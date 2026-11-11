@@ -1,55 +1,49 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Math Games</title>
+  <link rel="icon" href="favicon.ico">
+  <style>
+    :root { --bg: #0d1117; --card: #161b22; --line: #2a313c; --text: #e8eaed; --soft: #a9b1bb; --accent: #f0a04b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 1040px; margin: 0 auto; padding: 40px 16px 56px; }
+    h1 { margin: 0 0 6px; font-size: 2rem; letter-spacing: 0.02em; }
+    .lead { margin: 0 0 32px; color: var(--soft); }
+    .games { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+    a.game { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; color: inherit; text-decoration: none; transition: transform .15s ease, border-color .15s ease; }
+    a.game:hover, a.game:focus-visible { transform: translateY(-3px); border-color: var(--accent); outline: none; }
+    a.game img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+    .text { padding: 16px 20px 20px; }
+    h2 { margin: 0 0 6px; font-size: 1.35rem; }
+    p { margin: 0; color: var(--soft); }
+    .play { display: inline-block; margin-top: 14px; color: var(--accent); font-weight: 600; }
+  </style>
 </head>
-<body style="background-color: black; color: white">
-	<div style="text-align: center">
-	  <h1>South Park Math Game</h1>
-		<p>
-		  Select one of the South Park characters. Use the keyboard WASD keys
-		  to move the character to the correct answer. The UFO will beam up
-			the correct answer. If you are wrong then they will abduct your character
-		</p>
-		<a href="south-park/index.html">
-			<img src="thumbnails/south-park.jpg" alt="South Park Math Game">
-		</a>
-		<br>
-		<h1>Dino Math Game</h1>
-		<p>
-      Run around with the T-Rex with WASD or by clicking on things and eat the
-      correct numbers.
-    </p>
-		<a href="dino-math/index.html">
-			<img src="thumbnails/dino-math.jpg" alt="Dino Math Game">
-		</a>
-		<br>
-		<h1>Lunar Lander Math Game</h1>
-		<p>
-		  Use the keyboard, touch, or mouse controls to guide the lander to land on
-			the correct answer. Try not to land too hard or you might crash. 
-		</p>
-		<a href="lunar-lander/index.html">
-			<img src="thumbnails/lunar-lander.jpg" alt="Lunar Lander Math Game">
-		</a>
-		<br>
-		<h1>Snowboarding Math Game</h1>
-		<p>
-		  Use the mouse to guide the snowboarder to the correct math equations.
-			You will get points for skipping the wrong math equations. Avoid trees!
-		</p>
-		<a href="snow-board/index.html">
-			<img src="thumbnails/snow-board.jpg" alt="Snowboarding Math Game">
-		</a>
-		<br>
-		<h1>Math Murder Math Game</h1>
-		<p>
-		  Use the keyboard and mouse to move around and kill the robot that has the
-			correct answer on it's face. If you take too long it will attempt to murder you.
-		</p>
-		<a href="math-murder/index.html">
-			<img src="thumbnails/math-murder.jpg" alt="Math Murder Math Game">
-		</a>
-	</div>
+<body>
+  <main>
+    <h1>Math Games</h1>
+    <p class="lead">Two worlds to explore, with math to practise along the way. They play in the browser, on a computer or a tablet.</p>
+    <div class="games">
+      <a class="game" href="mathwood-valley/">
+        <img src="thumbnails/mathwood-valley.jpg" alt="Mathwood Valley: a western town in a green valley, seen from above">
+        <div class="text">
+          <h2>Mathwood Valley</h2>
+          <p>Ride into a western town and take jobs from the board: round up cattle, mind the store, build the windmill and the bridge. The math finds your level as you play.</p>
+          <span class="play">Play &rarr;</span>
+        </div>
+      </a>
+      <a class="game" href="space-station/">
+        <img src="thumbnails/space-station.jpg" alt="Calculation Station: a ship's engine room with a glowing reactor">
+        <div class="text">
+          <h2>Calculation Station</h2>
+          <p>Make a crew member and walk a space station: the hangars, the smelter, the medical centre and the ships. Early days: more is on the way.</p>
+          <span class="play">Play &rarr;</span>
+        </div>
+      </a>
+    </div>
+  </main>
 </body>
 </html>

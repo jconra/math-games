@@ -1,4 +1,4 @@
-This is a project for random math games that can be played in the browser. The goal is to help people who want to practice some math and have fun.
+Two math games that play in the browser: Mathwood Valley (mathwood-valley/) and the space station game (space-station/). The goal is to help people who want to practice some math and have fun. (The earlier small math games now live on jconra.com, under projects/math-games.)
 
 ## Credits
 
