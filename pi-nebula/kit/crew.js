@@ -73,7 +73,8 @@
 // bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. The gaze looks at a point or straight ahead, with
 // small darting movements, jumping and settling as eyes do (THE GAZE, below). A part's own bones (bones the suit's
 // skeleton lacks, all under the Head bone) are added to the person's skeleton when it's put together. A head without
-// eyes (the Meshy heads, crew 1's, the captain's, Vega's helmet) is as it was.
+// eyes (the captain's portrait head, captain1; Vega's helmet) is as it was. (The nine older HD mesh heads, h1 to h9,
+// were taken out 2026-11-11.)
 //
 // FACE BONES (the Tripo heads): small bones under the Head bone (Jaw, Chin, Cheek.L/R, Nose, Bridge, Brow, EyeSocket.L/R,
 // Ear.L/R) with smooth weights over the face, each moved or sized from its rest by the sliders in FACE, -1 to 1, kept to
