@@ -11,13 +11,13 @@
 // person and rows to change their look and their height (THE HEIGHT, below), and the words. Nothing here opens by itself.
 import { showTitle as showShared, esc } from '../../../shared/title/title.js';
 import * as save from '../save.js';
-import { GAME_NAME } from '../name.js';
+import { GAME_NAME, STATION_NAME } from '../name.js';
 import { LOOKS, lookById } from '../looks.js';
 import { pictureOf, onPicture } from '../portraits.js';
 import { SIZES } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=2', import.meta.url).href;
+const SHEET = new URL('./title.css?v=3', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -62,9 +62,9 @@ const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true">
   <ellipse cx="24" cy="24" rx="15.5" ry="4.2" transform="rotate(-24 24 24)" fill="none" stroke="currentColor" stroke-width="2"/>
 </svg>`;
 function brand() {
-  const words = GAME_NAME.trim().split(/\s+/), last = words.pop();
+  // (the whole name on one bold line, the station's own name small under it: a short name, "Pi" mustn't shrink)
   return `<span class="${P}-badge">${BADGE}</span>
-    <h1 class="${P}-name">${words.length ? `<span>${esc(words.join(' '))}</span> ` : ''}<b>${esc(last)}</b></h1>`;
+    <h1 class="${P}-name"><b>${esc(GAME_NAME)}</b><i>${esc(STATION_NAME)}</i></h1>`;
 }
 
 // the row of looks (on the chosen crew member's panel: pick another and it is saved at once)
