@@ -23,11 +23,12 @@ import { FACE, NAVY } from './ship.js';
 import { screen, glowStrip, FLAT } from './bits.js';
 import { spun } from './round.js';
 import { segText } from './segtext.js';
-import { wallStretcher, glints, BRIGHT_YELLOW, ORANGE, LABEL, DEVICE, PLASTIC } from './medbay.js';
+import { wallStretcher, glints, BRIGHT_YELLOW, ORANGE, LABEL, DEVICE, PLASTIC, hiddenBack, capsOf } from './medbay.js';
 
 const PI = Math.PI;
-const box = (p, look, x0, x1, y0, y1, z0, z1) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [] });
-const cyl = (p, look, r, h, at, seg = 8) => { const g = new THREE.CylinderGeometry(r, r, h, seg, 1); g.translate(...at); return add(p, look, g); };
+// (what never shows is not drawn: medbay.js hiddenBack and capsOf)
+const box = (p, look, x0, x1, y0, y1, z0, z1, skip) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [], skip: hiddenBack(Math.min(z0, z1), skip) });
+const cyl = (p, look, r, h, at, seg = 8, ends) => { const g = capsOf(new THREE.CylinderGeometry(r, r, h, seg, 1), ends); g.translate(...at); return add(p, look, g); };
 // a plan with its front corners cut (its back on the wall at FACE), as a FLAT prism from y0 to y1
 const planOf = (x0, x1, d, cl, cr) => { const P = [[x0, FACE], [x1, FACE]]; if (cr) P.push([x1, d - cr], [x1 - cr, d]); else P.push([x1, d]); if (cl) P.push([x0 + cl, d], [x0, d - cl]); else P.push([x0, d]); return P.map(([a, b]) => [a, -b]); };
 // (medicine boxes: mostly white, a few in colour)
@@ -47,7 +48,7 @@ export function drugsCabinet(p, o = {}) {
     const y = gy0 + s * sh;
     box(p, 'white2', gx0, gx1, y, y + 0.012, zf, zf + 0.012);
     // (boxes lying on their sides, wider than tall, stacked two high here and there; a white bottle now and then)
-    for (let x = gx0 + 0.02; x < gx1 - 0.06;) { const bw = 0.06 + R() * 0.05, bh = 0.04 + R() * 0.05, x1 = Math.min(gx1 - 0.02, x + bw), k = R(); if (k > 0.82) { cyl(p, 'white', 0.018, 0.09, [x + 0.02, y + 0.057, zf + 0.006], 5); x += 0.05; continue; } box(p, BOXES[Math.floor(R() * BOXES.length)], x, x1, y + 0.012, y + 0.012 + bh, zf + 0.001, zf + 0.008); if (k > 0.55) box(p, BOXES[Math.floor(R() * BOXES.length)], x + 0.005, x1 - 0.005, y + 0.012 + bh, y + 0.012 + bh * 1.9, zf + 0.001, zf + 0.008); x += bw + 0.008; }
+    for (let x = gx0 + 0.02; x < gx1 - 0.06;) { const bw = 0.06 + R() * 0.05, bh = 0.04 + R() * 0.05, x1 = Math.min(gx1 - 0.02, x + bw), k = R(); if (k > 0.82) { cyl(p, 'white', 0.018, 0.09, [x + 0.02, y + 0.057, zf + 0.006], 5, 'top'); x += 0.05; continue; } box(p, BOXES[Math.floor(R() * BOXES.length)], x, x1, y + 0.012, y + 0.012 + bh, zf + 0.001, zf + 0.008, ['-y']); if (k > 0.55) box(p, BOXES[Math.floor(R() * BOXES.length)], x + 0.005, x1 - 0.005, y + 0.012 + bh, y + 0.012 + bh * 1.9, zf + 0.001, zf + 0.008, ['-y']); x += bw + 0.008; }
   }
   glowStrip(p, gx1 - gx0 - 0.06, [0, gy1 - 0.02, zf + 0.01], [0, 0, 0], { wid: 0.01, i: 0.16, dir: [0, -0.7, 0.7], reach: 1.2 });
   // the two glass doors in dark frames, the lower drawers under them, the keypad lock between them with its red light
@@ -84,10 +85,10 @@ export function suppliesRack(p, o = {}) {
   // collars (orange)
   for (const y of [0.05, 0.62, 1.18]) box(p, 'white2', split, x1 - 0.024, y, y + 0.022, FACE, d - 0.02);
   const bx0 = split + 0.03, bx1 = x1 - 0.05;
-  for (let k = 0; k < 4; k++) box(p, k % 2 ? { c: '#5d6168', r: 0.9 } : NAVY, bx0, bx1, 1.2 + k * 0.07, 1.265 + k * 0.07, FACE + 0.02, d - 0.04);
-  for (let k = 0; k < 3; k++) box(p, k % 2 ? NAVY : { c: '#5d6168', r: 0.9 }, bx0, bx1, 0.64 + k * 0.07, 0.705 + k * 0.07, FACE + 0.02, d - 0.04);
-  box(p, 'dark', bx0, bx1, 0.072, 0.4, FACE + 0.02, d - 0.03);
-  for (let k = 0; k < 6; k++) { const x = bx0 + 0.03 + k * (bx1 - bx0 - 0.06) / 5; box(p, k % 3 ? ORANGE : { c: '#3d6fae', r: 0.6 }, x - 0.018, x + 0.018, 0.2, 0.55 + (k % 2) * 0.06, FACE + 0.05, FACE + 0.08); }
+  for (let k = 0; k < 4; k++) box(p, k % 2 ? { c: '#5d6168', r: 0.9 } : NAVY, bx0, bx1, 1.2 + k * 0.07, 1.265 + k * 0.07, FACE + 0.02, d - 0.04, ['-y']);
+  for (let k = 0; k < 3; k++) box(p, k % 2 ? NAVY : { c: '#5d6168', r: 0.9 }, bx0, bx1, 0.64 + k * 0.07, 0.705 + k * 0.07, FACE + 0.02, d - 0.04, ['-y']);
+  box(p, 'dark', bx0, bx1, 0.072, 0.4, FACE + 0.02, d - 0.03, ['-y']);
+  for (let k = 0; k < 6; k++) { const x = bx0 + 0.03 + k * (bx1 - bx0 - 0.06) / 5; box(p, k % 3 ? ORANGE : { c: '#3d6fae', r: 0.6 }, x - 0.018, x + 0.018, 0.2, 0.55 + (k % 2) * 0.06, FACE + 0.05, FACE + 0.08, ['-y']); }
   for (let k = 0; k < 2; k++) box(p, ORANGE, bx0 + 0.02 + k * 0.13, bx0 + 0.12 + k * 0.13, 0.42, 0.5, d - 0.08, d - 0.03);
   box(p, 'dark', bx0, bx1, 0.072, 0.4, d - 0.032, d - 0.028);
   return p;
@@ -104,9 +105,9 @@ export function labShelves(p, o = {}) {
   for (const y of [ys[0] + 0.02, ys[1] + 0.02]) {
     for (let x = x0 + 0.06; x < x1 - 0.06;) {
       const kind = R();
-      if (kind < 0.45) { const r = 0.025 + R() * 0.015, hh = 0.1 + R() * 0.08; cyl(p, R() > 0.5 ? { c: '#6b3d1c', r: 0.15 } : { c: '#c9d8de', r: 0.12 }, r, hh, [x + r, y + hh / 2, FACE + 0.08 + R() * 0.06], 6); x += 2 * r + 0.02; }
-      else if (kind < 0.7) { const bw = 0.08 + R() * 0.06, bh = 0.05 + R() * 0.05; box(p, BOXES[Math.floor(R() * BOXES.length)], x, x + bw, y, y + bh, FACE + 0.04, d - 0.04); x += bw + 0.015; }
-      else { box(p, 'white2', x, x + 0.14, y, y + 0.05, FACE + 0.06, FACE + 0.14); for (let i = 0; i < 5; i++) cyl(p, i % 2 ? { c: '#d9c25a', r: 0.3 } : { c: '#8fd0c8', r: 0.3 }, 0.008, 0.09, [x + 0.018 + i * 0.026, y + 0.07, FACE + 0.1], 5); x += 0.16; }
+      if (kind < 0.45) { const r = 0.025 + R() * 0.015, hh = 0.1 + R() * 0.08; cyl(p, R() > 0.5 ? { c: '#6b3d1c', r: 0.15 } : { c: '#c9d8de', r: 0.12 }, r, hh, [x + r, y + hh / 2, FACE + 0.08 + R() * 0.06], 6, 'top'); x += 2 * r + 0.02; }
+      else if (kind < 0.7) { const bw = 0.08 + R() * 0.06, bh = 0.05 + R() * 0.05; box(p, BOXES[Math.floor(R() * BOXES.length)], x, x + bw, y, y + bh, FACE + 0.04, d - 0.04, ['-y']); x += bw + 0.015; }
+      else { box(p, 'white2', x, x + 0.14, y, y + 0.05, FACE + 0.06, FACE + 0.14, ['-y']); for (let i = 0; i < 5; i++) cyl(p, i % 2 ? { c: '#d9c25a', r: 0.3 } : { c: '#8fd0c8', r: 0.3 }, 0.008, 0.09, [x + 0.018 + i * 0.026, y + 0.07, FACE + 0.1], 5, 'top'); x += 0.16; }
     }
   }
   return p;

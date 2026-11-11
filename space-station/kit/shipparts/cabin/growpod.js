@@ -42,6 +42,8 @@
 //     o.trim    the frame's surface (black: the satin charcoal of the ships' ribs and rims), o.clamp the clamps' (the
 //               mess's gunmetal: a named surface the cabin's looks would turn into the frame's own black)
 //     o.seed    which garden (1): its plants grown another way (other greens, other leaves, turned another way)
+//     o.rings   how many rings of plants, from the glass back (4; 3 leaves out the deepest, about 850 triangles less,
+//               the nearer three exactly as they were)
 //   growPodSize(o)   [w, h, d]: the whole fitting's size on the wall (frames and back plate), and how far it stands out
 // COST (counted in a built room). The frame 144 triangles round, 48 eight-sided; each clamp 38; the pane 22 round, 6
 // eight-sided; a back plate 22, its trim 22 more. The inside 3,488: drum 72, 28 feet 20 each (a cup and two roots),
@@ -112,7 +114,7 @@ const lin = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n
 const GREENS = ['#3f7a2a', '#4d8c34', '#5f9e3c', '#6aa84a', '#2f6b2e', '#7ab650', '#3a6e3a', '#86b95a'].map(lin);
 const RIB = lin('#d2e6a0'), STEM = lin('#5d7f35');
 const RINGS_Z = [-0.25, -0.7, -1.15, -1.6], PER = 7;   // (how deep each ring of plants is, half-sizes; plants a ring)
-function insideOf(hs, R) {
+function insideOf(hs, R, rings = RINGS_Z.length) {
   // (u: the unit the sizes are in: the glass's half-size for the drum, more for the plants)
   const I = INSIDE, P = [], L = [], C = [], ix = [];
   let u = hs;
@@ -176,7 +178,7 @@ function insideOf(hs, R) {
   }
   // the plants: four rings, each rooted at the wall and growing in toward the lamp (a little toward the glass)
   u = 1.6 * hs;
-  RINGS_Z.forEach((z0, ring) => {
+  RINGS_Z.slice(0, rings).forEach((z0, ring) => {
     for (let j = 0; j < PER; j++) {
       const a = (j + (ring % 2) * 0.5) / PER * TAU + (R() - 0.5) * 0.3, z = z0 * hs + (R() - 0.5) * 0.1 * hs;
       const base = [(RD - 0.01 * hs) * Math.cos(a), (RD - 0.01 * hs) * Math.sin(a), z];
@@ -224,7 +226,7 @@ export function growPod(p, o = {}) {
       add(p, o.clamp ?? GUN, solid(shape(0.05, 0.04, 0.009), RIM.proud + 0.008, { edge: 0.005, back: false }), [cx + rc * Math.cos(a), y + rc * Math.sin(a), z0], [0, 0, a]);
     }
     // what is behind the glass (one draw for all the pods' insides), and the frosted pane in front (another)
-    const [geo, more] = insideOf(hs, rand((o.seed ?? 1) * 7919 + k * 131)), gi = add(p, null, geo, glassAt, null, 'podIn');
+    const [geo, more] = insideOf(hs, rand((o.seed ?? 1) * 7919 + k * 131), o.rings ?? RINGS_Z.length), gi = add(p, null, geo, glassAt, null, 'podIn');
     for (const [name, a] of Object.entries(more)) gi.setAttribute(name, a);
     fill(gi, 'aPod', [hs, round ? 1 : 0, move === false || !turn ? 0 : TAU / turn, R() * TAU]);
     fill(gi, 'aLamp', [tint, o.sway ?? 0, o.glow ?? 1, shade]);

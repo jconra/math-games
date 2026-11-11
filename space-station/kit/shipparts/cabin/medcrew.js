@@ -25,10 +25,11 @@ import { shape, solid, plate, relief, prism, add } from '../../bevel.js';
 import { FACE, NAVY, SHEET } from './ship.js';
 import { glowStrip, FLAT } from './bits.js';
 import { segText } from './segtext.js';
-import { lines, lineGeo } from './medbay.js';
+import { lines, lineGeo, hiddenBack, capsOf } from './medbay.js';
 
 const PI = Math.PI;
-const box = (p, look, x0, x1, y0, y1, z0, z1) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [] });
+// (what never shows is not drawn: medbay.js hiddenBack and capsOf)
+const box = (p, look, x0, x1, y0, y1, z0, z1, skip) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [], skip: hiddenBack(Math.min(z0, z1), skip) });
 const rng = (seed) => { let s = Math.floor(seed * 1e5) % 2147483646 + 1; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; };
 
 // ── the third bed ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -134,6 +135,8 @@ export function wireCard(p, o = {}) {
   if (o.tag) { box(p, 'white2', x + w / 2 - 0.16, x + w / 2 - 0.02, y0 + h - 0.05, y0 + h - 0.01, z + 0.012, z + 0.016); segText(p, o.tag, { h: 0.018, at: [x + w / 2 - 0.09, y0 + h - 0.03, z + 0.0165], look: 'black', gap: 0.004 }); }
   return p;
 }
+// a flat rectangle w x h facing +z, its middle at (x, y): two triangles
+const rect = (w, h, x, y) => new THREE.PlaneGeometry(w, h).translate(x, y, 0);
 export function switchBox(p, o = {}) {
   const x = o.x ?? 0, y0 = o.y0 ?? 1.2, w = o.w ?? 0.4, h = o.h ?? 0.3, rows = o.rows ?? 2, cols = o.cols ?? 6, d = 0.1, R = rng(o.seed ?? 0.7), yc = y0 + h / 2;
   add(p, 'grey', solid(shape(w, h, 0.03, x, yc), d, { edge: 0.01, back: false }), [0, 0, FACE]);
@@ -142,9 +145,11 @@ export function switchBox(p, o = {}) {
   const cw = (w - 0.08) / cols, rh = (h - 0.08 - lab) / rows;
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const sx = x - w / 2 + 0.04 + cw * (c + 0.5), sy = y0 + 0.04 + rh * (r + 0.5), up = R() > 0.3;
-    add(p, 'rail', plate(shape(0.013, 0.034, 0.004, sx, up ? sy + 0.012 : sy - 0.012)), [0, 0, fz + 0.004]);
+    // (the lever and its lamp: plain rectangles, two triangles each; a cut corner on a part a centimetre across is not
+    // seen from a step away)
+    add(p, 'rail', rect(0.013, 0.034, sx, up ? sy + 0.012 : sy - 0.012), [0, 0, fz + 0.004]);
     const lit = R(), col = lit < 0.6 ? [0.4, 3.2, 1.0] : lit < 0.85 ? [3.4, 2.2, 0.4] : [3.4, 0.5, 0.3];
-    add(p, col, plate(shape(0.012, 0.012, 0.003, sx, sy + rh * 0.38)), [0, 0, fz + 0.0015], null, 'glow');
+    add(p, col, rect(0.012, 0.012, sx, sy + rh * 0.38), [0, 0, fz + 0.0015], null, 'glow');
   }
   if (o.label) { box(p, 'white2', x - w / 2 + 0.03, x + w / 2 - 0.03, y0 + h - 0.055, y0 + h - 0.015, fz, fz + 0.004); segText(p, o.label, { h: 0.022, at: [x, y0 + h - 0.035, fz + 0.0045], look: 'black', gap: 0.005 }); }
   return p;
@@ -157,9 +162,14 @@ export function gauge(p, o = {}) {
   const t = PI * 1.25 - a * PI * 1.5; lines(p, [[x, y], [x + Math.cos(t) * r * 0.7, y + Math.sin(t) * r * 0.7]], 0.006, [3.2, 0.5, 0.3], z + 0.003);
   return p;
 }
+export const CONDUIT_HIDDEN = { foot: 0.5, top: 2.0 };
 export function conduit(p, o = {}) {
   const [ax, ay] = o.a || [0, 0], [bx, by] = o.b || [0, 1], r = o.r ?? 0.02, z = FACE + r + 0.005, L = Math.hypot(bx - ax, by - ay);
-  const g = new THREE.CylinderGeometry(r, r, L, 6, 1); g.rotateZ(Math.atan2(bx - ax, by - ay) * -1); g.translate((ax + bx) / 2, (ay + by) / 2, z); add(p, o.look || 'grey', g);
+  // (upright: a lower end under CONDUIT_HIDDEN.foot faces the deck, an upper end over .top faces the ceiling; no eye
+  // sees either, so no cap there. The cylinder's own top cap ends up at b, its bottom at a)
+  const H = CONDUIT_HIDDEN, up = Math.abs(bx - ax) < 1e-6, hid = (y, other) => up && (y < other ? y < H.foot : y > H.top);
+  const ha = hid(ay, by), hb = hid(by, ay), ends = !ha && !hb ? 'both' : ha && hb ? 'none' : ha ? 'top' : 'bottom';
+  const g = capsOf(new THREE.CylinderGeometry(r, r, L, 6, 1), ends); g.rotateZ(Math.atan2(bx - ax, by - ay) * -1); g.translate((ax + bx) / 2, (ay + by) / 2, z); add(p, o.look || 'grey', g);
   for (let t = 0.15; t < 1; t += 0.35) { const cx = ax + (bx - ax) * t, cy = ay + (by - ay) * t; box(p, 'black', cx - (Math.abs(bx - ax) > Math.abs(by - ay) ? 0.012 : r + 0.012), cx + (Math.abs(bx - ax) > Math.abs(by - ay) ? 0.012 : r + 0.012), cy - (Math.abs(bx - ax) > Math.abs(by - ay) ? r + 0.012 : 0.012), cy + (Math.abs(bx - ax) > Math.abs(by - ay) ? r + 0.012 : 0.012), FACE, z + r + 0.004); }
   return p;
 }

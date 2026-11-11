@@ -7,6 +7,7 @@ import * as ML from './medlab.js';
 import * as MC from './medcrew.js';
 import { ambulanceStretcher, stowedStretcher } from './stretcher.js';
 import { hisMask } from './gasmask.js';
+import { growPod } from './growpod.js';
 import { segText } from './segtext.js';
 import { FACE } from './ship.js';
 
@@ -37,6 +38,7 @@ const PRESETS = {
   medicCubby: { 'two niches': {} },
   medicBusyWall: { 'wiring, switches, gauges': {} },
   medicLettering: { 'segment letters': {} },
+  medicGrowPod: { 'three rings (the Medic\'s)': { rings: 3 }, 'four rings (the kit\'s)': {} },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const MEDIC_FIT = {
@@ -58,6 +60,7 @@ export const MEDIC_FIT = {
   medicSpineBoard: entry('medicSpineBoard', 'Medic: spine board', 'wall', [1.9, 0.5, 0.1], (p) => MB.spineBoard(p, { y0: 0.05 })),
   medicHazmat: entry('medicHazmat', 'Medic: hazmat locker', 'wall', [0.5, 2.1, 0.3], (p) => MB.hazmatLocker(p, { w: 0.46, h: 2.08, cut: [0.07, 0] })),
   medicMasks: entry('medicMasks', 'Medic: gas mask (his model)', 'wall', [0.35, 0.3, 0.2], (p) => hisMask(p, { size: 0.24, at: [0, 0.02, FACE] })),
+  medicGrowPod: entry('medicGrowPod', 'Medic: grow pod over the kitchen counter', 'wall', [0.4, 0.4, 0.1], (p, o) => growPod(p, { size: 0.30, y: 0.2, ...o })),
   medicXray: entry('medicXray', 'Medic: x-ray viewer', 'wall', [0.8, 0.8, 0.12], (p) => MB.xrayViewer(p, { y0: 0.08, w: 0.66, h: 0.56 })),
   medicVitals: entry('medicVitals', 'Medic: vital signs monitor', 'wall', [0.55, 0.4, 0.1], (p, o) => MB.vitalsMonitor(p, { y: 0.2, w: 0.44, h: 0.28, ...o })),
   medicIV: entry('medicIV', 'Medic: IV bags and pumps', 'wall', [0.35, 1.1, 0.15], (p) => MB.ivStation(p, { y0: 0.02, top: 1.0 })),

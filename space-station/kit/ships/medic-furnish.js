@@ -368,7 +368,7 @@ function furnishCrew(args) {
       ctx.put('crew: kitchen', part(coffeeMachine, {}), { at: toWorld(W, mid, [-gs * len * 0.32, f + th, 0.2]), rot: [0, rotOf(W), 0] });
       ctx.put('crew: kitchen', part(sinkPart, {}), { at: toWorld(W, mid, [-gs * len * 0.03, f + th, 0]), rot: [0, rotOf(W), 0] });
       ctx.put('crew: small things', part(mug, { look: A.cup }), { at: toWorld(W, mid, [gs * len * 0.3, f + th, 0.36]), rot: [0, 0.7, 0] });
-      ctx.put('crew: grow pod', part(growPod, { size: 0.30, y: GROWPOD.y }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * gs * GROWPOD.along));
+      ctx.put('crew: grow pod', part(growPod, { size: 0.30, y: GROWPOD.y, rings: GROWPOD.rings }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * gs * GROWPOD.along));
       done.add(it.id);
     }
   }
@@ -380,7 +380,9 @@ function furnishCrew(args) {
 // across of flat wall; the wall here is the crew room's stern wall, and behind it there is more than 0.35 m of free space
 // (the inside-space file: free from the deck to 3.5 m for 0.45 m behind it). Nothing of the room's stands or hangs there
 // (the coffee machine is at the counter's other end, the sink's tap stops 2 cm short of it).
-export const GROWPOD = { along: 0.24, y: 1.25, size: 0.45 };
+// `rings`: the pod's rings of plants (three of the kit's four: the deepest, faint behind the frost, left out to keep the
+// Medic under its triangle limit)
+export const GROWPOD = { along: 0.24, y: 1.25, size: 0.45, rings: 3 };
 // (which end of the counter the pod takes: +1 or -1 in the counter's own x: the end away from the room's middle across)
 function growPodSide(room, W, mid) { const c = W.axis === 'z' ? (room.rect[0] + room.rect[2]) / 2 : (room.rect[1] + room.rect[3]) / 2; return localX(W, mid, c) >= localX(W, mid, mid) ? -1 : 1; }
 // (whether item `a` stands at one end of item `b`, touching it)

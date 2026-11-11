@@ -57,6 +57,22 @@ import { spun, aim } from './round.js';
 import { placeInto, part } from '../place.js';
 import { ambulanceStretcher } from './stretcher.js';
 const r3 = (v) => +v.toFixed(3);
+// WHAT NEVER SHOWS, LEFT OUT (to keep the Medic under its triangle limit, 2026-11-10):
+//   hiddenBack(z0, skip)  the faces a box leaves out: skip, and its back too when that lies on the wall line or within
+//                         WALL_NEAR in front of it (in a wall fitting's frame: facing the wall a few centimetres off, no
+//                         eye gets behind it). Free-standing pieces keep their boxes clear of that band.
+//   capsOf(g, ends)       a three.js cylinder's caps: 'both' (the default), 'top' (its foot stands on something or sits
+//                         in a pocket), 'bottom' (its top end is hidden), 'none' (both ends in something)
+export const WALL_NEAR = 0.05;
+export const hiddenBack = (z0, skip) => { const s = skip ? [...skip] : []; if (z0 >= FACE - 5e-4 && z0 <= FACE + WALL_NEAR && !s.includes('-z')) s.push('-z'); return s; };
+export function capsOf(g, ends) {
+  if (!ends || ends === 'both') return g;
+  // (CylinderGeometry's groups: the side, the top cap, the bottom cap)
+  const [side, top, bottom] = g.groups, ix = g.index.array, keep = Array.from(ix.slice(side.start, side.start + side.count));
+  const cap = ends === 'top' ? top : ends === 'bottom' ? bottom : null;
+  if (cap) keep.push(...ix.slice(cap.start, cap.start + cap.count));
+  g.setIndex(keep); g.clearGroups(); return g;
+}
 
 const PI = Math.PI;
 // the looks: the webbing, the labels, the bag, the tanks, the stretcher, the bed
@@ -66,10 +82,12 @@ export const BRIGHT_YELLOW = { c: '#e3b11c', r: 0.45, m: 0.03, w: 0.5 }, ORANGE 
 export const PLASTIC = { c: '#d4e2e8', r: 0.18, m: 0, w: 0.1 }, DEVICE = { c: '#d8dad6', r: 0.45, m: 0.05, w: 0.3 }, CASE = { c: '#3a3d42', r: 0.5, m: 0.2, w: 0.4 };
 const AMBER = { c: '#b8762a', r: 0.3, m: 0, w: 0.2 }, BLUE = { c: '#2f6fb3', r: 0.4, m: 0, w: 0.3 }, CLEAR = { c: '#aebfc6', r: 0.12, m: 0, w: 0.1 };
 export const TRACE = { ecg: [0.45, 3.4, 1.1], spo2: [0.35, 2.4, 3.6], resp: [3.3, 2.7, 0.5], bp: [3.0, 3.0, 3.0], bone: [1.45, 1.85, 2.3], teal: [0.4, 4.6, 4.0] };
-const box = (p, look, x0, x1, y0, y1, z0, z1) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [] });
+// (what never shows is not drawn: a box's back within a hand's breadth of the wall faces the wall, hiddenBack; a thing
+// standing on something or tucked in a pocket leaves out its foot, skip ['-y'] or ends 'top')
+const box = (p, look, x0, x1, y0, y1, z0, z1, skip) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [], skip: hiddenBack(Math.min(z0, z1), skip) });
 // a chamfered block standing out of the wall from z0, its face w x h centred at (x, y)
 const block = (p, look, x, y, w, h, z0, d, c = 0.02, edge = 0.006) => add(p, look, solid(shape(w, h, c, x, y), d, { edge, back: false }), [0, 0, z0]);
-const cyl = (p, look, r, h, at, rot, seg = 8) => { const g = new THREE.CylinderGeometry(r, r, h, seg, 1); if (rot) g.rotateX(rot[0]).rotateY(rot[1]).rotateZ(rot[2]); g.translate(...at); return add(p, look, g); };
+const cyl = (p, look, r, h, at, rot, seg = 8, ends) => { const g = capsOf(new THREE.CylinderGeometry(r, r, h, seg, 1), ends); if (rot) g.rotateX(rot[0]).rotateY(rot[1]).rotateZ(rot[2]); g.translate(...at); return add(p, look, g); };
 
 // ── a glowing line through points ───────────────────────────────────────────────────────────────────────────────
 export function lines(p, pts, t, glow, z, at = [0, 0, 0], rot = [0, 0, 0]) {
@@ -116,7 +134,7 @@ export function armLamp(p, o = {}) {
   // yoke over the head
   add(p, 'gun', solid(shape(0.2, 0.2, 0.05), 0.02, { edge: 0.006 }), [0, ceil - 0.02, 0], [PI / 2, 0, 0]);
   const j0 = [0, ceil - 0.24, 0], el = [hx * 0.55, ceil - 0.3, hz * 0.55], yk = [hx, hy + 0.2, hz];
-  cyl(p, G, 0.022, 0.22, [0, ceil - 0.13, 0], null, 8);
+  cyl(p, G, 0.022, 0.22, [0, ceil - 0.13, 0], null, 8, 'none');
   cyl(p, 'gun', 0.04, 0.07, j0, null, 10);
   const arm = (a, b, r) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), g = new THREE.BoxGeometry(r, r, L); g.lookAt(d); g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); add(p, 'white2', g); };
   arm(j0, el, 0.05); cyl(p, 'gun', 0.036, 0.07, el, null, 10); arm(el, yk, 0.04);
@@ -147,19 +165,21 @@ const STOCK = {
   masks: [['mask', 'white'], ['mask', 'white'], ['mask', 'white'], ['mask', 'white']],
   o2: [['o2', TANK], ['o2', TANK], ['o2', TANK]],
 };
+// (each thing stands in its pocket: its foot is never seen, nor the foot of a cap or valve standing on it)
+const FOOT = ['-y'];
 function thing(p, kind, look, x, y, z) {
-  if (kind === 'bottle') { cyl(p, look, 0.022, 0.1, [x, y + 0.05, z], null, 5); box(p, 'black', x - 0.012, x + 0.012, y + 0.1, y + 0.12, z - 0.004, z + 0.012); }
-  else if (kind === 'packet') box(p, look, x - 0.03, x + 0.03, y, y + 0.13, z - 0.006, z + 0.006);
-  else if (kind === 'box') box(p, look, x - 0.028, x + 0.028, y, y + 0.1, z - 0.018, z + 0.018);
-  else if (kind === 'bag') { box(p, look, x - 0.032, x + 0.032, y, y + 0.16, z - 0.012, z + 0.012); box(p, BLUE, x - 0.024, x + 0.024, y + 0.09, y + 0.12, z + 0.012, z + 0.014); }
-  else if (kind === 'tube') cyl(p, look, 0.009, 0.15, [x, y + 0.075, z], null, 5);
-  else if (kind === 'roll') cyl(p, look, 0.03, 0.08, [x, y + 0.04, z], null, 6);
-  else if (kind === 'device') { box(p, look, x - 0.04, x + 0.04, y, y + 0.12, z - 0.02, z + 0.02); box(p, 'dark', x - 0.028, x + 0.028, y + 0.07, y + 0.105, z + 0.02, z + 0.023); }
+  if (kind === 'bottle') { cyl(p, look, 0.022, 0.1, [x, y + 0.05, z], null, 5, 'top'); box(p, 'black', x - 0.012, x + 0.012, y + 0.1, y + 0.12, z - 0.004, z + 0.012, FOOT); }
+  else if (kind === 'packet') box(p, look, x - 0.03, x + 0.03, y, y + 0.13, z - 0.006, z + 0.006, FOOT);
+  else if (kind === 'box') box(p, look, x - 0.028, x + 0.028, y, y + 0.1, z - 0.018, z + 0.018, FOOT);
+  else if (kind === 'bag') { box(p, look, x - 0.032, x + 0.032, y, y + 0.16, z - 0.012, z + 0.012, FOOT); box(p, BLUE, x - 0.024, x + 0.024, y + 0.09, y + 0.12, z + 0.012, z + 0.014); }
+  else if (kind === 'tube') cyl(p, look, 0.009, 0.15, [x, y + 0.075, z], null, 5, 'top');
+  else if (kind === 'roll') cyl(p, look, 0.03, 0.08, [x, y + 0.04, z], null, 6, 'top');
+  else if (kind === 'device') { box(p, look, x - 0.04, x + 0.04, y, y + 0.12, z - 0.02, z + 0.02, FOOT); box(p, 'dark', x - 0.028, x + 0.028, y + 0.07, y + 0.105, z + 0.02, z + 0.023); }
   else if (kind === 'scissors') { for (const s of [-1, 1]) { const g = new THREE.BoxGeometry(0.012, 0.15, 0.006); g.rotateZ(s * 0.18); g.translate(x, y + 0.07, z); add(p, look, g); } box(p, 'black', x - 0.03, x + 0.03, y + 0.12, y + 0.16, z - 0.005, z + 0.005); }
-  else if (kind === 'bulb') { cyl(p, look, 0.034, 0.11, [x, y + 0.055, z], null, 6); cyl(p, 'black', 0.02, 0.03, [x, y + 0.125, z], null, 5); }
+  else if (kind === 'bulb') { cyl(p, look, 0.034, 0.11, [x, y + 0.055, z], null, 6, 'top'); cyl(p, 'black', 0.02, 0.03, [x, y + 0.125, z], null, 5, 'top'); }
   else if (kind === 'mask') { const g = new THREE.CylinderGeometry(0.02, 0.034, 0.04, 7, 1); g.rotateX(-PI / 2); g.scale(1, 1.25, 1); g.translate(x, y + 0.08, z + 0.02); add(p, look, g); box(p, 'black', x - 0.03, x + 0.03, y + 0.075, y + 0.085, z - 0.004, z + 0.004); }
-  else if (kind === 'can') { cyl(p, look, 0.024, 0.13, [x, y + 0.065, z], null, 5); box(p, 'red', x - 0.01, x + 0.01, y + 0.13, y + 0.155, z - 0.01, z + 0.01); }
-  else if (kind === 'o2') { cyl(p, look, 0.034, 0.2, [x, y + 0.1, z], null, 6); cyl(p, SHOULDER, 0.026, 0.04, [x, y + 0.215, z], null, 6); box(p, 'black', x - 0.01, x + 0.01, y + 0.235, y + 0.265, z - 0.01, z + 0.01); }
+  else if (kind === 'can') { cyl(p, look, 0.024, 0.13, [x, y + 0.065, z], null, 5, 'top'); box(p, 'red', x - 0.01, x + 0.01, y + 0.13, y + 0.155, z - 0.01, z + 0.01, FOOT); }
+  else if (kind === 'o2') { cyl(p, look, 0.034, 0.2, [x, y + 0.1, z], null, 6, 'top'); cyl(p, SHOULDER, 0.026, 0.04, [x, y + 0.215, z], null, 6, 'top'); box(p, 'black', x - 0.01, x + 0.01, y + 0.235, y + 0.265, z - 0.01, z + 0.01, FOOT); }
 }
 export function pouchPanel(p, o = {}) {
   const x = o.x ?? 0, y0 = o.y0 ?? 0.5, w = o.w ?? 0.4, h = o.h ?? 0.45, rows = o.rows ?? 2, lab = o.label ? 0.06 : 0, z = FACE + 0.006;
@@ -198,9 +218,9 @@ export function o2Tank(p, o = {}) {
   add(p, TANK, spun([[0.001, 0.01], [r * 0.9, 0.01], [r, 0.04], [r, h - 0.2]], { seg: 6, caps: [false, false] }), at);
   add(p, SHOULDER, spun([[r, h - 0.2], [r, h - 0.13], [r * 0.7, h - 0.05], [0.028, h - 0.015], [0.028, h]], { seg: 6, caps: [false, true] }), at);
   // the valve, its handwheel and the gauge facing out
-  cyl(p, 'black', 0.022, 0.07, [x, h + 0.035, z], null, 6);
+  cyl(p, 'black', 0.022, 0.07, [x, h + 0.035, z], null, 6, 'top');
   cyl(p, 'rail', 0.03, 0.012, [x, h + 0.075, z], null, 8);
-  cyl(p, 'white', 0.028, 0.02, [x, h + 0.03, z + 0.04], [PI / 2, 0, 0], 8);
+  cyl(p, 'white', 0.028, 0.02, [x, h + 0.03, z + 0.04], [PI / 2, 0, 0], 8, 'top');
   // its strap to the wall: a band round it, a plate on the wall
   add(p, 'yellow', spun([[r + 0.006, h * 0.62], [r + 0.006, h * 0.62 + 0.045]], { seg: 6, caps: [false, false] }), at);
   box(p, 'rail', x - 0.07, x + 0.07, h * 0.62 - 0.01, h * 0.62 + 0.055, FACE, FACE + 0.015);
@@ -425,7 +445,7 @@ export function bedHead(p, o = {}) {
   const x = o.x ?? 0, y0 = o.y0 ?? 0.92, w = o.w ?? 0.6, h = 0.24, z = FACE + 0.035;
   add(p, 'white2', solid(shape(w, h, 0.03, x, y0 + h / 2), 0.035, { edge: 0.008, back: false }), [0, 0, FACE]);
   // oxygen (green), air (black and white), suction (yellow): a ring and a socket each; a flow meter on the oxygen
-  [[TANK, -0.2], ['black', -0.08], [BRIGHT_YELLOW, 0.04]].forEach(([look, dx]) => { cyl(p, look, 0.026, 0.02, [x + dx, y0 + 0.09, z + 0.01], [PI / 2, 0, 0], 8); cyl(p, 'dark', 0.012, 0.022, [x + dx, y0 + 0.09, z + 0.012], [PI / 2, 0, 0], 6); });
+  [[TANK, -0.2], ['black', -0.08], [BRIGHT_YELLOW, 0.04]].forEach(([look, dx]) => { cyl(p, look, 0.026, 0.02, [x + dx, y0 + 0.09, z + 0.01], [PI / 2, 0, 0], 8, 'top'); cyl(p, 'dark', 0.012, 0.022, [x + dx, y0 + 0.09, z + 0.012], [PI / 2, 0, 0], 6, 'top'); });
   box(p, CLEAR, x - 0.215, x - 0.185, y0 + 0.12, y0 + 0.21, z + 0.01, z + 0.035); box(p, 'white', x - 0.207, x - 0.193, y0 + 0.16, y0 + 0.174, z + 0.02, z + 0.03);
   // a small lit switch for the reading light, and the teal pulse line along its top
   add(p, [0.4, 2.0, 3.2], plate(shape(0.018, 0.018, 0.004, x + 0.18, y0 + 0.09)), [0, 0, z + 0.001], null, 'glow');
