@@ -16,8 +16,9 @@
 // up, C down, Shift faster (quicker the higher up); the mouse drags and zooms as before (OrbitControls).
 // GRAPHICS: a choice on the Build bar, showing the tier in use: Auto (the game's own answer for this computer) or a tier for this
 // lab alone (kept in this browser; the game's own choice is left as it is). It reloads the lab: the work in hand is kept.
-// PAINTED LAWN always shows here, whatever the tier and however high the view (the lawn's tufts are drawn only near the camera,
-// and never on potato): the tufts round the brush while the lawn is picked, and a faint green tint over it (lawnmap.js).
+// PAINTED LAWN shows here while the lawn is picked, whatever the tier and however high the view (the lawn's tufts are drawn only
+// near the camera, and never on potato): the tufts round the brush, and a faint green tint over it (lawnmap.js). With anything
+// else picked the tint is hidden, so the town looks as it does in the game.
 // SAVE TIDIES UP: strokes that do nothing are left out of the file and out of the work in hand (tidy.js); then strokes of one
 // sort that overlap are made one and each stroke keeps only the points it needs, the ground coming out close (merge.js:
 // a little may change at the edges, never on a building, prop, placed plant or in front of a door). Undo brings them back.
@@ -476,7 +477,7 @@ TL.fenceDraw = { posts: () => fencePosts().map((q) => [q.x, q.z]), drag: () => F
 // painted shows its tufts as it goes; and the green tint shows all the painted lawn from any height
 const lawnMap = makeLawnMap({ THREE, scene: V.scene, heightAt, PLANT });
 TL.lawnMap = lawnMap;
-let lawnKey = '', liveT = 0;
+let lawnKey = '', liveT = 0, lawnHas = false;   // (lawnHas: is any lawn painted (the tint's sheet has something to show))
 const brushAt = { x: 0, z: 0 };   // (where the brush's ring was last drawn: the ring's own points are in the world, the line itself stays at the origin)
 { const show = tool.showRing.bind(tool); tool.showRing = (p, r, clear) => { brushAt.x = p.x; brushAt.z = p.z; show(p, r, clear); }; }
 lawnNearBrush = () => {
@@ -484,9 +485,11 @@ lawnNearBrush = () => {
   const brush = on && tool.ring.visible ? brushAt : null, far = brush && Math.hypot(brush.x - camera.position.x, heightAt(brush.x, brush.z) - camera.position.y, brush.z - camera.position.z) > V.LAWN.radius * G.wide * 0.5;
   if (far) { if (!G.over) G.over = { x: brush.x, z: brush.z }; if (Math.hypot(brush.x - G.over.x, brush.z - G.over.z) > 4) { G.over.x = brush.x; G.over.z = brush.z; } } else if (G.over && (!on || brush)) { G.over = null; G.at.set(1e9, 0, 1e9); }   // (the pointer off the ground for a moment, over the bar: the tufts stay where they were)
   const now = performance.now();
-  if (painting && now - liveT > 300) { liveT = now; G.live = { procedural: false, items: [], strokes: [{ ...st, pts: st.pts.slice() }] }; G.at.set(1e9, 0, 1e9); lawnMap.update(tool.planting.strokes, st); lawnKey = ''; }
+  if (painting && now - liveT > 300) { liveT = now; G.live = { procedural: false, items: [], strokes: [{ ...st, pts: st.pts.slice() }] }; G.at.set(1e9, 0, 1e9); lawnMap.update(tool.planting.strokes, st); lawnHas = lawnMap.mesh.visible; lawnKey = ''; }
   else if (!painting && G.live) { G.live = null; G.at.set(1e9, 0, 1e9); }
-  if (!painting) { const k = tool.planting.strokes.length + '|' + tool.planting.strokes.reduce((a, q) => a + (q.kind === PLANT.LAWN_KIND || q.mode === 'clear' ? q.pts.length : 0), 0); if (k !== lawnKey) { lawnKey = k; lawnMap.update(tool.planting.strokes); } }
+  if (!painting) { const k = tool.planting.strokes.length + '|' + tool.planting.strokes.reduce((a, q) => a + (q.kind === PLANT.LAWN_KIND || q.mode === 'clear' ? q.pts.length : 0), 0); if (k !== lawnKey) { lawnKey = k; lawnMap.update(tool.planting.strokes); lawnHas = lawnMap.mesh.visible; } }
+  // (the tint only while the lawn is picked: otherwise the lab looks as the game does, the game's maker's wish, 2026-11-10)
+  lawnMap.mesh.visible = on && lawnHas;
 };
 PICKS.move();
 TL.ready = true;
