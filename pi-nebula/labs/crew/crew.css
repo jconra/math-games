@@ -1,23 +1,76 @@
-/* The Crew Lab, on the Kit Lab's look (../kit/kit.css). Colour swatches in the menu are round chips. */
+/* The Crew Lab, on the Kit Lab's look (../kit/kit.css). 2026-11-11: no bar along the bottom; THE MENUS (windows.js): a
+   small master menu of category buttons and a window a category, each dragged by its top bar. Everything inside a
+   window WRAPS onto new lines: nothing anywhere scrolls sideways. Colour swatches are round chips. */
+body { overscroll-behavior: none; }
+/* ── the master menu ── */
+.cm { position: fixed; z-index: 1000; left: 0; top: 0; width: 234px; background: var(--glass); border: 1px solid var(--edge); border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45); user-select: none; -webkit-user-select: none; }
+.cm-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; cursor: grab; touch-action: none; font: 700 11px/1.6 system-ui, "Segoe UI", sans-serif;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue-hi); border-bottom: 1px solid rgba(79, 182, 255, .2); }
+.cm-bar:active { cursor: grabbing; }
+.cm-grip { color: var(--mute); font-size: 14px; letter-spacing: 0; }
+.cm-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; }
+.cm-b { border: 1px solid #2f3d50; border-radius: 7px; padding: 4px 2px; background: linear-gradient(var(--chip-2), var(--chip)); color: var(--ink);
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-b:hover { border-color: var(--blue); }
+.cm-b.on { background: linear-gradient(var(--blue-hi), var(--blue)); color: #06121d; border-color: var(--blue-hi); }
+/* (no text picked up while a menu or a window is dragged) */
+.cw-dragging, .cw-dragging * { user-select: none !important; -webkit-user-select: none !important; }
+/* ── a category's window: about square, its inside scrolling up and down only ── */
+.cw { position: fixed; z-index: 20; left: 0; top: 0; display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--edge);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.cw[hidden] { display: none; }
+.cw-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 12px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: rgba(79, 182, 255, 0.10); border-bottom: 1px solid rgba(79, 182, 255, .25); }
+.cw-bar:active { cursor: grabbing; }
+.cw-title { flex: 1; font: 700 13px/1.6 system-ui, "Segoe UI", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue-hi); }
+.cw-x { flex: none; width: 30px; height: 28px; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--ink-2); font-size: 22px; line-height: 1; cursor: pointer; }
+.cw-x:hover { border-color: var(--blue); color: var(--ink); }
+.cw-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px;
+  scrollbar-width: thin; scrollbar-color: rgba(79, 182, 255, .5) transparent; }
+/* a section: its small heading, then its controls wrapping */
+.cw-body > * { flex: none; }
+.cw-sec { display: flex; flex-direction: column; gap: 5px; }
+.cw-sec + .cw-sec { border-top: 1px solid rgba(79, 182, 255, .16); padding-top: 7px; }
+.cw-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+.cw-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.cw-note { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; overflow-wrap: anywhere; }
+.cw-note b { color: var(--ink); font-weight: 600; }
+.cw-sum { font-size: 12.5px; color: var(--ink); line-height: 1.45; overflow-wrap: anywhere; background: rgba(79, 182, 255, 0.07); border-radius: 7px; padding: 4px 7px; }
+.cw-sum div + div { margin-top: 2px; }
+/* a value between its two buttons, kept together as one piece that wraps whole */
+.cw-knob { display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px 2px 7px; border: 1px solid rgba(79, 182, 255, .18); border-radius: 15px; }
+.cw-knob .kl-label { min-width: 0; }
+.cw-knob .chip { min-width: 30px; padding: 3px 8px; }
+.kl-val { flex: none; min-width: 52px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+/* the three-way level choice: one chip lit */
+.cw-levels { display: flex; flex-wrap: wrap; gap: 4px; }
+.cw-levels .chip { white-space: normal; text-align: left; }
+/* ── the picture grids: their own scrolling area, so the edits under them stay in view ── */
+.cw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; max-height: 196px; overflow-y: auto; overflow-x: hidden; padding: 2px 2px 4px;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(79, 182, 255, .5) transparent; }
+.pic { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 3px 4px; border: 2px solid #2f3d50; border-radius: 9px; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, #2a3646, #121a24 75%); color: var(--ink-2); font-size: 11px; line-height: 1.2; min-width: 0; }
+.pic:hover { border-color: var(--blue); color: var(--ink); }
+.pic[aria-pressed="true"] { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); color: var(--ink); }
+.pic img, .pic .ph { width: 72px; height: 72px; display: block; }
+.pic .ph { border-radius: 50%; background: radial-gradient(circle at 50% 45%, rgba(159, 220, 255, .16), transparent 62%); animation: ph 1.4s ease-in-out infinite; }
+@keyframes ph { 50% { opacity: .45; } }
+.pic span { max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+/* colour swatches: round chips; any colour: the browser's own picker, round like a swatch */
 .chip.sw { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2f3d50; }
 .chip.sw.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
-/* any uniform colour: the browser's own colour picker, round like a swatch */
 .kl-colour { flex: none; width: 30px; height: 30px; padding: 0; border: 2px solid #2f3d50; border-radius: 50%; background: none; cursor: pointer; }
 .kl-colour.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
 .kl-colour::-webkit-color-swatch-wrapper { padding: 2px; }
 .kl-colour::-webkit-color-swatch { border: none; border-radius: 50%; }
 .kl-colour::-moz-color-swatch { border: none; border-radius: 50%; }
-.kl-row select { max-width: 150px; }
-.kl-row[hidden] { display: none; }
-/* the Fit rows: a value between its two buttons, the fit in words, the box Copy fits fills */
-.kl-val { flex: none; min-width: 58px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
-.kl-val.wide { min-width: 0; text-align: left; color: var(--ink-2); padding: 0 4px; }
-#fit .chip.sub, #fit2 .chip.sub, #buzz .chip.sub { min-width: 30px; }
-#fitout, #buzzout { flex-wrap: wrap; }
-#fitout .said, #buzzout .said { flex: 1 0 100%; white-space: normal; color: var(--ink); }
-#fitout textarea, #buzzout textarea { flex: 1 1 auto; min-width: 220px; max-width: 760px; resize: vertical; border: 1px solid #2f3d50; border-radius: 8px; padding: 4px 6px;
-  background: #0d141d; color: var(--ink); font: 12px/1.35 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace; white-space: pre; }
-@media (max-width: 520px) { .kl-row select { max-width: 120px; } }
-/* the Face row: a slider between its name and its value */
-#face input[type=range] { flex: none; width: 92px; accent-color: var(--blue-hi); }
-@media (max-width: 520px) { #face input[type=range] { width: 78px; } }
+/* the face's sliders and the tuck's: a slider between its name and its value */
+.cw input[type=range] { flex: 1 1 110px; min-width: 90px; max-width: 200px; accent-color: var(--blue-hi); }
+.cw-slider { display: flex; align-items: center; gap: 6px; flex: 1 1 100%; }
+.cw-slider .kl-label { flex: 0 0 104px; }
+/* the box Copy fills */
+.cw textarea { width: 100%; min-height: 90px; resize: vertical; border: 1px solid #2f3d50; border-radius: 8px; padding: 4px 6px;
+  background: #0d141d; color: var(--ink); font: 12px/1.35 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
+.cw .chip { white-space: nowrap; }
+@media (max-width: 520px) { .cm { width: 222px; } .cw-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 190px; } .pic img, .pic .ph { width: 64px; height: 64px; } }
