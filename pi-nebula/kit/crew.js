@@ -1483,6 +1483,13 @@ function normalsOf(P, I, n) {
     const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
     for (const q of [i, j, k]) { N[q] += cx; N[q + 1] += cy; N[q + 2] += cz; }
   }
+  // (welded: the points that share a place share the sum. A Tripo head is split along its picture's seams, one place
+  // several points; summed apart, each patch's points turned their normals their own way as the collar fit moved the
+  // neck, and the patches shaded as blocks (the game's maker's "blocky squares on peoples necks", 2026-11-11))
+  const key = (v) => Math.round(P[v * 3] * 1e5) + ',' + Math.round(P[v * 3 + 1] * 1e5) + ',' + Math.round(P[v * 3 + 2] * 1e5);
+  const sum = new Map(), keys = new Array(n);
+  for (let v = 0; v < n; v++) { const k = keys[v] = key(v); const s = sum.get(k); if (s) { s[0] += N[v * 3]; s[1] += N[v * 3 + 1]; s[2] += N[v * 3 + 2]; } else sum.set(k, [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]); }
+  for (let v = 0; v < n; v++) { const s = sum.get(keys[v]); N[v * 3] = s[0]; N[v * 3 + 1] = s[1]; N[v * 3 + 2] = s[2]; }
   return N;
 }
 // A hair's own geometry for a fit: its positions, normals and strand directions its own, the rest (index, uv, skin
