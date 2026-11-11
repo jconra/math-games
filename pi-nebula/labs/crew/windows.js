@@ -65,7 +65,7 @@ export function makeMenus({ items, store = 'crewlab.windows.v1', top = () => 0, 
       const r = el.getBoundingClientRect(); g = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
       bar.setPointerCapture(e.pointerId); e.preventDefault(); document.documentElement.classList.add('cw-dragging');
     });
-    bar.addEventListener('pointermove', (e) => { if (!g || e.pointerId !== g.id) return; place(el, e.clientX - g.dx, e.clientY - g.dy); });
+    bar.addEventListener('pointermove', (e) => { if (!g || e.pointerId !== g.id) return; place(el, e.clientX - g.dx, e.clientY - g.dy); const sel = getSelection && getSelection(); if (sel && sel.rangeCount) sel.removeAllRanges(); });
     const end = (e) => { if (!g || e.pointerId !== g.id) return; g = null; document.documentElement.classList.remove('cw-dragging'); done(); };
     bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
   }
