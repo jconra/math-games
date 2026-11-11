@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const H = await import('../src/helpplan.js');
-const { STUCK, makeStuckWatch, HOWTO, howtoLink, clockText, buildSummary, reportOf, sectionsFor, sumIn, ftIn, LINKS, videoJob } = H;
+const { STUCK, makeStuckWatch, HOWTO, howtoLink, videoOf, clockText, buildSummary, reportOf, sectionsFor, sumIn, ftIn, LINKS, videoJob } = H;
 const M = await import('../src/levels/model.js');
 const { LEVELS, PLACE, levelFor, recordLevel, stateOf, setLevelAt, skipLevel, startHere, levelsOf } = M;
 const S = await import('../src/save.js');
@@ -203,22 +203,30 @@ test('a build in words: pieces, how tall and how far along, how long at it', () 
   assert.equal(ftIn(6.9167), '6 ft 11 in');
 });
 
-// ---- the video ------------------------------------------------------------------------------------------------------
+// ---- the videos: one for each job -----------------------------------------------------------------------------------
 
-test('the video is hidden until it has an id: no link, and the menu has no video part', () => {
-  assert.equal(HOWTO.id, '', 'no video uploaded yet');
-  for (const job of Object.keys(HOWTO.at)) { assert.equal(howtoLink(job), null); assert.equal(HOWTO.at[job], null, `${job}: its time is empty until the edit`); }
+const JOBS_WITH_VIDEOS = ['roundup', 'sheep', 'pigs', 'store', 'delivery', 'wagon', 'deer', 'range', 'loot', 'windmill', 'bridge', 'fishing', 'boxes', 'graphs'];
+
+test('one video for each job, every one empty for now: no link, and no video part in any job\'s menu', () => {
+  assert.deepEqual(Object.keys(HOWTO).sort(), [...JOBS_WITH_VIDEOS].sort(), 'a place for every job on the board');
+  for (const job of JOBS_WITH_VIDEOS) {
+    assert.equal(HOWTO[job], null, `${job}: empty until its video is uploaded`);
+    assert.equal(videoOf(job), null); assert.equal(howtoLink(job), null);
+  }
   assert.ok(!sectionsFor({ video: howtoLink('windmill') }).some((s) => s.id === 'video'));
-  assert.ok(sectionsFor({ video: 'https://youtu.be/PLACEHOLDER?t=795' }).some((s) => s.id === 'video'));
 });
 
-test('the video link: one video, the job\'s start time in the address, or its start when the job has no time yet', () => {
-  const how = { id: 'PLACEHOLDER', at: { windmill: 795, store: 460, roundup: null } };
-  assert.equal(howtoLink('windmill', how), 'https://youtu.be/PLACEHOLDER?t=795');
-  assert.equal(howtoLink('roundup', how), 'https://youtu.be/PLACEHOLDER');
-  assert.equal(howtoLink('sell', how), 'https://youtu.be/PLACEHOLDER?t=460', 'selling goods is the store\'s chapter');
+test('a job\'s own video: its id opens it; a start time, when given, goes in the address; only that job shows it', () => {
+  const how = { ...HOWTO, windmill: { id: 'PLACEHOLDER' }, store: { id: 'abcdefghijk', start: 12, length: 95 } };
+  assert.deepEqual(videoOf('windmill', how), { id: 'PLACEHOLDER', start: null, length: null, link: 'https://youtu.be/PLACEHOLDER' });
+  assert.equal(howtoLink('store', how), 'https://youtu.be/abcdefghijk?t=12');
+  assert.equal(videoOf('store', how).length, 95);
+  assert.equal(howtoLink('sell', how), 'https://youtu.be/abcdefghijk?t=12', 'selling goods shows the store\'s video');
+  assert.equal(howtoLink('bridge', how), null, 'a job with no video of its own shows none (not another job\'s)');
+  assert.ok(sectionsFor({ video: howtoLink('windmill', how) }).some((s) => s.id === 'video'));
   assert.equal(videoJob('build'), null);
-  assert.equal(howtoLink('windmill', { id: 'not an id!', at: { windmill: 5 } }), null, 'only a real video id makes a link');
+  assert.equal(howtoLink('windmill', { windmill: { id: 'not an id!' } }), null, 'only a real video id makes a link');
+  assert.equal(howtoLink('windmill', { windmill: { id: 'PLACEHOLDER', start: 0 } }), 'https://youtu.be/PLACEHOLDER', 'start 0: the start');
   assert.equal(clockText(795), '13:15'); assert.equal(clockText(5), '0:05'); assert.equal(clockText(3725), '1:02:05');
 });
 

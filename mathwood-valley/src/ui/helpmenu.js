@@ -9,10 +9,10 @@
 //                       skipLevel; the job deals again)
 //   Tell us             the old "Confusing?" report: the question on screen filled in (src/ui/flag.js questionNow), or
 //                       with none up, the job and a short line about the build; sent as the chip's mark was
-//   The video           the how-to video's thumbnail in a YouTube frame, opening this job's chapter in a new tab
-//                       (hidden until src/helpplan.js HOWTO has a video id)
+//   The video           this job's own how-to video: its thumbnail in a YouTube frame, opening it in a new tab (none
+//                       until that job has a video in src/helpplan.js HOWTO)
 //   External Links      not yet (src/helpplan.js LINKS is empty: the game's maker said hold off)
-// The "?" draws attention, gently, while the rider seems stuck (src/helpplan.js STUCK): a slowly turning arc round it
+// The "?" draws attention, gently, while the rider seems stuck (src/helpplan.js STUCK): a slow pulse round it
 // (HELPQ.look 'pulse', the default: the game's maker's pick) or the turning arc ('arc'). Never a flash: one turn in 3 s, or one swell in 2.6 s;
 // with "reduce motion" asked for, a steady ring. Every part closes with the X, Esc, or a tap outside.
 //
@@ -103,6 +103,7 @@ function ensureCss() {
 .bmq-menu button.bmq-b.is-plain { background: transparent; color: #4a2d14; border-color: #a8865a; }
 .bmq-skip button.bmq-b { font-size: 15px; padding: 9px 14px; }
 .bmq-skip small, .bmq-small { display: block; font-size: 13px; color: #5d4a36; margin-top: 4px; }
+.bmq-skip .bmq-skipno { margin-top: 7px; padding: 6px 9px; border-radius: 7px; background: #fff3dc; border: 1px solid #d9b47a; color: #5a3a17; font-size: 13.5px; }
 .bmq-about { padding: 7px 9px; border-radius: 7px; background: #fffaf0; border: 1px dashed #c9ad7f; font-size: 14px; margin-bottom: 7px; }
 .bmq-about i { display: block; font-style: normal; font: 700 12px Bitter, Georgia, serif; color: #8a6a3a; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
 .bmq-form textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; font: 500 15px/1.35 Bitter, Georgia, serif;
@@ -207,7 +208,7 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
     const html = parts.map((p) => {
       if (p.id === 'hob') return sec('hob', '', hobPart(c));
       if (p.id === 'example') return sec('example', c.example && c.example.first ? 'An example' : 'Show me how', examplePart(c), p);
-      if (p.id === 'skip') return sec('skip', '', '<button type="button" class="bmq-b" data-do="skip">Skip to a new question</button><small>You get a new one, a little easier. No harm done.</small><small class="bmq-skipno" hidden></small>');
+      if (p.id === 'skip') return sec('skip', '', '<button type="button" class="bmq-b" data-do="skip">Skip to a new question</button><small>' + esc(c.skipLine || 'You get a new one, a little easier. No harm done.') + '</small><small class="bmq-skipno" hidden></small>');
       if (p.id === 'report') return sec('report', c.q ? 'Is this question confusing?' : 'Something confusing here?', reportPart(c), { ...p, small: 'tell us' });
       if (p.id === 'video') return sec('video', '', videoPart(c));
       if (p.id === 'links') return sec('links', 'External Links', linksPart(c), p);   // (none yet: helpplan.js LINKS)
@@ -243,9 +244,10 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
     if (d === 'another') { try { showEx(c.example.next()); } catch (err) { console.error(err); } return; }
     if (d === 'workex') { const s = exNow && sumIn(exNow.q); if (s) { H.close(); c.workOn(s); } return; }
     if (d === 'skip') {
-      let ok = false; try { ok = !!c.skip(); } catch (err) { console.error(err); }
-      if (ok) { H.close(); return; }
-      const no = menu.querySelector('.bmq-skipno'); if (no) { no.hidden = false; no.textContent = "This one is already started, so it can't be swapped. Finish it, or press Work it out."; }
+      // (c.skip() -> true, or the plain line why this job can't swap the question just then: src/helpplan.js SKIP_WHY)
+      let r = false; try { r = c.skip(); } catch (err) { console.error(err); }
+      if (r === true) { H.close(); return; }
+      const no = menu.querySelector('.bmq-skipno'); if (no) { no.hidden = false; no.textContent = typeof r === 'string' ? r : "This one can't be swapped just this second. Try again in a moment."; }
       return;
     }
     if (b.dataset.helper != null) { const x = (c.helpers || [])[+b.dataset.helper]; if (x) { H.close(); try { x.run(); } catch (err) { console.error(err); } } }

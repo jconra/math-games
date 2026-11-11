@@ -71,7 +71,9 @@ click away, and never pops up uninvited.**
 - Every helper that opens has a visible X, and Esc closes it (the HUD's help box adds the X itself: src/ui/hud.js).
 - The help button, a "?" always in the top corner (src/ui/helpmenu.js, its rules in src/helpplan.js; notes in
   ~/pw/bandit-math/HELP_BUTTON.md), took over the old "Confusing?" chip: Hob's advice, an example, a skip, the report
-  form, the how-to video. It only ever opens when pressed; while the rider seems stuck it may draw attention with a slow
-  turning arc (helpplan.js STUCK), never a flash. A new question card is marked for its form with flagCard (src/ui/flag.js).
+  form, the job's own how-to video (helpplan.js HOWTO: one video per job). It only ever opens when pressed; while the
+  rider seems stuck it may draw attention with a gentle pulse (helpplan.js STUCK), never a flash. A new question card is
+  marked for its form with flagCard (src/ui/flag.js). A new job with questions gets a skip: a hook that deals its
+  question again at the level now (main.js SKIPS), and a plain line for when it can't (helpplan.js SKIP_WHY).
 - Moving the level by hand (the tools strip's arrows) re-deals the questions out at that place straight away, at the new
   level (main.js `relevel` calls the job's `relevel()`); what was already answered or healed stays.

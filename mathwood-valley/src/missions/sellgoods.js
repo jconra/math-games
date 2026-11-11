@@ -12,7 +12,8 @@
 //     goods: the homestead (src/homestead.js: goods.sale(plan, who), goods.sold(order)); fish(): the fishing job, or null;
 //     say(text): Ezra says it, in his speech card; voice(): his recorded greeting; work(): the tools' Work it out
 //   G.words()      the spot's prompt   G.start()   E at the bins   G.stop()   done for now
-//   G.active, G.workSum() (the tools' Work it out), G.state(), G.dev.next(order) (a rig's next sale), G.dispose()
+//   G.active, G.workSum() (the tools' Work it out), G.skip() (the help menu's skip: a different deal), G.state(),
+//   G.dev.next(order) (a rig's next sale), G.dispose()
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { picture } from '../ui/storepics.js';
 import { sumOf, workFrom } from '../math/jobsums.js';
@@ -104,6 +105,16 @@ export function makeGoodsDeal({ rider, P, I, hud, hob = null, refresh = () => {}
     if (!next()) { say(carrying() ? SELL_WORDS.small : SELL_WORDS.thanks); G.stop(); }
   }
   function draw() { if (order && !U.busy) U.drawn((order.picture || picture)(order.pic)); }
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js): Ezra offers a different deal for what you carry (the
+  // goods stay yours, unsold). Sales never move the store's level, so neither does skipping one (main.js). False while
+  // the coins are flying, or when he has no other deal to offer.
+  G.skip = () => {
+    if (!G.active || !order || U.busy) return false;
+    const was = order;
+    if (next()) return true;
+    order = was;
+    return false;
+  };
 
   G.start = () => {
     if (G.active) return false;

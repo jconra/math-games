@@ -41,6 +41,7 @@
 //   DL.prompt           the words for the door prompt while by a foreman ('Take an order from Dusty'), or null
 //   DL.talk()           E by the foreman (main.js calls it when the prompt is DL's)
 //   DL.active           true while the order slip is open at the store
+//   DL.skip()           the help menu's skip: a new order for the same camp, from its first step (on the slip only)
 //   DL.card             true while an order is under way (the round-up's travel card stands aside)
 //   DL.marks()          [{ id, icon, x, z, label }] for the compass: the store, then the camp
 //   DL.carrying         { camp, crates, goods } while crates are on the horse, else null
@@ -348,6 +349,19 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     emit('order', { camp: camp.id, order });
     cardKey = '';
     if (DL.active) showPart();
+    return true;
+  };
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first): on the slip, a new
+  // order for the same camp at the level now, from its first step, even when a step of this one was answered (those
+  // answers already counted). Not while the worked area is up or the coins are flying.
+  DL.skip = () => {
+    if (!DL.active || !order || !camp || (phase !== 'ordered' && phase !== 'working') || longPanel || U.busy) return false;
+    clearTimeout(longT);
+    if (timer) { timer.cancel(); timer = null; }
+    makeOrder(camp);
+    emit('order', { camp: camp.id, order });
+    cardKey = '';
+    showPart();
     return true;
   };
 

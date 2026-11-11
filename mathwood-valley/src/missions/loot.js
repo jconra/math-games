@@ -40,6 +40,8 @@
 //   LJ.update(dt)       each frame after the player
 //   LJ.phase            'out' (caches wait) | 'carrying' (the loot is on the horse) | 'rest' (none open just now)
 //   LJ.active           the slip is up (sharing out at the sheriff's office)
+//   LJ.skip()           the help menu's skip: the bundle on the slip dealt again at the level now (false while the
+//                       coins fly, or when none can be made from the folks waiting)
 //   LJ.card             true while this job has the HUD's card (right at a camp, or carrying the loot)
 //   LJ.near             right at a camp (its card up);  LJ.guardUp  a fighting gang in the ring's reach
 //   LJ.workSum()        the slip's sum for the tools' Work it out (src/math/jobsums.js lootSum), or null
@@ -718,6 +720,17 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (trip.at >= trip.problems.length) finishTrip(); else showProblem();
   }
   function draw() { if (!LJ.active || !trip || U.busy) return; helped = true; U.drawn(picture(trip.problems[trip.at].pic)); }
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first): the bundle on the
+  // slip is dealt again at the level now, from the same folks waiting (as an answer moving the level deals the rest).
+  // A wrong coin already picked doesn't stop it. Not while the coins are flying, nor when none can be made from them.
+  LJ.skip = () => {
+    if (!LJ.active || !trip || U.busy || trip.at >= trip.problems.length) return false;
+    const p = dealAt(levelFor(rider, 'loot'), { among: trip.families.map((f) => f.name), only: true });
+    if (!p) return false;
+    trip.problems[trip.at] = p;
+    showProblem();
+    return true;
+  };
   // a bundle at the rider's level q (levelFor): made by the ladder's own maker (src/math/shares.js shareAt through the
   // trainer, which keeps the last few apart), and marked with the level it was made at (recordAnswer's level) and its
   // rung (how far up the ladder: the pay)

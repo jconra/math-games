@@ -75,6 +75,8 @@
 //   WJ.throwAt(rec)   rope this one (as a click on it does)
 //   WJ.stop()         the hold-up given up (the driver makes a run for it)
 //   WJ.newWave()      (dev) a new gang now, at the hold-up under way
+//   WJ.skip()         the help menu's skip: this gang rides off and a fresh one for the same wave rides in (false
+//                     between waves or once the box is grabbed)
 //   WJ.walkers        the roped bandits walking off ({ x, z }: the town's wagons stop for them)
 //   WJ.tookTrainer    true once a wave here has taken the shared trainer's current wave (the round-up deals afresh)
 //   WJ.workSum()      the card's sum for the tools' Work it out (a missing number: 56 ÷ 7, the kid picks it), or null
@@ -1248,6 +1250,15 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   // ── STOPPING, AND THE DEV HOOKS ────────────────────────────────────────────────────────────────────────────────
   WJ.stop = () => giveUp();
   WJ.newWave = () => { if (state === 'on' && !grab) newWave(); };
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first): this gang rides
+  // off and a fresh one for the SAME wave rides in at the level now (the bandits already roped still count, as with any
+  // gang cut short; the wave's number and the wagon's bar carry on). Not between waves, nor once the box is grabbed.
+  WJ.skip = () => {
+    if (state !== 'on' || grab || !kit || !wave || wave.done) return false;
+    waveN--;   // (newWave counts it again: the same wave, dealt afresh)
+    newWave();
+    return true;
+  };
   WJ.health = (h) => { if (h != null) health = Math.max(0, Math.min(HOLDUP.health, +h || 0)); return health; };
   // (dev and rigs) a bandit pulled down and tied at (x, z) now, as if roped there: he gets up and walks off as any does
   WJ.tieAt = (x, z) => {
@@ -1900,6 +1911,7 @@ export function makeWagonJob(opts) {
   WJ.throwAt = (rec) => !!(A && A.G.throwAt(rec));
   WJ.stop = () => { if (A) A.G.stop(); };
   WJ.newWave = () => { if (A) A.G.newWave(); };
+  WJ.skip = () => !!(A && A.G.skip && A.G.skip());   // (the help menu's skip: a fresh gang for this wave)
   WJ.update = (dt) => holdUps(dt);
   // the gang's sum for the tools' Work it out (src/math/jobsums.js): a missing-number card ("7 × ? = 56"), else none
   WJ.workSum = () => (near() ? waveSum(WJ.wave) : null);

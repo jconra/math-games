@@ -10,7 +10,8 @@
 //   makeStuckWatch(table)       -> W: W.answered(kind, right), W.tick(secs, { asking, building, progress }),
 //                                  W.opened(), W.on (true while the "?" draws attention), W.why ('wrong' | 'waiting' |
 //                                  'build' | null), W.state()
-//   HOWTO, howtoLink(job, how)  the how-to video: one video, a start time for each job (empty until it is uploaded)
+//   HOWTO, videoOf(job, how), howtoLink(job, how)   the how-to videos: one for each job (empty until uploaded)
+//   SKIP_LINE, skipLine(job), SKIP_WHY, skipWhy(job)   the skip's line in the menu, and why a job can't skip just then
 //   clockText(secs)             754 -> '12:34'
 //   buildSummary(job, b)        a short plain line about a build (the windmill's, the bridge's, the dock's)
 //   reportOf({ q, job, summary, build, note, place, tier })   what the help menu's form sends (feedback.js 'question')
@@ -19,7 +20,7 @@
 //   videoJob(job)               the job id the video table knows for a job id the game uses
 
 // ── SEEMS STUCK ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// The "?" draws attention, gently (a slow turning arc round it: never a flash), when any of these is true. It stops
+// The "?" draws attention, gently (a slow pulse round it: never a flash), when any of these is true. It stops
 // when the help menu is opened, a question is answered right, a builder moves on, or the question goes away.
 export const STUCK = {
   wrongInRow: 3,    // wrong answers in a row on the same kind of question (the same strand)
@@ -61,30 +62,64 @@ export function makeStuckWatch(T = STUCK) {
   return W;
 }
 
-// ── THE HOW-TO VIDEO ────────────────────────────────────────────────────────────────────────────────────────────────
-// One video on YouTube with a chapter for each job (~/pw/bandit-math/HOWTO_VIDEO.md part 4). The help menu shows its
-// thumbnail and opens it at this job's chapter in a new tab. Until `id` is filled in, the video part of the menu is
-// hidden. After uploading: put the video's id in `id` (the 11 letters after youtu.be/), and each chapter's start, in
-// seconds, from the description's chapter list. A job left at null opens the video at its start. `length` (seconds,
-// optional) is only for the thumbnail's player bar.
+// ── THE HOW-TO VIDEOS ───────────────────────────────────────────────────────────────────────────────────────────────
+// One short video for each job, each starting at the jobs board (the game's maker, 2026-11-10: a separate video per
+// job, not one long one with chapters). A job's "?" shows its own video's thumbnail and opens it in a new tab; a job
+// with no video shows no video part. After uploading one, fill in its job:
+//   windmill: { id: 'abcdefghijk' }                 the 11 letters after youtu.be/
+//   windmill: { id: 'abcdefghijk', start: 12 }      ...opening 12 seconds in (optional)
+//   windmill: { id: 'abcdefghijk', length: 165 }    ...its length in seconds (optional: only for the thumbnail's bar)
 export const HOWTO = {
-  id: '',
-  length: null,
-  at: { roundup: null, sheep: null, pigs: null, store: null, delivery: null, wagon: null, deer: null, range: null, loot: null,
-    windmill: null, bridge: null, fishing: null, boxes: null, graphs: null },
+  roundup: null, sheep: null, pigs: null, store: null, delivery: null, wagon: null, deer: null, range: null, loot: null,
+  windmill: null, bridge: null, fishing: null, boxes: null, graphs: null,
 };
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 // the video table's job for a job id the game uses (selling goods is the store's counter; a builder's own ids are the jobs')
 export const videoJob = (job) => (job === 'sell' ? 'store' : job === 'build' ? null : job || null);
-export function howtoLink(job, how = HOWTO) {
-  if (!how || !VIDEO_ID.test(String(how.id || ''))) return null;
-  const at = how.at && Number.isFinite(how.at[videoJob(job)]) ? Math.max(0, Math.round(how.at[videoJob(job)])) : null;
-  return `https://youtu.be/${how.id}${at ? `?t=${at}` : ''}`;
+// a job's video: { id, start (seconds, or null), length (seconds, or null), link }, or null (none yet, or not a real id)
+export function videoOf(job, how = HOWTO) {
+  const v = how && videoJob(job) ? how[videoJob(job)] : null;
+  if (!v || !VIDEO_ID.test(String(v.id || ''))) return null;
+  const start = Number.isFinite(v.start) && v.start > 0 ? Math.round(v.start) : null;
+  const length = Number.isFinite(v.length) && v.length > 0 ? Math.round(v.length) : null;
+  return { id: v.id, start, length, link: `https://youtu.be/${v.id}${start ? `?t=${start}` : ''}` };
 }
+export const howtoLink = (job, how = HOWTO) => { const v = videoOf(job, how); return v ? v.link : null; };
 export function clockText(secs) {
   const s = Math.max(0, Math.round(Number(secs) || 0)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
 }
+
+// ── SKIP: THE MENU'S LINES ──────────────────────────────────────────────────────────────────────────────────────────
+// Under the skip button: what a skip does here.
+export const SKIP_LINE = {
+  default: 'You get a new one, a little easier. No harm done.',
+  sell: 'Ezra offers you a different deal. Your goods stay yours. No harm done.',
+  wagon: 'This gang rides off and a new one rides in, a little easier. The ones you roped still count.',
+  delivery: 'A new order for the same camp, a little easier, from its first step. No harm done.',
+  loot: 'This bundle is shared out another way, a little easier. No harm done.',
+};
+// When a job can't swap the question just then, one plain, kind line why (the menu says it in place of skipping).
+export const SKIP_WHY = {
+  default: "This one can't be swapped just this second. Try again in a moment.",
+  store: "Ezra is busy with the coins or your working is open. Try again in a moment.",
+  sell: "Ezra is busy with the coins, or he has no other deal for what you carry. Try again in a moment.",
+  delivery: 'The order can be swapped while its slip is up. Close your working first, then try again.',
+  loot: "The families are taking their share right now. You can skip the next bundle.",
+  wagon: 'No gang is riding right now. The next one rides in soon.',
+  range: 'Miss Opal is setting up the next card. It comes in a moment.',
+  deer: 'The picture is being taken. A new question comes right after.',
+  windmill: "This card can't be swapped while the miller is teaching, or after you got it right. Press Back to building.",
+  bridge: "This card can't be swapped while the engineer is teaching, or after you got it right. Press Back to building.",
+  fishing: 'This fish is answered already. Keep it or throw it back, and the next fish brings a new question.',
+  boxes: "This box can't be swapped while it is opening, or when it's the storekeeper's own sum. Finish it, or press Done for now.",
+  graphs: "The Professor is between points. Try again in a moment.",
+  roundup: 'This bunch is done. The next one comes at your level.',
+  sheep: 'This flock is done. The next one comes at your level.',
+  pigs: 'This batch is done. The next one comes at your level.',
+};
+export const skipWhy = (job) => SKIP_WHY[job] || SKIP_WHY.default;
+export const skipLine = (job) => SKIP_LINE[job] || SKIP_LINE.default;
 
 // ── A BUILD, IN WORDS ───────────────────────────────────────────────────────────────────────────────────────────────
 // b (what main.js reads from the builder up, all optional):

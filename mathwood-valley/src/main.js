@@ -28,7 +28,7 @@ import { watchGraphics, openGfxCheck, gfxReport } from './gfxcheck.js';   // (fi
 import { FB } from './feedback.js';
 import { flagCard, rateJob, menuRows, questionNow } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
 import { makeHelpMenu, HELPQ } from './ui/helpmenu.js';
-import { makeStuckWatch, howtoLink, HOWTO, buildSummary, LINKS, videoJob } from './helpplan.js';
+import { makeStuckWatch, videoOf, HOWTO, buildSummary, LINKS, videoJob, skipWhy, skipLine } from './helpplan.js';
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
 import { makeWorld } from './world.js';
 import { chooseTier, wantAntialias } from '../world/quality.js';
@@ -222,6 +222,8 @@ function helpHost() {
 }
 // a builder's question card up (the miller's, the engineer's, the dock's catch card)
 const siteAsking = () => !!document.querySelector('.bsite #question:not([hidden]), .bsite #card:not([hidden])');
+// ...and answered right already (its "why" up and no wrong pick): that card is done, not a question to skip
+const siteDone = () => !!document.querySelector('.bsite #question:not([hidden]) .why:not([hidden])') && !document.querySelector('.bsite #question .choices .is-wrong');
 let siteSince = 0;   // (when the builder up now was opened: "how long" in the form's line about the build)
 // what the build site up now has built, as numbers and as a line
 function buildInfo(job) {
@@ -245,27 +247,39 @@ function buildInfo(job) {
   } catch (e) { console.warn('help: the build could not be read', e); }
   return null;
 }
-// SKIP TO A NEW QUESTION: the jobs that can deal the question up again (mostly the hooks the level tool's arrows use,
-// relevel above; the store's own skip also swaps an order after a wrong coin; the range and the deer camera deal a new
-// card or photo; a builder's card is dealt again; a lock box slides in a new box). Not yet: the wagon's gang, the
-// loot's slip and selling goods (the menu shows no skip there).
+// SKIP TO A NEW QUESTION: every job with questions can deal the one up again (mostly the hooks the level tool's arrows
+// use, relevel above; the store, the deliveries, the loot's slip, selling goods, the wagon's gang, the range and the deer
+// camera have their own skip; a builder's card is dealt again, after a wrong answer too; a lock box slides in a new box).
+// When a job can't just then, the menu says why in one plain line (src/helpplan.js SKIP_WHY).
 const siteRedeal = () => { const s = BS && BS.session(); return !!(s && s.relevel && s.relevel()); };
 const SKIPS = { roundup: () => RU && RU.relevel(), sheep: () => SH && SH.relevel(), pigs: () => PG && PG.relevel(), store: () => SJ && SJ.skip(),
-  delivery: () => DL && DL.relevel(), graphs: () => GT && GT.relevel(), range: () => SR && SR.skip(), deer: () => DJ && DJ.skip(),
+  delivery: () => DL && DL.skip(), graphs: () => GT && GT.relevel(), range: () => SR && SR.skip(), deer: () => DJ && DJ.skip(),
+  wagon: () => WJ && WJ.skip(), loot: () => LJ && LJ.skip(), sell: () => GD && GD.skip(),
   windmill: siteRedeal, bridge: siteRedeal, fishing: siteRedeal, boxes: () => !!(BOX && BOX.redeal && BOX.redeal()) };
+// (selling goods never moves the store's level, so skipping a sale doesn't either: Ezra just offers another deal)
+const SKIP_NO_LEVEL = new Set(['sell']);
 const placeForJob = (job) => (job === 'boxes' ? 'lockbox' : placeOfJob(job));
 // the skip: a gentle miss for the level there (src/levels/model.js skipLevel: never an answer, half a miss off the
-// bar, the next one from the level below), then the job deals again. If the job can't deal again just now (an order
-// already started), the level is put back as it was: nothing happened.
+// bar, the next one from the level below), then the job deals again. If the job can't deal again just now (the coins
+// still flying, a lesson up), the level is put back as it was: nothing happened, and the menu says why.
+// -> true, or the plain line why not
 function skipNow(job) {
-  const f = SKIPS[job], place = placeForJob(job);
-  if (!f || !place || !rider) return false;
+  const f = SKIPS[job];
+  if (!f || !rider) return skipWhy(job);
+  if (SKIP_NO_LEVEL.has(job)) {
+    let ok = false; try { ok = !!f(); } catch (e) { console.error(e); }
+    if (!ok) return skipWhy(job);
+    STUCKW.opened(); FB.event('skip', { job });
+    return true;
+  }
+  const place = placeForJob(job);
+  if (!place) return skipWhy(job);
   const lv = LEVELS.levelsOf(rider).places, had = Object.prototype.hasOwnProperty.call(lv, place), was = had ? JSON.stringify(lv[place]) : null;
   let r = null;
-  try { r = LEVELS.skipLevel(rider, place); } catch (e) { console.error(e); return false; }
+  try { r = LEVELS.skipLevel(rider, place); } catch (e) { console.error(e); return skipWhy(job); }
   let ok = false;
   try { ok = !!f(); } catch (e) { console.error(e); }
-  if (!ok) { if (had) lv[place] = JSON.parse(was); else delete lv[place]; return false; }
+  if (!ok) { if (had) lv[place] = JSON.parse(was); else delete lv[place]; return skipWhy(job); }
   saveRider(rider);
   STUCKW.opened();
   FB.event('skip', { job, place, from: r.before, to: r.id, ease: r.ease });
@@ -276,7 +290,9 @@ function helpContext() {
   const job = jobNow(), name = JOB_NAMES[job] || (job ? job : 'Riding about'), touch = !!(I && I.touch);
   const aj = state === 'play' ? askingJob() : null;
   const q = questionNow(job);
-  const up = !!q || !!BOX || (!!aj && aj !== 'panel' && aj !== 'build') || (!!(BS && BS.active) && siteAsking());
+  // (a builder's card answered right is done: still shown in the form, but nothing to skip)
+  const cardDone = !!(BS && BS.active) && siteDone();
+  const up = !!q || !!BOX || (!!aj && aj !== 'panel' && aj !== 'build') || (!!(BS && BS.active) && siteAsking() && !cardDone);
   // Old Hob: what he is saying here (a line of his about this job in the last two minutes; with no job, any line in the
   // last minute; on a lock box, his line on the box), and his tip for this job; at a builder, its own person's words too
   const last = hob && hob.last ? hob.last() : null;
@@ -303,10 +319,11 @@ function helpContext() {
   const build = BS && BS.active ? buildInfo(job) : null;
   const where = placeNow();
   const summary = build ? build.summary : `${job ? `${name}: ` : ''}no question up just now${where ? ` (${where})` : ''}.`;
-  const link = howtoLink(job);
-  const video = link ? { link, at: Number.isFinite(HOWTO.at[videoJob(job)]) ? HOWTO.at[videoJob(job)] : null, length: HOWTO.length, name: JOB_NAMES[videoJob(job)] || 'Mathwood Valley', pic: JOB_PICS[videoJob(job)] ? picURL(JOB_PICS[videoJob(job)], 220) : null } : null;
+  // this job's own how-to video (none yet: no video part)
+  const v = videoOf(job), vj = videoJob(job);
+  const video = v ? { link: v.link, at: v.start, length: v.length, name: JOB_NAMES[vj] || 'Mathwood Valley', pic: JOB_PICS[vj] ? picURL(JOB_PICS[vj], 220) : null } : null;
   return { job, name, q: q || (up && aj === job ? { job, text: name } : null), hob: hobPart, example, helpers, workOn: (s) => TOOLS.workOn(s),
-    skip: up && SKIPS[job] ? () => skipNow(job) : null, summary, build: build ? build.data : null, video, links: LINKS, place: where, tier: W ? W.tier : quality.tier };
+    skip: up && !cardDone && SKIPS[job] ? () => skipNow(job) : null, skipLine: skipLine(job), summary, build: build ? build.data : null, video, links: LINKS, place: where, tier: W ? W.tier : quality.tier };
 }
 const HELP = makeHelpMenu({ host: helpHost, context: helpContext, watch: STUCKW, look: Q.get('helplook') === 'arc' ? 'arc' : HELPQ.look,
   onOpen: () => { if (TOOLS.busy()) TOOLS.close(); if (state === 'play') pause('help'); },
@@ -1662,9 +1679,9 @@ Object.assign(BM, {
   levels: LEVELS, facts: FACTS,   // (src/levels/model.js: each place's ladder and the rider's level there; src/math/facts.js: the times facts)
   feedback: FB,   // (src/feedback.js: FB.state() says the device id, the switch and what was sent)
   // the help button (src/ui/helpmenu.js): its menu, the stuck watch, what it would show now, the skip; dev.video(id,
-  // { at, length }) puts a video id in (for pictures of the video part before the real one is uploaded)
+  // { jobs, start, length }) puts a video id under those jobs (for pictures of the video part before any is uploaded)
   help: { menu: HELP, watch: STUCKW, context: helpContext, skip: skipNow, howto: HOWTO,
-    dev: { video(id, { at = null, length = null } = {}) { HOWTO.id = id || ''; HOWTO.length = length; if (at) Object.assign(HOWTO.at, at); return howtoLink(jobNow()); } } },
+    dev: { video(id, { jobs = Object.keys(HOWTO), start = null, length = null } = {}) { for (const j of jobs) HOWTO[j] = id ? { id, start, length } : null; const v = videoOf(jobNow()); return v ? v.link : null; } } },
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),
   // a frame's real cost, not held to the screen's refresh: n frames drawn back to back, each waited for
   frameMs: (n = 60) => { const gl = renderer.getContext(), px = new Uint8Array(4); let worst = 0; const a = performance.now();

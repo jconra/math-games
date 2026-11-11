@@ -1237,10 +1237,12 @@ function settle() {
   if (a.keep) keepBuilding(a.keep);
   else { fall.clear(); resetAll(); backToBuild(); }
 }
-// the level was moved by hand: the question up, not yet answered, dealt again at the new level
+// the level was moved by hand (or the game's help menu skipped it): the question up, not yet answered or answered
+// wrong, dealt again at the new level (one answered right is done with; a lesson up stays)
 const relevel = () => {
   const c = $('question'), w = c && c.querySelector('.why');
-  if (app.phase !== 'question' || !curQ || !curQ.topic || c.hidden || !w || !w.hidden) return false;
+  if (app.phase !== 'question' || !curQ || !curQ.topic || c.hidden || !w) return false;
+  if (!w.hidden && !c.querySelector('.choices .is-wrong')) return false;
   const T = stepNow(); ask({ ...questionOf(curQ.topic, T), topic: curQ.topic, level: T }, true);
   return true;
 };
