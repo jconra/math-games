@@ -1347,15 +1347,18 @@ function horseButton(dt) {
 function compass() {
   const at = P.position, marks = [];
   const add = (id, icon, x, z, label) => marks.push({ id, icon, label, bearing: Math.atan2(x - at.x, z - at.z), dist: Math.hypot(x - at.x, z - at.z) });
+  // (a job's marks only for the job in hand, the one picked (or a hold-up under way when none is): every open job's green
+  // lasso at once was too much on the strip and no help, the game's maker, 2026-11-10; the cabin and the horse always)
+  const cur = theJob || (WJ && WJ.where() ? 'wagon' : null), mine = (job) => cur === job;
   const c = W.places.cabin; if (c) add('cabin', 'cabin', c.door.x, c.door.z, (cabin && cabin.markLabel) || 'Your cabin');
-  const pa = W.places.pasture; if (RU && pa) add('job', 'job', pa.x, pa.z, 'The round-up');
-  const sp = farm && farm.layout.sheep; if (SH && sp) add('farm', 'job', sp.x, sp.z, 'The farm: sick sheep');
-  const py = farm && farm.layout.yard; if (PG && py) add('pigs', 'job', py.x, py.z, 'The farm: loose pigs');
-  if (DL) for (const m of DL.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the store or the camp for a delivery)
-  { const w = WJ && WJ.where(); if (w) add('wagon', 'job', w.x, w.z, 'A wagon held up'); }   // (a hold-up under way)
-  if (DJ) for (const m of DJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the deer job's herd)
-  if (SR) for (const m of SR.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the target range)
-  if (LJ) for (const m of LJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the gang's cache, or the sheriff's office with the loot)
+  const pa = W.places.pasture; if (RU && pa && mine('roundup')) add('job', 'job', pa.x, pa.z, 'The round-up');
+  const sp = farm && farm.layout.sheep; if (SH && sp && mine('sheep')) add('farm', 'job', sp.x, sp.z, 'The farm: sick sheep');
+  const py = farm && farm.layout.yard; if (PG && py && mine('pigs')) add('pigs', 'job', py.x, py.z, 'The farm: loose pigs');
+  if (DL && mine('delivery')) for (const m of DL.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the store or the camp for a delivery)
+  { const w = WJ && mine('wagon') && WJ.where(); if (w) add('wagon', 'job', w.x, w.z, 'A wagon held up'); }   // (a hold-up under way)
+  if (DJ && mine('deer')) for (const m of DJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the deer job's herd)
+  if (SR && mine('range')) for (const m of SR.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the target range)
+  if (LJ && mine('loot')) for (const m of LJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the gang's cache, or the sheriff's office with the loot)
   if (P.horse && !P.onHorse) { const h = P.horse.root.position; add('horse', 'horse', h.x, h.z, 'Your horse'); }
   hud.compass(P.cam.yaw, marks);
 }
@@ -1505,6 +1508,7 @@ function step(dt) {
     if (SR) SR.draw();   // (the six-shooter, drawn over the valley)
     AUD.listen(camera);
     compass();
+    { const sd = W.places.store && W.places.store.door; hud.nearStore(!!(sd && P && Math.hypot(sd.x - P.position.x, sd.z - P.position.z) < 14)); }   // (the saddlebags' counts near the general store)
     horseButton(dt);
     if (I.touch && !home) hud.touch(true);
   } else if (state === 'title') {

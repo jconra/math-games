@@ -17,7 +17,8 @@
     a.game:hover, a.game:focus-visible { transform: translateY(-3px); border-color: var(--accent); outline: none; }
     a.game img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
     .text { padding: 16px 20px 20px; }
-    h2 { margin: 0 0 6px; font-size: 1.35rem; }
+    h2 { margin: 0 0 6px; font-size: 1.35rem; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .badge { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1a1205; background: var(--accent); border-radius: 999px; padding: 3px 10px; }
     p { margin: 0; color: var(--soft); }
     .play { display: inline-block; margin-top: 14px; color: var(--accent); font-weight: 600; }
   </style>
@@ -38,7 +39,7 @@
       <a class="game" href="pi-nebula/">
         <img src="thumbnails/pi-nebula.jpg" alt="Pi Nebula: a ship's engine room with a glowing reactor">
         <div class="text">
-          <h2>Pi Nebula</h2>
+          <h2>Pi Nebula <span class="badge">Under construction</span></h2>
           <p>Make a crew member and walk Calculation Station, out in the Pi Nebula: the hangars, the smelter, the medical centre and the ships. Early days: more is on the way.</p>
           <span class="play">Play &rarr;</span>
         </div>

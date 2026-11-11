@@ -8,6 +8,7 @@
 //     onMenu(): the Menu button (Esc does the same in main.js); onPrompt(): a click or tap on the door prompt
 //     onTouch(code): a touch button ('KeyF' rope, 'KeyH' horse, 'KeyE' on/off)
 //   H.show(on)                 shown while riding, hidden on the title screen
+//   H.nearStore(on)           the treats and goods counts show near the general store (and for a few seconds after more is collected)
 //   H.purse({ gold, bounty, title, next, badges, boxes, goods, treats })   the purse; gold going up pops a "+n" coin by
 //                              it; goods: the homestead's goods in the saddlebags, as words ('30 eggs · 6 qt milk to sell');
 //                              treats: { apple, carrot } the horses' treats in the saddlebags (src/treats.js), a small
@@ -279,13 +280,25 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   let lastGold = null;
   const treatsEl = $('.bmh-treats');
   let treatsKey = '';
+  // THE SADDLEBAGS' COUNTS (the treats by the gold, the homestead's goods) show only while something has just been
+  // collected (a few seconds) or near the general store, where they're bought and sold: the game's maker didn't want the
+  // eggs and the like always on the card, 2026-11-10. H.nearStore(on) is told by the game each frame.
+  const STUFF_MS = 6000;
+  let stuffUntil = 0, stuffNear = false, stuffT = 0, treatsHave = false, goodsText = '', lastStuff = null;
+  const goodsEl = $('.bmh-goods');
+  function stuffShow() {
+    const on = stuffNear || performance.now() < stuffUntil;
+    treatsEl.hidden = !(treatsHave && on); goodsEl.hidden = !(goodsText && on);
+  }
+  function stuffFlash() { stuffUntil = performance.now() + STUFF_MS; clearTimeout(stuffT); stuffT = setTimeout(stuffShow, STUFF_MS + 50); stuffShow(); }
+  function nearStore(on) { on = !!on; if (on !== stuffNear) { stuffNear = on; stuffShow(); } }
   function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0, goods = '', treats = null } = {}) {
     // the horses' treats in the saddlebags, by the gold (src/treats.js): an apple and a carrot with their counts
     const tk = treats ? `${treats.apple || 0}|${treats.carrot || 0}|${treats.jerky || 0}` : '';
     if (tk !== treatsKey) {
       treatsKey = tk;
       const a = treats ? treats.apple || 0 : 0, c = treats ? treats.carrot || 0 : 0, j = treats ? treats.jerky || 0 : 0;
-      treatsEl.hidden = !(a || c || j);
+      treatsHave = !!(a || c || j);
       treatsEl.innerHTML = (a ? `<i>${TREAT_ICON.apple}<b>${a}</b></i>` : '') + (c ? `<i>${TREAT_ICON.carrot}<b>${c}</b></i>` : '') + (j ? `<i>${TREAT_ICON.jerky}<b>${j}</b></i>` : '');
       treatsEl.setAttribute('aria-label', `${a} apples, ${c} carrots and ${j} strips of jerky for your animals`);
     }
@@ -298,8 +311,15 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     badgesEl.innerHTML = badges.map((b) => `<span class="bmh-badge">${ICON.star}${esc(b)}</span>`).join('');
     bagEl.hidden = !boxes;
     bagEl.querySelector('span').textContent = boxes === 1 ? '1 lock box in your saddlebags' : `${boxes} lock boxes in your saddlebags`;
-    const ge = $('.bmh-goods'); ge.hidden = !goods; ge.querySelector('span').textContent = goods || '';
+    goodsText = goods || ''; goodsEl.querySelector('span').textContent = goodsText;
+    // (collected: a treat or a good more than before (the first reading of a ride shows nothing): shown for a few seconds)
+    const now = { a: treats ? treats.apple || 0 : 0, c: treats ? treats.carrot || 0 : 0, j: treats ? treats.jerky || 0 : 0, g: goodsText };
+    const more = lastStuff && (now.a > lastStuff.a || now.c > lastStuff.c || now.j > lastStuff.j || (now.g && now.g !== lastStuff.g && goodsTotal(now.g) > goodsTotal(lastStuff.g)));
+    lastStuff = now;
+    if (more) stuffFlash(); else stuffShow();
   }
+  // (the goods line's numbers added up, '30 eggs · 6 qt milk' -> 36: more of anything counts as collecting)
+  const goodsTotal = (t) => (String(t || '').match(/\d+/g) || []).reduce((a, n) => a + +n, 0);
   // ── THE SHIFT COUNTER (src/shifts.js): only redrawn when it changes ─────────────────────────────────────────────
   const shiftEl = $('.bmh-shift');
   let shiftKey = '';
@@ -563,7 +583,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     cornerEl: $('.bmh-corner-row'),   // (the top right corner's row: the help button goes in it, left of Menu: src/ui/helpmenu.js)
     closeHelp: () => closeHelp(), helpOpen: () => helpEl.children.length > 0,
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
-    purse, toast, prompt, caption, rule, hint, compass, buckle, shift, meter,
+    purse, nearStore, toast, prompt, caption, rule, hint, compass, buckle, shift, meter,
     // the big touch button's word: 'Rope', or 'Shoot' while the six-shooter is the tool (src/gun.js)
     fireWord(w) { const b = touchEl.querySelector('[data-code="KeyF"]'); if (b && b.textContent !== w) b.textContent = w; },
     touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); callHorse(callOn); },

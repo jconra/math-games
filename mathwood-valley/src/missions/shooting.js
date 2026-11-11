@@ -302,13 +302,16 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // (marked for the help menu's form: src/ui/flag.js)
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', () => { down = null; });
     addEventListener('keydown', onKey, true);
+    // (the card in its own layer over the HUD's purse, as every other job's card is (z-index 30): on a phone the purse
+    // stood over the question, and the question is what matters, the game's maker, 2026-11-10)
+    ui.cardLayer = document.createElement('div'); ui.cardLayer.className = 'bsr-cardlayer'; ui.cardLayer.appendChild(ui.cardEl); document.body.appendChild(ui.cardLayer);
     gunWords(); dots();
   }
   function closeUi() {
     if (!ui) return;
     removeEventListener('keydown', onKey, true);
     clearTimeout(ui.sayT);
-    ui.el.remove(); ui = null;
+    ui.el.remove(); if (ui.cardLayer) ui.cardLayer.remove(); ui = null;
     document.body.classList.remove('bsr-aiming');
     camera.clearViewOffset(); camera.fov = FOV0; camera.near = NEAR0; camera.updateProjectionMatrix();
   }
@@ -720,6 +723,7 @@ function ensureCss() {
   s.textContent = `
 body.bsr-aiming .bmh-top, body.bsr-aiming .bmh-touch, body.bsr-aiming .bmh-prompt, body.bsr-aiming .bmh-help, body.bsr-aiming .bmh-hob { visibility: hidden; }
 @media (min-width: 761px) { body.bsr-aiming .bmh-bottom { bottom: 66px; } }   /* (the HUD's short notes over the gun's bar, not on it) */
+.bsr-cardlayer { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
 .bsr { position: fixed; inset: 0; z-index: 0; cursor: none; touch-action: none; user-select: none; -webkit-user-select: none; }
 .bsr-card { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); text-align: center; pointer-events: none; width: max-content; max-width: min(640px, calc(100vw - 24px));
   background: #f1e6cc; color: #2b1d12; border: 1px solid #8a6a3a; border-radius: 9px; padding: 5px 18px 7px; box-shadow: 0 4px 16px rgba(0,0,0,0.45); }
