@@ -311,11 +311,11 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       picture: o.counter ? counterPicture : (o.picture || null) }, extra);
     if (forced) {   // (rigs: J.dev.next({ type, step, sum, longStep, longOp, ladder: 'K' }), or { counter: 'time', step: 2, seed })
       const f = forced; forced = null;
-      if (f.counter) return mark(storeOrder({ maker: f.counter, step: f.step || 1 }, { who, rand: f.seed != null ? seeded(f.seed) : Math.random }), { fixed: true });
+      if (f.counter) return mark(storeOrder({ maker: f.counter, step: f.step || 1 }, { who, rand: f.seed != null ? seeded(f.seed) : Math.random }), { fixed: true, forced: true });
       const K = f.ladder === 'K' || f.map === 'storeK', step = f.step || 1;
       const o = makeOrder(f.type, { who, step, ladder: K ? 'K' : 'main', longStep: f.longStep || 4, longOp: f.longOp || null, sum: f.sum || null });
       o.own = { strand: 'words', at: askAt({ maker: K ? 'wordsK' : 'words', step }) };
-      return mark(o, { fixed: true, longAt: o.long ? o.long.point : null });
+      return mark(o, { fixed: true, forced: true, longAt: o.long ? o.long.point : null });
     }
     const ask = pickAsk(q.level.gen.mix, Math.random, lastAsk);
     lastAsk = ask;
@@ -568,10 +568,13 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null, credit: order.credit || [], long: order.long ? { op: order.long.op, point: order.long.point, a: order.long.a, b: order.long.b, n: order.long.n, d: order.long.d } : null } : null,
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2), inside: IN ? isIn(c) : null })), busy: U.busy, inside: !!IN });
-  // the level was moved by hand (the tools strip's arrows): the order at the counter, not yet answered, is made again at
-  // the new level for the same customer (a rig's order stays as it is)
+  // the level was moved by hand (the tools strip's arrows): the order at the counter, not yet filled, is made again at
+  // the new level for the same customer, a wrong coin already tried too (the game's maker: "level changing should give
+  // questions for the new level"). Only a rig's order (forced) stays as it is. (Not order.fixed: the word problems'
+  // trainer, src/math/wordproblems.js, marks every story slip made at a level step fixed, which once held every one
+  // of them back, so the arrows dealt nothing new at the story levels.)
   J.relevel = () => {
-    if (!J.active || !order || order.picked || order.fixed || longPanel || U.busy || eqPending) return false;
+    if (!J.active || !order || order.forced || longPanel || U.busy || eqPending) return false;
     const c = people.find((x) => x.state === 'serve'); if (!c) return false;
     if (served[served.length - 1] === c.who.name) served.pop();
     serve(c);
