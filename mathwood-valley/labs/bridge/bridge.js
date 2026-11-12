@@ -4,8 +4,11 @@
 //
 //   bridge = { S, D, boards: [board, ...], deck }
 //   board  = { id, a: { X, Y, Z }, b: { X, Y, Z }, len }                   (the windmill's free board, unchanged)
-//   deck   = null, or { y, on: [ids of the horizontal boards it rests on], planks: [plank, ...] }
-//   plank  = { id, a, b, len, X, plank: true, n: { X: 0, Y: 1, Z: 0 } }  (a 2 by 8 inch plank laid flat across)
+//   deck   = null, or { y, on: [ids of the boards it rests on], planks: [plank, ...] }; an arched deck also has
+//            arch: true, rise (feet over the road), slope (degrees: its steepest board), ends, lines (each side's path)
+//   arch   (on the bridge) true: its deck is laid along the highest gentle path (deckLine); every bridge begun now
+//   plank  = { id, a, b, len, X, plank: true, n: { X: 0, Y: 1, Z: 0 } }  (a 2 by 8 inch plank laid flat across; n its
+//            face's way, tilted with an arched deck)
 //
 // Feet. X runs across the river from west to east (the west bank at X <= -S/2, the east bank at X >= S/2: S is the gap
 // between the two stone faces), Y up (the top of both abutments at Y = 0, the water below), Z along the river from north
@@ -116,13 +119,17 @@ export function arrowStep(A, B, len, ax, sg) {
   }
   return null;
 }
-export function newBridge(S = SPAN0, D = WIDTH) { return { S, D, boards: [], deck: null }; }
+// arch: the deck takes the highest gentle path from bank to bank (deckLine). A bridge saved before arched decks has no
+// arch mark, and its deck stays on the road-height line it always lay on until the deck is laid again.
+export function newBridge(S = SPAN0, D = WIDTH) { return { S, D, boards: [], deck: null, arch: true }; }
 // the bridge as the windmill's modules want a tower: { W, D, boards } (the deck planks included when asked)
 export const asTower = (br, withDeck = false) => ({ W: FACE_W, D: br.D, boards: withDeck && br.deck ? [...br.boards, ...br.deck.planks] : br.boards });
 export function cleanBridge(br) {
   return { S: br.S, D: br.D ?? WIDTH, boards: (br.boards || []).map((b) => ({ id: b.id, a: roundPt(b.a), b: roundPt(b.b), len: b.len ?? d3(b.a, b.b) })),
-    deck: br.deck ? { y: br.deck.y, on: [...br.deck.on], planks: br.deck.planks.map((p) => ({ ...p, a: { ...p.a }, b: { ...p.b }, n: { X: 0, Y: 1, Z: 0 }, plank: true })) } : null };
+    deck: br.deck ? cleanDeck(br.deck) : null, ...(br.arch ? { arch: true } : {}) };
 }
+const cleanDeck = (d) => ({ ...d, on: [...d.on], planks: d.planks.map((p) => ({ ...p, a: { ...p.a }, b: { ...p.b }, n: p.n ? { ...p.n } : { X: 0, Y: 1, Z: 0 }, plank: true })),
+  ...(d.lines ? { lines: { south: d.lines.south.map((q) => [...q]), north: d.lines.north.map((q) => [...q]) } } : {}), ...(d.ends ? { ends: [...d.ends] } : {}) });
 export const boardCount = (br) => br.boards.length;
 // Is a spot already taken? A board lying along the same line over more than half of the shorter of the two (the rule the
 // ✓ uses). (The windmill's spotTaken calls any overlap taken; a bridge's bottom boards are lapped end over end, and a
@@ -280,7 +287,133 @@ function acrossCopies(br, board) {
 // -> { y, on: [ids], planks: [...] } or { why (in words), missing: ['front' | 'back'], low (the height of a side line
 //    lower down that reaches bank to bank, if any: what the builder may have meant) }
 export const ROAD_TOL = 0.1;
-export function deckLine(br) {
+// THE DECK'S PATH (a bridge with the arch mark: every bridge begun since arched decks; newBridge): from the top of one
+// bank to the top of the other, the HIGHEST path along the tops of a side's boards, each board no steeper than the
+// walkers and horses can climb (SLOPES.walk), one board leading on to the next only where their tops come within
+// DECK_GAP of each other (so a stray board higher up, not joined to the rest, is never the path). The planks lie on it,
+// each tilted with the boards under it. A path with no rise is the road-height deck it always was, laid exactly as
+// before. The wagons' limit is gentler (SLOPES.wagon): steeper than that, wagons can't use the bridge.
+export const SLOPES = {
+  walk: 25,    // degrees: people, horses and riders, the cattle
+  wagon: 15,   // degrees: a wagon and its team (the steep old wooden bridges were about this)
+};
+export const DECK_GAP = 0.25;   // feet (3 inches): a board's top this near the next one's leads on to it
+const PATH_STEP = 1 / 48;       // feet: the path is found a quarter inch at a time
+const deg = (k) => Math.atan(Math.abs(k)) * 180 / Math.PI;
+export function deckLine(br) { return br.arch ? archDeck(br) : flatDeck(br); }
+// One side's highest path (s: 1 south, -1 north): -> { xs, ys (the boards' line at each step), at (the board there),
+// on (ids of the boards it rests on), slope (degrees: the steepest board it uses) } or null
+export function sidePath(br, s, most = SLOPES.walk) {
+  const h = br.S / 2, Zs = s * br.D / 2;
+  const segs = [];
+  for (const b of br.boards) {
+    if (Math.abs(b.a.Z - Zs) >= 0.15 || Math.abs(b.b.Z - Zs) >= 0.15) continue;
+    const [p, q] = b.a.X <= b.b.X ? [b.a, b.b] : [b.b, b.a], run = q.X - p.X;
+    if (run < 0.05) continue;
+    const k = (q.Y - p.Y) / run;
+    if (deg(k) > most + 1e-6) continue;
+    segs.push({ id: b.id, x0: p.X, x1: q.X, y0: p.Y, k });
+  }
+  if (!segs.length) return null;
+  const N = Math.max(1, Math.round(br.S / PATH_STEP)), xs = [], cover = [];
+  const yOf = (g, x) => g.y0 + g.k * (x - g.x0);
+  // (a board's end reaches on a hair past itself, half the touching distance: two boards whose ends touch, as an arch's
+  // two halves meet at its crown, lead on from one to the other)
+  const e = TOL / 2;
+  for (let i = 0; i <= N; i++) { const x = -h + br.S * i / N; xs.push(x); cover.push(segs.filter((g) => g.x0 - e <= x + 1e-6 && g.x1 + e >= x - 1e-6)); }
+  // (the boards a set reaches at one step: on to any board there whose top is within DECK_GAP of one in the set)
+  const close = (set, i) => {
+    const stack = [...set];
+    while (stack.length) { const g = stack.pop(), y = yOf(g, xs[i]); for (const o of cover[i]) if (!set.has(o) && Math.abs(yOf(o, xs[i]) - y) <= DECK_GAP + 1e-9) { set.add(o); stack.push(o); } }
+    return set;
+  };
+  const sweep = (from, step) => {
+    const out = new Array(N + 1);
+    out[from] = close(new Set(cover[from].filter((g) => Math.abs(yOf(g, xs[from])) <= ROAD_TOL + 1e-9)), from);
+    for (let i = from + step; i >= 0 && i <= N; i += step) out[i] = close(new Set([...out[i - step]].filter((g) => cover[i].includes(g))), i);
+    return out;
+  };
+  const F = sweep(0, 1), Bk = sweep(N, -1);
+  const ys = [], at = [], on = new Set();
+  let slope = 0;
+  for (let i = 0; i <= N; i++) {
+    let best = null, by = -Infinity;
+    for (const g of F[i]) { if (!Bk[i].has(g)) continue; const y = yOf(g, xs[i]); if (y > by + 1e-9) { by = y; best = g; } }
+    if (!best) return null;
+    ys.push(by); at.push(best);
+    for (const g of F[i]) if (Bk[i].has(g) && Math.abs(yOf(g, xs[i]) - by) < 0.06) on.add(g.id);
+    slope = Math.max(slope, deg(best.k));
+  }
+  return { xs, ys, at, on: [...on], slope };
+}
+// the path's corners, for drawing it: [[X, Y], ...] from bank to bank (where the board under it changes)
+function cornersOf(P) {
+  const out = [[P.xs[0], P.ys[0]]];
+  for (let i = 1; i < P.xs.length; i++) if (P.at[i] !== P.at[i - 1]) { out.push([P.xs[i - 1], P.ys[i - 1]]); if (Math.abs(P.ys[i] - P.ys[i - 1]) > 1e-6) out.push([P.xs[i], P.ys[i]]); }
+  out.push([P.xs[P.xs.length - 1], P.ys[P.ys.length - 1]]);
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  return out.map(([x, y]) => [r(x), r(y)]);
+}
+function archDeck(br) {
+  const flat = flatDeck(br), h = br.S / 2, D = br.D;
+  const S = sidePath(br, 1), N = sidePath(br, -1);
+  if (!S || !N) {
+    const missing = [...(S ? [] : ['south']), ...(N ? [] : ['north'])];
+    // (a path there, but up a board too steep to walk: say that, not that the road isn't met)
+    const steep = missing.map((sd) => sidePath(br, sd === 'south' ? 1 : -1, 89.9)).filter(Boolean);
+    if (steep.length === missing.length) {
+      const st = Math.round(Math.max(...steep.map((p) => p.slope)));
+      return { why: `The deck can't climb that steeply: a board on its way across slopes ${st}°, and people and horses can only walk up about ${SLOPES.walk}°. Make the climb gentler: a lower middle, or longer boards.`, missing, steep: st, low: null };
+    }
+    if (flat.why) return { ...flat, missing };
+    return { why: 'The deck has to meet the road: ' + (missing.length === 2 ? 'put a board on each side from the top of one stone to the other.' : `the ${missing[0]} side needs a board from the top of one stone to the other.`), missing, low: null };
+  }
+  const top = (i) => Math.max(S.ys[i], N.ys[i]);
+  // (no rise anywhere: the road-height deck, exactly as it was always laid)
+  if (flat.planks && S.ys.every((y, i) => top(i) <= flat.y + 0.06)) return flat;
+  // (the two sides have to carry the planks level across: the same path within a few inches)
+  let worst = 0, wi = 0;
+  for (let i = 0; i < S.ys.length; i++) { const d = Math.abs(S.ys[i] - N.ys[i]); if (d > worst) { worst = d; wi = i; } }
+  if (worst > DECK_GAP + 1e-9) {
+    const hi = S.ys[wi] > N.ys[wi] ? 'south' : 'north', inch = Math.round(worst * 12);
+    return { why: `The deck's two sides don't match: the ${hi} side's boards are ${inch < 12 ? `${inch} inches` : lenWords(Math.round(worst * 2) / 2)} higher ${sideOfX(S.xs[wi], h)}, so the planks wouldn't lie flat across. Build both sides the same (the twins help).`, missing: [], uneven: hi, low: null };
+  }
+  const iOf = (X) => Math.max(0, Math.min(S.xs.length - 1, Math.round((X + h) / br.S * (S.xs.length - 1))));
+  const planks = planksFor(br, 0).map((p) => {
+    const i = iOf(p.X), side = S.ys[i] >= N.ys[i] ? S : N, Y = r6(top(i) + DECK_LIFT), k = side.at[i].k, c = 1 / Math.hypot(1, k);
+    return { ...p, a: { ...p.a, Y }, b: { ...p.b, Y }, n: { X: r6(-k * c), Y: r6(c), Z: 0 } };
+  });
+  const yAt = (X) => top(iOf(X));
+  const between = br.boards.filter((b) => !S.on.includes(b.id) && !N.on.includes(b.id) && Math.abs(b.a.Z - b.b.Z) < 0.05 && Math.abs(b.a.Z) < D / 2 - 0.2 && Math.abs(b.b.X - b.a.X) > 0.5
+    && [b.a, b.b].every((p) => Math.abs(p.X) > h || Math.abs(p.Y - yAt(p.X)) < 0.06)).map((b) => b.id);
+  const y = Math.round(((S.ys[0] + S.ys[S.ys.length - 1]) / 2) * 20) / 20, peak = Math.max(...S.ys.map((_, i) => top(i)));
+  return { y, on: [...S.on, ...N.on, ...between], planks, arch: true, rise: r6(Math.round((peak - y) * 1e4) / 1e4), slope: Math.round(Math.max(S.slope, N.slope) * 10) / 10,
+    ends: [r6(top(0)), r6(top(S.ys.length - 1))], lines: { south: cornersOf(S), north: cornersOf(N) } };
+}
+const sideOfX = (X, h) => (Math.abs(X) < h / 3 ? 'in the middle' : X < 0 ? 'toward the west bank' : 'toward the east bank');
+// THE DECK'S TOP at X (feet along the gap), where feet, hooves and wheels go: along the planks' tops (between two planks,
+// part way from one to the next; out past the last plank, toward the bank's edge where the path meets the road). A deck
+// with no rise is one height all the way across, as it always was.
+export const DECK_TOP = 3.5 / 24 + PLANK.t;   // feet: the deck's top above its boards' line (a plank on a 2x4's top edge)
+export function deckTopAt(deck, X, S) {
+  const ps = deck && deck.planks;
+  if (!ps || !ps.length) return deck ? deck.y + DECK_TOP : 0;
+  const top = (p) => p.a.Y - DECK_LIFT + DECK_TOP;
+  if (!deck.arch) return top(ps[0]);
+  const h = S / 2, x = Math.max(-h, Math.min(h, X)), first = ps[0], last = ps[ps.length - 1];
+  const e0 = deck.ends ? deck.ends[0] + DECK_TOP : top(first), e1 = deck.ends ? deck.ends[1] + DECK_TOP : top(last);
+  if (x <= first.X) return e0 + (top(first) - e0) * (x + h) / Math.max(1e-6, first.X + h);
+  if (x >= last.X) return e1 + (top(last) - e1) * (h - x) / Math.max(1e-6, h - last.X);
+  let k = Math.max(0, Math.min(ps.length - 2, Math.floor((x - first.X) / PLANK.pitch)));
+  while (k > 0 && ps[k].X > x) k--;
+  while (k < ps.length - 2 && ps[k + 1].X < x) k++;
+  const p = ps[k], q = ps[k + 1], t = (x - p.X) / Math.max(1e-6, q.X - p.X);
+  return top(p) + (top(q) - top(p)) * t;
+}
+// how steep the deck is, degrees (0 for a deck with no rise); and whether a wagon can take it
+export const deckSlope = (deck) => (deck && deck.arch ? deck.slope || 0 : 0);
+export const wagonsCan = (deck) => deckSlope(deck) <= SLOPES.wagon + 1e-6;
+function flatDeck(br) {
   const h = br.S / 2, D = br.D;
   // a side's lines from bank to bank: [{ y, ids }], any height
   const sideLines = (s) => {

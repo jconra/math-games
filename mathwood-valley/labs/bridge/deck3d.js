@@ -27,17 +27,22 @@ export function makeDeckView(scene, strainColor) {
     boards.clear();
     if (deck) deck.planks.forEach((p, i) => {
       const mesh = new THREE.Mesh(shelf.get(p.len), mats[i % 3]); mesh.castShadow = true; mesh.receiveShadow = true;
-      const a = new THREE.Vector3(p.a.X, p.a.Y + lift, p.a.Z).multiplyScalar(FT), b = new THREE.Vector3(p.b.X, p.b.Y + lift, p.b.Z).multiplyScalar(FT);
-      pose(mesh, a, b); mesh.userData = { key: p.id, src: p, plank: true };
+      // (on an arched deck each plank is tilted with the boards under it: its face looks along p.n, and it is drawn
+      // that far off its line along it)
+      const up = p.n && Math.abs(p.n.Y) < 1 - 1e-9 ? new THREE.Vector3(p.n.X, p.n.Y, p.n.Z).normalize() : new THREE.Vector3(0, 1, 0);
+      const a = new THREE.Vector3(p.a.X, p.a.Y, p.a.Z).addScaledVector(up, lift).multiplyScalar(FT), b = new THREE.Vector3(p.b.X, p.b.Y, p.b.Z).addScaledVector(up, lift).multiplyScalar(FT);
+      pose(mesh, a, b, up); mesh.userData = { key: p.id, src: p, plank: true };
       group.add(mesh);
-      boards.set(p.id, { mesh, a, b, z: new THREE.Vector3(0, 1, 0), len: p.len, src: p, mat: mesh.material, falling: false });
+      boards.set(p.id, { mesh, a, b, z: up, len: p.len, src: p, mat: mesh.material, falling: false });
     });
     shelf.keep(new Set([...boards.values()].map((b) => b.mesh.geometry)));
   }
   // a plank's box between two points (metres), its wide face up
   const tx = new THREE.Vector3(), ty = new THREE.Vector3(), tz = new THREE.Vector3(), tm = new THREE.Matrix4();
-  function pose(mesh, a, b) {
-    tx.subVectors(b, a).normalize(); ty.set(0, 1, 0).addScaledVector(tx, -tx.y).normalize(); tz.crossVectors(tx, ty);
+  function pose(mesh, a, b, up = null) {
+    tx.subVectors(b, a).normalize();
+    if (up) ty.copy(up); else ty.set(0, 1, 0);
+    ty.addScaledVector(tx, -ty.dot(tx)).normalize(); tz.crossVectors(tx, ty);
     tm.makeBasis(tx, ty, tz); mesh.quaternion.setFromRotationMatrix(tm); mesh.position.addVectors(a, b).multiplyScalar(0.5);
   }
   const sa = new THREE.Vector3(), sb = new THREE.Vector3();
@@ -45,9 +50,9 @@ export function makeDeckView(scene, strainColor) {
     for (const b of boards.values()) {
       if (b.falling) continue;
       const m = bend && bend(b.src.id);
-      if (!m) { pose(b.mesh, b.a, b.b); continue; }
+      if (!m) { pose(b.mesh, b.a, b.b, b.z); continue; }
       sa.set(m[0][0], m[0][1], m[0][2]).multiplyScalar(FT).add(b.a); sb.set(m[1][0], m[1][1], m[1][2]).multiplyScalar(FT).add(b.b);
-      pose(b.mesh, sa, sb);
+      pose(b.mesh, sa, sb, b.z);
     }
   }
   const tmpC = new THREE.Color(), cFlash = new THREE.Color(0xff2a14);

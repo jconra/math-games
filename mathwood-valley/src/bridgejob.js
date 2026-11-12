@@ -62,7 +62,7 @@ import { mountBridge, engineerAt } from '../labs/bridge/builder.js';
 import { makeYard, FT } from '../labs/bridge/scene.js';
 import { makeTowerView } from '../labs/windmill/tower3d.js';
 import { makeDeckView } from '../labs/bridge/deck3d.js';
-import { asTower, cleanBridge, deckLine, newBridge, WIDTH, ABUT_HALF, PLANK, DECK_LIFT, PLANKS, BOARDS } from '../labs/bridge/bridge.js';
+import { asTower, cleanBridge, deckLine, deckTopAt, wagonsCan, newBridge, WIDTH, ABUT_HALF, PLANKS, BOARDS } from '../labs/bridge/bridge.js';
 import { LOADS } from '../labs/bridge/frame.js';
 import { BANK } from '../labs/bridge/scene.js';
 import * as labSound from '../labs/windmill/sound.js';
@@ -95,7 +95,7 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   const site = J.site = sites.add({
     id: 'bridge', x: C.x, z: C.z, prompt: 'Help the engineer build his bridge',
     meet: () => { if (!engineer || J.builder || !jobOn(rider, 'bridge')) return null; const p = engineer.root.getWorldPosition(_w); return { x: p.x, z: p.z }; },
-    css: ['labs/windmill/windmill.css?v=26', 'labs/bridge/bridge.css?v=15'],
+    css: ['labs/windmill/windmill.css?v=26', 'labs/bridge/bridge.css?v=16'],
     mow: { r: 7, fade: 3 },   // (the abutments, the piles and the road's ends out of the tall meadow)
     mount, closed,
     // (while the loads cross, the player, the horse and the dog standing on the road there are out of their way)
@@ -143,20 +143,23 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   const deckShown = makeDeckView(frame, shown.strainColor);
   let holdTop = null;   // (THE DECK HELD, below: the deck's top kept under those standing on it)
   let merged = null, deckTop = null, plankY = null;   // deckTop: the deck's top (metres, the bridge's frame) while the
-                                                      // bridge is used; plankY: its top whether or not it is
+                                                      // bridge is used; plankY: its top whether or not it is (at the
+                                                      // middle of the gap; an arched deck's top along it: topAt)
+  let deck = null;                                    // (the deck as laid: bridge.js deckLine)
   function showBridge() {
     const b = saved();
     if (merged) { merged.undo(); merged = null; }
     yard.setPile(b && b.lumber && Number.isFinite(b.lumber.full) ? b.lumber.full : BOARDS);
     yard.setPlankPile(b && Number.isFinite(b.planks) ? b.planks : PLANKS);
     const t = b ? cleanBridge({ ...b.bridge, S }) : newBridge(S, WIDTH);
-    const br = { S, D: t.D, boards: t.boards, deck: null };
+    const br = { S, D: t.D, boards: t.boards, deck: null, arch: !!t.arch };
     if (b && b.deck) { const d = deckLine(br); if (d.planks) br.deck = d; }
     shown.rebuild(asTower(br)); shown.nails.visible = true; shown.showHead(false); shown.group.visible = true;
     deckShown.rebuild(br.deck); deckShown.group.visible = true;
     merged = mergeStatic([shown.group, deckShown.group, yard.pile, yard.plankPile], site.group);
-    const p = br.deck && br.deck.planks[0];
-    plankY = p ? (p.a.Y + (3.5 / 24 + PLANK.t / 2 - DECK_LIFT) + PLANK.t / 2) * FT : null;
+    // (the deck's top, metres in the bridge's frame: one height for a flat deck; an arched one follows its planks)
+    deck = br.deck;
+    plankY = deck ? deckTopAt(deck, 0, S) * FT : null;
     useDeck();
     // (changed since its rating was worked out: the engineer's sums run quietly on it now)
     if (b && b.bridge.boards.length && !(b.rated && b.rated.sig === bridgeSig(b.bridge, b.deck))) rate();
@@ -169,7 +172,7 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   function rate() {
     const b = saved(); if (!b) return Promise.resolve(-1);
     const sig = bridgeSig(b.bridge, b.deck), t = cleanBridge({ ...b.bridge, S });
-    const br = { S, D: t.D, boards: t.boards, deck: null };
+    const br = { S, D: t.D, boards: t.boards, deck: null, arch: !!t.arch };
     if (b.deck) { const d = deckLine(br); if (d.planks) br.deck = d; }
     if (!br.deck) { setRated(sig, -1); return Promise.resolve(-1); }
     const id = ++ask;
@@ -338,7 +341,10 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   const onFoot = (x, z) => { const l = toLocal(x, z); return Math.abs(l.x) <= halfL && Math.abs(l.z) <= halfW; };   // (the deck's footprint)
   const onDeck = (x, z) => (deckTop !== null || holdTop !== null) && onFoot(x, z);
   const prevHeight = W.heightAt, prevBlocked = W.blocked;
-  const heightAt = (x, z) => (onDeck(x, z) ? Y0 + (deckTop ?? holdTop) : prevHeight(x, z));
+  // (an arched deck: its top where along the gap the spot is, so a wagon's four wheels each roll up and down it and it
+  // noses up, then down, by itself: src/wagon.js)
+  const topAt = (x, z) => (deck && deck.arch ? deckTopAt(deck, toLocal(x, z).x / FT, S) * FT : (deckTop ?? holdTop));
+  const heightAt = (x, z) => (onDeck(x, z) ? Y0 + topAt(x, z) : prevHeight(x, z));
   const blocked = (x, z) => (onDeck(x, z) ? false : prevBlocked(x, z));
   W.heightAt = heightAt; W.blocked = blocked;
 
@@ -398,8 +404,9 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
     if (r >= C.stands) return 'riders';
     return b && b.bridge && b.bridge.boards.length ? 'building' : 'start';
   };
-  J.uses = (kind) => deckTop !== null && J.rating() >= (kind === 'wagon' ? C.wagons : C.stands);
-  J.deck = () => (deckTop === null ? null : { y: Y0 + deckTop, halfL, halfW, x: C.x, z: C.z, turn: C.turn });
+  // (wagons never take a deck steeper than they can climb: bridge.js SLOPES. Its test says so too: they stay on the bank)
+  J.uses = (kind) => deckTop !== null && J.rating() >= (kind === 'wagon' ? C.wagons : C.stands) && (kind !== 'wagon' || wagonsCan(deck));
+  J.deck = () => (deckTop === null ? null : { y: Y0 + deckTop, halfL, halfW, x: C.x, z: C.z, turn: C.turn, arch: !!(deck && deck.arch), rise: deck && deck.rise ? +(deck.rise * FT).toFixed(3) : 0, slope: deck && deck.slope ? deck.slope : 0 });
   J.onDeck = onDeck;
   J.toWorld = toWorld; J.toLocal = toLocal; J.origin = origin;
   // where the job is, for the jobs board and the trail: the engineer

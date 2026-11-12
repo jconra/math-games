@@ -19,6 +19,12 @@
 //     boards, a cross piece on the side of the top board) is toe-nailed, as in the windmill.
 //   * DECK PLANKS (2 by 8 inches, laid flat) are boards in the frame like any other, with their own size and strength;
 //     they rest on the two bottom-board lines and bear on them for nothing when pressed down; they touch nothing else.
+//     On an ARCHED deck (bridge.js deckLine: the highest gentle path) the planks lie along the arch's boards, each
+//     tilted with them, bearing square to its face. Nothing else about an arch is special: its strength comes from the
+//     same sums (its boards squeezed into the stone faces, which push back). Three joint rules for an arched deck
+//     only (old bridges' sums stay as they were): where a plank rests on a spot two of the arch's boards meet, they are
+//     joined by their own joint, not through the plank's toe-nails; two boards' ends meeting at a slant (the arch's
+//     crown) bear when pushed together; and wagons don't try a deck steeper than they can climb (SLOPES.wagon).
 //   * THE LOAD: a person, a horse, wagons, a cattle drive (LOADS): every foot, hoof and wheel a weight on the deck plank
 //     under it (shared between the two planks it stands between, by how near it is to each), moved across half a foot at
 //     a time. Each spot is solved on its own; a board's bending is checked under the weights on it as well as at its ends.
@@ -33,7 +39,7 @@
 // Exports: crossTest(bridge) (the whole test: every load in turn, as long as the bridge carries them), LOADS, SECTIONS,
 // and for the rigs and tests solveLoads (one set of weights, no giving way) and internals.
 import { WOOD as WOOD_W, NAILS as NAILS_W, TOE_SHARE, TOL, internals as WI } from '../windmill/frame.js';
-import { supportsOf, FACE_W, PLANK, DECK_LIFT, deckLine } from './bridge.js';
+import { supportsOf, FACE_W, PLANK, DECK_LIFT, DECK_TOP, deckLine, deckTopAt, deckSlope, SLOPES } from './bridge.js';
 
 const { prepBoards, faceToFace, markLegs, nailUse, rcm, makeEnvelope, factor, solveEnv, toWorld, groundedSet } = WI;
 // The bridge's wood and nails are stronger than the windmill's (its numbers are on the cautious side): clear, dry pine
@@ -95,8 +101,10 @@ export const partsAt = (load, x) => load.parts.map((p, i) => ({ X: x + p.dx, Z: 
 // THE ROOM a load needs: is any board (not a deck plank, nor a board the deck rests on) in the way of it, over the deck
 // from bank to bank: within half its width of the middle (and a 2x4's half thickness), from the deck's top to its
 // height? -> [ids in the way], the lowest first
+// (an arched deck: the same room, measured up from the deck's top wherever along the gap the board is)
 export function inTheWay(bridge, load) {
   if (!bridge.deck) return [];
+  if (bridge.deck.arch) return inTheWayArched(bridge, load);
   const top = bridge.deck.y + DECK_LIFT + PLANK.t / 2, h = bridge.S / 2 + 1, w = load.wide / 2, on = new Set(bridge.deck.on), r = 0.15;
   const lo = [-h - r, top + 0.05 - r, -w - r], hi = [h + r, top + load.tall + r, w + r];
   const hits = [];
@@ -110,6 +118,22 @@ export function inTheWay(bridge, load) {
       t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) hit = false;
     }
     if (hit) hits.push(b);
+  }
+  return hits.sort((p, q) => Math.min(p.a.Y, p.b.Y) - Math.min(q.a.Y, q.b.Y)).map((b) => b.id);
+}
+function inTheWayArched(bridge, load) {
+  const d = bridge.deck, H = bridge.S / 2, h = H + 1, w = load.wide / 2, on = new Set(d.on), r = 0.15;
+  const top = (X) => deckTopAt(d, X, bridge.S) - DECK_TOP + DECK_LIFT + PLANK.t / 2;   // (the planks' top, as above)
+  const hits = [];
+  for (const b of bridge.boards) {
+    if (on.has(b.id)) continue;
+    const L = Math.hypot(b.b.X - b.a.X, b.b.Y - b.a.Y, b.b.Z - b.a.Z), n = Math.max(2, Math.ceil(L / 0.05));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, X = b.a.X + (b.b.X - b.a.X) * t, Y = b.a.Y + (b.b.Y - b.a.Y) * t, Z = b.a.Z + (b.b.Z - b.a.Z) * t;
+      if (Math.abs(X) > h + r || Math.abs(Z) > w + r) continue;
+      const y0 = top(X);
+      if (Y >= y0 + 0.05 - r && Y <= y0 + load.tall + r) { hits.push(b); break; }
+    }
   }
   return hits.sort((p, q) => Math.min(p.a.Y, p.b.Y) - Math.min(q.a.Y, q.b.Y)).map((b) => b.id);
 }
@@ -138,7 +162,8 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 // (the windmill's prepBoards, with each board's size: a deck plank's, or a 2x4's)
 function prep(br, boards) {
   const bs = prepBoards({ W: FACE_W, D: br.D, boards });
-  for (const b of bs) { b.sec = b.src.plank ? SECTIONS.plank : SECTIONS.board; b.plank = !!b.src.plank; }
+  const arch = !!(br.deck && br.deck.arch);
+  for (const b of bs) { b.sec = b.src.plank ? SECTIONS.plank : SECTIONS.board; b.plank = !!b.src.plank; b.archDeck = arch; }
   return bs;
 }
 // where two boards touch (the windmill's rule; its own copy there is not exported under this name)
@@ -235,7 +260,11 @@ function classify(boards, hubs) {
       if (h.ground && it.ground) { it.kind = 'rest'; continue; }
       const mine = cs.filter((c) => c.i === it.b || c.j === it.b);
       const toes = mine.filter((c) => c.type === 'toe' && c.carrier === it.b);
-      if (toes.length && !ends.has(it.b)) {
+      // (under an arched deck, a board meeting another board where a plank also rests is joined by that joint: the
+      // plank's toe-nails there carry only the plank, as everywhere else along the deck. The arch's boards meet under
+      // its planks, at its crown and where it rises off the road.)
+      const joined = b.archDeck && mine.some((c) => !boards[c.i].plank && !boards[c.j].plank);
+      if (toes.length && !ends.has(it.b) && !joined) {
         const c = toes.reduce((a, x) => (Math.abs(boards[x.end].d[1]) > Math.abs(boards[a.end].d[1]) ? x : a));
         const e = boards[c.end], eEnd = c.tEnd < e.L / 2 ? e.d : [-e.d[0], -e.d[1], -e.d[2]];
         it.kind = 'toe'; it.toeEnd = c.end; it.toeAxis = eEnd;
@@ -243,11 +272,14 @@ function classify(boards, hubs) {
         it.restsOn = !e.post && Math.abs(e.d[1]) < 0.3 && Math.abs(b.d[1]) < 0.3;
         continue;
       }
-      let face = false, butt = true;
+      let face = false, butt = true, mitre = false;
       const soft = [];
       for (const c of mine) {
         const j = c.i === it.b ? c.j : c.i, o = boards[j];
         if (c.type === 'butt') { it.endToEnd = true; continue; }
+        // (under an arched deck: two boards' ends meeting at a slant, as an arch's two halves meet at its crown, bear
+        // when pushed together, as two boards end to end along one line do)
+        if (b.archDeck && !o.plank && c.type === 'face' && it.eIn) { const tj = c.i === it.b ? c.tj : c.ti; if (tj < TOL || tj > o.L - TOL) mitre = true; }
         butt = false;
         if (c.type === 'toe') { if (b.plank && !o.plank) it.bearsUp = true; continue; }
         face = true;
@@ -256,7 +288,7 @@ function classify(boards, hubs) {
           else soft.push(c.plane || (o.post ? b.n : o.n));
         } else if (c.plane) soft.push(c.plane);
       }
-      it.endToEnd = it.endToEnd && !!it.eIn;
+      it.endToEnd = (it.endToEnd || mitre) && !!it.eIn;
       it.kind = face || !butt ? 'face' : 'butt';
       it.soft = it.kind === 'face' ? (soft.length ? orthoSet(soft) : [b.n]) : [];
       // (a deck plank resting on a board, toe-nailed to it at its end and touching nothing else there: it turns on that
@@ -597,8 +629,15 @@ function checkAll(M, sol, live, { buckle = true, start = null } = {}) {
     const F = [0, 1, 2].map((r) => sp.Kt[r * 3] * dt[0] + sp.Kt[r * 3 + 1] * dt[1] + sp.Kt[r * 3 + 2] * dt[2]);
     const Mo = [0, 1, 2].map((r) => sp.R[r * 3] * dr[0] + sp.R[r * 3 + 1] * dr[1] + sp.R[r * 3 + 2] * dr[2]);
     // (a deck plank held up by the board it rests on bears there: that costs its nails nothing)
-    if (it.bearsUp && F[1] > 0) F[1] = 0;
-    const b = M.boards[it.b], r = nailUse(b, it, F, Mo, M.hubs[sp.hub]);
+    // (a plank tilted with an arched deck bears square to its face, not straight up: only what is left over, along the
+    // slope, works its nails)
+    const b = M.boards[it.b];
+    if (it.bearsUp) {
+      const nn = b.n[1] < 0 ? [-b.n[0], -b.n[1], -b.n[2]] : b.n;
+      if (nn[1] > 1 - 1e-12) { if (F[1] > 0) F[1] = 0; }
+      else { const fb = F[0] * nn[0] + F[1] * nn[1] + F[2] * nn[2]; if (fb > 0) for (let k = 0; k < 3; k++) F[k] -= fb * nn[k]; }
+    }
+    const r = nailUse(b, it, F, Mo, M.hubs[sp.hub]);
     items.push({ type: 'joint', util: r.util, b: it.b, id: b.id, hub: sp.hub, P: M.hubs[sp.hub].P, kind: it.kind, toeEnd: it.toeEnd, ...r });
     bump(b.id, r.util); hubUtil[sp.hub] = Math.max(hubUtil[sp.hub], r.util);
   }
@@ -838,6 +877,8 @@ export function crossTest(bridge, { loads = LOADS, step = 0.5, buckle = true, on
     // (no room for it: it stays on the bank, and the bridge is untouched)
     const way = inTheWay({ ...br, boards: state.boards.filter((b) => !b.plank), deck: state.deck }, load);
     if (way.length) { stop({ blocked: way }); break; }
+    // (an arched deck steeper than a wagon and its team can climb: the wagons stay on the bank)
+    if (load.model && deckSlope(state.deck) > SLOPES.wagon + 1e-6) { stop({ steep: deckSlope(state.deck) }); break; }
     opts.mode = null;
     for (const x of positionsOf(load, br.S, load.step || step)) {
       const parts = partsAt(load, x);

@@ -91,7 +91,7 @@
 //   state()), BR.result(), BR.startTest(), BR.worldToScreen(X, Y, Z)
 import * as THREE from 'three';
 import { SPAN0, WIDTH, BOARDS, PLANKS, BOARD_FT, newBridge, cleanBridge, boardCount, bridgeHeight, twinsOf, spotTaken, isPost, makeBoard, spellUnits,
-  placeWords, roleOf, nounOf, deckLine, pointWords, encodeBridge, decodeBridge, touchesAny, grounded, contactsOf as contactsBr, asTower, lenLabel, lenWords, isLevelB, isUprightB, supportsOf } from './bridge.js';
+  placeWords, roleOf, nounOf, deckLine, wagonsCan, SLOPES, pointWords, encodeBridge, decodeBridge, touchesAny, grounded, contactsOf as contactsBr, asTower, lenLabel, lenWords, isLevelB, isUprightB, supportsOf } from './bridge.js';
 import { touch3 } from '../windmill/touch.js';
 import { faceOf } from '../windmill/frame.js';
 import { LOADS, inTheWay } from './frame.js';
@@ -563,6 +563,9 @@ function pickUp(src) {
 let deckJustLaid = false, deckUpOffered = false;
 function layDeck() {
   const t = app.tower; if (t.deck || app.phase !== 'build') return false;
+  // (laid from now on along the highest gentle path from bank to bank: a bridge saved before arched decks gets the arch
+  // mark here, the first time its deck is laid again)
+  t.arch = true;
   const d = deckLine(t);
   // (not ready: the engineer says what is missing, and ghost lines show where the road-height boards go)
   if (!d.planks) { app.roadGhost = { until: performance.now() + 9000, missing: d.missing }; say(d.why, { key: 'nodeck', times: 99, force: true, ms: 9000 }); return false; }
@@ -570,7 +573,9 @@ function layDeck() {
   app.planks -= d.planks.length; t.deck = d; deckJustLaid = true; world.setPlankPile(app.planks);
   sound.hammer(2); later(() => sound.hammer(2), 300); later(() => sound.hammer(1), 600);
   rebuild();
-  say(`${d.planks.length} planks laid, one every 8 inches. Now send something across, or keep building.`, { key: 'decked', times: 2, force: true });
+  if (d.arch && !wagonsCan(d)) say(`${d.planks.length} planks laid along your arch. It climbs at ${Math.round(d.slope)}°: people and horses can walk up that, but a wagon and its team can only pull up about ${SLOPES.wagon}°, so the wagons can't make it up. Make it gentler: a lower middle, or the climb spread over longer boards.`, { key: 'steep', times: 99, force: true, ms: 10000 });
+  else if (d.arch) say(`${d.planks.length} planks laid along your arch: it rises ${archWords(d.rise)} in the middle and climbs at ${Math.round(d.slope)}°, gentle enough for the wagons. Now send something across!`, { key: 'arched', times: 3, force: true, ms: 8000 });
+  else say(`${d.planks.length} planks laid, one every 8 inches. Now send something across, or keep building.`, { key: 'decked', times: 2, force: true });
   return true;
 }
 function takeUpDeck(why = '') {
@@ -587,8 +592,23 @@ $('lay-deck').onclick = () => { sound.audioOn(); if (app.tower.deck) takeUpDeck(
 function deckFollows() {
   const t = app.tower; if (!t.deck) return;
   const d = deckLine(t);
-  if (!d.planks || Math.abs(d.y - t.deck.y) > 0.06) { takeUpDeck('The deck had nothing to rest on there any more, so I took it up.'); return; }
+  if (!d.planks || (!d.arch && !t.deck.arch && Math.abs(d.y - t.deck.y) > 0.06)) { takeUpDeck('The deck had nothing to rest on there any more, so I took it up.'); return; }
+  // (an arched deck, or one that now arches: the same planks moved onto the path its boards make now)
+  // (a deck with gaps in it after a test is left as it is: "Keep building" lays it again whole)
+  if (d.arch || t.deck.arch) { if (d.planks.length !== t.deck.planks.length) { t.deck.on = d.on; return; } t.deck = d; return; }
   t.deck.on = d.on;
+}
+// THE DECK'S PATH, for the glowing line: each side's corners along its boards' tops, [[X, Y], ...] (feet), and whether
+// it is too steep for the wagons. A flat deck runs straight across from bank to bank.
+function deckPathOf(t, d) {
+  if (!d || !d.planks) return null;
+  const h = t.S / 2, flat = [[-h, d.y], [h, d.y]];
+  return { south: d.lines ? d.lines.south : flat, north: d.lines ? d.lines.north : flat, laid: d === t.deck, steep: !wagonsCan(d), slope: d.slope || 0, arch: !!d.arch };
+}
+// a rise in words: "8 inches", "1 foot 2 inches"
+function archWords(ft) {
+  const inch = Math.max(1, Math.round(ft * 12));
+  return inch < 12 ? `${inch} inch${inch === 1 ? '' : 'es'}` : `${Math.floor(inch / 12)} ${inch < 24 ? 'foot' : 'feet'}${inch % 12 ? ` ${inch % 12} inch${inch % 12 === 1 ? '' : 'es'}` : ''}`;
 }
 
 function rebuild() {
@@ -602,6 +622,8 @@ function rebuild() {
   refreshGhosts();
   // ("Lay the deck" shows as soon as anything is built; it is ready once both sides reach bank to bank at road height)
   const dl = !t.deck && boardCount(t) > 0 ? deckLine(t) : null;
+  // (the path the deck takes, glowing along the boards it picked: build.js draws it)
+  app.deckPath = deckPathOf(t, t.deck || (dl && dl.planks ? dl : null));
   $('lay-deck').hidden = (!dl && !t.deck) || app.phase !== 'build';
   $('lay-deck').textContent = t.deck ? 'Take up the deck' : 'Lay the deck';
   $('lay-deck').classList.toggle('is-not-ready', !!dl && !dl.planks);
@@ -971,7 +993,8 @@ function resetAll(S = app.tower.S) {
 // a bridge already begun (the host's saved one): its boards, its deck, the lumber and planks left, the boards earned
 function restore(st) {
   const t = cleanBridge(st.bridge);
-  app.tower = newBridge(host.span || t.S, WIDTH); app.placed = []; app.held = null; app.selected = null; ghosts = null; app.lastHand = null; lastDown = null;
+  app.tower = newBridge(host.span || t.S, WIDTH);
+  app.tower.arch = !!t.arch;   // (saved before arched decks: its deck lies where it always did until it is laid again) app.placed = []; app.held = null; app.selected = null; ghosts = null; app.lastHand = null; lastDown = null;
   build.freshStack(Math.max(0, st.lumber && Number.isFinite(st.lumber.full) ? st.lumber.full : BOARDS));
   for (const len of (st.lumber && st.lumber.pieces) || []) if (len > 0) build.returnPiece(len);
   for (const b of t.boards) addBoard(b);
@@ -1165,7 +1188,8 @@ const handle = {
     return app.tower.boards.length;
   },
   setSpan: (S) => app.setSpan(S),
-  deck: () => (app.tower.deck ? { y: app.tower.deck.y, planks: app.tower.deck.planks.length, on: [...app.tower.deck.on] } : null),
+  deck: () => (app.tower.deck ? { y: app.tower.deck.y, planks: app.tower.deck.planks.length, on: [...app.tower.deck.on], arch: !!app.tower.deck.arch, rise: app.tower.deck.rise || 0, slope: app.tower.deck.slope || 0, wagons: wagonsCan(app.tower.deck) } : null),
+  deckPath: () => app.deckPath,
   boards: () => JSON.parse(JSON.stringify(app.tower.boards)),
   bridge: () => JSON.parse(JSON.stringify(app.tower)),
   ghosts: () => app.ghostList().map((g) => ({ a: g.a, b: g.b, len: g.len, ok: g.ok, reason: g.reason })),
@@ -1205,7 +1229,7 @@ function snapshot() {
   if (app.held && app.held.len) { if (app.held.len >= BOARD_FT - 1e-6) pieces.push(BOARD_FT); else pieces.push(+app.held.len.toFixed(4)); }
   const full = build.fullCount() + pieces.filter((l) => l >= BOARD_FT - 1e-6).length;
   const t = app.tower;
-  return { bridge: JSON.parse(JSON.stringify({ S: t.S, D: t.D, boards: t.boards.map((b) => ({ id: b.id, a: b.a, b: b.b, len: b.len })) })),
+  return { bridge: JSON.parse(JSON.stringify({ S: t.S, D: t.D, boards: t.boards.map((b) => ({ id: b.id, a: b.a, b: b.b, len: b.len })), ...(t.arch ? { arch: true } : {}) })),
     deck: t.deck ? t.deck.planks.length : 0, planks: app.planks,
     lumber: { full, pieces: pieces.filter((l) => l < BOARD_FT - 1e-6) }, bonus: bonusEarned, best: { ...best } };
 }

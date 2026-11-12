@@ -13,10 +13,12 @@ export function payFor(rating, paid, pay = PAY) {
   return Math.max(0, now - had);
 }
 
-// a bridge's fingerprint: its boards and its deck (a test's rating holds for this bridge only)
+// a bridge's fingerprint: its boards and its deck (a test's rating holds for this bridge only). A bridge with the arch
+// mark (its deck laid on the highest gentle path: labs/bridge/bridge.js deckLine) says so at the end; one saved before
+// arched decks has the very fingerprint it always had, so the rating it earned stands.
 export function bridgeSig(bridge, deck) {
   const r = (v) => Math.round(v * 100);
-  return (bridge.boards || []).map((b) => [b.a.X, b.a.Y, b.a.Z, b.b.X, b.b.Y, b.b.Z].map(r).join(',')).sort().join(';') + '|' + (deck | 0);
+  return (bridge.boards || []).map((b) => [b.a.X, b.a.Y, b.a.Z, b.b.X, b.b.Y, b.b.Z].map(r).join(',')).sort().join(';') + '|' + (deck | 0) + (bridge.arch ? '|a' : '');
 }
 
 // the ways, as the valley has them (the lab's frame turned a quarter: its east is south here, its south is west)

@@ -22,7 +22,7 @@
 //   pays: { gold, line, sub }; else frame.js LOADS gold), done(card) (optional: the card is up) }
 // C.dispose(): the worker let go (the builder put away)
 import { LOADS } from './frame.js';
-import { lenWords, lenLabel, spellUnits, placeWords, roleOf, PLANK, crossesMid, encodeBridge } from './bridge.js';
+import { lenWords, lenLabel, spellUnits, placeWords, roleOf, PLANK, crossesMid, encodeBridge, deckTopAt, SLOPES } from './bridge.js';
 import * as sound from '../windmill/sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -156,12 +156,12 @@ export function makeCrossing(app, hooks) {
   function begin() {
     const cr = run.crossings[run.i], L = LOADS[run.i];
     // (nothing to cross on, or no way across worked out: no load starts, and the card says what happened)
-    if (!cr || !L || (!cr.blocked && !cr.nodeck && !(cr.steps && cr.steps.length))) { run.phase = 'end'; run.t = 0; return; }
+    if (!cr || !L || (!cr.blocked && !cr.nodeck && !cr.steep && !(cr.steps && cr.steps.length))) { run.phase = 'end'; run.t = 0; return; }
     stage(`${L.name} · ${lb(L.lb)}`, `rating ${run.i + 1} of ${LOADS.length}`, (run.i + 1) / LOADS.length);
-    if (cr.blocked || cr.nodeck) {
+    if (cr.blocked || cr.nodeck || cr.steep) {
       run.phase = 'blocked'; run.t = 0;
-      run.log.push({ i: run.i, blocked: cr.blocked, nodeck: cr.nodeck });
-      say(cr.nodeck ? 'There\'s no deck to cross on.' : `No room! The ${L.short} won't fit under that.`, 2600);
+      run.log.push({ i: run.i, blocked: cr.blocked, nodeck: cr.nodeck, steep: cr.steep });
+      say(cr.nodeck ? 'There\'s no deck to cross on.' : cr.steep ? `The ${L.short} can't make it up that!` : `No room! The ${L.short} won't fit under that.`, 2600);
       run.focus = cr.blocked || [];
       return;
     }
@@ -247,7 +247,7 @@ export function makeCrossing(app, hooks) {
   // a short ramp up onto the deck
   function deckAt(X) {
     const br = run.bridge, h = br.S / 2; if (!br.deck) return 0;
-    const top = br.deck.y + TOP;
+    const top = br.deck.arch ? deckTopAt(br.deck, X, br.S) : br.deck.y + TOP;
     if (Math.abs(X) > h + 1) return 0;
     if (Math.abs(X) > h) return top * (h + 1 - Math.abs(X));
     // (the planks either side of X: how far they have sagged, as drawn)
@@ -275,7 +275,7 @@ export function makeCrossing(app, hooks) {
     const story = cw(spellUnits(storyOf())), advice = cw(spellUnits(told.advice)), focusIds = told.focus || [];
     const all = rating === LOADS.length - 1;
     const anyFell = [...run.byId.keys()].some((id) => !run.up.has(id));
-    const title = all ? 'She carried every load!' : L ? `She carried the ${L.short}!` : anyFell ? 'Down she came!' : last && last.blocked ? 'No room to cross!' : 'Nothing crossed.';
+    const title = last && last.steep && !anyFell ? 'Too steep for the wagon!' : all ? 'She carried every load!' : L ? `She carried the ${L.short}!` : anyFell ? 'Down she came!' : last && last.blocked ? 'No room to cross!' : 'Nothing crossed.';
     // what came down: boards that fell whole go back on the pile; snapped ones are kindling; planks go back on theirs
     const fellIds = [...run.byId.keys()].filter((id) => !run.up.has(id));
     const snapped = new Set(); for (const Lg of run.log) if (Lg.ev && (Lg.ev.kind === 'snap' || Lg.ev.kind === 'buckle' || Lg.ev.kind === 'bow' || Lg.ev.kind === 'collapse')) Lg.ev.broke.forEach((id) => snapped.add(id));
@@ -328,6 +328,7 @@ export function makeCrossing(app, hooks) {
       const L = LOADS[i], head = `${L.name} (${lb(L.lb)})`;
       if (cr.nodeck) { out.push(`${head}: there was no deck to cross on.`); continue; }
       if (cr.blocked) { const b = run.byId.get(cr.blocked[0]); out.push(`${head}: no room. ${cap(placeWords(br, b))} was in the way.`); continue; }
+      if (cr.steep) { out.push(`${head}: too steep. The deck climbs at ${Math.round(cr.steep)}°, and a wagon and its team can only pull up about ${SLOPES.wagon}°.`); continue; }
       const breaks = run.log.filter((Lg) => Lg.i === i && Lg.ev);
       if (cr.made) { out.push(breaks.length ? `${head} crossed, though ${breaks[0].words.what}.` : `${head} crossed.`); continue; }
       // (where the load's weight was: its middle, by its weights, from the west bank)
@@ -352,6 +353,10 @@ export function makeCrossing(app, hooks) {
     if (last && last.blocked) {
       const L = LOADS[crs.length - 1], b = run.byId.get(last.blocked[0]);
       return { advice: `The ${L.short} is ${lenWords(L.wide)} wide and ${lenWords(L.tall)} tall, and ${placeWords(br, b)} is in its way. Take it down, or put it higher than ${lenWords(L.tall)} above the deck, or brace the sides below the deck instead.`, focus: last.blocked.slice(0, 6) };
+    }
+    if (last && last.steep) {
+      const L = LOADS[crs.length - 1];
+      return { advice: `The ${L.short} can't make it up that: your deck climbs at ${Math.round(last.steep)}°, and a wagon and its team can only pull up about ${SLOPES.wagon}°. Make it gentler: a lower middle, or the climb spread over longer boards. People and horses can still walk up it.` };
     }
     // (the first break under the load that turned back; else one under her own weight; else one a load came through)
     const first = (last && !last.made && run.log.find((Lg) => Lg.ev && Lg.i === crs.length - 1)) || run.log.find((Lg) => Lg.ev && Lg.i === -1);
@@ -388,6 +393,9 @@ export function makeCrossing(app, hooks) {
       case 'buckle': return { call: `The ${role} buckled!`, what: `${placeMid} buckled under the squeeze`, focus,
         advice: `${cap(placeMid)} was squeezed end to end until it bowed out and buckled: a long board being squeezed bends out sideways, and the longer it is, the sooner. Shorten it: nail a post or a diagonal to its middle, or put a second board alongside to share the squeeze.` };
       case 'bow':
+        // (an arched deck's boards, tipping over together: an arch pushes hard, and nothing held the two arches square)
+        if (b && br.deck && br.deck.arch && br.deck.on.includes(b.id)) return { call: 'The arch is tipping over!', what: `the arches tipped over sideways${under}`, focus: ev.ids && ev.ids.length ? ev.ids : focus,
+          advice: 'Your arch pushes hard into the stone, and that is what makes an arch strong. But squeezed that hard, the two arches leaned over sideways together, like two playing cards leaned against each other. Brace them across: an X of boards under the deck, from one side\'s arch to the other\'s, so they can\'t lean.' };
         // (what bows is the slanted boards pushing up from the banks: each a long board squeezed end to end)
         if (b && Math.abs(b.a.Y - b.b.Y) > 0.5) {
           const n = (ev.ids || []).length;

@@ -906,6 +906,20 @@ export function makeBuild(app) {
       const n = nailedOverhang(app.selected);
       if (n && n.list.length) { out += drawOverhang((tt) => boardScreen(n.board, tt), n.list); hint = 'Tap ✂ saw off (or the pale end) to cut it off'; }
     }
+    // THE DECK'S PATH: a soft glow along the tops of the boards the deck rides on, each side, from bank to bank (the
+    // highest gentle path: bridge.js deckLine), so it shows which boards the planks lie on; brighter once laid, orange
+    // where it is too steep for the wagons
+    if (building && app.deckPath && !h) {
+      const dp = app.deckPath, cls = `deckpath${dp.laid ? ' is-laid' : ''}${dp.steep ? ' is-steep' : ''}`;
+      let topP = null;
+      for (const [sd, pts] of [['south', dp.south], ['north', dp.north]]) {
+        const Z = (sd === 'south' ? 1 : -1) * t.D / 2, scr = pts.map(([X, Y]) => app.worldToScreen(X, Y + 3.5 / 24, Z));
+        if (scr.some((q) => q.behind)) continue;
+        out += `<polyline class="${cls}" points="${scr.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' ')}"/>`;
+        for (const q of scr) if (!topP || q.y < topP.y) topP = q;
+      }
+      if (dp.steep && topP) out += `<g class="roadtag"><rect x="${topP.x - 86}" y="${topP.y - 40}" width="172" height="22" rx="11"/><text x="${topP.x}" y="${topP.y - 25}">${Math.round(dp.slope)}°: too steep for wagons</text></g>`;
+    }
     // the road height, where the deck's boards go (after "Lay the deck" was tapped too soon): a ghost line along each side
     // still missing one, from the top of one stone to the other
     if (building && app.roadGhost && performance.now() < app.roadGhost.until) {
