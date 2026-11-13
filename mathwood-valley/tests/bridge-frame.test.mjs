@@ -119,10 +119,12 @@ test('outcomes: a plank span carries a person and snaps under the horse', () => 
   assert.ok(horse.events.some((e) => e.kind === 'snap'), 'a board snapped under the horse');
 });
 
-test('outcomes: the truss under the deck carries the covered wagon, and the freight wagon breaks it', () => {
+// (2026-11-12: two board ends meeting at a slant bear when pushed together, on every bridge now, so its diagonals'
+// meeting ends carry their squeeze: it holds the freight wagon too, and the cattle drive breaks it)
+test('outcomes: the truss under the deck carries the freight wagon, and the cattle drive breaks it', () => {
   const r = crossTest(underTruss());
-  assert.equal(r.rating, 2, `rating ${r.rating}`);
-  assert.equal(r.crossings[3].made, false);
+  assert.equal(r.rating, 3, `rating ${r.rating}`);
+  assert.equal(r.crossings[4].made, false);
   assert.ok(r.crossings[2].sag < 0.05, `the covered wagon sags it ${(r.crossings[2].sag * 12).toFixed(2)} in.`);
 });
 

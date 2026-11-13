@@ -21,10 +21,12 @@
 //     they rest on the two bottom-board lines and bear on them for nothing when pressed down; they touch nothing else.
 //     On an ARCHED deck (bridge.js deckLine: the highest gentle path) the planks lie along the arch's boards, each
 //     tilted with them, bearing square to its face. Nothing else about an arch is special: its strength comes from the
-//     same sums (its boards squeezed into the stone faces, which push back). Three joint rules for an arched deck
-//     only (old bridges' sums stay as they were): where a plank rests on a spot two of the arch's boards meet, they are
-//     joined by their own joint, not through the plank's toe-nails; two boards' ends meeting at a slant (the arch's
-//     crown) bear when pushed together; and wagons don't try a deck steeper than they can climb (SLOPES.wagon).
+//     same sums (its boards squeezed into the stone faces, which push back). Joint rules made for arches: two boards' ends meeting
+//     at a slant (the arch's crown, a truss's diagonals) bear when pushed together, on EVERY bridge (2026-11-12, the
+//     game's maker's word: the under-deck truss now holds the freight wagon); where a plank rests on a spot two of an
+//     ARCH's boards meet they are joined by their own joint, not through the plank's toe-nails (arched decks only: on a
+//     straight span it made a plain butt joint hold like a splice, which it doesn't); and wagons don't try a deck
+//     steeper than they can climb (SLOPES.wagon).
 //   * THE LOAD: a person, a horse, wagons, a cattle drive (LOADS): every foot, hoof and wheel a weight on the deck plank
 //     under it (shared between the two planks it stands between, by how near it is to each), moved across half a foot at
 //     a time. Each spot is solved on its own; a board's bending is checked under the weights on it as well as at its ends.
@@ -279,7 +281,7 @@ function classify(boards, hubs) {
         if (c.type === 'butt') { it.endToEnd = true; continue; }
         // (under an arched deck: two boards' ends meeting at a slant, as an arch's two halves meet at its crown, bear
         // when pushed together, as two boards end to end along one line do)
-        if (b.archDeck && !o.plank && c.type === 'face' && it.eIn) { const tj = c.i === it.b ? c.tj : c.ti; if (tj < TOL || tj > o.L - TOL) mitre = true; }
+        if (!o.plank && c.type === 'face' && it.eIn) { const tj = c.i === it.b ? c.tj : c.ti; if (tj < TOL || tj > o.L - TOL) mitre = true; }
         butt = false;
         if (c.type === 'toe') { if (b.plank && !o.plank) it.bearsUp = true; continue; }
         face = true;
