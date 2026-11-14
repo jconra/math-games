@@ -188,8 +188,13 @@ const helpJob = () => { const f = JOB_HELP[workJob()]; const J = f && f(); retur
 const RELEVEL = { sheep: () => SH, pigs: () => PG, roundup: () => RU, store: () => SJ, deliveries: () => DL, graphs: () => GT };
 function relevel(placeId) {
   const f = RELEVEL[placeId], J = f && f();
-  if (!J || !J.relevel) return false;
-  try { return !!J.relevel(); } catch (e) { console.error(e); return false; }
+  if (J && J.relevel) { try { return !!J.relevel(); } catch (e) { console.error(e); return false; } }
+  // (a job with no relevel of its own (the wagon's gang, the range, the deer, the loot's slip, selling goods): its skip
+  // deals a fresh question at the level now, which is what the arrows ask for. The game's maker found the wagon's gang
+  // still asking for factors of 108 after he moved its level down, 2026-11-13. SKIPS is below: called only at a click.)
+  const job = jobNow();
+  if (!job || placeOfJob(job) !== placeId || !SKIPS[job]) return false;
+  try { return !!SKIPS[job](); } catch (e) { console.error(e); return false; }
 }
 const TOOLS = makeTools({ hud, rider: () => rider,
   sum: () => { const f = JOB_SUM[workJob()]; return f ? f() || null : null; },
