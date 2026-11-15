@@ -156,8 +156,36 @@ function mdHull(p) {
       acc.poly(q.map(dk), V3(m.x - ax, m.y - ay, 0).normalize(), GLOW.strip, 'glow', 99);
     }
   }
+  for (const E of ENGINE_AT) engineLiner(acc, E);
   acc.flush(p);
   return p;
+}
+// THE ENGINES' LINERS: the 3k's recess walls are rough (wedge-shaped gaps where its triangles fold, the same on both
+// rings, the mesh being mirrored), so each ring gets a clean liner just inside them: a smooth tapered tube of dark
+// metal from the mouth (r0) down to the recess's floor (r1), two darker grooves round it, a flat floor (the core) and a
+// rim-coloured lip over the mouth's ragged edge. Measured on the 3k (2026-11-15): its walls stand 0.83 to 0.91 m from
+// the axis at the mouth and 0.62 to 0.76 m at the floor, 0.55 m in; the liner stays inside the least of those. The
+// outside of the rings is the 3k's, as before; the jet (plume.js) still starts at the floor.
+export const LINER = { r0: 0.81, r1: 0.6, lip: 0.935, n: 36, grooves: [0.2, 0.38] };
+function engineLiner(acc, E) {
+  const [ax, ay] = E.axis, z0 = E.back - 0.004, z1 = E.floor - 0.006, n = LINER.n;
+  const pt = (a, r, z) => V3(ax + Math.cos(a) * r, ay + Math.sin(a) * r, z), rAt = (z) => LINER.r0 + (LINER.r1 - LINER.r0) * (z - z0) / (z1 - z0);
+  // (the wall in rings of depth: plain, a groove, plain, a groove, plain)
+  const cuts = [z0], g = 0.018;
+  for (const d of LINER.grooves) cuts.push(z0 + d - g, z0 + d + g);
+  cuts.push(z1);
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * PI * 2, a1 = ((i + 1) / n) * PI * 2, am = (a0 + a1) / 2, slope = (LINER.r0 - LINER.r1) / (z1 - z0);
+    const nIn = V3(-Math.cos(am), -Math.sin(am), -slope).normalize();
+    for (let k = 0; k + 1 < cuts.length; k++) {
+      const za = cuts[k], zb = cuts[k + 1];
+      polyTo(acc, [pt(a0, rAt(za), za), pt(a1, rAt(za), za), pt(a1, rAt(zb), zb), pt(a0, rAt(zb), zb)], nIn, k % 2 ? PAL.core : PAL.nozzle);
+    }
+    // the lip, a hair aft of the mouth: from the liner's edge out over the 3k's ragged one
+    polyTo(acc, [pt(a0, LINER.r0 - 0.01, z0 - 0.003), pt(a1, LINER.r0 - 0.01, z0 - 0.003), pt(a1, LINER.lip, z0 - 0.003), pt(a0, LINER.lip, z0 - 0.003)], V3(0, 0, -1), PAL.rim);
+    // the floor
+    polyTo(acc, [V3(ax, ay, z1), pt(a1, LINER.r1 + 0.01, z1), pt(a0, LINER.r1 + 0.01, z1)], V3(0, 0, -1), PAL.core);
+  }
 }
 // THE JETS (plume.js): one from the floor of each ring's recess, straight aft, as wide as the recess's floor
 export const JET = { len: 9.0, gain: 1.0 };
