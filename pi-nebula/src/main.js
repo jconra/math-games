@@ -1,7 +1,8 @@
 // THE SPACE GAME'S PAGE. What happens, in order:
 //   1. the title screen goes up at once (the shared engine with this game's theme: ui/title.js), over a dark page;
-//   2. the station is built behind it (station.js: the kit's own room file and code), the loading bar telling how far;
-//      meanwhile the crew kit loads and the looks' pictures are drawn from it (portraits.js);
+//   2. the looks' pictures, stored ready-made, appear all together (portraits.js); the station is built behind the
+//      title (station.js: the kit's own room file and code) while the crew kit loads, the loading strip along the
+//      bottom of the screen saying what is loading and how far (ui/loadbar.js);
 //   3. the station fades in behind the title, the camera drifting slowly somewhere handsome; where a person can walk
 //      is worked out from the station as built (walls.js);
 //   4. the start button puts the chosen crew member in their quarters, walking (player.js, chase.js, the shared
@@ -19,7 +20,8 @@ import * as save from './save.js';
 import { showTitle } from './ui/title.js';
 import { loadStation } from './station.js';
 import { loadCrew } from '../kit/crew.js';
-import { drawLooks, drawn, keptAll, onPicture } from './portraits.js';
+import { drawLooks, drawn, storedReady, storedInfo } from './portraits.js';
+import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
 import { makeChase, CAM } from './chase.js';
@@ -28,7 +30,8 @@ import { makePeople, resolve } from './people.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
 
-const BUILD = 2;                 // shown small on the title; goes up with index.html's ?v=
+const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
+const BUILD = 3;                 // shown small on the title; goes up with index.html's ?v=
 const q = new URLSearchParams(location.search);
 const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
 
@@ -42,30 +45,26 @@ async function boot() {
   let chosen = null, canBuild = false;
   const T = showTitle(document.getElementById('title-root'), { players, build: BUILD, onStart: start, onChange: (p) => { chosen = p; if (canBuild) prebuild(p); } });
   GAME.T = T; chosen = T.player();
-  T.setProgress(0.01, 'Waking the station');
+  // the loading strip: the bytes expected are the last visit's whole load in this browser, or the stored pictures' rig's
+  let expect = 0;
+  try { expect = +localStorage.getItem(LOAD_BYTES) || 0; } catch (e) { /* blocked: the rig's figure */ }
+  const bar = GAME.bar = showLoadBar(document.body, { expect });
+  if (!expect) storedReady.then(() => bar.expect(storedInfo().bytes)).catch(() => {});
+  const progress = (f, words) => { T.setProgress(f, words); bar.set(f, words); };
+  progress(0.01, 'Waking the station');
   // each file that arrives moves the loading bar on a little
   try { new PerformanceObserver((list) => { for (let i = list.getEntries().length; i > 0; i--) T.nudge(); }).observe({ type: 'resource' }); } catch (e) { /* an old browser: the bar still moves */ }
 
   // the crew kit, for the looks' pictures, the player and the people (one copy for all three)
   const libP = loadCrew();
-  const looksP = libP.then((lib) => drawLooks(lib, { first: [chosen && chosen.look && chosen.look.id, ...players.map((p) => p.look && p.look.id)] }));
-  looksP.catch(fail);
-  // THE LOOKS FIRST: on a visit with no pictures kept from the last one, the station waits until the looks' pictures are
-  // drawn, so the title's choices aren't empty frames while the station takes the network and the graphics card (the
-  // game's maker, 2026-11-11: "we need to prioritize loading the characters you can pick"); with them kept, both at once
-  let from = 0.02;
-  if (!keptAll()) {
-    T.setProgress(0.02, 'Getting the crew ready');
-    const off = onPicture(() => T.setProgress(0.02 + 0.16 * Math.min(1, drawn.looks / 8), 'Getting the crew ready'));
-    try { await looksP; } catch (e) { /* the station loads all the same */ }
-    off(); from = 0.18;
-  }
+  // (the looks' pictures are stored ready-made and on their way already; a look with none is drawn here once the kit is in)
+  Promise.all([libP, storedReady]).then(([lib, missing]) => missing.length ? drawLooks(lib, { only: missing }) : null).catch(fail);
 
-  const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => T.setProgress(from + f * (0.82 - from), words) });
+  const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => progress(0.02 + f * 0.8, words) });
   GAME.W = W;
 
   // ── where a person can walk ──────────────────────────────────────────────────────────────────────────────────
-  T.setProgress(0.84, 'Checking the doors');
+  progress(0.84, 'Checking the doors');
   await new Promise((go) => setTimeout(go, 0));
   const walls = makeWalls(W.built);
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
@@ -93,7 +92,7 @@ async function boot() {
   let player = null, building = null, people = null;
   const auto = { way: null, i: 0 };       // (a rig walking the player somewhere: GAME.walkTo)
   const lib = await libP;
-  T.setProgress(0.92, 'Waking the crew');
+  progress(0.92, 'Waking the crew');
   // the chosen crew member's character, built ahead so the start button is quick
   // (a look changed or another crew member picked before this: built for the latest; one no longer wanted is let go)
   function prebuild(p) {
@@ -146,6 +145,9 @@ async function boot() {
   tick(1 / 60);
   canvas.classList.add('is-on');
   T.setProgress(1, 'Station ready');
+  bar.done();
+  GAME.loadBytes = bar.bytes();
+  try { localStorage.setItem(LOAD_BYTES, String(GAME.loadBytes)); } catch (e) { /* blocked */ }
   GAME.ready = true;
 
   // the people come aboard after the station is ready (the player wakes in their quarters, behind a shut door)

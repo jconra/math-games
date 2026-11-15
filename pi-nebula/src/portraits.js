@@ -1,16 +1,15 @@
-// THE LOOKS' PICTURES, drawn in the player's own browser from the crew kit: the very files (kit/crew.js and
-// assets/crew/) the game's people are built from. Nothing is pasted in: when a head, a hair or an outfit is improved,
-// the title screen's pictures show it on the next visit, with nothing to remake.
+// THE LOOKS' PICTURES, drawn from the crew kit: the very files (kit/crew.js and assets/crew/) the game's people are
+// built from. The title shows them READY-MADE: stored in assets/looks/ by a rig that runs this same studio
+// (~/pw/space-math/rigs/portraits/make.cjs; re-run it whenever a head, a hair, an outfit or the stance changes), so all
+// eight are on the screen as the page opens.
 //
-//   drawLooks(lib, { first })   draws every look in src/looks.js (the ids in `first` before the rest), one at a time,
-//                               then closes its small drawing board
 //   pictureOf(id, kind)         a look's picture ('face': head and shoulders, 'body': the whole person) as an address
-//                               for CSS or an <img>, or null while it is still being drawn
-//   onPicture(fn)               fn(id) as each look's two pictures arrive
+//                               for CSS or an <img>, or null while it is still on its way
+//   onPicture(fn)               fn(id) as each look's two pictures arrive (the stored ones all together)
+//   storedReady                 a promise: the stored pictures are in; it gives the ids that had none
+//   drawLooks(lib, { only })    draws looks here in the browser (those with no stored picture), one at a time
+//   drawLook(lib, id)           one look's two pictures as data: addresses (the rig stores these)
 //   shoot(lib, recipe, kind, pose)   one picture of any recipe, as a data: address (the picture page and its rig use it)
-//
-// While a visit's pictures are being drawn the last visit's are shown (kept in this browser), so the cards are not
-// empty on a second visit; the first visit shows the empty frames for a few seconds.
 //
 // How a picture is made: the person is built with the crew kit's makeCrew, stood in the listening stance (POSE: the
 // arms hang by the sides; the plain Idle holds them out, which in a still picture reads as a shop dummy), lit by a
@@ -101,39 +100,62 @@ export async function shoot(lib, what, kind = 'face', pose = null) {
 }
 
 // ── the title's pictures ───────────────────────────────────────────────────────────────────────────────────────
+// READY-MADE (2026-11-15): the title shows the pictures stored in assets/looks/ (small WebP files, drawn by this same
+// studio by a rig: ~/pw/space-math/rigs/portraits/make.cjs, re-run whenever the crew kit changes), so all eight
+// appear together as the page opens, while the 3D crew loads behind. They are fetched as soon as this file runs and
+// shown only when every one has arrived (the game's maker: "It seemed like one model showed up and the other ones
+// too a long time"). A look with no stored picture (one added since the rig last ran) is drawn here in the browser.
+export const STORED = new URL('../assets/looks/', import.meta.url).href;
 const PICS = new Map(), heard = new Set();
+// (what the stored list says: when the rig drew them, and about how many bytes a whole first load of the game is)
+const info = { made: null, bytes: 0 };
+export const storedInfo = () => info;
+export const pictureOf = (id, kind = 'face') => PICS.get(lookById(id).id + '_' + kind) || null;
+export const onPicture = (fn) => { heard.add(fn); return () => heard.delete(fn); };
+export const drawn = { looks: 0, ms: 0, done: false, failed: null, stored: 0, storedMs: 0 };
+const tell = (id) => { for (const fn of heard) { try { fn(id); } catch (e) { console.error(e); } } };
+try { localStorage.removeItem('calc-station.looks.pictures'); } catch (e) { /* (the old in-browser keep: not used now) */ }
+
+// the stored pictures' list (looks.json: { made, bytes, pictures: { id: { face, body } } }), then every picture, held
+// back until all are in; resolves to the ids still without pictures (to be drawn here)
+const t0 = performance.now();
+export const storedReady = (async () => {
+  let list = null;
+  try { const r = await fetch(STORED + 'looks.json', { cache: 'no-cache' }); if (r.ok) list = await r.json(); } catch (e) { /* none: all drawn here */ }
+  info.made = list && list.made || null; info.bytes = list && +list.bytes || 0;
+  const v = list && list.made ? '?v=' + encodeURIComponent(list.made) : '';
+  const got = await Promise.all(LOOKS.map(async (l) => {
+    const files = list && list.pictures && list.pictures[l.id];
+    if (!files || !files.face || !files.body) return null;
+    try {
+      const urls = ['face', 'body'].map((k) => STORED + files[k] + v);
+      await Promise.all(urls.map((u) => { const im = new Image(); im.src = u; return im.decode(); }));
+      return [l.id, urls];
+    } catch (e) { return null; }
+  }));
+  for (const g of got) if (g) { PICS.set(g[0] + '_face', g[1][0]); PICS.set(g[0] + '_body', g[1][1]); drawn.stored++; }
+  drawn.storedMs = Math.round(performance.now() - t0);
+  for (const g of got) if (g) tell(g[0]);
+  return LOOKS.filter((l, i) => !got[i]).map((l) => l.id);
+})();
 const toBlobURL = (data) => {
   const [head, b64] = data.split(','), bin = atob(b64), bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return URL.createObjectURL(new Blob([bytes], { type: head.slice(5).split(';')[0] }));
 };
-function put(id, kind, data) {
-  const old = PICS.get(id + '_' + kind); if (old) URL.revokeObjectURL(old);
-  PICS.set(id + '_' + kind, toBlobURL(data));
-}
-// (the last visit's, shown until this visit's are drawn)
-let kept = {};
-try { kept = JSON.parse(localStorage.getItem(KEEP) || '{}') || {}; } catch (e) { kept = {}; }
-for (const l of LOOKS) for (const kind of ['face', 'body']) { const d = kept[l.id + '_' + kind]; if (typeof d === 'string' && d.startsWith('data:image/')) try { put(l.id, kind, d); } catch (e) { /* a broken keep: drawn again below */ } }
-
-export const pictureOf = (id, kind = 'face') => PICS.get(lookById(id).id + '_' + kind) || null;
-export const onPicture = (fn) => { heard.add(fn); return () => heard.delete(fn); };
-export const drawn = { looks: 0, ms: 0, done: false, failed: null };
-// (every look's pictures kept from the last visit: then the title isn't waiting on this visit's drawing)
-export const keptAll = () => LOOKS.every((l) => PICS.has(l.id + '_face') && PICS.has(l.id + '_body'));
-
 const breath = () => new Promise((go) => { requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 100); });
-export async function drawLooks(lib, { first = [] } = {}) {
-  const t0 = performance.now(), ids = [...new Set([...first.filter(Boolean), ...LOOKS.map((l) => l.id)])].filter((id) => LOOKS.some((l) => l.id === id));
-  const keep = {};
+// draws the looks named (all by default) here in the browser, one at a time
+export async function drawLooks(lib, { only = null } = {}) {
+  const t0 = performance.now(), ids = (only || LOOKS.map((l) => l.id)).filter((id) => LOOKS.some((l) => l.id === id));
   try {
     for (const id of ids) {
       const got = await draw(lib, recipeOf({ id }), ['body', 'face']);
-      for (const kind of ['face', 'body']) { put(id, kind, got[kind]); keep[id + '_' + kind] = got[kind]; }
+      for (const kind of ['face', 'body']) PICS.set(id + '_' + kind, toBlobURL(got[kind]));
       drawn.looks++;
-      for (const fn of heard) { try { fn(id); } catch (e) { console.error(e); } }
+      tell(id);
       await breath();
     }
   } catch (e) { drawn.failed = String(e && e.message || e); throw e; } finally { closeStudio(); drawn.ms = Math.round(performance.now() - t0); drawn.done = true; }
-  try { localStorage.setItem(KEEP, JSON.stringify(keep)); } catch (e) { /* full: drawn again next visit */ }
 }
+// one look's two pictures as data: addresses (the rig that stores them uses this)
+export const drawLook = async (lib, id) => { try { return await draw(lib, recipeOf({ id }), ['body', 'face']); } finally { closeStudio(); } };

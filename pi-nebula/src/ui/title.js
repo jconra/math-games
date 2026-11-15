@@ -17,7 +17,7 @@ import { pictureOf, onPicture } from '../portraits.js';
 import { SIZES } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=3', import.meta.url).href;
+const SHEET = new URL('./title.css?v=4', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -34,8 +34,8 @@ const withSize = (look, v) => { const l = { ...(look || {}) }; if (v === 1) dele
 const NAMES = ['Rookie', 'Comet', 'Scout', 'Pixel', 'Ace', 'Sparks', 'Jet', 'Echo', 'Dash', 'Rocket', 'Nova', 'Orbit'];
 
 // A look's picture: the face on cards, the whole person where the stylesheet asks for it (.cst-full). The pictures are
-// drawn in the browser from the crew kit (portraits.js) while the station loads: an empty frame until its picture
-// arrives, which then fills every frame showing that look.
+// stored ready-made (portraits.js, assets/looks/) and arrive all together as the page opens: an empty frame until
+// then, which then fills every frame showing that look.
 const vars = (id) => ['face', 'body'].map((k) => { const u = pictureOf(id, k); return `--${k}:${u ? `url('${u}')` : 'none'}`; }).join(';');
 const pic = (look) => {
   const id = lookById(look && look.id).id;

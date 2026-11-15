@@ -236,6 +236,9 @@
 .cst-why svg { width: 16px; height: 16px; flex: none; }
 .cst-load { flex: 1; display: flex; align-items: center; gap: 22px; transition: opacity 0.6s; }
 .cst-load.is-done { opacity: 0; }
+/* (the game shows its loading in a strip along the bottom of the screen instead, ui/loadbar.js: one bar, seen on every
+   screen of the title, the new crew member's form too; the start button still fills while it waits) */
+.cst-load { visibility: hidden !important; }
 .cst-bar { position: relative; flex: 1; height: 3px; background: rgba(196, 220, 240, 0.2); }
 .cst-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, rgba(150, 205, 255, 0.35), #eaf5ff); box-shadow: 0 0 10px rgba(140, 200, 255, 0.9); }
 .cst-bar svg { position: absolute; top: 50%; left: 0; width: 22px; height: 15px; transform: translate(-50%, -50%); color: #fff; filter: drop-shadow(0 0 6px rgba(140, 200, 255, 0.9)); }

@@ -1,0 +1,39 @@
+{
+ "made": "2026-11-15T19:47:16.650Z",
+ "bytes": 10606161,
+ "by": "rigs/portraits/make.cjs",
+ "pictures": {
+  "kai": {
+   "face": "kai_face.webp",
+   "body": "kai_body.webp"
+  },
+  "mira": {
+   "face": "mira_face.webp",
+   "body": "mira_body.webp"
+  },
+  "dax": {
+   "face": "dax_face.webp",
+   "body": "dax_body.webp"
+  },
+  "zuri": {
+   "face": "zuri_face.webp",
+   "body": "zuri_body.webp"
+  },
+  "sol": {
+   "face": "sol_face.webp",
+   "body": "sol_body.webp"
+  },
+  "ivy": {
+   "face": "ivy_face.webp",
+   "body": "ivy_body.webp"
+  },
+  "ren": {
+   "face": "ren_face.webp",
+   "body": "ren_body.webp"
+  },
+  "noor": {
+   "face": "noor_face.webp",
+   "body": "noor_body.webp"
+  }
+ }
+}

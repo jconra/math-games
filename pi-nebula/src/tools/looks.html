@@ -27,8 +27,9 @@
 <body>
 <h1>Crew looks</h1>
 <p>Every look a new crew member can pick from (<code>src/looks.js</code>), drawn from the real 3D characters by the
-same code the title screen uses (<code>src/portraits.js</code>). The title draws them in each player's browser, so a
-change to a look or to the crew kit shows there by itself.</p>
+same code that made the title screen's pictures (<code>src/portraits.js</code>). The title shows them ready-made, from
+<code>assets/looks/</code>: after a change to a look or to the crew kit, redraw those with the rig
+<code>~/pw/space-math/rigs/portraits/make.cjs</code>.</p>
 <div id="note" aria-live="polite">Putting the crew together…</div>
 <div id="grid"></div>
 <script type="module" src="looks-page.js?v=2"></script>
