@@ -130,9 +130,9 @@ async function boot() {
       const move = atJob ? null : auto.way ? autoMove() : input.move;
       P.update(dt, { move, run: auto.way ? auto.run : input.run, yaw: chase.yaw, others: people ? people.list : [] });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
-      if (atJob) jobs.aim(W.camera, dt);
       setFov(60);
-      P.c.root.visible = chase.near > 0.4;     // (closer than that, the camera would be inside the head)
+      if (atJob) jobs.aim(W.camera, dt);
+      P.c.root.visible = chase.near > 0.4 && !(atJob && jobs.inEyes());     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }

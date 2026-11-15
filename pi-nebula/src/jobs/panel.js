@@ -121,8 +121,10 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
     onSave();
     helped = helpOn; t0 = performance.now();
     if (slide) {
+      // (no picks while the cards change over: the buttons on screen are still the last card's)
+      busy = true;
       card.classList.add('is-out');
-      setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); }, 260);
+      setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); busy = false; t0 = performance.now(); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); }, 260);
     } else draw(q.order);
     showLevel(); helpBtn.classList.remove('is-nudge');
     if (helpOn) fillHelp();
@@ -145,7 +147,7 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
       if (r.up) showLevel('Up a level!');
       else if (r.down) showLevel('A level easier for now');
       else showLevel();
-      setTimeout(() => { if (closed) return; busy = false; next({ slide: 1 }); }, PANEL.nextMs);
+      setTimeout(() => { if (closed) return; next({ slide: 1 }); }, PANEL.nextMs);
     } else {
       btn.classList.add('is-wrong', 'is-dull');
       setTimeout(() => btn.classList.remove('is-wrong'), PANEL.shakeMs);
@@ -183,7 +185,8 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
   function fillHelp() {
     const o = q.order, pic = helpPicture(o);
     $('.pnj-htitle').textContent = pic.title || 'Help';
-    $('.pnj-pic:not(.is-lead)').innerHTML = pic.svg || '';
+    // (a picture already on the card, the things to count, isn't drawn twice)
+    $('.pnj-pic:not(.is-lead)').innerHTML = o.picFirst ? '' : pic.svg || '';
     $('.pnj-hline').textContent = pic.line || '';
     const st = stepsOf(o);
     $('.pnj-steps').innerHTML = st.map((s) => `<li>${esc(s.text)}</li>`).join('');

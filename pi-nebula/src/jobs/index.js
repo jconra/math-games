@@ -6,7 +6,7 @@
 //   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...} })
 //   jobs.update(dt, P, playing)   each frame: the prompt, the rings' glow; -> true while a job panel is up (the player
 //                                 stands still at the job and jobs.aim(camera) frames the job's props)
-//   jobs.aim(camera, dt)          the camera while a job is up: over the player's shoulder at the counter or desk
+//   jobs.aim(camera, dt)          the camera while a job is up: through the player's eyes, at the counter or desk
 //   jobs.close()                  (the crew screen: the panel goes)
 //   jobs.start(id) / jobs.panel / jobs.spots / jobs.near   for the rigs (GAME.jobs)
 //
@@ -91,10 +91,11 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     const c = crew();
     if (!s || !s.job.open || !c || panel) return false;
     at = s; camFresh = true;
+    s.ring.visible = s.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
     panel = openPanel(document.body, { job: s.job, crew: c, onSave: () => save(c), onCredits: showWallet,
-      onClose: () => { panel = null; at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; } });
+      onClose: () => { s.ring.visible = s.sign.visible = true; panel = null; at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; } });
     api.panel = panel;
     return true;
   }
@@ -132,30 +133,37 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     return false;
   }
 
-  // the camera while a job is up: over the player's shoulder, at the job's props (on a phone, looking down a little,
-  // so the counter sits above the panel; on a wide screen, the props to the left of the panel)
   function aim(camera, dt = 1 / 60) {
     if (!at) return;
     const h = at.heading, fx = Math.sin(h), fz = Math.cos(h), rx = -fz, rz = fx;   // (forward, and the player's right)
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
-    if (tall) {
-      // a phone: high behind, looking down past the head, so the counter shows above the panel along the bottom
-      want.set(at.pos.x - fx * 1.3, at.pos.y + 2.55, at.pos.z - fz * 1.3);
-      wantLook.set(at.pos.x + fx * 0.9, at.pos.y - 0.2, at.pos.z + fz * 0.9);
+    const V = at.job.view ? W.view(at.job.view) : null;
+    if (V) {
+      // a job with a view of its own (the station file's named view of its corner: the triage bays, the stretcher),
+      // kept clear of the panel (turned so it sits left of the panel on a wide screen, above it on a phone)
+      want.copy(V.at);
+      const vx = V.look.x - V.at.x, vz = V.look.z - V.at.z, d = Math.hypot(vx, vz) || 1;
+      const sx = -vz / d, sz = vx / d;   // (the view's right, level)
+      if (tall) wantLook.set(V.look.x, V.look.y - d * 0.3, V.look.z);
+      else wantLook.set(V.look.x + sx * d * 0.28, V.look.y, V.look.z + sz * d * 0.28);
+      if (camera.fov !== V.fov) { camera.fov = V.fov; camera.updateProjectionMatrix(); }
     } else {
-      // a wide screen: from the player's left shoulder, so the player stands behind the panel on the right and the
-      // counter or desk is in the open view on the left
-      want.set(at.pos.x - fx * 1.7 - rx * 0.95, at.pos.y + 1.95, at.pos.z - fz * 1.7 - rz * 0.95);
-      wantLook.set(at.pos.x + fx * 1.4 - rx * 0.7, at.pos.y + 0.95, at.pos.z + fz * 1.4 - rz * 0.7);
+      // through the player's own eyes (the body is put away while a job is up: main.js), at the counter or desk: on a
+      // phone looking down, so the counter top sits above the panel along the bottom; on a wide screen turned a little right,
+      // so what is ahead sits in the open view left of the panel
+      const eye = at.pos.y + 1.62;
+      want.set(at.pos.x - fx * 0.25, eye, at.pos.z - fz * 0.25);
+      if (tall) wantLook.set(at.pos.x + fx * 0.86, at.pos.y + 0.35, at.pos.z + fz * 0.86);
+      else wantLook.set(at.pos.x + fx * 2 + rx * 0.75, eye - 0.75, at.pos.z + fz * 2 + rz * 0.75);
     }
-    // (a camera that would sit inside a wall: closer in, over the head)
-    if (walls && walls.snap && !walls.snap(want.x, at.pos.y + 0.4, want.z, 0.3)) want.set(at.pos.x - fx * 0.6, at.pos.y + 2.1, at.pos.z - fz * 0.6);
     if (camFresh) { camAt.copy(camera.position); camFresh = false; camLook.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3())); }
     const k = 1 - Math.exp(-5 * dt);
     camAt.lerp(want, k); camLook.lerp(wantLook, k);
     camera.position.copy(camAt); camera.lookAt(camLook);
   }
 
-  const api = { update, aim, close, start, spots, missing, near: null, panel: null, busy: () => !!panel, faceOf: () => (at ? at.heading : null) };
+  // true while the camera is the player's own eyes (main.js puts the body away then)
+  const inEyes = () => !!(at && !(at.job.view && W.view(at.job.view)));
+  const api = { update, aim, close, start, spots, missing, near: null, panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null) };
   return api;
 }

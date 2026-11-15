@@ -151,9 +151,11 @@ export const PLACE = {
 };
 
 export const JOB = {
-  id: 'medical', name: 'Medical: the triage desk', short: 'Medical', open: true,
+  id: 'medical', name: 'The triage desk', short: 'Medical', open: true,
   // where the job is: at the triage desk, facing it
   spot: { place: 'triageDesk' },
+  // the camera while it's up: the station's own view of the triage corner (the desk, the bays, the stretcher)
+  view: 'medical-triage',
   sign: 'Triage desk', hint: 'Help the patients',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'chart',
