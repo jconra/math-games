@@ -80,7 +80,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   const wallet = document.createElement('div');
   wallet.className = 'pnj-wallet'; wallet.hidden = true; wallet.innerHTML = '<i aria-hidden="true"></i><span></span>';
   document.body.appendChild(wallet);
-  const showWallet = () => { const c = crew(); wallet.querySelector('span').textContent = `${credits(c)} credits`; };
+  const showWallet = () => { const c = crew(); wallet.querySelector('span').textContent = `${credits(c)} ${credits(c) === 1 ? 'credit' : 'credits'}`; };
 
   let near = null, panel = null, at = null, playing = false, t = 0;
   const camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();

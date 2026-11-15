@@ -63,7 +63,7 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
   // ── the top strip ─────────────────────────────────────────────────────────────────────────────────────────────
   function showCredits(bump = 0) {
     const n = E.credits(crew);
-    $('.pnj-cr em').textContent = `${n} credits`;
+    $('.pnj-cr em').textContent = `${n} ${n === 1 ? 'credit' : 'credits'}`;
     if (bump) { const c = $('.pnj-cr'); c.classList.remove('is-bump'); void c.offsetWidth; c.classList.add('is-bump'); }
   }
   function showLevel(flash = '') {
