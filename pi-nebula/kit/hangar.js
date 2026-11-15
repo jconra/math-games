@@ -10,12 +10,12 @@
 //             slide apart, each with a little window into the airlock) and 'outer' (the docking port to space: sealed,
 //             a porthole, a red light until a ship docks)
 //   crate     cargo: 'small', 'large', 'long', 'stack' (a pallet of them)
-//   fuel      'pump' (a fuel station), 'pipe' (2 m of fuel line along the floor), 'elbow' (a turn), 'hose' (a hose
-//             from a pump across the floor up to a ship's fuel port)
+//   fuel      'pump' (a fuel station), 'pipe' (2 m of fuel line along the floor), 'elbow' (a turn), 'hose' / 'hose r' (a hose
+//             from a pump's reel, hanging slack to the floor, along it to a fuel socket in the pad, to its left / right)
 //   gangway   a wheeled boarding stair up to a ship's door: seven steps of 0.18 m to a platform at 1.26 m
 import * as THREE from 'three';
 import { WALL_FACE as WF, ROOM_H as H } from './grid.js';
-import { MeshData, rrect, circle, line, plane, put, fixWinding, bevelBox, flat } from './geo.js';
+import { MeshData, rrect, circle, line, plane, put, fixWinding, bevelBox, flat, cylinder } from './geo.js';
 import { floorQuad, backing, slabRow, G, Z0 } from './shell.js';
 import { kitTextures } from './materials.js';
 import { BIG_H } from './windows.js';
@@ -213,6 +213,55 @@ export function crate(p, v) {
   crateBox(p, 0.6, 0.5, 0.6, [0.36, 0.78, 0.1]);
 }
 
+// ── the fuel hose ─────────────────────────────────────────────────────────────────────────────────────────────────
+// a pump's hose, plugged into a fuel socket set in the landing pad's floor. The piece stands 0.85 m in front of its
+// pump (the pump's middle at x = -0.35, its hose reel's middle at x = -0.35, y = 0.95, z = -0.5, turning about z); the
+// socket is 2.75 m out along x and 7 m to the side (side -1: toward -z; +1: toward +z), just inside the pad's ring
+// (7.75 m from the pad's middle, clear of the parked ship's wing tip). The hose leaves the reel's front and hangs down in a
+// slack curve (a hanging chain's shape) to the floor, lies along the floor in a loose curve, and lifts the last half
+// metre into the socket's coupling.
+const HOSE_R = 0.035;
+const upTo = (u) => new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), u)).toArray().slice(0, 3);
+function fuelHose(p, side) {
+  const S = v3(2.75, 0, 7.0 * side), A = v3(-0.15, 0.95, -0.5), T = v3(0.42, HOSE_R, -0.56);
+  // the coupling: a stub out of the socket, tilted 45 degrees up toward the pump
+  const back = v3(T.x - S.x, 0, T.z - S.z).normalize(), u = back.clone().multiplyScalar(Math.SQRT1_2).setY(Math.SQRT1_2);
+  const base = v3(S.x, 0.03, S.z), top = base.clone().addScaledVector(u, 0.2), E = top.clone().addScaledVector(u, 0.16);
+  const pts = [];
+  // 1. hanging: a chain's curve y = a (cosh(s / a) - 1), its low point (flat) where it meets the floor at T
+  const d = Math.hypot(T.x - A.x, T.z - A.z), h = A.y - T.y; let lo = 0.02, hi = 10, a = 1;
+  for (let k = 0; k < 50; k++) { a = (lo + hi) / 2; if (a * (Math.cosh(d / a) - 1) > h) lo = a; else hi = a; }
+  for (let i = 0; i <= 14; i++) { const s = d * (1 - i / 14), t = 1 - s / d; pts.push(v3(A.x + (T.x - A.x) * t, T.y + a * (Math.cosh(s / a) - 1), A.z + (T.z - A.z) * t)); }
+  // 2. along the floor: a loose curve from T to R (half a metre short of the socket, on the pump's side)
+  const R = v3(S.x, HOSE_R, S.z).addScaledVector(back, 0.62), D = R.clone().sub(T), N = v3(-D.z, 0, D.x).normalize();
+  const dirT = v3(T.x - A.x, 0, T.z - A.z).normalize();
+  const floor = new THREE.CatmullRomCurve3([T, T.clone().addScaledVector(dirT, 0.45), T.clone().addScaledVector(D, 0.35).addScaledVector(N, 0.32),
+    T.clone().addScaledVector(D, 0.7).addScaledVector(N, -0.18), R.clone().addScaledVector(back, 0.3), R], false, 'centripetal').getPoints(36);
+  for (let i = 1; i < floor.length; i++) { floor[i].y = HOSE_R; pts.push(floor[i]); }
+  // 3. the lift into the coupling: a smooth bend from flat on the floor to along the stub
+  const P1 = R.clone().addScaledVector(back, -0.22), P2 = E.clone().addScaledVector(u, 0.22), bz = new THREE.CubicBezierCurve3(R, P1, P2, E).getPoints(10);
+  for (let i = 1; i < bz.length; i++) { bz[i].y = Math.max(bz[i].y, HOSE_R); pts.push(bz[i]); }
+  const path = pts.map((q) => ({ p: q, x: v3(1, 0, 0), y: v3(0, 1, 0) }));
+  p.sweep('rubber', circle(HOSE_R, 10), fixFrames(path), { caps: true });
+  // a collar where it leaves the reel, and yellow bands along it
+  p.cyl('black', HOSE_R + 0.012, 0.07, [A.x, A.y - 0.03, A.z], null, 12);
+  for (const i of [20, 34]) { const q = pts[i], t = pts[i + 1].clone().sub(pts[i - 1]).normalize(); p.cyl('yellow', HOSE_R + 0.008, 0.05, [q.x, q.y, q.z], upTo(t), 12); }
+  // the nozzle on the hose's end, clamped onto the coupling: a grey grip, a black collar
+  { const m = top.clone().addScaledVector(u, 0.08); p.cyl('grey', 0.042, 0.16, [m.x, m.y, m.z], upTo(u), 12); }
+  { const m = top.clone().addScaledVector(u, 0.005); p.cyl('black', 0.058, 0.05, [m.x, m.y, m.z], upTo(u), 14); }
+  { const m = base.clone().addScaledVector(u, 0.1); p.cyl('yellow', 0.045, 0.2, [m.x, m.y, m.z], upTo(u), 12); }
+  // the socket: a steel plate set in the pad (raised a finger's width), a hazard border, its lid hinged open on the
+  // far side, a green lamp: fuel flowing
+  const ang = Math.atan2(back.x, back.z), at = (lx, lz) => [S.x + back.z * lx + back.x * lz, S.z - back.x * lx + back.z * lz];
+  p.box('gun', [0.7, 0.03, 0.7], [S.x, 0.015, S.z], [0, ang, 0], { r: 0.008, cell: 9 });
+  p.box('dark', [0.42, 0.012, 0.42], [S.x, 0.031, S.z], [0, ang, 0], { r: 0.004, cell: 9 });
+  for (const sx of [-1, 1]) { const [x, z] = at(sx * 0.31, 0); floorDecal(p, 'hazard', 0.06, 0.66, x, z, ang, '#d9b23a', 0.032); }
+  for (const sz of [-1, 1]) { const [x, z] = at(0, sz * 0.31); floorDecal(p, 'hazard', 0.66, 0.06, x, z, ang, '#d9b23a', 0.032); }
+  { const [x, z] = at(0, -0.27), g = bevelBox([0.42, 0.4, 0.025], [0, 0.2, 0], { r: 0.006, cell: 9 }); put(g, [0, 0, 0], [-0.3, 0, 0]); put(g, [x, 0.03, z], [0, ang, 0]); p.add('solid', g, 'yellow'); }
+  { const [x, z] = at(0.24, 0.24); p.cyl('black', 0.03, 0.03, [x, 0.04, z], null, 10); p.add('glow', cylinder(0.02, 0.012, [x, 0.058, z], 10), 'green'); }
+  p.light([S.x, 0.25, S.z], 0.25, [0.35, 1, 0.5], null, 1.5);
+}
+
 // ── the fuel line ─────────────────────────────────────────────────────────────────────────────────────────────────
 const FR = 0.055, FY = 0.14;   // the fuel line: its radius and height off the floor
 export function fuel(p, v) {
@@ -229,15 +278,7 @@ export function fuel(p, v) {
     p.cyl('dark', FR + 0.018, 0.05, [-0.98, FY, 0], [0, 0, PI / 2], 14);
     return;
   }
-  if (v === 'hose') {
-    // a hose from (0, 0, 0) along +x across the floor, rising at the end to a ship's fuel port at 1.1 m
-    const pts = [v3(0, 0.6, 0), v3(0.25, 0.25, 0.05), v3(0.6, 0.05, 0.1), v3(1.4, 0.04, 0.35), v3(2.4, 0.04, 0.2), v3(3.2, 0.06, -0.1), v3(3.7, 0.3, -0.1), v3(3.9, 0.85, -0.05), v3(3.95, 1.1, 0)];
-    const path = new THREE.CatmullRomCurve3(pts).getPoints(40).map((q) => ({ p: q, x: v3(1, 0, 0), y: v3(0, 1, 0) }));
-    p.sweep('rubber', circle(0.035, 10), fixFrames(path), { caps: true });
-    for (const t of [0.3, 0.55, 0.8]) { const q = new THREE.CatmullRomCurve3(pts).getPoint(t); p.cyl('yellow', 0.045, 0.04, [q.x, q.y, q.z], [0, 0, PI / 2], 12); }
-    p.cyl('black', 0.06, 0.16, [3.95, 1.12, 0], null, 14);
-    return;
-  }
+  if (v === 'hose' || v === 'hose r') return fuelHose(p, v === 'hose r' ? 1 : -1);
   // the pump: a yellow cabinet with a charcoal face, a screen, a hose reel, a nozzle in its holster
   p.slab('black', -0.45, 0.45, 0, 0.1, -0.32, 0.32, { r: 0.012 });
   p.slab('yellow', -0.4, 0.4, 0.1, 1.45, -0.28, 0.28, { r: 0.03 });

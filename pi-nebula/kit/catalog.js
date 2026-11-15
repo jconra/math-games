@@ -65,7 +65,7 @@ export const PIECES = {
   mark: { name: 'Floor paint', group: 'Hangar', at: 'free', variants: ['ring', 'line', 'hazard', 'box', 'arrow'], foot: [2, 0.1, 2], build: mark },
   airlock: { name: 'Docking airlock', group: 'Hangar', at: 'point', variants: ['inner', 'outer'], foot: [4, 3, 0.7], build: airlock },
   crate: { name: 'Cargo crate', group: 'Hangar', at: 'free', variants: ['small', 'large', 'long', 'stack', 'cart'], foot: [2, 1.3, 1.3], build: crate },
-  fuel: { name: 'Fuel line', group: 'Hangar', at: 'free', variants: ['pump', 'pipe', 'elbow', 'hose'], foot: [2, 1.5, 1], build: fuel },
+  fuel: { name: 'Fuel line', group: 'Hangar', at: 'free', variants: ['pump', 'pipe', 'elbow', 'hose', 'hose r'], foot: [2, 1.5, 1], build: fuel },
   gangway: { name: 'Boarding stair', group: 'Hangar', at: 'free', variants: ['seven'], foot: [1.3, 2.3, 3.3], build: gangway },
   ship: { name: 'Shuttle (a stand-in)', group: 'Hangar', at: 'free', variants: ['kestrel'], foot: [9.7, 4.8, 11.2], build: ship },
   // the station's build-out (kit/station2.js): the big hangars' door, pad and lamps, a third storey, stand-ins
