@@ -14,6 +14,10 @@
 //   walls.path(from, to)              a way to walk from one spot to another: [Vector3, ...], or null
 //   walls.doors                       [{ D (the kit's door), box, locked }]; a locked door leads nowhere a person can
 //                                     stand (the airlock's outer door) and stays shut
+//   walls.add(key, part) / drop(key)  more to walk in, made after the station: a parked ship's rooms while they are
+//                                     loaded (boarding.js). part: { solid: [geometry], up: [geometry] (world space),
+//                                     doors: [{ D, box }], when(pathing) (only while it says so: a stair that is a door,
+//                                     while it is down), voxel (its voxels' size), r (a person's half width in it) }
 //
 // HOW: two things are made once, when the station has loaded.
 //   - Voxels (the kit's own, kit/bake.js) of every wall, floor, window and piece of furniture, 0.1 m across. A person
@@ -28,16 +32,19 @@ import { makeVoxels } from '../kit/bake.js';
 export const BODY = {
   r: 0.28,                       // a person's half width (m)
   heights: [0.6, 1.0, 1.45],     // the heights the walls are felt at (over the feet): above a stair's next treads
-  stepUp: 0.32, stepDown: 0.5,   // the most a floor may rise or fall in one small step (a stair's riser is 0.18)
+  stepUp: 0.36, stepDown: 0.5,   // the most a floor may rise or fall in one small step (a stair's riser is 0.18; a
+                                 // ship's airstair's first tread is 0.35 off the floor)
   low: 1.0, lowR: 0.2,           // a bed, a table, a chair: any surface this high or lower that is too tall to step on
   stride: 0.05,                  // a walk is checked every this far (m)
   doorOpen: 0.55,                // a door lets a person through once it is this far open (0 shut .. 1 open)
 };
 const FC = 0.5;                  // the floors' squares (m)
+// a person walking head on into a door's frame is eased sideways into the opening, up to `most` (m), in steps of `step`
+export const NUDGE = { most: 0.24, step: 0.02 };
 
 export function makeWalls(built, { voxel = 0.1 } = {}) {
   const t0 = performance.now();
-  // ── the walls ────────────────────────────────────────────────────────────────────────────────────────────────
+  // ── the walls and the floors: the station's, and the parts added later (each its own, tried after it) ──────────
   const solid = [], up = [];
   for (const z of built.zones) {
     for (const k of ['solid', 'floor', 'glass', 'shield']) if (z.merged[k]) solid.push(z.merged[k]);
@@ -45,36 +52,23 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   }
   const V = makeVoxels(solid, voxel);
   const tV = performance.now();
-
-  // ── the floors ───────────────────────────────────────────────────────────────────────────────────────────────
-  const T = [], cells = new Map();
-  const key = (i, k) => (i + 8192) * 16384 + (k + 8192);
-  for (const g of up) {
-    const p = g.attributes.position.array, ix = g.index.array;
-    for (let t = 0; t < ix.length; t += 3) {
-      const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
-      const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
-      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, len = Math.hypot(nx, ny, nz);
-      if (len < 1e-9 || ny / len < 0.6) continue;                     // (faces up: a floor, a tread, a table's top)
-      const id = T.length / 9; T.push(p[a], p[a + 1], p[a + 2], p[b], p[b + 1], p[b + 2], p[c], p[c + 1], p[c + 2]);
-      const i0 = Math.floor(Math.min(p[a], p[b], p[c]) / FC), i1 = Math.floor(Math.max(p[a], p[b], p[c]) / FC);
-      const k0 = Math.floor(Math.min(p[a + 2], p[b + 2], p[c + 2]) / FC), k1 = Math.floor(Math.max(p[a + 2], p[b + 2], p[c + 2]) / FC);
-      for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) { const q = key(i, k); let L = cells.get(q); if (!L) cells.set(q, L = []); L.push(id); }
-    }
-  }
-  const tri = Float32Array.from(T);
+  const F0 = makeFloors(up);
+  const parts = new Map();
+  let extra = [];                 // (the parts in play: for the loops below, no Map walked on every step)
+  let pathing = false;            // (working out a way: a part whose `when` asks is counted as if its door were open)
+  const live = (L) => !L.when || L.when(pathing);
   function floorAt(x, z, top = Infinity, drop = Infinity) {
-    const L = cells.get(key(Math.floor(x / FC), Math.floor(z / FC))); if (!L) return null;
-    let best = null; const low = top - drop;
-    for (let n = 0; n < L.length; n++) {
-      const o = L[n] * 9, ax = tri[o], az = tri[o + 2], bx = tri[o + 3], bz = tri[o + 5], cx = tri[o + 6], cz = tri[o + 8];
-      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz); if (Math.abs(d) < 1e-12) continue;
-      const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, w = 1 - u - v;
-      if (u < -1e-4 || v < -1e-4 || w < -1e-4) continue;
-      const y = u * tri[o + 1] + v * tri[o + 4] + w * tri[o + 7];
-      if (y <= top && y >= low && (best === null || y > best)) best = y;
+    let best = F0.at(x, z, top, drop);
+    for (const L of extra) {
+      if (x < L.box.min.x || x > L.box.max.x || z < L.box.min.z || z > L.box.max.z || !live(L)) continue;
+      const f = L.F.at(x, z, top, drop); if (f !== null && (best === null || f > best)) best = f;
     }
     return best;
+  }
+  function full(x, y, z) {
+    if (V.full(x, y, z)) return true;
+    for (const L of extra) if (L.V && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && y >= L.box.min.y && y <= L.box.max.y && live(L) && L.V.full(x, y, z)) return true;
+    return false;
   }
 
   // ── the doors ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -94,6 +88,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   }
   function doorAt(x, y, z, r, doorsOpen = false) {
     for (const d of doors) {
+      if (d.when && !d.when(pathing)) continue;
       if (!d.locked && (doorsOpen || d.D.t >= BODY.doorOpen)) continue;
       const B = d.box;
       if (x > B.min.x - r && x < B.max.x + r && z > B.min.z - r && z < B.max.z + r && y + 1.7 > B.min.y && y < B.max.y) return d;
@@ -104,10 +99,17 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   // ── a person ─────────────────────────────────────────────────────────────────────────────────────────────────
   const RX = [], RZ = [];
   for (let i = 0; i < 8; i++) { RX.push(Math.cos(i * Math.PI / 4)); RZ.push(Math.sin(i * Math.PI / 4)); }
+  // (inside a part with a body of its own, a ship's cabin: a person there is that slim, as its narrow doors are drawn
+  // for a person 0.5 m across)
+  function radiusAt(x, y, z, r) {
+    for (const L of extra) if (L.r && L.r < r && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && y >= L.box.min.y && y <= L.box.max.y && live(L)) r = L.r;
+    return r;
+  }
   function free(x, y, z, r = BODY.r, doorsOpen = false) {
+    if (extra.length) r = radiusAt(x, y, z, r);
     for (const h of BODY.heights) {
-      if (V.full(x, y + h, z)) return false;
-      for (let i = 0; i < 8; i++) if (V.full(x + RX[i] * r, y + h, z + RZ[i] * r)) return false;
+      if (full(x, y + h, z)) return false;
+      for (let i = 0; i < 8; i++) if (full(x + RX[i] * r, y + h, z + RZ[i] * r)) return false;
     }
     if (doorAt(x, y, z, r, doorsOpen)) return false;
     // something low in the way (a bed, a chair's seat, a table's top): too tall to step onto
@@ -120,6 +122,21 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     if (f === null || !free(x, f, z, r, doorsOpen)) return false;
     pos.x = x; pos.z = z; pos.y = f; return true;
   }
+  // (the step taken from a point a little to either side, nearest first, up to NUDGE away: the person moved there)
+  // (sideways a small step at a time, as a person would shuffle: never through anything)
+  const _n = [new THREE.Vector3(), new THREE.Vector3()], _f = new THREE.Vector3();
+  function nudge(pos, sx, sz, r, doorsOpen) {
+    const L = Math.hypot(sx, sz), px = -sz / L * NUDGE.step, pz = sx / L * NUDGE.step, open = [true, true];
+    _n[0].copy(pos); _n[1].copy(pos);
+    for (let k = 1; k * NUDGE.step <= NUDGE.most + 1e-6; k++) for (let i = 0; i < 2; i++) {
+      if (!open[i]) continue;
+      const sg = i ? -1 : 1;
+      if (!tryStep(_n[i], px * sg, pz * sg, r, doorsOpen)) { open[i] = false; continue; }
+      _f.copy(_n[i]);
+      if (tryStep(_f, sx, sz, r, doorsOpen)) { pos.copy(_f); return true; }
+    }
+    return false;
+  }
   // doorsOpen: walk as if every door that can open were open (for working out a way)
   function move(pos, dx, dz, r = BODY.r, doorsOpen = false) {
     const dist = Math.hypot(dx, dz); if (dist < 1e-6) return 0;
@@ -128,7 +145,10 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
       if (tryStep(pos, sx, sz, r, doorsOpen)) continue;
       // a wall: slide along it (the station's walls run along x and z)
       const a = Math.abs(sx) > 1e-6 && tryStep(pos, sx, 0, r, doorsOpen), b = Math.abs(sz) > 1e-6 && tryStep(pos, 0, sz, r, doorsOpen);
-      if (!a && !b) break;
+      if (a || b) continue;
+      // head on into a door's frame, a little off its middle: eased sideways into the opening (a narrow ship's door
+      // needs a person lined up within a hand's width, too fine for a thumb on a stick)
+      if (!nudge(pos, sx, sz, r, doorsOpen)) break;
     }
     return Math.hypot(pos.x - x0, pos.z - z0);
   }
@@ -155,8 +175,13 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     return Math.abs(_p.x - b.x) < 0.03 && Math.abs(_p.z - b.z) < 0.03 && Math.abs(_p.y - b.y) < 0.4;
   }
   // (a spot that cannot be reached, under a ship or past a sill too high to climb: the way goes as near to it as it can)
-  function path(from, to, { r = BODY.r + 0.04, most = 12000 } = {}) {
-    const G = 0.5, nodes = [], open = [], seen = new Map();
+  function path(from, to, opts = {}) {
+    pathing = true;
+    try { return pathOf(from, to, opts); } finally { pathing = false; }
+  }
+  // (a way to or from a slim part, a ship's cabin, is worked out on a finer grid: its doors are narrow)
+  function pathOf(from, to, { r = BODY.r + 0.04, most = 12000, G = (radiusAt(from.x, from.y, from.z, BODY.r) < BODY.r || radiusAt(to.x, to.y, to.z, BODY.r) < BODY.r ? 0.125 : 0.5) } = {}) {
+    const nodes = [], open = [], seen = new Map();
     const keyOf = (p) => Math.round(p.x / G * 2) + ',' + Math.round(p.z / G * 2) + ',' + Math.round(p.y * 2);
     const h = (p) => Math.hypot(p.x - to.x, p.z - to.z) + Math.abs(p.y - to.y);
     const push = (n) => { open.push(n); let i = open.length - 1; while (i > 0) { const j = (i - 1) >> 1; if (open[j].f <= open[i].f) break; [open[i], open[j]] = [open[j], open[i]]; i = j; } };
@@ -166,6 +191,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     // (a step of the search: four small steps, each a person's, as a wall is thinner than a person but thicker than none)
     const edge = (p, dx, dz) => { for (let s = 0; s < 4; s++) if (!tryStep(p, dx / 4, dz / 4, r, true)) return false; return true; };
+    const edgeTo = (p, x, z) => { const n = Math.max(1, Math.ceil(Math.hypot(x - p.x, z - p.z) / 0.1)), dx = (x - p.x) / n, dz = (z - p.z) / n; for (let s = 0; s < n; s++) if (!tryStep(p, dx, dz, r, true)) return false; return true; };
     let end = null, n = 0, best = start;
     while (open.length && n++ < most) {
       const cur = pop();
@@ -177,6 +203,20 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
         const g = cur.g + Math.hypot(dx, dz) * G + Math.abs(_p.y - cur.p.y), k = keyOf(_p);
         if (seen.has(k) && seen.get(k) <= g) continue;
         seen.set(k, g); push({ p: _p.clone(), g, f: g + h(_p), up: cur });
+      }
+      // (near a door: straight to the middle of its opening and through it, as a narrow door rarely lies on the grid)
+      for (const d of doors) {
+        const B = d.box; if (d.locked || (d.when && !d.when(true))) continue;
+        const cx = (B.min.x + B.max.x) / 2, cz = (B.min.z + B.max.z) / 2;
+        if (Math.hypot(cur.p.x - cx, cur.p.z - cz) > 1.6 || cur.p.y > B.max.y || cur.p.y + 1.7 < B.min.y) continue;
+        const thinX = B.max.x - B.min.x < B.max.z - B.min.z;
+        for (const o of [-0.45, 0, 0.45]) {
+          _p.copy(cur.p);
+          if (!edgeTo(_p, thinX ? cx + o : cx, thinX ? cz : cz + o)) continue;
+          const g = cur.g + Math.hypot(_p.x - cur.p.x, _p.z - cur.p.z) + Math.abs(_p.y - cur.p.y), k = keyOf(_p);
+          if (seen.has(k) && seen.get(k) <= g) continue;
+          seen.set(k, g); push({ p: _p.clone(), g, f: g + h(_p), up: cur });
+        }
       }
     }
     if (!end) { if (best === start || h(best.p) > h(from) - 2) return null; end = best; }
@@ -196,7 +236,9 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   function reach(from, dir, len) {
     let t = V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, len, voxel * 0.5);
     if (t < 0) t = len;
+    for (const L of extra) { if (!L.V || !live(L)) continue; const u = L.V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, t, L.V.s * 0.5); if (u >= 0) t = Math.min(t, u); }
     for (const d of doors) {
+      if (d.when && !d.when(pathing)) continue;
       if (!d.locked && d.D.t >= BODY.doorOpen) continue;
       // (the ray against the door's box: the slab test)
       let t0 = 0, t1 = t, hit = true;
@@ -211,6 +253,61 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     return t;
   }
 
-  const stats = { voxelMs: Math.round(tV - t0), floorMs: Math.round(performance.now() - tV), bricks: V.bricks, voxelMB: +(V.bytes / 1048576).toFixed(1), floorTris: tri.length / 9, doors: doors.length, locked: doors.filter((d) => d.locked).length };
-  return { V, floorAt, free, move, snap, path, reach, doors, stats, solidAt: (x, y, z) => V.full(x, y, z) };
+  // ── parts added later ────────────────────────────────────────────────────────────────────────────────────────
+  // (each with its own voxels and floors, and a box round them, so a step far from it costs a comparison or two)
+  // (voxel: its own voxels' size, finer than the station's for a ship's narrow rooms; r: the body there)
+  function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null } = {}) {
+    drop(key);
+    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [] };
+    for (const g of [...S, ...U]) { if (!g.boundingBox) g.computeBoundingBox(); L.box.union(g.boundingBox); }
+    L.box.expandByScalar(0.6);
+    for (const d of D) { const e = { D: d.D, box: d.box, locked: false, part: key, when }; L.doors.push(e); doors.push(e); }
+    L.ms = Math.round(performance.now() - t);
+    parts.set(key, L); extra = [...parts.values()];
+    return L;
+  }
+  function drop(key) {
+    const L = parts.get(key); if (!L) return false;
+    for (const e of L.doors) { const i = doors.indexOf(e); if (i >= 0) doors.splice(i, 1); }
+    parts.delete(key); extra = [...parts.values()];
+    return true;
+  }
+
+  const stats = { voxelMs: Math.round(tV - t0), floorMs: Math.round(performance.now() - tV), bricks: V.bricks, voxelMB: +(V.bytes / 1048576).toFixed(1), floorTris: F0.tris, doors: doors.length, locked: doors.filter((d) => d.locked).length };
+  return { V, floorAt, free, move, snap, path, reach, doors, stats, add, drop, parts, solidAt: (x, y, z) => full(x, y, z) };
+}
+
+// THE FLOORS of a set of geometries: every triangle that faces up, sorted into half-metre squares; at(x, z, top, drop)
+// the highest of them under a point, not above `top` and not more than `drop` below it (or null)
+function makeFloors(geos) {
+  const T = [], cells = new Map();
+  const key = (i, k) => (i + 8192) * 16384 + (k + 8192);
+  for (const g of geos) {
+    const p = g.attributes.position.array, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.length / 3;
+    for (let t = 0; t < n; t += 3) {
+      const a = (ix ? ix[t] : t) * 3, b = (ix ? ix[t + 1] : t + 1) * 3, c = (ix ? ix[t + 2] : t + 2) * 3;
+      const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, len = Math.hypot(nx, ny, nz);
+      if (len < 1e-9 || ny / len < 0.6) continue;                     // (faces up: a floor, a tread, a table's top)
+      const id = T.length / 9; T.push(p[a], p[a + 1], p[a + 2], p[b], p[b + 1], p[b + 2], p[c], p[c + 1], p[c + 2]);
+      const i0 = Math.floor(Math.min(p[a], p[b], p[c]) / FC), i1 = Math.floor(Math.max(p[a], p[b], p[c]) / FC);
+      const k0 = Math.floor(Math.min(p[a + 2], p[b + 2], p[c + 2]) / FC), k1 = Math.floor(Math.max(p[a + 2], p[b + 2], p[c + 2]) / FC);
+      for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) { const q = key(i, k); let L = cells.get(q); if (!L) cells.set(q, L = []); L.push(id); }
+    }
+  }
+  const tri = Float32Array.from(T);
+  function at(x, z, top = Infinity, drop = Infinity) {
+    const L = cells.get(key(Math.floor(x / FC), Math.floor(z / FC))); if (!L) return null;
+    let best = null; const low = top - drop;
+    for (let n = 0; n < L.length; n++) {
+      const o = L[n] * 9, ax = tri[o], az = tri[o + 2], bx = tri[o + 3], bz = tri[o + 5], cx = tri[o + 6], cz = tri[o + 8];
+      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz); if (Math.abs(d) < 1e-12) continue;
+      const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, w = 1 - u - v;
+      if (u < -1e-4 || v < -1e-4 || w < -1e-4) continue;
+      const y = u * tri[o + 1] + v * tri[o + 4] + w * tri[o + 7];
+      if (y <= top && y >= low && (best === null || y > best)) best = y;
+    }
+    return best;
+  }
+  return { at, tris: tri.length / 9 };
 }

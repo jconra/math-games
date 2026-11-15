@@ -41,7 +41,8 @@ import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, hangs,
 import { Plan } from './plan.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, forgetPiece } from '../../kit/layout.js';
 import { PIECES } from '../../kit/catalog.js';
-import { buildCabin, LOOKS, cabinMaterials } from '../../kit/ships/cabin-built.js';
+import { LOOKS, cabinMaterials } from '../../kit/ships/cabin-built.js';
+import { buildCabinRoom } from '../../kit/ships/cabin-room.js';
 import { makeMaterials, U } from '../../kit/materials.js';
 import { liveTick, livePalette, LIVE, FLICKER_TAG } from '../../kit/shipparts/cabin/live.js';
 import { corePulse, CORE_LOOK } from '../../kit/shipparts/cabin/livecore.js';
@@ -270,24 +271,20 @@ async function showMeshy() {
 // ── the cabin: the rooms built inside the ship from the blueprint shown (kit/ships/cabin-built.js), with the kit's
 // layout code like the ship (its own materials: no grime inside); its ceilings a zone of their own, so Ceilings off
 // lifts them away to look in from above. One built cabin per blueprint and look is kept (the last few).
-let cabinSeq = 0, cabinMats = {};
+let cabinMats = {};
 const cabins = new Map();
 const cabinOn = () => hasCabin(st.ship) && st.inside && st.bp && (!st.bp.shell || st.bp.shell === st.ship.shell);
 const levelOf = (look) => (LOOKS[look].levels ? (LOOKS[look].levels[st.level] ? st.level : LOOKS[look].level) : null);
 function cabinFor(S, bp, look) {
   const level = levelOf(look), lk = look + (level ? ':' + level : ''), key = S.id + '|' + lk + '|' + JSON.stringify(bp);
   if (cabins.has(key)) return cabins.get(key);
-  const id = 'cabin' + (++cabinSeq), space = st.space, L = LOOKS[look], parts = {};
-  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look, level }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; parts.seesOutside = p.seesOutside; parts.pools = [...(parts.pools || []), ...(p.pools || [])]; parts.beams = [...(parts.beams || []), ...(p.beams || [])]; parts.lightList = [...(parts.lightList || []), ...(p.lightList || [])]; } };
+  const space = st.space;
   // (the cabin's own materials: lit by its strips, little of the lab's sky light let in, the floor tinted for the look,
   // less of a mirror than the station's)
   if (!cabinMats[lk]) cabinMats[lk] = cabinMaterials(look, level);
   livePalette(cabinMats[lk].live, st.screens);
-  const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
-  // (baked without shadows: on the bake's 8 cm grid a 45-degree slope fills its cells in steps thick enough that its own
-  // points start inside them, so it shadows itself from every light; the corner darkening stays)
-  const built = buildRoom(room, cabinMats[lk], { bake: { voxel: 0.08, rays: 24, shadows: false } });
-  delete PIECES[id]; forgetPiece(id);
+  // (built by the kit, as the game builds it: kit/ships/cabin-room.js)
+  const { built, parts } = buildCabinRoom(bp, { space, outer: S.lab.cabin.outer, look, level, mats: cabinMats[lk] });
   const rec = { key, built, group: built.group, tris: built.stats.tris, perZone: built.stats.perZone, parts };
   // (the beams of light with dust in them, under the ceilings' discs: kit/beams.js, two draws for the whole cabin; the
   // list is in the cabin's own frame, deck at 0)

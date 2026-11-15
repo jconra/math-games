@@ -509,7 +509,7 @@ function mdRamp(p, side) {
 // (B's hinge timed: the main section turns as the kit turns it, eased; the foot unfolds over the rest of the way, once
 // the main section is RAMP.unfold out)
 const easeT = (t) => t * t * (3 - 2 * t);
-function rampFoot(built) {
+export function rampFoot(built) {
   for (const D of doorsOf(built, 'mdRamp')) for (const L of D.leaves) {
     if (!L.meshes?.[0]?.name.includes('ramp B')) continue;
     C.poseLeaf(L, [easeT(D.t), easeT(Math.max(0, Math.min(1, (D.t - RAMP.unfold) / (1 - RAMP.unfold))))]);

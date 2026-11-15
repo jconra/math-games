@@ -6355,7 +6355,7 @@
         {"piece":"ebCanopy","cell":[21,12.5],"turn":1,"variant":"glass","off":[0,1.74,0.3]},
         {"piece":"ebMarks","cell":[21,12.5],"turn":1,"variant":"marks","off":[0,1.74,0.3]},
         {"piece":"ebWells","cell":[21,12.5],"turn":1,"variant":"wells","off":[0,1.74,0.3]},
-        {"piece":"ebDoorway","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3]},
+        {"piece":"ebDoorway","cell":[21,12.5],"turn":1,"variant":"port, cabin","off":[0,1.74,0.3]},
         {"piece":"ebDoorway","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3]},
         {"piece":"ebAirstair","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3]},
         {"piece":"ebGear","cell":[21,12.5],"turn":1,"variant":"nose","off":[0,1.74,0.3],"hold":0},
@@ -6364,7 +6364,7 @@
         {"piece":"ebGearDoors","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3],"hold":0},
         {"piece":"ebGear","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3],"hold":0},
         {"piece":"ebGearDoors","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3],"hold":0},
-        {"piece":"ebCockpit","cell":[21,12.5],"turn":1,"variant":"two seats","off":[0,1.74,0.3]}
+        {"piece":"ebCockpit","cell":[21,12.5],"turn":1,"variant":"two seats, cabin","off":[0,1.74,0.3]}
       ]
     },
     {

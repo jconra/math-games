@@ -5,7 +5,8 @@
 //
 //   const W = await loadStation({ canvas, quality, say })       say(fraction, words) as the loading moves on
 //   W.frame(dt, now, eyes)   one drawn frame: which rooms are drawn, the doors (they open for any of `eyes`, the
-//                            points where people are; a door in W.keepShut stays shut), the dust, the sky, the picture
+//                            points where people are; a door in W.keepShut stays shut, one in W.driven is left to
+//                            whatever drives it), the dust, the sky, the picture
 //   W.view(name) / W.place(name) / W.room(id)                   the station file's named views, spots and rooms
 //
 // NOTHING HERE KNOWS A COORDINATE. Rooms, doors, views and spots are found by name through the station file, which
@@ -144,7 +145,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // the shine of the room a point is in (for the people walking through it)
   const envAt = (p) => { const z = zoneAt(built, p), set = z && zoneSets.get(z.id); return (set && set.env) || envTex; };
 
-  const keepShut = new Set();
+  const keepShut = new Set(), driven = new Set();   // (driven: doors something else works, a parked ship's ways in: boarding.js)
   function frame(dt, now, eyes = null) {
     U.time.value = now;
     resize();
@@ -154,6 +155,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     // each door opens for whoever is nearest it (the kit's doors sense one point at a time); a door in keepShut (one
     // that leads nowhere a person can stand: walls.js) stays shut
     for (const D of built.doors) {
+      if (driven.has(D)) continue;
       let best = FAR, bd = Infinity;
       if (eyes) for (const e of eyes) { const d = e.distanceToSquared(D.sense); if (d < bd) { bd = d; best = e; } }
       ONE[0] = D; updateDoors(ONE, best, dt, keepShut.has(D) ? 'shut' : 'auto');
@@ -161,5 +163,5 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     draw(dt);
   }
 
-  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, get env() { return envTex; } };
+  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; } };
 }

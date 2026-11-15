@@ -24,6 +24,7 @@ import { drawLooks, drawn, storedReady, storedInfo } from './portraits.js';
 import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
+import { makeBoarding } from './boarding.js';
 import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
@@ -70,6 +71,8 @@ async function boot() {
   const walls = makeWalls(W.built);
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
+  // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
+  const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -140,6 +143,7 @@ async function boot() {
     eyes.length = 0;
     if (GAME.mode === 'play' && P) eyes.push(P.pos);
     if (people) eyes.push(...people.eyes());
+    boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes, camera: W.camera });
     W.frame(dt, now, eyes);
     GAME.frames++;
   }
@@ -205,12 +209,18 @@ async function boot() {
     return { y: _w.x * fx + _w.z * fz, x: _w.x * rx + _w.z * rz, mag: 1 };
   }
   GAME.walkTo = (spot, { run = false } = {}) => {
-    const s = resolve(W, walls, spot); if (!s || !player) return false;
+    // (a spot by name, or { at: [x, y, z] }: the nearest place to stand there)
+    const s = spot.at ? { pos: walls.snap(spot.at[0], spot.at[1] + 0.15, spot.at[2], 1.5) } : resolve(W, walls, spot); if (!s || !s.pos || !player) return false;
     const way = walls.path(player.P.pos, s.pos); if (!way) return false;
     auto.way = way; auto.i = 1; auto.run = run; auto.to = s.pos; auto.still = 0; return way.length;
   };
   GAME.walking = () => !!auto.way;
-  GAME.where = () => (player ? { x: +player.P.pos.x.toFixed(2), y: +player.P.pos.y.toFixed(2), z: +player.P.pos.z.toFixed(2), heading: +player.P.heading.toFixed(2), room: (W.zoneAt(player.P.pos) || {}).id || null, cam: chase.near } : null);
+  // (a rig standing the player somewhere at once: { at: [x, y, z] } or a spot by name, facing `heading`)
+  GAME.put = (spot, heading = 0) => {
+    const s = spot.at ? { pos: walls.snap(spot.at[0], spot.at[1] + 0.15, spot.at[2], 1.5) } : resolve(W, walls, spot); if (!s || !s.pos || !player) return false;
+    auto.way = null; player.P.place(s.pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); return true;
+  };
+  GAME.where = () => (player ? { x: +player.P.pos.x.toFixed(2), y: +player.P.pos.y.toFixed(2), z: +player.P.pos.z.toFixed(2), heading: +player.P.heading.toFixed(2), room: (W.zoneAt(player.P.pos) || {}).id || null, ship: boarding.where(player.P.pos), cam: chase.near } : null);
   // the cost test: n more people standing in a block in front of the camera (alone: the station's own people put away)
   GAME.crowd = async (n, { alone = false } = {}) => {
     if (!people) return 0;
