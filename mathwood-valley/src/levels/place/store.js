@@ -16,7 +16,7 @@
 // strand at that maker step's own point on the school guide (storeOrder's `own`), so the stats' Money, Telling time,
 // Decimals, Percent, Ratios and Word problems keep counting honestly.
 //
-//   storeOrder(ask, { rand, who, trainer, longMost, frac }) -> an order for the slip (wordproblems.js makeOrder's shape, or
+//   storeOrder(ask, { rand, who, trainer, longMost, frac, setting }) -> an order for the slip (wordproblems.js makeOrder's shape, or
 //                     counter.js counterOrder's), with order.own = { strand, at } and order.ask_ = the Ask it came from
 //   pickAsk(mix, rand, last) -> one Ask, by weight, not the same as `last` when there is another
 //   storeExample(gen, rand) -> { q, a }   (the levels page and the print rig: the same makers the counter uses)
@@ -123,14 +123,14 @@ function typeFor(ask, rand) {
 // stories from repeating and brings a missed kind back), or null; longMost: the hardest long sum (a Long work point)
 // a word problem may need
 // frac: how far into the level the rider is (0..1): the counter's makers grow their numbers through a step with it
-export function storeOrder(ask, { rand = Math.random, who = null, trainer = null, longMost = null, frac = 0 } = {}) {
+export function storeOrder(ask, { rand = Math.random, who = null, trainer = null, longMost = null, frac = 0, setting = null } = {}) {
   let o;
   if (ask.maker === 'words' || ask.maker === 'wordsK') {
     const ladder = ask.maker === 'words' ? 'main' : 'K';
     o = trainer ? trainer.next({ who, step: ask.step, ladder, types: ask.types || null, longMost })
-      : makeOrder(typeFor(ask, rand), { rand, step: ask.step, who, ladder, longMost });
+      : makeOrder(typeFor(ask, rand), { rand, step: ask.step, who, ladder, longMost, setting });
   } else {
-    o = counterOrder(ask.maker, { step: ask.step, frac, rand, who });
+    o = counterOrder(ask.maker, { step: ask.step, frac, rand, who, setting });
   }
   o.own = { strand: ASK_STRAND[ask.maker], at: askAt(ask) };
   o.ask_ = { maker: ask.maker, step: ask.step };

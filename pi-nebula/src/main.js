@@ -29,9 +29,10 @@ import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
+import { startJobs } from './jobs/index.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
-const BUILD = 3;                 // shown small on the title; goes up with index.html's ?v=
+const BUILD = 4;                 // shown small on the title; goes up with index.html's ?v=
 const q = new URLSearchParams(location.search);
 const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
 
@@ -107,6 +108,8 @@ async function boot() {
   }
   canBuild = true;
   prebuild(chosen);
+  // the station's jobs: their spots, the prompt, the job panel (jobs/index.js); credits are saved with the crew member
+  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p) });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -123,9 +126,11 @@ async function boot() {
     const P = player && player.P;
     if (GAME.mode === 'title' || !P) drift(now);
     else {
-      const move = auto.way ? autoMove() : input.move;
+      const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
+      const move = atJob ? null : auto.way ? autoMove() : input.move;
       P.update(dt, { move, run: auto.way ? auto.run : input.run, yaw: chase.yaw, others: people ? people.list : [] });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
+      if (atJob) jobs.aim(W.camera, dt);
       setFov(60);
       P.c.root.visible = chase.near > 0.4;     // (closer than that, the camera would be inside the head)
       // (lit by the room they are in: a new room's light as they walk into it)
@@ -179,7 +184,7 @@ async function boot() {
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; auto.way = null;
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; auto.way = null; jobs.update(0, null, false); jobs.close();
     T.show();
   }
   // back to the title (Escape)

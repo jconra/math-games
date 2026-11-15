@@ -19,7 +19,8 @@
 // This file turns a core into an order the store's slip shows (the same shape as wordproblems.js makeOrder's): the
 // right coin and up to 3 slips, shuffled. Pure, no page: tests/counter.test.mjs.
 //
-//   counterOrder(map, { step, frac, rand, who, coins }) -> order (order.counter = the map; order.lead, order.pic: the
+//   counterOrder(map, { step, frac, rand, who, coins, setting }) -> order (setting: another game's world for the
+//                            makers that take one, ratios.js and wordproblems.js; see there) (order.counter = the map; order.lead, order.pic: the
 //                            pictures for src/ui/counterpics.js counterPicture)
 //   counterChoice(rider, { rand, last, share, now }) -> a map to ask, or null (a word problem this time)
 //   COUNTER (map -> its maker), COUNTER_MAPS, COUNTER_SHARE, KIND_NAMES
@@ -44,14 +45,14 @@ const WIDE_PAST = 7;
 
 const keyOf = (v) => (typeof v === 'number' ? `n${Math.round(v * 1e6)}` : `s${v}`);
 
-export function counterOrder(map, { step = 1, frac = 0, rand = Math.random, who = null, coins = 4 } = {}) {
+export function counterOrder(map, { step = 1, frac = 0, rand = Math.random, who = null, coins = 4, setting = null } = {}) {
   const M = COUNTER[map];
   if (!M) throw new Error('counterOrder: no maker for ' + map);
   const t = tools(rand);
   const st = Math.max(1, Math.min(M.STEPS.length, Math.round(Number(step)) || 1));
   for (let tries = 0; tries < 30; tries++) {
-    const f = who || t.pick(FOLK);
-    const core = M.make(t, st, f, { frac: Math.max(0, Math.min(1, Number(frac) || 0)) });
+    const f = who || t.pick((setting && setting.folk) || FOLK);
+    const core = M.make(t, st, f, { frac: Math.max(0, Math.min(1, Number(frac) || 0)), setting });
     if (!core || !core.right) continue;
     const seen = new Set([keyOf(core.right.v)]), labels = new Set([core.right.label]);
     const wrong = [];

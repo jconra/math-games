@@ -191,12 +191,20 @@ function face(v, unit, cents) {
 //     "Then the change from $50"), for the tools' Work it out (src/math/jobsums.js sumOf), where the working doesn't name
 //     them all as sums with answers (10% off: the tenth first; whole crates: the cans shared into crates)
 const S3 = (size, a, b, c) => [a, b, c][Math.max(1, Math.min(3, size)) - 1];
+// ANOTHER SETTING (opts.setting, from makeOrder's `setting`): another game can tell the same stories in its own world
+// (Pi Nebula's galley and medical bay, ../pi-nebula/src/jobs/). A setting gives a maker its own list of contexts in
+// place of the town's: { folk, groups, share, crates, partsLeft, partsTogether, recipe, things, kmoreHow, kleftHow },
+// each entry shaped as the town's own, with its story and ask lines as functions of the maker's numbers ({ a, b, f, p,
+// ... }). The numbers, the slips and the pictures are the maker's, unchanged; without a setting nothing changes (the
+// same random draws, so the same orders).
+const said = (x, v) => (typeof x === 'function' ? x(v) : x);
+const setOf = (opts, key) => (opts && opts.setting && Array.isArray(opts.setting[key]) && opts.setting[key].length ? opts.setting[key] : null);
 const MAKERS = {};
 // 4 pies, 3 pounds each -> 12 pounds
-MAKERS.groups = (t, size, f) => {
+MAKERS.groups = (t, size, f, opts = {}) => {
   const p = pro(f);
   const a = t.int(2, S3(size, 5, 8, 9)), b = t.int(2, S3(size, 5, 9, 12));
-  const ctx = t.pick([
+  const ctx = t.pick(setOf(opts, 'groups') || [
     { key: 'pies', item: ['pie', 'pies'], unit: POUND, stuff: 'berries',
       story: () => `${f.name} is baking ${a} pies for the town social. Each pie needs ${b} pounds of berries.`, ask: () => `How many pounds of berries ${p.does} need?` },
     { key: 'shoes', item: ['horse', 'horses'], unit: ['nail', 'nails'], stuff: 'nails',
@@ -216,7 +224,7 @@ MAKERS.groups = (t, size, f) => {
   ]);
   const ans = a * b;
   return {
-    key: `groups:${ctx.key}`, story: ctx.story(), ask: ctx.ask(), answer: ans, unit: ctx.unit,
+    key: `groups:${ctx.key}`, story: ctx.story({ a, b, f, p }), ask: ctx.ask({ a, b, f, p }), answer: ans, unit: ctx.unit,
     slips: [
       { v: a + b, slip: 'added', why: `${a} + ${b} adds ${ctx.item[1]} to ${ctx.unit[1]}. It's ${a} ${ctx.item[1]} with ${b} ${ctx.unit[1]} each: ${a} groups of ${b}.` },
       { v: b, slip: 'one', why: `${u(b, ctx.unit)} is enough for just 1 ${ctx.item[0]}. There are ${a} of them.` },
@@ -235,7 +243,7 @@ MAKERS.share = (t, size, f, opts = {}) => {
   if (t.chance(opts.crates || 0)) {
     // whole crates: the leftover needs a crate (or a wagon, or a trip) of its own
     const per = t.pick([6, 8, 10, 12]), full = t.int(2, 7), left = t.int(1, per - 1), total = per * full + left, ans = full + 1;
-    const ctx = t.pick([
+    const ctx = t.pick(setOf(opts, 'crates') || [
       { key: 'beans', box: ['crate', 'crates'], story: `${f.name} needs ${total} cans of beans for the camp. Beans come in crates of ${per} cans.`, ask: `How many crates should ${p.they} buy so there's enough?` },
       { key: 'riders', box: ['wagon', 'wagons'], story: `${total} folks are riding out to the barn dance, and a wagon seats ${per}.`, ask: 'How many wagons are needed so everyone gets a seat?' },
       { key: 'jars', box: ['box', 'boxes'], story: `${f.name} is packing ${total} jars of jam to ship. A box holds ${per} jars.`, ask: `How many boxes does ${p.they} need for every jar?` },
@@ -243,7 +251,7 @@ MAKERS.share = (t, size, f, opts = {}) => {
       { key: 'bread', box: ['basket', 'baskets'], story: `${f.name} needs ${total} loaves of bread for the barn dance. A basket holds ${per} loaves.`, ask: `How many baskets ${p.does} need for every loaf?` },
     ]);
     return {
-      key: `share:${ctx.key}`, story: ctx.story, ask: ctx.ask, answer: ans, unit: ctx.box,
+      key: `share:${ctx.key}`, story: said(ctx.story, { total, per, f, p }), ask: said(ctx.ask, { total, per, f, p }), answer: ans, unit: ctx.box,
       slips: [
         { v: full, slip: 'leftover', why: `${u(full, ctx.box)} hold ${full * per}. That leaves ${left} with nowhere to go: they need one more.` },
         { v: total * per > 999 ? total + per : total * per, slip: total * per > 999 ? 'added' : 'multiplied', why: total * per > 999 ? `${total} + ${per} adds them up. Split the ${total} into ${ctx.box[1]} of ${per}.` : `${total} × ${per} multiplies. Split the ${total} into ${ctx.box[1]} of ${per} instead.` },
@@ -256,7 +264,7 @@ MAKERS.share = (t, size, f, opts = {}) => {
     };
   }
   const groups = t.int(2, S3(size, 5, 8, 9)), each = t.int(2, S3(size, 6, 9, 12)), total = groups * each;
-  const ctx = t.pick([
+  const ctx = t.pick(setOf(opts, 'share') || [
     { key: 'nails', thing: ['nail', 'nails'], box: ['keg', 'kegs'], story: `${f.name} has ${total} nails and ${groups} empty kegs, and wants the same number of nails in each keg.`, ask: 'How many nails go in each keg?' },
     { key: 'candy', thing: ['candy stick', 'candy sticks'], box: ['child', 'children'], story: `${f.name} buys ${total} candy sticks to share evenly among ${groups} children.`, ask: 'How many candy sticks does each child get?' },
     { key: 'flour', thing: ['pound', 'pounds'], box: ['sack', 'sacks'], story: `There are ${total} pounds of flour in the bin. ${f.name} wants it split into ${groups} sacks, all the same.`, ask: 'How many pounds go in each sack?' },
@@ -266,7 +274,7 @@ MAKERS.share = (t, size, f, opts = {}) => {
     { key: 'loaves', thing: ['loaf', 'loaves'], box: ['camp', 'camps'], story: `The bakery sends ${total} loaves of bread, shared evenly among ${groups} camps.`, ask: 'How many loaves does each camp get?' },
   ]);
   return {
-    key: `share:${ctx.key}`, story: ctx.story, ask: ctx.ask, answer: each, unit: ctx.thing,
+    key: `share:${ctx.key}`, story: said(ctx.story, { total, groups, f, p }), ask: said(ctx.ask, { total, groups, f, p }), answer: each, unit: ctx.thing,
     slips: [
       { v: total * groups, slip: 'multiplied', why: `${total} × ${groups} multiplies. The ${total} ${ctx.thing[1]} are being split up, so each ${ctx.box[0]} gets fewer, not more.` },
       { v: total - groups, slip: 'subtracted', why: `${total} − ${groups} takes away ${groups}. Deal the ${total} out into ${groups} equal piles instead.` },
@@ -280,11 +288,11 @@ MAKERS.share = (t, size, f, opts = {}) => {
 };
 
 // had 30, sold 12 -> 18 left; 15 and 18 together -> 33
-MAKERS.parts = (t, size, f) => {
+MAKERS.parts = (t, size, f, opts = {}) => {
   const p = pro(f);
   const a = t.int(S3(size, 6, 12, 20), S3(size, 20, 40, 80)), b = t.int(3, Math.max(4, a - 3));
   if (t.chance(0.5)) {   // the whole is known, a part taken away
-    const ctx = t.pick([
+    const ctx = t.pick(setOf(opts, 'partsLeft') || [
       { key: 'flourLeft', unit: ['sack', 'sacks'], story: `The store had ${a} sacks of flour this morning. ${f.name} bought ${b} of them for the hotel kitchen.`, ask: 'How many sacks are left on the shelf?' },
       { key: 'oilLeft', unit: ['pint', 'pints'], story: `${f.name}'s barrel held ${a} pints of lamp oil. ${p.They} poured out ${b} pints for the lamps.`, ask: 'How many pints are still in the barrel?' },
       { key: 'fenceLeft', unit: ['post', 'posts'], story: `${f.name} needs ${a} fence posts in all, and ${p.has} set ${b} of them already.`, ask: 'How many posts are still to set?' },
@@ -292,7 +300,7 @@ MAKERS.parts = (t, size, f) => {
     ]);
     const ans = a - b;
     return {
-      key: `parts:${ctx.key}`, story: ctx.story, ask: ctx.ask, answer: ans, unit: ctx.unit,
+      key: `parts:${ctx.key}`, story: said(ctx.story, { a, b, f, p }), ask: said(ctx.ask, { a, b, f, p }), answer: ans, unit: ctx.unit,
       slips: [
         { v: a + b, slip: 'added', why: `${a} + ${b} puts more in. Some were taken out of the ${a}, so fewer are left.` },
         { v: b, slip: 'part', why: `${b} is how many were taken. The question is what's left of the ${a}.` },
@@ -304,7 +312,7 @@ MAKERS.parts = (t, size, f) => {
       credit: [{ ...pointOf('sub', a, b), weight: 0.5 }],
     };
   }
-  const ctx = t.pick([
+  const ctx = t.pick(setOf(opts, 'partsTogether') || [
     { key: 'wagons', unit: ['sack', 'sacks'], story: `Two freight wagons pulled in. One carried ${a} sacks of oats and the other ${b} sacks.`, ask: 'How many sacks of oats came in?' },
     { key: 'eggsTwo', unit: ['egg', 'eggs'], story: `${f.name} sold the store ${a} eggs on Monday and ${b} more on Friday.`, ask: `How many eggs did ${p.they} sell in all?` },
     { key: 'miles', unit: MILE, story: `${f.name} rode ${a} miles to the fort, then ${b} miles on to the mission.`, ask: `How far did ${p.they} ride?` },
@@ -312,7 +320,7 @@ MAKERS.parts = (t, size, f) => {
   ]);
   const ans = a + b;
   return {
-    key: `parts:${ctx.key}`, story: ctx.story, ask: ctx.ask, answer: ans, unit: ctx.unit,
+    key: `parts:${ctx.key}`, story: said(ctx.story, { a, b, f, p }), ask: said(ctx.ask, { a, b, f, p }), answer: ans, unit: ctx.unit,
     slips: [
       { v: a - b, slip: 'subtracted', why: `${a} − ${b} takes one away from the other. Both lots are put together here.` },
       { v: a, slip: 'part', why: `${a} is just the first part. Put the ${b} with it.` },
@@ -547,7 +555,7 @@ MAKERS.twostep = (t, size, f) => {
 };
 
 // recipe scaling: 2 pies take 3 cups, so 8 pies take 12 cups
-MAKERS.recipe = (t, size, f) => {
+MAKERS.recipe = (t, size, f, opts = {}) => {
   const p = pro(f);
   const base = t.int(2, 4), k = t.int(2, S3(size, 3, 4, 5));
   // (the answer, per x k, must not be a number the story already prints: per = base would make it the number of pies
@@ -556,15 +564,15 @@ MAKERS.recipe = (t, size, f) => {
   for (let i = 0; i < 20 && (per === base || per * k === base); i++) per = t.int(2, S3(size, 4, 5, 6));
   if (per === base || per * k === base) per = base + 1;
   const want = base * k, ans = per * k;
-  const ctx = t.pick([
+  const ctx = t.pick(setOf(opts, 'recipe') || [
     { key: 'pies', make: ['pie', 'pies'], unit: ['cup of sugar', 'cups of sugar'], small: ['cup', 'cups'] },
     { key: 'biscuits', make: ['pan of biscuits', 'pans of biscuits'], unit: ['cup of flour', 'cups of flour'], small: ['cup', 'cups'] },
     { key: 'beans', make: ['bowl of chili', 'bowls of chili'], unit: ['handful of beans', 'handfuls of beans'], small: ['handful', 'handfuls'] },
     { key: 'cornbread', make: ['loaf of cornbread', 'loaves of cornbread'], unit: ['egg', 'eggs'], small: ['egg', 'eggs'] },
   ]);
-  const story = `${f.name}'s recipe makes ${u(base, ctx.make)} with ${u(per, ctx.unit)}. ${p.They} needs ${u(want, ctx.make)} for the harvest supper.`;
+  const story = ctx.story ? ctx.story({ base, per, want, f, p }) : `${f.name}'s recipe makes ${u(base, ctx.make)} with ${u(per, ctx.unit)}. ${p.They} needs ${u(want, ctx.make)} for the harvest supper.`;
   return {
-    key: `recipe:${ctx.key}`, story, ask: `How many ${ctx.small[1]} ${p.does} need?`, answer: ans, unit: ctx.small,
+    key: `recipe:${ctx.key}`, story, ask: ctx.ask ? ctx.ask({ base, per, want, f, p }) : `How many ${ctx.small[1]} ${p.does} need?`, answer: ans, unit: ctx.small,
     slips: [
       { v: per + (want - base), slip: 'addedOn', why: `That adds ${want - base}, one for each extra ${ctx.make[0]}. A recipe grows by times, not by adding: ${want} is ${k} times ${base}, so it takes ${k} times the ${ctx.small[1]}.` },
       { v: per * want, slip: 'multipliedAll', why: `${per} × ${want} would be ${per} ${ctx.small[1]} for every one ${ctx.make[0]}. The ${per} ${ctx.small[1]} make ${base}.` },
@@ -676,9 +684,10 @@ const THINGS = [
   { key: 'shoes', unit: ['horseshoe', 'horseshoes'], shape: 'shoe' },
 ];
 MAKERS.kmore = (t, size, f, opts = {}) => {
-  const p = pro(f), most = opts.most || 10, th = t.pick(THINGS), U = th.short || th.unit;
+  const p = pro(f), most = opts.most || 10, th = t.pick(setOf(opts, 'things') || THINGS), U = th.short || th.unit;
   const a = t.int(1, Math.max(1, most - 1)), b = t.int(1, Math.max(1, Math.min(most - a, most <= 5 ? 3 : 9))), ans = a + b;
-  const how = t.pick([`${p.They} buys ${b} more.`, `${p.They} gets ${b} more.`, `A neighbor brings ${p.them} ${b} more.`]);
+  const hows = setOf(opts, 'kmoreHow');
+  const how = hows ? t.pick(hows.map((x) => said(x, { b, f, p }))) : t.pick([`${p.They} buys ${b} more.`, `${p.They} gets ${b} more.`, `A neighbor brings ${p.them} ${b} more.`]);
   return {
     key: `kmore:${th.key}`, story: `${f.name} has ${u(a, th.unit)}. ${how}`, ask: `How many ${U[1]} does ${p.they} have now?`, answer: ans, unit: U,
     slips: [
@@ -692,9 +701,9 @@ MAKERS.kmore = (t, size, f, opts = {}) => {
   };
 };
 MAKERS.kleft = (t, size, f, opts = {}) => {
-  const p = pro(f), most = opts.most || 10, th = t.pick(THINGS), U = th.short || th.unit;
+  const p = pro(f), most = opts.most || 10, th = t.pick(setOf(opts, 'things') || THINGS), U = th.short || th.unit;
   const a = t.int(3, Math.max(3, most)), b = t.int(1, a - 1), ans = a - b;
-  const how = t.pick([`${p.They} sold ${b} of them.`, `${p.They} gave ${b} to a neighbor.`, `The children ate ${b} of them.`].filter((x) => th.key !== 'shoes' || !/ate/.test(x)));
+  const how = setOf(opts, 'kleftHow') ? t.pick(setOf(opts, 'kleftHow').map((x) => said(x, { b, f, p, th }))) : t.pick([`${p.They} sold ${b} of them.`, `${p.They} gave ${b} to a neighbor.`, `The children ate ${b} of them.`].filter((x) => th.key !== 'shoes' || !/ate/.test(x)));
   return {
     key: `kleft:${th.key}`, story: `${f.name} had ${u(a, th.unit)}. ${how}`, ask: `How many ${U[1]} are left?`, answer: ans, unit: U,
     slips: [
@@ -707,11 +716,11 @@ MAKERS.kleft = (t, size, f, opts = {}) => {
     rightWhy: `${a} take away ${b} leaves ${u(ans, U)}`, sum: { op: 'sub', a, b }, credit: [{ ...pointOf('sub', a, b), weight: 0.5 }],
   };
 };
-MAKERS.kgroups = (t, size, f) => {
-  const p = pro(f), th = t.pick(THINGS.filter((x) => x.key !== 'loaves')), U = th.short || th.unit;
+MAKERS.kgroups = (t, size, f, opts = {}) => {
+  const p = pro(f), th = t.pick((setOf(opts, 'things') || THINGS).filter((x) => x.key !== 'loaves')), U = th.short || th.unit;
   const g = t.int(2, 3), e = t.int(2, g === 3 ? 4 : 5), ans = g * e;
   return {
-    key: `kgroups:${th.key}`, story: `${f.name} has ${g} baskets with ${u(e, th.unit)} in each basket.`, ask: `How many ${U[1]} is that in all?`, answer: ans, unit: U,
+    key: `kgroups:${th.key}`, story: opts.setting && opts.setting.kgroups ? opts.setting.kgroups({ g, e, th, f, p }) : `${f.name} has ${g} baskets with ${u(e, th.unit)} in each basket.`, ask: `How many ${U[1]} is that in all?`, answer: ans, unit: U,
     slips: [
       { v: g + e, slip: 'added', why: `That adds the baskets and the ${U[1]}. Count every one in every basket.` },
       { v: e, slip: 'one', why: `${e} is one basket. There are ${g} baskets.` },
@@ -819,16 +828,16 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
 // ladder: 'K' for the picture stories (a K kind uses it anyway); longStep (a step, or a function giving it: asked only
 // when a bulk order is made), longMost: see makeWordProblems' next; longOp: 'mul' | 'div' for a bulk order; sum: a
 // given sum for a bulk order ({ op: 'div', n: 112, d: 5 }: rigs, the dev page).
-export function makeOrder(type, { rand = Math.random, step = 1, who = null, coins: count = null, ladder = 'main', longStep = null, longMost = null, longOp = null, sum = null } = {}) {
+export function makeOrder(type, { rand = Math.random, step = 1, who = null, coins: count = null, ladder = 'main', longStep = null, longMost = null, longOp = null, sum = null, setting = null } = {}) {
   const t = tools(rand);
   const K = ladder === 'K' || K_TYPES.includes(type);
   const LAD = K ? K_LADDER : LADDER;
   const st = Math.max(1, Math.min(LAD.length, Math.round(step) || 1));
   const S = LAD[st - 1];
-  const f = who || t.pick(FOLK);
+  const f = who || t.pick((setting && setting.folk) || FOLK);
   const n = count || S.coins || 4;
   for (let tries = 0; tries < 40; tries++) {
-    const core = MAKERS[type](t, S.size || 1, f, { ...S, step: st, longStep, longMost, longOp, sum });
+    const core = MAKERS[type](t, S.size || 1, f, { ...S, step: st, longStep, longMost, longOp, sum, setting });
     if (!core) continue;
     let coins;
     if (core.isEquation || core.wideCoins) {

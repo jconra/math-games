@@ -83,6 +83,20 @@ for (const P of [roundup, wagon, lockbox, deer, fishing, sheep, pigs, range, loo
 export const PLACE = Object.fromEntries(PLACES.map((P) => [P.id, P]));
 export const PLACE_IDS = PLACES.map((P) => P.id);
 
+// ANOTHER GAME'S PLACES on the same levels (Pi Nebula's station jobs, ../pi-nebula/src/jobs/): checked as these are,
+// then kept with them, so model.js and the level tool's arrows run them the same way. Mathwood itself never calls it.
+// -> true, or false (left out, listed in PROBLEMS) for a bad place or an id already taken
+export function addPlace(P) {
+  const why = check(P);
+  if (why) { bad(`place left out: ${why}`); return false; }
+  if (PLACE[P.id]) return PLACE[P.id] === P;
+  P.short = P.short || P.name;
+  P.fastFrom = P.fastFrom || null;
+  P.job = P.job === undefined ? null : P.job;
+  PLACES.push(P); PLACE[P.id] = P; PLACE_IDS.push(P.id);
+  return true;
+}
+
 // Examples for the levels page, made by the place's own maker: n of them, different where the maker allows (the same
 // seed gives the same examples, so the page doesn't change under a reader's eyes).
 export function examplesOf(placeId, levelId, { n = 3, seed = 1 } = {}) {

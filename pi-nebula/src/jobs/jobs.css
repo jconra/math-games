@@ -1,0 +1,154 @@
+/* The station jobs: the job panel, the prompt by a job spot, the credits chip. The title screen's look (src/ui/title.css):
+   dark glass, off-white words, ONE orange accent, every frame eight-sided (corners cut at 45 degrees). A phone gets the
+   panel along the bottom, the job's props still in view above it. */
+
+.pnj, .pnj-prompt, .pnj-wallet, .pnj-fly {
+  --ink: #eef1f4; --dim: #a7b0ba; --faint: #78818b;
+  --glass: rgba(15, 19, 25, 0.9); --glass-hi: rgba(40, 47, 56, 0.92);
+  --line: rgba(196, 220, 240, 0.36); --line-hi: rgba(232, 243, 252, 0.95);
+  --accent: #ff8f2e; --accent-ink: #1c1205; --good: #59d68b; --bad: #ff6b5b; --focus: #7fd4ff;
+  --cut: 12px;
+  --oct: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  font: 400 16px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: var(--ink);
+  -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+}
+.pnj *, .pnj-prompt *, .pnj-wallet * { box-sizing: border-box; }
+.pnj button, .pnj-prompt button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.pnj :focus-visible, .pnj-prompt :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pnj kbd, .pnj-prompt kbd { font: 700 10px/1 inherit; font-family: inherit; letter-spacing: 0.06em; padding: 3px 5px; margin-left: 8px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); color: var(--dim); vertical-align: 2px; }
+
+/* ── the panel ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.pnj { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+.pnj-panel {
+  position: absolute; right: max(16px, env(safe-area-inset-right)); top: 64px; max-height: calc(100% - 80px); width: min(480px, 44vw);
+  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 16px; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--glass); box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 16px;
+  pointer-events: auto; opacity: 0; transform: translateX(24px); transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.pnj.is-on .pnj-panel { opacity: 1; transform: none; }
+.pnj.is-going .pnj-panel { opacity: 0; transform: translateX(24px); }
+
+.pnj-top { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 6px 10px; align-items: center; }
+.pnj-name { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.pnj-name b { font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; }
+.pnj-cr { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 700; font-size: 14px; }
+.pnj-cr i, .pnj-wallet i { width: 12px; height: 12px; background: var(--accent); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); display: inline-block; }
+.pnj-cr em { font-style: normal; }
+.pnj-cr.is-bump { animation: pnj-bump 0.5s ease; }
+@keyframes pnj-bump { 40% { transform: scale(1.25); color: #ffd29e; } }
+.pnj-x { grid-column: 2; grid-row: 1; height: 34px; padding: 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 8px; }
+.pnj-x:hover { box-shadow: inset 0 0 0 1.5px var(--line-hi); }
+.pnj-level { grid-column: 1 / -1; display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; gap: 6px; }
+.pnj-arrow { height: 34px; font-size: 13px; color: var(--dim); background: rgba(255, 255, 255, 0.06) !important; clip-path: var(--oct); --cut: 7px; }
+.pnj-arrow:hover:not(:disabled) { color: var(--ink); background: rgba(255, 255, 255, 0.16) !important; }
+.pnj-arrow:disabled { opacity: 0.3; cursor: default; }
+.pnj-arrow[hidden] { visibility: hidden; display: block; }
+.pnj-lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: center; }
+.pnj-lvwords { font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnj-lv.is-flash .pnj-lvwords { color: var(--good); font-weight: 700; }
+.pnj-bar { height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; overflow: hidden; }
+.pnj-bar i { display: block; height: 100%; width: 0; background: var(--good); transition: width 0.4s ease; }
+.pnj-bar.is-placing i { width: 30% !important; background: linear-gradient(90deg, transparent, var(--focus), transparent); animation: pnj-scan 1.6s linear infinite; }
+@keyframes pnj-scan { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+/* the card: the job's scene, the story, the question */
+.pnj-stage { overflow: hidden; flex: none; }
+.pnj-card { padding: 12px 14px 14px; background: linear-gradient(180deg, rgba(120, 190, 240, 0.12), rgba(120, 190, 240, 0.04)); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.3); clip-path: var(--oct); --cut: 10px;
+  transition: transform 0.26s ease, opacity 0.26s ease; }
+.pnj-card.is-out { transform: translateX(-40px); opacity: 0; }
+.pnj-card.is-in { animation: pnj-in 0.32s ease; }
+@keyframes pnj-in { from { transform: translateX(40px); opacity: 0; } }
+.pnj-cardtop { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px dashed rgba(150, 210, 250, 0.35); }
+.pnj-cardtop b { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #9fd6ff; }
+.pnj-cardtop small { margin-left: auto; font-size: 12px; color: var(--dim); }
+.pnj-cardtop.is-chart b { color: #8ff0c0; }
+.pnj-icon { width: 18px; height: 18px; flex: none; background: currentColor; }
+.pnj-icon.is-pot { color: #9fd6ff; clip-path: polygon(0 35%, 100% 35%, 100% 45%, 88% 45%, 84% 100%, 16% 100%, 12% 45%, 0 45%, 0 35%, 30% 35%, 30% 15%, 70% 15%, 70% 35%); }
+.pnj-icon.is-cross { color: #8ff0c0; clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
+.pnj-chart { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 8px; font-size: 13px; }
+.pnj-chart div { display: contents; }
+.pnj-chart dt { color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; padding-top: 2px; }
+.pnj-chart dd { margin: 0; color: var(--ink); }
+.pnj-story { margin: 0 0 8px; font-size: 17px; line-height: 1.4; }
+.pnj-ask { margin: 0; font-size: 18px; font-weight: 700; color: #ffd29e; }
+
+/* the pictures (Mathwood's drawings) on a light card */
+.pnj-pic { background: #f4ecdc; border-radius: 6px; padding: 6px; }
+.pnj-pic:empty { display: none; }
+.pnj-pic svg { display: block; width: 100%; height: auto; max-height: 190px; }
+.pnj-pic.is-lead { margin: 4px 0 8px; }
+
+/* the answers: the number big, its unit small under it; no key numbers on them */
+.pnj-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: none; }
+.pnj-coin { min-height: 64px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 10px; transition: transform 0.12s ease, box-shadow 0.15s, background 0.15s; }
+.pnj-coin b { font-size: 24px; font-weight: 800; line-height: 1.05; }
+.pnj-coin small { font-size: 12px; color: var(--dim); }
+.pnj-coin:hover:not(.is-dull) { box-shadow: inset 0 0 0 2px var(--line-hi); }
+.pnj-coin:active:not(.is-dull) { transform: scale(0.97); }
+.pnj-coin.is-dull { opacity: 0.38; cursor: default; }
+.pnj-coin.is-wrong { animation: pnj-shake 0.4s ease; box-shadow: inset 0 0 0 2px var(--bad); }
+@keyframes pnj-shake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.pnj-coin.is-right { background: rgba(60, 170, 110, 0.85) !important; box-shadow: inset 0 0 0 2px #b8ffd6; animation: pnj-pop 0.4s ease; }
+.pnj-coin.is-right small { color: #e9fff2; }
+@keyframes pnj-pop { 50% { transform: scale(1.06); } }
+.pnj-answers.is-wide .pnj-coin b { font-size: 19px; }
+
+.pnj-line { min-height: 1.4em; margin: 0; font-size: 15px; color: var(--dim); }
+.pnj-line.is-right { color: var(--good); }
+.pnj-line.is-wrong { color: #ffc2b8; }
+.pnj-foot { display: flex; justify-content: flex-end; margin-top: auto; }
+.pnj-helpbtn { height: 40px; padding: 0 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 9px; }
+.pnj-helpbtn:hover, .pnj-helpbtn[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px var(--line-hi); }
+.pnj-helpbtn.is-nudge { animation: pnj-glow 2.2s ease-in-out infinite; }
+@keyframes pnj-glow { 50% { box-shadow: inset 0 0 0 2px var(--accent); color: #ffd29e; } }
+
+/* help: inside the panel, under the answers, with its X */
+.pnj-help { padding: 12px; background: rgba(30, 38, 48, 0.95); box-shadow: inset 0 0 0 1.5px rgba(255, 143, 46, 0.55); clip-path: var(--oct); --cut: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pnj-help[hidden] { display: none; }
+.pnj-help header { display: flex; align-items: center; justify-content: space-between; }
+.pnj-help header b { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #ffd29e; }
+.pnj-hx { width: 34px; height: 34px; font-size: 15px; background: rgba(255, 255, 255, 0.08) !important; clip-path: var(--oct); --cut: 7px; }
+.pnj-hline { margin: 0; font-size: 15px; }
+.pnj-hline:empty { display: none; }
+.pnj-steps { margin: 0; padding-left: 22px; font-size: 15px; color: #cfe6ff; }
+.pnj-steps li { margin: 2px 0; }
+.pnj-paper { align-self: flex-start; height: 38px; padding: 0 14px; font-size: 14px; font-weight: 700; color: var(--accent-ink) !important; background: var(--accent) !important; clip-path: var(--oct); --cut: 8px; }
+.pnj-paper[hidden] { display: none; }
+
+/* the credits flying to the count */
+.pnj-fly { position: fixed; z-index: 40; pointer-events: none; transform: translate(0, 0); margin: -14px 0 0 -20px; font-weight: 800; font-size: 22px; color: #ffd29e;
+  text-shadow: 0 0 10px rgba(255, 143, 46, 0.9); transition: transform 0.8s cubic-bezier(0.5, 0, 0.7, 1), opacity 0.8s ease; }
+
+/* ── the prompt by a job spot, and the credits chip while walking ─────────────────────────────────────────── */
+.pnj-prompt { position: fixed; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 18px; background: var(--glass); box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); max-width: calc(100vw - 32px); }
+.pnj-prompt[hidden] { display: none; }
+.pnj-prompt .pnj-pw { display: flex; flex-direction: column; min-width: 0; }
+.pnj-prompt .pnj-pw b { font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; }
+.pnj-prompt .pnj-pw small { font-size: 13px; color: var(--dim); }
+.pnj-prompt.is-soon { padding-right: 18px; }
+.pnj-prompt.is-soon .pnj-pw b { color: var(--dim); }
+.pnj-go { flex: none; height: 44px; padding: 0 18px; font-size: 15px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent-ink) !important; background: var(--accent) !important; clip-path: var(--oct); --cut: 9px; }
+.pnj-go kbd { background: rgba(0, 0, 0, 0.18); color: var(--accent-ink); }
+.pnj-wallet { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 14; height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 700; color: var(--accent); background: rgba(14, 18, 24, 0.72); box-shadow: inset 0 0 0 1.5px rgba(150, 200, 240, 0.45); clip-path: var(--oct); --cut: 10px; pointer-events: none; }
+.pnj-wallet[hidden] { display: none; }
+
+/* ── a phone: the panel along the bottom, the props in view above ─────────────────────────────────────────── */
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj-panel { left: 8px; right: 8px; width: auto; top: auto; bottom: max(8px, env(safe-area-inset-bottom)); max-height: 66vh; padding: 10px 12px 12px; gap: 8px; transform: translateY(24px); }
+  .pnj.is-going .pnj-panel { transform: translateY(24px); }
+  .pnj-story { font-size: 15px; }
+  .pnj-ask { font-size: 16px; }
+  .pnj-coin { min-height: 54px; }
+  .pnj-coin b { font-size: 21px; }
+  .pnj-pic svg { max-height: 130px; }
+  .pnj.is-help .pnj-panel { max-height: 86vh; }
+}
+@media (max-height: 480px) and (min-width: 641px) {
+  .pnj-panel { left: auto; right: 8px; width: min(460px, 56vw); top: 8px; bottom: 8px; max-height: none; transform: none; }
+}
