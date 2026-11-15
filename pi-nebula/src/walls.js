@@ -140,6 +140,8 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   // doorsOpen: walk as if every door that can open were open (for working out a way)
   function move(pos, dx, dz, r = BODY.r, doorsOpen = false) {
     const dist = Math.hypot(dx, dz); if (dist < 1e-6) return 0;
+    // (somewhere no person can stand, as when a ship's ramp has come down where they were: out to the nearest spot)
+    if (!free(pos.x, pos.y, pos.z, r, doorsOpen)) { const s = snap(pos.x, pos.y + BODY.stepUp, pos.z, 1.2, r); if (s) pos.copy(s); }
     const n = Math.max(1, Math.ceil(dist / BODY.stride)), sx = dx / n, sz = dz / n, x0 = pos.x, z0 = pos.z;
     for (let i = 0; i < n; i++) {
       if (tryStep(pos, sx, sz, r, doorsOpen)) continue;
@@ -176,6 +178,8 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   }
   // (a spot that cannot be reached, under a ship or past a sill too high to climb: the way goes as near to it as it can)
   function path(from, to, opts = {}) {
+    // (from somewhere no person can stand: from the nearest spot that is)
+    if (!free(from.x, from.y, from.z)) { const s = snap(from.x, from.y + BODY.stepUp, from.z, 1.2); if (s) from = s; }
     pathing = true;
     try { return pathOf(from, to, opts); } finally { pathing = false; }
   }

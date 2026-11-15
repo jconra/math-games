@@ -31,6 +31,7 @@ import { liveTick, livePalette, FLICKER_TAG } from '../kit/shipparts/cabin/live.
 import { corePulse, CORE_LOOK } from '../kit/shipparts/cabin/livecore.js';
 import { CORE_TAG } from '../kit/shipparts/cabin/reactor.js';
 import * as EB from '../kit/ships/explorer-built.js';
+import * as MD from '../kit/ships/medic-built.js';
 import { shine } from './player.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
@@ -40,6 +41,7 @@ import { shine } from './player.js';
 // paused: neither is boarded.)
 export const SHIPS = [
   { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, bp: 'explorer-c-row', ways: ['ebAirstair'] },
+  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
 ];
 // how near (m, along the floor) a person must be to a way in for it to come down (the door's own reach, if it has one);
 // how long (s) after everyone has left a ship's hangar its cabin is dropped; the cabin's look
@@ -271,7 +273,11 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       const [x0, z0, x1, z1] = r.rect, [x, z] = d.at, n = Math.abs(x - x0) < 1e-3 ? [1, 0] : Math.abs(x - x1) < 1e-3 ? [-1, 0] : Math.abs(z - z0) < 1e-3 ? [0, 1] : [0, -1];
       doorIn[id] = new THREE.Vector3(x + n[0] * 0.45, s.space.deck + (r.floor || 0), z + n[1] * 0.45).applyMatrix4(s.M).toArray().map((v) => +v.toFixed(3));
     }
-    return { rooms, doorIn, ways: s.ways.map((D) => [+D.sense.x.toFixed(3), 0, +D.sense.z.toFixed(3)]) };
+    // (each way in: on the floor 2 m beyond the point it senses people from, out from the ship's middle: clear of a
+    // ramp as it comes down)
+    const mid = new THREE.Vector3(0, 0, 0).applyMatrix4(s.M);
+    const ways = s.ways.map((D) => { const dx = D.sense.x - mid.x, dz = D.sense.z - mid.z, L = Math.hypot(dx, dz) || 1; return [+(D.sense.x + dx / L * 2).toFixed(3), 0, +(D.sense.z + dz / L * 2).toFixed(3)]; });
+    return { rooms, doorIn, ways };
   }
 
   // (where a point is aboard: 'explorer/mess', or null)

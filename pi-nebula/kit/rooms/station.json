@@ -6375,17 +6375,17 @@
         {"piece":"mdHull","cell":[21,27.5],"turn":3,"variant":"hull","off":[0,1.74,-0.3]},
         {"piece":"mdCanopy","cell":[21,27.5],"turn":3,"variant":"glass","off":[0,1.74,-0.3]},
         {"piece":"mdMarks","cell":[21,27.5],"turn":3,"variant":"marks","off":[0,1.74,-0.3]},
-        {"piece":"mdBay","cell":[21,27.5],"turn":3,"variant":"med bay","off":[0,1.74,-0.3]},
+        {"piece":"mdBay","cell":[21,27.5],"turn":3,"variant":"med bay, cabin","off":[0,1.74,-0.3]},
         {"piece":"mdWells","cell":[21,27.5],"turn":3,"variant":"wells","off":[0,1.74,-0.3]},
         {"piece":"mdRamp","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
         {"piece":"mdRamp","cell":[21,27.5],"turn":3,"variant":"starboard","off":[0,1.74,-0.3]},
         {"piece":"mdCrewDoor","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
-        {"piece":"mdAirlock","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
+        {"piece":"mdAirlock","cell":[21,27.5],"turn":3,"variant":"port, cabin","off":[0,1.74,-0.3]},
         {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"port front","off":[0,1.74,-0.3],"hold":0},
         {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"port rear","off":[0,1.74,-0.3],"hold":0},
         {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"starboard front","off":[0,1.74,-0.3],"hold":0},
         {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"starboard rear","off":[0,1.74,-0.3],"hold":0},
-        {"piece":"mdCockpit","cell":[21,27.5],"turn":3,"variant":"two seats","off":[0,1.74,-0.3]}
+        {"piece":"mdCockpit","cell":[21,27.5],"turn":3,"variant":"two seats, cabin","off":[0,1.74,-0.3]}
       ]
     }
   ]
