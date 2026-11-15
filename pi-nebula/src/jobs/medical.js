@@ -25,7 +25,7 @@ export const SETTING = {
     { key: 'apples', unit: ['apple', 'apples'], shape: 'apple' },
   ],
   kmoreHow: [({ b }) => `The pharmacy sends ${b} more.`, ({ b }) => `A supply drone brings ${b} more.`, ({ b, p }) => `${p.They} finds ${b} more in the cupboard.`],
-  kleftHow: [({ b, p }) => `${p.They} gave ${b} to patients.`, ({ b }) => `${b} were used on the ward today.`],
+  kleftHow: [({ b, p }) => `${p.They} gave ${b} to patients.`, ({ b }) => `${b} ${b === 1 ? 'was' : 'were'} used on the ward today.`],
   kgroups: ({ g, e, th }) => `The medic sets out ${g} trays with ${u(e, th.unit)} on each tray.`,
   groups: [
     { key: 'pills', item: ['day', 'days'], unit: ['pill', 'pills'], story: ({ a, b, f }) => `${f.name} has to take ${b} vitamin pills a day for ${a} days.`, ask: () => 'How many pills is that?' },
