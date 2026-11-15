@@ -131,6 +131,9 @@
 //   PLACE: how a head sits on an outfit, its three levels added up; centre: THE HEAD'S CENTRE, the head entry's own); lib.headPlaces { suits: { id: headFit }, heads: { id: headFit } }
 //   (empty: a layer over crew.json's, the Crew Lab's while it's tried); lib.seatOf(head id, suit id) (the seat alone);
 //   lib.seats (the older layer over a head's older `seat`); HEAD_LIMITS; c.place (the place a person wears)
+//   lib.armsOf(suit id) -> its arm thickness (ARM THICKNESS; 1 as made); lib.arms { suit id: thickness } (a layer over
+//   crew.json's, the Crew Lab's while it's tried); ARMS_LIMITS; c.arms (the thickness a person wears); CALM (THE CALM
+//   STANDING POSE) and lib.calm (tried in its place: set before an outfit's clips are first fitted)
 //   JOBS, UNIFORM_COLOURS, BAND_COLOURS (THE BANDS), SKIN_TONES, SKIN_LIMIT and skinTone (THE SKIN'S LIMITS),
 //   HAIR_UNDERSIDE (THE HAIR'S UNDERSIDE), HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
@@ -280,6 +283,9 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // outfit's and head's headFit is lib.headPlaces' for it if it has one (the Crew Lab's while it's tried; a head's
   // replacing its older `seat` too), else crew.json's
   lib.headPlaces = { suits: {}, heads: {} };
+  // ARM THICKNESS (makeCrew): lib.arms { suit id: thickness } (the Crew Lab's while it's tried) over the suit entry's `arms`
+  lib.arms = {};
+  lib.armsOf = (suit) => { const v = own(lib.arms, suit) ? lib.arms[suit] : (lib.entry('suit', suit) || {}).arms; return +v > 0 ? Math.min(ARMS_LIMITS[1], Math.max(ARMS_LIMITS[0], +v)) : 1; };
   // (the older form: a head entry's `seat`, and lib.seats over it, as the Crew Lab kept them before 2026-11-11)
   lib.seats = {};
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -336,7 +342,8 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
         const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm';
         const rig = handRig(g.scene.userData.crewRig, hand ? (await lib.part('hand', hand)).scene.userData.crewRig : null);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
-        return { body, rig, clips: retargetClips(await lib.rawClips(body), rig, rest), stride: strideOf(rig, body) };
+        const clips = retargetClips(await lib.rawClips(body), rig, rest);
+        return { body, rig, clips: calmStand(clips, g.scene, lib.calm || CALM), stride: strideOf(rig, body) };
       })());
     }
     return fitted.get(key);
@@ -410,6 +417,83 @@ export function retargetClips(clips, rig, rest = {}) {
     }
     return c;
   });
+}
+// THE CALM STANDING POSE (2026-11-15; the game's maker: the idle hands "do not look good, they are angled too far
+// forwards", and "This left should seems low"). The crew's standing clip (Stand_Listen, the game's STAND) is Mathwood's
+// listener: a hand on the hip, that elbow swung out toward the viewer, the body shifted onto one hip, the other wrist
+// bent forward. The crew play it calmer, made here at load from the clip itself (Mathwood's own file is left as it is,
+// and so is every other clip): both arms hang relaxed, the hands by the thighs with the wrists straight in line with
+// the forearms (the rest pose's own wrist turn) and the fingers as Idle has them; the clavicles as Idle has them (level);
+// the body's shift onto one hip and its sway kept at CALM.shift of the clip's own (the rest blended toward Idle's first
+// frame); the head's listening nods kept as they are.
+// Each arm is aimed in the person's own frame (y up, z their front, x out to that arm's side): the upper arm CALM.upper
+// [out, forward] degrees off straight down, the forearm CALM.lower; each turned the shortest way from its rest
+// direction, so the palms come to face the thighs; then ARMS OUT (makeCrew) still turns a bulky outfit's arms out on
+// top. lib.calm (as CALM) tries other values, as the checks do.
+// (ARM THICKNESS's limits: thinnest, thickest)
+export const ARMS_LIMITS = [0.7, 1.1];
+export const CALM = { clip: 'Stand_Listen', upper: [5, 3], lower: [4, 14], shift: 0.5 };
+const CALM_BODY = /^(Body|Hips|Abdomen|Torso|Chest|UpperLeg[LR]|LowerLeg[LR]|Foot[LR])$/;
+const CALM_IDLE = /^(Shoulder[LR]|(Thumb|Index|Middle|Ring|Pinky)\d[LR])$/;
+function calmStand(clips, scene, C = CALM) {
+  const i = clips.findIndex((c) => c.name === C.clip), idle = clips.find((c) => c.name === 'Idle');
+  if (i < 0 || !idle) return clips;
+  const src = clips[i], dur = src.duration;
+  // a bare copy of the suit's bones (the glTF's own is shared: never posed here)
+  scene.updateMatrixWorld(true);
+  const B = {}, holder = new THREE.Object3D(); let top = null;
+  scene.traverse((o) => { if (o.isBone) { const b = new THREE.Object3D(); b.name = o.name; b.position.copy(o.position); b.quaternion.copy(o.quaternion); b.scale.copy(o.scale); B[o.name] = b; } });
+  scene.traverse((o) => { if (!o.isBone) return; if (o.parent && o.parent.isBone) B[o.parent.name].add(B[o.name]); else { top = o; holder.add(B[o.name]); } });
+  if (!top || !B.UpperArmL || !B.WristL || !B.Middle1L) return clips;
+  top.parent.matrixWorld.decompose(holder.position, holder.quaternion, holder.scale);
+  holder.updateMatrixWorld(true);
+  const restQ = {}, restDir = {}, W = (n) => B[n].getWorldPosition(new THREE.Vector3());
+  for (const s of ['L', 'R']) for (const [n, m] of [['UpperArm' + s, 'LowerArm' + s], ['LowerArm' + s, 'Wrist' + s]]) {
+    restQ[n] = B[n].getWorldQuaternion(new THREE.Quaternion()); restDir[n] = W(m).sub(W(n)).normalize();
+  }
+  const wristRest = { L: B.WristL.quaternion.toArray(), R: B.WristR.quaternion.toArray() };
+  const side = { L: Math.sign(W('UpperArmL').x - W('UpperArmR').x) || 1 }; side.R = -side.L;
+  const aim = (deg, sg) => { const r = THREE.MathUtils.degToRad; return new THREE.Vector3(sg * Math.tan(r(deg[0])), -1, Math.tan(r(deg[1]))).normalize(); };
+  // (the clip's tracks, the body's blended toward Idle's first frame, the clavicles and fingers Idle's, by name)
+  const idleAt0 = {}; for (const t of idle.tracks) idleAt0[t.name] = Array.from(t.values.slice(0, t.getValueSize()));
+  const tracks = src.tracks.map((t0) => {
+    const [bone, prop] = t0.name.split('.'), held = idleAt0[t0.name];
+    if (held && CALM_IDLE.test(bone)) return new t0.constructor(t0.name, [0, dur], [...held, ...held]);
+    if (!held || !CALM_BODY.test(bone) || C.shift >= 1) return t0.clone();
+    const t = t0.clone(), n = t.getValueSize(), v = t.values, k = C.shift;
+    if (prop === 'quaternion') {
+      const a = new THREE.Quaternion(), h = new THREE.Quaternion().fromArray(held).normalize();
+      for (let j = 0; j < v.length; j += 4) h.clone().slerp(a.fromArray(v, j).normalize(), k).toArray(v, j);
+    } else for (let j = 0; j < v.length; j++) v[j] = held[j % n] + (v[j] - held[j % n]) * k;
+    return t;
+  });
+  // the arms aimed, a sample every 1/15 s over the clip (the body under them moves a little: its sway and breathing)
+  const interp = tracks.filter((t) => B[t.name.split('.')[0]]).map((t) => [B[t.name.split('.')[0]], t.name.split('.')[1], t.createInterpolant()]);
+  const steps = Math.max(2, Math.round(dur * 15) + 1), times = [], arm = {};
+  const pq = new THREE.Quaternion(), wq = new THREE.Quaternion(), sw = new THREE.Quaternion();
+  for (let j = 0; j < steps; j++) {
+    const t = (dur * j) / (steps - 1); times.push(t);
+    for (const [b, p, I] of interp) { const r = I.evaluate(t); if (p === 'quaternion') b.quaternion.fromArray(r).normalize(); else if (p === 'position') b.position.fromArray(r); }
+    for (const s of ['L', 'R']) {
+      B['Wrist' + s].quaternion.fromArray(wristRest[s]);
+      for (const [n, deg] of [['UpperArm' + s, C.upper], ['LowerArm' + s, C.lower]]) {
+        holder.updateMatrixWorld(true);
+        sw.setFromUnitVectors(restDir[n], aim(deg, side[s]));
+        wq.copy(sw).multiply(restQ[n]);
+        B[n].parent.getWorldQuaternion(pq);
+        B[n].quaternion.copy(pq.invert().multiply(wq));
+        (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());
+      }
+    }
+  }
+  const out = src.clone(); out.tracks = tracks.map((t) => {
+    const bone = t.name.split('.')[0];
+    if (t.name.endsWith('.quaternion') && arm[bone]) return new THREE.QuaternionKeyframeTrack(t.name, times, arm[bone]);
+    if (t.name.endsWith('.quaternion') && /^Wrist[LR]$/.test(bone)) { const q = wristRest[bone.slice(-1)]; return new THREE.QuaternionKeyframeTrack(t.name, [0, dur], [...q, ...q]); }
+    return t;
+  });
+  out.userData = { ...(src.userData || {}), calm: true };
+  return clips.map((c, j) => (j === i ? out : c));
 }
 function retargetMoves(clips, rig) {
   const map = {}; for (const k of Object.keys(rig.dstRest)) map[clean(k)] = k;
@@ -2593,6 +2677,20 @@ export async function makeCrew(lib, recipe) {
   if (gaze) gaze.shade(meshes.eyes, meshes.eyes.material);
   // (face bones, at rest before the clips' first frame)
   const faceR = faceRig(bones);
+  // ARM THICKNESS (crew.json suit entry `arms`, 2026-11-15; the game's maker, of Ivy in the grey uniform: "The arm also
+  // seems really big compared with the rest of her body"): the bones are a normal length, the sleeves are thick, so each
+  // upper arm's bone is scaled thinner across its own length (the two axes square to the line to its elbow; never
+  // shorter), the forearm thinner with it (a child takes its parent's scale), and each wrist scaled back by as much, so
+  // the hands and fingers stay their own size. 1 as made (every outfit unless set), ARMS_LIMITS; lib.armsOf
+  const armK = lib.armsOf(R.suit);
+  if (armK !== 1) for (const s of ['L', 'R']) {
+    const ua = bones['UpperArm' + s], la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!ua || !la || !wr) continue;
+    // (the bone's length runs along the axis its child sits on: most often y)
+    const along = (b, kid) => { const p = kid.position, a = [Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)]; return a.indexOf(Math.max(...a)); };
+    const k3 = (i, k) => [0, 1, 2].map((j) => (j === i ? 1 : k));
+    ua.scale.fromArray(k3(along(ua, la), armK));
+    wr.scale.fromArray(k3(along(la, wr), 1 / armK));
+  }
   // ARMS OUT (crew.json suit entry `armsOut`, degrees, 2026-11-07): bulky trousers or a coat's skirts that the hands would
   // sink into in the standing clips: each upper arm turned out that far from the body, as much as it hangs down (none
   // when it's raised or reaching forward), on top of the clip and taken off again before the next frame's clip
@@ -2618,7 +2716,7 @@ export async function makeCrew(lib, recipe) {
     person.root.updateMatrixWorld(true);
   }
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK,
     // (THE HEAD'S PLACE: how this head sits on this outfit, each level's and the total)
     place,
     // (THE SIZE: the whole person scaled, and their stride with them)
