@@ -26,7 +26,7 @@ body { overscroll-behavior: none; }
 .cw-title { flex: 1; font: 700 13px/1.6 system-ui, "Segoe UI", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue-hi); }
 .cw-x { flex: none; width: 30px; height: 28px; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--ink-2); font-size: 22px; line-height: 1; cursor: pointer; }
 .cw-x:hover { border-color: var(--blue); color: var(--ink); }
-.cw-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px;
+.cw-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px 10px 18px; display: flex; flex-direction: column; gap: 8px;
   scrollbar-width: thin; scrollbar-color: rgba(79, 182, 255, .5) transparent; }
 /* a section: its small heading, then its controls wrapping */
 .cw-body > * { flex: none; }
@@ -46,9 +46,14 @@ body { overscroll-behavior: none; }
 /* the three-way level choice: one chip lit */
 .cw-levels { display: flex; flex-wrap: wrap; gap: 4px; }
 .cw-levels .chip { white-space: normal; text-align: left; }
-/* ── the picture grids: their own scrolling area, so the edits under them stay in view ── */
-.cw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; max-height: 196px; overflow-y: auto; overflow-x: hidden; padding: 2px 2px 4px;
-  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(79, 182, 255, .5) transparent; }
+/* ── the picture grids: all their pictures shown (2026-11-15: no scrolling of their own; the window opens big enough,
+   or is resized by its corner) ── */
+.cw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; overflow-x: hidden; padding: 2px 2px 4px; }
+/* the corner grip that resizes a window */
+.cw-grip { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; touch-action: none; z-index: 2;
+  background: linear-gradient(135deg, transparent 50%, rgba(79, 182, 255, .55) 50%, rgba(79, 182, 255, .55) 58%, transparent 58%, transparent 70%, rgba(79, 182, 255, .55) 70%, rgba(79, 182, 255, .55) 78%, transparent 78%);
+  border-bottom-right-radius: 10px; }
+.cw-grip:hover { background-color: rgba(79, 182, 255, .12); }
 .pic { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 3px 4px; border: 2px solid #2f3d50; border-radius: 9px; cursor: pointer;
   background: radial-gradient(circle at 50% 40%, #2a3646, #121a24 75%); color: var(--ink-2); font-size: 11px; line-height: 1.2; min-width: 0; }
 .pic:hover { border-color: var(--blue); color: var(--ink); }
@@ -73,4 +78,14 @@ body { overscroll-behavior: none; }
 .cw textarea { width: 100%; min-height: 90px; resize: vertical; border: 1px solid #2f3d50; border-radius: 8px; padding: 4px 6px;
   background: #0d141d; color: var(--ink); font: 12px/1.35 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
 .cw .chip { white-space: nowrap; }
-@media (max-width: 520px) { .cm { width: 222px; } .cw-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 190px; } .pic img, .pic .ph { width: 64px; height: 64px; } }
+/* ── the Line-up (lineup.js): a frame and a name on each tile; the person shown outlined. The tiles are drawn on the
+   canvas under them; these never catch the pointer (a click goes through to the canvas, which picks the tile) ── */
+#lineup-tags { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+#lineup-tags[hidden] { display: none; }
+.lu-tile { position: absolute; box-sizing: border-box; border: 1px solid rgba(79, 182, 255, .14); border-radius: 4px; }
+.lu-tile.on { border: 2px solid var(--blue-hi); box-shadow: inset 0 0 0 1px rgba(6, 18, 29, .6); }
+.lu-tile span { position: absolute; left: 4px; right: 4px; bottom: 4px; font: 600 11.5px/1.25 system-ui, "Segoe UI", sans-serif; color: var(--ink);
+  text-shadow: 0 1px 2px #000, 0 0 4px #000; overflow-wrap: anywhere; }
+.lu-tile.on span { color: var(--blue-hi); }
+.lu-tile.wait span { color: var(--mute); }
+@media (max-width: 520px) { .cm { width: 222px; } .cw-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); } .pic img, .pic .ph { width: 64px; height: 64px; } }

@@ -6,7 +6,9 @@
 // category buttons, dragged anywhere by its top bar and never closed; each button opens its category's WINDOW (about
 // square, dragged by its top bar, closed by its X or Esc; several open at once, the one touched in front). Inside a
 // window everything wraps onto new lines (nothing scrolls sideways); a long window scrolls up and down inside itself.
-// Where the windows are and which are open are kept for this browser tab only. EVERY CONTROL IS IN ONE PLACE ONLY:
+// Where the windows are and which are open are kept for this browser tab only. (2026-11-15: a window opens big enough
+// to show everything in it where the screen allows, its picture grid no longer scrolling on its own, and is resized by
+// its bottom-right corner, the size kept for this tab: windows.js.) EVERY CONTROL IS IN ONE PLACE ONLY:
 //   CREW     the ready-made crew members (crew.json recipes), each a whole recipe
 //   BODIES   a grid of picture buttons, one an outfit (thumbs.js: drawn from the kit as the window opens; the one worn
 //            outlined), and under it Hands (by outfit: the man's on a men's-skeleton outfit, the woman's on a women's;
@@ -41,6 +43,12 @@
 //   CHANGES  what this browser has changed from crew.json (kept in this browser as made, worn at once), whether it has
 //            been saved since; Save fits (a file, crewFits-<yyyy-mm-dd-hhmm>.json, to Downloads, for the hair rig's
 //            merge_fits.mjs), Copy fits (the same text, also shown in a box to copy by hand), Clear my changes
+//   LINE-UP  (2026-11-15, lineup.js) one part held, another varied, side by side: Every head on this outfit (Hair on or
+//            off), This head on every outfit, Every hair on this head, This hair on every head; the rest of the recipe the
+//            person shown's. The screen becomes a grid of tiles, a person a tile (up to 8 across, 8 at 1280 wide; pages
+//            past that, its arrows); every Camera view applies to every tile (the close ones following each one's own
+//            head or neck); clicking a tile makes that person the one shown, and every edit (Heads, Hair, Colors, Face,
+//            Pose, Camera's paint) shows across the row as it's made. Closing the window: back to one person.
 //   Saved and copied text: { "hairs": { <hair id>: its fit (pairs in fit.heads) }, "heads": { <head id>: its hairFit },
 //     "buzzes": { <hair id>: its buzz | null }, "outfits": { <outfit id>: its headFit { seat, forward, size } },
 //     "headPlaces": { <head id>: its headFit { seat, forward, size, suits: { <outfit id>: { seat, forward, size } } } } }
@@ -53,7 +61,9 @@
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Hair window's fit: the fit worn,
 //     this browser's fits, the text Copy fits gives), buzz() (the buzz's state), buzzView({ buzz, under, ears }),
 //     step(kind, d) (the head or hair d along; resolves when shown), win(id, on) (a window opened or closed),
-//     menus() (the menus' state: { master, open, at }), thumbs (the picture buttons' drawer),
+//     menus() (the menus' state: { master, open, at, size, scrolls }), refit(id) (a window sized to fit its contents
+//     again), lineup { open(kind), close(), page(d), hair(on), state(), slots(), ready(), tileAt(x, y) } (the Line-up:
+//     its tiles' people in slots()[i].crew, each with .rest, its bones at rest), thumbs (the picture buttons' drawer),
 //     crew() (the person shown), lib (kit/crew.js's loadCrew), three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -63,6 +73,7 @@ import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 import { makeMenus } from './windows.js';
 import { makeThumbs } from './thumbs.js';
+import { makeLineup, KINDS as LINEUPS } from './lineup.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, recipe: null, look: q.has('look'), dirty: false };
@@ -142,6 +153,7 @@ const lib = await loadCrew({ smoothHair: !q.has('flathair') });
 const RECIPES = lib.list.recipes;
 const thumbs = makeThumbs(lib);
 let M = null;     // (the menus, once the first person is in)
+let LU = null;    // (the Line-up, once the first person is in: lineup.js)
 // (one character shown: a choice made while the one before is still being put together wins, and the one before is
 // dropped, so stepping fast through the heads never leaves two standing)
 let showSeq = 0, shownSeq = 0;
@@ -164,14 +176,16 @@ async function show(recipe) {
 // (a part picked from a grid: the recipe with it, the rest kept)
 const wear = (kind, id) => { if (!st.recipe) return; show({ ...st.recipe, [kind]: id || null }); };
 function setPaint(p) {
-  st.paint = p; if (!st.crew) return;
-  for (const m of Object.values(st.crew.meshes)) m.material = p === 'plain' ? PLAIN : p === 'wire' ? WIRE : m.userData.paint;
+  st.paint = p;
+  for (const c of [st.crew, ...(LU ? LU.slots.map((s) => s.crew) : [])]) if (c) paintOne(c);
 }
+// (one person painted as the Camera window says: their own paint, plain or wireframe)
+function paintOne(c) { for (const m of Object.values(c.meshes)) m.material = st.paint === 'plain' ? PLAIN : st.paint === 'wire' ? WIRE : m.userData.paint; }
 function setBones(on) {
   st.bones = on; if (skel) { scene.remove(skel); skel.dispose(); skel = null; }
   if (on && st.crew) { skel = new THREE.SkeletonHelper(st.crew.root); skel.material.depthTest = false; skel.material.linewidth = 2; scene.add(skel); }
 }
-function play(name, o = {}) { st.clip = name; st.paused = false; if (st.crew) st.crew.play(name, { speed: st.speed, ...o }); menu(); }
+function play(name, o = {}) { st.clip = name; st.paused = false; if (st.crew) st.crew.play(name, { speed: st.speed, ...o }); LU?.play(name, st.speed); menu(); }
 // (for pictures and checks: the clip held at time t seconds)
 function pose(name, t) {
   const c = st.crew; if (!c) return null;
@@ -183,14 +197,14 @@ function pose(name, t) {
   // clip's turn. Its memory of the frame before is cleared, so every bone is written now)
   for (const pm of a._propertyBindings) if (pm) pm.buffer.fill(NaN, pm.valueSize, pm.valueSize * 3);
   c.person.cur = a; c.person.curName = name; a.time = t; st.paused = true;
-  c.update(0); menu(); return a.getClip().duration;
+  c.update(0); LU?.pose(name, t); menu(); return a.getClip().duration;
 }
 
 // ── the view ──────────────────────────────────────────────────────────────────────────────────────────────────────
 const _h = new THREE.Vector3(), _f = new THREE.Vector3();
 // (what a following camera keeps in view: the middle of the head, or the neck at the collar)
-function anchorAt(kind, v) {
-  const B = st.crew?.bones; if (!B) return v.set(0, kind === 'neck' ? 1.5 : 1.7, 0);
+function anchorAt(kind, v, c = st.crew) {
+  const B = c?.bones; if (!B) return v.set(0, kind === 'neck' ? 1.5 : 1.7, 0);
   if (kind === 'neck') return B.Neck.getWorldPosition(v).add(_f.set(0, 0.03, 0));
   return B.Head.getWorldPosition(v).add(_f.set(0, 0.09, 0.03));
 }
@@ -247,8 +261,9 @@ const WINDOWS = [
   { id: 'colors', label: 'Colors', title: 'Job colours, bands, skin, hair and eyes' },
   { id: 'face', label: 'Face', title: 'The face\'s shape (sliders) and a visor\'s face' },
   { id: 'changes', label: 'Changes', title: 'What you have changed, and saving it' },
+  { id: 'lineup', label: 'Line-up', title: 'Many people side by side: every head on this outfit, this head on every outfit, every hair on this head, this hair on every head' },
 ];
-const RENDER = { crew: crewWin, bodies: bodiesWin, heads: headsWin, hair: hairWin, pose: poseWin, camera: cameraWin, colors: coloursWin, face: faceWin, changes: changesWin };
+const RENDER = { crew: crewWin, bodies: bodiesWin, heads: headsWin, hair: hairWin, pose: poseWin, camera: cameraWin, colors: coloursWin, face: faceWin, changes: changesWin, lineup: lineupWin };
 // (a window's inside made again: where it and its grid were scrolled kept; a window just opened shows the part worn)
 function paint(id, opened) {
   if (!M || !M.isOpen(id)) return;
@@ -258,7 +273,7 @@ function paint(id, opened) {
   if (opened) { const on = g && g.querySelector('.pic[aria-pressed="true"]'); if (on) g.scrollTop = Math.max(0, on.offsetTop - g.offsetTop - 6); }
   else { body.scrollTop = keep[0]; if (g) g.scrollTop = keep[1]; }
 }
-function menu() { if (!M) return; for (const id of M.ids()) paint(id); }
+function menu() { if (!M) return; for (const id of M.ids()) paint(id); LU?.drawTags(); }
 
 // CREW: the ready-made crew members
 function crewWin() {
@@ -284,7 +299,7 @@ function headsWin() {
 // POSE: the clips and their speed
 function poseWin() {
   return [...CLIP_GROUPS.map(([g, list]) => { const L = list.filter((n) => st.crew?.person.actions[n]); return L.length ? sec(g, row(L.map((n) => chip(LABEL[n] || n, n === st.clip, () => play(n), true)))) : null; }).filter(Boolean),
-    sec('Speed', row(...[[0.25, '¼'], [0.5, '½'], [1, '1×']].map(([v, t]) => chip(t, v === st.speed && !st.paused, () => { st.speed = v; st.paused = false; if (st.crew?.person.cur) st.crew.person.cur.setEffectiveTimeScale(v); menu(); }, true)),
+    sec('Speed', row(...[[0.25, '¼'], [0.5, '½'], [1, '1×']].map(([v, t]) => chip(t, v === st.speed && !st.paused, () => { st.speed = v; st.paused = false; if (st.crew?.person.cur) st.crew.person.cur.setEffectiveTimeScale(v); LU?.play(st.clip, v); menu(); }, true)),
       chip(st.paused ? 'Play' : 'Pause', st.paused, () => { st.paused = !st.paused; menu(); }, true)))];
 }
 // CAMERA: where from, and what shows
@@ -857,6 +872,22 @@ function changesWin() {
   return out;
 }
 
+// ── LINE-UP (lineup.js): one part held, another varied, side by side; a tile clicked is the person shown ─────────────
+function lineupWin() {
+  const R = st.recipe || {}, K = LU.kind, n = LU.slots.length, all = LU.pages;
+  const held = { heads: `${nameOf('suit', R.suit)}${LU.hairOn ? '' : ', no hair'}`, outfits: nameOf('head', R.head), hairs: nameOf('head', R.head), hairHeads: R.hair ? nameOf('hair', R.hair) : 'No hair' }[K];
+  const what = { heads: 'heads on', outfits: 'outfits under', hairs: 'hairs on', hairHeads: 'heads under' }[K];
+  const total = LU.slots.length ? `${{ heads: lib.list.parts.head.length, outfits: lib.list.parts.suit.length, hairs: lib.list.parts.hair.length + 1, hairHeads: lib.list.parts.head.length }[K]}` : '0';
+  const out = [sec('Line up', choice(Object.entries(LINEUPS).map(([k, x]) => [k, x.label, x.title]), K, (k) => { LU.open(k); paint('lineup'); }, 'Which line-up')),
+    el('div', 'cw-sum', `${total} ${what} ${held}` + (all > 1 ? `: page ${LU.pageNo + 1} of ${all} (${n} here)` : ''))];
+  const bits = [];
+  if (all > 1) bits.push(chip('◀ Page', false, () => { LU.page(-1); paint('lineup'); }, true, 'The page before'), chip('Page ▶', false, () => { LU.page(1); paint('lineup'); }, true, 'The next page'));
+  if (K === 'heads') bits.push(chip(LU.hairOn ? 'Hair on' : 'Hair off', LU.hairOn, () => { LU.hair(!LU.hairOn); paint('lineup'); }, true, 'Each head wears the hair shown (off: no hair, to see the necks and the scalps)'));
+  if (bits.length) out.push(sec('', row(bits)));
+  out.push(note('Click a person to make them the one shown: the Heads and Hair windows then change them, at the level chosen there, and the whole row shows it at once. Every Camera view applies to the row; drag to look round, wheel or pinch to come closer.'));
+  return out;
+}
+
 function layout() {
   const W = innerWidth, H = innerHeight;
   canvas.style.height = H + 'px'; canvas.style.width = W + 'px';
@@ -903,9 +934,12 @@ renderer.setAnimationLoop((t) => {
   }
   fly(dt); controls.update();
   if (wallGroup) wallGroup.visible = camera.position.z > wallZ;
-  renderer.render(scene, camera); frames++;
+  // (the Line-up: the person shown hidden, a tile a person drawn in its place)
+  if (c) c.root.visible = !LU?.on; if (skel) skel.visible = !LU?.on;
+  if (LU?.on) { LU.update(dt, st.paused); LU.render(camera, fo && fo[0]); } else renderer.render(scene, camera);
+  frames++;
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
-  if (c) hud.textContent = `${RECIPES[st.who]?.name || ''} · ${LABEL[st.clip] || st.clip} · ${tris.toLocaleString()} tris · ${fps} fps`;
+  if (c) hud.textContent = LU?.on ? `Line-up: ${LINEUPS[LU.kind].label} · ${LABEL[st.clip] || st.clip} · ${fps} fps` : `${RECIPES[st.who]?.name || ''} · ${LABEL[st.clip] || st.clip} · ${tris.toLocaleString()} tris · ${fps} fps`;
 });
 let tris = 0;
 const triCount = () => { tris = 0; st.crew?.root.traverse((o) => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); };
@@ -913,7 +947,9 @@ const triCount = () => { tris = 0; st.crew?.root.traverse((o) => { if (o.isMesh)
 st.who = RECIPES[q.get('who')] ? q.get('who') : Object.keys(RECIPES)[0];
 await show(RECIPES[st.who]); triCount();
 layout(); setCam(CAMS[st.cam] !== undefined ? st.cam : 'Full');
-M = makeMenus({ items: WINDOWS, top: () => $('#top').getBoundingClientRect().bottom, onOpen: (id, on) => { if (on) paint(id, true); } });
+const topPx = () => $('#top').getBoundingClientRect().bottom;
+LU = makeLineup({ lib, makeCrew, scene, renderer, sun, topPx, current: () => st.recipe, onPick: (kind, id) => wear(kind, id), paintOf: paintOne, anchorOf: (c, kind, v) => anchorAt(kind, v, c || st.crew) });
+M = makeMenus({ items: WINDOWS, top: topPx, onOpen: (id, on) => { if (id === 'lineup') { if (on) LU.open(); else LU.close(); } if (on) paint(id, true); } });
 menu();
 loading.hidden = true;
 
@@ -946,8 +982,11 @@ window.CREWLAB = {
   buzzView: (v) => buzzView(v),
   fit: () => ({ open: M.isOpen('hair'), scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), mineHeads: copy(lib.headFits), text: fitsText(), box: fitSt.out, note: fitSt.note, saved: fitSt.saved || null, changes: changeList() }),
-  step: (kind, d) => step(kind, d), win: (id, on) => M.open(id, on), menus: () => M.state(), thumbs,
+  step: (kind, d) => step(kind, d), win: (id, on) => M.open(id, on), menus: () => M.state(), refit: (id) => M.refit(id), thumbs,
   // (how the head sits: the level chosen, a step of a setting at it, what the person wears, this browser's layer)
   place: () => ({ scope: headSt.scope, fine: headSt.fine, wearing: st.crew?.place || null, mine: dup(lib.headPlaces) }), placeLevel: (k) => { headSt.scope = k; paint('heads'); }, placeStep: (key, dir) => replace(key, dir),
   measure, crew: () => st.crew, lib, three: THREE, scene, camera, renderer, controls,
+  // (the Line-up: opened on a kind, its page, its tiles' people, whether every tile is built and in step)
+  lineup: { open: (k) => { M.open('lineup', true); LU.open(k); paint('lineup'); }, close: () => M.open('lineup', false), page: (d) => { LU.page(d); paint('lineup'); }, hair: (on) => { LU.hair(on); paint('lineup'); },
+    state: () => ({ on: LU.on, kind: LU.kind, page: LU.pageNo, pages: LU.pages, per: LU.perPage(), slots: LU.slots.map((s) => ({ id: s.id, name: s.name, built: !!s.crew })) }), slots: () => LU.slots, ready: () => LU.ready(), tileAt: (x, y) => LU.tileAt(x, y), lu: () => LU },
 };
