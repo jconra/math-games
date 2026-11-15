@@ -16,8 +16,8 @@
 //   HEADS    a grid of picture buttons, one a head, and under it how the head sits on the outfit (kit/crew.js THE SEAT
 //            and THE HEAD'S PLACE): what the changes apply to, one of three (This outfit, every head; This head, every
 //            outfit; This head on this outfit only), a line adding the levels up ("Size: Cook's jacket and apron
-//            (every head) +6%, this head (every outfit) +2% = +8%"); Seat (lower into the collar) and Forward in 2 mm
-//            steps, Size in 1% steps (Fine: 0.5 mm and 0.25%); Reset (the level chosen back to nothing)
+//            (every head) +6%, this head (every outfit) +2% = +8%"); Seat (lower into the collar), Forward and Side (to
+//            their left or right) in 2 mm steps, Size in 1% steps (Fine: 0.5 mm and 0.25%); Reset (the level chosen back to nothing)
 //   HAIR     a grid of picture buttons ("No hair" first), and under it its FIT (kit/crew.js "a hair's fit"): what the
 //            changes apply to, one of three (This hair, every head: the hair's own fit; This hair on this head only: the
 //            pair's own, added to the hair's; Every hair on this head: the head's own setting, crew.json's head entry
@@ -50,8 +50,8 @@
 //            head or neck); clicking a tile makes that person the one shown, and every edit (Heads, Hair, Colors, Face,
 //            Pose, Camera's paint) shows across the row as it's made. Closing the window: back to one person.
 //   Saved and copied text: { "hairs": { <hair id>: its fit (pairs in fit.heads) }, "heads": { <head id>: its hairFit },
-//     "buzzes": { <hair id>: its buzz | null }, "outfits": { <outfit id>: its headFit { seat, forward, size } },
-//     "headPlaces": { <head id>: its headFit { seat, forward, size, suits: { <outfit id>: { seat, forward, size } } } } }
+//     "buzzes": { <hair id>: its buzz | null }, "outfits": { <outfit id>: its headFit { seat, forward, side, size } },
+//     "headPlaces": { <head id>: its headFit { seat, forward, side, size, suits: { <outfit id>: { ... } } } } }
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster); the arrow keys step
 // the hair (left, right) and the head (up, down); Esc closes the window in front.
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
@@ -341,7 +341,7 @@ function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu();
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours({ ...st.recipe.colours, ...c }); menu(); }
 
 // ── HOW THE HEAD SITS (kit/crew.js THE SEAT and THE HEAD'S PLACE): Seat (lower, into the collar), Forward (toward the
-// face) and Size, at one of three levels that add up (sizes multiply): this outfit, every head (the outfit's headFit);
+// face), Side (to their left or right, 2026-11-15) and Size, at one of three levels that add up (sizes multiply): this outfit, every head (the outfit's headFit);
 // this head, every outfit (the head's headFit); this head on this outfit only (the head's headFit.suits[<outfit>]).
 // Tried at once and kept in this browser over crew.json's (lib.headPlaces, each outfit's or head's whole headFit);
 // Save fits and Copy fits carry them ("outfits" and "headPlaces") ─────────────────────────────────────────────────
@@ -352,7 +352,7 @@ const HEAD_LEVELS = [
   ['head', 'This head, every outfit', 'Your changes are this head\'s own: it sits this way on every outfit'],
   ['pair', 'This head on this outfit only', 'Your changes are this pair\'s own: only this head on this outfit'],
 ];
-const PLACE_STEP = { seat: [0.002, 0.0005], forward: [0.002, 0.0005], size: [0.01, 0.0025] };   // (each: [step, Fine step])
+const PLACE_STEP = { seat: [0.002, 0.0005], forward: [0.002, 0.0005], side: [0.002, 0.0005], size: [0.01, 0.0025] };   // (each: [step, Fine step])
 const headSt = { scope: 'pair', fine: false };
 // (a head's headFit as crew.json gives it, its older `seat` folded in: a suit's at the pair's level, all at the head's)
 function headPlaceStart(h) {
@@ -363,11 +363,12 @@ function headPlaceStart(h) {
   }
   return o;
 }
-// (a level with nothing in it left out: seats and forwards of zero, a size of 1; numbers rounded; empty pairs dropped)
+// (a level with nothing in it left out: seats, forwards and sides of zero, a size of 1; numbers rounded; empty pairs dropped)
 function placeTidy(o) {
   const t = {}; if (!o) return t;
   if (Math.abs(+o.seat || 0) >= 0.00005) t.seat = +(+o.seat).toFixed(4);
   if (Math.abs(+o.forward || 0) >= 0.00005) t.forward = +(+o.forward).toFixed(4);
+  if (Math.abs(+o.side || 0) >= 0.00005) t.side = +(+o.side).toFixed(4);
   if (o.size != null && Math.abs(+o.size - 1) >= 0.00005) t.size = +(+o.size).toFixed(4);
   if (o.suits) { const S = {}; for (const [k, v] of Object.entries(o.suits)) { const x = placeTidy(v); delete x.suits; if (Object.keys(x).length) S[k] = x; } if (Object.keys(S).length) t.suits = S; }
   return t;
@@ -418,30 +419,34 @@ async function replace(key, dir) {
 }
 async function placeReset() {
   const R = st.recipe; if (!R?.head || !R.suit) return;
-  const o = placeLevel(R, true); delete o.seat; delete o.forward; delete o.size;
+  const o = placeLevel(R, true); delete o.seat; delete o.forward; delete o.side; delete o.size;
   st.dirty = true; savePlaces(); await show(R);
 }
 // (in words: "20 mm lower", "3 mm forward", "+6%")
 const seatW = (v) => (Math.abs(v) < 0.00005 ? '0 mm' : `${+(Math.abs(v) * 1000).toFixed(1)} mm ${v > 0 ? 'lower' : 'higher'}`);
 const fwdW = (v) => (Math.abs(v) < 0.00005 ? '0 mm' : `${+(Math.abs(v) * 1000).toFixed(1)} mm ${v > 0 ? 'forward' : 'back'}`);
+const sideW = (v) => (Math.abs(v) < 0.00005 ? '0 mm' : `${+(Math.abs(v) * 1000).toFixed(1)} mm to their ${v > 0 ? 'left' : 'right'}`);
 const sizeW = (v) => { const d = (v - 1) * 100; return Math.abs(d) < 0.005 ? '0%' : (d > 0 ? '+' : '−') + +Math.abs(d).toFixed(2) + '%'; };
 function headBits(R) {
   if (!R.head || !R.suit) return [note('Pick a head and an outfit.')];
   const P = lib.headPlaceOf(R.head, R.suit), L = placeLevel(R, false), lvName = { suit: `${nameOf('suit', R.suit)} (every head)`, head: 'this head (every outfit)', pair: 'this head on this outfit' };
-  const lvl = HEAD_LEVELS.map(([k, t, ti]) => { const x = P.levels[k], any = x.seat || x.forward || x.size !== 1; return [k, t + (any ? ' •' : ''), ti + (any ? ' (• it has some)' : '')]; });
+  const lvl = HEAD_LEVELS.map(([k, t, ti]) => { const x = P.levels[k], any = x.seat || x.forward || x.side || x.size !== 1; return [k, t + (any ? ' •' : ''), ti + (any ? ' (• it has some)' : '')]; });
   // (each setting's levels added up: "Size: Cook's jacket (every head) +6%, this head (every outfit) +2% = +8%")
   const sum = el('div', 'cw-sum'), lines = [];
-  for (const [key, name, fmt, def] of [['seat', 'Seat', seatW, 0], ['forward', 'Forward', fwdW, 0], ['size', 'Size', sizeW, 1]]) {
+  for (const [key, name, fmt, def] of [['seat', 'Seat', seatW, 0], ['forward', 'Forward', fwdW, 0], ['side', 'Side', sideW, 0], ['size', 'Size', sizeW, 1]]) {
     const parts = ['suit', 'head', 'pair'].filter((k) => Math.abs(P.levels[k][key] - def) > 1e-7).map((k) => `${lvName[k]} ${fmt(P.levels[k][key])}`);
     if (parts.length) lines.push(`${name}: ${parts.join(', ')}${parts.length > 1 ? ' = ' + fmt(P[key]) : ''}`);
   }
   if (!lines.length) lines.push('As made: this head sits on this outfit as the parts were made.');
+  // (the head's own centre, crew.json's, under the levels: kit/crew.js THE HEAD'S CENTRE)
+  if (P.centre[0] || P.centre[1]) lines.push(`Centred on its neck joint, on every outfit: this head was made off-centre, so it is always moved ${[P.centre[0] ? sideW(P.centre[0]) : '', P.centre[1] ? fwdW(P.centre[1]) : ''].filter(Boolean).join(' and ')}.`);
   for (const l of lines) sum.append(el('div', null, l));
   const v = (k) => (k === 'size' ? (L.size == null ? 1 : +L.size) : +L[k] || 0), lvTitle = HEAD_LEVELS.find((x) => x[0] === headSt.scope)[1].toLowerCase();
   return [sec('How this head sits: your changes apply to', choice(lvl, headSt.scope, (k) => { headSt.scope = k; paint('heads'); }, 'What the head changes apply to'), sum),
     sec(HEAD_LEVELS.find((x) => x[0] === headSt.scope)[1],
       row(knob('Seat', seatW(v('seat')), ['▲', () => replace('seat', -1)], ['▼', () => replace('seat', 1)], 'Higher in the collar', 'Lower: deeper in the collar (its neck goes deeper in; nothing is cut)', 'How much lower the head sits, ' + lvTitle),
         knob('Forward', fwdW(v('forward')), ['−', () => replace('forward', -1)], ['+', () => replace('forward', 1)], 'Back', 'Forward (toward the face)', 'How far forward the head sits, ' + lvTitle),
+        knob('Side', sideW(v('side')), ['−', () => replace('side', -1)], ['+', () => replace('side', 1)], 'To their right (your left as you face them)', 'To their left (your right as you face them)', 'How far to one side the head sits, ' + lvTitle),
         knob('Size', sizeW(v('size')), ['−', () => replace('size', -1)], ['+', () => replace('size', 1)], 'A touch smaller', 'A touch bigger', 'The head\'s size (its hair, eyes and face with it), ' + lvTitle)),
       row(chip('Fine', headSt.fine, () => { headSt.fine = !headSt.fine; paint('heads'); }, true, 'Small steps: 0.5 mm and 0.25% (off: 2 mm and 1%)'),
         chip('Reset', false, placeReset, true, 'The level chosen back to nothing'))),
@@ -843,11 +848,11 @@ function changeList() {
   for (const id of Object.keys(lib.fits)) L.push(['Hair fit', nameOf('hair', id)]);
   for (const id of Object.keys(lib.headFits)) L.push(['Every hair on a head', nameOf('head', id)]);
   for (const id of Object.keys(lib.buzzes)) L.push(['Buzz', nameOf('hair', id)]);
-  const placeW = (o) => [o.seat ? 'seat ' + seatW(o.seat) : '', o.forward ? fwdW(o.forward) : '', o.size != null && o.size !== 1 ? 'size ' + sizeW(o.size) : ''].filter(Boolean).join(', ') || 'back to as made';
+  const placeW = (o) => [o.seat ? 'seat ' + seatW(o.seat) : '', o.forward ? fwdW(o.forward) : '', o.side ? sideW(o.side) : '', o.size != null && o.size !== 1 ? 'size ' + sizeW(o.size) : ''].filter(Boolean).join(', ') || 'back to as made';
   for (const [id, o] of Object.entries(lib.headPlaces.suits)) L.push(['Every head on an outfit', `${nameOf('suit', id)}: ${placeW(placeTidy(o))}`]);
   for (const [id, o0] of Object.entries(lib.headPlaces.heads)) {
     const o = placeTidy(o0), w = [];
-    if (o.seat || o.forward || o.size) w.push(`every outfit: ${placeW(o)}`);
+    if (o.seat || o.forward || o.side || o.size) w.push(`every outfit: ${placeW(o)}`);
     for (const [suit, x] of Object.entries(o.suits || {})) w.push(`on ${nameOf('suit', suit)}: ${placeW(x)}`);
     L.push(['How a head sits', `${nameOf('head', id)}, ${w.join('; ') || 'back to as made'}`]);
   }

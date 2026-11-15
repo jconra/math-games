@@ -18,7 +18,10 @@
 //              against the hair's inner layer and its outside in that direction. Returns { points (scalp points under
 //              hair), inner (points out past the inner layer by over 1 mm), innerMm (the most), outer (points out past
 //              the hair's outside by over 0.5 mm: skin showing through), outerMm, worst: [azimuth, elevation] of the
-//              deepest } or null (no hair mesh)
+//              deepest, through, throughMm, throughWorst (2026-11-15: of the outer ones, those with hair over the scalp
+//              within 18 degrees above, below and to either side: skin showing THROUGH the hair, not the
+//              neck in front of a hair's edge tucked into the nape, which outer counts too: Crew 1's swept hair and the
+//              braided crown, hidden) } or null (no hair mesh)
 import * as THREE from 'three';
 
 const _v = new THREE.Vector3(), F = new THREE.Matrix4();
@@ -124,7 +127,22 @@ export function pokeOf(c) {
     }
     // (covered: the hair there and in every direction round it)
     const covered = (b) => { const e = Math.floor(b / NA), a = b % NA; for (let de = -1; de <= 1; de++) for (let da = -1; da <= 1; da++) { const ee = e + de; if (ee < 0 || ee >= NE) return false; if (!(lo[ee * NA + ((a + da + NA) % NA)] < Infinity)) return false; } return true; };
-    const out = { points: 0, inner: 0, innerMm: 0, outer: 0, outerMm: 0, worst: null, centre: O };
+    const out = { points: 0, inner: 0, innerMm: 0, outer: 0, outerMm: 0, worst: null, through: 0, throughMm: 0, throughWorst: null, centre: O };
+    // (the scalp's outside each way round; and a point RINGED by hair: going up, down and to either side from it, within
+    // 18 degrees, a way where the hair's outside stands beyond the scalp. Skin poking through a hair has hair over the
+    // scalp all round it; the neck in front of a hair's edge tucked into the nape has none below it)
+    const skin = new Float32Array(NA * NE).fill(-Infinity);
+    for (let i = 0; i < H.n; i++) { if (H.HW[i] < 0.5) continue; const [b, r] = bin(H.P[i * 3], H.P[i * 3 + 1], H.P[i * 3 + 2]); if (r > skin[b]) skin[b] = r; }
+    const hairOver = (k) => skin[k] > -Infinity && hi[k] >= skin[k];
+    const ringed = (b) => {
+      const e = Math.floor(b / NA), a = b % NA;
+      for (const [de, da] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let found = false;
+        for (let k = 1; k <= 6 && !found; k++) { const ee = e + de * k; if (ee < 0 || ee >= NE) break; if (hairOver(ee * NA + ((a + da * k + NA) % NA))) found = true; }
+        if (!found) return false;
+      }
+      return true;
+    };
     for (let i = 0; i < H.n; i++) {
       if (H.HW[i] < 0.5) continue;
       const x = H.P[i * 3], y = H.P[i * 3 + 1], z = H.P[i * 3 + 2], [b, r] = bin(x, y, z);
@@ -136,8 +154,9 @@ export function pokeOf(c) {
       const di = (r - lo[b]) * 1000, dout = (r - hi[b]) * 1000;
       if (di > 1) { out.inner++; out.innerMm = Math.max(out.innerMm, di); }
       if (dout > 0.5) { out.outer++; if (dout > out.outerMm) { out.outerMm = dout; out.worst = [Math.round(az), Math.round(el)]; } }
+      if (dout > 0.5 && ringed(b)) { out.through++; if (dout > out.throughMm) { out.throughMm = dout; out.throughWorst = [Math.round(az), Math.round(el)]; } }
     }
-    out.innerMm = Math.round(out.innerMm * 10) / 10; out.outerMm = Math.round(out.outerMm * 10) / 10;
+    out.innerMm = Math.round(out.innerMm * 10) / 10; out.outerMm = Math.round(out.outerMm * 10) / 10; out.throughMm = Math.round(out.throughMm * 10) / 10;
     return out;
   });
 }
