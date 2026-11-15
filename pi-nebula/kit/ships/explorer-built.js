@@ -502,15 +502,46 @@ function ebDoorway(p, variant) {
   }
   return acc.flush(p);
 }
-// the door's panel, closed, in the door's plane: its outer face (white, a black line round its edge), its edges and
-// inside face; steps: the airstair's treads and side rails on its inside face (they are horizontal when it is open)
+// THE DOOR'S OUTER FACE (between the black edge line, B in from the edge): the hull's lower band (dark under the
+// line y = 2.42 - 0.035 z, the hull's own colour line, ZONES 'lower') and white over it, so the band runs on across the
+// shut door; a seam across each (black, a hair proud); two yellow slashes by the aft edge (the hull's, small); a grab
+// handle (a dark plate, a metal bar) and a green lamp near the top. P(u, z, w): u along the door from its hinge, w in.
+const BAND_Y = (z) => 2.42 - 0.035 * z;
+function outerFace(acc, D, P, s, out, za, zb, L, B) {
+  const uOf = (z) => Math.max(B + 0.02, Math.min(L - B - 0.02, (BAND_Y(z) - DOOR.hinge) / DOOR_U.y)), ua = uOf(za + B), ub = uOf(zb - B);
+  D.poly([P(B, za + B), P(B, zb - B), P(ub, zb - B), P(ua, za + B)], out, PAL.trim, 'solid', 99);
+  D.poly([P(ua, za + B), P(ub, zb - B), P(L - B, zb - B), P(L - B, za + B)], out, PAL.skin, 'solid', 99);
+  const w = -0.002, seam = (u0, u1) => D.poly([P(u0, za + B, w), P(u0, zb - B, w), P(u1, zb - B, w), P(u1, za + B, w)], out, PAL.black, 'solid', 99);
+  seam(0.42, 0.432); seam(L - 0.46, L - 0.448);
+  // (a seam down the white part's middle, from the colour line up to the top seam)
+  { const zm = (za + zb) / 2; D.poly([P(uOf(zm), zm - 0.006, w), P(uOf(zm), zm + 0.006, w), P(L - 0.46, zm + 0.006, w), P(L - 0.46, zm - 0.006, w)], out, PAL.black, 'solid', 99); }
+  // the slashes: two yellow bars leaning forward, as on the hull aft of the door
+  for (const k of [0, 1]) {
+    const z0 = za + B + 0.12 + k * 0.13, u0 = uOf(z0) + 0.14, u1 = u0 + 0.38, lean = 0.12;
+    D.poly([P(u0, z0, w), P(u0, z0 + 0.07, w), P(u1, z0 + 0.07 + lean, w), P(u1, z0 + lean, w)], out, PAL.yellow, 'solid', 99);
+  }
+  // the handle: a dark plate across the door's middle under the top seam, a metal bar standing off it on two posts
+  const ax = [DOOR_U.clone().setX(s * DOOR_U.x), V3(0, 0, 1), out], zm = (za + zb) / 2, uh = L - 0.62;
+  boxAt(acc, P(uh, zm, -0.004), ax, [0.07, 0.2, 0.004], PAL.black, ['w-']);
+  boxAt(acc, P(uh, zm, -0.034), ax, [0.014, 0.15, 0.012], PAL.metal, []);
+  for (const dz of [-0.13, 0.13]) boxAt(acc, P(uh, zm + dz, -0.018), ax, [0.012, 0.012, 0.016], PAL.metal, ['w-']);
+  // the lamp: a small black housing toward the fore edge, its face glowing green (shut and safe)
+  const zl = zb - B - 0.16;
+  boxAt(acc, P(uh, zl, -0.008), ax, [0.03, 0.03, 0.008], PAL.black, ['w-']);
+  D.poly([P(uh - 0.018, zl - 0.018, -0.017), P(uh - 0.018, zl + 0.018, -0.017), P(uh + 0.018, zl + 0.018, -0.017), P(uh + 0.018, zl - 0.018, -0.017)], out, GLOW.green, 'glow', 99);
+}
+// the door's panel, closed, in the door's plane: its outer face (outerFace, inside a black line round its edge), its
+// edges and inside face; steps: the airstair's treads and side rails on its inside face (horizontal when it is open)
 function hatchPanel(acc, s, steps) {
   const [z0, z1] = DOOR.z, e = 0.008, za = z0 + e, zb = z1 - e, out = V3(s * DOOR_U.y, -DOOR_U.x, 0), inn = out.clone().negate(), T = 0.06, B = 0.05;
   const P = (u, z, w = 0) => V3(s * (DOOR.xHinge + DOOR_U.x * u), DOOR.hinge + DOOR_U.y * u, z).addScaledVector(inn, w);
   const D = { poly: (pts, n, surf, mat, step) => acc.poly(pts.map(dk), n, surf, mat, step) };   // (its points are the ship's: on the deck)
   const L = DOOR_LEN - e;
-  // the outer face: the white middle, the black line round it
-  D.poly([P(B, za + B), P(B, zb - B), P(L - B, zb - B), P(L - B, za + B)], out, PAL.skin, 'solid', 99);
+  // the outer face: painted as the hull round it (the game's maker: "the outside of the explorer door should have
+  // something on it so it matches the exterior when it is closed"): the hull's colour line carried across it (dark
+  // under, white over), the black line round its edge, seams across it, the hull's yellow slashes small by its aft edge,
+  // a grab handle and a green lamp near its top
+  outerFace(acc, D, P, s, out, za, zb, L, B);
   for (const q of [[P(0, za), P(0, zb), P(B, zb - B), P(B, za + B)], [P(L, za), P(L - B, za + B), P(L - B, zb - B), P(L, zb)], [P(0, za), P(B, za + B), P(L - B, za + B), P(L, za)], [P(0, zb), P(L, zb), P(L - B, zb - B), P(B, zb - B)]]) D.poly(q, out, PAL.black, 'solid', 99);
   // its edges and inside face
   for (const [a, b] of [[P(0, za), P(0, zb)], [P(0, zb), P(L, zb)], [P(L, zb), P(L, za)], [P(L, za), P(0, za)]]) { const n = b.clone().sub(a).cross(inn).normalize(); D.poly([a, b, b.clone().addScaledVector(inn, T), a.clone().addScaledVector(inn, T)], n.dot(a.clone().add(b).multiplyScalar(0.5).sub(P(L / 2, (za + zb) / 2))) < 0 ? n.negate() : n, PAL.trimEdge, 'solid', 99); }
