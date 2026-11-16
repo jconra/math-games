@@ -33,7 +33,7 @@
 // asteroid that pays double. A haul's pay is worked out by haulOf and the pay slip below; that is where they would
 // hook in.)
 import { dec } from '../../../mathwood-valley/src/math/counterkit.js';
-import { fr, gcd, simplest, value, fracText, partsWord } from '../../../mathwood-valley/labs/fishing/frac.js';
+import { fr, gcd, simplest, fracText, partsWord } from '../../../mathwood-valley/labs/fishing/frac.js';
 import { ownOrder } from './engine.js';
 
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
@@ -344,7 +344,7 @@ export const MAKERS = {
     strand: 'frac', at: (step) => (step <= 1 ? 44 : 47),
     make(step, { rand = Math.random, who = null, live = null, frac = 0 } = {}) {
       const t = kit(rand), H = live ? haulOf(live.round) : null, whole = step <= 1;
-      let n, a, d, metal, kind = 'own', ctx;
+      let n, a, d, metal, kind = 'own';
       // the haul: the whole of it (once a haul), or the canisters of it counted in the hangar right now (each count once)
       if (H) {
         const q = H.ore;
@@ -371,7 +371,7 @@ export const MAKERS = {
       }
       const q = fr(a, d), ans = fr(n * a, d), each = ofT(q), P1 = parts(d, 1), PS = parts(d);
       const W = (who && who.name) || 'the crew', they = who ? (who.she ? 'she' : 'he') : 'they';
-      ctx = kind === 'haul' ? { story: `This haul came in on the Miner: ${n} canisters, with ${each} of ${metal} ore in each. The rest is slag.`, ask: `How many tonnes of ${metal} ore did we collect?` }
+      const ctx = kind === 'haul' ? { story: `This haul came in on the Miner: ${n} canisters, with ${each} of ${metal} ore in each. The rest is slag.`, ask: `How many tonnes of ${metal} ore did we collect?` }
         : kind === 'wall' ? { story: `${n} of this haul's canisters are plugged in at the smelter's wall right now. The smelter reads ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore have they brought?` }
           : kind === 'ship' ? { story: `${n} of this haul's canisters are still full on the Miner. The smelter read ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore are still on the ship?` }
             : t.pick([
@@ -379,14 +379,14 @@ export const MAKERS = {
               { story: `An ore drone dropped off ${n} small canisters, with ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore is that?` },
               { story: `The smelter read ${W}'s haul: ${n} canisters, each with ${each} of ${metal} ore and the rest slag.`, ask: `How many tonnes of ${metal} ore did ${they} bring in?` },
             ]);
-      const top = n * a, left = top % d, wholeT = Math.floor(top / d);
+      const top = n * a, wholeT = Math.floor(top / d);
       const S = (f, slip, why) => ({ ...FT(f), slip, why });
       const slips = [
         S(fr(top, 1), 'partsOnly', `${top} is how many ${PS} of a tonne there are: ${n} lots of ${a}. ${d} ${PS} make one tonne.`),
-        ...(whole ? [] : [S(fr(wholeT, 1), 'leftOver', `That is only the whole tonnes. The ${left} ${parts(d, left)} left over ${left === 1 ? 'counts' : 'count'} too: ${wholeT} and ${left}/${d}.`)]),
+        ...(whole ? [] : [S(fr(wholeT, 1), 'leftOver', `That is only the whole tonnes. The ${PS} left over count too, as a fraction of a tonne beside them.`)]),
         S(fr(n * d + a, d), 'added', `That adds the ${n} canisters on, as if each were a tonne. Each one brings ${each}: ${n} lots of it.`),
         S(q, 'oneCanister', `${cap(each)} is one canister's ore. There are ${n} canisters: ${n} lots of ${a}/${d}.`),
-        S(fr(a + n, d), 'topAdded', `That adds ${n} to the top number. ${n} lots of ${a} ${parts(d, a)} is ${n} × ${a} ${PS}.`),
+        S(fr(a + n, d), 'topAdded', `That adds ${n} to the top number. ${n} lots of ${a}/${d} multiply it: ${n} × ${a} on top, ${d} still underneath.`),
         S(fr(a, d * n), 'bottomTimes', `That multiplies the bottom number, which makes the parts smaller. ${n} canisters bring more than one canister's ore.`),
         S(fr((n + 1) * a, d), 'groupOff', `That is the ore of ${n + 1} canisters. There are ${n}.`),
         S(fr((n - 1) * a, d), 'groupOff', `That is the ore of ${n - 1} canisters. There are ${n}.`),
