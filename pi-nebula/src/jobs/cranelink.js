@@ -40,16 +40,24 @@ export function craneLink({ crane, W, walls }) {
 
   // ── a wrong answer: the path it would have taken, faintly ─────────────────────────────────────────────────────
   const ghost = new THREE.Group(); ghost.name = 'crane job: the path a wrong answer would take'; W.scene.add(ghost);
-  const lineMat = new THREE.LineDashedMaterial({ color: 0xffa04a, dashSize: 0.22, gapSize: 0.14, transparent: true, opacity: 0.9, depthTest: false, toneMapped: false });
-  const boxMat = new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.3, depthWrite: false, depthTest: false, toneMapped: false });
-  const boxGeo = new THREE.BoxGeometry(0.75, 0.3, 1.35);
+  // (dashes: small glowing bars every 0.36 m along the path, seen through whatever is in front; and a ghost of the cradle
+  // where the path ends, its frame's size)
+  const dashMat = new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false });
+  const boxMat = new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.32, depthWrite: false, depthTest: false, toneMapped: false });
+  const dashGeo = new THREE.BoxGeometry(0.075, 0.075, 0.22), boxGeo = new THREE.BoxGeometry(0.75, 0.3, 1.35);
   let ghostT = 0;
-  function clearGhost() { for (const o of [...ghost.children]) { ghost.remove(o); if (o.geometry && o.geometry !== boxGeo) o.geometry.dispose(); } ghostT = 0; }
+  const _a = new THREE.Vector3();
+  function clearGhost() { for (const o of [...ghost.children]) ghost.remove(o); ghostT = 0; }
   function drawPath(points, endYaw) {
     clearGhost();
-    const g = new THREE.BufferGeometry().setFromPoints(points), L = new THREE.Line(g, lineMat); L.computeLineDistances(); L.renderOrder = 5; ghost.add(L);
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1], p1 = points[i], d = p0.distanceTo(p1), n = Math.max(1, Math.round(d / 0.36));
+      for (let k = 0; k < n; k++) {
+        const m = new THREE.Mesh(dashGeo, dashMat); m.position.copy(p0).lerp(p1, (k + 0.5) / n); m.lookAt(_a.copy(p1)); m.renderOrder = 5; ghost.add(m);
+      }
+    }
     const b = new THREE.Mesh(boxGeo, boxMat); b.position.copy(points[points.length - 1]); b.rotation.y = endYaw; b.renderOrder = 5; ghost.add(b);
-    lineMat.opacity = 0.9; boxMat.opacity = 0.3; ghostT = 3.2;
+    dashMat.opacity = 0.85; boxMat.opacity = 0.32; ghostT = 3.2;
   }
   const alongOf = (leg, mark) => (leg === 'wall' ? site.rail.wall[0] + mark : site.turn[1] + mark);
   function wrong(q, coin) {
@@ -91,7 +99,7 @@ export function craneLink({ crane, W, walls }) {
     // (a move that could not be made: the plan starts again from where the crane really is)
     if (D && D.failed && !D.busy) { console.info('crane job: a move could not be made (' + (D.failed.why || D.failed.axis || '') + '); planning again from here'); D.failed = null; Q.restart(); }
     if (D) { const w = readout(D.read()); for (const key of ['rail', 'hook', 'load']) { const dd = chip.querySelector(`[data-r="${key}"]`); if (dd.textContent !== w[key]) dd.textContent = w[key]; } }
-    if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); lineMat.opacity = 0.9 * a; boxMat.opacity = 0.3 * a; if (ghostT <= 0) clearGhost(); }
+    if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (ghostT <= 0) clearGhost(); }
   }
   // the view: following the load, kept clear of the panel (left of it on a wide screen, above it on a phone)
   function aim(camera, dt) {
