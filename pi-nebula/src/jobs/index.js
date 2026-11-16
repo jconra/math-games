@@ -23,7 +23,7 @@ import { JOB as arena } from './arena.js';
 import { JOB as dock } from './dock.js';
 
 export const JOBS = [galley, medical, smelter, arena, dock];
-export const NEAR = 1.7;     // metres from a job spot that bring up its prompt
+export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 
@@ -119,7 +119,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     }
     if (wallet.hidden) { showWallet(); wallet.hidden = false; }
     let best = null, bd = NEAR;
-    for (const s of spots) { const d = Math.hypot(s.pos.x - P.pos.x, s.pos.z - P.pos.z); if (d < bd && Math.abs(s.pos.y - P.pos.y) < 1.5) { bd = d; best = s; } }
+    for (const s of spots) { const d = Math.hypot(s.pos.x - P.pos.x, s.pos.z - P.pos.z); if (d < bd && d < (s.job.near ?? NEAR) && Math.abs(s.pos.y - P.pos.y) < 1.5) { bd = d; best = s; } }
     if (best !== near) {
       near = best; api.near = best ? best.job.id : null;
       prompt.hidden = !best;

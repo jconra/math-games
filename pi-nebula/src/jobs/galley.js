@@ -168,9 +168,14 @@ export const PLACE = {
 
 export const JOB = {
   id: 'galley', name: 'The galley kitchen', short: 'Galley', open: true,
-  // where the job is: in front of the serving counter, facing it (spots.js shape: by the station file's names)
-  spot: { piece: 'counter', variant: 'serve', local: [0, 0, 1.05], face: [0, -1] },
-  // the camera while the job is up: behind the player's shoulder, the counter and the cook in view
+  // where the job is: BEHIND the counter, on the cook's side (the game's maker: "it feels like they are standing on the
+  // wrong side of that counter"): at the plain stretch of counter beside the cook, who serves at the food wells, turned
+  // toward him and the dining room past the wells (spots.js shape: by the station file's names; the counter's own
+  // frame: customers on +z, the cook on -z, the food wells' stretch toward +x)
+  spot: { piece: 'counter', variant: 'plain', local: [0, 0, -0.9], face: [0.7, 0.7] },
+  // the prompt comes up only on the cook's side: a customer at the tray rail is 1.6 m or more from the spot
+  near: 1.2,
+  // the camera while the job is up: through the player's own eyes, along the counter: the cook, the wells, the tables
   sign: 'Galley kitchen', hint: 'Cook up the orders',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'recipe',
