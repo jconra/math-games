@@ -14,6 +14,7 @@
 //   ?hold                no clock of its own: nothing moves until GAME.step(dt) is called (for films and frame strips)
 //   ?rig                 keeps the picture readable for a screenshot
 //   ?nopeople            the station without its people
+//   ?crowd=N             that many of the station's people, whatever the quality (life.js CROWD: the cost rigs)
 import * as THREE from 'three';
 import { GAME_NAME } from './name.js';
 import * as save from './save.js';
@@ -127,7 +128,7 @@ async function boot() {
 
   // ── the clock ─────────────────────────────────────────────────────────────────────────────────────────────────
   let now = 0;
-  const eyes = [];
+  const eyes = [], shipEyes = [];
   function tick(dt) {
     now += dt;
     const P = player && player.P;
@@ -143,11 +144,14 @@ async function boot() {
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
+    if (GAME.cam) GAME.cam(W.camera, now, dt);      // (a rig's own camera, for films: GAME.cam = (camera, now, dt) => {...})
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera });
-    eyes.length = 0;
-    if (GAME.mode === 'play' && P) eyes.push(P.pos);
-    if (people) eyes.push(...people.eyes());
-    boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes, camera: W.camera });
+    eyes.length = 0; shipEyes.length = 0;
+    if (GAME.mode === 'play' && P) { eyes.push(P.pos); shipEyes.push(P.pos); }
+    if (people) { eyes.push(...people.eyes()); people.onWays(shipEyes); }
+    // (a parked ship's ways in come down for the player, never for the station's people, who do not board yet; anyone
+    // of them standing on a way's patch is counted, so it waits for them)
+    boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
     crane.update(dt, { eyes });
     W.frame(dt, now, eyes);
     GAME.frames++;
@@ -167,7 +171,7 @@ async function boot() {
   // the people come aboard after the station is ready (the player wakes in their quarters, behind a shut door)
   if (!q.has('nopeople')) {
     GAME.peopleReady = false;
-    makePeople({ W, walls, lib }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
+    makePeople({ W, walls, lib, jobs, boarding, crane }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
   }
 
   // ── the start button: the chosen crew member, in their quarters ───────────────────────────────────────────────
