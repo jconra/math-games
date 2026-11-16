@@ -39,12 +39,24 @@ import { levelTool, stepLevel } from '../../../mathwood-valley/src/ui/leveltool.
 import { sumOf } from '../../../mathwood-valley/src/math/jobsums.js';
 import { tools } from '../../../mathwood-valley/src/math/counterkit.js';
 
+// THE ONE PAY TABLE for every job (the game's maker, 2026-11-16: "I think that people should be able to buy a ship
+// after playing for about an hour ... a ship should cost about 50,000 credits ... Maybe faster questions get 50 credits
+// and harder questions get 200 credits", and "It would be cool if the player got paid on average 1,000 credits a
+// minute"): a right first pick pays `base` at a job's easiest level (the school guide's 0), rising evenly to `top` at
+// `topGrade` (eighth grade) and no more above it, in tens; about 100 in the middle. A ship's price is SHIP (not used
+// yet: nothing is for sale).
 export const PAY = {
-  base: 3,         // credits for a right first pick on a job's easiest level...
-  perGrade: 1 / 8, // ...and this much more for every point up the school guide (0..100): about 12 at the top
-  after: 1,        // a right pick after a miss
+  base: 50,        // credits for a right first pick on a job's easiest level...
+  top: 200,        // ...rising evenly with the school guide (0..100) to this...
+  topGrade: 80,    // ...at this point of it (eighth grade), and no more above it
+  step: 10,        // paid in tens
+  after: 20,       // a right pick after a miss
 };
-export const payFor = (L) => Math.round(PAY.base + (L ? L.grade : 0) * PAY.perGrade);
+export const SHIP = 50000;   // what a ship will cost (the game's maker's figure, for later)
+export const payFor = (L) => {
+  const g = Math.max(0, Math.min(PAY.topGrade, L ? L.grade : 0));
+  return Math.round((PAY.base + (PAY.top - PAY.base) * g / PAY.topGrade) / PAY.step) * PAY.step;
+};
 
 const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 const whole = (v) => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : 0);

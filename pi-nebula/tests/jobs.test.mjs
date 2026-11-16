@@ -16,7 +16,7 @@ import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PROBLEMS, PLACE } from '../../mathwood-valley/src/levels/places.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 
-const OPEN = [galley, medical, smelter];
+const OPEN = [galley, medical, smelter, arena];
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 
 test('the open jobs join Mathwood\'s levels cleanly', () => {
@@ -235,10 +235,11 @@ test('the arrows step the level by hand, and stop at the ends', () => {
 });
 
 test('the jobs still to come are marked, with nothing to play yet', () => {
-  for (const J of [arena]) {
+  // (none is left to come: the arena is Mathball, its own tests mathball.test.mjs; the dock's bridge is open, a try of
+  // three rings: its own tests, dock.test.mjs. A job closed again would have to be marked as one still to come)
+  for (const J of [arena, dock].filter((j) => j.open === false)) {
     assert.equal(J.open, false); assert.equal(J.place, null);
     assert.ok(J.spot && J.sign && J.hint, J.id);
   }
-  // (the dock's bridge is open now, a try of three rings: its own tests, dock.test.mjs)
-  assert.equal(dock.open, true);
+  assert.equal(dock.open, true); assert.equal(arena.open, true);
 });

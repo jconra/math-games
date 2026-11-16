@@ -16,6 +16,7 @@ import { COCKPIT } from './shipparts/cockpit.cat.js';
 import { CABIN } from './shipparts/cabin.cat.js';
 import { STATION2 } from './station2.js';
 import { SMELTER_PIECES } from './smelter.js';   // (the smelter's ore line in the Miner hangar: crane, sockets, rack, operator's chair)
+import { ARENA_PIECES } from './arena.js';       // (the arena: Mathball's court, inside the square in the loop)
 
 export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
@@ -75,6 +76,7 @@ export const PIECES = {
   ...STATION2,
   ...OUTSIDE, ...COCKPIT, ...CABIN,
   ...SMELTER_PIECES,
+  ...ARENA_PIECES,
 };
 
 // A junction square, 2 x 2 cells round a grid point: the floors make a walkway cross, the ceilings a light over each
