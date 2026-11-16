@@ -8,6 +8,10 @@
 //           'glass'): nothing solid stands behind it, so whatever the scene shows outside (the sky) shows through.
 //             single      a whole small window in one panel: the band rounded at both ends, 1.35 m of glass, no
 //                         upright in it (the scanner's booth looks into the scanner room through one)
+//             short       a whole window two panels wide in one piece (placed on the grid point between its two
+//                         panels): the same glass as end-left + end-right, 3.25 m, but one pane with no upright in
+//                         the middle, and the wall over and under it one piece with no seam down its middle (the
+//                         scanner room's glass front: the game's maker, "I would prefer to remove the post")
 //   filler  an EDGE piece, the 1 m between two storeys (decks are 4 m apart, rooms 3 m): two-storey rooms stack the
 //           ordinary 3 m panels, deck 0 and deck 1, with this between them. Drawn from 3 m to 4 m.
 //             band    a dark band with a channel along it (the corridor's dark band, a storey up)
@@ -105,6 +109,7 @@ function wholePanel(p, hw, xc) {
 }
 export function pane(p, v) {
   if (v === 'single') return wholePanel(p, 1, 0.1);
+  if (v === 'short') return wholePanel(p, 2, XC + 1.1);
   if (v === 'end-left') return endPanel(p);
   if (v === 'end-right') {
     // the left end, mirrored
