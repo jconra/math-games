@@ -15,11 +15,12 @@ import { helpPicture } from '../src/jobs/pics.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { JOB as arena } from '../src/jobs/arena.js';
 import { JOB as dock } from '../src/jobs/dock.js';
+import { JOB as crane } from '../src/jobs/crane.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PROBLEMS, PLACE } from '../../mathwood-valley/src/levels/places.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 
-const OPEN = [galley, medical, smelter, arena];
+const OPEN = [galley, medical, smelter, crane, arena];
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 
 test('the open jobs join Mathwood\'s levels cleanly', () => {
