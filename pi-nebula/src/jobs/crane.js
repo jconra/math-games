@@ -83,14 +83,14 @@ export function tripFrom(site, P, rand = Math.random) {
   // ── the moves at each kind of place ──
   function takeFromMount(i) {
     const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = who('mount', i), what = mountName(site, i);
-    toLeg('ship'); up(); along(o[1], `the ship rail's mark for ${what}`); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
+    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
     steps.push({ kind: 'wait', for: 'tray', i });
     hoist(m.at[1] + lift, what); grab('shut', what, c); P.held = c; P.cans[c].where = 'held';
     up();
   }
   function putOnMount(i) {
     const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = P.held, what = `the ship's ${m.upper ? 'top' : 'bottom'} mount on its ${m.out[1] < 0 ? 'wall' : 'far'} side`;
-    toLeg('ship'); up(); along(o[1], `the ship rail's mark for ${what}`); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
+    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
     steps.push({ kind: 'wait', for: 'tray', i });
     hoist(m.at[1] + lift, what); grab('open', what, c); P.cans[c].where = 'mount'; P.cans[c].i = i; P.held = -1;
     up();
