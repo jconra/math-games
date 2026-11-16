@@ -47,10 +47,24 @@ export function craneLink({ crane, W, walls }) {
   const dashMat = new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false });
   const boxMat = new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.32, depthWrite: false, depthTest: false, toneMapped: false });
   const dashGeo = new THREE.BoxGeometry(0.075, 0.075, 0.22), boxGeo = new THREE.BoxGeometry(0.75, 0.3, 1.35);
-  let ghostT = 0;
+  let ghostT = 0, tag = null;
   const _a = new THREE.Vector3();
-  function clearGhost() { for (const o of [...ghost.children]) ghost.remove(o); ghostT = 0; }
-  function drawPath(points, endYaw) {
+  function clearGhost() { for (const o of [...ghost.children]) ghost.remove(o); if (tag) { tag.material.map.dispose(); tag.material.dispose(); tag = null; } ghostT = 0; }
+  // (over the ghost of the cradle, the wrong answer itself: "8 metres" would take it here)
+  function tagOf(text) {
+    const cv = document.createElement('canvas'); cv.width = 384; cv.height = 96;
+    const g = cv.getContext('2d');
+    g.font = '700 46px "Segoe UI", system-ui, sans-serif';
+    const w = Math.min(372, g.measureText(text).width + 44);
+    g.fillStyle = 'rgba(12, 14, 18, 0.78)'; g.beginPath(); g.roundRect((384 - w) / 2, 12, w, 72, 16); g.fill();
+    g.lineWidth = 4; g.strokeStyle = 'rgba(255, 160, 74, 0.95)'; g.stroke();
+    g.fillStyle = '#ffb46b'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 192, 50, 340);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
+    sp.scale.set(1.2, 0.3, 1); sp.renderOrder = 6;
+    return sp;
+  }
+  function drawPath(points, endYaw, label = '') {
     clearGhost();
     for (let i = 1; i < points.length; i++) {
       const p0 = points[i - 1], p1 = points[i], d = p0.distanceTo(p1), n = Math.max(1, Math.round(d / 0.36));
@@ -59,28 +73,29 @@ export function craneLink({ crane, W, walls }) {
       }
     }
     const b = new THREE.Mesh(boxGeo, boxMat); b.position.copy(points[points.length - 1]); b.rotation.y = endYaw; b.renderOrder = 5; ghost.add(b);
+    if (label) { tag = tagOf(label); tag.position.copy(b.position); tag.position.y += 0.55; ghost.add(tag); }
     dashMat.opacity = 0.85; boxMat.opacity = 0.32; ghostT = 3.2;
   }
   const alongOf = (leg, mark) => (leg === 'wall' ? site.rail.wall[0] + mark : site.turn[1] + mark);
   function wrong(q, coin) {
     const f = q && q.order && q.order.facts, R = Q.reserved, D = crane.live;
     if (!f || !R || f.step !== R.id || !D || !coin) return;
-    const val = f.offset ? coin.v - f.offset : coin.v, S = D.state, yaw = S.yaw;
+    const val = f.offset ? coin.v - f.offset : coin.v, S = D.state, yaw = S.yaw, said = `${coin.big}${coin.small ? ' ' + coin.small : ''}`;
     const hk = new THREE.Vector3(S.x + Math.sin(yaw) * S.slide, S.hoist, S.z + Math.cos(yaw) * S.slide);
     if (R.kind === 'along' || R.kind === 'time') {
       // (from where the asked move starts, as far as the wrong answer says, the way it was going)
       const dir = Math.sign(R.markTo - R.mark) || 1, end = q.order.key === 'mark' ? val : R.mark + dir * (R.kind === 'time' ? val * R.speed : val);
       const y = Math.max(hk.y, 1), P = (m) => { const a = alongOf(R.leg, m); return R.leg === 'wall' ? new THREE.Vector3(a, y, site.wallZ) : new THREE.Vector3(site.shipX, y, a); };
-      drawPath([P(R.mark), P(end)], R.leg === 'wall' ? 0 : Math.PI / 2);
+      drawPath([P(R.mark), P(end)], R.leg === 'wall' ? 0 : Math.PI / 2, said);
     } else if (R.kind === 'hoist' || R.kind === 'slide') {
       // (where the asked move starts: it can be a move or two ahead of the crane)
       const h0 = R.at ? new THREE.Vector3(R.at[0], R.at[3], R.at[1]) : hk, hy = R.at ? R.at[2] : yaw;
       if (R.kind === 'hoist') {
         const down = R.to < R.from, endY = f.change != null ? R.from + val : R.from + (down ? -val : val);
-        drawPath([h0.clone().setY(R.from), h0.clone().setY(Math.max(0.05, Math.min(site.carry + 1.5, endY)))], hy);
+        drawPath([h0.clone().setY(R.from), h0.clone().setY(Math.max(0.05, Math.min(site.carry + 1.5, endY)))], hy, said);
       } else {
         const dir = Math.sign(R.to - R.from) || 1, b = new THREE.Vector3(Math.sin(hy), 0, Math.cos(hy));
-        drawPath([h0.clone(), h0.clone().addScaledVector(b, dir * val)], hy);
+        drawPath([h0.clone(), h0.clone().addScaledVector(b, dir * val)], hy, said);
       }
     } else if (R.kind === 'route' && q.order.key !== 'route:time') {
       // (along the way it would go, as far as the wrong answer's metres reach)
@@ -89,7 +104,7 @@ export function craneLink({ crane, W, walls }) {
       const last = way[way.length - 1]; way.push(last.clone().add(new THREE.Vector3(R.across.to - R.across.from, 0, 0)));
       let left = val; const P = [way[0].clone()];
       for (let i = 1; i < way.length && left > 0; i++) { const d = way[i - 1].distanceTo(way[i]); if (d < 1e-6) continue; const t = Math.min(1, left / d); P.push(way[i - 1].clone().lerp(way[i], t)); left -= d * t; }
-      if (P.length > 1) drawPath(P, 0);
+      if (P.length > 1) drawPath(P, 0, said);
     }
   }
 
@@ -107,7 +122,7 @@ export function craneLink({ crane, W, walls }) {
     // (a move that could not be made: the plan starts again from where the crane really is)
     if (D && D.failed && !D.busy) { console.info('crane job: a move could not be made (' + (D.failed.why || D.failed.axis || '') + '); planning again from here'); D.failed = null; Q.restart(); }
     if (D) { const w = readout(D.read()); for (const key of ['rail', 'hook', 'load']) { const dd = chip.querySelector(`[data-r="${key}"]`); if (dd.textContent !== w[key]) dd.textContent = w[key]; } }
-    if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (ghostT <= 0) clearGhost(); }
+    if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (tag) tag.material.opacity = a; if (ghostT <= 0) clearGhost(); }
     clock += dt; if (D && D.notes.some((n) => n.key === 'people')) peopleT = clock;
     // (while a card waits for the crane, the moves it makes by itself go twice as quick: the asked ones never)
     if (D) D.hurry = clock - waitT < 0.4 ? HURRY : 1;

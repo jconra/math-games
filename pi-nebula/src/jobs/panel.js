@@ -164,12 +164,31 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     helped = helpOn; t0 = performance.now();
     if (slide) {
       // (no picks while the cards change over: the buttons on screen are still the last card's)
-      busy = true;
-      card.classList.add('is-out');
-      setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); busy = false; t0 = performance.now(); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); }, 260);
-    } else draw(q.order);
+      const show = () => {
+        busy = true;
+        card.classList.add('is-out');
+        setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); busy = false; t0 = performance.now(); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); if (helpOn) fillHelp(); }, 260);
+      };
+      // (a job joined to its props that is not ready for the new card, the crane still on its way to where the card
+      // starts: the last card stays, its buttons shut, until it is; then the new card comes, matching the picture)
+      if (readyNow()) show(); else holdFor(show);
+    } else { draw(q.order); if (helpOn) fillHelp(); }
     showLevel(); helpBtn.classList.remove('is-nudge');
-    if (helpOn) fillHelp();
+  }
+  function readyNow() {
+    const ready = live && typeof live === 'object' && live.ready;
+    if (!ready) return true;
+    try { const v = ready(); return v === true || !!(v && v.ok); } catch (e) { return true; }
+  }
+  function holdFor(then) {
+    clearInterval(waitTimer);
+    answers.classList.add('is-waiting');
+    waitTimer = setInterval(() => {
+      if (closed) { clearInterval(waitTimer); waitTimer = 0; return; }
+      if (!readyNow()) return;
+      clearInterval(waitTimer); waitTimer = 0;
+      then();
+    }, 150);
   }
 
   // ── an answer ─────────────────────────────────────────────────────────────────────────────────────────────────
