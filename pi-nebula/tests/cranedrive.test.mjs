@@ -299,3 +299,10 @@ test('the job\'s queue: the moves before an asked one are made as the card comes
   const last = b2[b2.length - 1], at0 = h.leg === 'wall' ? site.rail.wall[0] + h.mark : site.turn[1] + h.mark;
   assert.equal(last.axis, 'along'); assert.ok(Math.abs(last.to - at0) < 1e-9, JSON.stringify({ h, last }));
 });
+
+test('hurry: the moves the crane makes by itself go quicker while a card waits; a move a card asked about never', () => {
+  const timeOf = (hurry, asked) => { const { D } = fresh(); D.hurry = hurry; D.go([{ axis: 'along', to: site.turn[0], asked }]); return until(D, () => !D.busy); };
+  const plain = timeOf(1, false), quick = timeOf(2, false), askedQuick = timeOf(2, true);
+  assert.ok(plain > 2 && quick < plain * 0.6, JSON.stringify({ plain, quick }));
+  assert.ok(Math.abs(askedQuick - plain) < 1e-6, JSON.stringify({ plain, askedQuick }));
+});

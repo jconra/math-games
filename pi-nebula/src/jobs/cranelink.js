@@ -98,7 +98,8 @@ export function craneLink({ crane, W, walls }) {
   const chip = document.createElement('div'); chip.className = 'pcd pcd-chip is-on';
   chip.innerHTML = `<dl class="pcd-reads"><div><dt>Rail</dt><dd data-r="rail"></dd></div><div><dt>Hook</dt><dd data-r="hook"></dd></div><div><dt>Load</dt><dd data-r="load"></dd></div><div class="pcd-plate"><dt>Rated</dt><dd>${DRIVE.rated} t</dd></div></dl>`;
   document.body.appendChild(chip);
-  let clock = 0, peopleT = -9;
+  let clock = 0, peopleT = -9, waitT = -9;
+  const HURRY = 2;
   function update(dt) {
     if (closed) return;
     const D = crane.live;
@@ -108,6 +109,8 @@ export function craneLink({ crane, W, walls }) {
     if (D) { const w = readout(D.read()); for (const key of ['rail', 'hook', 'load']) { const dd = chip.querySelector(`[data-r="${key}"]`); if (dd.textContent !== w[key]) dd.textContent = w[key]; } }
     if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (ghostT <= 0) clearGhost(); }
     clock += dt; if (D && D.notes.some((n) => n.key === 'people')) peopleT = clock;
+    // (while a card waits for the crane, the moves it makes by itself go twice as quick: the asked ones never)
+    if (D) D.hurry = clock - waitT < 0.4 ? HURRY : 1;
   }
   // the view: following the load, kept clear of the panel (left of it on a wide screen, above it on a phone)
   function aim(camera, dt) {
@@ -118,6 +121,7 @@ export function craneLink({ crane, W, walls }) {
   function close() {
     if (closed) return;
     closed = true; clearGhost(); W.scene.remove(ghost); chip.remove();
+    if (crane.drive) crane.drive.hurry = 1;
     crane.give();
   }
   const peek = () => (crane.live ? Q.peek() : null), ahead = () => (crane.live ? Q.ahead() : []);
@@ -127,6 +131,7 @@ export function craneLink({ crane, W, walls }) {
   function ready() {
     const D = crane.live;
     if (!D || !D.busy) return true;
+    waitT = clock;   // (asked while the card waits: the crane hurries its own moves meanwhile, see update)
     return { ok: false, why: D.notes.some((n) => n.key === 'people') ? 'The crane is waiting: someone is under it.' : 'The crane is getting into place...' };
   }
   return { now, right, wrong, ready, update, aim, close, Q, state: () => ({ cursor: Q.cursor, queued: Q.queue.length, reserved: Q.reserved && { ...Q.reserved }, busy: crane.live ? crane.live.busy : null, steps: crane.live ? crane.live.steps : null, failed: crane.live ? crane.live.failed : null, mode: crane.mode, ghost: ghostT > 0 }) };

@@ -79,7 +79,9 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   let leaving = false, left = false, upPlanned = false;
   const want = { iris: K.map((_, k) => S.iris[k]), lit: K.map((_, k) => S.lit[k]) };
   const trail = [];             // where it has been since it was last up and home, for the way back if all else fails
-  const D = { state: S, notes: [], place: null, failed: null, pulling: false,
+  // (hurry: the crane operator job's moves the crane makes by itself, while the next card waits, are made this many
+  // times as quick; never the part of a move a card asked about)
+  const D = { state: S, notes: [], place: null, failed: null, pulling: false, hurry: 1,
     get held() { return held; }, get busy() { return auto.length > 0 || !!action; }, get moving() { return auto.length > 0 || !!action || Math.abs(vel.along) + Math.abs(vel.slide) + Math.abs(vel.hoist) > 1e-3; }, get left() { return left; }, get leaving() { return leaving; }, get action() { return action && action.kind; }, get steps() { return auto.length; } };
   const note = (key, text) => { if (!D.notes.some((n) => n.key === key)) D.notes.push({ key, text }); };
 
@@ -365,7 +367,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     }
   }
   // the trays, the irises, the collars' dogs, the draining: each frame, whoever is working the crane
-  function stepParts(dt) {
+  function stepParts(dt, k = 1) {
     const [hx, hy, hz] = hookAt(S), onShip = leg() === 'ship';
     // (the one mount the cradle is over and could use: its tray comes out; one at a time)
     const wanted = onShip ? lineup(S, held >= 0, 1.0) : null;
@@ -379,23 +381,23 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       const clearOf = hy > m.at[1] + lift + (held >= 0 ? DRIVE.clearHeld : DRIVE.clearEmpty) || Math.hypot(hx - (m.at[0] + o[0]) / 2, hz - (m.at[2] + o[2]) / 2) > half + 1.4;
       if (!clearOf) return;
       if (to > S.tray[i] && trayPeople(i)) { note('people', 'Someone is by the ship\'s tray: it stays in.'); return; }
-      S.tray[i] = approach(S.tray[i], to, dt / sp.tray);
+      S.tray[i] = approach(S.tray[i], to, dt * k / sp.tray);
     });
-    const L = held >= 0 ? lineup(S, true, DRIVE.capture) : null;
+    const L = held >= 0 ? lineup(S, true, DRIVE.capture) : null, hk = k;   // (the sockets' own index is k below)
     K.forEach((s, k) => {
       const there = whoAt('socket', k), releasing = action && action.kind === 'release' && action.k === k;
       let open = there >= 0;
       // (a canister lined up in front of it, or in its mouth)
       if (L && L.kind === 'socket' && L.i === k && (Math.abs(L.dy) < 0.4 || L.ax - half < 0.1)) open = true;
       want.iris[k] = open ? 1 : 0;
-      S.iris[k] = approach(S.iris[k], want.iris[k], dt / sp.iris);
+      S.iris[k] = approach(S.iris[k], want.iris[k], dt * hk / sp.iris);
       // the dogs: shut on a canister seated in it (held or let go); let go when the cradle takes it, or is drawing a
       // held one back out
       if (releasing) want.lit[k] = 0;
       else if (there >= 0) want.lit[k] = 1;
       else if (L && L.kind === 'socket' && L.i === k) want.lit[k] = Math.abs(L.ax - (half - seat)) < tight && Math.abs(L.dy) < tight && !D.pulling ? 1 : 0;
       else want.lit[k] = 0;
-      S.lit[k] = approach(S.lit[k], want.lit[k], dt / sp.clamp);
+      S.lit[k] = approach(S.lit[k], want.lit[k], dt * hk / sp.clamp);
     });
     S.cans.forEach((q) => { if (q.where === 'socket' && q.fill > 0 && S.lit[q.i] > 0.999) q.fill = Math.max(0, q.fill - dt / sp.drain); });
   }
@@ -444,8 +446,9 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   function step(dt, cmd = {}) {
     D.notes = [];
     if (!(dt > 0)) return D;
-    stepAction(dt);
-    if (auto.length && !action) runAuto(dt);
+    const k = auto.length && D.hurry > 1 && !auto[0].asked ? D.hurry : 1;
+    stepAction(dt * k);
+    if (auto.length && !action) runAuto(dt * k);
     const quiet = auto.length > 0 || leaving || !!action;
     const push = { move: quiet ? [0, 0] : cmd.move || [0, 0], hoist: quiet ? 0 : cmd.hoist || 0 };
     if (!quiet) {
@@ -457,7 +460,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       }
     }
     if (!auto.length && !action && !leaving) manual(dt, push);
-    stepParts(dt);
+    stepParts(dt, k);
     record();
     if (leaving && !auto.length && !action) settle();
     return D;
