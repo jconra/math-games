@@ -47,16 +47,15 @@ export const ROUND = {
 // THE OTHER PLAYER'S LEVELS: easier, a match, harder (the player picks one to start a round)
 export const OTHER = {
   levels: [
-    { key: 'easy', share: 0.72, acc: 0.72, run: 3.4 },
+    { key: 'easy', share: 0.76, acc: 0.74, run: 3.5 },
     { key: 'even', share: 0.9, acc: 0.85, run: 3.9 },
-    { key: 'hard', share: 1.18, acc: 0.94, run: 4.3 },
+    { key: 'hard', share: 1.06, acc: 0.93, run: 4.3 },
   ],
   band: { at: 2, ahead: 0.62, behind: 1.4, step: 0.12 },   // ahead by 2 or more: slower; behind by 2 or more: quicker
   passed: 3,                       // a ball passed over this many times is the one it goes for
   think: [0.35, 0.9],              // s it takes to choose a goal once it holds a ball
   roam: [0.8, 1.8],                // s between new spots while it waits
   keep: 1.1,                       // m it keeps off the player
-  fetch: 1.8,                      // s it usually takes to get to a ball
   youRate: 5,                      // right balls a minute a player is guessed to score before any are seen
 };
 
@@ -253,6 +252,9 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     P.x = nx; P.z = nz;
     return d;
   }
+  // (well behind, it hurries: runs faster and chooses quicker, a tenth more for every ball past the band's 2, at most a
+  // third: so even the easier one keeps a quick player's game close)
+  const hurry = () => { const gap = G.score.you - G.score.them; return gap > OTHER.band.at ? Math.min(1.35, 1 + 0.1 * (gap - OTHER.band.at + 1)) : 1; };
   function turnTo(P, h, dt, rate = 7) { const d = wrapA(h - P.heading); P.heading = wrapA(P.heading + Math.sign(d) * Math.min(Math.abs(d), rate * dt)); return Math.abs(d); }
   function otherStep(dt) {
     O.t += dt;
@@ -260,7 +262,7 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     if (O.mode === 'cheer') { O.vx *= 0.8; O.vz *= 0.8; if (O.t > 1.1) { O.mode = 'roam'; O.t = 0; O.roamTo = null; } return; }
     if (O.holding) {
       // aiming: turn to the goal, then throw
-      if (O.aim == null) { O.aim = chooseGoal(O.holding); O.t = 0; O.think = OTHER.think[0] + rand() * (OTHER.think[1] - OTHER.think[0]); }
+      if (O.aim == null) { O.aim = chooseGoal(O.holding); O.t = 0; O.think = (OTHER.think[0] + rand() * (OTHER.think[1] - OTHER.think[0])) / hurry(); }
       const g = GOALS[O.aim], h = Math.atan2(g.mid[0] - O.x, g.mid[1] - O.z), off = turnTo(O, h, dt);
       moveTo(O, O.x, O.z, 0, dt, you);
       carry(O, O.holding);
@@ -269,18 +271,19 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
       return;
     }
     // going for a ball, once its pace says it is time
-    if (!O.target && G.t >= O.nextAt) O.target = chooseBall();
+    // (it sets off for a ball in time to have it in hand when its pace says: as far ahead as the run to it takes)
+    if (!O.target) { const c = chooseBall(); if (c && G.t >= O.nextAt - (Math.hypot(c.p[0] - O.x, c.p[2] - O.z) / (lv.run * hurry()) + 0.35)) O.target = c; }
     if (O.target && (!free(O.target) || O.target.fading || O.target === you.target)) O.target = null;
     if (O.target) {
       const b = O.target;
-      moveTo(O, b.p[0], b.p[2], lv.run, dt, you);
+      moveTo(O, b.p[0], b.p[2], lv.run * hurry(), dt, you);
       turnTo(O, Math.atan2(O.vx, O.vz), dt, 9);
       O.mode = 'fetch';
       if (Math.hypot(b.p[0] - O.x, b.p[2] - O.z) < ROUND.reach + 0.1 && b.p[1] < 1.6) {
         grab(O, 'them', b);
-        // the next go: one right ball every 60 / pace seconds (counting its misses as goes too), less the time it takes
-        // to get to a ball (OTHER.fetch), so the next one is in its hands about then
-        O.nextAt = G.t + (60 / paceNow()) * lv.acc * (0.85 + rand() * 0.3) - OTHER.fetch;
+        // the next go: a ball in its hands again one right ball's worth of its pace from now (60 / pace seconds,
+        // counting its misses as goes too)
+        O.nextAt = G.t + (60 / paceNow()) * lv.acc * (0.85 + rand() * 0.3);
       }
       return;
     }
