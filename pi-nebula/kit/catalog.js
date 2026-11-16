@@ -9,7 +9,7 @@ import { LABELS, SIGNS } from './tex.js';
 import { pane, filler } from './windows.js';
 import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTile } from './bigroom.js';
 import { bayDoor, mark, airlock, crate, fuel, gangway } from './hangar.js';
-import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider } from './furniture.js';
+import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider, pot } from './furniture.js';
 import { ship } from './ship.js';
 import { OUTSIDE } from './shipparts/outside.cat.js';
 import { COCKPIT } from './shipparts/cockpit.cat.js';
@@ -58,6 +58,7 @@ export const PIECES = {
   counter: { name: 'Counter', group: 'Furniture', at: 'free', variants: ['serve', 'plain', 'end'], foot: [2, 1.6, 0.9], build: counter },
   table: { name: 'Table', group: 'Furniture', at: 'free', variants: ['round', 'set', 'long'], foot: [2, 0.8, 1], build: table },
   dispenser: { name: 'Drinks dispenser', group: 'Furniture', at: 'free', variants: ['drinks'], foot: [0.9, 2, 0.6], build: dispenser },
+  pot: { name: 'Pot of soup', group: 'Furniture', at: 'free', variants: ['tomato', 'pea'], foot: [0.4, 0.4, 0.5], build: pot },
   booth: { name: "Captain's booth", group: 'Furniture', at: 'free', variants: ['medic', 'mining', 'explore', 'security'], foot: [2, 1.8, 2], build: booth },
   planter: { name: 'Planter', group: 'Furniture', at: 'free', variants: ['long', 'tall'], foot: [1.7, 2.2, 0.7], build: planter },
   jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu'], foot: [4.5, 2, 0.3], build: jobs },

@@ -3,13 +3,14 @@
 // Things that stand against a wall have their back on z = 0.
 //   quarters   bunk ('single', 'double'), cabinet ('tall', 'double'), desk ('screen'), chair ('desk', 'stool', 'bar',
 //              'bench')
-//   galley     counter ('serve', 'plain', 'end'), table ('round', 'long'), dispenser ('drinks')
+//   galley     counter ('serve', 'plain', 'end'), table ('round', 'long'), dispenser ('drinks'), pot (a pot of soup for a
+//              counter: 'tomato', 'pea')
 //   captains   booth (one per crew: 'medic', 'mining', 'explore', 'security': a U of benches round a table, a screen
 //              with the captain's card, the crew's colour), jobs (the jobs board: 'hang' from the ceiling, both faces,
 //              or 'wall')
 //   the ward   divider ('bed': a screen between two beds)
 import * as THREE from 'three';
-import { rrect, circle, line, put } from './geo.js';
+import { rrect, circle, line, put, cylinder } from './geo.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
 import { GLOW } from './materials.js';
@@ -170,6 +171,36 @@ export function counter(p, v) {
   p.slab('black', -0.98, 0.98, 1.5, 1.56, -0.26, 0.2, { r: 0.016, cell: 0.8 });
   p.glowSlab('amber', -0.92, 0.92, 1.495, 1.5, -0.18, 0.12);
   for (let k = 0; k < 4; k++) p.light([-0.72 + k * 0.48, 1.35, 0], 0.5, [1, 0.7, 0.4], [0, -1, 0], 2);
+}
+// a pot of soup for the counter (the game's maker: "we can just put some pots sitting on the counter where there is
+// nothing (with the ladle sticking out)"; the soup sits inside it, well under its rim: the stew that was in a well
+// once stood above its pan's sides): a steel stock pot on a dark warming plate, a handle each side, the soup 4 cm
+// under the rim with a few bits in it, a ladle leaning in it with its handle out over the back of the rim (toward
+// -z: the cook's side, for a pot set the way its counter is), turned a little one way or the other. 32 cm across;
+// stands on y = 0 (a counter's top: off y 0.94), its middle on x = z = 0. 'tomato' or 'pea'.
+const SOUPS = {
+  tomato: { soup: { c: '#b4432c', r: 0.42 }, bits: ['#e08a2c', '#7fa83a', '#e6d29a'], yaw: 0.45 },
+  pea: { soup: { c: '#7f9b3d', r: 0.48 }, bits: ['#e08a2c', '#e6d29a', '#56742a'], yaw: -0.6 },
+};
+export function pot(p, v) {
+  const S = SOUPS[v] || SOUPS.tomato, rim = 0.222, top = rim - 0.042, STEEL = { c: '#a9afb5', r: 0.34, m: 0.55, w: 0.4 };
+  p.cyl('black', 0.17, 0.018, [0, 0.009, 0], null, 28);
+  p.lathe(STEEL, [[0.001, 0.018], [0.148, 0.018], [0.153, 0.024], [0.153, 0.205], [0.161, 0.21], [0.161, 0.218], [0.153, rim], [0.145, 0.216], [0.144, 0.21], [0.144, 0.032], [0.001, 0.032]], 32);
+  for (const s of [-1, 1]) p.box('black', [0.05, 0.018, 0.028], [s * 0.174, 0.19, 0], null, { r: 0.006 });
+  // the soup, and the bits floating in it
+  p.cyl(S.soup, 0.143, 0.01, [0, top - 0.005, 0], null, 28);
+  [[0.06, 0.03], [-0.05, 0.07], [0.02, -0.09], [-0.09, -0.02], [0.09, -0.05], [-0.02, 0.1], [0.05, 0.09]].forEach(([x, z], i) => p.cyl({ c: S.bits[i % 3], r: 0.6 }, 0.011 + (i % 3) * 0.003, 0.006, [x, top + 0.001, z], null, 8));
+  // the ladle: its bowl down in the soup, the handle leaning on the rim at the back and out past it, a hook at its end
+  const c = Math.cos(S.yaw), s = Math.sin(S.yaw), at = (x, y, z) => new THREE.Vector3(x * c + z * s, y, -x * s + z * c);
+  const rod = (surf, r, a, b) => {
+    const d = b.clone().sub(a), g = cylinder(r, d.length(), [0, 0, 0], 10);
+    g.applyMatrix4(new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()), new THREE.Vector3(1, 1, 1)));
+    return p.add('solid', g, surf);
+  };
+  const bowl = at(0, 0.08, 0.05), lean = at(0, rim + 0.007, -0.147), u = lean.clone().sub(bowl).normalize(), end = lean.clone().addScaledVector(u, 0.15);
+  rod(STEEL, 0.007, bowl, end);
+  rod('black', 0.0095, end.clone().addScaledVector(u, -0.07), end);
+  rod(STEEL, 0.006, end, end.clone().add(at(0, -0.03, -0.012)));
 }
 export function table(p, v) {
   if (v === 'set') {

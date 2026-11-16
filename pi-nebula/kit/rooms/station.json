@@ -746,6 +746,8 @@
         {"piece":"booth","cell":[-2,14],"turn":1,"variant":"security"},
         {"piece":"jobs","cell":[0.5,12.5],"turn":0,"variant":"hang","off":[0,4.3,0]},
         {"piece":"counter","cell":[5,14],"turn":3,"variant":"plain","off":[0,0,1]},
+        {"piece":"pot","cell":[5,14],"turn":3,"variant":"tomato","off":[0.15,0.94,1.08]},
+        {"piece":"pot","cell":[5,14],"turn":3,"variant":"pea","off":[0.75,0.94,0.88]},
         {"piece":"counter","cell":[5,15],"turn":3,"variant":"serve","off":[0,0,1]},
         {"piece":"counter","cell":[4.5,13.5],"turn":0,"variant":"end"},
         {"piece":"counter","cell":[4.5,15.5],"turn":0,"variant":"end"},
