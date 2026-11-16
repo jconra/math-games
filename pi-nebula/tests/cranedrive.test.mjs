@@ -206,6 +206,11 @@ test('the job\'s trips: the round\'s own, one canister each, and the moves end w
 
 test('the job\'s queue: a question holds the next move of its kind, on the level\'s marks; a right answer is exactly that move', () => {
   const S = stateAt(plan, 0), Qu = makeJobQueue(site, { start: () => S, oreOf: () => 1.2 }), W = marksOf(site);
+  // (the next move is the trolley along the wall rail to the turntable: a card about a distance, or the whole route)
+  assert.deepEqual(Qu.peek(), ['trip', 'along', 'route']);
+  // the job picks, from a level's makers, one that suits that move
+  const pick = crane.pickAsk([{ maker: 'hoist', step: 1 }, { maker: 'rail', step: 1 }], { live: { peek: Qu.peek } });
+  assert.equal(pick.maker, 'rail');
   const a = Qu.ask('along', { prec: 1 });
   assert.ok(a && Number.isInteger(a.mark) && Number.isInteger(a.markTo) && a.what, JSON.stringify(a));
   const steps = Qu.right(a.id), asked = steps.find((s) => s.asked);

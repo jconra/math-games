@@ -98,7 +98,9 @@ export function ownOrder(core, rand = Math.random, coins = 4) {
 // live: what the job's own props are doing right now, for a maker that asks about it (the smelter's load in the hangar:
 // src/crane.js load()); null where there is none (node, the levels page)
 function make(job, L, { rand = Math.random, last = null, who = null, frac = 0, live = null } = {}) {
-  const ask = pickAsk(L.gen.mix, rand, last);
+  // (a job whose questions follow its props may choose from the level's mix itself: the crane operator job asks about
+  // the crane's next move; otherwise, and when it has no choice to make, Mathwood's own pick by weight)
+  const ask = (job.pickAsk && live && job.pickAsk(L.gen.mix, { rand, last, live })) || pickAsk(L.gen.mix, rand, last);
   const own = job.makers && job.makers[ask.maker];
   for (let tries = 0; tries < 8; tries++) {
     try {

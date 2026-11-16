@@ -235,7 +235,7 @@ export const MAKERS = {
   mark: {
     strand: 'number', at: () => 10,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.4, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(LOG_STOPS) }; })();
+      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.45, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(LOG_STOPS) }; })();
       const m = Math.round(s.markTo), here = Math.round(s.mark);
       const flip = m >= 10 && m % 10 !== Math.floor(m / 10) % 10 ? Number(String(m).split('').reverse().join('')) : null;
       return ownOrder({
@@ -503,6 +503,18 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
   }
   // (planning again from where the crane is now: after a move that could not be made)
   Q.restart = function restart() { queue.length = 0; cursor = 0; planned = null; Q.reserved = null; };
+  // the kinds of question the crane's next move could be asked as: ['along'], ['along', 'route'], ['hoist'], ['grab'],
+  // ['trip'] ... (the moves it makes by itself, the waits and the turns, are passed over)
+  Q.peek = function peek() {
+    if (!planned) begin();
+    const moving = (s) => s.kind === 'along' || s.kind === 'hoist' || s.kind === 'slide' || (s.kind === 'grab' && s.how === 'shut' && s.c >= 0);
+    const kinds = (k) => { const s = queue[k]; return s.kind === 'grab' ? ['grab'] : s.kind === 'along' ? (s.what === 'the turntable' && routeAt(k) ? ['along', 'route'] : ['along']) : [s.kind]; };
+    const k = findFrom((s) => moving(s) || s.kind === 'trip');
+    if (k < 0) return [];
+    // (at a trip's start: the trip itself, to be counted, or its first move)
+    if (queue[k].kind === 'trip') { const m = findFrom(moving, k + 1); return ['trip', ...(m >= 0 ? kinds(m) : [])]; }
+    return kinds(k);
+  };
   Q.ask = function ask(kind, o = {}) {
     if (!planned) begin();
     const prec = o.prec || 1;
@@ -604,8 +616,20 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
 // THE OPERATOR AREA: the operator's chair in the smelter's control room. Its two options are its two sides (as you
 // sit: the yellow stick on the left, the red on the right); which one comes up is the side you look at.
 export const OPERATOR = { piece: 'opChair', local: [0, 0, -0.95], face: [0, 1] };
+// which of the job's makers can ask about which kind of move (route: the way out to a canister, from the turntable)
+const SUITS = { hops: ['along'], mark: ['along'], rail: ['along'], time: ['along'], hoist: ['hoist'], change: ['hoist'], slide: ['slide'], weight: ['grab'], trips: ['trip'], count: ['trip'], route: ['route'], words: [] };
+// the level's makers that suit the crane's next move, one of them by weight; none: null (Mathwood's own pick)
+function pickAsk(mix, { rand = Math.random, live = null } = {}) {
+  const next = live && live.peek ? live.peek() : null;
+  if (!next || !next.length) return null;
+  const fits = mix.filter((a) => (SUITS[a.maker] || []).some((k) => next.includes(k)));
+  if (!fits.length) return null;
+  let r = rand() * fits.reduce((q, a) => q + (a.w ?? 1), 0);
+  for (const a of fits) if ((r -= a.w ?? 1) <= 0) return a;
+  return fits[fits.length - 1];
+}
 export const JOB = {
-  id: 'crane', name: 'Crane operator job', short: 'Crane', open: true,
+  id: 'crane', name: 'Crane operator job', short: 'Crane', open: true, pickAsk,
   pair: 'operator', side: 'right', spot: OPERATOR, near: 2.3, seated: true,
   sign: 'Crane operator job', hint: 'Right answers move the crane: credits for each',
   place: PLACE, setting: SETTING, makers: MAKERS, card: 'workorder',
