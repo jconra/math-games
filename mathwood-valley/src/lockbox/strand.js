@@ -66,7 +66,7 @@
 //   youngMost(rider)                    -> the highest point a box is made at while read-aloud is on (YOUNG), or null
 //   levelOfFrac(frac), mapOfRung(rung), BOX_MAPS, REVIEW, INEQ, WORK, YOUNG
 
-import { chooseMap, fits, stepFor, stepAt, pctAt, isPlaced, isMet, levelOf, record, readAloud, ageStart, MAPS, SKILL } from '../math/skill.js';
+import { chooseMap, fits, stepFor, stepAt, pctAt, isPlaced, isMet, levelOf, record, readAloud, headStart, MAPS, SKILL } from '../math/skill.js';
 import { RUNG } from './generate.js';
 import { K_RUNG } from './kbox.js';
 import { WORK_RUNG } from './workout.js';
@@ -93,8 +93,9 @@ export const INEQ = {
 // settles at that point (skill.js stepFor `most`). The deer and the sheep's algebra flock hold the same way.
 export const YOUNG = { top: 'R1', arith: 10 };
 
-// A teen (an age whose head start is TEEN.fromStart or more: 13 and up) isn't dealt the coin-picture warm-up boxes made
-// for the youngest (R0a "Balance the wagon", R0b "Which key fits"): the add-on box (TEEN.least, R1) is their easiest.
+// A teen (an age whose head start is TEEN.fromStart or more: 13 and up; or a starting difficulty of Medium or Hard,
+// skill.js headStart) isn't dealt the coin-picture warm-up boxes made for the youngest (R0a "Balance the wagon", R0b
+// "Which key fits"): the add-on box (TEEN.least, R1) is their easiest.
 // Their equations level can still sit lower; the baseline's bottom is that box (skill.js record's floor), so two early
 // slips don't drop a teen onto the youngest boxes.
 export const TEEN = { fromStart: 30, least: 'R1' };
@@ -124,7 +125,7 @@ export function planBox(rider, alg, { rng, now = Date.now() } = {}) {
   }
   s.lastWork = false;
   const most = youngMost(rider);
-  const least = most == null && ageStart(rider && rider.age) >= TEEN.fromStart ? pctAt('lockbox', TEEN.least) : null;
+  const least = most == null && headStart(rider) >= TEEN.fromStart ? pctAt('lockbox', TEEN.least) : null;
   // (the picture boxes are for riders who are read to; an older one gets the balance and the key boxes at that level,
   // unless even those don't fit yet)
   const kOk = readAloud(rider) || !fits(rider, 'lockbox', BOX_MAPS);

@@ -15,7 +15,12 @@
 //     base     placement in progress, or null: { phase: 'climb' | 'check' | 'down', lo (the highest level answered
 //              right), n (answers), flukes, got (rights in a row on the way down),
 //              cap (the hardest level the job asking now can ask, or null) }
-//     off      ['id', ...] levels a grown-up switched off (skipped by placement and the staircase; never all of them)
+//     lo, hi   THE RANGE: the easiest and the hardest level this place may ask (ids), set with the two-handled slider
+//              on the levels page; kept only while it isn't the ladder's own end (no lo: from the first level; no hi:
+//              up to the top, so a level added at a ladder's top later is in it)
+//     keep     true: KEEP TO THESE LEVELS (adaptive level changes off); left out otherwise
+//     off      ['id', ...] single levels skipped inside the range (the old ticks: an older save, or setOn; never all of
+//              them). Setting the range clears them
 //     start    the level a grown-up picked with "Start here" (shown on the levels page), or null
 //     n, r, f  answers, right answers, fast right answers here
 //     h        the last HIST_KEEP answers: [right 1/0, level id, fast 1/0]
@@ -50,8 +55,26 @@
 // under the hood (save.js recordAnswer records each answer at its level's grade). A place first met starts on the
 // highest level, counting up from its first, whose strand the rider has shown at least SEED_BELOW points above its
 // grade; a level whose strand the rider hasn't met is passed over (it neither stops the count nor counts) unless the
-// rider's optional age covers its grade (skill.js ageStart). The first level whose strand the rider has shown is
-// under it stops the count. A new rider with no age starts on the first level.
+// rider's head start covers its grade. The head start is the STARTING DIFFICULTY picked when the rider was made
+// (skill.js STARTS: Easy 0, Medium 30, Hard 60), or an older save's age (skill.js ageStart). The starting difficulty
+// covers levels from the first up, and stops at the first level it doesn't cover (a ladder that comes back down the
+// school guide later, the round-up's fractions after its negatives, doesn't pull a Hard start past the levels in
+// between); an age passes over as it always did. The first level whose strand the rider has shown is under it stops
+// the count. A new rider on Easy, or with no age, starts on the first level.
+//
+// THE RANGE (the game's maker, 2026-11-16: "a range selector at the top that had a min and max value (kind of like a
+// price filter on Amazon). So instead of having 30 check boxes to uncheck, a slider can easily be adjusted to get
+// medium-range questions"). Each place keeps the easiest and the hardest level it may ask (lo, hi): placement and the
+// staircase move only between them, a level outside is never asked, and the level tool's arrows stop at them. The
+// whole ladder until someone sets it. (Single levels skipped inside it, `off`, are the old ticks' way: an older save
+// keeps them until the range is set.)
+//
+// KEEP TO THESE LEVELS (his words: "a setting in the menu to disable adaptive level changes. So if someone wants to
+// really practice for a test, they can set it to the type of math questions they want without it always going up to
+// the next one"). With `keep` on, the game never moves the level by itself at that place: no placement, no staircase,
+// no skip moving it down. The rider stays on their level (brought into the range if it was outside it), the answers
+// are still counted, and only the arrows by the level move it, inside the range. A skip still deals one easier question
+// from the level below, inside the range. Off (the default): the game moves the level as above.
 //
 // OLD SAVES (migrate): once per rider, every place whose strands the rider has a level in (from the strand model,
 // which itself read the old topics) gets a level the same way with no margin: the highest level at or under the
@@ -59,7 +82,8 @@
 //
 // THE API
 //   levelFor(rider, placeId, { now, most })   -> what to ask now: { place, level (the ladder entry), id, i, n (levels),
-//                                    into, count, pct, placing, capped }   (meets the place the first time: save after)
+//                                    into, count, pct, placing, capped, eased, kept (KEEP TO THESE LEVELS is on) }
+//                                    (meets the place the first time: save after)
 //                                    most: the hardest level id the job asking can ask (the windmill stops at 7)
 //                                    eased: true for the one easier question after a skip (the level below)
 //   skipLevel(rider, placeId, { now })   the help menu's skip: a gentle miss, never recorded as an answer (see A SKIP)
@@ -69,15 +93,20 @@
 //                                      outlier, pct }      level: the id asked (default: the rider's level)
 //   pctOf(rider, placeId)         -> 0..100 how far up its ladder the rider is, or null (not met)
 //   isMet, isPlaced, stateOf(rider, placeId), seedLevel(rider, placeId) -> id, levelPct(placeId, id) -> 0..100
+//   levelHere(rider, placeId)     -> the level id the next question comes from (the rider's, or where they'd start),
+//                                    without meeting the place
+//   rangeOf(rider, placeId)       -> { lo, hi (indexes), loId, hiId, n, full, holes: [ids skipped inside it], keep }
+//   setRange(rider, placeId, loId, hiId) -> true if changed (single skipped levels inside it come on again)
+//   setKeep(rider, placeId, on) -> true if changed;  isKept(rider, placeId)
 //   isOn(rider, placeId, id), onIds(rider, placeId), setOn(rider, placeId, id, on) -> true if changed,
-//   setAllOn(rider, placeId), startHere(rider, placeId, id)
+//   setAllOn(rider, placeId) (the whole ladder, nothing skipped), startHere(rider, placeId, id)
 //   placeStats(rider, { all })    -> [{ place, name, short, math, pic, pct, id, title, placed, finding, answered, right,
-//                                      recentPct, avgMs, off, start, history: [{ day, pct }] }]
+//                                      recentPct, avgMs, off, lo, hi, keep, start, history: [{ day, pct }] }]
 //   migrate(rider), levelsOf(rider) (rider.levels, filled in), setLevelAt(rider, placeId, id, { placed }) (dev, tests)
 //   LEVELS (the dials)
 
 import { PLACE, PLACES } from './places.js';
-import { ageStart } from '../math/skill.js';
+import { headStart, difficultyOf } from '../math/skill.js';
 
 // ---- the dials -----------------------------------------------------------------------------------------------------
 
@@ -148,8 +177,14 @@ function cleanPlace(P, s) {
   s.into = clamp(num(s.into, 0), 0, countOf(L));
   s.placed = s.placed === true;
   for (const k of ['n', 'r', 'f']) s[k] = Math.max(0, Math.floor(num(s[k], 0)));
+  // the range (kept only while an end isn't the ladder's own: an id this ladder no longer has opens that end)
+  if ('lo' in s || 'hi' in s) {
+    const a = typeof s.lo === 'string' ? idx(P, s.lo) : -1, b = typeof s.hi === 'string' ? idx(P, s.hi) : -1;
+    setEnds(P, s, a < 0 ? 0 : a, b < 0 ? P.levels.length - 1 : b);
+  }
+  if ('keep' in s && s.keep !== true) delete s.keep;
   s.off = [...new Set((Array.isArray(s.off) ? s.off : []).filter((x) => typeof x === 'string' && idx(P, x) >= 0))];
-  if (s.off.length >= P.levels.length) s.off = [];   // (never every level off)
+  { const [lo, hi] = bounds(P, s); if (!P.levels.some((L, i) => i >= lo && i <= hi && !s.off.includes(L.id))) s.off = []; }   // (never every level off)
   s.start = typeof s.start === 'string' && idx(P, s.start) >= 0 ? s.start : null;
   s.h = (Array.isArray(s.h) ? s.h : []).filter((x) => Array.isArray(x) && x.length >= 2).slice(-LEVELS.HIST_KEEP)
     .map((x) => [x[0] ? 1 : 0, String(x[1]), x[2] ? 1 : 0]);
@@ -159,7 +194,7 @@ function cleanPlace(P, s) {
     .map((x) => [Math.floor(+x[0]), clamp(Math.round(num(x[1], 0)), 0, 100)]);
   s.met = num(s.met, 0); s.last = num(s.last, 0);
   // (a skip's two: only kept tidy where a skip has been, so a save that never skipped stays exactly as it was)
-  if ('ease' in s) s.ease = s.ease === true && s.placed;
+  if ('ease' in s) s.ease = s.ease === true && (s.placed || s.keep === true);
   if ('k' in s) s.k = Math.max(0, Math.floor(num(s.k, 0)));
   if (s.placed) s.base = null;
   else if (!isObj(s.base) || !['climb', 'check', 'down'].includes(s.base.phase)) s.base = newBase();
@@ -205,11 +240,26 @@ export const isPlaced = (rider, placeId) => { const s = stateOf(rider, placeId);
 // ---- which levels are on --------------------------------------------------------------------------------------------
 
 function offSet(s) { return new Set(s && Array.isArray(s.off) ? s.off : []); }
-// the levels that are on, as indexes (all of them when every one is off, which setOn never allows)
+// THE RANGE's ends as indexes, [lo, hi]: the whole ladder when none is set
+function bounds(P, s) {
+  let lo = s && typeof s.lo === 'string' ? idx(P, s.lo) : -1, hi = s && typeof s.hi === 'string' ? idx(P, s.hi) : -1;
+  if (lo < 0) lo = 0;
+  if (hi < 0) hi = P.levels.length - 1;
+  return lo <= hi ? [lo, hi] : [hi, lo];
+}
+// the range's ends written into the place's state (an end at the ladder's own end is left out)
+function setEnds(P, s, lo, hi) {
+  if (lo > hi) [lo, hi] = [hi, lo];
+  if (lo > 0) s.lo = P.levels[lo].id; else delete s.lo;
+  if (hi < P.levels.length - 1) s.hi = P.levels[hi].id; else delete s.hi;
+}
+// the levels that are on, as indexes: the range, less any single level skipped inside it (all of the range when every
+// one of those is off, which setOn never allows)
 function onIndexes(P, s) {
-  const off = offSet(s);
-  const on = P.levels.map((L, i) => i).filter((i) => !off.has(P.levels[i].id));
-  return on.length ? on : P.levels.map((L, i) => i);
+  const off = offSet(s), [lo, hi] = bounds(P, s), range = [];
+  for (let i = lo; i <= hi; i++) range.push(i);
+  const on = range.filter((i) => !off.has(P.levels[i].id));
+  return on.length ? on : range;
 }
 function nextOn(P, s, i) { return onIndexes(P, s).find((j) => j > i) ?? null; }
 function prevOn(P, s, i) { const on = onIndexes(P, s).filter((j) => j < i); return on.length ? on[on.length - 1] : null; }
@@ -221,34 +271,106 @@ function nearestOn(P, s, i) {
   return below.length ? below[below.length - 1] : on[0];
 }
 
-export function isOn(rider, placeId, id) { return !offSet(stateOf(rider, placeId)).has(id); }
+export function isOn(rider, placeId, id) {
+  const P = PLACE[placeId], s = stateOf(rider, placeId);
+  if (!P) return !offSet(s).has(id);
+  const i = idx(P, id), [lo, hi] = bounds(P, s);
+  return i >= lo && i <= hi && !offSet(s).has(id);
+}
 export function onIds(rider, placeId) { const P = placeOf(placeId); return onIndexes(P, stateOf(rider, placeId)).map((i) => P.levels[i].id); }
 
-// A grown-up's tick on the levels page. The last level that is on can't be switched off (-> false). Switching a level
-// off doesn't move the rider at once: the next question comes from the nearest level that is on (levelFor).
+// a level brought into the range by itself: the range reaches out to it, and the levels between it and the old end are
+// put in `off`, so only that one level comes on (setOn, startHere: the old ticks' meaning)
+function reach(P, s, i) {
+  const [lo, hi] = bounds(P, s);
+  if (i >= lo && i <= hi) return;
+  const off = offSet(s);
+  if (i < lo) { for (let j = i + 1; j < lo; j++) off.add(P.levels[j].id); setEnds(P, s, i, hi); }
+  else { for (let j = hi + 1; j < i; j++) off.add(P.levels[j].id); setEnds(P, s, lo, i); }
+  s.off = P.levels.map((L) => L.id).filter((x) => off.has(x));
+}
+
+// One level on or off (the old ticks; tests and older saves). The last level that is on can't be switched off (->
+// false). Switching a level off doesn't move the rider at once: the next question comes from the nearest level that is
+// on (levelFor). A level outside the range switched on: the range reaches out to it (that level alone comes on).
 export function setOn(rider, placeId, id, on, { now = Date.now() } = {}) {
   const P = placeOf(placeId);
-  if (idx(P, id) < 0) return false;
+  const i = idx(P, id);
+  if (i < 0) return false;
   const s = ensure(rider, placeId, now);
+  const [lo, hi] = bounds(P, s);
   const off = offSet(s);
-  if (on) { if (!off.delete(id)) return false; }
-  else {
-    if (off.has(id)) return false;
-    if (P.levels.length - off.size <= 1) return false;
+  if (on) {
+    if (i < lo || i > hi) { reach(P, s, i); s.off = s.off.filter((x) => x !== id); return true; }
+    if (!off.delete(id)) return false;
+  } else {
+    if (i < lo || i > hi || off.has(id)) return false;
+    if (onIndexes(P, s).length <= 1) return false;
     off.add(id);
   }
   s.off = P.levels.map((L) => L.id).filter((x) => off.has(x));   // (ladder order)
   return true;
 }
-export function setAllOn(rider, placeId, { now = Date.now() } = {}) { const s = ensure(rider, placeId, now); const was = s.off.length; s.off = []; return was > 0; }
+// Every level on: the whole ladder, nothing skipped. -> true if anything changed
+export function setAllOn(rider, placeId, { now = Date.now() } = {}) {
+  const P = placeOf(placeId);
+  const s = ensure(rider, placeId, now);
+  const [lo, hi] = bounds(P, s);
+  const was = s.off.length > 0 || lo > 0 || hi < P.levels.length - 1;
+  s.off = []; delete s.lo; delete s.hi;
+  return was;
+}
 
-// "Start here" on the levels page: the rider goes straight to that level (switched on if it was off), placed, at its
-// start. Placement is over for the place (the grown-up has placed them).
+// THE RANGE: where it is now. lo, hi: indexes (0-based); holes: single levels skipped inside it (an older save's ticks)
+export function rangeOf(rider, placeId) {
+  const P = placeOf(placeId), s = stateOf(rider, placeId);
+  const [lo, hi] = bounds(P, s), off = offSet(s), holes = [];
+  for (let i = lo; i <= hi; i++) if (off.has(P.levels[i].id)) holes.push(P.levels[i].id);
+  return { lo, hi, loId: P.levels[lo].id, hiId: P.levels[hi].id, n: P.levels.length, full: lo === 0 && hi === P.levels.length - 1,
+    holes, keep: !!(s && s.keep === true) };
+}
+// The range set (the levels page's slider): the easiest and the hardest level this place may ask, by id (either order;
+// the same id twice: that one level). Single levels skipped before come on again: the range is the whole setting now.
+// The rider isn't moved at once: the next question comes from the nearest level in it (levelFor). -> true if changed
+export function setRange(rider, placeId, loId, hiId, { now = Date.now() } = {}) {
+  const P = placeOf(placeId);
+  let a = idx(P, loId), b = idx(P, hiId);
+  if (a < 0 || b < 0) return false;
+  if (a > b) [a, b] = [b, a];
+  const s = ensure(rider, placeId, now);
+  const [lo, hi] = bounds(P, s), had = s.off.length;
+  setEnds(P, s, a, b);
+  s.off = [];
+  return a !== lo || b !== hi || had > 0;
+}
+// KEEP TO THESE LEVELS on or off for a place. -> true if changed
+export function setKeep(rider, placeId, on, { now = Date.now() } = {}) {
+  placeOf(placeId);
+  const s = ensure(rider, placeId, now);
+  const was = s.keep === true;
+  if (on) s.keep = true; else delete s.keep;
+  if (s.ease && !s.placed && !on) s.ease = false;   // (a skip's easier question waits only where it can be dealt)
+  return was !== !!on;
+}
+export const isKept = (rider, placeId) => { const s = stateOf(rider, placeId); return !!(s && s.keep === true); };
+// The level the next question comes from (the rider's, brought into the range; or, not met yet, where they'd start),
+// without meeting the place or moving anything: the level tool and the levels page show it.
+export function levelHere(rider, placeId) {
+  const P = placeOf(placeId), s = stateOf(rider, placeId);
+  if (!s) return seedLevel(rider || {}, placeId);
+  const i = idx(P, s.id);
+  return P.levels[nearestOn(P, s, i < 0 ? 0 : i)].id;
+}
+
+// "Start here" (the level tool's arrows): the rider goes straight to that level (switched on if it was off; outside
+// the range, the range reaches out to it), placed, at its start. Placement is over for the place (the rider or a
+// grown-up has placed them).
 export function startHere(rider, placeId, id, { now = Date.now() } = {}) {
   const P = placeOf(placeId);
   const i = idx(P, id);
   if (i < 0) return false;
   const s = ensure(rider, placeId, now);
+  reach(P, s, i);
   s.off = s.off.filter((x) => x !== id);
   moveTo(P, s, i, 0);
   s.placed = true; s.base = null; s.start = id;
@@ -259,17 +381,21 @@ export function startHere(rider, placeId, id, { now = Date.now() } = {}) {
 // ---- seeding and meeting a place -----------------------------------------------------------------------------------
 
 // Where a place starts for a rider (see THE SEED and OLD SAVES at the top). margin: school-guide points the rider must
-// have shown above a level's grade; useAge: let the optional age's head start cover strands not met.
-// -> { i, by } (by: 'strand' when a level was passed on the rider's own strands, 'age', or null)
+// have shown above a level's grade; useAge: let the head start (the starting difficulty's, or an older save's age's)
+// cover strands not met.
+// -> { i, by } (by: 'strand' when a level was passed on the rider's own strands, 'start' (the starting difficulty),
+// 'age', or null)
 function seedOf(rider, P, { margin = LEVELS.SEED_BELOW, useAge = true } = {}) {
-  const age = useAge ? ageStart(rider && rider.age) : 0;
-  let at = 0, by = null;
+  const head = useAge ? headStart(rider) : 0, picked = useAge && !!difficultyOf(rider);
+  let at = 0, by = null, gap = false;
   for (let i = 0; i < P.levels.length; i++) {
     const L = P.levels[i];
     const v = shown(rider, L.strand);
     if (v == null) {
       if (L.grade <= 0.05) { at = i; continue; }   // (a level at the very bottom of the school guide needs nothing)
-      if (useAge && age > 0 && L.grade <= age + 0.05) { at = i; by = by || 'age'; }
+      // (a starting difficulty covers levels only up to the first it doesn't: see THE SEED; an age passes over)
+      if (head > 0 && L.grade <= head + 0.05 && !(picked && gap)) { at = i; by = by || (picked ? 'start' : 'age'); continue; }
+      gap = true;
       continue;
     }
     if (v - margin + 0.05 >= L.grade) { at = i; by = 'strand'; continue; }
@@ -312,13 +438,14 @@ export function pctOf(rider, placeId) {
 export function levelFor(rider, placeId, { now = Date.now(), most = null } = {}) {
   const P = placeOf(placeId);
   const s = ensure(rider, placeId, now);
+  const kept = s.keep === true;   // (KEEP TO THESE LEVELS: no placement; the level stays where it is)
   let i = idx(P, s.id);
-  // a level switched off since: the nearest one that is on
+  // a level switched off since, or outside the range set since: the nearest one that is on
   const j = nearestOn(P, s, i);
   if (j !== i) { moveTo(P, s, j, 0); i = j; }
   const mi = typeof most === 'string' && idx(P, most) >= 0 ? nearestOn(P, s, idx(P, most)) : -1;
   let capped = false;
-  if (!s.placed) {
+  if (!s.placed && !kept) {
     // (placement: the job's hardest level is the top of this placement; it settles there once answered right)
     s.base.cap = mi >= 0 ? P.levels[mi].id : null;
     if (mi >= 0 && i > mi) { moveTo(P, s, mi, 0); i = mi; }
@@ -327,10 +454,10 @@ export function levelFor(rider, placeId, { now = Date.now(), most = null } = {})
   // (a skip just now (skipLevel): the next question comes from the level below the one asked, near its end, until the
   // next answer here is recorded; at the lowest level that is on there is nothing easier)
   let eased = false;
-  if (s.placed && s.ease === true) { const e = prevOn(P, s, i); if (e != null) { i = e; into = countOf(P.levels[e]) - 1; eased = true; } }
+  if ((s.placed || kept) && s.ease === true) { const e = prevOn(P, s, i); if (e != null) { i = e; into = countOf(P.levels[e]) - 1; eased = true; } }
   const L = P.levels[i];
   return { place: placeId, level: L, id: L.id, i, n: P.levels.length, into, count: countOf(L),
-    pct: levelPct(placeId, L.id, into), placing: !s.placed, capped, eased };
+    pct: levelPct(placeId, L.id, into), placing: !s.placed && !kept, capped, eased, kept };
 }
 
 // ---- a skip -----------------------------------------------------------------------------------------------------------
@@ -344,13 +471,15 @@ export function levelFor(rider, placeId, { now = Date.now(), most = null } = {})
 //                     doesn't move the rider up, as with any answer below their level)
 //   finding the level the climb stops there: the rider settles on the highest level answered right so far, or, with
 //                     none yet, steps down a level and the way down goes on from there
+//   kept              (KEEP TO THESE LEVELS) the level stays; only the one easier question, from inside the range
 // -> { id, before, moved (-1, 0), into, placed, ease }
 export function skipLevel(rider, placeId, { now = Date.now() } = {}) {
   const P = placeOf(placeId);
   const s = ensure(rider, placeId, now);
   const cur = idx(P, s.id), before = s.id;
   s.k = Math.max(0, Math.floor(num(s.k, 0))) + 1;
-  if (!s.placed) {
+  if (s.keep === true) s.ease = true;
+  else if (!s.placed) {
     const B = s.base;
     B.n++;
     if (B.lo != null) { moveTo(P, s, idx(P, B.lo), 0); s.placed = true; s.base = null; }
@@ -409,7 +538,8 @@ export function recordLevel(rider, placeId, opts = {}) {
   s.h.push([right ? 1 : 0, P.levels[at].id, fast ? 1 : 0]);
   if (s.h.length > LEVELS.HIST_KEEP) s.h.splice(0, s.h.length - LEVELS.HIST_KEEP);
 
-  if (!s.placed) placement(P, s, at, right);
+  // (KEEP TO THESE LEVELS: the answer is counted, the level isn't moved)
+  if (s.keep === true) { /* kept */ } else if (!s.placed) placement(P, s, at, right);
   else staircase(P, s, at, right, fast);
 
   const i = idx(P, s.id);
@@ -499,12 +629,12 @@ export function placeStats(rider, { all = false } = {}) {
     const s = stateOf(rider, P.id);
     if (!s && !all) continue;
     const base = { place: P.id, name: P.name, short: P.short, math: P.math, pic: P.pic };
-    if (!s) { out.push({ ...base, pct: null, id: null, title: null, placed: false, finding: false, answered: 0, right: 0, recentPct: null, avgMs: null, off: [], start: null, history: [] }); continue; }
+    if (!s) { out.push({ ...base, pct: null, id: null, title: null, placed: false, finding: false, answered: 0, right: 0, recentPct: null, avgMs: null, off: [], lo: null, hi: null, keep: false, start: null, history: [] }); continue; }
     const L = P.levels[Math.max(0, idx(P, s.id))];
     out.push({ ...base, pct: levelPct(P.id, s.id, s.into), id: s.id, title: L.title, placed: s.placed, finding: !s.placed,
       answered: s.n, right: s.r, recentPct: s.h.length ? Math.round((100 * s.h.reduce((a, x) => a + x[0], 0)) / s.h.length) : null,
       avgMs: s.t.length ? Math.round(s.t.reduce((a, x) => a + x[0], 0) / s.t.length) : null,
-      off: [...s.off], start: s.start, history: s.days.map(([d, p]) => ({ day: d, pct: p })) });
+      off: [...s.off], lo: s.lo || null, hi: s.hi || null, keep: s.keep === true, start: s.start, history: s.days.map(([d, p]) => ({ day: d, pct: p })) });
   }
   return out;
 }

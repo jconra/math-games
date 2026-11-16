@@ -13,8 +13,9 @@
 // `fix(player)` is the game's own tidy-up of one saved player: it fills in the game's defaults (coins, progress...)
 // and returns the player. The store has already made sure of what every game shares:
 //   { id, name (16 letters at most), look (whatever the game keeps there), made, last (when they last played, 0 for
-//     never), age (3..99 or null) }   and it keeps any field it does not know, so a newer build's save survives an
-//     older one.
+//     never), start (the starting difficulty picked on the new-player form: one of STARTS, left out on a player from
+//     before it), age (3..99 or null: an older save's; no longer asked) }   and it keeps any field it does not know, so
+//     a newer build's save survives an older one.
 //
 // WHAT IS STORED is the same shape as Mathwood Valley's saves (src/save.js there, which came first and keeps its own
 // code): { version, riders: [player, ...] } under one key. The list is called `riders` in every game's save, on
@@ -24,6 +25,11 @@
 // and works() says so. A save too damaged to read is kept under key + '.broken' so it can be rescued by hand.
 
 function num(v, dflt = 0) { v = Number(v); return Number.isFinite(v) ? v : dflt; }
+
+// THE STARTING DIFFICULTIES a new player picks from (the title screen's new-player form, shared/title/title.js), in
+// place of an age. What each means in a game's math is the game's own (Mathwood's src/math/skill.js STARTS, which the
+// space game's jobs share).
+export const STARTS = ['easy', 'medium', 'hard'];
 
 export function makeId() {
   return 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -83,6 +89,7 @@ export function makeStore({ key, version = 1, fix = null, max = 6, game = 'The g
     out.look = r.look && typeof r.look === 'object' ? r.look : {};
     out.made = num(r.made, Date.now());
     out.last = num(r.last, 0);
+    if ('start' in out && !STARTS.includes(out.start)) delete out.start;
     const age = Math.round(Number(r.age));
     out.age = r.age != null && age >= 3 && age <= 99 ? age : null;
     return (fix && fix(out)) || out;

@@ -55,8 +55,11 @@
 //   skill:    { v, migrated, strands: { add: {...}, mul: {...}, ... } }   what the rider can do in each strand of math
 //             and how hard their next question should be (src/math/skill.js keeps it; fixRider fills it in and, the
 //             first time, reads the old topics' progress into it)
-//   age:      null | a whole number   optional; gives the skill model a modest head start (skill.js ageStart)
-//   goals:    [{ id, ... }]   goals a grown-up pinned on the rider (src/completion.js says what they are)
+//   start:    'easy' | 'medium' | 'hard'   the starting difficulty picked when the rider was made (skill.js STARTS: the
+//             head start for math and places not met yet); left out on a rider from before it, who keeps the age
+//   age:      null | a whole number   an older save's: gives the skill model a modest head start (skill.js ageStart);
+//             no longer asked (the starting difficulty took its place, 2026-11-16)
+//   goals:   [{ id, ... }]   goals a grown-up pinned on the rider (src/completion.js says what they are)
 //   done:     ['buckle:cattle:tin', ...]   completion items already announced with a toast (src/completion.js)
 //   levels:   { v, migrated, places: { roundup: {...}, lockbox: {...}, ... } }   the rider's level in each place's ladder
 //             (src/levels/model.js keeps it; fixRider moves an old save onto the ladders once, from the strands)
@@ -71,7 +74,7 @@
 import { cleanAnimals, cleanGoods } from './math/goods.js';
 import { PRICES } from './catalog.js';
 import { cleanMounts } from './mounts.js';
-import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow } from './math/skill.js';
+import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow, START } from './math/skill.js';
 import { migrate as migrateLevels, recordLevel, PLACE } from './levels/model.js';
 import { migrate as migrateFacts } from './math/facts.js';
 import { cleanShifts } from './shifts.js';
@@ -480,7 +483,9 @@ export function fixRider(r) {
   // Keep any extra topic or mission flags a newer build added (or an old one left: 'roundup' is always on now).
   for (const k in topicsOn) if (!(k in out.topicsOn)) out.topicsOn[k] = !!topicsOn[k];
   for (const k in missions) if (!(k in out.missions)) out.missions[k] = !!missions[k];
-  // the optional age, the pinned goals and the completion items already announced (each only when the rider has it)
+  // the starting difficulty (only when the rider has one), an older save's age, the pinned goals and the completion
+  // items already announced (each only when the rider has it)
+  if ('start' in out && !(typeof out.start === 'string' && START[out.start])) delete out.start;
   const age = Math.round(num(r.age, NaN));
   out.age = age >= 3 && age <= 99 ? age : null;
   if (r.goals !== undefined) out.goals = upgradeGoals(r.goals);

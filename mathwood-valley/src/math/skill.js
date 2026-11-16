@@ -30,8 +30,8 @@
 // SEEDING. The first time a strand is met it starts from the strands related to it (each STRANDS entry's `seed`: the
 // related strands and a discount, e.g. subtraction starts at 0.9 x addition). With several related strands met, it
 // starts at the average of them (each times its discount): a careful start, since starting too low costs only a
-// question or two of the baseline's climb, and too high costs misses. With none met, it starts at the rider's
-// optional age's head start (ageStart), or 0.
+// question or two of the baseline's climb, and too high costs misses. With none met, it starts at the rider's head
+// start (headStart: the starting difficulty picked when the rider was made, STARTS; an older save's age, ageStart), or 0.
 //
 // THE BASELINE (placement), once per strand, the first time it comes up (no long test at the start):
 //   climb   from the seed, every right answer moves the next question up JUMP (10) points: a school year at a time.
@@ -92,7 +92,10 @@
 //   stats(rider, { all })            -> [{ strand, name, short, pct, placed, finding, answered, right, recentPct, avgMs,
 //                                       history: [{ day, pct }] }]   (met strands, in STRANDS order; all: every strand)
 //   ageStart(age)                    -> the head start an optional age gives (0..AGE.most)
-//   migrate(rider)                   -> rider.skill, filled in; the first time, today's topic progress is read into it
+//   headStart(rider)                 -> the head start the rider has: their starting difficulty's (STARTS: easy 0,
+//                                       medium 30, hard 60), else an older save's age's, else 0
+//   difficultyOf(rider)              -> 'easy' | 'medium' | 'hard', or null (no starting difficulty saved)
+//   migrate(rider)                 -> rider.skill, filled in; the first time, today's topic progress is read into it
 //   skillOf(rider)                   -> rider.skill, filled in (made if missing)
 //   chooseMap(rider, mapIds, { rand, last, now })  -> which of a job's makers to ask next (or null): see its notes
 //   fits(rider, mapId, mapIds)       -> true if that maker has material near the rider's level
@@ -344,14 +347,34 @@ export function ageStart(age) {
   return Math.round(clamp((a - SKILL.AGE.from) * SKILL.AGE.perYear, 0, SKILL.AGE.most));
 }
 
+// THE STARTING DIFFICULTY (the game's maker, 2026-11-16: "We could also just ask for a starting difficulty (Easy,
+// Medium, Hard), that way it doesn't seem like we are trying to harvest data about the player"; and for the space
+// game's grown-ups, "Start grown-ups higher"). A new player picks one in place of an age; it is saved as player.start
+// and gives the head start an age gave: where a kind of math not met yet starts (seedOf), and each place's ladder
+// (src/levels/model.js), until the player's own answers say more. Hard starts well above any age's head start. A
+// player saved with an age and no start keeps the age's head start, as before.
+export const STARTS = [
+  { id: 'easy', points: 0 },      // the very first questions (as a player with no age started)
+  { id: 'medium', points: 30 },   // third-grade work (a 14-year-old's head start was 30)
+  { id: 'hard', points: 60 },     // sixth-grade work: fractions, decimals, ratios, negatives
+];
+export const START = Object.fromEntries(STARTS.map((s) => [s.id, s]));
+// the player's starting difficulty ('easy' | 'medium' | 'hard'), or null (a save from before: an age, or nothing)
+export const difficultyOf = (rider) => (rider && typeof rider.start === 'string' && START[rider.start] ? rider.start : null);
+// The head start the player has: their starting difficulty's, else their age's (an older save), else 0.
+export function headStart(rider) {
+  const s = difficultyOf(rider);
+  return s ? START[s].points : ageStart(rider && rider.age);
+}
+
 // Where a strand not met yet would start (see SEEDING above).
-// A related strand still finding its level counts at no less than the age's head start (its guess can sit low for a
-// moment: one easy question right says little), and a start worked out from related strands is never above the
-// middle of the strand's own material.
+// A related strand still finding its level counts at no less than the head start (the starting difficulty's, or an
+// older save's age's: its guess can sit low for a moment, one easy question right says little), and a start worked out
+// from related strands is never above the middle of the strand's own material.
 export function seedOf(rider, strand) {
   const def = STRAND[strand];
   if (!def) return 0;
-  const age = ageStart(rider && rider.age);
+  const age = headStart(rider);
   const metOf = (list) => Object.entries(list || {}).map(([s, f]) => [stateOf(rider, s), f]).filter(([s]) => s);
   let known = metOf(def.seed);
   if (!known.length) known = metOf(def.fallback);   // (none of the close ones met: the fallback, e.g. equations)
@@ -775,9 +798,10 @@ export function fits(rider, mapId, mapIds = [mapId], now = Date.now()) {
     const o = MAPS[k];
     return k !== mapId && o && o.strands.includes(s) && capOf(o) > capOf(m) && probeOf(rider, s) >= startOf(o, s) - SKILL.GATE;
   }))) return false;
-  // (a strand the rider hasn't been placed in yet is judged at no less than the optional age's head start, so a teen
-  // isn't dealt counting cards or picture boxes before showing they need them)
-  const old = m.strands.every((s) => isPlaced(rider, s)) ? lvl : Math.max(lvl, ageStart(rider && rider.age));
+  // (a strand the rider hasn't been placed in yet is judged at no less than the head start (the starting difficulty's,
+  // or an older save's age's), so a teen or a grown-up isn't dealt counting cards or picture boxes before showing they
+  // need them)
+  const old = m.strands.every((s) => isPlaced(rider, s)) ? lvl : Math.max(lvl, headStart(rider));
   if (old <= a[a.length - 1] + SKILL.TOP_MARGIN) return true;
   // past this maker's top: it still serves as the nearest material below a gap, until another maker of the strand can
   // ask the level (its first question for that strand within GATE)
@@ -815,18 +839,19 @@ export function chooseMap(rider, mapIds, { rand = Math.random, last = null, now 
 
 // Questions are read out loud (src/audio/readaloud.js) for a kid who can't read yet, so they can still play everything.
 // The grown-ups' switch (rider.readAloud) has three settings: false = off; 'on' = always; anything else (true, the
-// default) = by itself: on for a rider whose age is set at READ_AGE or under, else while both the rider's best PLACED
-// strand (or a level brought over from an old save: real progress from earlier rides, placed there or not) and the
-// age's head start are under READ_BELOW (a level still being found can climb fast for a moment and says little about
-// reading; a 15-year-old's start, 33, keeps it off whatever the levels; an old algebra rider at equations 74 is a reader).
+// default) = by itself: on for a rider whose age is set at READ_AGE or under (an older save; a starting difficulty
+// replaces the age), else while both the rider's best PLACED strand (or a level brought over from an old save: real
+// progress from earlier rides, placed there or not) and the head start are under READ_BELOW (a level still being found
+// can climb fast for a moment and says little about reading; a 15-year-old's start, 33, and Medium's and Hard's keep
+// it off whatever the levels; an old algebra rider at equations 74 is a reader).
 export function readAloud(rider) {
   if (!rider || rider.readAloud === false) return false;
   if (rider.readAloud === 'on') return true;
-  const age = num(rider.age, NaN);
+  const age = difficultyOf(rider) ? NaN : num(rider.age, NaN);
   if (fin(age) && age <= SKILL.READ_AGE) return true;
   const sk = rider.skill && isObj(rider.skill.strands) ? rider.skill.strands : {};
   const lv = Object.keys(sk).filter((k) => STRAND[k] && isObj(sk[k]) && (sk[k].placed === true || sk[k].old === true)).map((k) => num(sk[k].level, 0));
-  const best = Math.max(ageStart(rider.age), ...lv);   // (an age given counts too: a teen whose levels sit low isn't read to)
+  const best = Math.max(headStart(rider), ...lv);   // (a head start counts too: a teen whose levels sit low isn't read to)
   return best < SKILL.READ_BELOW;
 }
 
