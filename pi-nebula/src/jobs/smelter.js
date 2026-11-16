@@ -507,10 +507,11 @@ export const JOB = {
   // (named in the game's maker's own word for it: "they could go over to the controls and start calculating")
   id: 'smelter', name: 'The smelter pay desk', short: 'Smelter', open: true,
   // where the job is: at its own desk in the smelter's control room, by the window at the room's door end, looking out
-  // at the hangar (the desk's own frame: its front, where one sits, is its +z). It moved here from the operator's chair
+  // at the hangar. It moved here from the operator's chair
   // (2026-11-16), which now holds the crane's two options (src/jobs/crane.js): the game's maker to say whether it stays
   // its own job here or folds into the crane operator job's upper levels.
-  spot: { piece: 'desk', variant: 'screen', room: 'smelter-control', local: [0, 0, 0.95], face: [0, -1] },
+  // (the station file's places: where one stands at the desk, and its screen, by the window)
+  spot: { place: 'smelterPayDesk' }, face: 'smelterPayDeskScreen',
   // the camera while it's up: through the crew member's eyes at the desk, out of the window (their body is put away)
   seated: true,
   sign: 'Smelter pay desk', hint: 'Work out what the load pays',

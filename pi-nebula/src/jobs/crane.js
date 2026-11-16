@@ -31,11 +31,12 @@
 import { dec } from '../../../mathwood-valley/src/math/counterkit.js';
 import { makeCard, classify as signSlip } from '../../../mathwood-valley/src/math/negatives.js';
 import { ownOrder } from './engine.js';
+import { DRIVE } from '../../kit/crane-drive.js';
 
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
 const METRE = ['metre', 'metres'], SEC = ['second', 'seconds'], TONNE = ['tonne', 'tonnes'], TRIP = ['trip', 'trips'], CAN = ['canister', 'canisters'];
-export const RATED = 3;          // tonnes: the crane's plate (kit/crane-drive.js DRIVE.rated)
-export const EMPTY = 0.4;        // tonnes: an empty canister
+export const RATED = DRIVE.rated;     // tonnes: the crane's plate (kit/crane-drive.js, kit/smelter.js PLATE)
+export const EMPTY = DRIVE.canister;  // tonnes: an empty canister
 export const CHANGE_AT = 1000;   // (a plus-or-minus answer's button value: the change plus this, so it is above zero)
 const r1 = (x) => Math.round(x * 10) / 10, r2 = (x) => Math.round(x * 100) / 100;
 const t1 = (x) => dec(Math.round(x * 10), 1, { trim: true });          // 6.6 -> "6.6", 12 -> "12"
@@ -231,18 +232,18 @@ export const MAKERS = {
   mark: {
     strand: 'number', at: () => 10,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.26, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(['socket 3', 'bay 2 of the rack', 'the turntable', 'socket 6']) }; })();
+      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.4, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(['socket 3', 'bay 2 of the rack', 'the turntable', 'socket 6']) }; })();
       const m = Math.round(s.markTo), here = Math.round(s.mark);
       const flip = m >= 10 && m % 10 !== Math.floor(m / 10) % 10 ? Number(String(m).split('').reverse().join('')) : null;
       return ownOrder({
-        key: 'mark', story: `The trolley is on ${railWords(s)}. ${cap(s.what)} is under one of the rail's metre marks.`, ask: 'Which mark must the trolley go to?',
+        key: 'mark', story: `The trolley is on ${railWords(s)}, going to ${s.what}. The crane stops on a metre mark, then lines itself up.`, ask: `Which mark is ${s.what} nearest to?`,
         right: { v: m, big: String(m), small: 'm mark', label: `the ${m} m mark` },
         slips: [{ v: m + 1, big: String(m + 1), small: 'm mark', label: `the ${m + 1} m mark`, why: 'One mark too far. Find the place, then read the number on the mark above it.' },
           { v: m - 1, big: String(m - 1), small: 'm mark', label: `the ${m - 1} m mark`, why: 'One mark short. Read the number on the mark right above the place.' },
           ...(here !== m && here > 0 ? [{ v: here, big: String(here), small: 'm mark', label: `the ${here} m mark`, why: `${here} is the mark the trolley is at now. Find the mark over ${s.what}.` }] : []),
           ...(flip != null && flip !== m && flip <= 27 ? [{ v: flip, big: String(flip), small: 'm mark', label: `the ${flip} m mark`, why: `The digits are the other way round: it is ${m}.` }] : []),
           { v: m + 2, big: String(m + 2), small: 'm mark', label: `the ${m + 2} m mark`, why: 'Two marks too far. Read the number on the mark right above the place.' }].filter((x) => x.v > 0),
-        rightWhy: `${cap(s.what)} is at the ${m} m mark`,
+        rightWhy: `${cap(s.what)} is nearest the ${m} m mark`,
         picFirst: true, help: { title: 'Read the marks', pic: { kind: 'rail', from: s.mark, to: s.markTo, read: true, what: s.what, leg: s.leg }, line: 'The numbers count the metres from the start of the rail. Find the place, then read the mark above it.' },
         own: { strand: 'number', at: 10 }, facts: { kind: 'along', step: s.id, to: m, live: s.id != null },
       }, rand);

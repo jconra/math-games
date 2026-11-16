@@ -67,7 +67,7 @@ function ringOf(job) {
 // side of it (job.side, as you sit in the chair: left or right). Near the area, the one that comes up is the side the
 // camera looks at (the point of the view nearest the area's middle, left or right of it); its ring and sign are lit,
 // the other's are faint, and the other is on the prompt too, small, to be picked by a click or a tap.
-export const SIDE = { far: 0.85, dead: 0.12 };
+export const SIDE = { far: 0.85, turn: 0.2, sign: 1.75 };   // (the sides' marks out from the middle; how far round the view must turn; the signs' height)
 function sideMarks(s) {
   // (the chair's own left, as you sit facing its forward: its +x)
   const fx = Math.sin(s.heading), fz = Math.cos(s.heading), lx = fz, lz = -fx, k = s.job.side === 'left' ? 1 : -1;
@@ -89,7 +89,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     const mark = job.pair ? sideMarks(spot) : spot.pos;
     const ring = ringOf(job); ring.position.copy(mark); ring.position.y += 0.02;
     const sign = signOf(job); sign.position.copy(mark); sign.position.y += 2.3;
-    if (job.pair) { sign.position.y -= 0.1; sign.scale.multiplyScalar(0.9); }
+    if (job.pair) { sign.position.y = mark.y + SIDE.sign; sign.scale.multiplyScalar(0.62); }
     group.add(ring, sign);
     spots.push(Object.assign(spot, { ring, sign, mark }));
   }
@@ -142,16 +142,14 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') { e.preventDefault(); start(near.job.id); }
   });
 
-  // which side of a shared area the camera is looking at (with a little slack, so it does not flicker)
-  const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _c = new THREE.Vector3();
+  // which side of a shared area the camera is turned toward (the way it faces, level, against the chair's own left;
+  // with a little slack, so it does not flicker)
+  const _d = new THREE.Vector3();
   function facing(s) {
-    const cam = W.camera; cam.getWorldDirection(_d); _o.copy(cam.position);
-    _c.set(s.pos.x, s.pos.y + 0.9, s.pos.z);
-    const tt = Math.max(0, _c.clone().sub(_o).dot(_d)), p = _o.addScaledVector(_d, tt);
-    // (its place across the area, along the chair's own left: + left, - right)
-    const lx = Math.cos(s.heading), lz = -Math.sin(s.heading), across = (p.x - s.pos.x) * lx + (p.z - s.pos.z) * lz;
-    if (across > SIDE.dead) return 'left';
-    if (across < -SIDE.dead) return 'right';
+    W.camera.getWorldDirection(_d); _d.y = 0; if (_d.lengthSq() < 1e-6) return null; _d.normalize();
+    const across = _d.x * Math.cos(s.heading) - _d.z * Math.sin(s.heading);
+    if (across > SIDE.turn) return 'left';
+    if (across < -SIDE.turn) return 'right';
     return null;
   }
   function update(dt, P, isPlaying = true) {
@@ -161,7 +159,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     for (const s of spots) {
       const lit = !s.job.pair || (near === s), base = s.job.open ? 0.6 : 0.3;
       s.ring.material.opacity = (lit ? base : 0.14) + Math.sin(t * 2.2 + s.pos.x) * (s.job.open ? (lit ? 0.25 : 0.05) : 0.08);
-      if (s.job.pair) s.sign.material.opacity = lit ? 1 : 0.32;
+      if (s.job.pair) s.sign.material.opacity = lit ? 1 : 0.22;
     }
     if (!playing || !P) { prompt.hidden = true; wallet.hidden = true; near = null; other = null; api.near = null; api.nearJobs = []; return false; }
     if (panel) {
@@ -197,10 +195,15 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
         if (alt) {
           otherBtn.dataset.job = alt.job.id;
           otherBtn.querySelector('span').textContent = alt.job.sign;
-          otherBtn.querySelector('small').textContent = alt.job.side === 'left' ? '◀ look left' : 'look right ▶';
-          otherBtn.setAttribute('aria-label', `${alt.job.sign} (look ${alt.job.side}, or pick it here)`);
+          otherBtn.setAttribute('aria-label', `${alt.job.sign} (turn to its side, or pick it here)`);
         }
       }
+    }
+    // (the other side: which way to turn to it, from the view as it is)
+    if (other) {
+      W.camera.getWorldDirection(_d); _d.y = 0; _d.normalize();
+      const tx = other.mark.x - P.pos.x, tz = other.mark.z - P.pos.z, turn = -_d.z * tx + _d.x * tz > 0 ? 'turn right ▶' : '◀ turn left';
+      const sm = otherBtn.querySelector('small'); if (sm.textContent !== turn) sm.textContent = turn;
     }
     return false;
   }

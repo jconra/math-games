@@ -47,6 +47,7 @@ import { bevelBox, put, circle, bend, line, sweep, rrect } from './geo.js';
 import { liveFace } from './shipparts/cabin/live.js';
 import { canisterLeaves } from './ships/miner-built.js';
 import { CANISTER_AT } from './ships/miner-built.hull.js';
+import { DRIVE } from './crane-drive.js';
 
 const PI = Math.PI;
 const flat = { r: 0.012, cell: 9, loops: [] }, sharp = { r: 0, cell: 9, loops: [] };
@@ -110,6 +111,41 @@ export function craneRail(p, v) {
   for (let x = -L / 2 + 1; x < L / 2 - 0.5; x += 2) p.light([x, -0.25, 0], 1.3, [1, 0.98, 0.95], [0, -1, 0], 6);
 }
 
+// ── THE RAIL'S METRE MARKS: where the crane is, read off the rail itself (the crane operator job reads its numbers
+// here: src/jobs/crane.js). Dark on the white rail, on both its sides: a tick every half metre (taller on the whole
+// metres) and the metre's number above each whole one, in the sockets' display strokes. The wall rail's marks count
+// from its west end, the ship rail's from the turntable. A FREE piece, its origin on the rail's underside where the
+// count starts, the marks along +x: 'wall 27 gap 10.5 12.2' (no marks between those two, the turntable's).
+export const MARKS = { digit: 0.19, w: 0.105, t: 0.026, pitch: 0.14, tick: [0.07, 0.13], end: 0.3 };
+const MARKS_RE = /^(wall|ship) \d+(\.\d+)?( gap \d+(\.\d+)? \d+(\.\d+)?)?$/;
+// a number in strokes on a face of the rail: centred at x, its middle at y, on the side `side` (the face at z = side *
+// its depth), read the right way from that side
+function strokes(p, text, x, y, side, z) {
+  const D = MARKS, n = text.length, x0 = x - (n - 1) * D.pitch / 2;
+  for (let i = 0; i < n; i++) {
+    const on = DIGIT.on[text[i]] || '', cx = x + (x0 + i * D.pitch - x) * side;   // (left to right as seen from that side)
+    for (const ch of on) {
+      const [sx, sy, up] = SEGS[ch], mx = cx + sx * side * (D.w - D.t) / 2, my = y + sy * (D.digit - D.t) / 2;
+      const hw = up ? D.t / 2 : (D.w - D.t) / 2 - 0.004, hh = up ? (D.digit - D.t) / 4 + 0.002 : D.t / 2;
+      p.slab('black', mx - hw, mx + hw, my - hh, my + hh, Math.min(z, z + side * 0.004), Math.max(z, z + side * 0.004), sharp);
+    }
+  }
+}
+export function craneMarks(p, v) {
+  const parts = v.split(' '), L = parseFloat(parts[1]), gap = parts[2] === 'gap' ? [parseFloat(parts[3]), parseFloat(parts[4])] : null;
+  const { w, h } = CRANE.rail, D = MARKS;
+  for (const side of [-1, 1]) {
+    const z = side * (w / 2 + 0.001);
+    for (let k = 0; k <= L * 2; k++) {
+      const x = k / 2;
+      if (x < D.end * 0.5 || x > L - 0.05 || (gap && x > gap[0] && x < gap[1])) continue;
+      const whole = k % 2 === 0, th = whole ? D.tick[1] : D.tick[0];
+      p.slab('black', x - 0.011, x + 0.011, 0.025, 0.025 + th, Math.min(z, z + side * 0.004), Math.max(z, z + side * 0.004), sharp);
+      if (whole) strokes(p, String(x), x, h - 0.03 - D.digit / 2, side, z);
+    }
+  }
+}
+
 // ── THE TURNTABLE where the two legs meet ──────────────────────────────────────────────────────────────────────────
 function turnPlate(lp) {
   const R = CRANE.disc, { h } = CRANE.rail;
@@ -147,6 +183,30 @@ function trolleyLeaf(lp) {
   for (const s of [-1, 1]) { B(lp, 'yellow', -M.w - 0.02, M.w + 0.02, M.y0 - 0.05, M.y1 + 0.02, s * M.half - 0.03, s * M.half + 0.04, { r: 0.015, cell: 9, loops: [] }); glowBox(lp, 'strip', -M.w - 0.004, M.w + 0.004, M.y0 + 0.11, M.y0 + 0.14, s * 0.9 - 0.45, s * 0.9 + 0.45); }
   // (the beacons' housings, one at each corner of the body: the lamps themselves are 'crane:beacon')
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) lp.cyl('black', 0.13, 0.05, [sx * (half - 0.18), y0 - 0.025, sz * (w - 0.14)], null, 14);
+  // the rated-load plate on each side of the beam: what the crane may lift, "3 t" (PLATE.rated: kit/crane-drive.js
+  // DRIVE.rated, the crane operator job's weights)
+  const PL = PLATE, yc = (M.y0 + M.y1) / 2;
+  for (const s of [-1, 1]) {
+    const x = s * (M.w + 0.004);
+    lp.slab('yellow', Math.min(x, x + s * 0.006), Math.max(x, x + s * 0.006), yc - PL.h / 2, yc + PL.h / 2, PL.z - PL.len / 2, PL.z + PL.len / 2, { r: 0.006, cell: 9, loops: [] });
+    plateStrokes(lp, `${PL.rated}t`, PL.z, yc, s, x + s * 0.006);
+  }
+}
+// THE PLATE on the beam: its size and where along the beam; its words in the display's strokes
+export const PLATE = { rated: DRIVE.rated, z: 0.62, len: 0.42, h: 0.22, digit: 0.15, w: 0.085, t: 0.022, pitch: 0.12 };
+const T_SEGS = 'defg';   // (a small t in strokes)
+function plateStrokes(lp, text, zc, yc, side, x) {
+  const D = PLATE, n = text.length;
+  for (let i = 0; i < n; i++) {
+    // (read the right way from that side: along -z seen from +x, along +z seen from -x)
+    const cz = zc - side * ((i - (n - 1) / 2) * D.pitch), on = text[i] === 't' ? T_SEGS : DIGIT.on[text[i]] || '';
+    const dh = text[i] === 't' ? D.digit * 0.8 : D.digit, cy = yc - (D.digit - dh) / 2;
+    for (const ch of on) {
+      const [sx, sy, up] = SEGS[ch], mz = cz - side * sx * (D.w - D.t) / 2, my = cy + sy * (dh - D.t) / 2;
+      const hz = up ? D.t / 2 : (D.w - D.t) / 2 - 0.003, hy = up ? (dh - D.t) / 4 + 0.002 : D.t / 2;
+      lp.slab('black', Math.min(x, x + side * 0.003), Math.max(x, x + side * 0.003), my - hy, my + hy, mz - hz, mz + hz, sharp);
+    }
+  }
 }
 function carriageLeaf(lp) {
   const C = CRANE.car, K = CRANE.cable, w = CRANE.beam.w;
@@ -370,6 +430,7 @@ export function opChair(p) {
 export const SMELTER_PIECES = {
   craneRail: { name: 'Crane rail', group: 'Smelter', at: 'free', variants: ['run 6', 'hanger', 'stop'], accepts: (v) => RUN_RE.test(v), foot: [6, 2.1, 0.6], build: craneRail },
   craneTurn: { name: 'Crane turntable', group: 'Smelter', at: 'free', variants: ['plate'], foot: [2.2, 2.1, 2.2], build: craneTurn },
+  craneMarks: { name: 'Crane rail metre marks', group: 'Smelter', at: 'free', variants: ['wall 27 gap 10.5 12.2', 'ship 16 gap 0 0.9'], accepts: (v) => MARKS_RE.test(v), foot: [27, 0.4, 0.5], build: craneMarks },
   // (y: where its rail's underside is, for a lab that stands it on a floor: the cradle hangs well below it)
   crane: { name: 'Ceiling crane (trolley and cradle)', group: 'Smelter', at: 'point', variants: ['cradle'], foot: [1.6, 3.4, 3.4], build: crane, y: -2.6 },
   oreSocket: { name: 'Ore socket', group: 'Smelter', at: 'wall', variants: ['collar'], foot: [2.6, 1.5, 0.7], build: oreSocket },

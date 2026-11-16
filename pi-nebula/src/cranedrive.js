@@ -94,6 +94,15 @@ export function pushFrom(camera, move) {
   const x = move.x / len * m, y = move.y / len * m;
   return [rx * x + f.x * y, rz * x + f.z * y];
 }
+// (a push mostly along one of the crane's two ways, the rail's or the beam's, goes that way only: the view is seldom
+// square to the rail, and a push meant along the rail should not creep across)
+export function squarePush(push, yaw) {
+  const [x, z] = push; if (!x && !z) return push;
+  const ship = Math.abs(Math.sin(yaw)) > 0.5, rail = ship ? z : x, beam = ship ? x : z;
+  if (Math.abs(beam) < Math.abs(rail) * 0.45) return ship ? [0, z] : [x, 0];
+  if (Math.abs(rail) < Math.abs(beam) * 0.45) return ship ? [x, 0] : [0, z];
+  return push;
+}
 
 // ── the HUD ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function openDrive(root, { crane, input, W, walls, onClose = () => {} } = {}) {
@@ -162,7 +171,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     const kb = (c) => !!(input && input.enabled && input.held && input.held(c));
     const up = held.up || kb('KeyR') || kb('Space'), down = held.down || kb('KeyF') || kb('KeyC');
     const r0 = D.read();
-    const cmd = { move: pushFrom(W.camera, input && input.move), hoist: (up ? 1 : 0) - (down ? 1 : 0) };
+    const cmd = { move: squarePush(pushFrom(W.camera, input && input.move), D.state.yaw), hoist: (up ? 1 : 0) - (down ? 1 : 0) };
     if (taps.grab) cmd.grab = r0.shut || D.state.arms > 0.5 ? 'open' : 'shut';
     if (taps.turn) cmd.turn = true;
     taps = { grab: false, turn: false };
