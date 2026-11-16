@@ -294,8 +294,8 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       if (axis === 'slide' && Math.abs(c.slide) > d.reach + 1e-9) { note('reach', 'The carriage is at the end of its beam.'); break; }
       if (axis === 'hoist' && c.hoist > site.carry + 1e-9) break;
       // people: nothing comes down over anyone, and a low load is not moved over them
-      if (axis === 'hoist' && each < 0 && under(c)) { note('people', 'Someone is under the load: it will not come down.'); break; }
-      if (axis !== 'hoist' && underside(c) < DRIVE.low && under(c) && !under(cfg())) { note('people', 'Someone is under there: a load this low will not go over them.'); break; }
+      if (axis === 'hoist' && each < 0 && under(c)) { note('people', held >= 0 ? 'Someone is under the load: it will not come down.' : 'Someone is under the grab: it will not come down.'); break; }
+      if (axis !== 'hoist' && underside(c) < DRIVE.low && under(c) && !under(cfg())) { note('people', held >= 0 ? 'Someone is under there: a load this low will not go over them.' : 'Someone is under there: the grab will not go over them this low.'); break; }
       const hit = blocked(c, held >= 0, held >= 0 ? S.cans[held].rel : 0, axis === 'hoist' && each < 0);
       if (hit) {
         // (where it is: over the cradle or under it, for the words)

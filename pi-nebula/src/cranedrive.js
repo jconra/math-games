@@ -64,9 +64,16 @@ export function followCam(W, walls, site = null) {
         if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
         hook.set(S.x + Math.sin(S.yaw) * S.slide, S.hoist, S.z + Math.cos(S.yaw) * S.slide);
         const ship = Math.abs(Math.sin(S.yaw)) > 0.5;
-        // (the wall's leg: from the hangar floor's side; the ship's leg: off the side of the ship the load is on)
+        // (the wall's leg: from the hangar floor's side; the ship's leg: off the side of the ship the load is on, but never
+        // behind the hangar's wall: coming toward the turntable it swings round to look from beside the rail)
         const side = ship && shipMid != null ? (hook.z < shipMid ? -1 : 1) : 1;
-        const base = ship ? Math.atan2(0.35, side) : Math.atan2(0.38, 1), a = base + F.orbit;
+        let base = ship ? Math.atan2(0.35, side) : Math.atan2(0.38, 1);
+        if (ship && shipMid != null && site.wallZ != null) {
+          const hang = Math.sign(shipMid - site.wallZ) || 1;   // (which way the hangar lies from the wall)
+          const beside = Math.atan2(1, 0.35 * hang);   // (beside the rail, a little out into the hangar)
+          if (side === -hang) { const t = Math.max(0, Math.min(1, ((hook.z - site.wallZ) * hang - 2) / F.zoom)); base = beside + (base - beside) * t; }
+        }
+        const a = base + F.orbit;
         const up = (ship ? 0.6 : 0.34) + Math.max(0, 2.8 - hook.y) * 0.22;
         dir.set(Math.sin(a), up, Math.cos(a)).normalize();
         let d = F.zoom;
