@@ -59,7 +59,7 @@ export function makeOreLine(built, speed = undefined) {
   for (const D of live('oreSocket')) { const M = D.leaves[0].M, k = [M.elements[12], M.elements[13], M.elements[14]].map((v) => Math.round(v * 100)).join(), kind = kindOf(D.leaves[0]); (socks.get(k) || socks.set(k, { M }).get(k))[kind === 'sock:petal' ? 'iris' : kind === 'sock:ring' ? 'lit' : 'gauge'] = D; }
   const sockets = [...socks.values()].filter((q) => q.iris && q.lit && q.gauge).map((q) => {
     const at = new THREE.Vector3(0, 0, SOCKET.deep).applyMatrix4(q.M), n = new THREE.Vector3(0, 0, 1).transformDirection(q.M);
-    return { ...q, at, n, ring: q.lit.leaves[0], segs: q.gauge.leaves.filter((l) => kindOf(l) === 'sock:seg'), bars: q.gauge.leaves.filter((l) => kindOf(l) === 'sock:bar'), shown: null, litAt: -1, irisAt: -1 };
+    return { ...q, at, n, ring: q.lit.leaves.find((l) => kindOf(l) === 'sock:ring'), segs: q.gauge.leaves.filter((l) => kindOf(l) === 'sock:seg'), bars: q.gauge.leaves.filter((l) => kindOf(l) === 'sock:bar'), shown: null, litAt: -1, irisAt: -1 };
   }).sort((a, b) => a.at.x - b.at.x || a.at.z - b.at.z || a.at.y - b.at.y);
   const sockY = sockets.reduce((s, q) => s + q.at.y, 0) / (sockets.length || 1);
   // ── the rack's bays ──
@@ -127,7 +127,8 @@ export function makeOreLine(built, speed = undefined) {
     const docked = dockedAt(plan, t);
     sockets.forEach((q, k) => {
       const iris = valueAt(T.iris[k], t); if (iris !== q.irisAt) { q.irisAt = iris; setDoors([q.iris], iris); }
-      const lit = valueAt(T.lit[k], t); if (lit !== q.litAt) { q.litAt = lit; tint(q.ring, mix(GLOWS.ringOff, GLOWS.ringOn, smooth(lit)), GLOWS.ringOff); }
+      // (the collar's latch dogs slide in onto the seated canister as its ring lights, and let go before it is drawn out)
+      const lit = valueAt(T.lit[k], t); if (lit !== q.litAt) { q.litAt = lit; setDoors([q.lit], lit); tint(q.ring, mix(GLOWS.ringOff, GLOWS.ringOn, smooth(lit)), GLOWS.ringOff); }
       const c = docked[k], f = c < 0 ? -1 : fillAt(plan, c, t), text = c < 0 ? '' : String(Math.round(f * 100)), bars = c < 0 ? 0 : Math.ceil(f * GAUGE.bars - 1e-6), shown = text + '|' + bars;
       if (shown === q.shown) return; q.shown = shown;
       const col = f > 0.2 ? GLOWS.ok : GLOWS.low, pad = text.padStart(GAUGE.digits, ' ');

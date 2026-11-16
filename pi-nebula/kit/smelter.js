@@ -35,7 +35,8 @@
 //               As placed it is parked: cradle up, arms open
 //   oreSocket   a WALL piece, its middle on the collar's middle: the collar (standing SOCKET.deep out of the wall),
 //               the display to its right; leaves: 'sock:petal' x 12 (door 'iris': they fold back into the collar),
-//               'sock:ring' (the lit ring), 'sock:seg' x 21 and 'sock:bar' x 5 (the display's number and bars)
+//               'sock:ring' (the lit ring) and 'sock:dog' x 4 (the latch dogs that grip a seated canister; door
+//               'lit'), 'sock:seg' x 21 and 'sock:bar' x 5 (the display's number and bars)
 //   oreRack     a FREE piece: 'bays <n>' the low rack, its bays side by side along x, a canister lying along z in each
 //   oreCan      a FREE piece: a canister lying along z, its middle RACK.y up ('empty' or 'full'): the rack's
 //   guardRail   a FREE piece: 'run <metres>' a yellow rail along x (the dock apron's)
@@ -214,6 +215,18 @@ function petalLeaf(lp) {
   lp.extrude('black', [[-hw * 0.5, -L * 0.14], [0, -L * 0.86], [hw * 0.5, -L * 0.14]], 0.004, 0.001);   // (a darker rib down its face)
 }
 function ringLeaf(lp) { const S = SOCKET; lp.add('glow', sweep(circle(0.022, 6), bend([0, 0, S.deep + 0.006], (S.mouth + S.out) / 2 - 0.004, [1, 0, 0], [0, 1, 0], 0, 2 * PI, 40), { closed: true }), GLOWS.ringOff); }
+// A LATCH DOG: what holds a docked canister once the cradle has let go. Four of them stand on the collar's face. When
+// a canister is seated they slide in onto it just outside the mouth, and only then does the ring light: the canister
+// is borne at the back of the bore and gripped at the mouth, 0.4 m apart, which is what lets it stand out of the wall
+// with nothing under it. (Its own frame: on the collar's face, +y out from the collar's middle, z out of the wall. It
+// stays within DOG.deep of the face: the cradle's arms pass 0.11 m out.)
+export const DOG = { n: 4, r: 0.66, travel: 0.092, w: 0.2, h: 0.1, deep: 0.085 };
+function dogLeaf(lp) {
+  const D = DOG;
+  lp.slab('yellow', -D.w / 2, D.w / 2, -D.h / 2, D.h / 2, 0.004, D.deep, { r: 0.014, cell: 9, loops: [] });
+  // (its nose: a narrower pad on the side that meets the canister)
+  lp.slab('yellow', -D.w / 2 + 0.03, D.w / 2 - 0.03, -D.h / 2 - 0.05, -D.h / 2 + 0.01, 0.024, D.deep - 0.01, { r: 0.01, cell: 9, loops: [] });
+}
 function segLeaf(lp) { const D = DIGIT; lp.add('glow', bevelBox([D.w - 0.024, D.t, 0.004], [0, 0, 0], { r: 0, cell: 9, loops: [] }), GLOWS.off); }
 function barLeaf(lp) { lp.add('glow', bevelBox([0.026, 0.18, 0.004], [0, 0, 0], { r: 0, cell: 9, loops: [] }), GLOWS.off); }
 export function oreSocket(p) {
@@ -235,7 +248,13 @@ export function oreSocket(p) {
     p.leaf('sock:petal', petalLeaf, { at, rot: [0, 0, a], hinge: { at, axis: [Math.cos(a), Math.sin(a), 0], angle: 1.5 }, door: 'iris' });
   }
   p.door('iris', [0, 0, S.deep], 0, 0.7, false);
-  p.leaf('sock:ring', ringLeaf, { door: 'lit' }); p.door('lit', [0, 0, S.deep], 0, 1, false);
+  // the ring, and the four latch dogs that slide in onto a seated canister as it lights (the same door: 'lit')
+  p.leaf('sock:ring', ringLeaf, { door: 'lit' });
+  for (let k = 0; k < DOG.n; k++) {
+    const a = (k + 0.5) * 2 * PI / DOG.n, c = Math.cos(a), sn = Math.sin(a);
+    p.leaf('sock:dog', dogLeaf, { at: [c * DOG.r, sn * DOG.r, S.deep], rot: [0, 0, a - PI / 2], slide: [-c * DOG.travel, -sn * DOG.travel, 0], door: 'lit' });
+  }
+  p.door('lit', [0, 0, S.deep], 0, 1, false);
   // the display's number (three places of seven strokes) and its five bars
   const D = DIGIT, x0 = dx - 0.27;
   for (let i = 0; i < GAUGE.digits; i++) for (const ch of D.order) {
