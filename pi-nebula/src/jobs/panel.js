@@ -182,6 +182,8 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   }
   function holdFor(then) {
     clearInterval(waitTimer);
+    // (not busy, as the cards are not changing over yet: the last card's buttons are shut by is-waiting)
+    busy = false;
     answers.classList.add('is-waiting');
     waitTimer = setInterval(() => {
       if (closed) { clearInterval(waitTimer); waitTimer = 0; return; }
