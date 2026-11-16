@@ -36,7 +36,7 @@ export const NEAR = 1.7;     // metres from a job spot that bring up its prompt 
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 
-// a sign over a job spot: the job's name, and what it is (or "coming soon")
+// a sign over a job spot: the job's name, and what it is (or "coming soon"; job.signSub in place of "Station job")
 function signOf(job) {
   const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
   const g = cv.getContext('2d'), open = job.open;
@@ -48,7 +48,7 @@ function signOf(job) {
   g.font = '700 46px "Segoe UI", system-ui, sans-serif';
   g.fillText(job.sign.toUpperCase(), 256, 72, 470);
   g.font = '600 32px "Segoe UI", system-ui, sans-serif'; g.fillStyle = open ? '#ffb46b' : '#8d98a4';
-  g.fillText(open ? 'Station job' : 'Coming soon', 256, 122, 470);
+  g.fillText(!open ? 'Coming soon' : job.signSub || 'Station job', 256, 122, 470);   // (free control: no credits, so not a job)
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
   sp.scale.set(1.15, 0.36, 1);

@@ -655,5 +655,5 @@ export const JOB = {
 export const FREE = {
   id: 'craneFree', name: 'Free control', short: 'Free control', open: true, drive: true, place: null,
   pair: 'operator', side: 'left', spot: OPERATOR, near: 2.3, seated: true,
-  sign: 'Free control', hint: 'Drive the crane by hand: no credits, just for fun',
+  sign: 'Free control', signSub: 'Just for fun', hint: 'Drive the crane by hand: no credits, just for fun',
 };

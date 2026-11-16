@@ -96,6 +96,7 @@ export function craneLink({ crane, W, walls }) {
   const chip = document.createElement('div'); chip.className = 'pcd pcd-chip is-on';
   chip.innerHTML = `<dl class="pcd-reads"><div><dt>Rail</dt><dd data-r="rail"></dd></div><div><dt>Hook</dt><dd data-r="hook"></dd></div><div><dt>Load</dt><dd data-r="load"></dd></div><div class="pcd-plate"><dt>Rated</dt><dd>${DRIVE.rated} t</dd></div></dl>`;
   document.body.appendChild(chip);
+  let clock = 0, peopleT = -9;
   function update(dt) {
     if (closed) return;
     const D = crane.live;
@@ -104,11 +105,13 @@ export function craneLink({ crane, W, walls }) {
     if (D && D.failed && !D.busy) { console.info('crane job: a move could not be made (' + (D.failed.why || D.failed.axis || '') + '); planning again from here'); D.failed = null; Q.restart(); }
     if (D) { const w = readout(D.read()); for (const key of ['rail', 'hook', 'load']) { const dd = chip.querySelector(`[data-r="${key}"]`); if (dd.textContent !== w[key]) dd.textContent = w[key]; } }
     if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (ghostT <= 0) clearGhost(); }
+    clock += dt; if (D && D.notes.some((n) => n.key === 'people')) peopleT = clock;
   }
   // the view: following the load, kept clear of the panel (left of it on a wide screen, above it on a phone)
   function aim(camera, dt) {
     const S = crane.live ? crane.live.state : crane.L.state(crane.t);
-    cam.aim(camera, S, dt, { shift: innerHeight > innerWidth * 1.05 || innerWidth <= 640 ? [0, -0.26] : [0.22, 0] });
+    // (held up by someone under the load: looking down at the floor under it a while, so they can be seen)
+    cam.aim(camera, S, dt, { shift: innerHeight > innerWidth * 1.05 || innerWidth <= 640 ? [0, -0.26] : [0.22, 0], below: clock - peopleT < 2.6 ? 1 : 0 });
   }
   function close() {
     if (closed) return;

@@ -58,7 +58,7 @@ export function followCam(W, walls, site = null) {
   const at = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3(), dir = new THREE.Vector3(), hook = new THREE.Vector3();
   let fresh = true;
   const F = { orbit: 0, zoom: 7.5, fresh() { fresh = true; },
-    aim(camera, S, dt, { chair = null, shift = null } = {}) {
+    aim(camera, S, dt, { chair = null, shift = null, below = 0 } = {}) {
       if (chair) { want.copy(chair.at); wantLook.copy(chair.look); if (camera.fov !== chair.fov) { camera.fov = chair.fov; camera.updateProjectionMatrix(); } }
       else {
         if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
@@ -77,6 +77,8 @@ export function followCam(W, walls, site = null) {
         // (looking a little past the load toward the wall it is going to, or down at the ship)
         wantLook.copy(hook); wantLook.y -= ship ? 0.6 : 0.25;
         if (!ship) wantLook.z -= 0.55;
+        // (`below`: down toward the floor under the load, to see who is there)
+        if (below) wantLook.y += (0.9 - wantLook.y) * 0.55 * below;
         // (kept clear of a panel: the load left of a panel on the right, above one along the bottom)
         if (shift) { const fx = wantLook.x - want.x, fz = wantLook.z - want.z, L = Math.hypot(fx, fz) || 1; wantLook.x += (-fz / L) * shift[0] * d; wantLook.z += (fx / L) * shift[0] * d; wantLook.y += shift[1] * d; }
       }
@@ -141,7 +143,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
   root.appendChild(el);
   const $ = (s) => el.querySelector(s);
   const held = { up: false, down: false };
-  let closed = false, view = 'follow', taps = { grab: false, turn: false }, noteText = '', noteT = 0, t = 0;
+  let closed = false, view = 'follow', taps = { grab: false, turn: false }, noteText = '', noteT = 0, t = 0, peopleT = -9;
   const cam = followCam(W, walls, crane.L && crane.L.site);
   if (input) input.enabled = true;
   crane.take();
@@ -197,6 +199,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     // the hint: what it would not do just now, else what to do next
     const n = D.notes[0];
     if (n) { noteText = n.text; noteT = t; }
+    if (D.notes.some((q) => q.key === 'people')) peopleT = t;
     let hint = '';
     if (noteText && t - noteT < 2.6) hint = noteText;
     else if (D.busy && D.action === 'turn') hint = 'Turning on the turntable...';
@@ -207,7 +210,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
   }
   function aim(camera, dt) {
     const S = crane.live ? crane.live.state : crane.L.state(crane.t);
-    cam.aim(camera, S, dt, { chair: view === 'chair' ? W.view('smelter-console') : null });
+    // (held up by someone under the load: the view looks down at the floor under it a while, so they can be seen)
+    cam.aim(camera, S, dt, { chair: view === 'chair' ? W.view('smelter-console') : null, below: t - peopleT < 2.6 ? 1 : 0 });
   }
   function close() {
     if (closed) return;
