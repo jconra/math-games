@@ -231,7 +231,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     else if (D.busy && D.action === 'turn') hint = 'Turning on the turntable...';
     else if (D.busy) hint = '';
     // (just let go, still at it: what next, not "grab it again")
-    else if (r.held < 0 && lastLet && lastLet.place === here) hint = lastLet.socket ? 'Let go: it is docked. Back away from the wall, then up.' : 'Let go: it rests there. Up, and on to the next.';
+    else if (r.held < 0 && lastLet && lastLet.place === here) hint = lastLet.socket ? 'Let go: it is docked. Up a little, back from the wall, then up.' : 'Let go: it rests there. Up, and on to the next.';
     else if (r.held < 0) hint = r.seated ? 'On a canister: Grab it (G).' : r.place ? 'Lined up: lower the grab onto it.' : r.nearTurn && !r.onTurntable ? 'Near the turntable: Turn (T) to go along the other rail.' : 'Bring the grab over a canister (on the rack, the ship or at the wall), then lower it.';
     else hint = r.resting ? 'It can rest here: Let go (G).' : r.place && r.place.kind === 'socket' ? 'Lined up with a socket: lower it to the socket, then push it in toward the wall.' : r.place ? 'Lined up: lower it down.' : 'Take it to a socket, the rack or the ship\'s tray.';
     const h = $('.pcd-hint'); if (h.textContent !== hint) { h.textContent = hint; h.classList.toggle('is-note', !!noteText && t - noteT < 2.6); }
