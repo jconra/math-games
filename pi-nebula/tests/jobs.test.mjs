@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
 import { JOB as galley } from '../src/jobs/galley.js';
 import { JOB as medical } from '../src/jobs/medical.js';
-import { JOB as smelter, STEADY, CARRIES, METALS, LOADS } from '../src/jobs/smelter.js';
+import { JOB as smelter, STEADY, CARRIES, METALS, LOADS, forget } from '../src/jobs/smelter.js';
 import { helpPicture } from '../src/jobs/pics.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { JOB as arena } from '../src/jobs/arena.js';
@@ -136,6 +136,7 @@ test('the smelter: a slip counts the canisters in the hangar when the count suit
   const load = (over = {}) => ({ canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 2, percent: 40 }], drained: 1, onRack: 8, carried: 1,
     steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 }, ...over });
   for (let k = 0; k < 120; k++) {
+    forget();   // (each case afresh: a count of the hangar is asked about only once, see the next test)
     // the youngest: one of the counts that are 5 or fewer (5 on the ship, 2 at the wall), never the rack's 8
     const c = M.count.make(1, { rand, live: load() });
     assert.equal(c.facts.live, true); assert.ok(['ship', 'wall'].includes(c.facts.kind)); assert.equal(rightOf(c), c.facts.kind === 'ship' ? 5 : 2);
@@ -146,11 +147,12 @@ test('the smelter: a slip counts the canisters in the hangar when the count suit
     const w = M.weigh.make(2, { rand, live: load() });
     assert.equal(w.facts.live, true); assert.equal(w.facts.n, { ship: 5, wall: 2, load: CARRIES }[w.facts.kind]);
     // ... and each of them holds the same on every slip about that load (one weight for the crane's whole round)
-    for (const round of [0, 3, LOADS.length + 1]) assert.equal(M.weigh.make(2, { rand, live: load({ round }) }).facts.w, LOADS[round % LOADS.length]);
+    for (const round of [1, 3, LOADS.length + 2]) assert.equal(M.weigh.make(2, { rand, live: load({ round }) }).facts.w, LOADS[round % LOADS.length]);
     // the whole slip is for the canisters the Miner carries, but it is a load from the log: it does not say "now"
     const slip = M.pay.make(2, { rand, live: load() });
     assert.equal(slip.facts.n, CARRIES); assert.equal(slip.facts.live, false);
     // a count about to change is not asked about; nor one that does not suit the level
+    forget();
     const soon = load({ steady: { onShip: STEADY - 5, fullOnShip: STEADY - 5, docked: STEADY - 5, drained: 60, onRack: 60 } });
     assert.equal(M.count.make(1, { rand, live: soon }).facts.live, false);
     assert.notEqual(M.weigh.make(2, { rand, live: soon }).facts.kind, 'ship');
@@ -166,8 +168,37 @@ test('the smelter: a slip counts the canisters in the hangar when the count suit
   const crew = crewOf();
   setLevelAt(crew, 'smelter', 'kCount');
   let seen = 0;
-  for (let k = 0; k < 40; k++) { const q = E.deal(crew, smelter, { rand: seeded(k + 1), live: load() }); if (q.order.facts && q.order.facts.live) seen++; }
+  for (let k = 0; k < 40; k++) { forget(); const q = E.deal(crew, smelter, { rand: seeded(k + 1), live: load() }); if (q.order.facts && q.order.facts.live) seen++; }
   assert.ok(seen > 5, `only ${seen} of 40 slips used the hangar's count`);
+});
+
+test('the smelter: a count of the hangar is asked about once, and again only when the crane has changed it', () => {
+  const rand = seeded(41), M = smelter.makers;
+  const load = (over = {}) => ({ canisters: CARRIES, phase: 'unload', round: 2, onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 2, percent: 40 }], drained: 1, onRack: 8, carried: 1,
+    steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 }, ...over });
+  forget();
+  // level 1: 5 on the ship and 2 at the wall are each asked once, in either order; then slips from the log
+  const first = [1, 2, 3, 4, 5, 6].map(() => M.count.make(1, { rand, live: load() }).facts);
+  assert.deepEqual(first.map((f) => f.live), [true, true, false, false, false, false]);
+  assert.deepEqual(first.slice(0, 2).map((f) => f.kind).sort(), ['ship', 'wall']);
+  // the crane docks another: 3 at the wall is new, and is asked once
+  const more = { docked: [{ socket: 0, percent: 0 }, { socket: 2, percent: 0 }, { socket: 4, percent: 90 }], onShip: 4, fullOnShip: 4 };
+  const next = [1, 2, 3, 4].map(() => M.count.make(1, { rand, live: load(more) }).facts);
+  assert.equal(next.filter((f) => f.live).length, 2); assert.equal(next.slice(2).filter((f) => f.live).length, 0);
+  // how many are still on the Miner: once for 4, and once more when it is 3
+  forget();
+  assert.equal(M.count.make(2, { rand, live: load(more) }).facts.live, true);
+  for (let k = 0; k < 10; k++) assert.equal(M.count.make(2, { rand, live: load(more) }).facts.live, false);
+  assert.equal(M.count.make(2, { rand, live: load({ ...more, onShip: 3, fullOnShip: 3 }) }).facts.n, 3);
+  // a load of canisters: the ship's, the wall's and the whole load's are three sums, each asked once a round
+  forget();
+  const sums = [1, 2, 3, 4, 5, 6, 7].map(() => M.weigh.make(2, { rand, live: load() }).facts);
+  assert.deepEqual(sums.map((f) => f.live), [true, true, true, false, false, false, false]);
+  assert.deepEqual(sums.slice(0, 3).map((f) => f.kind).sort(), ['load', 'ship', 'wall']);
+  assert.equal(new Set(sums.slice(0, 3).map((f) => f.n)).size, 3);
+  // a new round's load is new
+  assert.equal(M.weigh.make(2, { rand, live: load({ round: 3 }) }).facts.live, true);
+  forget();
 });
 
 test('an answer: the first pick counts, a right one pays, a miss pays nothing, the level moves', () => {

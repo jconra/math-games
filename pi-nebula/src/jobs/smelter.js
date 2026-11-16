@@ -14,8 +14,8 @@
 // the game hands each maker `live` (src/crane.js load(): how many canisters are on the ship, how many of them full,
 // how many are plugged in at the wall, how many on the rack, and for how long each of those stays as it is). A count
 // is used only if it suits the level and the crane's timetable says it will still be true for STEADY seconds, so the
-// answer is not out of date before it is picked; otherwise, and in node, the numbers are the job's own (a slip "from
-// the log"). The weight of a canister of the load in the hangar is one number for the crane's whole round (LOADS), so
+// answer is not out of date before it is picked, and only once (the next slip about the hangar waits until the crane
+// has changed that count); otherwise, and in node, the numbers are the job's own (a slip "from the log"). The weight of a canister of the load in the hangar is one number for the crane's whole round (LOADS), so
 // two slips about the same load agree. What the displays read is NOT taken live: a draining canister's display
 // changes every second, so a question about it would be wrong before it was read. And the whole pay slip at the top
 // is always a load from the log (of a Miner's 8 canisters where the hangar has one): a slip for "the load in the
@@ -114,6 +114,14 @@ const liveCount = (live, key, lo, hi) => {
   const n = key === 'docked' ? (live.docked || []).length : live[key];
   return Number.isInteger(n) && n >= lo && n <= hi && live.steady[key] >= STEADY ? n : null;
 };
+// A count of the hangar is asked about ONCE: the same slip twice running teaches nothing (and at this level a slip
+// takes seconds, a canister a minute). Until the crane has changed that count, or a new round has begun, the next
+// slips are from the log.
+const asked = new Set();
+const tag = (live, what, n) => `${live.round || 0}:${what}:${n}`;
+const isNew = (live, what, n) => !asked.has(tag(live, what, n));
+const used = (live, what, n) => { if (asked.size > 300) asked.clear(); asked.add(tag(live, what, n)); };
+export const forget = () => asked.clear();   // (the tests start each case afresh)
 // (which of the Miner's canisters are still full at the top of a round: all the ones on it while it is being unloaded)
 const unloading = (live) => !!live && live.phase === 'unload';
 
@@ -149,8 +157,9 @@ export const MAKERS = {
           { key: 'wall', src: 'docked', look: 'full', ask: 'How many canisters are plugged in at the wall?', where: 'at the wall' },
           { key: 'rack', src: 'onRack', look: 'empty', ask: 'How many canisters are on the rack?', where: 'on the rack' },
         ];
-        const now = KINDS.map((k) => ({ k, n: liveCount(live, k.src, 1, 5) })).filter((x) => x.n != null);
+        const now = KINDS.map((k) => ({ k, n: liveCount(live, k.src, 1, 5) })).filter((x) => x.n != null && isNew(live, 'count:' + x.k.key, x.n));
         const got = now.length ? t.pick(now) : null, k = got ? got.k : t.pick(KINDS), n = got ? got.n : t.int(1, 5);
+        if (got) used(live, 'count:' + k.key, n);
         // (drawn as they are: at the wall a drained canister's lights have gone blue; the ones on the ship are the
         // empties once the full ones are off)
         const slots = got && k.key === 'wall' ? live.docked.map((d) => (d.percent > 0 ? 'full' : 'empty'))
@@ -169,7 +178,9 @@ export const MAKERS = {
         }, rand, 3);
       }
       if (step === 2) {
-        const still = unloading(live) ? liveCount(live, 'onShip', 1, CARRIES - 1) : null;
+        let still = unloading(live) ? liveCount(live, 'onShip', 1, CARRIES - 1) : null;
+        if (still != null && !isNew(live, 'still', still)) still = null;
+        if (still != null) used(live, 'still', still);
         if (still != null || t.chance(0.45)) {
           // 8 came in: how many are still on the Miner (the others' places drawn empty)
           const n = still != null ? still : t.int(2, CARRIES - 1), gone = CARRIES - n;
@@ -324,8 +335,10 @@ export const MAKERS = {
       }
       // n canisters of w tonnes: the count from the hangar when it suits
       const onShip = unloading(live) ? liveCount(live, 'fullOnShip', 2, CARRIES) : null, atWall = liveCount(live, 'docked', 2, CARRIES);
-      const now = [onShip != null && { key: 'ship', n: onShip }, atWall != null && { key: 'wall', n: atWall }, live && { key: 'load', n: live.canisters || CARRIES }].filter(Boolean);
+      // (what the whole load holds is one sum for the round: asked once, like each count)
+      const now = [onShip != null && { key: 'ship', n: onShip }, atWall != null && { key: 'wall', n: atWall }, live && { key: 'load', n: live.canisters || CARRIES }].filter((x) => x && isNew(live, 'weigh:' + x.key, x.n));
       const got = now.length ? t.pick(now) : null, n = got ? got.n : t.pick([3, 4, 5, 6, 7, 8, 8]);
+      if (got) used(live, 'weigh:' + got.key, n);
       const w = got ? LOADS[(live.round || 0) % LOADS.length] : t.pick(WEIGHTS), p = n * w;   // tenths
       const ctx = !got ? { story: `A Miner came in with ${n} canisters, each holding ${t1(w)} tonnes of ore.`, ask: 'How many tonnes of ore is the load?' }
         : got.key === 'ship' ? { story: `The Miner in the hangar has ${n} full canisters on it right now. Each one holds ${t1(w)} tonnes of ore.`, ask: 'How many tonnes of ore are still on the ship?' }
