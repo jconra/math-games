@@ -31,7 +31,8 @@
 //   crane       a POINT piece, its point on the rail's underside: the trolley under a rail that runs along x, and all
 //               it carries, as leaves (door 'crane'):
 //               'crane:trolley' (with its beam, along z), 'crane:carriage', four 'crane:cable', 'crane:cradle', four
-//               'crane:arc' (the arms) and 'crane:beacon'. As placed it is parked: cradle up, arms open
+//               'crane:arc' (the arms), 'crane:beacon' (the trolley's warning lamps) and 'crane:lamp' (the cradle's).
+//               As placed it is parked: cradle up, arms open
 //   oreSocket   a WALL piece, its middle on the collar's middle: the collar (standing SOCKET.deep out of the wall),
 //               the display to its right; leaves: 'sock:petal' x 12 (door 'iris': they fold back into the collar),
 //               'sock:ring' (the lit ring), 'sock:seg' x 21 and 'sock:bar' x 5 (the display's number and bars)
@@ -51,7 +52,7 @@ const B = (p, surf, x0, x1, y0, y1, z0, z1, o = flat) => p.slab(surf, x0, x1, y0
 const glowBox = (p, look, x0, x1, y0, y1, z0, z1) => p.add('glow', bevelBox([x1 - x0, y1 - y0, z1 - z0], [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], { r: 0, cell: 9, loops: [] }), look);
 // (a glow's own colour may be a name from the kit's list or a linear colour)
 // (kept below where the picture's tone curve washes a colour out to white: green stays green, amber amber)
-export const GLOWS = { ok: [0.14, 1.5, 0.42], off: [0.016, 0.03, 0.024], ringOff: [0.07, 0.085, 0.1], ringOn: [0.16, 1.9, 0.5], low: [2.0, 0.62, 0.04], beaconOff: [0.22, 0.1, 0.012], beaconOn: [3.2, 1.05, 0.05] };
+export const GLOWS = { ok: [0.14, 1.5, 0.42], off: [0.016, 0.03, 0.024], ringOff: [0.07, 0.085, 0.1], ringOn: [0.16, 1.9, 0.5], low: [2.0, 0.62, 0.04], beaconOff: [0.22, 0.1, 0.012], beaconOn: [7.5, 2.6, 0.12] };
 
 // ── the numbers the pieces and the cycle share (metres; y from the rail's underside unless said) ──────────────────────
 export const CRANE = {
@@ -139,7 +140,7 @@ function trolleyLeaf(lp) {
   lp.slab('black', -0.05, 0.05, M.y0 - 0.008, M.y0 + 0.002, -M.half + 0.08, M.half - 0.08, sharp);
   for (const s of [-1, 1]) { B(lp, 'yellow', -M.w - 0.02, M.w + 0.02, M.y0 - 0.05, M.y1 + 0.02, s * M.half - 0.03, s * M.half + 0.04, { r: 0.015, cell: 9, loops: [] }); glowBox(lp, 'strip', -M.w - 0.004, M.w + 0.004, M.y0 + 0.11, M.y0 + 0.14, s * 0.9 - 0.45, s * 0.9 + 0.45); }
   // (the beacons' housings, one at each corner of the body: the lamps themselves are 'crane:beacon')
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) lp.cyl('black', 0.07, 0.05, [sx * (half - 0.16), y0 - 0.025, sz * (w - 0.12)], null, 12);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) lp.cyl('black', 0.13, 0.05, [sx * (half - 0.18), y0 - 0.025, sz * (w - 0.14)], null, 14);
 }
 function carriageLeaf(lp) {
   const C = CRANE.car, K = CRANE.cable, w = CRANE.beam.w;
@@ -179,11 +180,13 @@ function arcLeaf(lp) {
 function beaconLeaf(lp) {
   const { half, w, y0 } = CRANE.body;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const g = new THREE.SphereGeometry(0.06, 10, 5, 0, PI * 2, PI / 2, PI / 2); g.translate(sx * (half - 0.16), y0 - 0.05, sz * (w - 0.12));
+    const g = new THREE.SphereGeometry(0.11, 12, 5, 0, PI * 2, PI / 2, PI / 2); g.translate(sx * (half - 0.18), y0 - 0.05, sz * (w - 0.14));
     lp.add('glow', g, GLOWS.beaconOff);
   }
 }
 // (the arms: two at each end of the cradle, side by side; one of each pair slides round one way, one the other)
+// (the cradle's own warning lamps: a bar across each end of its frame, flashing with the trolley's)
+function cradleLampLeaf(lp) { const G = CRANE.grip; for (const s of [-1, 1]) glowBox(lp, GLOWS.beaconOff, -0.22, 0.22, G.under + 0.03, G.top - 0.03, s * (G.half + 0.012) - 0.006, s * (G.half + 0.012) + 0.006); }
 // (way: +1 round toward the cradle's +x, -1 toward -x. The cradle is the same turned half way round.)
 export const ARMS = [-1, 1].flatMap((end) => [1, -1].map((s) => ({ z: end * (CRANE.arc.z + s * CRANE.arc.gap), way: end * s })));
 export function crane(p) {
@@ -194,6 +197,7 @@ export function crane(p) {
   p.leaf('crane:cradle', cradleLeaf, { at: [0, yc, 0], door: 'crane' });
   for (const a of ARMS) p.leaf('crane:arc', arcLeaf, { at: [0, yc, a.z], hinge: { at: [0, yc, a.z], axis: [0, 0, 1], angle: -a.way * C.arc.shut }, door: 'crane' });
   p.leaf('crane:beacon', beaconLeaf, { door: 'crane' });
+  p.leaf('crane:lamp', cradleLampLeaf, { at: [0, yc, 0], door: 'crane' });
   p.door('crane', [0, yc, 0], 0, 0.5, true);
 }
 

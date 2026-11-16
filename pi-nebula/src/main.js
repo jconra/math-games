@@ -25,6 +25,7 @@ import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
 import { makeBoarding } from './boarding.js';
+import { makeCrane } from './crane.js';
 import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
@@ -73,6 +74,8 @@ async function boot() {
   GAME.walls = walls;
   // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
   const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
+  // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
+  const crane = GAME.crane = makeCrane({ W, walls });
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -144,6 +147,7 @@ async function boot() {
     if (GAME.mode === 'play' && P) eyes.push(P.pos);
     if (people) eyes.push(...people.eyes());
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes, camera: W.camera });
+    crane.update(dt, { eyes });
     W.frame(dt, now, eyes);
     GAME.frames++;
   }
