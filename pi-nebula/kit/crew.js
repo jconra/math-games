@@ -8,6 +8,12 @@
 // Mathwood clips play on it as they are. The bodies, the clips and the playing are Mathwood's own code: the person is
 // made by world/objects/people.js (Person: its clip mixer, fades, and the bones put back before each mixer update),
 // imported, never copied.
+//   THE ELBOW (2026-11-16; the game's maker: "Can we fix those issues like the elbow position"): the Mathwood people are
+// drawn with short upper arms, and the outfits took their elbow joint from them, some 5 cm too near the shoulder (the
+// upper arm 0.57 to 0.85 of the forearm, a person's 1.06 to 1.21, joint to joint). The outfit build now puts each
+// outfit's elbow joint where a person's is, the arm from the upper arm's joint (where SHOULDER WIDTH turns it) to the
+// wrist split 1.14 to 1 (rigs/crew-rig/crewkit.py place_elbow), and makes the weights for it there; no point of any
+// outfit moved. The clips, the skeleton's bones' rest turns and Mathwood's own people are as they were.
 //   Two things differ from a Mathwood person, both done here at load and after each update:
 //   - the clips' moves (their position tracks: the body's root, the feet, a shrug; the Blender-made clips carry one
 //     for every bone) were made for the Mathwood bones' lengths, so each is laid on the crew's own rest offset:
