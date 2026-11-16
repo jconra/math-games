@@ -289,9 +289,10 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     if (!O.roamTo || O.roamT <= 0 || Math.hypot(O.roamTo[0] - O.x, O.roamTo[1] - O.z) < 0.3) { O.roamTo = roamSpot(); O.roamT = OTHER.roam[0] + rand() * (OTHER.roam[1] - OTHER.roam[0]); }
     O.roamT -= dt;
     moveTo(O, O.roamTo[0], O.roamTo[1], 1.9, dt, you);
-    // (it looks at the nearest ball, or the player: so it turns as it goes, sidestepping)
+    // (it watches the player while they hold a ball, about to throw; else the nearest ball: so it turns as it goes,
+    // sidestepping)
     const near = onCourt().filter(free).sort((a, b) => Math.hypot(a.p[0] - O.x, a.p[2] - O.z) - Math.hypot(b.p[0] - O.x, b.p[2] - O.z))[0];
-    const lookAt = near && rand() < 0.995 ? near.p : [you.x, 0, you.z];
+    const lookAt = near && !you.holding ? near.p : [you.x, 0, you.z];
     turnTo(O, Math.atan2(lookAt[0] - O.x, lookAt[2] - O.z), dt, 3.5);
   }
 
