@@ -7,11 +7,15 @@
 // What a ring asks, by level (the one idea the bridge teaches: a square folds, a triangle can't):
 //   1  the youngest TAP the wobbly squares of the new ring: each tap puts a brace across one, two triangles, stiff (the
 //      player builds that much; its twin on the far side of the tube goes in too)
-//   2  which glass pane fits the gap (the same shape and size, turned round or not)
-//   3  a brace in a square corner: the other part of the 90° (Mathwood's own maker: labs/windmill/questions.js)
-//   4  a triangle pane's glass: half of base × height
-//   5  the third corner of a triangle (Mathwood's own maker)
-//   6  a brace's length across a panel, corner to corner (whole right triangles: 60 cm by 80 cm makes 100 cm)
+//   2  which glass pane fits the gap: the gap's shape among other shapes, turned round or not
+//   3  how many triangles: each braced square is two (counting by 2s)
+//   4  kinds of angles: two struts meet, acute, right, obtuse or straight (Mathwood's own maker: labs/windmill)
+//   5  a brace in a square corner: the other part of the 90° (Mathwood's own maker)
+//   6  a triangle pane's glass: half of base × height
+//   7  the third corner of a triangle (Mathwood's own maker)
+//   8  a brace's length across a panel, corner to corner (whole right triangles: 60 cm by 80 cm makes 100 cm)
+// (Levels 3 and 4 keep a young child's try young: a new crew member climbs a level with each right answer while their
+// level is found, and the squares can't be missed.)
 // This file is the math (pure: node tests it, pi-nebula/tests/dock.test.mjs): the ladder, the makers, their pictures.
 // The bridge itself, the camera outside and the squares to tap are src/jobs/docklink.js (the panel's `live`).
 import { ownOrder } from './engine.js';
@@ -254,7 +258,8 @@ export const MAKERS = {
     make(step, { rand = Math.random } = {}) {
       const [a, b] = pick([[2, 2], [2, 2], [2, 3], [3, 2]], rand), half = rand() < 0.5 ? 1 : 0, flip = rand() < 0.5;
       const turn = Math.floor(rand() * 4) % 4;
-      const wrongs = shuffle(['square', 'other', 'even', 'wide'], rand).slice(0, 3);
+      // (for the young, shapes plainly different: four corners, no square corner, a corner wider than square)
+      const wrongs = shuffle(['square', 'even', 'wide'], rand);
       const coin = (kind) => { const P = PIECES[kind](a, b, turn); return { v: kind, big: '', small: '', label: NAMES[kind], svg: paneCoin(P.pts), slip: kind, why: P.why }; };
       const right = coin('right');
       const o = ownOrder({

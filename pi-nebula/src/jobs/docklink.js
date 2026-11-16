@@ -12,7 +12,7 @@
 // card's top: the bridge plan, which ring), play(o, ui) (the squares to tap), over() (the try's end), update(dt),
 // aim(camera, dt), close(); state() for the rigs.
 import * as THREE from 'three';
-import { DOCK, STRUTS, PANELS, ring as ringParts, collar, crewModule, plan, meshesOf, FLOODS, MODULE_LIGHT, moduleAt } from '../../kit/dockbridge.js';
+import { DOCK, ring as ringParts, collar, hull, crewModule, plan, meshesOf, FLOODS, MODULE_LIGHT } from '../../kit/dockbridge.js';
 import { AIRLOCK } from '../../kit/hangar.js';
 import { expand, zonesOf } from '../../kit/layout.js';
 import { placeMatrix } from '../../kit/grid.js';
@@ -35,10 +35,15 @@ const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
 // above it, back toward the station), looking out along the bridge to the ship, and turns so that ring lands at the
 // screen point `on` (-1..1 across, -1..1 up): on a wide screen left of the panel, on a phone in the band above it,
 // whatever the screen's shape. It moves on with each ring. The end of the try: back a little, on the middle ring.
+// (Not far back behind the port: the airlock module would stand between the camera and the first ring. From here the
+// ship is ahead, left of the panel at 1280.)
 export const VIEW = {
-  wide: { from: [-6.2, 3.6, -5.2], on: [-0.42, -0.05], fov: 50 },
-  tall: { from: [-5.0, 5.6, -5.6], on: [0, 0.52], fov: 58 },
-  end: { wide: { from: [-7.6, 4.6, -6.6], on: [-0.45, -0.1], fov: 50 }, tall: { from: [-6.2, 7.0, -6.8], on: [0, 0.5], fov: 60 } },
+  wide: { from: [-6.2, 3.6, -2.0], on: [-0.68, -0.1], fov: 50 },
+  tall: { from: [-4.6, 6.4, -2.0], on: [0, 0.46], fov: 62 },
+  end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.6, -0.12], fov: 50 }, tall: { from: [-5.4, 7.6, -2.6], on: [0, 0.48], fov: 64 } },
+  // (never further back toward the station than this, metres from the port's face: past it the camera would be in the
+  // station's rooms, the terminal behind the airlock)
+  back: -4.5,
 };
 // the light outside (the kit's saved-light units): the sun, the planet's glow, the port's floodlights
 const SUN = { i: 2.2, c: [1, 0.95, 0.88] }, SHINE = { i: 0.45, c: [0.55, 0.75, 1.0] }, FLOOD = { i: 7, c: [1, 0.97, 0.92], cone: [Math.cos(52 * Math.PI / 180), Math.cos(24 * Math.PI / 180)] };
@@ -87,6 +92,14 @@ function make(W, frame) {
   const root = new THREE.Group(); root.name = 'dock: the bridge'; root.matrixAutoUpdate = false;
   const add = (to, list) => { for (const x of list) to.add(x); return list; };
   add(root, meshesOf(collar(), mats, light));
+  // the station's outside round the port: plating over the room the port is in (its box, from the station as built)
+  const zone = W.zoneAt(new THREE.Vector3(0, DOCK.c, -1.6).applyMatrix4(frame));
+  if (zone) {
+    const B = zone.box, P = [];
+    for (const x of [B.min.x, B.max.x]) for (const y of [B.min.y, B.max.y]) for (const z of [B.min.z, B.max.z]) P.push(new THREE.Vector3(x, y, z).applyMatrix4(inv));
+    const lo = (k) => Math.min(...P.map((p) => p[k])), hi = (k) => Math.max(...P.map((p) => p[k]));
+    add(root, meshesOf(hull({ x0: lo('x'), x1: hi('x'), y0: lo('y'), y1: hi('y'), z0: lo('z'), z1: Math.min(hi('z'), -0.02) }), mats, light));
+  }
   const CM = crewModule(); add(root, [...meshesOf(CM.solid, mats, light), ...meshesOf(CM.glow, mats, light)]);
   // the plan: faint hoops where the rings will go, three lines along to the ship
   const planMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.75, 1.3), transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, fog: false });
@@ -286,7 +299,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   // where the camera wants to be, and which way it wants to face, for ring i (into `want` and probe.quaternion)
   function poseFor(V, i, aspect) {
     ringAt.set(0, DOCK.c, DOCK.z0 + (i + 0.5) * DOCK.L).applyMatrix4(frame);
-    want.set(V.from[0], V.from[1] + DOCK.c, V.from[2] + DOCK.z0 + (i + 0.5) * DOCK.L).applyMatrix4(frame);
+    want.set(V.from[0], V.from[1] + DOCK.c, Math.max(VIEW.back, V.from[2] + DOCK.z0 + (i + 0.5) * DOCK.L)).applyMatrix4(frame);
     probe.position.copy(want); probe.up.set(0, 1, 0); probe.lookAt(ringAt);
     // (turned so the ring sits at V.on: right to put it left, down to put it high)
     const tv = Math.tan(V.fov * Math.PI / 360), th = tv * aspect;

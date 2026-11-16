@@ -110,6 +110,30 @@ export function collar() {
 // the floodlights, for the light (in the bridge's frame): where they are, the way they point
 export const FLOODS = [-1, 1].map((s) => ({ at: [s * (DOCK.R + 0.42), DOCK.c + 0.95, 0.3], dir: new THREE.Vector3(-s * 0.12, -0.18, 1).normalize() }));
 
+// ── the station's outside round the port: plating over the airlock module's sides, roof and underside ──────────────
+// The station's rooms are drawn to be seen from inside (a wall's back is not drawn): from out here, beside the port,
+// the airlock module would look cut open. b: its box in the bridge's frame ({ x0, x1, y0, y1, z0, z1 }; z0 back toward
+// the station, z1 at the port's face). Plates about 2 m by 1.5 m with dark seams, ribs at the module's corners.
+export function hull(b) {
+  const p = new Piece(), G = 0.02, T = 0.06, H1 = { c: '#a9acaf', r: 0.55, m: 0.15, w: 0.9 }, H2 = { c: '#8e9196', r: 0.5, m: 0.2, w: 0.9 };
+  const rows = (a0, a1, n) => { const out = []; for (let k = 0; k < n; k++) out.push([a0 + (a1 - a0) * k / n, a0 + (a1 - a0) * (k + 1) / n]); return out; };
+  const nz = Math.max(1, Math.round((b.z1 - b.z0) / 2)), ny = Math.max(1, Math.round((b.y1 - b.y0) / 1.5)), nx = Math.max(1, Math.round((b.x1 - b.x0) / 2));
+  // the two sides (x0 and x1), plates facing out
+  for (const [s, x] of [[-1, b.x0], [1, b.x1]]) {
+    p.slab('dark', s < 0 ? x - T : x, s < 0 ? x : x + T, b.y0, b.y1, b.z0, b.z1, { r: 0.01, cell: 1.5 });
+    rows(b.z0, b.z1, nz).forEach(([z0, z1], i) => rows(b.y0, b.y1, ny).forEach(([y0, y1], j) => p.slab((i + j) % 2 ? H1 : H2, s < 0 ? x - T - 0.03 : x + T, s < 0 ? x - T : x + T + 0.03, y0 + G, y1 - G, z0 + G, z1 - G, { r: 0.012, cell: 1.5 })));
+  }
+  // the roof and the underside
+  for (const [s, y] of [[1, b.y1], [-1, b.y0]]) {
+    p.slab('dark', b.x0 - T, b.x1 + T, s > 0 ? y : y - T, s > 0 ? y + T : y, b.z0, b.z1, { r: 0.01, cell: 1.5 });
+    rows(b.z0, b.z1, nz).forEach(([z0, z1], i) => rows(b.x0, b.x1, nx).forEach(([x0, x1], j) => p.slab((i + j) % 2 ? H2 : H1, x0 + G, x1 - G, s > 0 ? y + T : y - T - 0.03, s > 0 ? y + T + 0.03 : y - T, z0 + G, z1 - G, { r: 0.012, cell: 1.5 })));
+  }
+  // ribs along the four long corners, and a band round the port's end
+  for (const x of [b.x0 - T, b.x1 + T]) for (const y of [b.y0 - T, b.y1 + T]) p.slab('black', x - 0.07, x + 0.07, y - 0.07, y + 0.07, b.z0, b.z1, { r: 0.02 });
+  for (const x of [b.x0 - T - 0.05, b.x1 + T + 0.05]) p.slab('yellow', x - 0.02, x + 0.02, b.y0 + 0.1, b.y1 - 0.1, b.z1 - 0.3, b.z1 - 0.12, { r: 0.006 });
+  return p;
+}
+
 // ── the crew module, waiting at the far end (a stand-in: the transport's sealed crew section) ──────────────────────
 export function crewModule() {
   const p = new Piece(), z = moduleAt(), glow = new Piece();
