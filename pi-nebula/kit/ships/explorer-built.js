@@ -472,7 +472,7 @@ function ebCockpit(p, variant) {
 const doorX = (y) => DOOR.xHinge + (DOOR.xHead - DOOR.xHinge) * (y - DOOR.hinge) / (DOOR.head - DOOR.hinge);
 // THE SEAM round a door's skin: the gap between the port door, which moves, and the pocket's rim, and a dark line
 // along the skin's edge beside it; the fixed starboard skin has the same dark line where the gap would be
-export const SEAM = { gap: 0.008, line: 0.02 };
+export const SEAM = { gap: 0.008, line: 0.014 };
 // THE SKIN ACROSS A DOORWAY (side: 'port' | 'starboard'), in the ship's frame: the rig's facets, each cut along the
 // hull's colour line and painted by the hull's own rules, as the hull's own faces are (so the colours and the facets
 // carry straight across the seam): [{ pts (a convex polygon), n, part ('slope' | 'side' | 'top'), surf }]
@@ -482,7 +482,11 @@ export function doorSkin(side) {
   if (SKINS[side]) return SKINS[side];
   const out = [];
   for (const part0 of ['slope', 'side', 'top']) for (const T of DOORSKIN[side][part0]) {
-    const P = T.map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), n = tnorm(P).normalize();
+    const P = T.map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), n = tnorm(P);
+    // (a sliver between two of the rim's corners a few millimetres apart, under half a square centimetre: left out; its
+    // normal is anyone's guess)
+    if (n.length() < 1e-4) continue;
+    n.normalize();
     // (the band up to the head is thin strips, as the hull's own faces round it are: they take an edge's wear)
     C.clipPlane(P, LOWER).forEach((R, i) => { if (R.length > 2) out.push({ pts: R, n, part: part0, surf: C.paintOf(RULES, PAL, { part: 'body', zone: i ? null : 'lower', n, c: middle(R), thin: part0 === 'top', pts: R }, PAL.skin) }); });
   }
@@ -700,9 +704,18 @@ function airstair(acc, what) {
     drawSkin(acc, 'port', g);
     // the cheeks: each side of the bulk, from the skin (its line where the cheek's plane cuts it, from the foot's seam
     // up to the top's) in to the stringer's top and the hinge: dark, as the lower hull
-    for (const [zc, nz] of [[z0, AFT], [z1, FORE]]) {
+    for (const [zc, nz, zj] of [[z0, AFT, DOOR.z[0] - 1e-3], [z1, FORE, DOOR.z[1] + 1e-3]]) {
       const line = cutLine(cutLine(skinLine(skin, 'z', zc, 'y'), 'x', xf, true), 'y', yTop, false);
       polyTo(acc, ring([...line, pt(top[2], zc), pt(top[1], zc), pt(top[0], zc), pt([0, 0], zc)]), nz, PAL.trim);
+      // (the seam's stop: along the cheek's inner edge, the stringer's top, a dark strip out to the jamb. Without it an
+      // eye in line with the seam looked along the gap between cheek and jamb, past the door and into the ship)
+      for (let i = 0; i < top.length - 1; i++) { const da = top[i + 1][0] - top[i][0], db = top[i + 1][1] - top[i][1], L = Math.hypot(da, db); span(top[i], top[i + 1], zc, zj, OUT.clone().multiplyScalar(db / L).addScaledVector(UP, -da / L), PAL.black); }
+    }
+    // (and the head seam's stop: along the far end's inner edge, the last tread's nose and the stringers' ends, a dark
+    // strip up to the pocket's head: an eye level with the head looked over the door's top into the ship)
+    {
+      const xs = pt(top[2], 0).x, xt = pt(walk[walk.length - 1], 0).x, yj = DOOR.head + 1.4e-3, edge = [[xs, z0], [xs, zA], [xt, zA], [xt, zB], [xs, zB], [xs, z1]];
+      for (let i = 0; i < edge.length - 1; i++) { const [xa, za] = edge[i], [xb, zb] = edge[i + 1]; polyTo(acc, [V3(xa, yTop, za), V3(xb, yTop, zb), V3(xb, yj, zb), V3(xa, yj, za)], V3(zb - za, 0, xa - xb).normalize(), PAL.black); }
     }
     // on the skin: a flush handle (a dark plate, a metal bar across it, a centimetre proud) and a small green lamp
     // (shut and safe) toward the fore edge
