@@ -6018,8 +6018,7 @@
         {"piece":"wall","cell":[23.5,42],"turn":3,"variant":"plain"},
         {"piece":"trim","cell":[23.5,42],"turn":3,"variant":"base"},
         {"piece":"trim","cell":[23.5,42],"turn":3,"variant":"cornice"},
-        {"piece":"standin","cell":[21.5,42],"turn":0,"variant":"box 2.2x2.4x1.9","off":[0,0,-0.17]},
-        {"piece":"standin","cell":[21.5,40.5],"turn":0,"variant":"box 0.7x0.85x3.1","off":[0,0,0.33]},
+        {"piece":"bigscanner","cell":[21.5,42.5],"turn":2,"variant":"slim ring","off":[0,0,0.22]},
         {"piece":"cabinStretcher","cell":[20.5,40.5],"turn":0,"variant":"low","off":[-0.4,0,-0.4]},
         {"piece":"pulse","cell":[21.5,42.5],"turn":2,"variant":"long","off":[0,2.6,0]},
         {"piece":"screen","cell":[19.5,40],"turn":1,"variant":"status","off":[0,1.35,0]}

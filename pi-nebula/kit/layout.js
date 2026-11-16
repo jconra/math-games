@@ -5,6 +5,8 @@
 // every static piece is merged into ONE mesh per material, the strips' light and the corner darkening are baked in,
 // and the door leaves are instanced (one draw per material for all the leaves) so they can slide. (A leaf marked
 // `still`, a door flush in a ship's skin, is lit and painted with the room's still parts and drawn as its own mesh.)
+// A part that glides by itself (a piece's p.glide: a scanner's ring along its rails) is a door nobody opens: its
+// leaves are moved by updateGlides from the kit's clock, and only while its room is drawn.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PIECES } from './catalog.js';
@@ -115,7 +117,7 @@ export function zonesOf(room) { return room.rooms ? room.rooms : [{ id: room.id 
 // the grid a zone's pieces are placed on: its own, its room's, or (none given) the station's
 const gridOf = (zd, room) => zd.grid || room.grid || null;
 export function buildRoom(room, mats, opts = {}) {
-  const t0 = performance.now(), problems = [], lights = [], doors = [], leafGroups = new Map(), zones = [];
+  const t0 = performance.now(), problems = [], lights = [], doors = [], glides = [], leafGroups = new Map(), zones = [];
   let pieceCount = 0;
   for (const zd of zonesOf(room)) {
     const list = expand(zd.pieces || [], problems), lists = Object.fromEntries(MAT_KEYS.map((k) => [k, []])), stills = {};
@@ -129,7 +131,8 @@ export function buildRoom(room, mats, opts = {}) {
       const mine = new Map();
       // (a placement's `hold`: its doors stay at that much open whatever comes near, whatever the mode: a parked ship's
       // folded arms and lowered legs)
-      for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, heavy: !!dr.heavy, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; doors.push(D); mine.set(dr.id, D); }
+      // (a part that glides by itself is kept apart from the doors: nothing that works the doors ever sees it)
+      for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, heavy: !!dr.heavy, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; if (dr.glide) { D.glide = dr.glide; glides.push(D); } else doors.push(D); mine.set(dr.id, D); }
       for (const mv of p.movers) {
         // (a leaf whose door is held never moves: it is posed once and goes into the room's own still geometry, so it
         // is drawn with its room and costs no batch of its own: a parked ship's folded arms, its legs)
@@ -144,7 +147,7 @@ export function buildRoom(room, mats, opts = {}) {
         // it. Its triangles go in with the room's still ones, last (they are lit and saved with them), and are drawn
         // as a mesh of their own, which moves: stillMeshes, below. It takes no part in what a person can walk on.)
         if (mv.still) {
-          const leaf = { key: mv.key, M: _m.clone(), base: mv.base, slide: mv.slide, door: held || null, meshes: [], own: [] };
+          const leaf = { key: mv.key, piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: held || null, meshes: [], own: [] };
           if (mv.hinge) leaf.hinge = mv.hinge;
           const e0 = leafMatrix(leaf, 0, _lm).elements.slice();
           leaf.shut = new THREE.Matrix4().fromArray(e0).invert();
@@ -153,7 +156,7 @@ export function buildRoom(room, mats, opts = {}) {
           continue;
         }
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
-        const leaf = { M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
+        const leaf = { piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
         if (mv.hinge) leaf.hinge = mv.hinge;
         leafGroups.get(mv.key).list.push(leaf); if (leaf.door) leaf.door.leaves.push(leaf);
       }
@@ -188,7 +191,7 @@ export function buildRoom(room, mats, opts = {}) {
   // and roughness / metalness / wear as bytes (a vertex shrinks from about 84 bytes to 52: less to send to the GPU)
   if (opts.compact !== false) for (const z of zones) for (const k of ['solid', 'floor']) { const g = z.merged[k]; if (!g) continue; compact(g, 'normal', Int16Array, 32767); if (k === 'solid') { compact(g, 'color', Uint8Array, 255); compact(g, 'aRMW', Uint8Array, 255); } }
   const group = new THREE.Group(); group.name = room.name || 'room';
-  const stats = { pieces: pieceCount, draws: 0, tris: 0, perMat: {}, perZone: {}, zones: zones.length, lights: lights.length, doors: doors.length, leaves: 0,
+  const stats = { pieces: pieceCount, draws: 0, tris: 0, perMat: {}, perZone: {}, zones: zones.length, lights: lights.length, doors: doors.length, glides: glides.length, leaves: 0,
     bake: { ms: Math.round(bakeMs), verts, saved, live, voxels: V?.count || 0, bricks: V?.bricks || 0, voxelMB: V ? +(V.bytes / 1048576).toFixed(1) : 0, voxel: V?.s || 0 }, problems };
   for (const z of zones) {
     const zg = new THREE.Group(); zg.name = 'zone:' + z.id; group.add(zg); z.group = zg; z.box = new THREE.Box3(); z.tris = 0;
@@ -230,8 +233,17 @@ export function buildRoom(room, mats, opts = {}) {
     G.list.forEach((leaf, i) => { leaf.meshes = meshes; leaf.index = i; setLeaf(leaf, leaf.door?.hold ?? 0); });
     stats.leaves += G.list.length;
   }
+  // the parts that glide by themselves: each one's room (it moves only while that room is drawn), and the box its
+  // leaves pass through from rest to fully out (where nobody may stand: the game's walls)
+  for (const D of glides) {
+    D.room = zones.find((z) => z.id === D.zone) || null; D.sweep = new THREE.Box3();
+    for (const leaf of D.leaves) for (const part of leaf.piece.parts) {
+      if (!part.geo.boundingBox) part.geo.computeBoundingBox();
+      for (const t of [0, 1]) D.sweep.union(_gb.copy(part.geo.boundingBox).applyMatrix4(leafMatrix(leaf, t, _lm)));
+    }
+  }
   stats.tris = Math.round(stats.tris); stats.ms = Math.round(performance.now() - t0); stats.mergeMs = Math.round(tMerge - t0);
-  return { group, doors, lights, stats, zones, get voxels() { return V; }, dispose() { group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); } };
+  return { group, doors, glides, lights, stats, zones, get voxels() { return V; }, dispose() { group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); } };
 }
 
 // Which of a station's rooms are drawn. (A door between two rooms is a little zone of its own, "with" both: it is
@@ -309,6 +321,28 @@ export function updateDoors(doors, eye, dt, mode = 'auto') {
 }
 export function setDoors(doors, t) { for (const D of doors) { const v = D.hold ?? t; D.t = D.target = v; for (const leaf of D.leaves) setLeaf(leaf, v); } }
 
+// THE PARTS THAT GLIDE BY THEMSELVES (a piece's p.glide: the big scanner's ring along its rails). Call once a frame
+// with the kit's clock (seconds; the same clock as the moving glows, materials.js U.time). Where each one stands is
+// worked out from the clock alone, so nothing is kept from frame to frame: one whose room is not being drawn is left
+// alone (and is in the right place again the frame its room comes back), and one resting at an end costs a
+// comparison. Returns whether any moved.
+const _gb = new THREE.Box3();
+// how far out (0 at rest .. 1 fully out) a glide is at a time: out for `go` seconds, still for `rest`, back, still
+export function glideAt(G, now) {
+  const round = 2 * (G.go + G.rest), u = (((now / round + (G.start || 0)) % 1) + 1) % 1 * round;
+  return u < G.go ? u / G.go : u < G.go + G.rest ? 1 : u < 2 * G.go + G.rest ? 1 - (u - G.go - G.rest) / G.go : 0;
+}
+export function updateGlides(built, now) {
+  let moved = false;
+  for (const D of built?.glides || []) {
+    if (D.hold != null || (D.room && !D.room.group.visible)) continue;
+    const t = glideAt(D.glide, now); if (t === D.t) continue;
+    D.t = D.target = t; for (const leaf of D.leaves) setLeaf(leaf, t);
+    moved = true;
+  }
+  return moved;
+}
+
 // the box a room's pieces fill (their own parts and door leaves, as placed)
 export function roomBounds(room) {
   const box = new THREE.Box3(), b = new THREE.Box3();
@@ -317,7 +351,11 @@ export function roomBounds(room) {
     if (def.at === 'wall') off[2] += WALL_FACE;
     placeMatrix({ ...pl, off }, _m, gridOf(zd, room));
     for (const part of p.parts) { part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(_m)); }
-    for (const mv of p.movers) for (const part of mv.piece.parts) { part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(mv.base).applyMatrix4(_m)); }
+    for (const mv of p.movers) for (const part of mv.piece.parts) {
+      part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(mv.base).applyMatrix4(_m));
+      // (a part that glides by itself: and where it is when fully out)
+      if (p.doors.find((d) => d.id === mv.door)?.glide) box.union(b.copy(part.geo.boundingBox).applyMatrix4(mv.base).translate(mv.slide).applyMatrix4(_m));
+    }
   }
   return box;
 }

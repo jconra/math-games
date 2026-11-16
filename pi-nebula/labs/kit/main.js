@@ -18,7 +18,7 @@ import { makeMaterials, U } from '../../kit/materials.js';
 import { liveTick } from '../../kit/shipparts/cabin/live.js';
 import { createSky, SKY_VIEWS } from '../../world/sky.js';
 import { PIECES, GROUPS, SHIP_GROUPS, pieceList } from '../../kit/catalog.js';
-import { buildRoom, updateDoors, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
+import { buildRoom, updateDoors, updateGlides, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
 import { loadBake, packBake } from '../../kit/bakefile.js';
 import { plane, put } from '../../kit/geo.js';
 import { Piece } from '../../kit/piece.js';
@@ -375,6 +375,8 @@ function zoneProbes(b) {
 function stationTick(now) {
   U.time.value = now / 1000; liveTick(U.time.value);   // (the tired strip's brightness, kit/shipparts/cabin/live.js)
   if (built?.zones?.length > 1 && !frozen) updateZones(built, camera.position, station.range, camera, roomData[state.room]?.portals);
+  // (what glides by itself, the big scanner's ring: by the same clock, as in the game)
+  if (built && !frozen && updateGlides(built, U.time.value)) renderer.shadowMap.needsUpdate = true;
   return frozen;
 }
 // a plan from above (x to the right, z down the page), everything above `y` cut away; returns the plan's edges in metres

@@ -6,7 +6,8 @@
 //   const W = await loadStation({ canvas, quality, say })       say(fraction, words) as the loading moves on
 //   W.frame(dt, now, eyes)   one drawn frame: which rooms are drawn, the doors (they open for any of `eyes`, the
 //                            points where people are; a door in W.keepShut stays shut, one in W.driven is left to
-//                            whatever drives it), the dust, the sky, the picture
+//                            whatever drives it), what glides by itself (the big scanner's ring, by the clock `now`),
+//                            the dust, the sky, the picture
 //   W.view(name) / W.place(name) / W.room(id)                   the station file's named views, spots and rooms
 //
 // NOTHING HERE KNOWS A COORDINATE. Rooms, doors, views and spots are found by name through the station file, which
@@ -18,7 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeMaterials, U } from '../kit/materials.js';
 import { createSky } from '../world/sky.js';
-import { buildRoom, updateDoors, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
+import { buildRoom, updateDoors, updateGlides, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
 import { makeBeams, beamsOf } from '../kit/beams.js';
@@ -160,6 +161,8 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
       if (eyes) for (const e of eyes) { const d = e.distanceToSquared(D.sense); if (d < bd) { bd = d; best = e; } }
       ONE[0] = D; updateDoors(ONE, best, dt, keepShut.has(D) ? 'shut' : 'auto');
     }
+    // (what glides by itself, the big scanner's ring: by the clock, and only in a room that is being drawn)
+    updateGlides(built, now);
     draw(dt);
   }
 

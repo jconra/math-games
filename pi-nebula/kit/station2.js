@@ -23,6 +23,7 @@ import { SCREEN_RECT, CREWS } from './tex.js';
 import { scanner as triageHood, pulseLine } from './shipparts/cabin/medical.js';
 import { OPTIONS2 } from './station2-options.js';
 import { FORGE_PIECES } from './forge.js';   // (the smelter's forge: the two towers)   // (sketches of props still to be designed, to choose from)
+import { BIGSCANNER_PIECES } from './bigscanner.js';   // (the medical centre's big scanner: the slim ring on rails)
 
 const PI = Math.PI;
 // a decal lying on the floor (facing up), w along x by d along z, centred at (x, z), turned by a about the up axis
@@ -221,4 +222,5 @@ export const STATION2 = {
   pulse: { name: 'Medical mark (pulse line)', group: 'Medical', at: 'wall', variants: ['short', 'long'], foot: [3.2, 0.3, 0.02], build: pulse },
   ...OPTIONS2,
   ...FORGE_PIECES,
+  ...BIGSCANNER_PIECES,
 };

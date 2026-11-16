@@ -25,7 +25,8 @@
 //   - The floors: every triangle that faces up, sorted into half-metre squares. The floor under a point is the
 //     highest of them within a step's reach, so stairs, ramps and raised floors work with nothing said about them.
 // Door leaves are not part of either (they move): each door's leaves, shut, make a box that stops a person until the
-// door is most of the way open.
+// door is most of the way open. A part that glides by itself (the big scanner's ring) is not part of either: the
+// whole box it glides through stops a person, always.
 import * as THREE from 'three';
 import { makeVoxels } from '../kit/bake.js';
 
@@ -86,6 +87,10 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     const a = floorAt(c.x + (alongX ? off : 0), c.z + (alongX ? 0 : off), y, 1.2), b = floorAt(c.x - (alongX ? off : 0), c.z - (alongX ? 0 : off), y, 1.2);
     doors.push({ D, box, locked: a === null || b === null });
   }
+  // what glides by itself (the big scanner's ring along its rails: kit/piece.js glide): the whole box it passes
+  // through counts as a door that never opens. So nobody can stand in its way, be pushed by it or be shut in by it,
+  // and a camera never sits where it is about to pass.
+  for (const D of built.glides || []) if (D.glide.sweep && D.hold == null && !D.sweep.isEmpty()) doors.push({ D, box: D.sweep, locked: true, glide: true });
   function doorAt(x, y, z, r, doorsOpen = false) {
     for (const d of doors) {
       if (d.when && !d.when(pathing)) continue;

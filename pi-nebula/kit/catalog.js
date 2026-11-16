@@ -16,7 +16,7 @@ import { COCKPIT } from './shipparts/cockpit.cat.js';
 import { CABIN } from './shipparts/cabin.cat.js';
 import { STATION2 } from './station2.js';
 
-export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar'];
+export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
 export const SHIP_GROUPS = ['Ship outside', 'Ship cockpit', 'Ship cabin'];
 export const PIECES = {

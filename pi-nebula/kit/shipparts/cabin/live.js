@@ -10,6 +10,13 @@
 //                             tired strip light, kit/shipparts/cabin/flicker.js: one on a ship), 'blink' (slow, eased:
 //                             on for a second and a half every o.every seconds, 4), 'breathe' (a slow swell, o.every, 5);
 //                             o.glow a glow name (kit/materials.js GLOW) or a linear colour; o.phase 0..1
+//   liveBand(p, o, at, rot)   a band of light round a circle whose bright part goes round and round (the big scanner's
+//                             ring, kit/bigscanner.js): o.r the circle's radius (to the band's middle), o.w the band's
+//                             width, o.lean how the band lies (0: flat in the circle's plane, a washer facing +z;
+//                             PI / 2: a hoop's inner wall, facing the middle; between: a cone opening toward +z),
+//                             o.every seconds a turn (a whole number, 4), o.turn 1 or -1 (which way round), o.seg 64,
+//                             o.glow and o.gain as a lamp's. The circle lies in the x-y plane, centred on `at`, before
+//                             it is turned. Its brightest is twice its colour, its dimmest three tenths of it.
 //   liveScreenMaterial(o)     the material (o.time: the clock uniform, U.time by default; o.dark: false for the kit's
 //                             blue panel instead of the dark one; o.palette: 'soft' or 'vivid', LIVE_PALETTES)
 //   livePalette(m, name)      change a live material's palette while it runs (every screen at once)
@@ -42,7 +49,7 @@ import { LIVE_VERTEX, liveFragment } from './live.glsl.js';
 
 export const SHOWS = { lamp: 0, survey: 1, chart: 2, rest: 3, drive: 4, scan: 5, log: 6, systems: 7, airlock: 8, water: 9, furnace: 10 };
 export const SHOW_LABEL = ['lamp', 'wire planet', 'star chart', 'sleep trace', 'engine readouts', 'scanner sweep', "ship's log", 'systems board', 'airlock board', 'water tanks', 'furnace readouts'];
-export const LAMP_MODES = { steady: 0, flicker: 1, blink: 2, breathe: 3 };
+export const LAMP_MODES = { steady: 0, flicker: 1, blink: 2, breathe: 3, turn: 4 };   // (turn: liveBand's)
 // what the material shares: the flicker light's brightness this frame, which seed of flicker it is
 export const LIVE = { flick: { value: 1 }, seed: 0, sheet: null, adv: 0.45 };
 // the tag on the tired strip's pool of light (bits.js glowStrip o.flicker): multiply that pool by liveTick(t)
@@ -84,6 +91,24 @@ export function liveLamp(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
   const k = o.gain ?? 1, c = Array.isArray(o.glow) ? o.glow : GLOW[o.glow || 'strip'];
   setColor(g, [c[0] * k, c[1] * k, c[2] * k]);
   return g;
+}
+
+// a band round a circle, its bright part going round (a lamp in the 'turn' mode: each vertex says how far round the
+// circle it is, in its uv, where a plain lamp says where in its cycle it starts; the two ends of the band meet at a
+// seam of doubled vertices, so no triangle runs from the end of the round back to its start)
+export function liveBand(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
+  const r = o.r ?? 0.5, hw = (o.w ?? 0.06) / 2, lean = o.lean ?? 0, seg = o.seg ?? 64, every = Math.max(1, Math.round(o.every ?? 4)), back = (o.turn ?? 1) < 0;
+  const cl = Math.cos(lean), sl = Math.sin(lean), pos = [], nrm = [], uv = [], ix = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = i / seg * Math.PI * 2, cs = Math.cos(a), sn = Math.sin(a), round = every + 0.02 + 0.96 * (back ? 1 - i / seg : i / seg);
+    for (const s of [-1, 1]) { const rr = r + s * hw * cl; pos.push(rr * cs, rr * sn, s * hw * sl); nrm.push(-sl * cs, -sl * sn, cl); uv.push(2 + LAMP_MODES.turn, round); }
+    if (i < seg) ix.push(i * 2, i * 2 + 1, i * 2 + 3, i * 2, i * 2 + 3, i * 2 + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(ix);
+  const k = o.gain ?? 1, c = Array.isArray(o.glow) ? o.glow : GLOW[o.glow || 'strip'];
+  return add(p, [c[0] * k, c[1] * k, c[2] * k], g, at, rot, 'live');
 }
 
 // ── the sheet of words ──────────────────────────────────────────────────────────────────────────────

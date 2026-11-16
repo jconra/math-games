@@ -319,6 +319,9 @@ void main() {
     if ( mode == 1.0 ) b = 1.0 - 0.3 * ( 1.0 - uFlick );
     else if ( mode == 2.0 ) { float x = mod( uTime + ph * every, every ); b = 0.12 + 0.88 * smoothstep( 0.0, 0.5, x ) * ( 1.0 - smoothstep( 1.5, 2.2, x ) ); }
     else if ( mode == 3.0 ) b = 0.62 + 0.38 * sin( ( uTime / every + ph ) * TAU );
+    // (a band round a ring, its bright part going round once every \`every\` seconds: live.js liveBand. ph says how far
+    // round the ring this point is: a soft head, a tail fading behind it most of the way round, never quite dark)
+    else if ( mode == 4.0 ) { float x = fract( uTime / every - ( ph - 0.02 ) / 0.96 ); b = 0.3 + 1.9 * smoothstep( 0.0, 0.035, x ) * pow( 1.0 - x, 3.0 ); }
     col = vData * b;
   } else {
     float prog = floor( vData.y ), seed = fract( vData.y ), A = floor( vData.z ) / 100.0, cut = fract( vData.z ) - 0.25, t = uTime;

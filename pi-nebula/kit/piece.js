@@ -83,6 +83,13 @@ export class Piece {
   }
   // (heavy: a big door, a ship's stair or ramp: it starts and lands gently, kit/layout.js setLeaf)
   door(id, sense, near = 2.6, speed = 1.6, heavy = false) { this.doors.push({ id, sense, near, speed, heavy }); }
+  // a part that GLIDES BY ITSELF, out and back, for as long as its room is drawn (a scanner's ring along its rails):
+  // a "door" that nobody opens. Its leaves (leaf(..., { door: id })) slide and swing as a door's do, from where they
+  // stand at rest to fully out and back again, by the kit's clock: `go` seconds each way (eased in and out), `rest`
+  // seconds still at each end, `start` where in its round it begins (0..1 of the whole round). Mark its leaves `still`,
+  // so they are lit and drawn with their room. `sweep`: nobody may stand anywhere its leaves pass (the game's walls).
+  // A placement's `hold` (0..1) parks it there for good, as it holds a door.
+  glide(id, { go = 8, rest = 2.5, start = 0, sweep = true } = {}) { this.doors.push({ id, sense: [0, 0, 0], near: 0, speed: 0, glide: { go, rest, start, sweep } }); }
 }
 Piece.coarse = false;
 
