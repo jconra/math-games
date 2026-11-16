@@ -127,8 +127,20 @@ let FACES = null;
 // part, zone, paint }]
 export function hullFaces() {
   if (FACES) return FACES;
-  FACES = C.paintFaces(mesh(HULL), new Uint8Array(bytes(HULL.part)), PARTS, ZONES, RULES);
+  FACES = C.paintFaces(mesh(HULL), new Uint8Array(bytes(HULL.part)), PARTS, ZONES, RULES).flatMap((f) => (f.back ? sillStrip(f) : [f]));
   return FACES;
+}
+// (the lower hull's strip at the foot of each doorway, over the hinge's height and inboard of the hinge line: its BACK
+// is not drawn. The hull narrows toward the nose, so at the hinge line its slope stands up to 8 cm over the hinge's
+// height, where the fixed step and the open airstair's landing lie level: its back, seen from the doorway, stood up
+// through them as a lip, and a person walked over it. A face that reaches into that strip is cut there.)
+function sillStrip(f) {
+  const box = [[0, -1, 0, -DOOR.hinge], [0, 0, -1, -DOOR.z[0]], [0, 0, 1, DOOR.z[1]], [1, 0, 0, DOOR.xHinge + 0.004], [-1, 0, 0, -1.6]];
+  if (!f.pts.some((v) => v.y > DOOR.hinge) || !f.pts.some((v) => v.z > DOOR.z[0]) || !f.pts.some((v) => v.z < DOOR.z[1]) || !f.pts.some((v) => Math.abs(v.x) < DOOR.xHinge + 0.004) || !f.pts.some((v) => Math.abs(v.x) > 1.6)) return [f];
+  const out = []; let rest = f.pts;
+  for (const pl of box) { const [i, o] = C.clipPlane(rest, pl); if (o.length > 2) for (const T of C.fan(o)) out.push({ ...f, pts: T }); rest = i; if (rest.length < 3) return [f]; }
+  for (const T of C.fan(rest)) out.push({ ...f, pts: T, back: false });
+  return out;
 }
 // a face's paint as a surface for the solid material, or a glow (faces 'glass' and 'gone' are drawn by others)
 const GLOWS = { ring: GLOW.ring };
@@ -583,18 +595,22 @@ function ebDoorway(p, variant) {
 }
 // (a polygon's corners with any that sit on the one before dropped)
 const ring = (P) => P.filter((v, i) => v.distanceTo(P[(i + P.length - 1) % P.length]) > 1e-4);
-// (the white side of a door's skin is two facets with a ridge of about 5 degrees between them, corner to corner, as
-// the hull's side aft of the door and the block's face ahead of it do not lie in one plane. It is SHADED as one gently
-// twisted panel instead, so the door reads as one flat panel: each point's normal is that of the smooth sheet through
-// the side's four corners. Its corners and edges stay where the facets put them.)
+// (the white side of a door's skin is two facets with a ridge of about 5 degrees between them, corner to corner, and
+// a bend of 4 to 7 degrees at each end, as the hull's side aft of the door and the block's face ahead of it do not lie
+// in one plane. It is SHADED as one panel that runs from the one into the other instead: at its aft edge it takes
+// the light as the hull's side beside it does, at its fore edge as the block's face does, and evenly between. So the
+// door reads as one flat panel, and no change of tone gives its seams away. Its corners and edges stay where the
+// facets put them.)
 function sideNormals(side) {
-  const V = DOORSKIN[side].side.flat().map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), zm = (DOOR.z[0] + DOOR.z[1]) / 2;
-  const aft = V.filter((v) => v.z < zm).sort((a, b) => a.y - b.y), fore = V.filter((v) => v.z > zm).sort((a, b) => a.y - b.y);
-  const A1 = aft[0], A2 = aft[aft.length - 1], F3 = fore[0], F4 = fore[fore.length - 1];
+  const s = side === 'starboard' ? -1 : 1;
+  // (the hull's own face beside each end of the side: the biggest that faces out and has an edge on that end's plane,
+  // within the side's height)
+  const beside = (z) => hullFaces().filter((f) => drawn(f) && s * f.n.x > 0.9 && [0, 1, 2].some((e) => { const a = f.pts[e], b = f.pts[(e + 1) % 3]; return Math.abs(a.z - z) < 2e-3 && Math.abs(b.z - z) < 2e-3 && s * a.x > 2.9 && Math.max(a.y, b.y) > 2.7 && Math.min(a.y, b.y) < 3.5; })).sort((a, b) => b.area - a.area)[0];
+  const A = beside(DOOR.z[0]), F = beside(DOOR.z[1]);
   return (p, flat) => {
-    const u = (p.z - A1.z) / (F3.z - A1.z), yb = A1.y + (F3.y - A1.y) * u, yt = A2.y + (F4.y - A2.y) * u, v = Math.max(0, Math.min(1, (p.y - yb) / (yt - yb)));
-    const du = F3.clone().sub(A1).multiplyScalar(1 - v).addScaledVector(F4.clone().sub(A2), v), dv = A2.clone().sub(A1).multiplyScalar(1 - u).addScaledVector(F4.clone().sub(F3), u);
-    const n = du.cross(dv).normalize(); return n.dot(flat) < 0 ? n.negate() : n;
+    if (!A || !F) return flat;
+    const u = Math.max(0, Math.min(1, (p.z - DOOR.z[0]) / (DOOR.z[1] - DOOR.z[0])));
+    return A.n.clone().multiplyScalar(1 - u).addScaledVector(F.n, u).normalize();
   };
 }
 // A DOOR'S SKIN, DRAWN: its faces inside `inset` of the pocket's rim, painted as the hull; a dark line along its edge
