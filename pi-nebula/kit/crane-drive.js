@@ -534,7 +534,8 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     const target = s.from + (s.to - s.from) * alongAt(s.t / s.T, s.k), got = nudge(s.axis, target - cur);
     if (Math.abs(got - (target - cur)) > 1e-7) {
       s.t = Math.max(0, s.t - dt); s.stuck = (s.stuck || 0) + dt;
-      if (s.stuck > (s.patience ?? 6)) { D.failed = { ...s, why: D.notes.map((n) => n.text).join(' ') }; auto.length = 0; }
+      // (held up by someone under the load it waits as long as they stay, as the round does; anything else, a while)
+      if (!D.notes.some((n) => n.key === 'people') && s.stuck > (s.patience ?? 6)) { D.failed = { ...s, why: D.notes.map((n) => n.text).join(' ') }; auto.length = 0; }
       return;
     }
     s.stuck = 0;

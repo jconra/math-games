@@ -88,6 +88,8 @@ export function craneLink({ crane, W, walls }) {
     if (closed) return;
     const D = crane.live;
     if (D && waiting.length) { D.go(waiting); waiting = []; }
+    // (a move that could not be made: the plan starts again from where the crane really is)
+    if (D && D.failed && !D.busy) { console.info('crane job: a move could not be made (' + (D.failed.why || D.failed.axis || '') + '); planning again from here'); D.failed = null; Q.restart(); }
     if (D) { const w = readout(D.read()); for (const key of ['rail', 'hook', 'load']) { const dd = chip.querySelector(`[data-r="${key}"]`); if (dd.textContent !== w[key]) dd.textContent = w[key]; } }
     if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); lineMat.opacity = 0.9 * a; boxMat.opacity = 0.3 * a; if (ghostT <= 0) clearGhost(); }
   }

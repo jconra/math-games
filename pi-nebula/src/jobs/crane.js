@@ -501,6 +501,8 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
     const across = queue[j], to = queue.slice(j + 1).find((q) => q.kind === 'hoist' || q.kind === 'trip');
     return { legs: [a, b], across, end: j, what: to && to.kind === 'hoist' ? to.what : across.what };
   }
+  // (planning again from where the crane is now: after a move that could not be made)
+  Q.restart = function restart() { queue.length = 0; cursor = 0; planned = null; Q.reserved = null; };
   Q.ask = function ask(kind, o = {}) {
     if (!planned) begin();
     const prec = o.prec || 1;
