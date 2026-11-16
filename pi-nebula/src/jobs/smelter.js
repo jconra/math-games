@@ -1,34 +1,48 @@
-// THE SMELTER'S CONTROL ROOM, at the operator's chair: what a load of ore pays (the game's maker, 2026-11-05: "they
-// could go over to the controls and start calculating on the smelter to figure out how many credits they will get
-// paid"). Out of the window the Miner hangar's crane swaps the parked Miner's canisters by itself (src/crane.js).
+// THE SMELTER CONTROLS, in the smelter's hall at the forge's own console (its FURNACE screens), the glowing pours just
+// past it: what a haul of ore pays (the game's maker, 2026-11-05: "they could go over to the controls and start
+// calculating on the smelter to figure out how many credits they will get paid"; 2026-11-16: "It makes sense to me
+// that the smelter equipment is what would have an accurate read on the amount of ore verses slag from the haul").
 // The ladder, easiest first: counting the canisters on the ship, how many are still on it and which are full, racks
 // of the same; tonnes by the canister and loads shared out; a part of the load (1/4 of the ore is iron), several
-// parts; weights in tenths (1.2 tonnes and 0.9 tonnes); yields in percent (25% of the ore is iron); a load of
-// canisters (8 canisters of 1.2 tonnes); any percent (35%); what the metal pays (tonnes times the price), and at the
-// top the whole pay slip: the load, its yield, its pay. Decimals stay decimals.
+// parts; canisters of ore, a whole number of canisters times a fraction of a tonne (8 canisters of 3/4 of a tonne,
+// then 5 of them: 3 3/4 tonnes); weights in tenths (1.2 tonnes and 0.9 tonnes); yields in percent (25% of the ore is
+// iron); a load of canisters (8 canisters of 1.2 tonnes); any percent (35%); what the metal pays (tonnes times the
+// price), and at the top the whole pay slip: the ore, its yield, its pay. Decimals stay decimals; fractions stay
+// fractions (3 3/4, never 3.75).
 // Mathwood Valley's question makers tell the whole-number stories through SETTING (engine.js); the counting, the
-// parts, the weights, the percents and the pay are this job's own makers (MAKERS below), as Mathwood's are told at a
-// store counter and have no hook for another world yet.
+// parts, the canisters of ore, the weights, the percents and the pay are this job's own makers (MAKERS below), as
+// Mathwood's are told at a store counter or a fishing dock and have no hook for another world yet. The fractions are
+// Mathwood's own (labs/fishing/frac.js), and the canisters of ore are its fishing dock's "fish times a fraction" (the
+// level 'timesW', labs/fishing/pies.js) told through the haul.
 //
-// THE LOAD IN THE HANGAR. Where a question counts canisters, it counts the ones really there when the slip is made:
-// the game hands each maker `live` (src/crane.js load(): how many canisters are on the ship, how many of them full,
-// how many are plugged in at the wall, how many on the rack, and for how long each of those stays as it is). A count
-// is used only if it suits the level and the crane's timetable says it will still be true for STEADY seconds, so the
-// answer is not out of date before it is picked, and only once (the next slip about the hangar waits until the crane
-// has changed that count); otherwise, and in node, the numbers are the job's own (a slip "from the log"). The weight of a canister of the load in the hangar is one number for the crane's whole round (LOADS), so
-// two slips about the same load agree. What the displays read is NOT taken live: a draining canister's display
-// changes every second, so a question about it would be wrong before it was read. And the whole pay slip at the top
-// is always a load from the log (of a Miner's 8 canisters where the hangar has one): a slip for "the load in the
-// hangar" would have to be the same slip, with the same answer, for the half hour that load is there.
+// THE HAUL (haulOf below): one for each landing of the Miner (src/crane.js's round: the hangar is set out afresh and the
+// Miner lands again when the player leaves the area and comes back). The smelter's equipment reads the WHOLE haul, all
+// its canisters, wherever they are: how much in each is ore and how much slag. A haul is a pure function of its number,
+// so every slip about the same haul tells the same haul.
+//
+// THE HANGAR, RIGHT NOW. Where a question counts canisters, it counts the ones really there when the slip is made:
+// the game hands each maker `live` (src/crane.js load(): the haul's number, how many canisters are on the ship, how
+// many of them full, how many are plugged in at the wall, how many on the rack, and for how long each of those stays
+// as it is). A count is used only if it suits the level and the crane's timetable says it will still be true for
+// STEADY seconds, so the answer is not out of date before it is picked, and only once (the next slip about the
+// hangar waits until the crane has changed that count); otherwise, and in node, the numbers are the job's own (a slip
+// "from the log"). What the displays read is NOT taken live: a draining canister's display changes every second, so a
+// question about it would be wrong before it was read. A slip about the whole haul (its ore, its pay) is asked once a
+// haul too: the same slip with the same answer twice running teaches nothing.
+// (Later, the game's maker's plan, not built: missions and contracts, who gets paid for the ore, and the rare rich
+// asteroid that pays double. A haul's pay is worked out by haulOf and the pay slip below; that is where they would
+// hook in.)
 import { dec } from '../../../mathwood-valley/src/math/counterkit.js';
+import { fr, gcd, simplest, fracText, partsWord } from '../../../mathwood-valley/labs/fishing/frac.js';
 import { ownOrder } from './engine.js';
 
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
 const TONNE = ['tonne', 'tonnes'], CAN = ['canister', 'canisters'], CREDIT = ['credit', 'credits'];
 export const STEADY = 40;      // seconds a live count must stay as it is to be asked about
 export const CARRIES = 8;      // canisters a Miner carries (the parked one's mounts: kit/ships/miner-built.js)
-// what a full canister of the load in the hangar holds, in tenths of a tonne: one weight for a whole round of the
-// crane (the next load's is the next in the list), so two slips about the same load never disagree
+// what a full canister of the haul holds, in tenths of a tonne (ore and slag together: the crane lifts it, src/crane.js
+// reads it from here): LOADS[haul % LOADS.length], one weight for the whole haul (the next haul's is the next in the
+// list), so two slips about the same haul never disagree
 export const LOADS = [12, 15, 8, 21, 14, 9, 25, 16, 11, 18, 7, 22, 13, 24, 6];
 const WEIGHTS = [6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 21, 22, 24, 25];
 
@@ -43,6 +57,37 @@ export const METALS = [
   { name: 'cobalt', price: 50 }, { name: 'titanium', price: 60 }, { name: 'gold', price: 80 },
 ];
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+// ── THE HAUL: what the smelter's equipment reads of one landing's canisters ─────────────────────────────────────────
+//   haulOf(n) -> { n, canisters, fill, metal, ore, yield, oreTonnes, metal10, pay }
+//     canisters  all the haul's canisters (CARRIES), wherever they are now: on the ship, at the wall, on the rack
+//     fill       tenths of a tonne in each full canister (LOADS): its ore and its slag together
+//     metal      the metal its ore carries ({ name, price }: METALS)
+//     ore        { n, d }: the tonnes of that metal's ore in each canister, a fraction of a tonne in halves, quarters
+//                or eighths (so all the canisters come to whole tonnes of ore), under one tonne and at least a tenth
+//                of a tonne under the fill; the rest of what is in a canister is slag
+//     yield      the percent of the ore the furnace pours as metal (the rest of the ore goes to slag too): the dearer
+//                the metal, the less of the ore it is
+//     oreTonnes  the whole haul's ore, in tonnes; metal10: the metal it pours, in tenths of a tonne; pay: in credits
+const HAUL_ORE = [[3, 4], [5, 8], [7, 8], [1, 2], [3, 8]];
+const HAUL_YIELD = { iron: 50, nickel: 40, copper: 30, cobalt: 20 };
+export function haulOf(n = 0) {
+  const k = Math.max(0, Math.floor(Number(n) || 0)), fill = LOADS[k % LOADS.length], metal = METALS[k % 4];
+  // (the haul's own pick from the list, or the next one on that leaves a tenth of a tonne of slag or more)
+  const turn = [...HAUL_ORE.slice(k % HAUL_ORE.length), ...HAUL_ORE.slice(0, k % HAUL_ORE.length)];
+  const [a, d] = turn.find(([x, y]) => x / y <= fill / 10 - 0.1 + 1e-9) || [3, 8];
+  const oreTonnes = CARRIES * a / d, y = HAUL_YIELD[metal.name], metal10 = oreTonnes * y / 10;
+  return { n: k, canisters: CARRIES, fill, metal, ore: { n: a, d }, yield: y, oreTonnes, metal10, pay: metal10 * metal.price / 10 };
+}
+
+// ── fractions of a tonne (Mathwood's own fractions: labs/fishing/frac.js) ───────────────────────────────────────
+// in a sentence: "3/4 of a tonne", "1 tonne", "3 3/4 tonnes"; on an answer button: "3 3/4" big, "tonnes" small
+// ("3/4" and "of a tonne"), its value the simplest fraction's text, so two answers of the same amount are one
+const ofT = (f) => { const s = simplest(f); return s.n < s.d ? `${fracText(s)} of a tonne` : `${fracText(s)} ${s.n === s.d ? 'tonne' : 'tonnes'}`; };
+const FT = (f) => { const s = simplest(f), big = fracText(s), small = s.n < s.d ? 'of a tonne' : s.n === s.d ? 'tonne' : 'tonnes'; return { v: `${s.n}/${s.d}`, big, small, label: `${big} ${small}` }; };
+const ONE_PART = { 2: 'half', 3: 'third', 4: 'quarter', 5: 'fifth', 6: 'sixth', 8: 'eighth', 10: 'tenth' };
+const parts = (d, k = 2) => (k === 1 ? ONE_PART[d] || `${d}th` : partsWord(d));
+
 // the ore a question is about: one load while the number is a load's size, a month of loads past that
 const oreOf = (whole) => (whole <= 30 ? { of: 'the ore in this load', is: `The load is ${whole} tonnes.`, it: 'load' } : { of: 'this month\'s ore', is: `The Miners brought in ${whole} tonnes this month.`, it: 'ore' });
 
@@ -165,7 +210,7 @@ export const MAKERS = {
         const slots = got && k.key === 'wall' ? live.docked.map((d) => (d.percent > 0 ? 'full' : 'empty'))
           : got && k.key === 'ship' ? Array(n).fill(live.fullOnShip > 0 ? 'full' : 'empty') : Array(n).fill(k.look);
         return ownOrder({
-          key: `count:${k.key}`, story: got ? 'Look at the hangar as it is right now.' : 'Look at this pay slip from the log.', ask: k.ask,
+          key: `count:${k.key}`, story: got ? 'The smelter\'s screen shows the hangar as it is right now.' : 'Look at this pay slip from the log.', ask: k.ask,
           right: C(n, CAN),
           slips: [
             { ...C(n + 1, CAN), slip: 'off', why: 'One too many. Count again, touching each one once.' },
@@ -262,7 +307,7 @@ export const MAKERS = {
       }
       const [n, d] = t.pick(frac < 0.5 ? [[2, 3], [3, 4], [2, 5], [3, 5], [4, 5]] : [[3, 4], [3, 5], [4, 5], [5, 6], [3, 8], [5, 8], [3, 10], [7, 10]]), k = t.int(2, 9), whole = d * k, ans = n * k;
       const O = oreOf(whole), ctx = t.pick([
-        { key: 'rock', story: `${n}/${d} of ${O.of} is plain rock, and the rest is metal. ${O.is}`, ask: 'How many tonnes of rock is that?', what: 'rock' },
+        { key: 'slag', story: `${n}/${d} of ${O.of} is slag, and the rest is metal. ${O.is}`, ask: 'How many tonnes of slag is that?', what: 'slag' },
         { key: 'metal', story: `${n}/${d} of ${O.of} is ${metal}. ${O.is}`, ask: `How many tonnes of ${metal} is that?`, what: metal },
         { key: 'melted', story: `${O.is} The furnace has melted ${n}/${d} of it so far.`, ask: 'How many tonnes has it melted?', what: 'melted' },
       ]);
@@ -280,6 +325,86 @@ export const MAKERS = {
         help: { title: 'Cut into equal parts', pic: { kind: 'fracbar', whole, n, d, what: ctx.what, it: O.it }, line: `${n}/${d} means the ${O.it} cut into ${d} equal parts, and ${n} of them taken. Work out one part first.`,
           steps: [`First one of the ${d} equal parts: ${whole} ÷ ${d}`, `Then ${n} of those parts: that × ${n}`] },
         own: { strand: 'frac', at: 40 }, credit: [{ strand: 'div', at: 29, weight: 0.5 }], facts: { whole, n, d, ans }, size: 2,
+      }, rand);
+    },
+  },
+
+  // ── canisters of ore: a whole number of canisters times a fraction of a tonne ─────────────────────────────────
+  // (the game's maker, 2026-11-16: "5 of our containers are 3/4 ton of copper ore. How many tons did we collect?").
+  // Mathwood's fishing dock asks the same of fish (labs/fishing/pies.js timesW: 4 perch of 3/4 of a pound each), and
+  // these are its slips: the bottom number multiplied too (one canister's ore), the bottom number only (smaller
+  // parts), the canisters added on, the canisters added to the top number; with this job's own: the parts counted and
+  // not made into tonnes (15 quarters taken for 15 tonnes), the whole tonnes kept and the parts left over lost, a
+  // canister too many or too few.
+  // step 1  the answer is whole tonnes: the whole haul, 8 canisters of 3/4 of a tonne of copper ore (6 tonnes); or
+  //         from the log, 4 canisters of 3/4 of a tonne (3 tonnes)
+  // step 2  the answer is a mixed number: 5 canisters of 3/4 of a tonne (3 3/4 tonnes): the haul's canisters plugged
+  //         in at the wall, or still full on the Miner, counted in the hangar where they can be; or from the log
+  ore: {
+    strand: 'frac', at: (step) => (step <= 1 ? 44 : 47),
+    make(step, { rand = Math.random, who = null, live = null, frac = 0 } = {}) {
+      const t = kit(rand), H = live ? haulOf(live.round) : null, whole = step <= 1;
+      let n, a, d, metal, kind = 'own';
+      // the haul: the whole of it (once a haul), or the canisters of it counted in the hangar right now (each count once)
+      if (H) {
+        const q = H.ore;
+        if (whole && isNew(live, 'ore:haul', 0)) { used(live, 'ore:haul', 0); kind = 'haul'; n = H.canisters; }
+        if (!whole) {
+          const fits = (c) => c != null && (c * q.n) % q.d !== 0 && c * q.n > q.d;
+          const wall = liveCount(live, 'docked', 2, CARRIES), ship = unloading(live) ? liveCount(live, 'fullOnShip', 2, CARRIES - 1) : null;
+          const now = [fits(wall) && { key: 'wall', n: wall }, fits(ship) && { key: 'ship', n: ship }].filter((x) => x && isNew(live, 'ore:' + x.key, x.n));
+          const got = now.length ? t.pick(now) : null;
+          if (got) { used(live, 'ore:' + got.key, got.n); kind = got.key; n = got.n; }
+        }
+        if (kind !== 'own') { a = q.n; d = q.d; metal = H.metal.name; }
+      }
+      if (kind === 'own') {
+        // from the log: halves and quarters first, then thirds, fifths and eighths
+        const good = () => gcd(a, d) === 1 && n >= 2 && (whole ? (n * a) % d === 0 && n * a >= 2 * d : (n * a) % d !== 0 && n * a > d);
+        for (let tries = 0; tries < 60; tries++) {
+          d = t.pick(frac < 0.5 ? [2, 4, 4, 3] : [3, 4, 5, 8, 6]); a = t.int(1, d - 1);
+          n = whole ? d * t.int(1, Math.max(1, Math.floor(12 / d))) : t.int(2, 9);
+          if (good()) break;
+        }
+        if (!good()) [n, a, d] = whole ? [4, 3, 4] : [5, 3, 4];
+        metal = t.pick(METALS.slice(0, 5)).name;
+      }
+      const q = fr(a, d), ans = fr(n * a, d), each = ofT(q), P1 = parts(d, 1), PS = parts(d);
+      const W = (who && who.name) || 'the crew', they = who ? (who.she ? 'she' : 'he') : 'they';
+      const ctx = kind === 'haul' ? { story: `This haul came in on the Miner: ${n} canisters, with ${each} of ${metal} ore in each. The rest is slag.`, ask: `How many tonnes of ${metal} ore did we collect?` }
+        : kind === 'wall' ? { story: `${n} of this haul's canisters are plugged in at the smelter's wall right now. The smelter reads ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore have they brought?` }
+          : kind === 'ship' ? { story: `${n} of this haul's canisters are still full on the Miner. The smelter read ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore are still on the ship?` }
+            : t.pick([
+              { story: `${n} of our canisters each hold ${each} of ${metal} ore.`, ask: `How many tonnes of ${metal} ore did we collect?` },
+              { story: `An ore drone dropped off ${n} small canisters, with ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore is that?` },
+              { story: `The smelter read ${W}'s haul: ${n} canisters, each with ${each} of ${metal} ore and the rest slag.`, ask: `How many tonnes of ${metal} ore did ${they} bring in?` },
+            ]);
+      const top = n * a, wholeT = Math.floor(top / d);
+      const S = (f, slip, why) => ({ ...FT(f), slip, why });
+      const slips = [
+        S(fr(top, 1), 'partsOnly', `${top} is how many ${PS} of a tonne there are: ${n} lots of ${a}. ${d} ${PS} make one tonne.`),
+        ...(whole ? [] : [S(fr(wholeT, 1), 'leftOver', `That is only the whole tonnes. The ${PS} left over count too, as a fraction of a tonne beside them.`)]),
+        S(fr(n * d + a, d), 'added', `That adds the ${n} canisters on, as if each were a tonne. Each one brings ${each}: ${n} lots of it.`),
+        S(q, 'oneCanister', `${cap(each)} is one canister's ore. There are ${n} canisters: ${n} lots of ${a}/${d}.`),
+        S(fr(a + n, d), 'topAdded', `That adds ${n} to the top number. ${n} lots of ${a}/${d} multiply it: ${n} × ${a} on top, ${d} still underneath.`),
+        S(fr(a, d * n), 'bottomTimes', `That multiplies the bottom number, which makes the parts smaller. ${n} canisters bring more than one canister's ore.`),
+        S(fr((n + 1) * a, d), 'groupOff', `That is the ore of ${n + 1} canisters. There are ${n}.`),
+        S(fr((n - 1) * a, d), 'groupOff', `That is the ore of ${n - 1} canisters. There are ${n}.`),
+      ];
+      return ownOrder({
+        key: `ore:${whole ? 'whole' : 'mixed'}:${kind}`, story: ctx.story, ask: ctx.ask, right: FT(ans), slips,
+        rightWhy: `${n} × ${a}/${d} = ${top}/${d} = ${ofT(ans)}`,
+        // (Work it out: the parts in all, then whole tonnes, the remainder the parts left over: 15 ÷ 4 = 3 r 3, 3 3/4)
+        sum: [...(a > 1 ? [{ op: 'mul', a: n, b: a, say: `First the ${PS} of a tonne in all: ${n} lots of ${a}` }] : []),
+          { op: 'div', a: top, b: d, say: `${a > 1 ? 'Then' : 'First'} whole tonnes: ${d} ${PS} make one tonne${whole ? '' : ', and what is left over is still ' + PS}` }],
+        help: { title: 'Lots of a fraction', pic: { kind: 'orecans', n, a, d, what: `${metal} ore` },
+          line: `${n} × ${a}/${d} is ${n} lots of ${a}/${d}: count the ${PS} of a tonne in all the canisters, then make them into whole tonnes, ${d} ${PS} to a tonne.`,
+          steps: [a > 1 ? `First the ${PS} in all: ${n} × ${a}` : `First the ${PS} in all: one ${P1} in each of ${n} canisters`,
+            `Then whole tonnes: ${d} ${PS} make one tonne, so that many ${PS} ÷ ${d}`,
+            ...(whole ? [] : [`What is left over is still ${PS}: it goes over the ${d}`])] },
+        own: { strand: 'frac', at: whole ? 44 : 47 }, credit: whole ? [{ strand: 'mul', at: 20, weight: 0.5 }] : [{ strand: 'div', at: 45, weight: 0.5 }],
+        facts: { n, a, d, ans: [top, d], metal, kind, live: kind !== 'own', ...(kind !== 'own' ? { haul: H.n } : {}), ...(kind === 'haul' ? { from: 'This haul' } : {}) },
+        size: whole ? 1 : 2,
       }, rand);
     },
   },
@@ -340,10 +465,11 @@ export const MAKERS = {
       const got = now.length ? t.pick(now) : null, n = got ? got.n : t.pick([3, 4, 5, 6, 7, 8, 8]);
       if (got) used(live, 'weigh:' + got.key, n);
       const w = got ? LOADS[(live.round || 0) % LOADS.length] : t.pick(WEIGHTS), p = n * w;   // tenths
+      // (the haul's canisters hold its ore and its slag together: the smelter reads which is which, the 'ore' maker)
       const ctx = !got ? { story: `A Miner came in with ${n} canisters, each holding ${t1(w)} tonnes of ore.`, ask: 'How many tonnes of ore is the load?' }
-        : got.key === 'ship' ? { story: `The Miner in the hangar has ${n} full canisters on it right now. Each one holds ${t1(w)} tonnes of ore.`, ask: 'How many tonnes of ore are still on the ship?' }
-          : got.key === 'wall' ? { story: `${n} canisters are plugged in at the wall right now. Each one came in holding ${t1(w)} tonnes of ore.`, ask: 'How many tonnes of ore did they bring?' }
-            : { story: `The Miner in the hangar carries ${n} canisters. Each one holds ${t1(w)} tonnes of ore when it is full.`, ask: 'How many tonnes of ore is a full load?' };
+        : got.key === 'ship' ? { story: `The Miner in the hangar has ${n} full canisters on it right now. Each one holds ${t1(w)} tonnes, ore and slag together.`, ask: 'How many tonnes are still on the ship?' }
+          : got.key === 'wall' ? { story: `${n} canisters are plugged in at the smelter's wall right now. Each one came in holding ${t1(w)} tonnes, ore and slag together.`, ask: 'How many tonnes did they bring?' }
+            : { story: `This haul came in on the Miner: ${n} canisters, each holding ${t1(w)} tonnes when full, ore and slag together.`, ask: 'How many tonnes is the whole haul?' };
       return ownOrder({
         key: `weigh:load:${got ? got.key : 'own'}`, story: ctx.story, ask: ctx.ask, right: D(p * 10),
         slips: [
@@ -355,7 +481,7 @@ export const MAKERS = {
         ],
         pic: { kind: 'bars', n, label: dec(w, 1), line: `${n} canisters of ${dec(w, 1)} tonnes: ${n} lots of ${w} tenths.` },
         rightWhy: `${n} × ${w} tenths = ${p} tenths = ${t1(p)} tonnes`, sum: { op: 'mul', a: w / 10, b: n },
-        own: { strand: 'dec', at: 60 }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }], facts: { n, w, ans: p, live: !!got, kind: got ? got.key : 'own' },
+        own: { strand: 'dec', at: 60 }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }], facts: { n, w, ans: p, live: !!got, kind: got ? got.key : 'own', ...(got && got.key === 'load' ? { haul: live.round || 0, from: 'This haul' } : {}) },
       }, rand);
     },
   },
@@ -419,7 +545,9 @@ export const MAKERS = {
 
   // ── what it pays ───────────────────────────────────────────────────────────────────────────────────────────
   // step 1  tonnes times the price: 2.8 tonnes of cobalt at 50 credits a tonne
-  // step 2  the whole pay slip: 8 canisters of 1.5 tonnes; 25% of the ore is titanium; 60 credits a tonne
+  // step 2  the whole pay slip: the haul's own once a haul (8 canisters with 3/4 of a tonne of copper ore in each; 30%
+  //         of the ore is copper; 40 credits a tonne), then from the log (8 canisters of 1.5 tonnes; 25% of the ore is
+  //         titanium; 60 credits a tonne)
   pay: {
     strand: 'dec', at: (step) => (step <= 1 ? 66 : 76),
     make(step, { rand = Math.random, live = null, frac = 0 } = {}) {
@@ -446,6 +574,40 @@ export const MAKERS = {
         }
         throw new Error('smelter pay: nothing made');
       }
+      // THE WHOLE HAUL'S PAY (once a haul; then slips from the log): the smelter's equipment has the whole haul, all its
+      // canisters wherever they are (the game's maker, 2026-11-16: "if the player goes to the smelter room to calculate
+      // the payout then it should be able to access the entire haul"): its ore, then the part of the ore that is metal,
+      // then what that pays. (Later, not built: who is paid, a contract, a rich asteroid's double pay: they would
+      // change `pay` here.)
+      const H = live ? haulOf(live.round) : null;
+      if (H && isNew(live, 'pay:haul', 0)) {
+        used(live, 'pay:haul', 0);
+        const N = H.canisters, { n: a, d } = H.ore, O = H.oreTonnes, m = H.metal, pct = H.yield, metal10 = H.metal10, pay = H.pay, PS = parts(d);
+        const cut = pct === 50 ? [2, 'half'] : pct === 25 ? [4, 'a quarter'] : pct === 20 ? [5, 'a fifth'] : pct === 10 ? [10, 'a tenth'] : null;
+        const yieldSteps = cut ? [cutBy(O, cut[0], `Then the ${m.name}: ${pct}% is ${cut[1]} of the ore`)]
+          : [cutBy(O, 10, 'Then 10% of the ore: a tenth of it'), { op: 'mul', a: r2(O / 10), b: pct / 10, say: `Then the ${m.name}: ${pct}% is ${pct / 10} lots of 10%` }];
+        return ownOrder({
+          key: `pay:haul:${m.name}`, story: `This haul came in on the Miner: ${N} canisters, with ${ofT(fr(a, d))} of ${m.name} ore in each. ${pct}% of the ore is ${m.name}, and ${m.name} pays ${m.price} credits a tonne.`, ask: 'How many credits does the haul pay?', right: P(pay),
+          slips: [
+            { ...P(O * m.price), slip: 'allOre', why: `That pays for all ${u(O, TONNE)} of ore as if every tonne were ${m.name}. Only ${pct}% of the ore is ${m.name}.` },
+            ...(a > 1 ? [{ ...P(N * a * pct / 100 * m.price), slip: 'partsOnly', why: `${N * a} is how many ${PS} of a tonne of ore there are, not tonnes: ${d} ${PS} make one tonne.` }] : []),
+            { ...P(pay / N), slip: 'oneCanister', why: `That's the pay for one canister. There are ${N} of them.` },
+            { ...P((O * 10 - metal10) * m.price / 10), slip: 'rest', why: `That pays for the other ${100 - pct}%: the slag. Only the ${m.name} is paid for.` },
+            { ...P(metal10 / 10), slip: 'noPrice', why: `${t1(metal10)} is the tonnes of ${m.name}. Each tonne pays ${m.price} credits.` },
+            { ...P(pay + m.price), slip: 'off', why: `That's a tonne of ${m.name} too many. Work out the tonnes of ore, then the ${m.name}, then the pay.` },
+          ].filter((s) => s.v > 0),
+          rightWhy: `${N} × ${a}/${d} = ${u(O, TONNE)} of ore; ${pct}% of it is ${t1(metal10)} tonnes of ${m.name}; × ${m.price} = ${pay.toLocaleString('en-US')} credits`,
+          sum: [...(a > 1 ? [{ op: 'mul', a: N, b: a, say: `First the ore, in ${PS} of a tonne: ${N} lots of ${a}` }] : []),
+            { op: 'div', a: N * a, b: d, say: `${a > 1 ? 'Then' : 'First'} the ore in tonnes: ${d} ${PS} make one tonne` }, ...yieldSteps,
+            { op: 'mul', a: metal10 / 10, b: m.price, say: `Then the pay: the tonnes of ${m.name} times ${m.price} credits` }],
+          lines: [['Ore', `${N} canisters × ${a}/${d} of a tonne`], [cap(m.name), `${pct}% of the ore`], ['Price', `${m.price} credits a tonne`], ['Pay', '?']],
+          help: { title: 'Down the pay slip', pic: { kind: 'payslip', n: N, each: `${a}/${d}`, pct, metal: m.name, price: m.price },
+            line: `Three sums, one after the other: the tonnes of ore (${N} lots of ${a}/${d} of a tonne), then the ${pct}% of it that is ${m.name}, then that many tonnes at ${m.price} credits each.`,
+            steps: [`First the ore: ${N} × ${a}/${d} of a tonne`, `Then the ${m.name}: ${pct}% of that`, `Then the pay: the tonnes of ${m.name} × ${m.price}`] },
+          own: { strand: 'pct', at: 76 }, credit: [{ strand: 'frac', at: 47, weight: 0.5 }],
+          facts: { n: N, each: [a, d], pct, price: m.price, ore: O, metal: metal10 / 10, ans: pay, live: true, haul: H.n, from: 'This haul' }, size: 3,
+        }, rand);
+      }
       for (let tries = 0; tries < 200; tries++) {
         const n = live ? live.canisters || CARRIES : t.pick([4, 5, 6, 8, 8, 10]), w = t.pick([5, 12, 15, 20, 25]), ore = n * w;   // tenths
         // (the dearer the metal, the less of the ore it is: nobody's ore is half gold)
@@ -461,7 +623,7 @@ export const MAKERS = {
           slips: [
             { ...P(ore * m.price / 10), slip: 'allOre', why: `That pays for all ${t1(ore)} tonnes as if every tonne were ${m.name}. Only ${pct}% of the ore is ${m.name}.` },
             { ...P(oneCan), slip: 'oneCanister', why: `That's the pay for one canister. There are ${n} of them.` },
-            { ...P((ore - metal10) * m.price / 10), slip: 'rest', why: `That pays for the other ${100 - pct}%: the rock. Only the ${m.name} is paid for.` },
+            { ...P((ore - metal10) * m.price / 10), slip: 'rest', why: `That pays for the other ${100 - pct}%: the slag. Only the ${m.name} is paid for.` },
             { ...P(metal10 / 10), slip: 'noPrice', why: `${t1(metal10)} is the tonnes of ${m.name}. Each tonne pays ${m.price} credits.` },
             { ...P(pay + m.price), slip: 'off', why: `That's a tonne of ${m.name} too many. Work out the tonnes of ore, then the ${m.name}, then the pay.` },
           ].filter((s) => s.v > 0),
@@ -484,8 +646,8 @@ const W = (step, types, w = 1) => ({ maker: 'words', step, types, w });
 const M = (maker, step, w = 1) => ({ maker, step, w });
 
 export const PLACE = {
-  id: 'smelter', name: 'The smelter\'s control room', short: 'Smelter', math: 'What a load of ore pays: weights, yields, credits', pic: 'smelter', job: null,
-  line: 'Pay slips at the operator\'s chair: canisters to count, tonnes of ore, the part that is metal, and what it pays.',
+  id: 'smelter', name: 'The smelter\'s hall', short: 'Smelter', math: 'What a haul of ore pays: fractions, weights, yields, credits', pic: 'smelter', job: null,
+  line: 'Pay slips at the furnace console: canisters to count, the ore against the slag, tonnes of ore, the part that is metal, and what it pays.',
   levels: [
     { id: 'kCount', title: 'Counting canisters', line: 'Up to 5: the canisters on the Miner', gen: { mix: [M('count', 1, 2), K(1)] } },
     { id: 'kFull', title: 'Still on the ship, full and empty', line: 'Up to 8: 8 came in, 5 are still on the Miner', gen: { mix: [M('count', 2, 2), K(2)] } },
@@ -493,7 +655,11 @@ export const PLACE = {
     { id: 'loads', title: 'Tonnes by the canister', line: '4 canisters with 3 tonnes in each; 15 tonnes and 18 together', gen: { mix: [W(1, ['groups', 'parts'])] } },
     { id: 'share', title: 'Sharing a load out', line: '24 tonnes into 4 canisters', gen: { mix: [W(2, ['share'], 2), W(1, ['groups'])] } },
     { id: 'part', title: 'A part of the load', line: '1/4 of the 12 tonnes is iron', gen: { mix: [M('part', 1, 2), W(3, ['groups', 'share', 'parts'])] } },
-    { id: 'parts', title: 'Several parts', line: '3/4 of the 12 tonnes is rock', gen: { mix: [M('part', 2, 2), W(3, ['groups', 'share'])] } },
+    { id: 'parts', title: 'Several parts', line: '3/4 of the 12 tonnes is slag', gen: { mix: [M('part', 2, 2), W(3, ['groups', 'share'])] } },
+    // (canisters times a fraction of a tonne: the whole haul's ore first, a whole number of tonnes; then the answers
+    // that are mixed numbers, as Mathwood's fishing dock has them at the same point of the school guide, 47)
+    { id: 'oreWhole', title: 'Canisters of ore', line: '8 canisters with 3/4 of a tonne in each: 6 tonnes', gen: { mix: [M('ore', 1, 2), M('part', 2)] } },
+    { id: 'oreTimes', title: 'Canisters times a fraction', line: '5 canisters with 3/4 of a tonne in each: 3 3/4 tonnes', gen: { mix: [M('ore', 2, 2), M('ore', 1)] } },
     { id: 'tenths', title: 'Weights in tenths', line: '1.2 tonnes and 0.9 tonnes together; 2.3 tonnes with 0.8 drained', gen: { mix: [M('weigh', 1, 2), M('part', 2)] } },
     { id: 'percent', title: 'Yields in percent', line: '25% of the 12 tonnes is iron', gen: { mix: [M('percent', 1, 2), M('weigh', 1)] } },
     { id: 'tonnes', title: 'A load of canisters', line: '8 canisters of 1.2 tonnes; 2 bars from every 5 tonnes', gen: { mix: [M('weigh', 2, 2), M('ratio', 3)] } },
@@ -504,17 +670,23 @@ export const PLACE = {
 };
 
 export const JOB = {
-  // (named in the game's maker's own word for it: "they could go over to the controls and start calculating")
-  id: 'smelter', name: 'The smelter pay desk', short: 'Smelter', open: true,
-  // where the job is: at its own desk in the smelter's control room, by the window at the room's door end, looking out
-  // at the hangar. It moved here from the operator's chair
-  // (2026-11-16), which now holds the crane's two options (src/jobs/crane.js): the game's maker to say whether it stays
-  // its own job here or folds into the crane operator job's upper levels.
-  // (the station file's places: where one stands at the desk, and its screen, by the window)
-  spot: { place: 'smelterPayDesk' }, face: 'smelterPayDeskScreen',
-  // the camera while it's up: through the crew member's eyes at the desk, out of the window (their body is put away)
-  seated: true,
-  sign: 'Smelter pay desk', hint: 'Work out what the load pays',
+  // (named in the game's maker's own words: "I thought that there were controls in the smelter room for the smelter pay
+  // desk?")
+  id: 'smelter', name: 'The smelter controls', short: 'Smelter', open: true,
+  // WHERE THE JOB IS: in the smelter's hall, at the forge's own thermal console (its FURNACE 1 and FURNACE 2 screens),
+  // the glowing pours just past it. The game's maker (2026-11-16): "I think it would be a good idea to have one job per
+  // room. I want people to have a reason to go into the smelter room and look at the pretty glowing metal. It makes
+  // sense to me that the smelter equipment is what would have an accurate read on the amount of ore verses slag from
+  // the haul." (Before, it was a desk in the smelter's control room, and before that the crane's chair, which now has
+  // the crane's own two options: src/jobs/crane.js.)
+  // (the station file's places: where one stands at the console, on its operator's side, and the middle of its two
+  // screens. The smelter, one of the station's people, stands by the console's south end now and then, under the
+  // catwalk: life.js forgeConsole, well clear of this job's ring)
+  spot: { place: 'smelterControls' }, face: 'smelterControlsScreen',
+  // the camera while it's up: the station file's view from behind the console's south end, over it to the nearer pour
+  // and its ladle (the crew member stands at the console, in view)
+  view: 'smelter-controls',
+  sign: 'Smelter controls', hint: 'Work out what the haul pays',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'payslip',
 };
