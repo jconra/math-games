@@ -1022,6 +1022,8 @@ renderer.setAnimationLoop((t) => {
   // (the lamps stand on the side the camera looks from, so a view from behind (Back, Nape, As the game) is lit as a
   // front view is: before 2026-11-15 the back of every head and neck stood in shadow, one reason a long nape went unseen)
   if ((camera.position.z < 0) !== (sun.position.z < 0)) { sun.position.z = -sun.position.z; fill.position.z = -fill.position.z; }
+  // (the game draws no cast shadows (src/station.js turns them off), so the two "As the game" views draw none either)
+  sun.castShadow = st.cam !== 'Game' && st.cam !== 'GameClose';
   if (wallGroup) wallGroup.visible = camera.position.z > wallZ;
   // (the Line-up: the person shown hidden, a tile a person drawn in its place)
   if (c) c.root.visible = !LU?.on; if (skel) skel.visible = !LU?.on; if (refFig) refFig.visible = !LU?.on;
