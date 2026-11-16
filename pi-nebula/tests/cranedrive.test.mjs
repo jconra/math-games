@@ -211,6 +211,11 @@ test('the job\'s queue: a question holds the next move of its kind, on the level
   // the job picks, from a level's makers, one that suits that move
   const pick = crane.pickAsk([{ maker: 'hoist', step: 1 }, { maker: 'rail', step: 1 }], { live: { peek: Qu.peek } });
   assert.equal(pick.maker, 'rail');
+  // a level none of whose questions suits the very next move asks about the first coming move one does suit (the grab)
+  const ahead = Qu.ahead();
+  assert.deepEqual(ahead[0], ['trip', 'along', 'route']);
+  assert.ok(ahead.some((k) => k.includes('grab')), JSON.stringify(ahead));
+  assert.equal(crane.pickAsk([{ maker: 'weight', step: 1 }], { live: { ahead: Qu.ahead } }).maker, 'weight');
   const a = Qu.ask('along', { prec: 1 });
   assert.ok(a && Number.isInteger(a.mark) && Number.isInteger(a.markTo) && a.what, JSON.stringify(a));
   const steps = Qu.right(a.id), asked = steps.find((s) => s.asked);

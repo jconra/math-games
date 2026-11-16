@@ -111,7 +111,7 @@ export function craneLink({ crane, W, walls }) {
     closed = true; clearGhost(); W.scene.remove(ghost); chip.remove();
     crane.give();
   }
-  const peek = () => (crane.live ? Q.peek() : null);
-  const now = () => ({ ask, peek, rated: DRIVE.rated, site, marks });
+  const peek = () => (crane.live ? Q.peek() : null), ahead = () => (crane.live ? Q.ahead() : []);
+  const now = () => ({ ask, peek, ahead, rated: DRIVE.rated, site, marks });
   return { now, right, wrong, update, aim, close, Q, state: () => ({ cursor: Q.cursor, queued: Q.queue.length, reserved: Q.reserved && { ...Q.reserved }, busy: crane.live ? crane.live.busy : null, steps: crane.live ? crane.live.steps : null, failed: crane.live ? crane.live.failed : null, mode: crane.mode, ghost: ghostT > 0 }) };
 }
