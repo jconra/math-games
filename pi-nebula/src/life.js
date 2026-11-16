@@ -55,7 +55,9 @@ export const SPOTS = {
   counter: [{ piece: 'counter', variant: 'serve', local: [0, 0, 0.95], face: [0, -1] }],
   drinks: [{ piece: 'dispenser', variant: 'drinks', local: [0, 0, 0.95], face: [0, -1] }],
   // by the terminal's big windows, looking out over the planters at space (its south side: the far end of its box)
-  windows: [{ room: 'terminal', at: [0.066, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.259, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.645, 0.87], face: [-0.1, 1] }, { room: 'terminal', at: [0.915, 0.87], face: [0.1, 1] }],
+  // (the westmost a little in from the west wall's screen, so nobody stands at the window and the screen shoulder to
+  // shoulder)
+  windows: [{ room: 'terminal', at: [0.094, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.259, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.645, 0.87], face: [-0.1, 1] }, { room: 'terminal', at: [0.915, 0.87], face: [0.1, 1] }],
   // the terminal's open west side, where the captains' booths stood: by the crew screen, and out on the floor
   terminalFloor: [{ room: 'terminal', at: [0.17, 0.12], face: [0.3, -1] }, { room: 'terminal', at: [0.25, 0.33], face: [1, 0.2] }, { room: 'terminal', at: [0.16, 0.45], face: [1, -0.3] }],
   // reading the terminal's screens, on its walls (standing in the open with nothing to look at reads as someone waiting)

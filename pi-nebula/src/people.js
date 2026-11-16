@@ -566,17 +566,23 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const P of [...want]) { const Q = partner(P); if (Q) want.add(Q); }
     const pl = playerNow ? playerNow.pos : null;
     const unseen = (P) => !inView(P, camera);
+    // (those past the nearest go first, then those wanted come, each only while there is room: never more than the
+    // nearest NEAR about, but for someone who should go and is still in view)
     for (const P of L) {
       const w = want.has(P);
       P.unwanted = w ? 0 : (P.unwanted || 0) + PRESENCE.every;
+      if (w || P.away || P.unwanted < PRESENCE.linger) continue;
       const group = [P]; const Q = partner(P); if (Q && Q.away === P.away) group.push(Q);
-      if (w && P.away) {
-        // (back, where nobody is looking, nobody stands, not right by the player, and not in a shut door's way: someone
-        // away walks through doors as if they were open)
-        if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.come) && !someoneAt(X.pos, X, LIFE.body, true) && (X.scripted || walls.free(X.pos.x, X.pos.y, X.pos.z, 0.22)))) for (const X of group) setAway(X, false);
-      } else if (!w && !P.away && P.unwanted >= PRESENCE.linger) {
-        if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.go))) for (const X of group) setAway(X, true);
-      }
+      if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.go))) for (const X of group) setAway(X, true);
+    }
+    let about = L.filter((P) => !P.away).length;
+    for (const P of L) {
+      if (!want.has(P) || !P.away) continue;
+      const group = [P]; const Q = partner(P); if (Q && Q.away === P.away) group.push(Q);
+      if (about + group.length > nearMost + (Q ? 1 : 0)) continue;
+      // (back, where nobody is looking, nobody stands, not right by the player, and not in a shut door's way: someone
+      // away walks through doors as if they were open)
+      if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.come) && !someoneAt(X.pos, X, LIFE.body, true) && (X.scripted || walls.free(X.pos.x, X.pos.y, X.pos.z, 0.22)))) { for (const X of group) setAway(X, false); about += group.length; }
     }
   }
   function setAway(P, v) {
@@ -659,6 +665,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (lying) look = null;
       else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.state === 'offer' || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
       else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
+      // (the medic at the scanner watches their patient)
+      else if (P.act && P.act.kind === 'scanMedic' && SCAN && SCAN.busy && SCAN.busy.patient && SCAN.busy.patient.inScene) look = headAt(SCAN.busy.patient, near);
       if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
       P.moves.look = look && far < 14 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
       // (a little more smile while the player is near, or just after a hello)
@@ -1186,7 +1194,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.phase || '') + ' ' + (P.act.spot?.name || '') : '-') + (P.walking ? ', walking' : '') + (P.yielding ? ', making way' : '') + ')');
       // in another person (or the player): only among those about (someone away is not there to bump into)
       if (!P.away) {
-        for (const Q of list) if (Q !== P && !Q.hidden && !Q.away && !Q.scripted && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < 0.42 && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, 'and ' + Q.id);
+        const what = (X) => X.id + ' at ' + X.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (X.act ? X.act.kind + ' ' + (X.act.phase || '') + ' ' + (X.act.spot?.name || '') : '-') + (X.walking ? ', walking' : '') + (X.yielding ? ', making way' : '') + ')';
+        for (const Q of list) if (Q !== P && !Q.hidden && !Q.away && !Q.scripted && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < 0.42 && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, what(P) + ' and ' + what(Q));
         if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < 0.42) alarm('inPerson', P, 'and the player');
       }
       // on a patch kept off (a job's ring, a ship's way in, under the crane, the scanner)
@@ -1320,7 +1329,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const a = claimFor(P, { do: 'scan', for: [40, 60] }); if (!a) return false;
       begin(P, a); return true;
     },
-    put(id, at, heading = 0) { const P = byId(id); if (!P) return false; release(P); P.req = null; P.walking = false; P.way = null; P.pos.copy(at); P.heading = heading; P.act = { kind: 'wait', until: 3, t: 0 }; return true; },
+    // (someone put somewhere at once: waiting a moment, or standing there `len` seconds; a spot of a group (its own
+    // claim with it) when `spot` is one of people.groups' spots)
+    put(id, at, heading = 0, len = 0) {
+      const P = byId(id); if (!P) return false;
+      reset(P); P.pos.copy(at.pos || at); P.heading = at.heading ?? heading;
+      if (at.pos && at.name && !at.who) { at.who = P; P.claim = at; taken.set(P, [at.pos]); }
+      P.act = len ? { kind: 'stand', phase: 'do', t: 0, len, spot: at.pos ? at : { pos: P.pos.clone(), heading: P.heading }, step: { do: 'stand' } } : { kind: 'wait', until: 3, t: 0 };
+      stillV++; return true;
+    },
   };
   const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };

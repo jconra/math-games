@@ -43,7 +43,8 @@ export function pickTalk(A, B, { sitting = false, player = null, now = 0 } = {})
   const { T, N, facts } = cands[Math.floor(Math.random() * cands.length)];
   // (a line naming the player when there is no player: that conversation is not for now)
   const F = { ...facts, A: A.name, B: B.name };
-  const lines = T.lines.map((s, i) => ({ who: i % 2, words: fill(s, F) }));
+  // (a line that starts with a filled-in blank starts with a capital all the same)
+  const lines = T.lines.map((s, i) => { const w = fill(s, F); return { who: i % 2, words: w.charAt(0).toUpperCase() + w.slice(1) }; });
   if (lines.some((l) => /\{\w+\}/.test(l.words))) return null;
   heard.set(T.id, now);
   if (N) told.set(N.id, (told.get(N.id) || 0) + 1);
