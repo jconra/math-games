@@ -18,6 +18,11 @@
 //                                     loaded (boarding.js). part: { solid: [geometry], up: [geometry] (world space),
 //                                     doors: [{ D, box }], when(pathing) (only while it says so: a stair that is a door,
 //                                     while it is down), voxel (its voxels' size), r (a person's half width in it) }
+//   walls.lift(key, dy, feet)         A MOVING FLOOR (a ship's lift: its platform and railings): a part added with
+//                                     walls.add, moved up or down to `dy` metres from where it was made, carrying with
+//                                     it anyone whose feet (Vector3s, changed) stand on its floors; returns how many it
+//                                     carried. Every question asked of the part (its floors, its walls, a camera's
+//                                     reach) is asked of it where it now is.
 //
 // HOW: two things are made once, when the station has loaded.
 //   - Voxels (the kit's own, kit/bake.js) of every wall, floor, window and piece of furniture, 0.1 m across. A person
@@ -58,17 +63,19 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   let extra = [];                 // (the parts in play: for the loops below, no Map walked on every step)
   let pathing = false;            // (working out a way: a part whose `when` asks is counted as if its door were open)
   const live = (L) => !L.when || L.when(pathing);
+  // (a part that moves up and down, walls.lift, is asked where it was made: y less its dy, the answer plus its dy)
   function floorAt(x, z, top = Infinity, drop = Infinity) {
     let best = F0.at(x, z, top, drop);
     for (const L of extra) {
       if (x < L.box.min.x || x > L.box.max.x || z < L.box.min.z || z > L.box.max.z || !live(L)) continue;
-      const f = L.F.at(x, z, top, drop); if (f !== null && (best === null || f > best)) best = f;
+      let f = L.F.at(x, z, top - L.dy, drop); if (f !== null) f += L.dy;
+      if (f !== null && (best === null || f > best)) best = f;
     }
     return best;
   }
   function full(x, y, z) {
     if (V.full(x, y, z)) return true;
-    for (const L of extra) if (L.V && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && y >= L.box.min.y && y <= L.box.max.y && live(L) && L.V.full(x, y, z)) return true;
+    for (const L of extra) { const u = y - L.dy; if (L.V && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && u >= L.box.min.y && u <= L.box.max.y && live(L) && L.V.full(x, u, z)) return true; }
     return false;
   }
 
@@ -107,7 +114,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   // (inside a part with a body of its own, a ship's cabin: a person there is that slim, as its narrow doors are drawn
   // for a person 0.5 m across)
   function radiusAt(x, y, z, r) {
-    for (const L of extra) if (L.r && L.r < r && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && y >= L.box.min.y && y <= L.box.max.y && live(L)) r = L.r;
+    for (const L of extra) if (L.r && L.r < r && x >= L.box.min.x && x <= L.box.max.x && z >= L.box.min.z && z <= L.box.max.z && y - L.dy >= L.box.min.y && y - L.dy <= L.box.max.y && live(L)) r = L.r;
     return r;
   }
   function free(x, y, z, r = BODY.r, doorsOpen = false) {
@@ -245,7 +252,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   function reach(from, dir, len) {
     let t = V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, len, voxel * 0.5);
     if (t < 0) t = len;
-    for (const L of extra) { if (!L.V || !live(L)) continue; const u = L.V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, t, L.V.s * 0.5); if (u >= 0) t = Math.min(t, u); }
+    for (const L of extra) { if (!L.V || !live(L)) continue; const u = L.V.march(from.x, from.y - L.dy, from.z, dir.x, dir.y, dir.z, t, L.V.s * 0.5); if (u >= 0) t = Math.min(t, u); }
     for (const d of doors) {
       if (d.when && !d.when(pathing)) continue;
       if (!d.locked && d.D.t >= (d.open ?? BODY.doorOpen)) continue;
@@ -267,7 +274,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   // (voxel: its own voxels' size, finer than the station's for a ship's narrow rooms; r: the body there)
   function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null } = {}) {
     drop(key);
-    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [] };
+    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [], dy: 0 };
     for (const g of [...S, ...U]) { if (!g.boundingBox) g.computeBoundingBox(); L.box.union(g.boundingBox); }
     L.box.expandByScalar(0.6);
     for (const d of D) { const e = { D: d.D, box: d.box, locked: false, part: key, when }; L.doors.push(e); doors.push(e); }
@@ -281,9 +288,23 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     parts.delete(key); extra = [...parts.values()];
     return true;
   }
+  // A MOVING FLOOR: the part moved to dy (m, up from where it was made); whoever stands on its floors moves with it.
+  // Standing on it: its floor right under their feet (within 6 cm) where it was. (Its doors, if any, stay where they are.)
+  function lift(key, dy, feet = []) {
+    const L = parts.get(key); if (!L) return 0;
+    const d = dy - L.dy; if (Math.abs(d) < 1e-9) return 0;
+    let n = 0;
+    for (const p of feet) {
+      if (!p || p.x < L.box.min.x || p.x > L.box.max.x || p.z < L.box.min.z || p.z > L.box.max.z) continue;
+      const f = L.F.at(p.x, p.z, p.y - L.dy + 0.06, 0.12);
+      if (f !== null && Math.abs(f + L.dy - p.y) < 0.06) { p.y += d; n++; }
+    }
+    L.dy = dy;
+    return n;
+  }
 
   const stats = { voxelMs: Math.round(tV - t0), floorMs: Math.round(performance.now() - tV), bricks: V.bricks, voxelMB: +(V.bytes / 1048576).toFixed(1), floorTris: F0.tris, doors: doors.length, locked: doors.filter((d) => d.locked).length };
-  return { V, floorAt, free, move, snap, path, reach, doors, stats, add, drop, parts, solidAt: (x, y, z) => full(x, y, z) };
+  return { V, floorAt, free, move, snap, path, reach, doors, stats, add, drop, lift, parts, solidAt: (x, y, z) => full(x, y, z) };
 }
 
 // THE FLOORS of a set of geometries: every triangle that faces up, sorted into half-metre squares; at(x, z, top, drop)

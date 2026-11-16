@@ -113,7 +113,8 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
       const n = a1 - a0 >= 0.9 ? 2 : 1;
       for (let k = 0; k < n; k++) { const a = a0 + (a1 - a0) * (n === 1 ? 0.5 : k ? 0.76 : 0.24); spots.push(along === 'z' ? [pos, a] : [a, pos]); }
     }
-    for (const [sx, sz] of spots) ctx.put('mess: stools', part(stool, { pad: A.pad }), { at: [sx, f, sz] });
+    // (a table may say it has no stools, "stools": 0: its benches seat everyone and the walk past it is narrow)
+    if (it.stools !== 0) for (const [sx, sz] of spots) ctx.put('mess: stools', part(stool, { pad: A.pad }), { at: [sx, f, sz] });
     const top = f + h;
     ctx.put('mess: small things', part(mug, { look: A.cup }), { at: [cx + 0.15 * (x1 - x0) / 0.75, top, cz - 0.25], rot: [0, 2.2, 0] });
     ctx.put('mess: small things', part(mug, { look: A.cup }), { at: [cx - 0.12, top, cz + 0.22], rot: [0, -0.6, 0] });

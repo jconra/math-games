@@ -811,15 +811,18 @@ export const LIFT = (() => {
 // way in that people ride (src/boarding.js):
 //   - the platform rides between the airlock's floor (shut: its top flush with the deck, the middle of the airlock's
 //     floor) and the ground; the hatch's doors go (up, the platform is the floor);
-//   - his picture's tower at its back and the rods at its front corners TELESCOPE, each in CLIFT.n nested sections, the
-//     top one fixed in the shaft: down, they stand from the platform up into the shaft; up, they are folded down into
-//     the platform, so nothing stands in the airlock and people walk over it fore and aft;
+//   - the platform is a thin deck (CLIFT.thick, 10 cm): down, its tread is a small step off the hangar floor, low
+//     enough that a person steps onto it from beside it under the side blocks (the belly there is 1.68 m up);
+//   - his picture's tower at its back and the rods at its front corners TELESCOPE, each in CLIFT.n nested sections
+//     CLIFT.sec tall, the top one fixed in the shaft: down, they stand from the platform up into the shaft; up, they are
+//     folded down through a slot in the platform into the shaft under it, so nothing stands in the airlock and people
+//     walk over it fore and aft;
 //   - railings stand along the back of each side; the front of each side (from CLIFT.gap forward) is left open to step
-//     on and off by, under the side blocks beside the hatch (the belly there is 1.68 m up);
+//     on and off by;
 //   - the shaft's sides start at the hull's own underside just outside the hatch (worked out from the hull's faces),
 //     so nothing hangs below the belly beside it (the stand-in shaft's walls all reach down to the keel's 1.37 m).
 // One kit door, 'lift' (0 up, 1 down), heavy (it starts and lands gently), CLIFT.speed of its way a second.
-export const CLIFT = { drop: +(DECK - 0.33).toFixed(3), thick: 0.33, n: 6, gap: -0.45, speed: 0.2, rail: 0.9 };
+export const CLIFT = { drop: +(DECK - 0.1).toFixed(3), thick: 0.1, sec: 0.3, n: 6, gap: -0.45, speed: 0.2, rail: 0.9 };
 function cabinLift(p) {
   const L = LIFT, K = CLIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, hx = L.hx, hz = L.hz, zc = L.zc;
   // the shaft: its four walls from the hull's underside just outside each edge (sampled along it) up to the deck
@@ -844,7 +847,7 @@ function cabinLift(p) {
       const hu = sx ? hz : hx, u0 = -hu + (2 * hu) * i / n, u1 = -hu + (2 * hu) * (i + 1) / n, col = i % 2 ? PAL.black : PAL.yellow, e = 0.1;
       const q = sx ? [V3(sx * (hx - e), pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u1), V3(sx * (hx - e), pt + 0.004, zc + u1)] : [V3(u0, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * hz), V3(u0, pt + 0.004, zc + sz * hz)];
       a.poly(q.map(dk), V3(0, 1, 0), col, 'solid', 99);
-      const y0 = pt - 0.12, d = sx ? [V3(sx * (hx + 0.003), y0, zc + u0), V3(sx * (hx + 0.003), y0, zc + u1), V3(sx * (hx + 0.003), pt, zc + u1), V3(sx * (hx + 0.003), pt, zc + u0)] : [V3(u0, y0, zc + sz * (hz + 0.003)), V3(u1, y0, zc + sz * (hz + 0.003)), V3(u1, pt, zc + sz * (hz + 0.003)), V3(u0, pt, zc + sz * (hz + 0.003))];
+      const y0 = pt - Math.min(0.12, K.thick), d = sx ? [V3(sx * (hx + 0.003), y0, zc + u0), V3(sx * (hx + 0.003), y0, zc + u1), V3(sx * (hx + 0.003), pt, zc + u1), V3(sx * (hx + 0.003), pt, zc + u0)] : [V3(u0, y0, zc + sz * (hz + 0.003)), V3(u1, y0, zc + sz * (hz + 0.003)), V3(u1, pt, zc + sz * (hz + 0.003)), V3(u0, pt, zc + sz * (hz + 0.003))];
       a.poly(d.map(dk), sx ? V3(sx, 0, 0) : V3(0, 0, sz), col, 'solid', 99);
     }
     a.flush(lp);
@@ -852,7 +855,7 @@ function cabinLift(p) {
   // THE TOWER and THE RODS: K.n nested sections each, `h` tall; up, every section stands inside the platform (from its
   // underside to its top); down, they reach from the platform's top to the deck, each overlapping the next. Section k
   // (0 the lowest, on the platform; n-1 the top, which never moves) slides (its place down) - (its place up).
-  const h = K.thick, step = (D - h) / (K.n - 1), sec = (k) => (pt - D + k * step) - (pt - h);
+  const h = K.sec, step = (D - h) / (K.n - 1), sec = (k) => (pt - D + k * step) - (pt - h);
   const T = L.column, zt = zc - hz + 0.06 + T.t / 2;
   for (let k = 0; k < K.n; k++) {
     const w = hx - 0.12 - 0.012 * k, t = T.t / 2 - 0.006 * k, yb = pt - h;

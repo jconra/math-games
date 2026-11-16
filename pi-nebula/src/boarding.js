@@ -33,16 +33,19 @@ import { corePulse, CORE_LOOK } from '../kit/shipparts/cabin/livecore.js';
 import { CORE_TAG } from '../kit/shipparts/cabin/reactor.js';
 import * as EB from '../kit/ships/explorer-built.js';
 import * as MD from '../kit/ships/medic-built.js';
+import * as MB from '../kit/ships/miner-built.js';
 import { shine } from './player.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
 // meets its hull: kit/ships/<ship>-built.js), the blueprint the game's maker picked, and its ways in (the ship's
 // doors that come down to the floor, by piece; `step`: what the ship's module does each frame to pose them, as the
-// Medic's ramp unfolds its foot). (The Miner has blueprints but no cabin built in the Ship Lab yet, and the Hauler is
-// paused: neither is boarded.)
+// Medic's ramp unfolds its foot). `lifts`: a way in that people ride instead (the Miner's belly lift: LIFTS below),
+// by piece, with where to stand on the hangar floor to step onto it (`foot`: in the ship's frame, x to port, z to the
+// nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.)
 export const SHIPS = [
   { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, bp: 'explorer-c-row', ways: ['ebAirstair'] },
   { id: 'medic', zone: 'ship-medic', lab: MD.LAB, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.05], drop: MB.CLIFT.drop }] },
 ];
 // how near (m, along the floor) a person must be to a way in for it to come down (the door's own reach, if it has one);
 // how long (s) after everyone has left a ship's hangar its cabin is dropped; the cabin's look
@@ -63,6 +66,19 @@ export const INSIDE = { exposure: 1.0, fogNear: 40, fogFar: 140, ease: 3 };
 // is in (the strips under the cabinets, the benches' toes, the door frames, the ceilings' downlights: cabin-built.js
 // POOLS), on high quality only (every lit surface in view pays for them); how many
 export const POOL_N = 10;
+// THE LIFTS (a ship's way in that people ride: the Miner's belly lift, kit/ships/miner-built.js mbLift 'belly, cabin').
+// One heavy kit door ('lift': 0 up, its platform the middle of the airlock's floor; 1 down on the hangar floor), driven
+// here, never by the station's frame:
+//   - it comes down for whoever comes within WAY_REACH of it on the hangar floor while nobody is aboard, waits on the
+//     ground while they are near, and goes back up once nobody is near it and nobody is on it;
+//   - someone standing still on its tread for RIDE.wait seconds (feet on it, RIDE.inset inside its edge) is carried:
+//     up if it is down, down if it is up (walking across it in the airlock does not). Once carried, they must step off
+//     before it carries them again;
+//   - coming down, the floor under it is shut to walkers (its own patch, whose top is always the platform's underside)
+//     and it waits while anyone not riding stands there, the player walked off it first, as the ways do;
+//   - its riders move with it: its platform and railings are a moving floor (walls.lift), and the feet of whoever
+//     stands on them go up and down with them, smoothly (the kit's heavy door: it starts and lands gently).
+export const RIDE = { wait: 1.0, still: 0.15, inset: 0.15 };
 
 const breath = () => new Promise((done) => { let went = false; const go = () => { if (!went) { went = true; done(); } }; requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 60); });
 const FAR = new THREE.Vector3(1e6, 1e6, 1e6), ONE = [null];
@@ -88,7 +104,10 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     for (const D of ways) { W.driven.add(D); W.keepShut.delete(D); }
     const entries = ways.map((D) => walls.doors.find((d) => d.D === D)).filter(Boolean);
     for (const e of entries) { e.locked = true; e.open = WAY_OPEN; }
-    ships.push({ ...S, zd, zone, hangar, near, ways, entries, state: 'out', away: 0, cabin: null, wayParts: new Map(), M: null, inv: null, stats: null });
+    // the lifts: driven here; their door's box never stops anyone (the lift is a moving floor of its own: liftParts)
+    const lifts = (S.lifts || []).flatMap((Lf) => W.built.doors.filter((D) => D.zone === S.zone && D.hold == null && D.piece === Lf.piece).map((D) => ({ ...Lf, D, carried: new Set(), key: null, patch: null })));
+    for (const L of lifts) { W.driven.add(L.D); W.keepShut.delete(L.D); const e = walls.doors.find((d) => d.D === L.D); if (e) e.when = () => false; }
+    ships.push({ ...S, zd, zone, hangar, near, ways, lifts, entries, state: 'out', away: 0, cabin: null, wayParts: new Map(), M: null, inv: null, stats: null });
   }
 
   // ── a ship's cabin, built ──────────────────────────────────────────────────────────────────────────────────────
@@ -129,13 +148,14 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         D.senseW = D.sense.clone().applyMatrix4(s.M);
       }
       walls.add('cabin:' + s.id, { solid, up, doors, voxel: CABIN_WALLS.voxel, r: CABIN_WALLS.r });
+      s.lifts.forEach((L, i) => liftParts(s, L, i));
       times.walls = Math.round(performance.now() - t);
       W.scene.add(group);
       // (its materials' programs made now, not on the first frame it is seen)
       t = performance.now();
       if (W.renderer.compileAsync) await W.renderer.compileAsync(group, W.camera); else W.renderer.compile(group, W.camera);
       times.compile = Math.round(performance.now() - t);
-      if (s.state !== 'loading') { W.scene.remove(group); walls.drop('cabin:' + s.id); C.built.dispose(); beams?.dispose(); return; }
+      if (s.state !== 'loading') { W.scene.remove(group); walls.drop('cabin:' + s.id); for (const k of s.wayParts.keys()) walls.drop(k); s.wayParts.clear(); C.built.dispose(); beams?.dispose(); return; }
       // the cabin's own picture of itself, for the people walking in it (the player's suit lit by its strips)
       t = performance.now();
       const env = cabinPicture(s, group);
@@ -156,6 +176,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     walls.drop('cabin:' + s.id);
     for (const k of s.wayParts.keys()) walls.drop(k);
     s.wayParts.clear();
+    for (const L of s.lifts) { L.key = L.patch = null; L.carried.clear(); }
     for (const e of s.entries) e.locked = true;
     s.cabin = null; s.state = 'out'; poolKey = null;
     for (const L of pools) { L.intensity = 0; L.userData.pool = null; }
@@ -231,6 +252,78 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     if (side <= end) { p.x += sx * sg * k; p.z += sz * sg * k; } else { p.x += ox * k; p.z += oz * k; }
   }
 
+  // ── a lift (LIFTS): its moving floor, its patch, and each frame's ride ─────────────────────────────────────────
+  // (how far the platform is below where it stands up: the kit poses a heavy door's leaves at smooth(smooth(t)) of their
+  // slide, kit/layout.js setLeaf)
+  const smooth = (t) => t * t * (3 - 2 * t), liftDy = (L) => -L.drop * smooth(L.D.heavy ? smooth(L.D.t) : L.D.t);
+  // its platform and railings, as they stand up (t 0), as a part of the walls that moves (walls.lift); and its patch:
+  // the floor under its platform at the bottom, CLEAR wider, from under the floor to the platform's underside, moved with
+  // it (so its top is always the platform's underside), shut to walkers only while the lift comes down
+  function liftParts(s, L, i) {
+    const D = L.D, t0 = D.t, geos = [], box = new THREE.Box3(), low = new THREE.Box3();
+    ONE[0] = D; setDoors(ONE, 0);
+    for (const leaf of D.leaves) for (const im of leaf.meshes || []) {
+      if (!/platform|railing/.test(im.name) || /glass|glow|decal/.test(im.name)) continue;
+      im.getMatrixAt(leaf.index, _im);
+      const w = new THREE.BufferGeometry(); w.setAttribute('position', im.geometry.attributes.position.clone()); w.setIndex(im.geometry.index); w.applyMatrix4(_im);
+      geos.push(w); w.computeBoundingBox(); if (/platform/.test(im.name)) box.union(w.boundingBox);
+    }
+    ONE[0] = D; setDoors(ONE, t0);
+    if (!geos.length || box.isEmpty()) return;
+    L.key = 'lift:' + s.id + ':' + i; L.box = box; L.top0 = box.max.y;
+    // (and, to walk on only, its tread carried out over the few centimetres between its edge and the hatch's rim, so a
+    // step off it at the top lands on the deck, not in the gap)
+    const e = 0.09, tread = new THREE.BufferGeometry();
+    tread.setAttribute('position', new THREE.Float32BufferAttribute([box.min.x - e, box.max.y, box.min.z - e, box.max.x + e, box.max.y, box.min.z - e, box.max.x + e, box.max.y, box.max.z + e, box.min.x - e, box.max.y, box.max.z + e], 3));
+    tread.setIndex([0, 2, 1, 0, 3, 2]);
+    walls.add(L.key, { solid: geos, up: [...geos, tread], voxel: CABIN_WALLS.voxel });
+    const y0 = box.max.y - L.drop - 0.1, g = new THREE.BoxGeometry(box.max.x - box.min.x + 2 * CLEAR, box.min.y - y0, box.max.z - box.min.z + 2 * CLEAR);
+    g.translate((box.min.x + box.max.x) / 2, (box.min.y + y0) / 2, (box.min.z + box.max.z) / 2);
+    L.patch = 'liftpatch:' + s.id + ':' + i;
+    walls.add(L.patch, { solid: [g], when: () => !!D.coming });
+    const dy = liftDy(L); walls.lift(L.key, dy); walls.lift(L.patch, dy);
+    // (its patch on the hangar floor at the bottom, for who is standing there, and where it senses people from)
+    low.set(new THREE.Vector3(box.min.x - CLEAR, box.max.y - L.drop - 0.3, box.min.z - CLEAR), new THREE.Vector3(box.max.x + CLEAR, box.max.y - L.drop + 1.0, box.max.z + CLEAR));
+    D.foot = low;
+    s.wayParts.set(L.key, D); s.wayParts.set(L.patch, D);
+  }
+  // (each person's feet: how long they have stood still, by their own Vector3)
+  const stillOf = new WeakMap();
+  function stillFor(p, dt) {
+    let q = stillOf.get(p); if (!q) stillOf.set(p, (q = { x: p.x, z: p.z, t: 0 }));
+    const v = Math.hypot(p.x - q.x, p.z - q.z) / Math.max(dt, 1e-4); q.t = v < RIDE.still ? q.t + dt : 0; q.x = p.x; q.z = p.z;
+    return q.t;
+  }
+  const onTread = (L, e, top) => e.x > L.box.min.x + RIDE.inset && e.x < L.box.max.x - RIDE.inset && e.z > L.box.min.z + RIDE.inset && e.z < L.box.max.z - RIDE.inset && Math.abs(e.y - top) < 0.07;
+  function liftStep(s, L, dt, eyes, player) {
+    const D = L.D, inCabin = s.state === 'in' && L.key, top = inCabin ? L.top0 + liftDy(L) : 0;
+    const riders = inCabin ? eyes.filter((e) => onTread(L, e, top)) : [];
+    for (const p of L.carried) if (!riders.includes(p)) L.carried.delete(p);   // (stepped off: may ride again)
+    const waited = riders.map((e) => stillFor(e, dt)), ready = riders.some((e, k) => waited[k] >= RIDE.wait && !L.carried.has(e));
+    for (const e of eyes) if (!riders.includes(e)) stillOf.delete(e);
+    const callers = inCabin && eyes.some((e) => !riders.includes(e) && e.y < D.foot.min.y + 1.0 && Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < WAY_REACH);
+    const aboard = inCabin && eyes.some((e) => !riders.includes(e) && inside(e) === s);
+    const atRest = L.goal == null || D.t === L.goal;
+    if (!inCabin) L.goal = 0;
+    else if (atRest) {
+      if (ready) { L.goal = D.t >= 1 ? 0 : 1; for (const e of riders) L.carried.add(e); }
+      else if (D.t <= 0 && callers && !aboard && !riders.length) L.goal = 1;
+      else if (D.t >= 1 && !callers && !riders.length) L.goal = 0;
+      else L.goal = D.t >= 1 ? 1 : 0;
+    }
+    // (coming down: its patch of floor shut to walkers; it waits while anyone not riding stands there, and the player
+    // standing there is walked off it first)
+    D.coming = !!inCabin && L.goal === 1 && D.t < 1;
+    const onPatch = (e) => !riders.includes(e) && e.x > D.foot.min.x && e.x < D.foot.max.x && e.z > D.foot.min.z && e.z < D.foot.max.z && e.y < D.foot.max.y;
+    const waits = D.coming && eyes.some(onPatch);
+    if (waits && player && onPatch(player.pos)) standClear(s, D, player.pos, dt);
+    if (D.t !== L.goal && !waits) {
+      D.t = L.goal > D.t ? Math.min(L.goal, D.t + dt * D.speed) : Math.max(L.goal, D.t - dt * D.speed);
+      ONE[0] = D; setDoors(ONE, D.t);
+      if (L.key) { const dy = liftDy(L); walls.lift(L.key, dy, riders); walls.lift(L.patch, dy); }
+    }
+  }
+
   // the room of a ship's cabin a point is in (its blueprint's room), or null
   function roomOf(s, p) {
     _p.copy(p).applyMatrix4(s.inv);
@@ -275,6 +368,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         if (!waits) { ONE[0] = D; updateDoors(ONE, FAR, dt, open ? 'open' : 'shut'); }
         if (D.t >= 1 && s.state === 'in') wayDown(s, D, i);
       });
+      for (const L of s.lifts) liftStep(s, L, dt, eyes, player);
       if (s.step) s.step(s.ways);
       if (s.state !== 'in') continue;
       const c = s.cabin;
@@ -328,7 +422,12 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     // ramp as it comes down)
     const mid = new THREE.Vector3(0, 0, 0).applyMatrix4(s.M);
     const ways = s.ways.map((D) => { const dx = D.sense.x - mid.x, dz = D.sense.z - mid.z, L = Math.hypot(dx, dz) || 1; return [+(D.sense.x + dx / L * 2).toFixed(3), 0, +(D.sense.z + dz / L * 2).toFixed(3)]; });
-    return { rooms, doorIn, ways };
+    // (a lift: its foot on the hangar floor beside it (the ship's frame's point, on the ground) as its way in; and the
+    // middle of its tread up and down)
+    const r3 = (v) => v.toArray().map((u) => +u.toFixed(3));
+    for (const L of s.lifts) ways.push(r3(new THREE.Vector3(L.foot[0], 0, L.foot[1]).applyMatrix4(s.M).setY(0)));
+    const lifts = s.lifts.filter((L) => L.box).map((L) => { const c = L.box.getCenter(new THREE.Vector3()); return { top: r3(c.clone().setY(L.top0)), bottom: r3(c.clone().setY(L.top0 - L.drop)), t: +L.D.t.toFixed(3) }; });
+    return { rooms, doorIn, ways, lifts };
   }
 
   // (where a point is aboard: 'explorer/mess', or null)

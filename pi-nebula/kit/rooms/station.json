@@ -6324,7 +6324,7 @@
         {"piece":"mbCanopy","cell":[21,-2.5],"turn":1,"variant":"glass","off":[0,1.82,0.3]},
         {"piece":"mbMarks","cell":[21,-2.5],"turn":1,"variant":"marks","off":[0,1.82,0.3]},
         {"piece":"mbWells","cell":[21,-2.5],"turn":1,"variant":"pods","off":[0,1.82,0.3]},
-        {"piece":"mbLift","cell":[21,-2.5],"turn":1,"variant":"belly","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbLift","cell":[21,-2.5],"turn":1,"variant":"belly, cabin","off":[0,1.82,0.3]},
         {"piece":"mbGear","cell":[21,-2.5],"turn":1,"variant":"port","off":[0,1.82,0.3],"hold":0},
         {"piece":"mbGearDoors","cell":[21,-2.5],"turn":1,"variant":"port","off":[0,1.82,0.3],"hold":0},
         {"piece":"mbGear","cell":[21,-2.5],"turn":1,"variant":"starboard","off":[0,1.82,0.3],"hold":0},
@@ -6345,7 +6345,7 @@
         {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard upper back","off":[0,1.82,0.3]},
         {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard lower front","off":[0,1.82,0.3]},
         {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard lower back","off":[0,1.82,0.3]},
-        {"piece":"mbCockpit","cell":[21,-2.5],"turn":1,"variant":"two seats","off":[0,1.82,0.3]}
+        {"piece":"mbCockpit","cell":[21,-2.5],"turn":1,"variant":"two seats, cabin","off":[0,1.82,0.3]}
       ]
     },
     {
