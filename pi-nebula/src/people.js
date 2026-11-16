@@ -171,6 +171,19 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const w = KEEP_OFF.way; wayFeet.push({ D, box: box.clone() });
     mark(box.min.x - w, box.min.z - w, box.max.x + w, box.max.z + w, 'way:' + s.id);
   }
+  // a ship's lift (the Miner's belly lift, boarding.js LIFTS): the floor under its platform, where it comes down (it
+  // moves straight up and down, so its platform's box as it stands, across the floor)
+  for (const s of boarding?.ships || []) for (const Lf of s.lifts || []) {
+    const D = Lf.D; if (!D) continue;
+    const box = new THREE.Box3(), any = new THREE.Box3();
+    for (const leaf of D.leaves) for (const im of leaf.meshes || []) {
+      if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); _b.copy(im.geometry.boundingBox).applyMatrix4(_im);
+      any.union(_b); if (/platform/.test(im.name)) box.union(_b);
+    }
+    const B = box.isEmpty() ? any : box; if (B.isEmpty()) continue;
+    const w = KEEP_OFF.way; wayFeet.push({ D, box: B.clone() });
+    mark(B.min.x - w, B.min.z - w, B.max.x + w, B.max.z + w, 'lift:' + s.id);
+  }
   // under the crane: every patch it works over in a round
   if (crane?.on && crane.L) {
     const seen = new Set(), m = (crane.RULES?.margin ?? 0.9) + (KEEP_OFF.crane - 0.9);
@@ -292,7 +305,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const free = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P) && !crowded(t.at[1], Q))
         .sort((a, b) => a.at[0].distanceTo(P.pos) + a.at[0].distanceTo(Q.pos) - b.at[0].distanceTo(P.pos) - b.at[0].distanceTo(Q.pos));
       const T = free[0]; if (!T) return null;
-      release(Q); const q = talkAt(Q, T, 1, step); begin(Q, q);
+      release(Q); const q = talkAt(Q, T, 1, step); begin(Q, q); if (Q.req) { Q.req.dropped = true; Q.req = null; } Q.act.phase = 'go'; Q.act.delay = rnd(0.8, 2.2);
       return talkAt(P, T, 0, step);
     }
     if (kind === 'walk') {
@@ -320,7 +333,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // the next thing in a person's day
   function next(P) {
-    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null;
+    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false;
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
       const step = P.day[P.k];
@@ -499,7 +512,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.kind === 'wait') { play(P, STAND); if (a.t > a.until) next(P); return; }
     if (P.req) { if (!P.walking) play(P, STAND); return; }        // (working the way out: as they were)
     if (P.walking) { walk(P, dt); return; }
-    if (a.phase === 'go') { route(P, a.spot.pos); return; }
+    if (a.phase === 'go') { if (a.delay > 0) { a.delay -= dt; play(P, STAND); return; } route(P, a.spot.pos); return; }
     // turning to the spot's way, then at it
     if (a.phase === 'turn') {
       const want = a.spot.heading ?? P.heading, diff = wrap(want - P.heading);
@@ -603,6 +616,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       steer += (lat > 0.05 ? -1 : lat < -0.05 ? 1 : (Q === playerNow || !Q.walking ? 1 : -1)) * w;
       if (ahead < 1.0) slow = Math.min(slow, 0.55 + ahead * 0.45);
     }
+    // (walking beside someone going the same way: the one later in the roster drops back a little, so two never walk
+    // shoulder to shoulder in step)
+    for (const Q of others) {
+      if (Q === playerNow || !Q.walking || P.order < Q.order) continue;
+      const ox = Q.pos.x - P.pos.x, oz = Q.pos.z - P.pos.z, ahead = ox * dx + oz * dz, lat = Math.abs(ox * sx + oz * sz);
+      if (ahead > -0.4 && ahead < 0.9 && lat < 1.1 && Math.cos(Q.heading - P.heading) > 0.6) slow = Math.min(slow, 0.7);
+    }
     steer = Math.max(-1.2, Math.min(1.2, steer)) + P.side;
     dx += sx * steer * 1.2; dz += sz * steer * 1.2;
     const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
@@ -638,6 +658,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     P.blocker = by && typeof by === 'object' ? by : null;
     // (held up by a walker who is held up by them: the one later in the roster makes way)
+    if (P.blocker && P.blocker === playerNow && P.held > 1.2 && !P.madeWayFor) {
+      const to = makeWay(P, playerNow);
+      if (to) { P.yielding = { to, for: { pos: playerNow.pos, walking: true, hidden: false }, t: 0 }; P.madeWayFor = true; P.blocker = null; alarms.madeWay = (alarms.madeWay || 0) + 1; return; }
+    }
     if (P.blocker && P.blocker !== playerNow && P.blocker.walking && P.blocker.blocker === P && P.held > 0.3 && P.order > P.blocker.order) {
       const to = makeWay(P, P.blocker);
       if (to) { P.yielding = { to, for: P.blocker, t: 0 }; P.blocker = null; alarms.madeWay = (alarms.madeWay || 0) + 1; return; }
@@ -660,7 +684,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (P.held > 0.5) P.side = P.side * 0.98;
       P.heldAll = Math.max(0, (P.heldAll || 0) - dt * 0.5);
       P.held = Math.max(0, P.held - dt * 2); if (P.held === 0) { P.side *= Math.exp(-dt * 1.5); if (Math.abs(P.side) < 0.05) P.side = 0; }
-      play(P, CLIPS.walk, { speed: Math.max(0.6, Math.min(1.5, (got / Math.max(dt, 1e-4)) / P.c.stride.Walk)) });
+      const v = got / Math.max(dt, 1e-4);
+      if (v < 0.35) play(P, STAND); else play(P, CLIPS.walk, { speed: Math.max(0.6, Math.min(1.5, v / P.c.stride.Walk)) });
     }
   }
 
