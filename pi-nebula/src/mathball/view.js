@@ -270,6 +270,12 @@ export function makeView({ W, G: G0 }) {
   const ringOf = (c) => { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending })); m.renderOrder = 2; group.add(m); return m; };
   const youRing = ringOf(new THREE.Color(0.1, 0.9, 1.8)), themRing = ringOf(new THREE.Color(1.8, 0.55, 0.06));
   youRing.visible = themRing.visible = false;   // (only while a round is played: V.playing)
+  // the gallery's shutter: down over the window while a round is played (nobody can be up on the catwalk watching then,
+  // and the bright terminal behind it would only draw the eye and cost the frame: index.js drops the window's portal)
+  const GA = COURT.gallery, shutter = new THREE.Mesh(new THREE.PlaneGeometry(GA.x1 - GA.x0 + 0.1, GA.y1 - GA.y0 + 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.55, metalness: 0.3, envMap: W.envAt(new THREE.Vector3(MID[0], 1.5, MID[2])), emissive: new THREE.Color(0.01, 0.05, 0.09) }));
+  shutter.position.set(MID[0] + (GA.x0 + GA.x1) / 2, (GA.y0 + GA.y1) / 2, MID[2] + COURT.hz - 0.006); shutter.rotation.y = Math.PI;
+  shutter.visible = false; shutter.name = 'mathball gallery shutter'; group.add(shutter);
   const balls = new Map();
   const env = W.envAt(new THREE.Vector3(MID[0], 1.5, MID[2]));
   let t = 0, strikeK = 0;
@@ -367,7 +373,7 @@ export function makeView({ W, G: G0 }) {
       }
       for (const id of [...balls.keys()]) if (!seen.has(id)) dropBall(id);
       // the players' rings
-      youRing.visible = themRing.visible = !!V.playing;
+      youRing.visible = themRing.visible = shutter.visible = !!V.playing;
       youRing.position.set(MID[0] + G.you.x, 0.012, MID[2] + G.you.z);
       themRing.position.set(MID[0] + G.other.x, 0.012, MID[2] + G.other.z);
     },
@@ -385,6 +391,7 @@ export function makeView({ W, G: G0 }) {
       floor.mesh.geometry.dispose(); floor.mesh.material.dispose(); bar.mesh.geometry.dispose(); bar.mesh.material.dispose();
       for (const S of signs) { S.tex.dispose(); S.mesh.material.dispose(); S.mesh.geometry.dispose(); }
       for (const p of ports) p.material.dispose();
+      shutter.geometry.dispose(); shutter.material.dispose();
       hitMat.dispose(); for (const h of hits) h.geometry.dispose(); ringGeo.dispose(); youRing.material.dispose(); themRing.material.dispose();
       if (ports[0]) ports[0].geometry.dispose();   // (the ports' rings share one shape; the balls' shape is kept for the next round)
     },

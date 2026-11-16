@@ -21,7 +21,7 @@ const upTo = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(i); r
 export const SETS = {
   oddeven: {
     name: 'Odd and even, bigger and smaller', short: 'Odd and even', line: 'Even, odd, less than 5, more than 10: the numbers 1 to 20',
-    strand: 'number', grade: 14, goals: ['even', 'odd', 'less:5', 'more:10'], pool: upTo(1, 20), spares: ['less:8', 'more:15', 'more:5', 'less:10'],
+    strand: 'number', grade: 14, goals: ['even', 'odd', 'less:5', 'more:10'], pool: upTo(1, 20), spares: ['less:8', 'more:15', 'less:10', 'more:12'],
   },
   tables1: {
     name: 'Easy times tables: 2, 3, 5 and 10', short: 'Times 2, 3, 5, 10', line: 'Multiples of 2, 3, 5 and 10, up to 50',

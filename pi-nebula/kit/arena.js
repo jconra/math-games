@@ -162,11 +162,15 @@ export function arenaRoom(p) {
     sub(p, (q) => wall(q, W, holes), F.at, F.ry);
     if (goalOn.has(W.i)) sub(p, (q) => goal(q, goalOn.get(W.i).glow), F.at, F.ry);
     if (W.i === 4) sub(p, (q) => {
-      // the door from the terminal: a frame of light round it
-      const { w, h } = COURT.door;
-      glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, -w / 2, 0, h + 0.05, 0, 0.03); glow(q, ARENA_GLOW.corner, w / 2, w / 2 + 0.05, 0, h + 0.05, 0, 0.03);
-      glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, w / 2 + 0.05, h, h + 0.05, 0, 0.03);
-      q.light([0, h + 0.2, 0.3], 0.4, lightOf(ARENA_GLOW.corner), [0, -0.5, 1], 2.5);
+      // the door from the terminal: a surround standing out from the wall (the station's door has a face of its own just
+      // behind the wall's: the surround keeps the two well apart, so they never flicker through each other far off),
+      // a frame of light round its opening
+      const { w, h } = COURT.door, sw = 1.02, sh = 3.06, sd = 0.22;
+      for (const [a, b, c, d] of minus([-sw, sw, 0, sh], [{ x0: -w / 2, x1: w / 2, y0: -1, y1: h }])) q.slab(WALL, a, b, c, d, -0.02, sd, { r: 0.012, cell: 0.9 });
+      glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, -w / 2, 0, h + 0.05, sd, sd + 0.03); glow(q, ARENA_GLOW.corner, w / 2, w / 2 + 0.05, 0, h + 0.05, sd, sd + 0.03);
+      glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, w / 2 + 0.05, h, h + 0.05, sd, sd + 0.03);
+      glow(q, ARENA_GLOW.line, -sw, sw, sh - 0.05, sh - 0.02, sd, sd + 0.02);
+      q.light([0, h + 0.2, sd + 0.3], 0.4, lightOf(ARENA_GLOW.corner), [0, -0.5, 1], 2.5);
       // the gallery's window: the glass, a dark lining through the wall to the terminal's own window, a frame of light
       const { x0, x1, y0, y1 } = gal, t = 0.05, back = -0.26;
       q.slab(DEEP, x0 - t, x0, y0 - t, y1 + t, back, 0, { r: 0, cell: 9 }); q.slab(DEEP, x1, x1 + t, y0 - t, y1 + t, back, 0, { r: 0, cell: 9 });

@@ -7,10 +7,10 @@
 // their own ... the balls should all spin to be easily readable when they are out of view ... not an always facing
 // billboard"). Each ball carries its number on two opposite sides (its own +z and -z), upright along its own +y.
 //   - Flying and rolling fast it tumbles as any ball does.
-//   - Rolling slower than PHYS.settle it rights itself as a ball weighted under its number would: it ROLLS (the ball
-//     moves as it turns: nothing slides) toward the side of it facing the camera, number upright, and may spin a little
-//     about its upright, as a rolling ball does after a knock. It comes to rest only once the side facing the camera is
-//     within PHYS.restAngle of it, upright (the test holds every resting ball to 20 degrees).
+//   - Slower than PHYS.settle it rights itself as a ball weighted under its number would: it stops rolling over and
+//     rocks upright as it slides on to a stop, turning the side nearer the camera to it, number upright (so a slow ball
+//     on the floor never shows its number on its side or upside down). It comes to rest only once the side facing the
+//     camera is within PHYS.restAngle of it, upright (the test holds every resting ball to 20 degrees).
 //   - At rest and in view it never turns. Out of view (the game says which balls the camera sees) a ball whose number
 //     has turned away from the camera, because the player has walked round, turns back to face it, quietly.
 //
@@ -27,12 +27,14 @@ import { COURT, WALLS } from './court.js';
 
 export const PHYS = {
   g: 9.81, r: COURT.ball.r,
-  eFloor: 0.58, eWall: 0.62, eBall: 0.82, ePerson: 0.5,
-  roll: 0.55,          // m/s lost each second rolling (round two's 0.5: they roll a good way)
+  eFloor: 0.58, eWall: 0.62, eBall: 0.82, ePerson: 0.15,
+  roll: 0.8,           // m/s lost each second rolling fast (round two's 0.5 rolled a long way, numbers tumbling)
+  slide: 1.3,          // m/s lost each second sliding slowly, upright (a weighted ball doesn't roll over freely)
   scrub: 0.12,         // the share of its speed along the floor a ball loses at each bounce
-  settle: 1.05,        // m/s: rolling slower than this, a ball starts to right itself
-  turn: 3.2,           // how quickly it rights itself (1/s: the share of what is left each second, as a rate)
-  most: 3.4,           // the fastest it rolls or spins while righting itself (rad/s)
+  settle: 2.0,         // m/s: slower than this, a ball rights itself, turning as it slides to a stop
+  turn: 4.0,           // how quickly it rights itself (1/s: the share of what is left each second, as a rate)
+  most: 5.0,           // the fastest it turns while righting itself (rad/s)
+  kick: 1.6,           // m/s: the most a player's legs knock a ball on at
   restAngle: 4,        // degrees: it comes to rest once its number faces the camera within this
   restSpeed: 0.035,    // m/s
   outTurn: 4.0,        // rad/s: how fast a ball out of view turns back to face the camera
@@ -204,10 +206,9 @@ export function makeBalls({ rand = Math.random } = {}) {
   // the spin a ball rolling without slipping has (plus `yaw` about its upright): v = r (w x up)
   function rolling(b, yaw = 0) { return [b.v[2] / R, yaw, -b.v[0] / R]; }
 
-  // THE WEIGHTED BALL righting itself: the turn still to make (to the side facing the camera, upright) is split into
-  // a part about a level axis, which it ROLLS (so it moves along the floor as it turns: a weighted ball rocks to rest),
-  // and a part about its upright, which it spins. Both run at a rate that shrinks as the turn left shrinks (so it eases
-  // to rest), never faster than PHYS.most; the speed it still had runs down into the roll.
+  // THE WEIGHTED BALL righting itself: the turn still to make (to the side facing the camera, upright) is made at a
+  // rate that shrinks as the turn left shrinks (so it eases to rest), never faster than PHYS.most, while the ball slides
+  // on to a stop (PHYS.slide): a ball weighted under its number rocks upright rather than rolling over.
   function righting(b, dt, eye) {
     b.settleT += dt;
     const e = rotvec(b.q, bestGoal(b, eye));
@@ -217,11 +218,11 @@ export function makeBalls({ rand = Math.random } = {}) {
     const wl = Math.hypot(wh[0], wh[2]);
     if (wl > PHYS.most) { wh = [wh[0] / wl * PHYS.most, 0, wh[2] / wl * PHYS.most]; }
     if (Math.abs(wy) > PHYS.most) wy = Math.sign(wy) * PHYS.most;
-    // the roll the righting wants, as a speed along the floor: v = r (w x up), and (wx, 0, wz) x (0, 1, 0) = (-wz, 0, wx).
-    // Both the spin and the speed ease from what the ball had to what it wants (no jolt); the spin is kept even where
-    // a wall or another ball stops it moving (it slips round against them: it always gets there)
-    const want = [-R * wh[2], 0, R * wh[0]], blend = Math.min(1, dt * 6);
-    b.v[0] += (want[0] - b.v[0]) * blend; b.v[2] += (want[2] - b.v[2]) * blend;
+    // (it slides on to a stop, slowing steadily, while it turns: a weighted ball rocks upright rather than rolling over,
+    // so a slow ball's number is upright and turning to the camera, never tumbling; the turn eases in from the spin it had)
+    const sp = Math.hypot(b.v[0], b.v[2]), s2 = Math.max(0, sp - PHYS.slide * dt);
+    if (sp > 1e-6) { b.v[0] *= s2 / sp; b.v[2] *= s2 / sp; }
+    const blend = Math.min(1, dt * 8);
     b.w = [b.w[0] + (wh[0] - b.w[0]) * blend, b.w[1] + (wy - b.w[1]) * blend, b.w[2] + (wh[2] - b.w[2]) * blend];
     if (ah < 1e-4 && Math.abs(ey) < 1e-4) { b.v[0] *= 0.5; b.v[2] *= 0.5; }
   }
@@ -264,6 +265,7 @@ export function makeBalls({ rand = Math.random } = {}) {
     const rv = (b.v[0] - (P.vx || 0)) * nx + (b.v[2] - (P.vz || 0)) * nz;
     if (rv < 0) {
       b.v[0] -= (1 + PHYS.ePerson) * rv * nx; b.v[2] -= (1 + PHYS.ePerson) * rv * nz;
+      const sp = Math.hypot(b.v[0], b.v[2]); if (sp > PHYS.kick) { b.v[0] *= PHYS.kick / sp; b.v[2] *= PHYS.kick / sp; }
       if (b.mode !== 'air') { b.mode = 'roll'; b.settleT = 0; }
     }
   }

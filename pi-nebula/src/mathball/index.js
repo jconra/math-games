@@ -51,7 +51,7 @@ const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours
 // stands further back and higher, looking more steeply down)
 export const MBCAM = {
   wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62 },
-  tall: { dist: 5.0, height: 4.9, ahead: 3.6, lookY: 0.05, fov: 74 },
+  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76 },
   turn: 0.0052, swing: 1.9, after: 1.1,
 };
 
@@ -95,6 +95,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
         <span class="mbl-lap" aria-label="The light bar: how far round the room it is">${GOALS.map((g) => `<i style="--c:${GOAL_CSS[g.colour]}"></i>`).join('')}<u></u></span>
         <span class="mbl-them"><em>0</em><b></b></span></div>
       <div class="mbl-cr" aria-label="Credits this round"><i aria-hidden="true"></i><span>0</span></div>
+      <p class="mbl-theirs" aria-live="polite"></p>
     </header>
     <div class="mbl-tools"><button type="button" class="mbl-help" data-askhelp>Help<kbd>H</kbd></button><button type="button" class="mbl-done">Leave<kbd>Esc</kbd></button></div>
     <div class="mbl-bottom">
@@ -180,18 +181,19 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     tally.other = choice; onSave();
     G = makeRound({ set, rand: Math.random, other: { level: opp.level }, youRate: tally.rate || OTHER.youRate });
     view.use(G); view.playing = true;
+    dropWindow(true);
     other = opp; earned = 0; round++;
     $('.mbl-pick').hidden = true; $('.mbl-end').hidden = true; $('.mbl-top').hidden = false;
     $('.mbl-them b').textContent = opp.name.replace(/^(Captain|Pilot) /, '');
     $('.mbl-cr span').textContent = '0';
-    say(press('a ball to grab it'), 5);
+    say('Here come the balls, out of the walls', 2.5); askedBall = false;
     phase = 'play';
     hideStationCopy(opp.id);
     // the body: the one already made for this crew member, or made now (the round waits for nothing: until it comes,
     // the other player is only their ring)
     if (otherBody && lastBody !== opp.id) { otherBody.root.visible = false; }
     otherBody = null;
-    bodyFor(opp).then((c) => { if (closed || other !== opp) return; otherBody = c; lastBody = opp.id; c.root.visible = true; shine(c, W.envAt(new THREE.Vector3(MID[0], 1, MID[2]))); c.clipNow = ''; }).catch((e) => console.warn('Mathball: no body for ' + opp.name, e));
+    bodyFor(opp).then((c) => { if (closed || other !== opp) return; otherBody = c; lastBody = opp.id; c.root.visible = true; shine(c, W.envAt(new THREE.Vector3(MID[0], 1, MID[2]))); for (const o2 of [c.root]) o2.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) lifted.delete(m); }); lift(c); c.clipNow = ''; }).catch((e) => console.warn('Mathball: no body for ' + opp.name, e));
   }
   let lastEnd = null;
   function showEnd(r) {
@@ -238,7 +240,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   const goalOff = view.goalHits.map((m) => input.addTarget(m, { goal: m.userData.goal }));
   function pickBall(id) {
-    if (G.pick(id)) { const b = G.balls.find((x) => x.id === id); say(`Run to the ${b.num}`, 1.5); }
+    if (G.pick(id) && /a ball to grab it/.test(hint.textContent)) say('', 0);   // (you run to it by yourself)
   }
   function throwAt(gi) {
     if (phase !== 'play' || paused) return;
@@ -250,12 +252,13 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   const cam = { yaw: Math.PI, idle: 99, at: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true, lift: 0 };
   let lastCam = new THREE.Vector3(MID[0], 3, MID[2] + 8);
   const youNow = { x: 0, z: 0, vx: 0, vz: 0, heading: 0 }, prev = new THREE.Vector3();
-  let throwT = -1, goalsShown = false, endT = 0;
+  let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null;
   function update(dt, P) {
     if (closed) return;
     // the drags turn the game's camera (taken before the station's camera sees them)
     const look = input.takeLook(); if (look.dx || look.dy) { cam.yaw = wrapA(cam.yaw - look.dx * MBCAM.turn); cam.lift = Math.max(-1, Math.min(1.6, cam.lift + look.dy * 0.006)); cam.idle = 0; } else cam.idle += dt;
     input.takeZoom();
+    if (P && !P.lifted) { lift(P.c); P.lifted = true; liftedP = P; }
     // the player's feet in the court's frame
     if (P) {
       youNow.vx = (P.pos.x - prev.x) / Math.max(dt, 1e-4); youNow.vz = (P.pos.z - prev.z) / Math.max(dt, 1e-4); prev.copy(P.pos);
@@ -276,13 +279,28 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     otherBodyStep(dt);
     hud(dt);
     if (hintUntil && G.t > hintUntil && phase === 'play') { hintUntil = 0; hint.textContent = ''; hint.className = 'mbl-hint'; }
+    if (theirsUntil && G.t > theirsUntil) { theirsUntil = 0; $('.mbl-theirs').textContent = ''; }
+    // (the first ask for a ball waits until one is in view, settled enough to see)
+    if (phase === 'play' && !askedBall && !G.you.holding && !G.you.target && G.balls.some((b) => b.seen && (b.mode === 'roll' || b.mode === 'rest'))) { askedBall = true; say(press('a ball to grab it'), 5); }
+  }
+  // THE GOAL BUTTONS: a small map of the four goals, two rows of two: the end of the court the camera looks toward on
+  // top, each row as the goals stand across the view (looking north, west on the left; looking south, the other way
+  // round). The same goal keeps its place throw after throw; the map turns only when the view has turned round.
+  // (the end of the court a player holding a ball looks toward: the far one from where they stand; near the middle line,
+  // the one the camera faces already. The camera turns there, so the map is laid out for it)
+  const farSouth = () => (Math.abs(youNow.z) > 1.5 ? youNow.z < 0 : Math.cos(cam.yaw) > 0);
+  function goalOrder() {
+    const north = !farSouth();
+    const key = (g) => GOALS.findIndex((x) => x.key === g);
+    return north ? ['NW', 'NE', 'SW', 'SE'].map(key) : ['SE', 'SW', 'NE', 'NW'].map(key);
   }
   function showGoals(on) {
     goalsShown = on; goalsEl.hidden = !on; if (!on) return;
-    // in the order they stand across the view, left to right
-    const order = GOALS.map((g, i) => { const v = new THREE.Vector3(MID[0] + g.mid[0], 2, MID[2] + g.mid[1]).project(W.camera); return { i, x: v.z > 1 ? (v.x > 0 ? 5 : -5) : v.x }; }).sort((a, b) => a.x - b.x);
-    goalsEl.innerHTML = order.map(({ i }) => { const R = ruleOf(G.goals[i].rule), w = R.sign.length === 2 ? `<small>${esc(R.sign[0])}</small><b>${esc(R.sign[1])}</b>` : `<b class="is-words">${esc(R.sign[0])}</b>`; return `<button type="button" data-goal="${i}" style="--c:${GOAL_CSS[GOALS[i].colour]}" aria-label="Throw at the ${GOALS[i].colour} goal: ${esc(R.say)}">${w}</button>`; }).join('');
+    goalsEl.innerHTML = goalOrder().map((i) => { const R = ruleOf(G.goals[i].rule), w = R.sign.length === 2 ? `<small>${esc(R.sign[0])}</small><b>${esc(R.sign[1])}</b>` : `<b class="is-words">${esc(R.sign[0])}</b>`; return `<button type="button" data-goal="${i}" style="--c:${GOAL_CSS[GOALS[i].colour]}" aria-label="Throw at the ${GOALS[i].colour} goal: ${esc(R.say)}">${w}</button>`; }).join('');
   }
+  // (the other player's goals, on a small line of their own under the score, for a few seconds)
+  let theirsUntil = 0;
+  function theirs(words) { const t = $('.mbl-theirs'); t.textContent = words; theirsUntil = G.t + 2.6; }
   function onEvent(e) {
     const name = other ? other.name : 'They';
     const panOf = (p) => { if (!p) return 0; const v = new THREE.Vector3(MID[0] + p[0], 1, MID[2] + p[2]).project(W.camera); return Math.max(-0.8, Math.min(0.8, v.x)); };
@@ -294,15 +312,15 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       view.strike(e.from, e.goal, 1);
       if (e.who === 'you') {
         const a = answer(true);
-        sound.play('score'); say(`${e.why}  +${a ? a.pay : 0}`, 3.2, 'good');
-      } else { sound.play('them', { gain: 0.8 }); if (!G.you.holding) say(`${name}: ${e.num} in, ${ruleOf(e.rule).say}`, 2.2, 'them'); }
+        sound.play('score'); say(`${e.why}  +${a ? a.pay : 0}`, 3.2, 'good'); $('.mbl-help').classList.remove('is-nudge');
+      } else { sound.play('them', { gain: 0.8 }); theirs(`${name.replace(/^(Captain|Pilot) /, '')} scored: ${e.num}, ${ruleOf(e.rule).say}`); }
     } else if (e.type === 'bounce') {
       sound.play('bounce', { gain: e.who === 'you' ? 1 : 0.6 });
       if (e.who === 'you') { answer(false); say(`Bounced out: ${e.why}`, 5, 'bad'); $('.mbl-help').classList.add('is-nudge'); }
-      else say(`${name}'s ${e.num} bounced out of ${ruleOf(e.rule).say}`, 2.6, 'them');
+      else theirs(`${name.replace(/^(Captain|Pilot) /, '')}'s ${e.num} bounced out of ${ruleOf(e.rule).say}`);
     } else if (e.type === 'change') {
-      if (e.to !== e.from) { view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).say}`, 3.5, 'change'); if (goalsShown) setTimeout(() => { if (goalsShown) showGoals(true); }, 800); }
-    } else if (e.type === 'taken') say(`${name} got that one first`, 2.2, 'them');
+      if (e.to !== e.from) { view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).say}`, 3.5, 'change'); if (goalsShown) showGoals(true); }
+    } else if (e.type === 'taken') say(`${name.replace(/^(Captain|Pilot) /, '')} got that one first`, 2.2, 'them');
     else if (e.type === 'end') endRound(e);
   }
   // a ball the player threw: an answer at the round's level (engine.js: the level, the kinds of math, the pay)
@@ -396,6 +414,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (cam.idle > MBCAM.after) {
       let want = null, rate = MBCAM.swing;
       if (w.face != null) { want = w.face; rate *= 1.5; }
+      else if (G.you.holding) {
+        // (a ball in hand: toward the court's far end from the player, so its two goals are in view while they choose)
+        want = Math.atan2(-youNow.x * 0.35, farSouth() ? 6 : -6); rate *= 0.9;
+      }
       else if (Math.hypot(youNow.x, youNow.z) > 2.2) { want = Math.atan2(-youNow.x * 0.55, -youNow.z); rate *= 0.6; }
       else if (sp > 0.8) { want = Math.atan2(youNow.vx, youNow.vz); rate *= Math.min(1, sp / 3); }
       if (want != null) { const d = wrapA(want - cam.yaw); cam.yaw = wrapA(cam.yaw + Math.sign(d) * Math.min(Math.abs(d), rate * dt)); }
@@ -417,8 +439,24 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     lastCam.copy(camera.position);
   }
 
+  // (the gallery window's portal, out of the station's list while the shutter is down: the terminal is not drawn
+  // behind it; back in when the game closes)
+  let windowPortal = null;
+  function dropWindow(on) {
+    const L = W.R.portals || [];
+    if (on && !windowPortal) { const i = L.findIndex((P) => P.a === 'terminal' && P.b === 'arena' && P.box[0][1] > 3); if (i >= 0) windowPortal = L.splice(i, 1)[0]; }
+    if (!on && windowPortal) { L.push(windowPortal); windowPortal = null; }
+  }
+  // (the people on the court lit a little more than the room's own light gives them: dark suits on a dark floor)
+  const lifted = new Map();
+  function lift(c, k = 1.8) {
+    if (!c) return;
+    c.root.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && 'envMapIntensity' in m && !lifted.has(m)) { lifted.set(m, m.envMapIntensity); m.envMapIntensity *= k; } });
+  }
   function close() {
     if (closed) return; closed = true;
+    dropWindow(false);
+    for (const [m, v] of lifted) m.envMapIntensity = v; lifted.clear(); if (liftedP) liftedP.lifted = false;
     removeEventListener('keydown', onKey, true);
     offPick(); for (const f of goalOff) f(); for (const [, T] of ballTargets) T.off(); ballTargets.clear();
     if (keepShut) W.keepShut.delete(keepShut);
