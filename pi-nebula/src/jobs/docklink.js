@@ -150,10 +150,10 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   // ── the rings' states: off, out (sliding out of the last), wait (asking: wobbling), brace (its braces going in),
   // lock (its glow, glass and lights), done ──────────────────────────────────────────────────────────────────────
   let cur = 0, answered = 0, finished = false, closed = false, clock = 0, order = null, ui = null, endT = -1;
-  const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), fl: new Map(), jolt: 0, loose: 1, flash: 0, pane: false }));
+  const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), fl: new Map(), jolt: 0, loose: 1, pane: false }));
   function reset() {
     cur = 0; answered = 0; finished = false;
-    S.forEach((s, i) => { Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, flash: 0, pane: false }); s.braced.clear(); s.pop.clear(); s.fl.clear(); const R = M.rings[i]; R.g.visible = false; R.braces.forEach((b) => { b.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.flashes.forEach((f) => { f.visible = false; }); R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08); });
+    S.forEach((s, i) => { Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, pane: false }); s.braced.clear(); s.pop.clear(); s.fl.clear(); const R = M.rings[i]; R.g.visible = false; R.braces.forEach((b) => { b.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.flashes.forEach((f) => { f.visible = false; }); R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08); });
     M.ghosts.forEach((g) => { g.visible = true; g.material.color.copy(M.planMat.color); g.material.opacity = M.planMat.opacity; });
     M.shipLights.color.setRGB(...SHIP_RED);
     slideOut(0);
@@ -262,7 +262,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
         // soon as the last is in: at once when a young player braced them all)
         const left = [...SQUARES, 0, 1].filter((p) => !s.braced.has(p));
         if (left.length && s.t >= s.next) { s.braced.add(left[0]); s.pop.set(left[0], 0); s.next = s.t + TIMES.brace; s.last = s.t; }
-        if (!left.length && s.t >= s.last + TIMES.pop * 0.7) { s.state = 'lock'; s.t = 0; s.flash = 1; }
+        if (!left.length && s.t >= s.last + TIMES.pop * 0.7) { s.state = 'lock'; s.t = 0; }
       }
       if (s.state === 'lock') {
         const k = clamp01(s.t / TIMES.lock);
