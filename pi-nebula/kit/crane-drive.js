@@ -56,6 +56,8 @@ export const DRIVE = {
   canister: 0.4,        // tonnes: an empty canister
   turnNear: 1.6,        // metres from the turntable at which turning is offered
   step: 0.025,          // metres: the most any part moves between two looks for what is in the way
+  settle: 0.9,          // metres: coming to rest within this of a place, it settles onto it
+  brake: { along: 2.4, slide: 1.6, hoist: 2.2 },   // metres a second, each second: slowing down when let go of
   clearHeld: 1.25,      // metres over a mount's canister (its middle) the hook must be for a tray to move under a load,
   clearEmpty: 0.65,     // ... and under the open cradle
 };
@@ -405,8 +407,18 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   function lining(push) {
     const L = lineup(S, held >= 0, DRIVE.capture), out = { along: 0, slide: 0, hoist: 0 };
     D.place = L;
-    if (!L) return out;
     const [hx, , hz] = hookAt(S), k = DRIVE.pull, still = Math.hypot(push.move[0], push.move[1]) < 0.15;
+    // coming to rest near a place (the stick let go, slowing down), it settles onto it, as onto a detent: a canister
+    // to take, or a free place for the one it holds (in front of a socket: onto its line along the rail)
+    if (still && push.hoist === 0 && Math.abs(vel.along) < 0.9 && Math.abs(vel.slide) < 0.5) {
+      const N = lineup(S, held >= 0, DRIVE.settle);
+      if (N) {
+        const dx = N.at[0] - hx, dz = N.at[2] - hz;
+        out.along = clamp(railPart(S, dx, dz) * DRIVE.pull * 0.8, -0.5, 0.5);
+        if (!(N.kind === 'socket' && held >= 0)) out.slide = clamp(beamPart(S, dx, dz) * DRIVE.pull * 0.8, -0.35, 0.35);
+      }
+    }
+    if (!L) return out;
     if (L.kind === 'socket' && held >= 0) {
       // in front of a socket: across and in height onto its middle line, so it can be pushed in end on
       if (Math.abs(L.dy) < 0.45 && L.ax > half - seat - 0.05) {
@@ -418,7 +430,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     // over a place: as it comes down within DRIVE.guide of it (or rests close over it), onto it
     if (L.dy < DRIVE.guide && (push.hoist < 0 || (still && L.dy < 0.6))) {
       const dx = L.at[0] - hx, dz = L.at[2] - hz;
-      out.along = clamp(railPart(S, dx, dz) * k, -0.35, 0.35);
+      out.along = clamp(railPart(S, dx, dz) * k, -0.5, 0.5);
       out.slide = clamp(beamPart(S, dx, dz) * k, -0.35, 0.35);
     }
     return out;
@@ -440,7 +452,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
         else note('turn', 'Turning happens on the turntable: drive to it first.');
       }
     }
-    if (!auto.length && !action) manual(dt, push);
+    if (!auto.length && !action && !leaving) manual(dt, push);
     stepParts(dt);
     record();
     if (leaving && !auto.length && !action) settle();
@@ -468,9 +480,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     if (fl != null && wantHoist < 0 && S.hoist - fl < 0.35) wantHoist = Math.max(wantHoist, -sp.set.v);
     const g = lining(push);
     const tA = clamp(wantAlong + g.along, -sp.travel.v, sp.travel.v), tS = clamp(wantSlide + g.slide, -sp.slide.v, sp.slide.v), tH = clamp(wantHoist + g.hoist, -sp.hoist.v, sp.hoist.v);
-    vel.along = approach(vel.along, inMouth ? 0 : tA, sp.travel.a * dt * (Math.abs(tA) < Math.abs(vel.along) ? 1.6 : 1));
-    vel.slide = approach(vel.slide, tS, sp.slide.a * dt * 2);
-    vel.hoist = approach(vel.hoist, inMouth ? 0 : tH, sp.hoist.a * dt * 2);
+    // (speeding up gently, as the round's moves do; braking firmly when the stick is let go or turned back)
+    const ease = (v, to, a, brake) => approach(v, to, (to * v < 0 || Math.abs(to) < Math.abs(v) ? brake : a) * dt);
+    vel.along = ease(vel.along, inMouth ? 0 : tA, sp.travel.a, DRIVE.brake.along);
+    vel.slide = ease(vel.slide, tS, sp.slide.a * 2, DRIVE.brake.slide);
+    vel.hoist = ease(vel.hoist, inMouth ? 0 : tH, sp.hoist.a * 2, DRIVE.brake.hoist);
     // (coming to rest near the turntable, it stops on it)
     const off = turnAlong(leg()) - alongOf();
     if (Math.abs(wantAlong) < 0.05 && Math.abs(off) < 0.25 && Math.abs(vel.along) < 0.5) vel.along = clamp(off * 3, -0.4, 0.4);

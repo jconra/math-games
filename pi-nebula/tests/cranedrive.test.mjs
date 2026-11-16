@@ -127,6 +127,15 @@ test('by hand: nothing driven through anything, and the grab lets go only where 
   assert.equal(D.held, -1); assert.deepEqual([S.cans[8].where, S.cans[8].i], ['bay', 0]);
 });
 
+test('by hand: let go of the stick near a place and the crane settles onto it, and it stops within a metre', () => {
+  const { S, D } = fresh();
+  run(D, 1.2, { move: [1, 0] });
+  const x0 = S.x; run(D, 2.5);
+  assert.ok(S.x - x0 < 1.0, `it stopped within a metre of letting go (${(S.x - x0).toFixed(2)} m)`);
+  const onBay = bays.some((b) => Math.abs(hook(S)[0] - b.at[0]) < 0.005);
+  assert.ok(onBay, `it settled onto a bay (the hook at x ${hook(S)[0].toFixed(3)})`);
+});
+
 test('by hand: along the rail only, round the turntable only on it, the carriage only along its beam', () => {
   const { S, D } = fresh();
   run(D, 20, { move: [-1, 0] });
