@@ -35,8 +35,9 @@
 //               As placed it is parked: cradle up, arms open
 //   oreSocket   a WALL piece, its middle on the collar's middle: the collar (standing SOCKET.deep out of the wall),
 //               the display to its right; leaves: 'sock:petal' x 12 (door 'iris': they fold back into the collar),
-//               'sock:ring' (the lit ring) and 'sock:dog' x 4 (the latch dogs that grip a seated canister; door
-//               'lit'), 'sock:seg' x 21 and 'sock:bar' x 5 (the display's number and bars)
+//               'sock:ring' (the lit ring), 'sock:dog' x 4 (the latch dogs that grip a seated canister) and
+//               'sock:saddle' x 2 (the rests that slide in under it from a beam each side; all door 'lit'),
+//               'sock:seg' x 21 and 'sock:bar' x 5 (the display's number and bars)
 //   oreRack     a FREE piece: 'bays <n>' the low rack, its bays side by side along x, a canister lying along z in each
 //   oreCan      a FREE piece: a canister lying along z, its middle RACK.y up ('empty' or 'full'): the rack's
 //   guardRail   a FREE piece: 'run <metres>' a yellow rail along x (the dock apron's)
@@ -231,6 +232,29 @@ function dogLeaf(lp) {
   // (its nose: a narrower pad on the side that meets the canister)
   lp.slab('yellow', -D.w / 2 + 0.03, D.w / 2 - 0.03, -D.h / 2 - 0.05, -D.h / 2 + 0.01, 0.024, D.deep - 0.01, { r: 0.01, cell: 9, loops: [] });
 }
+// THE RESTS under a docked canister. Three blind critics in a row said a canister let go of in its collar looked held
+// "only by its tip", latch dogs or not. So each socket has a beam standing out of the wall each side of its collar,
+// and on each beam a saddle that slides in under the seated canister's flank as the dogs close (the same door:
+// 'lit'), near the canister's middle. Why not a fixed shelf: a canister bound for the socket below comes straight
+// down in front of this one, cradle arms round it (0.57 m out from its middle line), so nothing fixed may stand
+// closer than that; the beams stand REST.x out and the saddles draw back onto them. And the cradle's arms pass round
+// a seated canister only 0.11 to 1.02 m and 1.21 to 2.12 m out from the collar's face as it is pushed in: the
+// saddles work in the gap between (REST.z0 to REST.z1).
+// (All from the collar's middle, z from the wall.)
+export const REST = { x: 0.73, w: 0.08, y: -0.34, h: 0.12, z0: SOCKET.deep + 1.05, z1: SOCKET.deep + 1.17, touch: 0.476, travel: 0.36, tail: 0.42 };
+function saddleLeaf(side) {
+  // (drawn parked, in the socket's own frame moved to the beam's middle line: the pad sits round the beam, its bar
+  // through it and out the far side. Slid in by REST.travel, the pad's sloped face meets the canister REST.touch from
+  // its middle line, 45 degrees under its side, and the bar's tail is still in the beam.)
+  return (lp) => {
+    const R = REST, zc = (R.z0 + R.z1) / 2, d = (R.z1 - R.z0) / 2, k = Math.SQRT1_2;
+    // where the pad's middle is when it holds the canister, from the beam's middle line; parked, R.travel further out
+    const ux = (R.touch + 0.05) * k - R.x + R.travel, uy = -(R.touch + 0.05) * k - R.y;
+    const x0 = side * (ux - 0.06), x1 = side * R.tail;
+    lp.slab('gun', Math.min(x0, x1), Math.max(x0, x1), uy - 0.03, uy + 0.03, zc - d + 0.02, zc + d - 0.02, { r: 0.008, cell: 9, loops: [] });
+    lp.add('solid', put(bevelBox([0.1, 0.2, 2 * d], [0, 0, 0], { r: 0.012, cell: 9, loops: [] }), [side * ux, uy, zc], [0, 0, -side * PI / 4]), 'yellow');
+  };
+}
 function segLeaf(lp) { const D = DIGIT; lp.add('glow', bevelBox([D.w - 0.024, D.t, 0.004], [0, 0, 0], { r: 0, cell: 9, loops: [] }), GLOWS.off); }
 function barLeaf(lp) { lp.add('glow', bevelBox([0.026, 0.18, 0.004], [0, 0, 0], { r: 0, cell: 9, loops: [] }), GLOWS.off); }
 export function oreSocket(p) {
@@ -257,6 +281,13 @@ export function oreSocket(p) {
   for (let k = 0; k < DOG.n; k++) {
     const a = (k + 0.5) * 2 * PI / DOG.n, c = Math.cos(a), sn = Math.sin(a);
     p.leaf('sock:dog', dogLeaf, { at: [c * DOG.r, sn * DOG.r, S.deep], rot: [0, 0, a - PI / 2], slide: [-c * DOG.travel, -sn * DOG.travel, 0], door: 'lit' });
+  }
+  // the rests: a beam each side (it stands REST.x out, clear of a canister and cradle coming down past this socket),
+  // and on it the saddle that slides in under a seated canister with the dogs
+  for (const s of [-1, 1]) {
+    B(p, 'gun', s * REST.x - REST.w / 2, s * REST.x + REST.w / 2, REST.y - REST.h / 2, REST.y + REST.h / 2, 0.05, REST.z1 + 0.06, { r: 0.012, cell: 2, loops: [] });
+    B(p, 'yellow', s * REST.x - REST.w / 2 - 0.006, s * REST.x + REST.w / 2 + 0.006, REST.y - REST.h / 2 - 0.006, REST.y + REST.h / 2 + 0.006, REST.z1 + 0.06, REST.z1 + 0.1);
+    p.leaf('sock:saddle', saddleLeaf(s), { at: [s * REST.x, REST.y, 0], slide: [-s * REST.travel, 0, 0], door: 'lit' });
   }
   p.door('lit', [0, 0, S.deep], 0, 1, false);
   // the display's number (three places of seven strokes) and its five bars
