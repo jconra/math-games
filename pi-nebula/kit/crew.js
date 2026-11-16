@@ -135,6 +135,9 @@
 //   lib.armsOf(suit id) -> its arm thickness (ARM THICKNESS; 1 as made); lib.arms { suit id: thickness } (a layer over
 //   crew.json's, the Crew Lab's while it's tried); ARMS_LIMITS; c.arms (the thickness a person wears); CALM (THE CALM
 //   STANDING POSE) and lib.calm (tried in its place: set before an outfit's clips are first fitted)
+//   lib.armsOutOf(suit id) -> { stand, move } (ARMS OUT, degrees: the standing clips' and the moving clips', the
+//   suit entry's `armsOut` and `armsOutMove`); lib.armsOut and lib.armsOutMove { suit id: ... } (tried in their place);
+//   c.armsOut (a person's), c.armsOutNow() (the angle worn this frame, the playing clips' mixed by their weights)
 //   lib.shouldersOf(suit id) -> how far its upper arms' joints are moved out (SHOULDER WIDTH; metres, 0 as made);
 //   lib.shoulders { suit id: metres } (a layer over crew.json's, the Crew Lab's while it's tried); SHOULDER_LIMITS,
 //   SHOULDER_STEP; c.shoulders (what a person wears)
@@ -290,6 +293,14 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // ARM THICKNESS (makeCrew): lib.arms { suit id: thickness } (the Crew Lab's while it's tried) over the suit entry's `arms`
   lib.arms = {};
   lib.armsOf = (suit) => { const v = own(lib.arms, suit) ? lib.arms[suit] : (lib.entry('suit', suit) || {}).arms; return +v > 0 ? Math.min(ARMS_LIMITS[1], Math.max(ARMS_LIMITS[0], +v)) : 1; };
+  // ARMS OUT (makeCrew): an outfit's angles, degrees: { stand, move } (move: one number for every moving clip, or
+  // { clip: degrees }; the standing one where the outfit gives none). lib.armsOut { suit id: degrees } and
+  // lib.armsOutMove { suit id: degrees | { clip: degrees } } are tried in place of crew.json's, as the checks do
+  lib.armsOutOf = (suit) => {
+    const E = lib.entry('suit', suit) || {}, a = lib.armsOut && lib.armsOut[suit], m = lib.armsOutMove && lib.armsOutMove[suit];
+    const stand = +(a != null ? a : E.armsOut) || 0, mv = m != null ? m : E.armsOutMove;
+    return { stand, move: mv == null ? stand : typeof mv === 'object' ? { ...mv } : +mv || 0 };
+  };
   // SHOULDER WIDTH (makeCrew, clipsFor): lib.shoulders { suit id: metres } (the Crew Lab's while it's tried) over the
   // suit entry's `shoulders`
   lib.shoulders = {};
@@ -380,6 +391,11 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
 const HAND_BONE = /^(Thumb|Index|Middle|Ring|Pinky)\d\.?[LR]$/;
 // (the clips whose hands rest on something (a seat, a wheel, a bar, a hammer): no arms out (ARMS OUT, in makeCrew))
 const ARMS_KEEP = /^(Sit_|Stool_|Drive|Bar_Polish|Hammer|Tend_Forge)/;
+// (the clips that carry the person along, the walk and the runs: their own arms out (ARMS OUT, in makeCrew))
+const ARMS_MOVE = /^(Walk|Run)/;
+// (the fastest the arms out worn changes, radians a second (90 degrees): quicker than any fade the game or the lab
+// plays (16 degrees over a fifth of a second is 80), so it only ever holds back a jump)
+const ARMS_RATE = Math.PI / 2;
 function handRig(rig, hand) {
   if (!hand) return rig;
   const dst = { ...rig.dstRest };
@@ -461,6 +477,9 @@ const CALM_IDLE = /^(Shoulder[LR]|(Thumb|Index|Middle|Ring|Pinky)\d[LR])$/;
 // every point stays exactly where it was made at rest (nothing reshaped; the bone from the shoulder to the elbow just
 // shorter, the collarbone longer), and the arm turns from there in every clip. 0 as made (every outfit unless set);
 // SHOULDER_LIMITS; lib.shouldersOf. (The collarbones are not it: standing, the joint sits 1 to 2 mm lower than at rest)
+// (Every women's outfit has its own, to that same place, about 2.3 cm inside its armpit as measured on its own suit
+// at rest: the women's spacesuit 2.5 cm, the women's captain and the medic 2.0, the captain's jumpsuit 0.5, Security
+// none; the Dock worker 3.0, less than the 4.0 measured: its armpit is its vest's side, and at 4.0 it read padded)
 export const SHOULDER_LIMITS = [-0.02, 0.06], SHOULDER_STEP = 0.005;
 // (the moves, from the suit's bones at rest: each upper arm's own place moved d metres out toward its side, its
 // forearm's place moved back by as much so the elbow stays; { UpperArmL: local move, LowerArmL: ... }, or null)
@@ -2777,28 +2796,46 @@ export async function makeCrew(lib, recipe) {
   // sink into in the standing clips: each upper arm turned out that far from the body, as much as it hangs down (none
   // when it's raised or reaching forward), on top of the clip and taken off again before the next frame's clip
   // (lib.armsOut { suit id: degrees }: tried in place of crew.json's, as the checks do)
-  // (only while standing or moving: a clip that sits, drives or works (ARMS_KEEP) puts the hands on something, and the
-  // turn eases in and out over a third of a second as the clips change)
-  const armsOut = THREE.MathUtils.degToRad(lib.armsOut && lib.armsOut[R.suit] != null ? lib.armsOut[R.suit] : (lib.entry('suit', R.suit) || {}).armsOut || 0), armQ = {};
+  // EACH CLIP ITS OWN (2026-11-15; the game's maker: "the arms/hands drifting away from the body"): the standing pose
+  // hangs the arms straight down beside the hips and needs the most; a walk swings them past the thighs and needs far
+  // less, and one angle for both had everyone walking with their arms held off their sides. So `armsOut` is the
+  // standing clips' angle, and the moving clips (ARMS_MOVE: the walk, the runs) take the outfit's `armsOutMove`: one
+  // number for them all, or { clip: degrees } (a moving clip it leaves out, and an outfit without it: the standing
+  // one); a clip that sits, drives or works (ARMS_KEEP) puts the hands on something: none. crew.json gives each
+  // outfit { Walk, Run, Run_Back }, each the smallest that keeps its sleeves and hands 5 mm off its hips and thighs
+  // through that clip (the runs sideways are left on the standing one: there a knee comes up to the hand in the clip
+  // itself, which no angle clears). What is worn is the clips' own mix: each playing clip's angle by its weight in
+  // the mixer, so while one clip fades into another the arms follow that same fade, and nothing steps when someone
+  // starts or stops walking. (And never faster than ARMS_RATE: a fade cut short by the next clip makes the mixer's
+  // own weights jump (a station person stopping for the player and setting off again within a third of a second), and
+  // the arms ease through that rather than jump with it; a pose set at once, update(0), is worn at once.) lib.armsOutOf
+  const AO = lib.armsOutOf(R.suit), armQ = {}, rad = THREE.MathUtils.degToRad;
+  const armsOf = (name) => (ARMS_KEEP.test(name) ? 0 : !ARMS_MOVE.test(name) ? AO.stand : typeof AO.move === 'number' ? AO.move : AO.move[name] != null ? +AO.move[name] : AO.stand);
+  const armsBy = Object.entries(person.actions).map(([name, a]) => [a, rad(armsOf(name))]);
+  const armsAny = armsBy.some((x) => x[1] !== 0);
   const _d = new THREE.Vector3(), _ax = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
-  let armsW = 1;
+  let armsNow = rad(AO.stand);
   function armsOutApply(dt) {
-    const want = ARMS_KEEP.test(person.curName || '') ? 0 : 1;
-    armsW = dt > 0 ? armsW + Math.max(-dt * 3, Math.min(dt * 3, want - armsW)) : want;
+    // (the clips playing, each by its weight: three's own, as the mixer has just mixed the bones)
+    let sw = 0, sa = 0;
+    for (const [a, ang] of armsBy) { if (!a.enabled || !a.isScheduled()) continue; const w = a.getEffectiveWeight(); if (w > 0) { sw += w; sa += w * ang; } }
+    if (sw > 0) { const to = sa / sw, most = dt > 0 ? ARMS_RATE * dt : Infinity; armsNow += Math.max(-most, Math.min(most, to - armsNow)); }
     person.root.getWorldQuaternion(_rq);
     for (const [s, sg] of [['L', 1], ['R', -1]]) {
       const ua = bones['UpperArm' + s], la = bones['LowerArm' + s]; if (!ua || !la) continue;
       armQ[s] = ua.quaternion.clone();
       _d.subVectors(la.getWorldPosition(_d), ua.getWorldPosition(_ax)).normalize();
-      const down = new THREE.Vector3(0, -1, 0).applyQuaternion(_rq), w = Math.max(0, _d.dot(down)) ** 2 * armsW;
-      if (w <= 0) continue;
+      const down = new THREE.Vector3(0, -1, 0).applyQuaternion(_rq), w = Math.max(0, _d.dot(down)) ** 2;
+      if (w <= 0 || !armsNow) continue;
       _ax.set(0, 0, 1).applyQuaternion(_rq).applyQuaternion(ua.parent.getWorldQuaternion(_pq).invert());
-      ua.quaternion.premultiply(_q.setFromAxisAngle(_ax, armsOut * sg * w));
+      ua.quaternion.premultiply(_q.setFromAxisAngle(_ax, armsNow * sg * w));
     }
     person.root.updateMatrixWorld(true);
   }
   const c = {
     root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK, shoulders: fit.shoulders,
+    // (ARMS OUT: the outfit's angles, degrees, and the angle worn this frame)
+    armsOut: AO, armsOutNow: () => THREE.MathUtils.radToDeg(armsNow),
     // (THE HEAD'S PLACE: how this head sits on this outfit, each level's and the total)
     place,
     // (THE SIZE: the whole person scaled, and their stride with them)
@@ -2806,7 +2843,7 @@ export async function makeCrew(lib, recipe) {
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
     update(dt) {
       // (arms out: the clip's own turn back first, so the mixer, which writes only what changed, never stacks it)
-      if (armsOut) for (const s of ['L', 'R']) if (armQ[s]) bones['UpperArm' + s].quaternion.copy(armQ[s]);
+      if (armsAny) for (const s of ['L', 'R']) if (armQ[s]) bones['UpperArm' + s].quaternion.copy(armQ[s]);
       person.update(dt);
       // each foot at its shin's end (see the top)
       person.root.updateMatrixWorld(true);
@@ -2817,7 +2854,7 @@ export async function makeCrew(lib, recipe) {
         f.position.copy(f.parent.worldToLocal(A));
       }
       person.root.updateMatrixWorld(true);
-      if (armsOut) armsOutApply(dt);
+      if (armsAny) armsOutApply(dt);
       if (visor) visor.userData.visor.vsTime.value += dt;
       if (gaze) gaze.update(dt);
     },
