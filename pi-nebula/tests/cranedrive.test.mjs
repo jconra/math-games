@@ -320,3 +320,32 @@ test('by hand it settles onto a place nearby as it comes to rest; run by the job
   assert.ok(hand < 0.2, 'by hand: settled back toward the socket ' + hand);
   assert.ok(Math.abs(job - 0.5) < 1e-6, 'run by the job: left where it was ' + job);
 });
+
+test('low down it goes only over the patches the round works over (the station\'s people keep off them)', () => {
+  const S = stateAt(plan, 0), lowOk = (x) => Math.abs(x - 42) > 3;   // (a made-up walkway across the rail, x 39 to 45)
+  const D = makeDrive(site, S, { solid, eyes: [], lowOk });
+  D.go([{ axis: 'along', to: 42 }]); assert.ok(until(D, () => !D.busy) != null && !D.failed);
+  D.go([{ axis: 'hoist', to: 1.0 }]); until(D, () => !!D.failed, 30);
+  assert.ok(D.failed && /People walk here/.test(D.failed.why), JSON.stringify(D.failed));
+  assert.ok(S.hoist + 0.17 >= DRIVE.low - 0.03, 'it stayed high over the walkway: ' + S.hoist);
+  // over a patch the round works over (here, past the walkway), all the way down
+  D.failed = null;
+  D.go([{ axis: 'hoist', to: site.carry }, { axis: 'along', to: 46.5 }, { axis: 'hoist', to: 1.0 }]); assert.ok(until(D, () => !D.busy) != null && !D.failed, JSON.stringify(D.failed));
+  assert.ok(Math.abs(S.hoist - 1.0) < 1e-6);
+  // and low, it does not go on over the walkway
+  D.go([{ axis: 'along', to: 44 }]); until(D, () => !D.busy || !!D.failed, 30);
+  assert.ok(S.x > 45 - 1e-6 && S.x < 45.5, 'stopped at the walkway: ' + S.x);
+});
+
+test('the job\'s moves come down low only over the patches the round works over: none is held up by the rule', () => {
+  const seen = new Set(), patches = plan.gates.filter((g) => { const k = [g.x, g.z, g.hx, g.hz].join(); if (seen.has(k)) return false; seen.add(k); return true; });
+  const lowOk = (x, z) => patches.some((g) => Math.abs(x - g.x) <= g.hx + 0.2 && Math.abs(z - g.z) <= g.hz + 0.2);
+  const S = stateAt(plan, 0), D = makeDrive(site, S, { solid, eyes: [], lowOk }), Qu = makeJobQueue(site, { start: () => S, oreOf: () => 1.2 });
+  let lows = 0;
+  for (let n = 0; n < 30; n++) {
+    const steps = Qu.right(null); if (!steps.length) break;
+    D.go(steps); assert.ok(until(D, () => !D.busy, 120) != null && !D.failed, 'move ' + n + ': ' + JSON.stringify(D.failed));
+    if (S.hoist < DRIVE.low) lows++;
+  }
+  assert.ok(lows > 3, 'it did come down low, over the places: ' + lows);
+});

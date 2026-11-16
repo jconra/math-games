@@ -51,6 +51,7 @@ export const RULES = {
 };
 export const REACH = { voxel: 0.05, pad: 0.8 };
 
+const LOW_SLACK = 0.2;   // m: see lowOk in makeCrane
 export function makeCrane({ W, walls }) {
   const L = makeOreLine(W.built, { rail: W.R?.places?.crane || null });
   if (!L) { console.info('crane: the station has no ore line'); return { on: false, mode: 'none', update() {}, load: () => null, pose() {}, take: () => false, give() {}, command() {} }; }
@@ -65,7 +66,18 @@ export function makeCrane({ W, walls }) {
   for (let i = walls.doors.length - 1; i >= 0; i--) { const d = walls.doors[i]; if (!L.doors.includes(d.D)) continue; if (d.box.min.y > 1.75) walls.doors.splice(i, 1); else d.locked = true; }
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
-  const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; } };
+  // (low down, the hand-worked crane goes only over the patches the round works over, which the station's people keep
+  // off (src/people.js marks the same patches from L.gate, wider): the ship's trays, the sockets, the rack. The hook
+  // within LOW_SLACK of one keeps a load's footprint inside the patch people keep off)
+  let patches = null;
+  const lowOk = (x, z) => {
+    if (!patches) {
+      patches = []; const seen = new Set();
+      for (let t = 0; t < L.length; t += 0.5) { const g = L.gate(t, 0); if (!g) continue; const k = [g.x, g.z, g.hx, g.hz].join(); if (!seen.has(k)) { seen.add(k); patches.push(g); } }
+    }
+    return patches.some((g) => Math.abs(x - g.x) <= g.hx + LOW_SLACK && Math.abs(z - g.z) <= g.hz + LOW_SLACK);
+  };
+  const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; }, lowOk };
   const oreOf = () => LOADS[L.round % LOADS.length] / 10;   // (tonnes of ore in a full canister of this round's load)
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
   const C = {

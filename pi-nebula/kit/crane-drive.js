@@ -14,7 +14,9 @@
 //     into any of them does not happen. A canister goes into a socket's collar only lined up with it, end on, through
 //     its open iris, slowly (the round's push speed), and no deeper than seated.
 //   - NOBODY UNDER A LOAD. While anyone stands under the load (or within DRIVE.margin of it), it will not come down,
-//     and a low load will not be moved over them; a tray will not slide out over them.
+//     and a low load will not be moved over them; a tray will not slide out over them. And it comes down low (under
+//     DRIVE.low) only over the patches the round works over, which the station's people keep off (world.lowOk(x, z),
+//     from src/crane.js): where people walk, it stays high, as the round's loads do.
 //   - IT LETS GO ONLY WHERE A CANISTER CAN REST: seated in a socket with the collar's latch dogs shut on it, on a
 //     ship's tray that is out, in a bay of the rack. Anywhere else the grab stays shut, and says why.
 //   - LINING UP. Within DRIVE.capture of a place (a socket, a bay, a tray), coming down to it, the crane lines itself
@@ -300,6 +302,9 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       // people: nothing comes down over anyone, and a low load is not moved over them
       if (axis === 'hoist' && each < 0 && under(c)) { note('people', held >= 0 ? 'Someone is under the load: it will not come down.' : 'Someone is under the grab: it will not come down.'); break; }
       if (axis !== 'hoist' && underside(c) < DRIVE.low && under(c) && !under(cfg())) { note('people', held >= 0 ? 'Someone is under there: a load this low will not go over them.' : 'Someone is under there: the grab will not go over them this low.'); break; }
+      // where people walk (everywhere but the patches the round works over, which the station's people keep off: the
+      // ship's trays, the sockets, the rack) nothing comes down low, whoever is there or not
+      if (world.lowOk && !(axis === 'hoist' && each > 0) && underside(c) < DRIVE.low) { const h = hookAt(c); if (!world.lowOk(h[0], h[2])) { note('low', 'People walk here: it comes down only over the ship, the rack or the sockets.'); break; } }
       const hit = blocked(c, held >= 0, held >= 0 ? S.cans[held].rel : 0, axis === 'hoist' && each < 0);
       if (hit) {
         // (where it is: over the cradle or under it, for the words)
