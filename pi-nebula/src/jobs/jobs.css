@@ -44,6 +44,14 @@
 .pnj-arrow:hover:not(:disabled) { color: var(--ink); background: rgba(255, 255, 255, 0.16) !important; }
 .pnj-arrow:disabled { opacity: 0.3; cursor: default; }
 .pnj-arrow[hidden] { visibility: hidden; display: block; }
+/* the Levels button, in the foot left of Help (the job's levels to ask: ui/levels.js), and a level kept where it is
+   (no bar toward the next level) */
+.pnj-levels { height: 40px; margin-right: auto; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line);
+  clip-path: var(--oct); --cut: 9px; }
+.pnj-levels svg { width: 15px; height: 15px; }
+.pnj-levels:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line-hi); }
+.pnj-lv.is-kept .pnj-bar { visibility: hidden; }
 .pnj-lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: center; }
 .pnj-lvwords { font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pnj-lv.is-flash .pnj-lvwords { color: var(--good); font-weight: 700; }

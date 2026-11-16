@@ -2,7 +2,8 @@
 // triage desk). The same eight-sided glass as the title screen.
 //
 //   the top strip    the job's name, the level with its arrows (Mathwood's level tool: ◀ 9 of 14: Recipes made bigger ▶,
-//                    a thin bar for the right answers toward the next level), and "Done" (Esc)
+//                    a thin bar for the right answers toward the next level, "Kept ·" and no bar when the level is kept;
+//                    the arrows stop at the levels chosen), and "Done" (Esc)
 //   the card         the job's scene (a recipe card in the galley, a patient chart at the triage desk, a pay slip at
 //                    the smelter: its rows in place of the story where the order has them), the story and the
 //                    question, and for the youngest the things to count drawn on it
@@ -14,6 +15,8 @@
 //                    how to go about it, the sums in order with the numbers filled in, and "Work it out on paper", which
 //                    opens Mathwood's worked sheet (src/ui/longwork.js) on the question's own sums. It never opens by
 //                    itself, has an X, and Esc closes it. Using it never costs credits.
+//   Levels           left of Help: the job's levels to ask and keep to these levels (ui/levels.js), over the panel,
+//                    which keeps no keys while it is up; the card is dealt again when it closes, if the level moved
 //
 //   const J = openPanel(root, { job, crew, live, onClose, onSave, onCredits })    J.close(), J.state() (for rigs),
 //   J.pick(i), J.help(), J.step(dir). live: a function giving what the job's props are doing right now (the smelter's
@@ -23,6 +26,7 @@ import * as E from './engine.js';
 import { helpPicture } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
 import { workOf, sumWords } from '../../../mathwood-valley/src/math/longwork.js';
+import { openJobLevels } from '../ui/levels.js';
 
 const CSS = new URL('./jobs.css', import.meta.url).href;
 export function ensureCss() {
@@ -51,7 +55,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       <div class="pnj-stage"><article class="pnj-card"></article></div>
       <div class="pnj-answers" role="group" aria-label="Pick the answer"></div>
       <p class="pnj-line" aria-live="polite"></p>
-      <div class="pnj-foot"><button type="button" class="pnj-helpbtn" data-askhelp>Help<kbd>H</kbd></button></div>
+      <div class="pnj-foot"><button type="button" class="pnj-levels" aria-label="Levels to ask, and keep to them"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4.5 1.5v13M11.5 1.5v13M4.5 4.5h7M4.5 8h7M4.5 11.5h7"/></svg>Levels</button><button type="button" class="pnj-helpbtn" data-askhelp>Help<kbd>H</kbd></button></div>
       <aside class="pnj-help" hidden>
         <header><b class="pnj-htitle">Help</b><button type="button" class="pnj-hx" aria-label="Close the help (Esc)">&#10005;</button></header>
         <div class="pnj-pic"></div><p class="pnj-hline"></p><ol class="pnj-steps"></ol>
@@ -72,15 +76,24 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   function showLevel(flash = '') {
     const v = E.level(crew, job);
     if (!v) return;
-    $('.pnj-lvwords').textContent = flash || `Level ${v.i + 1} of ${v.n}: ${v.title}`;
+    $('.pnj-lvwords').textContent = flash || `${v.kept ? 'Kept · ' : ''}Level ${v.i + 1} of ${v.n}: ${v.title}`;
     $('.pnj-lv').title = v.note;
     $('.pnj-lv').classList.toggle('is-flash', !!flash);
+    $('.pnj-lv').classList.toggle('is-kept', !!v.kept);
     $('.pnj-bar i').style.width = `${Math.round((v.placing ? 0 : v.fill) * 100)}%`;
     $('.pnj-bar').classList.toggle('is-placing', v.placing);
     const [dn, up] = el.querySelectorAll('.pnj-arrow');
     dn.disabled = !v.canDown; up.disabled = !v.canUp; dn.hidden = up.hidden = !v.pick;
   }
   el.querySelectorAll('.pnj-arrow').forEach((b) => b.addEventListener('click', () => step(+b.dataset.dir)));
+  // the job's levels to ask and keep to these levels (ui/levels.js), over the panel; the card dealt again on closing if
+  // the level the next question comes from moved
+  let levelsSheet = null;
+  $('.pnj-levels').addEventListener('click', () => {
+    if (busy || levelsSheet || closed) return;
+    levelsSheet = openJobLevels(document.body, crew, { jobs: [job], job: job.id, onChange: () => onSave(),
+      onClose: (moved) => { levelsSheet = null; if (closed) return; if (moved) next({ slide: 1 }); else showLevel(); } });
+  });
   function step(dir) {
     if (busy) return null;
     const v = E.step(crew, job, dir);
@@ -290,6 +303,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   function onKey(e) {
     if (closed) return;
     if (document.querySelector('.bml:not(.is-out)')) return;   // (the worked sheet has the keys while it is up)
+    if (levelsSheet) return;                                     // (and the levels sheet: ui/levels.js)
     if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (helpOn) help(false); else close(); return; }
     if (e.key === 'h' || e.key === 'H') { e.preventDefault(); help(); return; }
     if (/^[1-4]$/.test(e.key)) { e.preventDefault(); pick(+e.key - 1); }
@@ -299,6 +313,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   function close() {
     if (closed) return;
     closed = true; closeSheet();
+    if (levelsSheet) { const L = levelsSheet; levelsSheet = null; L.close(); }
     removeEventListener('keydown', onKey, true);
     el.classList.add('is-going');
     setTimeout(() => el.remove(), 250);

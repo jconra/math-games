@@ -107,10 +107,21 @@ const theme = {
         <p class="${P}-line">You start in your room. Walk around the station and see who is there.</p>
         <section><h3 class="${P}-label">Look</h3>${lookRow(cur)}</section>
         <section><h3 class="${P}-label">Height</h3>${heightRow(sizeOf(p.look), 'setsize')}</section>
+        <section><h3 class="${P}-label">Job levels</h3>
+          <button class="${P}-btn ${P}-joblevels" data-act="joblevels" data-k="joblevels">Levels to ask at each job</button>
+          <p class="${P}-startline">Which levels each job asks, and whether the game moves you up and down by itself.</p></section>
       </div>
     </div>`;
   },
   actions: {
+    // the job levels (ui/levels.js), for the chosen crew member: every job with questions, a tab each
+    joblevels(ctx) {
+      const p = ctx.current();
+      if (!p) return;
+      Promise.all([import('../jobs/index.js'), import('./levels.js')]).then(([J, L]) => {
+        L.openJobLevels(document.body, p, { jobs: J.JOBS, onChange: (x) => ctx.changed(x || p), onClose: () => ctx.focusKey('joblevels', false) });
+      }).catch((e) => console.error('Pi Nebula: the job levels could not open', e));
+    },
     // the height on the new crew member's form
     size(ctx, data) {
       const v = +data.v; if (!ctx.S.draft || !HEIGHTS.some((h) => h.v === v)) return;

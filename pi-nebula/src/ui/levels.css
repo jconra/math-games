@@ -1,0 +1,71 @@
+/* The job levels (src/ui/levels.js): one sheet over the station (over the job panel, 25, and the crew screen, 20), in
+   the job panel's dark glass with its eight-sided frames: the job's name, where the crew member is, the levels to ask
+   (the slider shared with Mathwood, shared/levelrange.js: its .lr rules are put on the page by itself, its colours
+   here), keep to these levels, and the job's ladder with the levels outside the range greyed. On a phone it fills
+   the screen and scrolls. */
+.pnl {
+  --ink: #eef1f4; --dim: #a7b0ba; --faint: #78818b;
+  --glass: rgba(15, 19, 25, 0.96); --glass-hi: rgba(40, 47, 56, 0.92);
+  --line: rgba(196, 220, 240, 0.36); --line-hi: rgba(232, 243, 252, 0.95);
+  --accent: #ff8f2e; --accent-ink: #1c1205; --focus: #7fd4ff; --cut: 12px;
+  --oct: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; box-sizing: border-box;
+  background: rgba(4, 6, 9, 0.72);
+  font: 400 16px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  /* the slider in the station's colours: an orange range on a dark rail, white handles */
+  --lr-rail: rgba(255, 255, 255, 0.1); --lr-fill: linear-gradient(90deg, #c96a1c, var(--accent)); --lr-tick: rgba(4, 6, 9, 0.8);
+  --lr-thumb: #f4f7fa; --lr-thumb-edge: var(--accent); --lr-bubble: var(--accent); --lr-bubble-ink: var(--accent-ink);
+  --lr-focus: var(--focus); --lr-here: var(--focus); --lr-ink: var(--ink); --lr-mute: var(--dim);
+}
+.pnl * { box-sizing: border-box; }
+.pnl button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.pnl :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pnl-card { position: relative; width: min(620px, 100%); max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 20px;
+  background: var(--glass); box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 18px; }
+.pnl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.pnl-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.pnl-head small { display: block; margin-top: 2px; font-size: 13px; color: var(--dim); }
+.pnl-x { flex: none; width: 40px; height: 40px; display: grid; place-items: center; font-size: 15px; background: var(--glass-hi) !important;
+  box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 9px; }
+.pnl-x:hover { box-shadow: inset 0 0 0 1.5px var(--line-hi); }
+.pnl-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pnl-tab { height: 36px; padding: 0 14px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  background: rgba(255, 255, 255, 0.05) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 8px; }
+.pnl-tab[aria-selected="true"] { color: var(--accent-ink); background: var(--ink) !important; box-shadow: none; }
+.pnl-where { margin: 0 0 10px; font-size: 14px; color: var(--dim); }
+.pnl-range { padding: 12px 14px 14px; background: rgba(120, 190, 240, 0.07); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.28); clip-path: var(--oct); --cut: 10px; }
+.pnl-rhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pnl-rhead h3 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+.pnl-rhead small { font-size: 12px; color: var(--faint); }
+.pnl-chip { height: 32px; padding: 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 143, 46, 0.6); clip-path: var(--oct); --cut: 7px; }
+.pnl-chip:hover { background: rgba(255, 143, 46, 0.12) !important; }
+.pnl-range .lr-said { font-size: 14px; color: var(--dim); }
+.pnl-range .lr-said b { color: var(--ink); }
+.pnl-keep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; padding-top: 10px; border-top: 1px dashed rgba(196, 220, 240, 0.2); }
+.pnl-keep small { flex: 1 1 240px; font-size: 12.5px; line-height: 1.4; color: var(--faint); }
+.pnl-switch { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 12px; font-size: 14px; font-weight: 600;
+  background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 8px; }
+.pnl-switch svg { width: 14px; height: 14px; color: var(--dim); }
+.pnl-switch b { min-width: 42px; padding: 3px 8px; text-align: center; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  background: rgba(0, 0, 0, 0.35); clip-path: var(--oct); --cut: 5px; }
+.pnl-switch[aria-checked="true"] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pnl-switch[aria-checked="true"] svg { color: var(--accent); }
+.pnl-switch[aria-checked="true"] b { color: var(--accent-ink); background: var(--accent); }
+.pnl-note { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ink); }
+.pnl-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }
+.pnl-list li { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 5px 8px; font-size: 13.5px; background: rgba(255, 255, 255, 0.04); transition: opacity 0.12s; }
+.pnl-list li.is-off { opacity: 0.35; }
+.pnl-list li.is-here { box-shadow: inset 2px 0 0 var(--focus); }
+.pnl-n { flex: none; min-width: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+.pnl-list li.is-off .pnl-n { color: var(--faint); }
+.pnl-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pnl-list em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--focus); }
+@media (max-width: 640px) {
+  .pnl { padding: 0; place-items: stretch; }
+  .pnl-card { width: 100%; height: 100%; max-height: none; clip-path: none; padding: 16px 16px 24px; background: rgb(15, 19, 25); }
+  .pnl-list { grid-template-columns: minmax(0, 1fr); }
+  .pnl-head h2 { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { .pnl-list li { transition: none; } }
