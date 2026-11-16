@@ -1,11 +1,15 @@
 // practice.js: the practice page. Tabs per place; each place's levels; a level's questions as cards with the real
 // choices (cards.js makes them with the game's own makers); and an adaptive mode with a throwaway rider (never saved)
-// driven by the game's own level model (src/levels/model.js), to watch placement and the 80% staircase.
+// driven by the game's own level model (src/levels/model.js), to watch placement and the 80% staircase: made with a
+// starting difficulty (Easy, Medium, Hard: src/math/skill.js STARTS, as the game's new-rider form asks), with the
+// game's levels-to-ask slider (shared/levelrange.js) and keep to these levels to try on it.
 //
 // URL: ?place=roundup&level=by5&seed=123&into=2 opens that card; &mode=adaptive opens the adaptive mode.
 
 import { PLACES, PLACE } from '../../src/levels/places.js';
-import { levelFor, recordLevel, stateOf, pctOf } from '../../src/levels/model.js';
+import { levelFor, recordLevel, stateOf, pctOf, rangeOf, setRange, setKeep } from '../../src/levels/model.js';
+import { STARTS } from '../../src/math/skill.js';
+import { makeLevelRange } from '../../../shared/levelrange.js';
 import { STRAND } from '../../src/math/strands.js';
 import { makeCard, cardText, LAB_CHOICES } from './cards.js';
 import { makeQuestion } from '../../src/math/graphs.js';
@@ -252,7 +256,7 @@ function renderLevels(root, P) {
 
 const T0 = Date.UTC(2026, 0, 5, 15);
 function riderOf(placeId) {
-  if (!S.riders[placeId]) S.riders[placeId] = { rider: { skill: { v: 1, migrated: 1, strands: {} } }, log: [], age: '', clock: 0, seed: newSeed() };
+  if (!S.riders[placeId]) S.riders[placeId] = { rider: { skill: { v: 1, migrated: 1, strands: {} }, start: 'easy' }, log: [], start: 'easy', clock: 0, seed: newSeed() };
   return S.riders[placeId];
 }
 
@@ -294,13 +298,21 @@ function renderAdaptive(root, P) {
   panel.append(h('div', { class: 'bar' },
     h('button', { class: 'btn good', type: 'button', onclick: () => record(true, 'button') }, 'Answer right'),
     h('button', { class: 'btn bad', type: 'button', onclick: () => record(false, 'button') }, 'Answer wrong')));
-  const age = h('select', { 'aria-label': 'Age (head start)' },
-    h('option', { value: '' }, 'no age'), ...[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((a) => h('option', { value: String(a) }, `age ${a}`)));
-  age.value = R.age;
-  panel.append(h('div', { class: 'row' }, 'Start a new rider:', age,
+  // the starting difficulty, as the game's new-rider form asks (in place of the age it asked before)
+  const start = h('select', { 'aria-label': 'Starting difficulty' },
+    ...STARTS.map((s) => h('option', { value: s.id }, `${s.id[0].toUpperCase()}${s.id.slice(1)} (head start ${s.points})`)));
+  start.value = R.start;
+  panel.append(h('div', { class: 'row' }, 'Start a new rider:', start,
     h('button', { class: 'btn alt', type: 'button', onclick: () => {
-      const a = age.value; delete S.riders[P.id]; const N = riderOf(P.id); N.age = a; if (a) N.rider.age = Number(a); render();
+      const v = start.value; delete S.riders[P.id]; const N = riderOf(P.id); N.start = v; N.rider.start = v; render();
     } }, 'New rider')));
+  // the levels to ask (the game's slider) and keep to these levels, on this rider
+  const Rg = rangeOf(R.rider, P.id), focusK = () => { const a = document.activeElement; return a && a.dataset ? a.dataset.k : null; };
+  const slider = makeLevelRange({ n: P.levels.length, lo: Rg.lo, hi: Rg.hi, here: q.i, name: (i) => P.levels[i].title, label: 'Levels to ask',
+    onChange: (lo, hi) => { const k = focusK(); setRange(R.rider, P.id, P.levels[lo].id, P.levels[hi].id, { now: T0 + R.clock * 60000 }); render(); if (k) { const t = document.querySelector(`.lr-thumb[data-k="${k}"]`); if (t) t.focus(); } } });
+  const keep = h('input', { type: 'checkbox', id: 'lab-keep', checked: Rg.keep, onchange: () => { setKeep(R.rider, P.id, keep.checked, { now: T0 + R.clock * 60000 }); render(); } });
+  panel.append(h('div', { class: 'lab-range' }, h('b', {}, 'Levels to ask'), slider.el,
+    h('label', { class: 'row', for: 'lab-keep' }, keep, 'Keep to these levels: the game never moves the level (the answers still count)')));
   const log = h('ol', { class: 'log' });
   for (const e of R.log) log.append(h('li', {}, h('b', {}, e.right ? 'Right' : 'Wrong'), ` at ${e.at}. ${e.title}${e.placing ? ' (finding)' : ''}: ${e.moved}${e.placed ? ', placed' : ''}${e.how === 'button' ? '' : ' · on a card'}`));
   if (R.log.length) panel.append(log);

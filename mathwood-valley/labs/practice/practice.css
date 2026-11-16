@@ -124,6 +124,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
 .log li b { color: var(--ink); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; font-size: 14px; }
 .row select { font: inherit; padding: 4px; border-radius: 6px; border: 1px solid var(--edge); background: var(--chip); color: var(--ink); }
+/* the game's levels-to-ask slider (shared/levelrange.js) on the throwaway rider, in the page's colours */
+.lab-range { margin-top: 12px; padding: 10px 12px 8px; border-radius: 10px; border: 1px solid var(--edge); background: var(--chip);
+  --lr-rail: rgba(90, 60, 30, 0.2); --lr-fill: linear-gradient(90deg, var(--brass), var(--brass-hi)); --lr-tick: rgba(43, 34, 25, 0.4);
+  --lr-thumb: var(--brass-hi); --lr-thumb-edge: #7a5320; --lr-bubble: var(--brass); --lr-bubble-ink: #fffaf0; --lr-focus: var(--ink);
+  --lr-here: var(--rust); --lr-ink: var(--ink); --lr-mute: var(--mute); }
+.lab-range > b { font-size: 14px; }
+.lab-range .lr-said { font-size: 13px; }
 
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #2b2219; color: #f6edd6; padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s; max-width: calc(100vw - 32px); }
 .toast.on { opacity: 1; }

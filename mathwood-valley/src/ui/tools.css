@@ -48,6 +48,11 @@
   background-size: 32px 100%; animation: bmtl-find 1.6s linear infinite; }
 @keyframes bmtl-find { to { background-position: 32px 0; } }
 .bmtl-level.is-fixed .bmtl-lv { padding: 0 10px; }
+/* (keep to these levels: no bar toward the next level, a padlock and "Kept here" in its place) */
+.bmtl-kept { display: none; align-items: center; gap: 4px; font: 600 10.5px/1 Bitter, Georgia, serif; letter-spacing: 0.04em; color: var(--brass-hi, #f3c56b); }
+.bmtl-kept svg { width: 10px; height: 10px; }
+.bmtl-level.is-kept .bmtl-lvbar { display: none; }
+.bmtl-level.is-kept .bmtl-kept { display: flex; }
 .bmtl-level.is-moved .bmtl-lvt { animation: bmtl-moved 0.35s ease-out; }
 @keyframes bmtl-moved { from { color: var(--brass-hi, #f3c56b); transform: translateY(-3px); } }
 
