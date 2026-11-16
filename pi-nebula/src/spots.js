@@ -11,7 +11,7 @@
 //   { room: 'terminal' }  { room: /smelt/i }      a room, by its id (or a room whose id or name matches): its middle
 //   { room: 'terminal', at: [0.3, 0.6], face: [x, z] }
 //                                                 a point in a room's box, by fractions across it (life.js), facing a way
-//   { piece: 'booth', variant: 'explore', local: [x, y, z], face: [x, z] }
+//   { piece: 'counter', variant: 'serve', local: [x, y, z], face: [x, z] }
 //                                                 a kind of piece (and its variant), anywhere in the station: a point in
 //                                                 the piece's own frame (metres), facing a way in that frame (room: only
 //                                                 in that room; all: every such piece, life.js)

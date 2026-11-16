@@ -14,7 +14,8 @@
 //   ?hold                no clock of its own: nothing moves until GAME.step(dt) is called (for films and frame strips)
 //   ?rig                 keeps the picture readable for a screenshot
 //   ?nopeople            the station without its people
-//   ?crowd=N             that many of the station's people, whatever the quality (life.js CROWD: the cost rigs)
+//   ?crowd=N             that many of the station's people about the player at once, whatever the quality (life.js NEAR:
+//                        the cost rigs); ?far=N: people drawn with their far copy from N metres (people.js LIFE.far)
 import * as THREE from 'three';
 import { GAME_NAME } from './name.js';
 import * as save from './save.js';
@@ -33,6 +34,10 @@ import { makePeople, resolve } from './people.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
 import { startJobs } from './jobs/index.js';
+import { credits } from './jobs/engine.js';
+import { sound } from './sound.js';
+import { soundButton } from './ui/soundbutton.js';
+import { news } from './news.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 4;                 // shown small on the title; goes up with index.html's ?v=
@@ -73,6 +78,8 @@ async function boot() {
   const walls = makeWalls(W.built, { portals: W.R.portals });
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
+  // (the big scanner glides only with someone on its bed: parked until the station's people put a patient there)
+  for (const D of W.built.glides || []) D.use = null;
   // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
   const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
   // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
@@ -126,6 +133,11 @@ async function boot() {
   menu.setAttribute('aria-label', 'Back to the crew screen (Esc)');
   menu.addEventListener('click', toTitle);
   document.getElementById('hud-root').appendChild(menu);
+  // (and beside it the sound's switch: the volume and a mute, kept in this browser)
+  const soundSw = soundButton(document.getElementById('hud-root'), sound);
+  // (a job shift that paid becomes the station's news: the people may talk about it, news.js 'player')
+  const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab' };
+  let shift = null;
 
   // ── the clock ─────────────────────────────────────────────────────────────────────────────────────────────────
   let now = 0;
@@ -147,7 +159,13 @@ async function boot() {
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
     if (GAME.cam) GAME.cam(W.camera, now, dt);      // (a rig's own camera, for films: GAME.cam = (camera, now, dt) => {...})
-    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera });
+    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now });
+    sound.ears(W.camera);
+    if (GAME.player) {
+      const busy = jobs.busy();
+      if (busy && !shift) shift = { id: jobs.near, credits: credits(GAME.player) };
+      else if (!busy && shift) { if (credits(GAME.player) > shift.credits) news.add({ kind: 'player', player: GAME.player.name, job: JOB_WORDS[shift.id] || 'galley' }); shift = null; }
+    }
     eyes.length = 0; shipEyes.length = 0;
     if (GAME.mode === 'play' && P) { eyes.push(P.pos); shipEyes.push(P.pos); }
     if (people) { eyes.push(...people.eyes()); people.onWays(shipEyes); }
@@ -173,7 +191,7 @@ async function boot() {
   // the people come aboard after the station is ready (the player wakes in their quarters, behind a shut door)
   if (!q.has('nopeople')) {
     GAME.peopleReady = false;
-    makePeople({ W, walls, lib, jobs, boarding, crane }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
+    makePeople({ W, walls, lib, jobs, boarding, crane, crew: () => GAME.player }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
   }
 
   // ── the start button: the chosen crew member, in their quarters ───────────────────────────────────────────────
@@ -194,12 +212,13 @@ async function boot() {
     }
     GAME.mode = 'play';
     player.P.c.root.visible = true;
-    input.enabled = true; menu.hidden = false;
+    input.enabled = true; menu.hidden = false; soundSw.show(true);
     T.hide();
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; auto.way = null; jobs.update(0, null, false); jobs.close();
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; jobs.update(0, null, false); jobs.close();
+    if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
   }
   // back to the title (Escape)

@@ -338,11 +338,16 @@ export function glideAt(G, now) {
   const round = 2 * (G.go + G.rest), u = (((now / round + (G.start || 0)) % 1) + 1) % 1 * round;
   return u < G.go ? u / G.go : u < G.go + G.rest ? 1 : u < 2 * G.go + G.rest ? 1 - (u - G.go - G.rest) / G.go : 0;
 }
+// A glide the game runs only while it is in use (the big scanner, only with someone lying on its bed: the game's maker,
+// 2026-11-16; src/people.js sets D.use): D.use null, parked at rest; { from, end }, gliding from rest at the clock's
+// `from`, parked again once the clock reaches `end` (the end of a round, at rest); D.use left unset (the Kit Lab, a part
+// alone on the stand), the clock's own, all the time.
 export function updateGlides(built, now) {
   let moved = false;
   for (const D of built?.glides || []) {
     if (D.hold != null || (D.room && !D.room.group.visible)) continue;
-    const t = glideAt(D.glide, now);
+    const use = D.use, G0 = D.glide0 || (D.glide0 = { ...D.glide, start: 0 });
+    const t = use === undefined ? glideAt(D.glide, now) : !use || (use.end != null && now >= use.end) ? 0 : glideAt(G0, Math.max(0, now - use.from));
     if (t !== D.t) { D.t = D.target = t; for (const leaf of D.leaves) setLeaf(leaf, t); moved = true; }
     // its hoop of light, where switched on: where the hoop is now and which side its bright part is on (three small
     // vectors handed to its room's materials: materials.js U.hoop)

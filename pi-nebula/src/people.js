@@ -1,9 +1,9 @@
 // THE PEOPLE in the station, going about their day (life.js: who they are and what they do), each built with the crew
 // kit from its recipe, drawn only while the room they are in is drawn and they are in front of the camera.
 //
-//   const people = await makePeople({ W, walls, lib, jobs, boarding, crane, say })
-//   people.update(dt, { player, camera })   everyone's day goes on; whoever is drawn moves; eyes follow a player who is near
-//   people.list    [{ id, name, c, pos, heading, walking, ... }]    people.missing  the spots the station has no name for
+//   const people = await makePeople({ W, walls, lib, jobs, boarding, crane, say, crew })
+//   people.update(dt, { player, camera, now })   everyone's day goes on; whoever is drawn moves; the friendly bits
+//   people.list    [{ id, name, c, pos, heading, walking, away, ... }]    people.missing  the spots the station has no name for
 //   people.eyes()  where the people on the move are (the station's doors open for them; the crane stops for them)
 //   people.onWays(out)  pushes anyone standing on a parked ship's way in (it waits for them; people never call a ship's
 //                  way down: they do not board yet)
@@ -12,7 +12,23 @@
 //   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson, onPatch
 //   people.plan()  everyone's spots and ways, for the plan from above (the rigs)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
+//   people.bubbles, people.say(P, words)   the chat bubbles (bubbles.js)
 //   resolve(W, walls, at) -> { pos, heading } | null                where a spot in spots.js is, by the station's names
+//
+// A SMALL STATION (2026-11-16; the game's maker: "Just having 4-8 people around seems plenty"): everyone in the roster
+// lives aboard, but only the nearest NEAR[quality] (life.js) are about at once (PRESENCE): the rest go on with their day
+// out of the way (not drawn, nobody's way blocked by them) and come back as the player comes near, always somewhere the
+// player cannot see at that moment (their room not drawn, or out of the camera's view and a few metres off); two people
+// talking, or a medic and a patient at the scanner, come and go together.
+// FRIENDLY (the game's maker: "I like the eyes looking and I think a small smile would be good... Just chat bubbles
+// saying 'Hi' and 'Hello' are good"): within a few metres of the player people look at them (eyes and head), smile a
+// little more, and say hello in a bubble as the player passes, their very first hello spoken in their own voice
+// (voices.js, quietly, from where they stand). A CAPTAIN (a yellow marker over their head) stops and offers the player
+// a place on their crew: who they are and what for, and the question at the bottom of the screen (missions.js gets the
+// answer). TWO TALKING (at a talking spot, or side by side at a table) share a conversation from the line bank in
+// bubbles over their heads (chatter.js, lines.js, news.js), the speaker's hands moving, the listener nodding, both
+// shifting their weight (moves.js). THE BIG SCANNER glides only with someone on its bed: now and then a patient comes
+// with a medic, lies down on it, and is scanned (SCAN below).
 //
 // HOW THEY GET ABOUT
 // - A way is worked out a little at a time (walls.plan: LIFE.planMs a frame for everyone together, taking turns, at most
@@ -25,14 +41,24 @@
 //   aside or back, a wait till the other has gone by). Held LIFE.giveUp seconds in all, the errand is given up.
 // - Out of sight (their room not drawn, behind the camera, or past the nearest LIFE.drawn[quality]) their body is out
 //   of the scene altogether and their day goes on six frames at a time. In sight, their clips are played every frame
-//   near, every other frame or every fourth further off, and their eyes are drawn only close up.
+//   near, every other frame or every fourth further off, their eyes are drawn only close up, and beyond a few metres
+//   (on Low always) they are drawn with the crew kit's far copy (kit/crew.js THE FAR COPY: about 11,000 triangles a
+//   person where the whole one is about 25,000).
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
 import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
-import { CROWD, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER } from './life.js';
+import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, SCAN_BED } from './life.js';
 import { STAND, shine } from './player.js';
+import { addMoves } from './moves.js';
+import { makeBubbles } from './bubbles.js';
+import { pickTalk } from './chatter.js';
+import { HELLOS, AGAIN, CAPTAINS } from './lines.js';
+import { VOICES, CLIPS as VOICE_CLIPS, clipUrl } from './voices.js';
+import { sound } from './sound.js';
+import { missions } from './missions.js';
+import { news } from './news.js';
 
 const SEEN = 46;        // people further than this from the camera are not drawn (m)
 // how they walk: m/s (each their own within it), the turn (radians a second), how close to anyone they ever come (m,
@@ -44,8 +70,17 @@ export const LIFE = {
   near: 12, mid: 24,    // m from the camera: clips played every frame nearer, every other frame to `mid`, every fourth beyond
   drawn: { low: 8, medium: 12, high: 20 },   // the most drawn at once, the nearest (?drawn=N for the cost rigs)
   eyes: 7,              // m from the camera beyond which the eyes are not drawn
+  far: { low: 0, medium: 5, high: 7 },        // m from the camera beyond which a person is drawn with the far copy (?far=N)
   stuck: 3,             // s with a way to go and nothing gained: a loud alarm (counted)
 };
+// PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
+// from the player someone comes back or goes, at least (m)
+export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
+// FRIENDLY: how near the player someone says hello (m), and not again for `again` seconds; a voice at most once in
+// `voiceGap` seconds anywhere (so a room full of people does not all speak at once), hellos at most one in `gap`; the
+// smile while the player is near (the crew kit's smile slider: worn at 0.67 as made); a captain's offer: how near (m),
+// how far the player goes before it is left (m), how long before it is made again (s)
+export const FRIENDLY = { hello: 3.3, again: 80, gap: 1.1, voiceGap: 1.6, voice: 0.6, look: 4, smile: 1, offer: 3.6, leave: 6, offerAgain: 45, answered: 90 };
 // the patches nobody stands on or walks across: a job spot's ring (its middle, m), a parked ship's way in (its patch of
 // floor when down, m wider), under the crane's loads (each patch it works over, m wider: its own margin and more), the
 // big scanner's rails (its box, m wider)
@@ -55,6 +90,7 @@ const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (L) => L[Math.floor(Math.random() * L.length)];
+const ease = (t) => t * t * (3 - 2 * t);
 
 // ── where a spot is, by name ───────────────────────────────────────────────────────────────────────────────────
 // every placed piece in the station, once: { piece, variant, room (id), M (its world placement) }
@@ -82,7 +118,7 @@ function roughAll(W, pieces, at) {
     // (the spawn is where the eyes are: the floor is about 1.6 m below)
     return [{ p: p.setY(p.y - 1.6), heading: l ? Math.atan2(l.x - s.at[0], l.z - s.at[2]) : 0 }];
   }
-  if (at.place) { const p = placeAt(W, at.place, at.n); return p ? [{ p, heading: null }] : []; }
+  if (at.place) { const p = placeAt(W, at.place, at.n); return p ? [{ p, heading: at.face ? Math.atan2(at.face[0], at.face[1]) : null }] : []; }
   if (at.room && !at.piece) {
     const z = roomMatch(W, at.room); if (!z) return [];
     const B = z.box, f = at.at || [0.5, 0.5];
@@ -132,11 +168,29 @@ const SHADE = (() => {
 })();
 export function shadeUnder(root) { const m = new THREE.Mesh(SHADE.geo, SHADE.mat); m.position.y = 0.012; m.renderOrder = -1; root.add(m); return m; }
 
-export async function makePeople({ W, walls, lib, jobs = null, boarding = null, crane = null, say = () => {} }) {
+// THE CAPTAINS' MARKER (the game's maker: "I'd be fine with them having a yellow marker above them (a captain symbol or
+// something) to easily tell that they are a captain looking for help"): a yellow four-pointed star in a ring, as on the
+// captains' own uniforms, floating over the head and bobbing gently; hidden by walls like anything else
+const MARK = { size: 0.36, over: 0.62, bob: 0.035 };
+const MARKER = (() => {
+  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d'), c = s / 2;
+  const glow = g.createRadialGradient(c, c, s * 0.2, c, c, s * 0.5); glow.addColorStop(0, 'rgba(10,12,16,0.55)'); glow.addColorStop(1, 'rgba(10,12,16,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, s, s);
+  g.lineWidth = 7; g.strokeStyle = '#ffc83c'; g.beginPath(); g.arc(c, c, s * 0.38, 0, Math.PI * 2); g.stroke();
+  const star = (r1, r2) => { g.beginPath(); for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + i * Math.PI / 4, r = i % 2 ? r2 : r1; g.lineTo(c + Math.cos(a) * r, c + Math.sin(a) * r); } g.closePath(); };
+  star(s * 0.3, s * 0.1); g.fillStyle = '#ffd34d'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#7a5300'; g.stroke();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
+})();
+
+export async function makePeople({ W, walls, lib, jobs = null, boarding = null, crane = null, say = () => {}, crew = () => null }) {
   const pieces = piecesOf(W.R), list = [], missing = [];
   const recipeOf = (r) => (typeof r === 'string' ? (lib.list.recipes || {})[r] : r);
   const alarms = { stuck: 0, inWall: 0, inPerson: 0, onPatch: 0, planFailed: 0, gaveUp: 0, seen: {} };
   const alarm = (k, P, words) => { alarms[k]++; if (!alarms.seen[k + P.id]) { alarms.seen[k + P.id] = 1; console.warn('people: ' + k + ': ' + P.id + ' ' + words); } };
+  // (what the friendly bits did, counted: for the rigs)
+  const counts = { hellos: 0, voiced: 0, offers: 0, answers: 0, talks: 0, lines: 0, scans: 0, came: 0, went: 0 };
 
   // ── the patches kept off ─────────────────────────────────────────────────────────────────────────────────────
   // (a map of the station's floor, a quarter metre a square: 1 where nobody goes)
@@ -207,7 +261,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return true;
   };
   // (a spot: on the floor, never on top of a crate; off every patch kept off; with room all round, except a post, a
-  // spot placed by hand for one person, as a captain at the corner of a booth's counter)
+  // spot placed by hand for one person)
   const posts = new Set(ROSTER.flatMap((d) => d.day.map((s) => (typeof s === 'string' ? s : s.do))).filter((s) => /^post:[^.]+\.\d+$/.test(s)).map((s) => s.slice(5).split('.')[0]));
   // (and room to walk away: a quarter-metre walk out from the spot, as a person walks, gets 2.5 m off; a spot in a
   // pocket between a table and a wall, that nobody who stood there could leave, is no spot)
@@ -266,30 +320,57 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const list2 = [];
       if (d.face === 'table') {
         const t = tables.reduce((b, q) => (!b || q.distanceTo(o) < b.distanceTo(o) ? q : b), null); if (!t) continue;
-        const hd = Math.atan2(t.x - o.x, t.z - o.z); list2.push({ seat: o.clone(), heading: hd, back: new THREE.Vector3(-Math.sin(hd), 0, -Math.cos(hd)) });
+        const hd = Math.atan2(t.x - o.x, t.z - o.z); list2.push({ seat: o.clone(), heading: hd, back: new THREE.Vector3(-Math.sin(hd), 0, -Math.cos(hd)), table: t });
       } else {
         const hd = Math.atan2(f.x, f.z), side = new THREE.Vector3(Math.cos(hd), 0, -Math.sin(hd));
-        for (const k of d.two ? [-0.42, 0.42] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true });
+        for (const k of d.two ? [-0.42, 0.42] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true, table: o.clone() });
       }
       for (const s of list2) {
         // where one stands to sit down: behind a stool (away from its table), in front of a bench
         const dir = s.front ? s.back.clone().negate() : s.back, out = s.front ? 0.5 : 0.55;
         const ap = walls.snap(s.seat.x + dir.x * out, s.seat.y + 0.35, s.seat.z + dir.z * out, 0.35);
         if (!ap || noGo(ap.x, ap.z) || !roomy(ap, 0.28) || !walkOut(ap)) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
-        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, who: null, bad: 0 });
+        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, table: s.table, who: null, bad: 0 });
       }
     }
   }
 
+  // ── THE BIG SCANNER (SCAN): its place, its bed in the station, and its glide, run only while someone lies on it ──
+  // (the game's maker, 2026-11-16: "it shouldn't be moving unless it is being used with someone on the bed. I think it
+  // should be normal for a medic and a person to go in there and use it though (or just be there when it loads)")
+  const scanPc = pieces.find((x) => x.piece === 'bigscanner');
+  const scanD = scanPc ? (W.built.glides || []).find((D) => D.piece === 'bigscanner') || (W.built.glides || [])[0] || null : null;
+  const SCAN = scanPc && groups.scanApproach && groups.scanApproach[0] && groups.scanScreen && groups.scanScreen[0] ? (() => {
+    const M = scanPc.M, q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(M));
+    const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(M);
+    return {
+      M, q, busy: null, path: SCAN_BED.path.map(([x, z]) => at(x, z)), sit: at(SCAN_BED.sit[0], SCAN_BED.sit[1], SCAN_BED.top),
+      hips: at(SCAN_BED.hips[0], SCAN_BED.hips[1], SCAN_BED.top), top: SCAN_BED.top,
+      // (the scanner's own ways in the station: across its bed (its +x), out along the bed (its +z))
+      across: new THREE.Vector3(1, 0, 0).applyQuaternion(q), along: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
+      round: scanD ? 2 * (scanD.glide.go + scanD.glide.rest) : 24, use: null,
+    };
+  })() : null;
+  if (!SCAN) missing.push('the big scanner (no scan)');
+  if (scanD) scanD.use = null;     // (parked: nobody on it yet)
+
   // ── the people themselves ────────────────────────────────────────────────────────────────────────────────────
   const firstClip = (c, clips) => [].concat(clips || STAND).find((n) => c.person.actions[n]) || 'Idle';
+  const _v = new THREE.Vector3();
   async function body(def, pos, heading) {
     const recipe = recipeOf(def.look || def.recipe); if (!recipe) { missing.push(def.id + ': no recipe'); return null; }
-    const c = await makeCrew(lib, recipe);
-    const P = { id: def.id, name: def.name, c, pos: pos.clone(), drawnY: pos.y, heading, zone: null, shown: false, walking: false, clip: '', anim: 0, animDt: 0, sitY: 0 };
+    const c = await makeCrew(lib, recipe, { far: true });
+    const P = { id: def.id, name: def.name, def, c, pos: pos.clone(), drawnY: pos.y, heading, zone: null, shown: false, walking: false, clip: '', anim: 0, animDt: 0, sitY: 0, away: false, voice: def.voice || null, rate: def.rate || 1 };
     c.root.position.copy(P.pos); c.root.rotation.set(0, heading, 0);
     shadeUnder(c.root); shine(c, W.envAt(P.pos));
     c.play(firstClip(c, STAND), { fade: 0 }); P.clip = STAND; c.update(0); c.update(Math.random() * 3);   // (each at its own moment of the clip)
+    P.moves = addMoves(c);
+    P.smile = c.faceSliders.includes('smile') ? { now: (recipe.face && recipe.face.smile) ?? 0.67, base: (recipe.face && recipe.face.smile) ?? 0.67 } : null;
+    // (a captain: the marker over the head, the captain's own lines)
+    if (def.captain && CAPTAINS[def.id]) {
+      const m = new THREE.Sprite(MARKER); m.renderOrder = 6; m.scale.setScalar(MARK.size / (c.size || 1));
+      c.root.add(m); P.marker = m; P.cap = { ...CAPTAINS[def.id], id: def.id, name: def.name, state: 'idle', t: 0, cool: 0 };
+    }
     c.root.visible = false;     // (in the scene only while drawn: update() adds and takes it away)
     return P;
   }
@@ -304,29 +385,48 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (every spot someone has: a spot, a seat's place to stand and its seat, a talking spot's places)
   const taken = new Map();       // person -> [points]
   const crowded = (p, P) => { for (const [Q, pts] of taken) { if (Q === P) continue; for (const q of pts) if (Math.hypot(q.x - p.x, q.z - p.z) < LIFE.room) return true; } return false; };
+  // (someone free to be asked over: to talk, or to run the scanner; about as P is (both near the player, or both not))
+  const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away);
   function claimFor(P, step) {
     const { kind, group, n } = parse(step);
     if (kind === 'sit') {
-      const free = (seats[group] || []).filter((s) => !s.who && s.bad < 2 && !crowded(s.pos, P) && !crowded(s.seat, P));
-      if (!free.length) return null;
-      const s = pick(free); P.claim = s; s.who = P; taken.set(P, [s.pos, s.seat]); return { kind, step, spot: s };
+      const free2 = (seats[group] || []).filter((s) => !s.who && s.bad < 2 && !crowded(s.pos, P) && !crowded(s.seat, P));
+      if (!free2.length) return null;
+      const s = pick(free2); P.claim = s; s.who = P; taken.set(P, [s.pos, s.seat]); return { kind, step, spot: s };
     }
     if (kind === 'talk') {
       // (a talking spot with someone already on their way to talk there, near enough: to join them; else someone
       // standing about near by is asked over to an empty one, and both go; nobody near: no talk this time)
       const all = (talks[group] || []).filter((t) => t.bad < 2);
-      const near = (t) => { const q = t.who[0] || t.who[1]; return q && q.pos && (!P.pos || q.pos.distanceTo(P.pos) < 40); };
+      const near = (t) => { const q = t.who[0] || t.who[1]; return q && q.pos && (!P.pos || (q.pos.distanceTo(P.pos) < 40 && q.away === P.away)); };
       const waiting = all.filter((t) => ((t.who[0] && !t.who[1]) || (!t.who[0] && t.who[1])) && near(t) && !crowded(t.at[t.who[0] ? 1 : 0], P));
       if (waiting.length) { const T = pick(waiting); return talkAt(P, T, T.who[0] ? 1 : 0, step); }
       if (!P.pos) return null;
-      const Q = list.filter((q) => q !== P && !q.hidden && q.act && (q.act.kind === 'stand' || q.act.kind === 'wait') && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && q.pos.distanceTo(P.pos) < 30)
-        .sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
+      // (a captain only now and then: they have crew to find)
+      const Q = list.filter((q) => free(q, P) && q.pos.distanceTo(P.pos) < 30 && (!q.cap || Math.random() < 0.3)).sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
       if (!Q) return null;
-      const free = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P) && !crowded(t.at[1], Q))
+      const freeT = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P) && !crowded(t.at[1], Q))
         .sort((a, b) => a.at[0].distanceTo(P.pos) + a.at[0].distanceTo(Q.pos) - b.at[0].distanceTo(P.pos) - b.at[0].distanceTo(Q.pos));
-      const T = free[0]; if (!T) return null;
+      const T = freeT[0]; if (!T) return null;
       release(Q); const q = talkAt(Q, T, 1, step); begin(Q, q); if (Q.req) { Q.req.dropped = true; Q.req = null; } Q.act.phase = 'go'; Q.act.delay = rnd(0.8, 2.2);
       return talkAt(P, T, 0, step);
+    }
+    if (kind === 'scan') {
+      // (a patient's turn in the big scanner: only one at a time, and only with a medic to run it, who is asked over)
+      if (!SCAN || SCAN.busy || !groups.scanApproach[0] || !groups.scanScreen[0]) return null;
+      const A = groups.scanApproach[0], S = groups.scanScreen[0];
+      if (A.who || S.who) return null;
+      const Q = list.filter((q) => free(q, P) && /medic/.test(q.id) && q.pos.distanceTo(A.pos) < 60).sort((a, b) => a.pos.distanceTo(A.pos) - b.pos.distanceTo(A.pos))[0];
+      if (!Q) return null;
+      // (the medic's own errand let go first: the scan is theirs only after)
+      release(Q);
+      SCAN.busy = { patient: P, medic: Q };
+      Q.claim = S; S.who = Q; taken.set(Q, [S.pos]);
+      begin(Q, { kind: 'scanMedic', step: { do: 'scanMedic' }, spot: S });
+      if (Q.req) { Q.req.dropped = true; Q.req = null; } Q.act.phase = 'go'; Q.act.delay = rnd(0.3, 1.2);
+      P.claim = A; A.who = P; taken.set(P, [A.pos]);
+      counts.scans++;
+      return { kind: 'scan', step, spot: A };
     }
     if (kind === 'walk') {
       const L = (groups[group] || []).filter(Boolean); if (!L.length) return null;
@@ -335,12 +435,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     // stand or post: a spot of the group (a post's own one, by its number)
     const L = groups[group] || [];
-    const free = n != null ? (L[n] && (!L[n].who || L[n].who === P) ? [L[n]] : []) : L.filter((s) => s && !s.who && s.bad < 2 && !crowded(s.pos, P));
-    if (!free.length) return null;
-    const s = pick(free); P.claim = s; s.who = P; taken.set(P, [s.pos]); return { kind, step, spot: s };
+    const freeS = n != null ? (L[n] && (!L[n].who || L[n].who === P) ? [L[n]] : []) : L.filter((s) => s && !s.who && s.bad < 2 && !crowded(s.pos, P));
+    if (!freeS.length) return null;
+    const s = pick(freeS); P.claim = s; s.who = P; taken.set(P, [s.pos]); return { kind, step, spot: s };
   }
   function release(P) {
     const c = P.claim; taken.delete(P);
+    endTalk(P);
+    if (SCAN && SCAN.busy && (SCAN.busy.patient === P || SCAN.busy.medic === P)) scanOver(P);
     if (!c) return;
     if (c.talk) { if (c.talk.who[c.i] === P) c.talk.who[c.i] = null; } else if (c.who === P) c.who = null;
     P.claim = null;
@@ -348,13 +450,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (a claim made for someone before their body was: theirs now)
   function handOver(c, P0, P) {
     if (taken.has(P0)) { taken.set(P, taken.get(P0)); taken.delete(P0); }
+    if (SCAN && SCAN.busy) { if (SCAN.busy.patient === P0) SCAN.busy.patient = P; if (SCAN.busy.medic === P0) SCAN.busy.medic = P; }
     if (!c) return;
     if (c.talk) { if (c.talk.who[c.i] === P0) c.talk.who[c.i] = P; } else if (c.who === P0) c.who = P;
   }
   // the next thing in a person's day
   function next(P) {
     if (P.fleeing) { P.speed = P.fleeing.was; P.fleeing = null; }   // (run from the crane: back to their own pace)
-    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false;
+    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false; P.pose = null; P.scripted = false;
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
       const step = P.day[P.k];
@@ -392,6 +495,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (placed) {
       P.heading = a.spot.heading ?? P.heading;
       if (a.kind === 'sit') { P.pos.copy(a.spot.seat); a.phase = 'sat'; play(P, CLIPS.sit, { fade: 0 }); }
+      else if (a.kind === 'scan') { a.phase = 'lying'; a.placed = true; }
       else a.phase = 'do';
     }
   }
@@ -403,13 +507,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function stillMap() {
     if (stillAt === stillV) return stillCells;
     stillCells = new Map(); stillAt = stillV;
-    for (const P of list) { if (P.walking || !P.act || P.act.phase === 'go') continue; const k = Math.floor(P.pos.x) * 4096 + Math.floor(P.pos.z); (stillCells.get(k) || stillCells.set(k, []).get(k)).push(P); }
+    for (const P of list) { if (P.walking || P.away || !P.act || P.act.phase === 'go') continue; const k = Math.floor(P.pos.x) * 4096 + Math.floor(P.pos.z); (stillCells.get(k) || stillCells.set(k, []).get(k)).push(P); }
     return stillCells;
   }
   function avoidFor(P, to) {
     return (x, z) => {
       if (noGo(x, z)) return true;
       if (Math.hypot(x - to.x, z - to.z) < 0.7) return false;
+      if (P.away) return false;       // (someone away keeps off the patches, and nobody else is there for them)
       const M = stillMap(), i = Math.floor(x), k = Math.floor(z);
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const L = M.get((i + a) * 4096 + k + b); if (L) for (const Q of L) if (Q !== P && Math.hypot(Q.pos.x - x, Q.pos.z - z) < LIFE.keepFrom) return true; }
       return false;
@@ -433,23 +538,70 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         alarms.planFailed++;
         if (P.act && P.act.spot) P.act.spot.bad = (P.act.spot.bad || 0) + 1;
         console.info('people: no way for ' + P.id + ' to ' + (P.act?.spot?.name || P.act?.kind) + (w ? ' (' + w.short + ' m short)' : ''));
+        // (the scanner's two: once more after a moment, before the scan is given up)
+        if (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic') && !P.act.retried) { P.act.retried = true; P.act.phase = 'go'; P.act.delay = rnd(1, 2); P.walking = false; continue; }
         release(P); P.act = { kind: 'wait', until: rnd(2, 5), t: 0 }; P.walking = false;
       }
     }
   }
 
+  // ── PRESENCE: the nearest NEAR about the player, the rest out of the way ─────────────────────────────────────
+  const _f = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere(new THREE.Vector3(), 1.15);
+  const inView = (P, camera) => { _s.center.set(P.pos.x, P.pos.y + 0.95, P.pos.z); return !!(P.zone && P.zone.group.visible) && camera.position.distanceTo(P.pos) < SEEN && _f.intersectsSphere(_s); };
+  // (who goes with whom: a pair talking, the scanner's patient and medic)
+  function partner(P) {
+    if (P.act && P.act.kind === 'talk' && P.act.spot.talk) { const Q = P.act.spot.talk.who[1 - P.act.spot.i]; if (Q) return Q; }
+    if (P.convo) return P.convo.A === P ? P.convo.B : P.convo.A;
+    if (SCAN && SCAN.busy) { if (SCAN.busy.patient === P) return SCAN.busy.medic; if (SCAN.busy.medic === P) return SCAN.busy.patient; }
+    return null;
+  }
+  let presenceClock = 0, nearMost = 8;
+  function presence(dt, focus, camera) {
+    presenceClock -= dt; if (presenceClock > 0) return; presenceClock = PRESENCE.every;
+    const L = list.filter((P) => !P.hidden);
+    for (const P of L) P.rank = Math.hypot(P.pos.x - focus.x, P.pos.z - focus.z) + Math.abs(P.pos.y - focus.y) * 2;
+    for (const P of L) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank ?? Infinity) : P.rank; }
+    L.sort((a, b) => a.rankPair - b.rankPair || a.order - b.order);
+    const want = new Set(L.slice(0, nearMost));
+    for (const P of [...want]) { const Q = partner(P); if (Q) want.add(Q); }
+    const pl = playerNow ? playerNow.pos : null;
+    const unseen = (P) => !inView(P, camera);
+    for (const P of L) {
+      const w = want.has(P);
+      P.unwanted = w ? 0 : (P.unwanted || 0) + PRESENCE.every;
+      const group = [P]; const Q = partner(P); if (Q && Q.away === P.away) group.push(Q);
+      if (w && P.away) {
+        // (back, where nobody is looking, nobody stands, not right by the player, and not in a shut door's way: someone
+        // away walks through doors as if they were open)
+        if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.come) && !someoneAt(X.pos, X, LIFE.body, true) && (X.scripted || walls.free(X.pos.x, X.pos.y, X.pos.z, 0.22)))) for (const X of group) setAway(X, false);
+      } else if (!w && !P.away && P.unwanted >= PRESENCE.linger) {
+        if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.go))) for (const X of group) setAway(X, true);
+      }
+    }
+  }
+  function setAway(P, v) {
+    if (P.away === v) return;
+    P.away = v; stillV++;
+    counts[v ? 'went' : 'came']++;
+    if (v) { bubbles.clear(P); if (P.cap && P.cap.state === 'offer') endOffer(P); }
+  }
+
   // ── each frame ───────────────────────────────────────────────────────────────────────────────────────────────
-  const others = [], near = new THREE.Vector3(), _f = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere(new THREE.Vector3(), 1.15);
-  let zoneClock = 0, frame = 0, playerNow = null;
+  const others = [], near = new THREE.Vector3();
+  let zoneClock = 0, frame = 0, playerNow = null, clock = 0;
   const seen = [];
-  let drawnMost = 12;
-  function update(dt, { player = null, camera }) {
+  let drawnMost = 12, farAt = 7;
+  const bubbles = makeBubbles({ camera: W.camera, walls });
+  function update(dt, { player = null, camera, now = null }) {
     frame++; seen.length = 0;
+    clock = now != null ? now : clock + dt;
     zoneClock -= dt;
     const findZones = zoneClock <= 0; if (findZones) zoneClock = 0.4;
     playerNow = player;
     planning();
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
+    news.update(dt);
+    presence(dt, player ? player.pos : camera.position, camera);
     for (const P of list) {
       const c = P.c;
       if (P.hidden) { P.shown = false; continue; }
@@ -460,9 +612,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if ((frame + P.id.length) % every === 0) { think(P, P.acc); P.acc = 0; }
       if (findZones || !P.zone) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { if (P.zone) shine(c, W.envAt(P.pos)); P.zone = z; } }
       const far = camera.position.distanceTo(P.pos);
-      _s.center.set(P.pos.x, P.pos.y + 0.95, P.pos.z);
       P.far = far;
-      P.shown = !!(P.zone && P.zone.group.visible) && far < SEEN && _f.intersectsSphere(_s);
+      P.shown = !P.away && inView(P, camera);
       if (P.shown) seen.push(P);
     }
     // the nearest of them drawn, at most DRAWN[quality] (a body out of the scene costs nothing at all: the scene's own
@@ -473,28 +624,52 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (P.shown) { W.scene.add(P.c.root); P.fresh = true; } else W.scene.remove(P.c.root);
       P.inScene = P.shown; P.c.root.visible = P.shown;
     }
+    // (the scanner's glide: from rest while its patient lies on it (and is about), parked otherwise: kit/layout.js
+    // updateGlides, which the station's frame calls)
+    if (scanD) scanD.use = SCAN && SCAN.use && SCAN.busy && SCAN.busy.patient && !SCAN.busy.patient.away ? SCAN.use : null;
+    talking(dt);
+    friendly(dt);
     for (const P of seen) {
       const c = P.c, far = P.far;
-      // (the body eased up and down steps, a riser at a time; a sitter at the seat's height)
+      // (the body eased up and down steps, a riser at a time; a sitter at the seat's height; a patient on the scanner's
+      // bed, lying)
       P.drawnY = Math.abs(P.pos.y - P.drawnY) > 0.6 ? P.pos.y : damp(P.drawnY, P.pos.y, 14, dt);
-      c.root.position.set(P.pos.x, P.drawnY + P.sitY, P.pos.z); c.root.rotation.set(0, P.heading, 0);
-      // (the eyes and the clear layer over them, two draws each, too small to see past LIFE.eyes metres)
-      const close = far < LIFE.eyes;
+      if (P.pose) { c.root.position.copy(P.pose.root); c.root.quaternion.copy(P.pose.q); }
+      else { c.root.position.set(P.pos.x, P.drawnY + P.sitY, P.pos.z); c.root.rotation.set(0, P.heading, 0); }
+      // (THE FAR COPY beyond a few metres, on Low always; the eyes and the clear layer over them, two draws each, only
+      // close up and never on the far copy)
+      const wantFar = far > (c.far ? farAt - 0.5 : farAt);
+      if (wantFar !== c.far) c.setFar(wantFar);
+      const close = far < LIFE.eyes && !c.far;
       if (P.close !== close) { P.close = close; for (const m of [c.meshes.eyes, c.meshes.cornea]) if (m) m.visible = close; }
+      // (the captain's marker, over the head as it is now, bobbing)
+      if (P.marker) { const H = c.bones.Head; P.marker.position.set(0, (H ? H.getWorldPosition(_v).y - c.root.position.y : 1.65 * (c.size || 1)) / (c.size || 1) + (MARK.over + Math.sin(clock * 2.1 + P.order) * MARK.bob) / (c.size || 1), 0); }
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
       // (just come into view: posed at once, never shown as they were when last seen)
       if (!P.fresh && (frame + P.id.length) % step !== 0) continue;
       P.fresh = false;
-      // eyes on a player who comes near, or on whoever they are talking to (the eyes only)
+      // eyes (and the head) on a player who comes near, or on whoever they are talking to, or a captain's on the player
       const tk = P.act && P.act.kind === 'talk' && P.act.phase === 'do' && P.act.spot.talk.who[1 - P.act.spot.i];
-      const vis = far < 8 && !tk && P.act && (P.act.kind === 'post' || P.act.kind === 'stand') ? visitor(P) : null;
-      if (far < 8 && player && player.pos.distanceTo(P.pos) < 4) c.lookAt(near.copy(player.pos).setY(player.pos.y + 1.55), { dart: true });
-      else if (far < 8 && (tk || vis)) { const q = tk || vis; c.lookAt(near.copy(q.pos).setY(q.pos.y + 1.55), { dart: true }); }
-      else c.lookAt(null);
+      const ck = P.convo ? (P.convo.A === P ? P.convo.B : P.convo.A) : null;
+      const vis = far < 8 && !tk && !ck && P.act && (P.act.kind === 'post' || P.act.kind === 'stand') ? visitor(P) : null;
+      const lying = P.act && P.act.kind === 'scan' && P.pose;
+      let look = null;
+      if (lying) look = null;
+      else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.state === 'offer' || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
+      else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
+      if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
+      P.moves.look = look && far < 14 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
+      // (a little more smile while the player is near, or just after a hello)
+      if (P.smile) {
+        const want = (player && player.pos.distanceTo(P.pos) < FRIENDLY.look) || (P.smileUntil && clock < P.smileUntil) ? FRIENDLY.smile : P.smile.base;
+        const s2 = damp(P.smile.now, want, 3, P.animDt);
+        if (Math.abs(s2 - P.smile.now) > 0.01 || (s2 !== P.smile.now && Math.abs(s2 - want) < 0.01)) { P.smile.now = Math.abs(s2 - want) < 0.01 ? want : s2; c.setFace({ ...(c.recipe.face || {}), smile: P.smile.now }); }
+      }
       c.update(P.animDt); P.animDt = 0;
     }
+    bubbles.update(dt);
     audit(dt);
   }
 
@@ -502,7 +677,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function visitor(P) {
     let best = null, bd = 2.6;
     for (const Q of list) {
-      if (Q === P || Q.walking || Q.hidden) continue;
+      if (Q === P || Q.walking || Q.hidden || Q.away) continue;
       const dx = Q.pos.x - P.pos.x, dz = Q.pos.z - P.pos.z, d = Math.hypot(dx, dz);
       if (d < bd && dx * Math.sin(P.heading) + dz * Math.cos(P.heading) > d * 0.3) { bd = d; best = Q; }
     }
@@ -514,7 +689,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return { kind: 'talk', step, spot: { name: T.name, pos: T.at[i], heading: Math.atan2(T.at[1 - i].x - T.at[i].x, T.at[1 - i].z - T.at[i].z), talk: T, i } };
   }
   // (still at a spot or a seat: now and then a slow turn a little to one side or the other of the way it faces, as
-  // anyone shifts and looks round; toward a visitor or the player who comes up, a little more)
+  // anyone shifts and looks round; toward a visitor or the player who comes up, a little more; a captain making an
+  // offer, all the way round to the player)
   function idle(P, a, dt, most) {
     const L = a.look || (a.look = { off: 0, want: 0, next: rnd(2, 6) });
     L.next -= dt;
@@ -522,8 +698,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const base = a.spot.heading ?? P.heading;
     const q = (playerNow && playerNow.pos.distanceTo(P.pos) < 3) ? playerNow : (a.kind === 'post' ? visitor(P) : null);
     let want = L.want;
-    if (q) want = Math.max(-most * 2, Math.min(most * 2, wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base)));
-    L.off += Math.sign(want - L.off) * Math.min(Math.abs(want - L.off), 0.7 * dt);
+    const offering = P.cap && P.cap.state === 'offer' && a.phase !== 'sat';
+    if (q) want = offering ? wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base) : Math.max(-most * 2, Math.min(most * 2, wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base)));
+    L.off += Math.sign(want - L.off) * Math.min(Math.abs(want - L.off), (offering ? 1.6 : 0.7) * dt);
     P.heading = wrap(base + L.off);
   }
   // what a person does this moment
@@ -532,6 +709,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     a.t += dt;
     if (a.kind === 'wait') { play(P, STAND); if (a.t > a.until) next(P); return; }
     if (P.req) { if (!P.walking) play(P, STAND); return; }        // (working the way out: as they were)
+    // (a captain stopped for the player: standing, turned to them, until the offer is over)
+    if (P.cap && P.cap.state === 'offer' && P.walking && playerNow) {
+      play(P, STAND);
+      const want = Math.atan2(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z), diff = wrap(want - P.heading);
+      P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * 0.8 * dt));
+      return;
+    }
     if (P.walking) { walk(P, dt); return; }
     if (a.phase === 'go') { if (a.delay > 0) { a.delay -= dt; play(P, STAND); return; } route(P, a.spot.pos); return; }
     // turning to the spot's way, then at it
@@ -539,7 +723,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const want = a.spot.heading ?? P.heading, diff = wrap(want - P.heading);
       P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
       play(P, STAND);
-      if (Math.abs(diff) < 0.05) { a.phase = 'do'; a.t = 0; }
+      if (Math.abs(diff) < 0.05) { a.phase = a.kind === 'scan' ? 'ready' : 'do'; a.t = 0; }
       return;
     }
     if (a.phase === 'sitting') {
@@ -550,8 +734,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (k >= 1) { a.phase = 'sat'; a.t = 0; stillV++; }
       return;
     }
-    // (getting up only when nobody is standing where they would step)
-    if (a.phase === 'sat') { play(P, CLIPS.sit); idle(P, a, dt, a.spot.front ? 0.15 : 0.4); if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body)) { a.phase = 'rising'; a.t = 0; } return; }
+    // (getting up only when nobody is standing where they would step; sitting side by side with someone, a chat now
+    // and then)
+    if (a.phase === 'sat') {
+      play(P, CLIPS.sit); idle(P, a, dt, a.spot.front ? 0.15 : 0.4);
+      if (!P.convo && a.t > 5 && Math.random() < dt * 0.08) seatChat(P);
+      if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body) && !(P.convo && P.convo.speaking === P)) { endTalk(P); a.phase = 'rising'; a.t = 0; }
+      return;
+    }
     if (a.phase === 'rising') {
       const k = Math.min(1, a.t / LIFE.sit);
       play(P, STAND, { fade: 0.45 });
@@ -559,25 +749,265 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (k >= 1) { P.pos.copy(a.spot.pos); stillV++; next(P); }
       return;
     }
+    if (a.kind === 'scan') { scanPatient(P, a, dt); return; }
+    if (a.kind === 'scanMedic') { scanMedic(P, a, dt); return; }
     // at it: standing, at work, or talking (the time counted once both are there)
     if (a.kind === 'talk') {
       const other = a.spot.talk.who[1 - a.spot.i], there = other && other.act && other.act.phase === 'do' && other.act.spot.talk === a.spot.talk;
       play(P, STAND);
       idle(P, a, dt, 0.12);
-      if (there) { a.both = (a.both || 0) + dt; if (a.both > a.len) next(P); }
-      else if (a.both > 0 || a.t > 20 || !other) next(P);      // (the other gone, or not come: on with the day)
+      if (there) {
+        a.both = (a.both || 0) + dt;
+        // (a conversation from the line bank, begun by the one who came first; another after a pause if time is left)
+        if (!P.convo && !other.convo && a.spot.i === 0 && a.both > (a.again ?? rnd(0.8, 2)) && a.len - a.both > 6) startTalk(P, other, false);
+        if (a.both > a.len && !(P.convo && P.convo.speaking)) next(P);
+      } else if (a.both > 0 || a.t > 20 || !other) next(P);      // (the other gone, or not come: on with the day)
       return;
     }
     play(P, a.clip || STAND);
-    // (at work with a clip of its own: turned to the work; standing about, or a captain at the booth: a look round now
-    // and then, and toward whoever comes up)
+    // (at work with a clip of its own: turned to the work; standing about: a look round now and then, and toward
+    // whoever comes up)
     if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
-    if (a.t > a.len) next(P);
+    if (a.t > a.len && !(P.cap && P.cap.state === 'offer')) next(P);
   }
 
-  // (anyone, or the player, within r of a point)
-  function someoneAt(p, P, r) {
-    for (const Q of list) if (Q !== P && !Q.hidden && Math.hypot(Q.pos.x - p.x, Q.pos.z - p.z) < r && Math.abs(Q.pos.y - p.y) < 1.2) return Q;
+  // ── TALK: two people sharing a conversation from the line bank, in bubbles over their heads ──────────────────
+  const convos = new Set();
+  const READ = (w) => Math.min(8, 1.5 + w.length * 0.055);
+  function startTalk(A, B, sitting) {
+    const T = pickTalk(A, B, { sitting, player: (crew() || {}).name || null, now: clock });
+    if (!T) { if (A.act) A.act.again = (A.act.both || 0) + rnd(8, 14); return null; }
+    const C = { A, B, lines: T.lines, id: T.id, i: -1, t: 0, gap: rnd(0.3, 0.8), sitting, speaking: null };
+    A.convo = B.convo = C; convos.add(C); counts.talks++;
+    return C;
+  }
+  function endTalk(P) {
+    const C = P.convo; if (!C) return;
+    convos.delete(C);
+    for (const X of [C.A, C.B]) { if (X.convo === C) X.convo = null; if (X.moves) X.moves.talk = null; if (X.act && X.act.kind === 'talk') X.act.again = (X.act.both || 0) + rnd(3, 8); }
+  }
+  function talking(dt) {
+    for (const C of [...convos]) {
+      C.t += dt;
+      if (C.speaking) { if (C.t > C.secs) { C.speaking = null; C.t = 0; C.gap = rnd(0.35, 0.9); } }
+      else if (C.t > C.gap) {
+        C.i++;
+        if (C.i >= C.lines.length) { endTalk(C.A); continue; }
+        const L = C.lines[C.i], S = L.who ? C.B : C.A;
+        C.speaking = S; C.t = 0; C.secs = READ(L.words); counts.lines++;
+        if (S.shown) bubbles.say(S, L.words, { kind: 'talk', secs: C.secs });
+      }
+      for (const X of [C.A, C.B]) if (X.moves) { X.moves.talk = C.speaking === X ? 'speak' : 'listen'; X.moves.sitting = !!C.sitting; }
+    }
+  }
+  // (sitting at a table or on a bench with someone beside, nobody talking: a chat)
+  function seatChat(P) {
+    const s = P.act.spot; if (!s || !s.table) return;
+    const Q = list.find((q) => q !== P && !q.hidden && q.away === P.away && !q.convo && q.act && q.act.kind === 'sit' && q.act.phase === 'sat' && q.act.spot.table && q.act.spot.table.distanceTo(s.table) < 0.3 && q.act.t > 3);
+    if (Q) startTalk(P, Q, true);
+  }
+
+  // ── FRIENDLY: hellos as the player passes, a captain's offer ─────────────────────────────────────────────────
+  let lastHello = -99, lastVoice = -99;
+  const headAt = (P, out) => { const H = P.c.bones.Head; if (H && P.inScene) return H.getWorldPosition(out); return out.set(P.pos.x, P.pos.y + 1.6, P.pos.z); };
+  const _h = new THREE.Vector3();
+  // (a clip in P's voice, from where they stand: -> its handle, or null when it could not play: another voice a moment
+  // ago, the sound off or not yet allowed)
+  function speak(P, clipId, volume = FRIENDLY.voice) {
+    if (!clipId || clock - lastVoice < FRIENDLY.voiceGap) return null;
+    const h = sound.play(clipId, { at: headAt(P, _h), volume, rate: P.rate || 1 });
+    if (h) { lastVoice = clock; counts.voiced++; }
+    return h;
+  }
+  function friendly(dt) {
+    const pl = playerNow;
+    // (a captain's offer, the nearest captain to a player who has come near)
+    for (const P of list) if (P.cap) captain(P, dt, pl);
+    if (!pl) return;
+    if (clock - lastHello < FRIENDLY.gap) return;
+    let best = null, bd = FRIENDLY.hello;
+    for (const P of list) {
+      if (P.away || !P.shown || P.cap || P.hidden || (P.greeted && clock - P.greeted < FRIENDLY.again)) continue;
+      if (P.convo && P.convo.speaking === P) continue;
+      if (P.act && P.act.kind === 'scan' && P.pose) continue;
+      const dx = pl.pos.x - P.pos.x, dz = pl.pos.z - P.pos.z, d = Math.hypot(dx, dz);
+      if (d > bd || Math.abs(pl.pos.y - P.pos.y) > 1.2) continue;
+      // (the player in front of them, more or less: someone walking away from the player says nothing)
+      if ((dx * Math.sin(P.heading) + dz * Math.cos(P.heading)) / (d || 1) < -0.2) continue;
+      best = P; bd = d;
+    }
+    if (!best) return;
+    hello(best);
+  }
+  function hello(P) {
+    const first = !P.greeted;
+    P.greeted = clock; P.smileUntil = clock + 4; lastHello = clock; counts.hellos++;
+    const V = P.voice && VOICES[P.voice];
+    let words = pick(first ? HELLOS : AGAIN);
+    // (the first hello that can be heard is spoken, in their own voice, its words in the bubble; after that, bubbles)
+    if (!P.voiced && V) { const id = pick(V.hellos); if (speak(P, id)) { words = VOICE_CLIPS[id].words; P.voiced = true; } }
+    bubbles.say(P, words, { kind: 'hello', secs: 2.4 });
+  }
+  // A CAPTAIN: near the player, in view, the offer (who, what for, and the question); the answer; left a while after
+  function captain(P, dt, pl) {
+    const K = P.cap; K.t += dt; K.cool -= dt;
+    if (K.state === 'offer') {
+      const d = pl ? pl.pos.distanceTo(P.pos) : Infinity;
+      if (!pl || d > FRIENDLY.leave || K.t > 25 || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; }
+      // (the question hidden while a job's prompt is up: one prompt at a time)
+      else bubbles.hideAsk(!!(jobs && jobs.near));
+      return;
+    }
+    if (K.state === 'answered') { if (K.t > 3.5) { K.state = 'idle'; K.busy = false; } return; }
+    if (!pl || P.away || !P.shown || K.cool > 0 || bubbles.asking) return;
+    if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
+    const d = pl.pos.distanceTo(P.pos);
+    if (d > FRIENDLY.offer || Math.abs(pl.pos.y - P.pos.y) > 1.2) return;
+    // (only the nearest captain speaks up)
+    for (const Q of list) if (Q !== P && Q.cap && !Q.away && Q.shown && pl.pos.distanceTo(Q.pos) < d) return;
+    offer(P);
+  }
+  function offer(P) {
+    const K = P.cap, st = missions.state(K.id);
+    endTalk(P);
+    K.state = 'offer'; K.t = 0; K.busy = true; P.greeted = clock; P.smileUntil = clock + 8; counts.offers++;
+    if (st === 'interested') { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
+    // (the offer: spoken the first time it can be heard, in a bubble always; the question at the bottom of the screen)
+    let words = K.again;
+    if (!K.offered) { K.voice = speak(P, K.offer.clip, 0.8); if (K.voice) { K.offered = true; words = VOICE_CLIPS[K.offer.clip].words; } else if (st === 'new') words = VOICE_CLIPS[K.offer.clip].words; }
+    else K.voice = speak(P, K.hello.clip);
+    bubbles.say(P, words, { kind: 'captain', secs: Math.max(6, READ(words) + 2) });
+    missions.asked(K.id);
+    K.ask = bubbles.ask({ who: K.name, what: K.what, yes: 'Interested', no: 'Not now',
+      onYes: () => answer(P, true), onNo: () => answer(P, false) });
+  }
+  function answer(P, yes) {
+    const K = P.cap; counts.answers++;
+    if (K.voice) { K.voice.stop(); K.voice = null; lastVoice = -99; }
+    missions.answer({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
+    const words = yes ? VOICE_CLIPS[K.yes.clip].words : K.no;
+    if (yes) speak(P, K.yes.clip, 0.8);
+    bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) });
+    K.ask = null; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; P.smileUntil = clock + 5;
+  }
+  function endOffer(P) {
+    const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; }
+    K.state = 'idle'; K.busy = false; K.t = 0;
+  }
+
+  // ── SCAN: the patient's turn on the big scanner, and the medic's at its screen ───────────────────────────────
+  // The patient walks from the spot by the bed's foot along its side, sits on its edge, lies back (their head toward
+  // the wall, under the parked ring), and lies still while the ring glides over them, a few times there and back; then
+  // up, and out the way they came. Their body is turned and moved about the hips (where a person turns lying down),
+  // the clips going from walking to sitting to standing straight (lying, it is the calm standing pose, flat on the bed).
+  const HIP = { stand: 0.95, sit: 0.5 };
+  const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
+  function bodyQ(out, heading, lie) {
+    // (lie 0: standing, turned to `heading`; lie 1: on their back along the bed, head toward the wall, face up)
+    out.setFromEuler(_e.set(0, heading, 0, 'YXZ'));
+    if (lie > 0) {
+      // (on the back: the body's up along the bed toward the wall (the scanner's -z), its front up)
+      // (their left along the scanner's across, their head toward its wall, their face up: x, y, z of the body, a
+      // proper turn: across x (-along) = up)
+      const L = new THREE.Matrix4().makeBasis(SCAN.across.clone(), SCAN.along.clone().negate(), new THREE.Vector3(0, 1, 0));
+      _q2.setFromRotationMatrix(L);
+      out.slerp(_q2, lie);
+    }
+    return out;
+  }
+  function setPose(P, hips, q, hipH) {
+    const pose = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
+    pose.q.copy(q);
+    pose.root.set(0, hipH * (P.c.size || 1), 0).applyQuaternion(q).negate().add(hips);
+    P.pos.set(hips.x, 0, hips.z);
+  }
+  function scanPatient(P, a, dt) {
+    if (!SCAN || !SCAN.busy || SCAN.busy.patient !== P) { next(P); return; }
+    const M = SCAN.busy.medic, ready = M && M.act && M.act.kind === 'scanMedic' && M.act.phase === 'do';
+    const along = (from, to, k) => _v.lerpVectors(from, to, k);
+    const sitH = Math.atan2(SCAN.across.x, SCAN.across.z);        // (sitting on the bed's west edge: facing out, across)
+    if (a.phase === 'ready') {
+      play(P, STAND); idle(P, a, dt, 0.1);
+      if (ready || a.placed) { a.phase = 'walkin'; a.t = 0; a.leg = 0; P.scripted = true; }
+      else if (a.t > 45) { next(P); }
+      return;
+    }
+    if (a.phase === 'walkin' || a.phase === 'walkout') {
+      // (along the bed's side, at an easy pace, inside the rails: the ring is parked)
+      const path = a.phase === 'walkin' ? SCAN.path : [...SCAN.path].reverse();
+      const A = path[a.leg], B = path[a.leg + 1];
+      if (!B) { if (a.phase === 'walkin') { a.phase = 'sit'; a.t = 0; } else { P.scripted = false; P.pos.copy(path[path.length - 1]); scanDone(P); } return; }
+      const L = A.distanceTo(B), k = Math.min(1, a.t * 0.75 / Math.max(L, 0.01));
+      P.pos.copy(along(A, B, k)); P.pose = null;
+      const want = Math.atan2(B.x - A.x, B.z - A.z), diff = wrap(want - P.heading);
+      P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
+      play(P, CLIPS.walk, { speed: 0.75 });
+      if (k >= 1) { a.leg++; a.t = 0; }
+      return;
+    }
+    if (a.phase === 'sit' || a.phase === 'unsit') {
+      // (turned to face out across the bed's side, then down onto its edge; or up off it again)
+      const k = ease(Math.min(1, a.t / 1.1)), u = a.phase === 'sit' ? k : 1 - k;
+      const stand = SCAN.path[SCAN.path.length - 1];
+      const hips = _w.set(stand.x, stand.y + HIP.stand, stand.z).lerp(_v.copy(SCAN.sit).setY(SCAN.sit.y + 0.08), u);
+      const h = wrap(P.heading + wrap(sitH - P.heading) * Math.min(1, a.t * 3));
+      P.heading = h;
+      setPose(P, hips, bodyQ(_q1, h, 0), HIP.stand + (HIP.sit - HIP.stand) * u);
+      play(P, u > 0.4 ? CLIPS.sit : STAND, { fade: 0.5 });
+      if (a.t > 1.1) { a.t = 0; a.phase = a.phase === 'sit' ? 'lie' : 'walkout'; a.leg = 0; if (a.phase === 'walkout') P.pose = null; }
+      return;
+    }
+    if (a.phase === 'lie' || a.phase === 'unlie') {
+      // (lying back along the bed: turned about the hips, from sitting on its edge to flat on it, head to the wall)
+      const k = ease(Math.min(1, a.t / 1.6)), u = a.phase === 'lie' ? k : 1 - k;
+      const hips = _w.copy(SCAN.sit).setY(SCAN.top + 0.08).lerp(_v.copy(SCAN.hips).setY(SCAN.top + 0.11), u);
+      setPose(P, hips, bodyQ(_q1, sitH, u), HIP.sit + (HIP.stand - HIP.sit) * u);
+      play(P, u > 0.5 ? STAND : CLIPS.sit, { fade: 0.7 });
+      if (a.t > 1.6) { a.t = 0; a.phase = a.phase === 'lie' ? 'lying' : 'unsit'; if (a.phase === 'lying') a.rounds = Math.round(rnd(SCAN_BED.rounds[0], SCAN_BED.rounds[1])); }
+      return;
+    }
+    if (a.phase === 'lying') {
+      // (flat on the bed, still; the ring glides while they are on it: SCAN.use, from rest, a few times there and back)
+      P.scripted = true;
+      setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.11), bodyQ(_q1, sitH, 1), HIP.stand);
+      play(P, STAND, { fade: 0.4 });
+      if (!SCAN.use) SCAN.use = { from: clock, end: null };
+      const U = SCAN.use;
+      if (U.end == null && clock - U.from > (a.rounds || 2) * SCAN.round - 0.01) U.end = U.from + Math.ceil((clock - U.from) / SCAN.round) * SCAN.round;
+      if (U.end != null && clock >= U.end) { SCAN.use = null; a.phase = 'unlie'; a.t = 0; }
+      return;
+    }
+  }
+  function scanMedic(P, a, dt) {
+    const S = SCAN && SCAN.busy;
+    if (!S || S.medic !== P) { next(P); return; }
+    // (at the scanner's screen: working it now and then while the patient is on the bed)
+    const working = S.patient && S.patient.act && S.patient.act.kind === 'scan' && S.patient.act.phase === 'lying';
+    a.work = (a.work || 0) - dt;
+    if (working && a.work < -rnd(4, 9)) a.work = rnd(2.5, 4);
+    play(P, a.work > 0 ? CLIPS.reach : STAND);
+    if (a.work <= 0) idle(P, a, dt, 0.25);
+    if (a.t > 240) next(P);       // (a scan that never came: on with the day)
+  }
+  function scanDone(P) {
+    const S = SCAN && SCAN.busy; if (!S) { next(P); return; }
+    const M = S.medic; SCAN.busy = null; SCAN.use = null;
+    if (M && M.act && M.act.kind === 'scanMedic') next(M);
+    next(P);
+  }
+  function scanOver(P) {
+    // (the patient or the medic gone off before it was done: the patient off the bed at once, where nobody can see
+    // (people.js never leaves anyone lying), the scanner parked)
+    const S = SCAN.busy; SCAN.busy = null; SCAN.use = null;
+    const pt = S.patient;
+    if (pt && pt !== P && pt.act && pt.act.kind === 'scan') { pt.pose = null; pt.scripted = false; if (pt.act.phase !== 'go' && pt.act.phase !== 'ready' && pt.act.phase !== 'turn') pt.pos.copy(SCAN.path[0]); pt.act = { kind: 'wait', until: rnd(1, 3), t: 0 }; }
+    if (pt === P) { P.pose = null; P.scripted = false; if (P.act && P.act.kind === 'scan' && !['go', 'ready', 'turn'].includes(P.act.phase)) P.pos.copy(SCAN.path[0]); }
+    const md = S.medic; if (md && md !== P && md.act && md.act.kind === 'scanMedic') md.act = { kind: 'wait', until: rnd(1, 3), t: 0 };
+  }
+
+  // (anyone, or the player, within r of a point; `present`: only those about the player, not those away)
+  function someoneAt(p, P, r, present = false) {
+    for (const Q of list) if (Q !== P && !Q.hidden && !(present && Q.away) && !(!present && P && Q.away !== P.away) && Math.hypot(Q.pos.x - p.x, Q.pos.z - p.z) < r && Math.abs(Q.pos.y - p.y) < 1.2) return Q;
     if (playerNow && Math.hypot(playerNow.pos.x - p.x, playerNow.pos.z - p.z) < r) return playerNow;
     return null;
   }
@@ -590,7 +1020,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     let best = null, bs = -Infinity;
     for (const [s, b] of [[0.75, -0.15], [-0.75, -0.15], [0.55, -0.55], [-0.55, -0.55], [0, -0.8], [0.9, 0.1], [-0.9, 0.1]]) {
       _y.set(P.pos.x - uz * s + ux * b, P.pos.y, P.pos.z + ux * s + uz * b);
-      const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26);
+      const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26, !!P.away);
       if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || onPatch(t.x, t.z) || someoneAt(t, P, LIFE.body)) continue;
       // (the further from the line the other is walking along, the better)
       const score = Math.abs(s) - Math.max(0, b) * 0.5 + Math.random() * 0.05;
@@ -598,7 +1028,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     return best;
   }
-  // walking the way, keeping clear of everyone
+  // walking the way, keeping clear of everyone (everyone about as they are: someone away passes nobody, and nobody them)
   const _d = new THREE.Vector3(), _t = new THREE.Vector3();
   function walk(P, dt) {
     P.walkT = (P.walkT || 0) + dt;
@@ -609,7 +1039,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (yd > 0.05 && Y.t < 2) {
         const s = Math.min(yd, P.speed * 0.8 * dt);
         P.heading = wrap(P.heading + Math.sign(wrap(Math.atan2(yx, yz) - P.heading)) * Math.min(Math.abs(wrap(Math.atan2(yx, yz) - P.heading)), LIFE.turn * dt));
-        const g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26);
+        const g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26, !!P.away);
         if (g < s * 0.3) { Y.t = 2; play(P, STAND); } else play(P, CLIPS.walk, { speed: 0.8 });   // (blocked: no walking on the spot)
       } else {
         const Q = Y.for; play(P, STAND);
@@ -633,10 +1063,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const gx = goal.x - P.pos.x, gz = goal.z - P.pos.z, gd = Math.hypot(gx, gz);
     if (P.wi >= W2.length - 1 && gd < 0.08) { P.pos.x = goal.x; P.pos.z = goal.z; arrive(P); stillV++; return; }
     let dx = gx / (gd || 1), dz = gz / (gd || 1);
-    // the others near: everyone else, and the player
+    // the others near: everyone else about as they are, and the player (if they are about)
     others.length = 0;
-    for (const Q of list) if (Q !== P && !Q.hidden && Math.abs(Q.pos.x - P.pos.x) < 2.5 && Math.abs(Q.pos.z - P.pos.z) < 2.5 && Math.abs(Q.pos.y - P.pos.y) < 1.5) others.push(Q);
-    if (playerNow && Math.abs(playerNow.pos.x - P.pos.x) < 2.5 && Math.abs(playerNow.pos.z - P.pos.z) < 2.5 && Math.abs(playerNow.pos.y - P.pos.y) < 1.5) others.push(playerNow);
+    for (const Q of list) if (Q !== P && !Q.hidden && Q.away === P.away && !Q.scripted && Math.abs(Q.pos.x - P.pos.x) < 2.5 && Math.abs(Q.pos.z - P.pos.z) < 2.5 && Math.abs(Q.pos.y - P.pos.y) < 1.5) others.push(Q);
+    if (playerNow && !P.away && Math.abs(playerNow.pos.x - P.pos.x) < 2.5 && Math.abs(playerNow.pos.z - P.pos.z) < 2.5 && Math.abs(playerNow.pos.y - P.pos.y) < 1.5) others.push(playerNow);
     // in the lane ahead: passed on the side away from them (head on, each to their own right)
     const sx = -dz, sz = dx; let steer = 0, slow = 1;
     for (const Q of others) {
@@ -672,7 +1102,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     _d.set(P.pos.x + dx * step, 0, P.pos.z + dz * step);
     if (!by) for (const Q of others) { const d1 = Math.hypot(Q.pos.x - _d.x, Q.pos.z - _d.z); if (d1 < LIFE.body && d1 < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z)) { by = Q; break; } }
     let got = 0;
-    if (!by) got = walls.move(P.pos, dx * step, dz * step, 0.26);
+    // (someone away opens no doors (nobody sees them): they pass through as if open)
+    if (!by) got = walls.move(P.pos, dx * step, dz * step, 0.26, !!P.away);
     // (pressed into a corner, or steered into one: the freest small step near the way wanted, never back the way they
     // came, onto a patch or toward anyone)
     if (!by && got < step * 0.3) {
@@ -682,10 +1113,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const a = i / 16 * Math.PI * 2, vx = Math.sin(a), vz = Math.cos(a), dot = vx * ux + vz * uz;
         if (dot <= bd) continue;
         _t.copy(P.pos);
-        if (walls.move(_t, vx * step, vz * step, 0.26) < step * 0.7 || onPatch(_t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
+        if (walls.move(_t, vx * step, vz * step, 0.26, !!P.away) < step * 0.7 || onPatch(_t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
         bd = dot; bx = vx; bz = vz;
       }
-      if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26);
+      if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26, !!P.away);
     }
     P.blocker = by && typeof by === 'object' ? by : null;
     // (held up by a walker who is held up by them: the one later in the roster makes way)
@@ -703,13 +1134,16 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (got < step * 0.3) {
       P.held += dt; P.by = by && by === playerNow ? 'player' : by === 'patch' ? 'patch' : by ? 'person' : 'wall';
       const still = !by || by === 'patch' || (by !== playerNow && !by.walking), end = P.way[P.way.length - 1];
-      if (still && P.held > LIFE.stillWait && Math.hypot(end.x - P.pos.x, end.z - P.pos.z) < 1.6) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
+      // (the scanner's patient and medic keep at it: a scan is not dropped for someone standing near; they work the way
+      // out again round them, and give up only after twice as long)
+      const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic');
+      if (still && !keen && P.held > LIFE.stillWait && Math.hypot(end.x - P.pos.x, end.z - P.pos.z) < 1.6) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
       if (P.held > LIFE.sidestep && !P.side) P.side = Math.random() < 0.75 ? 0.9 : -0.9;
       // (the way worked out again whenever held this long, at most once in LIFE.replanEvery seconds; held up too long in
       // all, they give it up)
       P.heldAll = (P.heldAll || 0) + dt;
       if (P.held > (still ? LIFE.stillWait : LIFE.replan) && (P.lastReplan == null || P.walkT - P.lastReplan > LIFE.replanEvery)) { P.lastReplan = P.walkT; P.side = 0; stillV++; route(P, end); return; }
-      if (P.heldAll > LIFE.giveUp) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
+      if (P.heldAll > LIFE.giveUp * (keen ? 2 : 1)) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
       play(P, STAND);
     } else {
       if (P.held > 0.5) P.side = P.side * 0.98;
@@ -724,13 +1158,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   let auditClock = 0;
   function audit(dt) {
     auditClock += dt; if (auditClock < 0.25) return;
-    const T = auditClock; auditClock = 0;
+    auditClock = 0;
+    // (the scanner's ring gliding with nobody on its bed: never)
+    if (scanD && scanD.use && !(SCAN && SCAN.busy && SCAN.busy.patient && SCAN.busy.patient.act && SCAN.busy.patient.act.phase === 'lying')) { alarms.emptyScan = (alarms.emptyScan || 0) + 1; }
     for (const P of list) {
       if (P.hidden) continue;
       // stuck: a way to go, and less than 0.4 m from where they were LIFE.stuck seconds ago (as the crow flies, so someone
       // jiggling back and forth on the spot is stuck too); making way for someone is not being stuck
       const tr = P.trail || (P.trail = []);
-      if (P.walking && !P.yielding) {
+      if (P.walking && !P.yielding && !(P.cap && P.cap.state === 'offer')) {
         tr.push(P.pos.x, P.pos.z); if (tr.length > 2 * Math.round(LIFE.stuck / 0.25 + 1)) tr.splice(0, 2);
         const full = tr.length >= 2 * Math.round(LIFE.stuck / 0.25 + 1), moved = Math.hypot(P.pos.x - tr[0], P.pos.z - tr[1]);
         // (not getting anywhere for two seconds, walking or not: held, so they stand and work the way out afresh)
@@ -740,30 +1176,33 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
           P.stuckSaid = true;
           // (waiting for the player to get out of the way is good manners, not stuck: counted apart)
           if (P.by === 'player') alarms.waitedForPlayer = (alarms.waitedForPlayer || 0) + 1;
-          else alarm('stuck', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (held by ' + (P.by || '?') + ', ' + (P.act?.spot?.name || P.act?.kind) + ')');
+          else alarm('stuck', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (held by ' + (P.by || '?') + ', ' + (P.act?.spot?.name || P.act?.kind) + (P.away ? ', away' : '') + ')');
         } else if (moved > 0.8) P.stuckSaid = false;
       } else { tr.length = 0; P.jam = false; }
+      if (P.scripted) continue;      // (the scanner's patient, on its bed and along its side: where they are meant to be)
       // in a wall (a sitter is on a seat: not counted)
       const sitting = P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising');
       if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.phase || '') + ' ' + (P.act.spot?.name || '') : '-') + (P.walking ? ', walking' : '') + (P.yielding ? ', making way' : '') + ')');
-      // in another person (or the player)
-      for (const Q of list) if (Q !== P && !Q.hidden && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < 0.42 && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, 'and ' + Q.id);
-      if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < 0.42) alarm('inPerson', P, 'and the player');
+      // in another person (or the player): only among those about (someone away is not there to bump into)
+      if (!P.away) {
+        for (const Q of list) if (Q !== P && !Q.hidden && !Q.away && !Q.scripted && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < 0.42 && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, 'and ' + Q.id);
+        if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < 0.42) alarm('inPerson', P, 'and the player');
+      }
       // on a patch kept off (a job's ring, a ship's way in, under the crane, the scanner)
       if (onPatch(P.pos.x, P.pos.z) && !sitting) alarm('onPatch', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)));
     }
   }
 
-  // ── for the station: who the doors open for, who a ship's way waits for ─────────────────────────────────────
+  // ── for the station: who the doors open for, who a ship's way waits for (only those about the player) ────────
   const eyeList = [];
-  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
+  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && !P.away && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
   function onWays(out) {
-    for (const P of list) { if (P.hidden) continue; for (const w of wayFeet) if (P.pos.x > w.box.min.x - 0.5 && P.pos.x < w.box.max.x + 0.5 && P.pos.z > w.box.min.z - 0.5 && P.pos.z < w.box.max.z + 0.5) { out.push(P.pos); break; } }
+    for (const P of list) { if (P.hidden || P.away) continue; for (const w of wayFeet) if (P.pos.x > w.box.min.x - 0.5 && P.pos.x < w.box.max.x + 0.5 && P.pos.z > w.box.min.z - 0.5 && P.pos.z < w.box.max.z + 0.5) { out.push(P.pos); break; } }
     return out;
   }
 
   // ── for the plan from above ──────────────────────────────────────────────────────────────────────────────────
-  const COL = { post: '#ffb347', stand: '#8fd3ff', sit: '#c6a0ff', talk: '#7dff9a', walk: '#ff8fb0' };
+  const COL = { post: '#ffb347', stand: '#8fd3ff', sit: '#c6a0ff', talk: '#7dff9a', walk: '#ff8fb0', scan: '#ff6b6b', scanMedic: '#ff6b6b' };
   function plan({ labels = false } = {}) {
     const spots = [], routes = [], notes = [];
     for (const [g, L] of Object.entries(groups)) for (const s of L.filter(Boolean)) spots.push({ at: [s.pos.x, s.pos.z], face: s.heading, label: labels ? s.name : null, colour: s.who ? '#fff' : '#9ab', kind: 'stand', group: g });
@@ -771,7 +1210,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const [g, L] of Object.entries(talks)) for (const T of L) for (const p of T.at) spots.push({ at: [p.x, p.z], kind: 'talk', colour: COL.talk, group: g, label: labels ? T.name : null });
     for (const P of list) {
       const kind = P.act ? P.act.kind : 'wait';
-      spots.push({ at: [P.pos.x, P.pos.z], face: P.heading, label: labels || kind === 'post' ? P.id : null, colour: COL[kind] || '#fff', kind: 'person' });
+      spots.push({ at: [P.pos.x, P.pos.z], face: P.heading, label: labels || kind === 'post' || P.cap ? P.id + (P.away ? ' (away)' : '') : null, colour: P.away ? '#666' : COL[kind] || '#fff', kind: 'person' });
       if (P.way) routes.push({ id: P.id, colour: (COL[kind] || '#fff') + 'cc', way: P.way.map((p) => [p.x, p.z]) });
     }
     return { spots, routes, noGo: patches, notes };
@@ -786,25 +1225,45 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   function remove(P) { const i = list.indexOf(P); if (i >= 0) list.splice(i, 1); release(P); W.scene.remove(P.c.root); P.inScene = false; P.c.dispose(); }
   // ── aboard: everyone, one at a time ──────────────────────────────────────────────────────────────────────────
-  // (how many: by the picture's quality, or the address's ?crowd=N, for the cost rigs)
-  const asked = +new URLSearchParams(location.search).get('crowd');
-  const quality = W.quality in CROWD ? W.quality : 'medium', most = asked > 0 ? Math.min(asked, ROSTER.length) : CROWD[quality];
-  const askedDrawn = +new URLSearchParams(location.search).get('drawn');
-  drawnMost = askedDrawn > 0 ? askedDrawn : LIFE.drawn[quality];
-  const roster = ROSTER.slice(0, most);
+  // (how many about at once: by the picture's quality, or the address's ?crowd=N, for the cost rigs; ?far=N: the far
+  // copy from N metres, ?drawn=N: at most N drawn)
+  const Q0 = new URLSearchParams(location.search), asked = +Q0.get('crowd');
+  const quality = W.quality in NEAR ? W.quality : 'medium';
+  nearMost = asked > 0 ? Math.min(asked, ROSTER.length) : NEAR[quality];
+  drawnMost = +Q0.get('drawn') > 0 ? +Q0.get('drawn') : LIFE.drawn[quality];
+  farAt = Q0.has('far') ? +Q0.get('far') : LIFE.far[quality];
+  // (the voices' clips fetched now, made ready to play once the player touches the page: sound.js)
+  for (const def of ROSTER) {
+    const V = def.voice && VOICES[def.voice]; if (V) for (const id of V.hellos) sound.load(id, clipUrl(id));
+    const K = CAPTAINS[def.id]; if (def.captain && K) for (const id of [K.offer.clip, K.yes.clip, K.hello.clip]) sound.load(id, clipUrl(id));
+  }
   // where each comes aboard: their first spot (a post's own, or the first free spot of their day), placed there at once
-  for (const def of roster) {
+  for (const def of ROSTER) {
     const day = def.day.map((d) => (typeof d === 'string' ? { do: d } : d));
-    const P0 = { id: def.id, day, k: 0, pos: null };
+    const P0 = { id: def.id, name: def.name, day, k: 0, pos: null, away: false };
     let first = null;
     for (let k = 0; k < day.length && !first; k++) { first = claimFor(P0, day[k]); if (first) P0.k = k; }
     if (!first) { missing.push(def.id + ' (nowhere to be)'); continue; }
     const P = await body(def, first.spot.pos, first.spot.heading ?? 0);
     if (!P) { release(P0); continue; }
-    Object.assign(P, { order: list.length, day, k: P0.k, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null });
+    Object.assign(P, { order: list.length, day, k: P0.k, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false });
     P.claim = P0.claim; handOver(P.claim, P0, P);
     begin(P, first, true);
     list.push(P); say(list.length);
+  }
+  // (a scan begun as they came aboard, the patient placed on the bed: its medic at the screen too)
+  if (SCAN && SCAN.busy) {
+    const { medic } = SCAN.busy;
+    if (medic && medic.act && medic.act.kind === 'scanMedic') { medic.pos.copy(medic.act.spot.pos); medic.heading = medic.act.spot.heading; medic.act.phase = 'do'; }
+  }
+  // the nearest NEAR to where the camera is about at once (a pair together), the rest away (out of sight) from the start
+  {
+    const focus = W.camera.position;
+    for (const P of list) P.rank = P.pos.distanceTo(focus);
+    for (const P of list) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank) : P.rank; }
+    const by = [...list].sort((a, b) => a.rankPair - b.rankPair || a.order - b.order), want = new Set(by.slice(0, nearMost));
+    for (const P of [...want]) { const Q = partner(P); if (Q) want.add(Q); }
+    for (const P of list) P.away = !want.has(P);
   }
 
   // RUNNING FROM THE CRANE (src/crane.js: the crane worked by hand brings a load down low over someone; the game's
@@ -814,7 +1273,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function flee(x, z, r = 2, away = 4.5) {
     const sent = [];
     for (const P of list) {
-      if (P.hidden || P.fleeing || !P.act) continue;
+      // (someone away is out of sight and out of the crane's way; the scanner's patient is on its bed)
+      if (P.hidden || P.away || P.fleeing || P.scripted || !P.act) continue;
       if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
       const dx = P.pos.x - x, dz = P.pos.z - z, d = Math.hypot(dx, dz);
       if (d > r || P.pos.y > 2.4) continue;
@@ -825,12 +1285,43 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body)) { to = p; break; }
       }
       if (!to) continue;
+      // (a talk, or a captain's offer, left off: running comes first)
+      endTalk(P); if (P.cap && P.cap.busy) endOffer(P);
       P.fleeing = { was: P.speed }; P.speed = Math.max(P.speed, 1.2) * 1.9;
       begin(P, { kind: 'walk', step: { for: [1, 2] }, spot: { pos: to, heading: null }, list: [{ pos: to }], j: 0 });
       sent.push(P);
     }
     return sent;
   }
-  const stats = () => ({ people: list.length, quality, most, walking: list.filter((P) => P.walking).length, shown: list.filter((P) => P.shown).length, planning: planQ.length, steps: walls.steps ? walls.steps() : null });
-  return { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee };
+  const stats = () => ({ people: list.length, quality, most: nearMost, about: list.filter((P) => !P.away && !P.hidden).length, walking: list.filter((P) => P.walking).length, shown: list.filter((P) => P.shown).length, far: list.filter((P) => P.shown && P.c.far).length,
+    tris: list.reduce((a, P) => a + (P.shown ? P.c.tris() : 0), 0), planning: planQ.length, steps: walls.steps ? walls.steps() : null, counts: { ...counts }, talksNow: convos.size, scan: SCAN ? { busy: !!SCAN.busy, lying: !!(SCAN.busy && SCAN.busy.patient && SCAN.busy.patient.act && SCAN.busy.patient.act.phase === 'lying'), gliding: !!(scanD && scanD.use) } : null });
+  // (the scanner's glide: SCAN.use, handed to its glide each frame (kit/layout.js updateGlides: parked while null))
+  // (for the films and the rigs: two people sent to talk at a group's talking spot, a scan begun with a patient)
+  const byId = (id) => list.find((P) => P.id === id);
+  // (anyone seated stood up beside their seat first; nothing of what they were doing kept)
+  const reset = (P) => {
+    const a = P.act; if (a && a.spot && a.spot.seat && ['sat', 'sitting', 'rising'].includes(a.phase)) P.pos.copy(a.spot.pos);
+    release(P); P.away = false; P.req = null; P.walking = false; P.way = null; P.pose = null; P.scripted = false; P.sitY = 0; play(P, STAND, { fade: 0 });
+  };
+  const stage = {
+    // (here: placed at the talking spot at once, already talking; else they walk there)
+    talk(a, b, group = 'terminal', here = true) {
+      const A = byId(a), B = byId(b), T = (talks[group] || []).find((t) => !t.who[0] && !t.who[1]); if (!A || !B || !T) return false;
+      for (const P of [A, B]) reset(P);
+      const step = { do: 'talk:' + group, for: [40, 60] }, qa = talkAt(A, T, 0, step), qb = talkAt(B, T, 1, step);
+      if (here) { A.pos.copy(T.at[0]); B.pos.copy(T.at[1]); stillV++; }
+      begin(A, qa, here); begin(B, qb, here); return true;
+    },
+    scan(patient = 'patient') {
+      const P = byId(patient); if (!P || !SCAN || SCAN.busy) return false;
+      const M = list.find((q) => /medic/.test(q.id)); if (!M) return false;
+      for (const X of [P, M]) { reset(X); X.act = { kind: 'stand', phase: 'do', t: 0, len: 1, spot: { pos: X.pos.clone(), heading: X.heading } }; }
+      const a = claimFor(P, { do: 'scan', for: [40, 60] }); if (!a) return false;
+      begin(P, a); return true;
+    },
+    put(id, at, heading = 0) { const P = byId(id); if (!P) return false; release(P); P.req = null; P.walking = false; P.way = null; P.pos.copy(at); P.heading = heading; P.act = { kind: 'wait', until: 3, t: 0 }; return true; },
+  };
+  const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage,
+    say: (P, words, o) => bubbles.say(P, words, o) };
+  return api;
 }
