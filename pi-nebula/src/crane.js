@@ -124,11 +124,12 @@ export function makeCrane({ W, walls, boarding = null }) {
   }
   let landT = 0, legsDown = false;
   function beginLanding() {
-    L.reset(); t = 0; mode = 'landing'; landT = 0; legsDown = false; L.pose(0);
+    L.reset(); t = 0; mode = 'landing'; landT = 0; legsDown = false;
     C.haul = { n: L.round, landed: false, at: performance.now() };
     if (boarding && boarding.hold) boarding.hold('miner', true);
     if (ship) { for (const D of ship.legs) { W.driven.add(D); D.held0 = D.held0 ?? D.hold; D.hold = null; } setDoors(ship.legs, 1); }
-    shipAt(0);
+    // (the ship out past the bay door first, then everything posed: its canisters ride with it from the first frame)
+    shipAt(0); L.pose(0);
   }
   function landed() {
     shipAt(null); mode = 'round'; t = 0; C.haul.landed = true;

@@ -136,6 +136,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     <div class="pcg-btns">${onFree ? '<button type="button" class="pcg-free" aria-label="Free control: drive the crane by hand">Free control</button>' : ''}<button type="button" class="pcg-view" aria-label="Change the view (V)">View<kbd>V</kbd></button></div>
     <div class="pcg-banner" hidden></div><p class="pcg-viewname"></p>`;
   document.body.appendChild(strip);
+  document.body.classList.add('pcg-on');   // (the strip sits where the Crew button is: that hides while it is up)
   const $ = (s) => strip.querySelector(s);
   if (onFree) $('.pcg-free').addEventListener('click', () => { if (!closed) onFree(); });
   $('.pcg-view').addEventListener('click', () => nextView());
@@ -359,7 +360,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   function close(keep = false) {
     if (closed) return;
     closed = true; removeEventListener('keydown', onKey, true);
-    strip.remove(); cv.remove();
+    strip.remove(); cv.remove(); document.body.classList.remove('pcg-on');
     crane.target = null; crane.places = []; crane.view = null;
     if (W.camera.view && W.camera.view.enabled) W.camera.clearViewOffset();
     W.camera.near = 0.03; W.camera.far = 120; W.camera.updateProjectionMatrix();

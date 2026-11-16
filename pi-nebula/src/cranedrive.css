@@ -124,6 +124,7 @@
 .pcg-viewname { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); margin: 0; padding: 6px 14px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #bfe9ff;
   background: rgba(12, 18, 24, 0.86); opacity: 0; }
 .pcg-viewname.is-show { animation: pcd-name 2.6s ease forwards; }
+body.pcg-on .hud-menu { visibility: hidden; }   /* (the crane system's strip is where the Crew button is) */
 .pcg-grid { position: fixed; inset: 0; z-index: 23; pointer-events: none; width: 100vw; height: 100vh; }
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
   .pcg { left: 8px; right: 8px; top: max(8px, env(safe-area-inset-top)); max-width: none; gap: 6px; }
