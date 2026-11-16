@@ -40,7 +40,7 @@ export function placeInto(dst, src, { at = [0, 0, 0], rot = [0, 0, 0], scale = 1
   _lin.setFromMatrix4(_m);
   const kind = src.kind || 'part';
   for (const mv of src.movers) {
-    const m = { key: kind + '|' + mv.key, piece: mv.piece, base: _m.clone().multiply(mv.base), slide: mv.slide.clone().applyMatrix3(_lin), door: id + mv.door };
+    const m = { key: kind + '|' + mv.key, piece: mv.piece, base: _m.clone().multiply(mv.base), slide: mv.slide.clone().applyMatrix3(_lin), door: id + mv.door, still: mv.still };
     // (a hinge goes with it: its point placed, its axis turned)
     if (mv.hinge) m.hinge = mv.hinge.map((H) => ({ at: new THREE.Vector3(...H.at).applyMatrix4(_m).toArray(), axis: new THREE.Vector3(...H.axis).applyMatrix3(_lin).normalize().toArray(), angle: H.angle }));
     dst.movers.push(m);

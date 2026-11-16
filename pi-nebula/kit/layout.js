@@ -3,7 +3,8 @@
 //     "views": { "start": { "at": [x, y, z], "look": [x, y, z], "fov": 60 } }, "probe": [x, y, z] }
 // (piece, cell, turn, variant; optional off [x, y, z] in metres and deck). buildRoom turns it into a few meshes:
 // every static piece is merged into ONE mesh per material, the strips' light and the corner darkening are baked in,
-// and the door leaves are instanced (one draw per material for all the leaves) so they can slide.
+// and the door leaves are instanced (one draw per material for all the leaves) so they can slide. (A leaf marked
+// `still`, a door flush in a ship's skin, is lit and painted with the room's still parts and drawn as its own mesh.)
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PIECES } from './catalog.js';
@@ -117,7 +118,7 @@ export function buildRoom(room, mats, opts = {}) {
   const t0 = performance.now(), problems = [], lights = [], doors = [], leafGroups = new Map(), zones = [];
   let pieceCount = 0;
   for (const zd of zonesOf(room)) {
-    const list = expand(zd.pieces || [], problems), lists = Object.fromEntries(MAT_KEYS.map((k) => [k, []]));
+    const list = expand(zd.pieces || [], problems), lists = Object.fromEntries(MAT_KEYS.map((k) => [k, []])), stills = {};
     pieceCount += list.length;
     for (const pl of list) {
       const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant, zd.coarse), off = [...(pl.off || [0, 0, 0])];
@@ -138,6 +139,19 @@ export function buildRoom(room, mats, opts = {}) {
           for (const [k, g] of Object.entries(pieceByMat(mv.piece))) lists[k].push({ geo: g, e: e2 });
           continue;
         }
+        // (a STILL leaf, a door whose outside is part of a ship's skin: lit with its room as it stands shut, vertex by
+        // vertex, and painted with the room's own materials, so shut it cannot be told from the still parts round
+        // it. Its triangles go in with the room's still ones, last (they are lit and saved with them), and are drawn
+        // as a mesh of their own, which moves: stillMeshes, below. It takes no part in what a person can walk on.)
+        if (mv.still) {
+          const leaf = { key: mv.key, M: _m.clone(), base: mv.base, slide: mv.slide, door: held || null, meshes: [], own: [] };
+          if (mv.hinge) leaf.hinge = mv.hinge;
+          const e0 = leafMatrix(leaf, 0, _lm).elements.slice();
+          leaf.shut = new THREE.Matrix4().fromArray(e0).invert();
+          for (const [k, g] of Object.entries(pieceByMat(mv.piece))) (stills[k] ||= []).push({ geo: g, e: e0, leaf });
+          if (leaf.door) leaf.door.leaves.push(leaf);
+          continue;
+        }
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
         const leaf = { M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
         if (mv.hinge) leaf.hinge = mv.hinge;
@@ -146,9 +160,14 @@ export function buildRoom(room, mats, opts = {}) {
     }
     if (!zones.length) for (const [k, gs] of Object.entries(opts.extra || {})) lists[k].push(...gs.map((geo) => ({ geo, e: IDENT })));
     const merged = {};
-    for (const k of MAT_KEYS) if (lists[k].length) merged[k] = mergePlaced(lists[k]);
+    for (const k of MAT_KEYS) {
+      const S = stills[k] || []; if (!lists[k].length && !S.length) continue;
+      const g = merged[k] = mergePlaced([...lists[k], ...S]);
+      // (the still leaves' triangles taken back out of what is drawn, and walked on, as the room: each leaf keeps its own)
+      if (S.length) { const all = g.index.array; let n = 0; for (const it of lists[k]) n += it.geo.index.count; g.setIndex(new THREE.BufferAttribute(all.slice(0, n), 1)); for (const it of S) { const c = it.geo.index.count; it.index = all.slice(n, n + c); n += c; } }
+    }
     if (merged.solid) worldUV(merged.solid);
-    zones.push({ id: zd.id, name: zd.name || zd.id, probe: zd.probe, sky: zd.sky, with: zd.with, merged, pieces: list.length });
+    zones.push({ id: zd.id, name: zd.name || zd.id, probe: zd.probe, sky: zd.sky, with: zd.with, merged, stills, pieces: list.length });
   }
   const tMerge = performance.now();
   // the light: from the saved bake where it still matches, worked out here for the rest (against one shared grid of
@@ -180,6 +199,14 @@ export function buildRoom(room, mats, opts = {}) {
       if (k === 'glass') m.renderOrder = 2; if (k === 'shield') m.renderOrder = 3;
       g.computeBoundingBox(); g.computeBoundingSphere(); z.box.union(g.boundingBox);
       zg.add(m); const tris = g.index.count / 3; stats.draws++; stats.tris += tris; z.tris += tris; stats.perMat[k] = Math.round((stats.perMat[k] || 0) + tris);
+      // (stillMeshes: each still leaf's own mesh, of the room's own vertices and material; setLeaf moves it)
+      for (const it of z.stills[k] || []) {
+        const sg = new THREE.BufferGeometry(); for (const [name, a] of Object.entries(g.attributes)) sg.setAttribute(name, a);
+        sg.setIndex(new THREE.BufferAttribute(it.index, 1));
+        const sm = new THREE.Mesh(sg, zm[k]); sm.name = it.leaf.key + ':' + k; sm.castShadow = m.castShadow; sm.receiveShadow = m.receiveShadow; sm.renderOrder = m.renderOrder; sm.matrixAutoUpdate = false; sm.frustumCulled = false;
+        zg.add(sm); it.leaf.own.push(sm); if (!it.leaf.counted) { it.leaf.counted = true; stats.leaves++; }
+        const st = it.index.length / 3; stats.draws++; stats.tris += st; z.tris += st; stats.perMat[k] = Math.round((stats.perMat[k] || 0) + st);
+      }
     }
     stats.perZone[z.id] = Math.round(z.tris);
   }
@@ -261,6 +288,8 @@ function leafMatrix(leaf, t, out) {
 }
 function setLeaf(leaf, t) {
   leafMatrix(leaf, t, _m);
+  // (a still leaf's meshes are where it stands shut already: moved from there)
+  if (leaf.own) { _m.multiply(leaf.shut); for (const m of leaf.own) { m.matrix.copy(_m); m.matrixWorldNeedsUpdate = true; } return; }
   for (const im of leaf.meshes) { im.setMatrixAt(leaf.index, _m); im.instanceMatrix.needsUpdate = true; }
 }
 // doors open by themselves as someone comes near (mode 'auto'), or stay 'open' or 'shut'; returns whether any moved

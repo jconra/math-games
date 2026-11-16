@@ -16,10 +16,12 @@
 //                            one part, the spar, placed again and again
 //   ebMarks      'marks'     what is laid on the skin: the blue light strips, the nose's lamps, the yellow marks by the
 //                            door, the nav lights
-//   ebDoorway    'port' / 'starboard'   a doorway's sides and sill; port: the airlock behind it (its floor, walls,
-//                            ceiling and inner door); starboard: the sealed hatch in it
-//   ebAirstair   'port'      the airstair door: one panel hinged at its foot, its steps and side rails on its inside
-//                            face; it swings out and down to the ground as someone comes near (a kit door)
+//   ebDoorway    'port' / 'starboard'   a doorway: a pocket in the hull's side (the 3k has no skin there). Port: its
+//                            sides and sill, and the airlock behind it (its floor, walls, ceiling and inner door);
+//                            starboard: the sealed hatch, fixed: the hull's skin carried across the pocket, flush
+//   ebAirstair   'port'      the airstair door: hinged at its foot, its outside the hull's skin carried across the
+//                            pocket (flush with the hull when shut), its steps set down into it between two side
+//                            beams; it swings out and down toward the ground as someone comes near (a kit door)
 //   ebGear       'nose' / 'port' / 'starboard'   a landing leg (its strut, and its foot, which turns at the ankle as it
 //                            folds into its well): kit door leaves on hinges, door 'gear' (no one opens it by walking
 //                            up: the game, or the lab's Gear up / down, moves it)
@@ -35,7 +37,7 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part } from '../shipparts/place.js';
 import { GLOW_SHIP } from '../shipparts/palette.js';
 import { SURF } from '../materials.js';
-import { HULL, GEAR, DOORS, WELLS, JAMBS, DOOR, PARTS, Q } from './explorer-built.hull.js';
+import { HULL, GEAR, DOORS, WELLS, JAMBS, DOOR, DOORSKIN, PARTS, Q } from './explorer-built.hull.js';
 import * as C from './built-common.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
@@ -440,12 +442,87 @@ function ebCockpit(p, variant) {
 }
 
 // ── THE DOORWAYS ────────────────────────────────────────────────────────────────────────────────────────────────────
-// The door stands in a plane from its hinge line (xHinge, hinge height) up to its head line (xHead, head height), set
-// into the hull's side (the 3k's side steps out over a narrower lower hull here, so the door sits in a dark alcove,
-// the jambs between it and the skin). Inside, the cabin's deck is the sill: a step up from the hinge.
+// Each doorway is a POCKET in the hull's side: the 3k was made from a picture with the door standing open, so it has
+// no skin there (the rig cut the pocket to size: explorer-built.hull.js). The door's plane is the pocket's back, from
+// its hinge line (xHinge, hinge height) up to its head line (xHead, head height); the jambs are the pocket's ends,
+// between that plane and the skin. Inside, the cabin's deck is the sill: a step up from the hinge.
+// The game's maker, of the shut door standing deep in its pocket: "For the Explorers door, I expected it to be flush
+// with the fuselage", and "it doesn't really need to move, it could just have more bulk on the outside of it". So each
+// door has BULK on its outside, from its plane out to the hull's line: it fills the pocket, and its outer face is the
+// hull's skin carried across the doorway (DOORSKIN: made by the rig from the hull's own cut edges round the pocket;
+// painted here by the hull's own rules: doorSkin). The port door's bulk is the airstair (ebAirstair), which swings
+// away with it, so the open doorway is as it was; the starboard one is fixed (the sealed hatch).
+// ONE PLACE IS NOT FLUSH, and cannot be: under the block at the pocket's fore end the hull ahead is half a metre
+// narrower than the hull aft of the door (the lower hull steps in there: DOORSKIN's `notch`). The door carries the aft
+// hull's lines straight to its fore edge, and its end closes the notch there, as the hull's own end wall did at the
+// pocket's aft end before.
 // (x of the door's plane at height y, in the ship frame)
 const doorX = (y) => DOOR.xHinge + (DOOR.xHead - DOOR.xHinge) * (y - DOOR.hinge) / (DOOR.head - DOOR.hinge);
-const DOOR_U = V3(DOOR.xHead - DOOR.xHinge, DOOR.head - DOOR.hinge, 0).normalize(), DOOR_LEN = Math.hypot(DOOR.xHead - DOOR.xHinge, DOOR.head - DOOR.hinge);
+// THE SEAM round a door's skin: the gap between the port door, which moves, and the pocket's rim, and a dark line
+// along the skin's edge beside it; the fixed starboard skin has the same dark line where the gap would be
+export const SEAM = { gap: 0.008, line: 0.02 };
+// THE SKIN ACROSS A DOORWAY (side: 'port' | 'starboard'), in the ship's frame: the rig's facets, each cut along the
+// hull's colour line and painted by the hull's own rules, as the hull's own faces are (so the colours and the facets
+// carry straight across the seam): [{ pts (a convex polygon), n, part ('slope' | 'side' | 'top'), surf }]
+const LOWER = ZONES.find((Z) => Z.zone === 'lower').planes[0], SKINS = {};
+const middle = (P) => P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length);
+export function doorSkin(side) {
+  if (SKINS[side]) return SKINS[side];
+  const out = [];
+  for (const part0 of ['slope', 'side', 'top']) for (const T of DOORSKIN[side][part0]) {
+    const P = T.map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), n = tnorm(P).normalize();
+    // (the band up to the head is thin strips, as the hull's own faces round it are: they take an edge's wear)
+    C.clipPlane(P, LOWER).forEach((R, i) => { if (R.length > 2) out.push({ pts: R, n, part: part0, surf: C.paintOf(RULES, PAL, { part: 'body', zone: i ? null : 'lower', n, c: middle(R), thin: part0 === 'top', pts: R }, PAL.skin) }); });
+  }
+  return (SKINS[side] = out);
+}
+// (the skin's corners, as the rig gave them; x of the pocket's foot, where the rig cut the lower hull's slope)
+const skinCorners = (side) => ['slope', 'side', 'top'].flatMap((k) => DOORSKIN[side][k].flat()).map(([x, y, z]) => V3(x / Q, y / Q, z / Q));
+const FOOT_X = Math.min(...skinCorners('port').map((v) => v.x));
+// the pocket's four sides moved in, for a face whose normal is n, so that the face's edge lies `inset` from the rim
+// measured ALONG the face (a face lying nearly in a side's plane is moved in less: the seam is the same width on every
+// facet), as planes for clipPlane (inside them: on the skin within its seam); and faces cut by their planes: [what lies
+// inside them all, what lies outside any]
+const seamBy = (inset, c) => inset * Math.sqrt(Math.max(0, 1 - c * c));
+const seamPlanes = (inset, n) => [[0, 0, -1, -(DOOR.z[0] + seamBy(inset, n.z))], [0, 0, 1, DOOR.z[1] - seamBy(inset, n.z)], [0, 1, 0, DOOR.head - seamBy(inset, n.y)], [-1, 0, 0, -(FOOT_X + seamBy(inset, n.x))]];
+function cutFaces(faces, inset) {
+  const inn = [], out = [];
+  for (const f of faces) {
+    let rest = f.pts;
+    for (const pl of seamPlanes(inset, f.n)) { const [i, o] = C.clipPlane(rest, pl); if (o.length > 2) out.push({ ...f, pts: o }); rest = i; if (rest.length < 3) break; }
+    if (rest.length > 2) inn.push({ ...f, pts: rest });
+  }
+  return [inn, out];
+}
+// where a plane cuts the skin: axis 'x' | 'y' | 'z' at `at`, as a line of points in order along `along` (another axis)
+function skinLine(faces, axis, at, along) {
+  const segs = [];
+  for (const f of faces) {
+    const q = [];
+    for (let i = 0; i < f.pts.length; i++) { const a = f.pts[i], b = f.pts[(i + 1) % f.pts.length], fa = a[axis] - at, fb = b[axis] - at; if ((fa > 0) !== (fb > 0)) q.push(a.clone().lerp(b, fa / (fa - fb))); }
+    if (q.length === 2 && q[0].distanceTo(q[1]) > 1e-6) segs.push(q);
+  }
+  // (chained end to end from the end lowest along `along`)
+  const line = [], near = (a, b) => a.distanceTo(b) < 1e-4;
+  let cur = segs.flat().reduce((m, v) => (v[along] < m[along] ? v : m), segs[0][0]);
+  line.push(cur);
+  for (let n = segs.length; n > 0; n--) {
+    const i = segs.findIndex((s) => near(s[0], cur) || near(s[1], cur)); if (i < 0) break;
+    const [s] = segs.splice(i, 1); cur = near(s[0], cur) ? s[1] : s[0]; line.push(cur);
+  }
+  return line;
+}
+// a point on a door's skin: where a ray in from the side at (y, z) meets it, lifted `lift` off it (and the face's normal)
+function onSkin(side, y, z, lift = 0) {
+  const s = side === 'starboard' ? -1 : 1, o = V3(s * 8, y, z), d = V3(-s, 0, 0);
+  for (const f of doorSkin(side)) for (let i = 1; i < f.pts.length - 1; i++) { const h = C.rayFaces([{ pts: [f.pts[0], f.pts[i], f.pts[i + 1]], n: f.n }], o, d); if (h) return { p: h.p.addScaledVector(f.n, lift), n: f.n }; }
+  return null;
+}
+// a small flat plate lying on a door's skin: centred at (y, z), `w` along the ship by `h` up, `lift` off the skin
+function skinPlate(acc, side, y, z, w, h, lift, surf, mat = 'solid') {
+  const q = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => onSkin(side, y + b * h / 2, z + a * w / 2, lift));
+  if (q.every((v) => v)) acc.poly(q.map((v) => dk(v.p)), q[0].n, surf, mat, 99);
+}
 // the airlock behind the port door (its inner wall at x AIRLOCK.x, its ceiling at AIRLOCK.top over the deck), the
 // step inside the doorway (its riser AIRLOCK.riser in from the hinge line)
 export const AIRLOCK = { x: 0.9, top: 2.06, riser: 0.16, z: DOOR.z };
@@ -456,6 +533,12 @@ export const CABIN = { wall: 2.0 };
 function ebDoorway(p, variant) {
   const cabin = variant === 'port, cabin', side = cabin ? 'port' : variant;
   const s = side === 'starboard' ? -1 : 1, acc = new Acc(), [z0, z1] = DOOR.z, J = JAMBS[side];
+  // (starboard: the sealed hatch fills its pocket: nothing of the pocket is seen)
+  if (s < 0) { sealedHatch(acc); return acc.flush(p); }
+  // the pocket's head: closed, dark, from the door's plane out to the skin's edge under the lintel (the hull is hollow
+  // over it; the airstair's steps are set down into its bulk, so from the airlock the shut door's top is seen past
+  // the door's plane)
+  { const y = DOOR.head + 0.002, xp = doorX(DOOR.head), edge = skinLine(doorSkin('port'), 'y', DOOR.head - 1e-3, 'z').map((v) => V3(Math.max(v.x, xp + 2e-3), y, v.z)); polyTo(acc, ring([V3(xp, y, z0), ...edge, V3(xp, y, z1)]), V3(0, -1, 0), PAL.trimEdge); }
   // the jambs: between the door's plane and the skin, at each end of the doorway, dark (the black edge round the door)
   J.forEach(({ z, profile }, i) => {
     const outer = profile.filter(([x, y]) => x > doorX(y) + 0.004).map(([x, y]) => V3(s * x, y, z));
@@ -495,86 +578,151 @@ function ebDoorway(p, variant) {
     acc.poly([V3(xi + 0.03, top - 0.12, zm - 0.4), V3(xi + 0.03, top - 0.12, zm + 0.4), V3(xi + 0.03, top - 0.08, zm + 0.4), V3(xi + 0.03, top - 0.08, zm - 0.4)].map(dk), V3(1, 0, 0), GLOW.strip, 'glow', 99);
     acc.poly([V3(xi + 0.2, top - 0.005, zm - 0.5), V3(xi + 1.0, top - 0.005, zm - 0.5), V3(xi + 1.0, top - 0.005, zm + 0.5), V3(xi + 0.2, top - 0.005, zm + 0.5)].map(dk), V3(0, -1, 0), [2.6, 2.4, 2.0], 'glow', 99);
     p.light([xi + 0.6, top - DECK - 0.15, zm], 1.4, [1, 0.94, 0.85], [0, -1, 0], 3.5);
-  } else {
-    // THE SEALED HATCH (starboard): a panel in the door's plane, white with a black edge line round it, two dark
-    // latch plates
-    hatchPanel(acc, s, false);
   }
   return acc.flush(p);
 }
-// THE DOOR'S OUTER FACE (between the black edge line, B in from the edge): the hull's lower band (dark under the
-// line y = 2.42 - 0.035 z, the hull's own colour line, ZONES 'lower') and white over it, so the band runs on across the
-// shut door; a seam across each (black, a hair proud); two yellow slashes by the aft edge (the hull's, small); a grab
-// handle (a dark plate, a metal bar) and a green lamp near the top. P(u, z, w): u along the door from its hinge, w in.
-const BAND_Y = (z) => 2.42 - 0.035 * z;
-function outerFace(acc, D, P, s, out, za, zb, L, B) {
-  const uOf = (z) => Math.max(B + 0.02, Math.min(L - B - 0.02, (BAND_Y(z) - DOOR.hinge) / DOOR_U.y)), ua = uOf(za + B), ub = uOf(zb - B);
-  D.poly([P(B, za + B), P(B, zb - B), P(ub, zb - B), P(ua, za + B)], out, PAL.trim, 'solid', 99);
-  D.poly([P(ua, za + B), P(ub, zb - B), P(L - B, zb - B), P(L - B, za + B)], out, PAL.skin, 'solid', 99);
-  const w = -0.002, seam = (u0, u1) => D.poly([P(u0, za + B, w), P(u0, zb - B, w), P(u1, zb - B, w), P(u1, za + B, w)], out, PAL.black, 'solid', 99);
-  seam(0.42, 0.432); seam(L - 0.46, L - 0.448);
-  // (a seam down the white part's middle, from the colour line up to the top seam)
-  { const zm = (za + zb) / 2; D.poly([P(uOf(zm), zm - 0.006, w), P(uOf(zm), zm + 0.006, w), P(L - 0.46, zm + 0.006, w), P(L - 0.46, zm - 0.006, w)], out, PAL.black, 'solid', 99); }
-  // the slashes: two yellow bars leaning forward, as on the hull aft of the door
-  for (const k of [0, 1]) {
-    const z0 = za + B + 0.12 + k * 0.13, u0 = uOf(z0) + 0.14, u1 = u0 + 0.38, lean = 0.12;
-    D.poly([P(u0, z0, w), P(u0, z0 + 0.07, w), P(u1, z0 + 0.07 + lean, w), P(u1, z0 + lean, w)], out, PAL.yellow, 'solid', 99);
-  }
-  // the handle: a dark plate across the door's middle under the top seam, a metal bar standing off it on two posts
-  const ax = [DOOR_U.clone().setX(s * DOOR_U.x), V3(0, 0, 1), out], zm = (za + zb) / 2, uh = L - 0.62;
-  boxAt(acc, P(uh, zm, -0.004), ax, [0.07, 0.2, 0.004], PAL.black, ['w-']);
-  boxAt(acc, P(uh, zm, -0.034), ax, [0.014, 0.15, 0.012], PAL.metal, []);
-  for (const dz of [-0.13, 0.13]) boxAt(acc, P(uh, zm + dz, -0.018), ax, [0.012, 0.012, 0.016], PAL.metal, ['w-']);
-  // the lamp: a small black housing toward the fore edge, its face glowing green (shut and safe)
-  const zl = zb - B - 0.16;
-  boxAt(acc, P(uh, zl, -0.008), ax, [0.03, 0.03, 0.008], PAL.black, ['w-']);
-  D.poly([P(uh - 0.018, zl - 0.018, -0.017), P(uh - 0.018, zl + 0.018, -0.017), P(uh + 0.018, zl + 0.018, -0.017), P(uh + 0.018, zl - 0.018, -0.017)], out, GLOW.green, 'glow', 99);
+// (a polygon's corners with any that sit on the one before dropped)
+const ring = (P) => P.filter((v, i) => v.distanceTo(P[(i + P.length - 1) % P.length]) > 1e-4);
+// (the white side of a door's skin is two facets with a ridge of about 5 degrees between them, corner to corner, as
+// the hull's side aft of the door and the block's face ahead of it do not lie in one plane. It is SHADED as one gently
+// twisted panel instead, so the door reads as one flat panel: each point's normal is that of the smooth sheet through
+// the side's four corners. Its corners and edges stay where the facets put them.)
+function sideNormals(side) {
+  const V = DOORSKIN[side].side.flat().map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), zm = (DOOR.z[0] + DOOR.z[1]) / 2;
+  const aft = V.filter((v) => v.z < zm).sort((a, b) => a.y - b.y), fore = V.filter((v) => v.z > zm).sort((a, b) => a.y - b.y);
+  const A1 = aft[0], A2 = aft[aft.length - 1], F3 = fore[0], F4 = fore[fore.length - 1];
+  return (p, flat) => {
+    const u = (p.z - A1.z) / (F3.z - A1.z), yb = A1.y + (F3.y - A1.y) * u, yt = A2.y + (F4.y - A2.y) * u, v = Math.max(0, Math.min(1, (p.y - yb) / (yt - yb)));
+    const du = F3.clone().sub(A1).multiplyScalar(1 - v).addScaledVector(F4.clone().sub(A2), v), dv = A2.clone().sub(A1).multiplyScalar(1 - u).addScaledVector(F4.clone().sub(F3), u);
+    const n = du.cross(dv).normalize(); return n.dot(flat) < 0 ? n.negate() : n;
+  };
 }
-// the door's panel, closed, in the door's plane: its outer face (outerFace, inside a black line round its edge), its
-// edges and inside face; steps: the airstair's treads and side rails on its inside face (horizontal when it is open)
-function hatchPanel(acc, s, steps) {
-  const [z0, z1] = DOOR.z, e = 0.008, za = z0 + e, zb = z1 - e, out = V3(s * DOOR_U.y, -DOOR_U.x, 0), inn = out.clone().negate(), T = 0.06, B = 0.05;
-  const P = (u, z, w = 0) => V3(s * (DOOR.xHinge + DOOR_U.x * u), DOOR.hinge + DOOR_U.y * u, z).addScaledVector(inn, w);
-  const D = { poly: (pts, n, surf, mat, step) => acc.poly(pts.map(dk), n, surf, mat, step) };   // (its points are the ship's: on the deck)
-  const L = DOOR_LEN - e;
-  // the outer face: painted as the hull round it (the game's maker: "the outside of the explorer door should have
-  // something on it so it matches the exterior when it is closed"): the hull's colour line carried across it (dark
-  // under, white over), the black line round its edge, seams across it, the hull's yellow slashes small by its aft edge,
-  // a grab handle and a green lamp near its top
-  outerFace(acc, D, P, s, out, za, zb, L, B);
-  for (const q of [[P(0, za), P(0, zb), P(B, zb - B), P(B, za + B)], [P(L, za), P(L - B, za + B), P(L - B, zb - B), P(L, zb)], [P(0, za), P(B, za + B), P(L - B, za + B), P(L, za)], [P(0, zb), P(L, zb), P(L - B, zb - B), P(B, zb - B)]]) D.poly(q, out, PAL.black, 'solid', 99);
-  // its edges and inside face
-  for (const [a, b] of [[P(0, za), P(0, zb)], [P(0, zb), P(L, zb)], [P(L, zb), P(L, za)], [P(L, za), P(0, za)]]) { const n = b.clone().sub(a).cross(inn).normalize(); D.poly([a, b, b.clone().addScaledVector(inn, T), a.clone().addScaledVector(inn, T)], n.dot(a.clone().add(b).multiplyScalar(0.5).sub(P(L / 2, (za + zb) / 2))) < 0 ? n.negate() : n, PAL.trimEdge, 'solid', 99); }
-  D.poly([P(0, za, T), P(L, za, T), P(L, zb, T), P(0, zb, T)], inn, steps ? PAL.deck : PAL.inner, 'solid', 99);
-  if (!steps) { for (const u of [0.5, L - 0.5]) boxAt(acc, P(u, (za + zb) / 2, -0.012), [DOOR_U.clone().setX(s * DOOR_U.x), V3(0, 0, 1), out], [0.06, 0.18, 0.012], PAL.trim, ['w-']); return; }
-  // THE STEPS: the side rails along both edges, and the treads: when the door is open its inside faces up the slope
-  // at the stair's angle; each tread is a wedge whose top is level then, its front a riser, a yellow nosing on it
-  const ang = Math.asin(DOOR.hinge / DOOR_LEN), rise = 0.205, ds = rise / Math.sin(ang), run = rise / Math.tan(ang);
-  // (level and up when open, in the panel's own terms: along it from the hinge (u) and out of its inside face (w))
-  const hu = Math.cos(ang), hw = Math.sin(ang);
-  const W = (u, w, z) => P(u, z, T + w);
-  for (const z of [za + 0.025, zb - 0.025]) boxAt(acc, W(L / 2, 0.08, z), [DOOR_U.clone().setX(s * DOOR_U.x), inn, V3(0, 0, 1)], [L / 2, 0.08, 0.025], PAL.black, ['v-']);
-  const zA = za + 0.05, zB = zb - 0.05;
-  for (let u = ds * 0.6; u + ds < L - 0.02; u += ds) {
-    // (the wedge: its back on the panel at u, its nose run out level, its riser down to the panel at u + ds)
-    const a = [u, 0], b = [u + hu * run, hw * run], c = [u + ds, 0];
-    const tri = (q, z) => W(q[0], q[1], z), nTop = W(b[0], b[1], 0).sub(W(a[0], a[1], 0)).cross(V3(0, 0, 1)).normalize(), nFront = W(c[0], c[1], 0).sub(W(b[0], b[1], 0)).cross(V3(0, 0, 1)).normalize();
-    const fix = (n, ref) => (n.dot(ref) < 0 ? n.negate() : n);
-    D.poly([tri(a, zA), tri(b, zA), tri(b, zB), tri(a, zB)], fix(nTop, inn), PAL.belly, 'solid', 99);
-    D.poly([tri(b, zA), tri(c, zA), tri(c, zB), tri(b, zB)], fix(nFront, inn), PAL.trim, 'solid', 99);
-    const n0 = [W(...a, 0), W(...b, 0), W(...c, 0)];
-    D.poly([tri(a, zA), tri(c, zA), tri(b, zA)], V3(0, 0, -1), PAL.trim, 'solid', 99); D.poly([tri(a, zB), tri(b, zB), tri(c, zB)], V3(0, 0, 1), PAL.trim, 'solid', 99);
-    // (the nosing: a yellow strip along the tread's front edge, on its top)
-    const bn = [b[0] - hu * 0.07, b[1] - hw * 0.07];
-    D.poly([W(bn[0], bn[1] + 0.002, zA), W(b[0], b[1] + 0.002, zA), W(b[0], b[1] + 0.002, zB), W(bn[0], bn[1] + 0.002, zB)], fix(nTop, inn), PAL.yellow, 'solid', 99);
-    void n0;
+// A DOOR'S SKIN, DRAWN: its faces inside `inset` of the pocket's rim, painted as the hull; a dark line along its edge
+function drawSkin(acc, side, inset) {
+  const [body] = cutFaces(doorSkin(side), inset), [face, line] = cutFaces(body, inset + SEAM.line), smooth = sideNormals(side);
+  const put = (f, surf) => {
+    if (f.part !== 'side') return polyTo(acc, f.pts, f.n, surf);
+    const m = acc.mesh(surf), i0 = m.count;
+    for (const p of f.pts) { const q = dk(p), n = smooth(p, f.n); m.v(q.x, q.y, q.z, n.x, n.y, n.z, p.z, p.y); }
+    for (let i = 1; i < f.pts.length - 1; i++) { if (tnorm([f.pts[0], f.pts[i], f.pts[i + 1]]).dot(f.n) < 0) m.ix.push(i0, i0 + i + 1, i0 + i); else m.ix.push(i0, i0 + i, i0 + i + 1); }
+  };
+  for (const f of face) put(f, f.surf);
+  for (const f of line) put(f, PAL.black);
+}
+// THE SEALED HATCH (starboard), fixed: the hull's skin across its pocket, a dark line round it where a door's seam would
+// be; the end under the block at its fore edge closed (the hull's own outline there, `notch`, out to the skin's straight
+// edge), dark as the lower hull; two flush latch plates and a small amber lamp (sealed)
+function sealedHatch(acc) {
+  drawSkin(acc, 'starboard', 0);
+  polyTo(acc, DOORSKIN.starboard.notch.map(([x, y, z]) => V3(x / Q, y / Q, z / Q)), V3(0, 0, 1), PAL.trim);
+  const zm = (DOOR.z[0] + DOOR.z[1]) / 2;
+  for (const y of [2.82, 3.42]) skinPlate(acc, 'starboard', y, zm, 0.34, 0.11, 0.004, PAL.black);
+  skinPlate(acc, 'starboard', 3.42, DOOR.z[1] - 0.26, 0.06, 0.06, 0.004, PAL.black);
+  skinPlate(acc, 'starboard', 3.42, DOOR.z[1] - 0.26, 0.036, 0.036, 0.007, [3.2, 1.6, 0.25], 'glow');
+}
+// THE AIRSTAIR DOOR (port): a kit door hinged on its foot (the hinge line along z, as it always was), swinging out and
+// down as someone comes within 2.6 m of its foot. Its outside is the hull's skin across the pocket (drawSkin), so shut
+// it is flush with the hull, found only by its seam, its handle and its lamp. That skin stands up to 1.4 m out from
+// the hinge line and hangs under the open door, so it cannot swing down to the ground as the flat panel did (103
+// degrees): it stops when its skin's lowest corner is STAIR.clear off the ground (STAIR.open, about 89 degrees), and
+// the open door's own plane then ends 0.6 m up in the air. So the steps are SET DOWN INTO THE BULK, between two side
+// beams (the stringers):
+//   - a landing level with the hinge (where the fixed step inside the doorway is), then `treads` treads, each `rise`
+//     lower and `going` deep, the last one's nose at the door's far end, one rise off the ground: every rise is the
+//     same, the ground to the deck in treads + 2 of them
+//   - a stringer each side, from the door's cheek in to the walk (its `lane`: the cabin's own doorway between its
+//     casings, 5 mm inside each so the stringers' faces stand proud of the casings' faces, not in them); its top
+//     `curb` over the landing, then straight down to the far end, where it stops `inset` inside the door's plane (so
+//     it stays behind the skin where the skin turns in at the head's fore corner)
+//   - closed all round: the cheeks (the fore one closes the notch under the block when the door is shut, dark as the
+//     lower hull there), the far end, the foot
+// Shut, the walk is a stepped back wall to the pocket, seen from the airlock: nothing of it comes further into the
+// cabin than the old panel's steps did.
+// It is two leaves of one door. The OUTSIDE (the skin, its handle and lamp, and the cheeks) is a `still` leaf: lit with
+// the ship as it stands shut and painted with the ship's own material (kit/layout.js), so the shut door's skin cannot
+// be told from the hull's beside it. The STEPS (the walk, the stringers, the far end, the foot) are an ordinary leaf,
+// lit as a thing that moves, and are what a person walks on.
+export const STAIR = (() => {
+  const clear = 0.06, treads = 4, curb = 0.12, inset = 0.06, lane = [1.005, 2.245], P = skinCorners('port');
+  // (the open door: how far off the ground its skin's lowest corner is, swung by t)
+  const low = (t) => Math.min(...P.map((v) => DOOR.hinge - (v.x - DOOR.xHinge) * Math.sin(t) + (v.y - DOOR.hinge) * Math.cos(t)));
+  let a = 0.6, b = 1.9; for (let i = 0; i < 50; i++) { const m = (a + b) / 2; if (low(m) > clear) a = m; else b = m; }
+  const rise = DOOR.hinge / (treads + 1), top = DOOR.head - SEAM.gap;
+  // (how far out the door's far end is at a height b over the hinge line, as the door stands open)
+  const far = (h) => (top - DOOR.hinge - h * Math.cos(a)) / Math.sin(a);
+  return { open: a, angle: -a, clear, treads, rise, going: far(-treads * rise) / (treads + 1), curb, inset, lane, far };
+})();
+const ST_C = Math.cos(STAIR.open), ST_S = Math.sin(STAIR.open);
+// a point of the OPEN door (a out from the hinge line, b over it, at z) as it stands SHUT, in the ship's frame
+const shut = (a, b, z) => V3(DOOR.xHinge + a * ST_C - b * ST_S, DOOR.hinge + a * ST_S + b * ST_C, z);
+// the walk's outline as the door stands open, from the hinge out: [a, b] (the landing, then each riser and tread); and
+// each stringer's top
+export function stairProfile() {
+  const { treads: n, rise: r, going: G, curb: c, inset, far } = STAIR, walk = [[0, 0], [G, 0]];
+  for (let k = 1; k <= n; k++) walk.push([k * G, -k * r], [k < n ? (k + 1) * G : far(-k * r), -k * r]);
+  // (the stringer's far end: on the door's top, `inset` inside the door's plane there)
+  const x = doorX(DOOR.head - SEAM.gap) - inset, bS = -(x - DOOR.xHinge - (DOOR.head - SEAM.gap - DOOR.hinge) * ST_C / ST_S) * ST_S;
+  return { walk, top: [[0, c], [G, c], [far(bS), bS]] };
+}
+// (a line of points, kept where its `ax` is over v (or under it): its end cut there)
+function cutLine(L, ax, v, keepOver) {
+  const out = [];
+  for (let i = 0; i < L.length; i++) {
+    const a = L[i], b = L[i + 1]; if ((a[ax] >= v) === keepOver) out.push(a);
+    if (b && ((a[ax] >= v) !== (b[ax] >= v))) out.push(a.clone().lerp(b, (v - a[ax]) / (b[ax] - a[ax])));
+  }
+  return out;
+}
+// the airstair's parts: what: 'outside' (the skin, the cheeks, the handle and the lamp) or 'steps' (the rest)
+function airstair(acc, what) {
+  const g = SEAM.gap, z0 = DOOR.z[0] + g, z1 = DOOR.z[1] - g, [zA, zB] = STAIR.lane, { walk, top } = stairProfile();
+  const OUT = V3(ST_C, ST_S, 0), UP = V3(-ST_S, ST_C, 0), FORE = V3(0, 0, 1), AFT = V3(0, 0, -1), yTop = DOOR.head - g;
+  const pt = ([a, b], z) => shut(a, b, z), span = (p0, p1, za, zb, nrm, surf) => polyTo(acc, [pt(p0, za), pt(p1, za), pt(p1, zb), pt(p0, zb)], nrm, surf);
+  const skin = doorSkin('port'), xf = FOOT_X + seamBy(g, skin.find((f) => f.part === 'slope').n.x);
+  if (what === 'outside') {
+    // the skin, inside its seam
+    drawSkin(acc, 'port', g);
+    // the cheeks: each side of the bulk, from the skin (its line where the cheek's plane cuts it, from the foot's seam
+    // up to the top's) in to the stringer's top and the hinge: dark, as the lower hull
+    for (const [zc, nz] of [[z0, AFT], [z1, FORE]]) {
+      const line = cutLine(cutLine(skinLine(skin, 'z', zc, 'y'), 'x', xf, true), 'y', yTop, false);
+      polyTo(acc, ring([...line, pt(top[2], zc), pt(top[1], zc), pt(top[0], zc), pt([0, 0], zc)]), nz, PAL.trim);
+    }
+    // on the skin: a flush handle (a dark plate, a metal bar across it, a centimetre proud) and a small green lamp
+    // (shut and safe) toward the fore edge
+    const zm = (DOOR.z[0] + DOOR.z[1]) / 2, yh = 3.3, zl = DOOR.z[1] - 0.26;
+    skinPlate(acc, 'port', yh, zm, 0.34, 0.11, 0.004, PAL.black);
+    skinPlate(acc, 'port', yh, zm, 0.26, 0.026, 0.012, PAL.metal);
+    skinPlate(acc, 'port', yh, zl, 0.06, 0.06, 0.004, PAL.black);
+    skinPlate(acc, 'port', yh, zl, 0.036, 0.036, 0.007, GLOW.green, 'glow');
+    return;
+  }
+  // the walk, between the stringers: the landing and the treads (the grey of the old steps), the risers dark, a yellow
+  // nosing along each front edge
+  for (let i = 0; i < walk.length - 1; i++) span(walk[i], walk[i + 1], zA, zB, i % 2 ? OUT : UP, i % 2 ? PAL.trim : PAL.belly);
+  for (let i = 1; i < walk.length; i += 2) span([walk[i][0] - 0.07, walk[i][1] + 0.002], [walk[i][0], walk[i][1] + 0.002], zA, zB, UP, PAL.yellow);
+  // the stringers: each one's face toward the walk (from the walk's outline up to its top), its top, its end at the hinge
+  const inner = [...top, ...walk.slice().reverse()];
+  for (const [zi, zo, nz] of [[zA, z0, FORE], [zB, z1, AFT]]) {
+    polyTo(acc, inner.map((q) => pt(q, zi)), nz, PAL.deck);
+    for (let i = 0; i < top.length - 1; i++) { const da = top[i + 1][0] - top[i][0], db = top[i + 1][1] - top[i][1], L = Math.hypot(da, db); span(top[i], top[i + 1], zi, zo, OUT.clone().multiplyScalar(-db / L).addScaledVector(UP, da / L), PAL.black); }
+    span([0, 0], top[0], zi, zo, OUT.clone().negate(), PAL.black);
+  }
+  // the far end (the door's top when shut): from the skin's edge in to the last tread's nose and the stringers' ends
+  {
+    const edge = cutLine(cutLine(skinLine(skin, 'y', yTop, 'z'), 'z', z0, true), 'z', z1, false), xs = pt(top[2], 0).x, xt = pt(walk[walk.length - 1], 0).x, Y = (x, z) => V3(x, yTop, z);
+    polyTo(acc, ring([...edge, Y(xs, z1), Y(xs, zB), Y(xt, zB), Y(xt, zA), Y(xs, zA), Y(xs, z0)]), V3(0, 1, 0), PAL.black);
+  }
+  // the foot: from the skin's edge in to the hinge line, dark
+  {
+    const edge = cutLine(cutLine(skinLine(skin, 'x', xf, 'z'), 'z', z0, true), 'z', z1, false), h0 = V3(DOOR.xHinge, DOOR.hinge, z0), h1 = V3(DOOR.xHinge, DOOR.hinge, z1), m = middle(edge);
+    polyTo(acc, ring([...edge, h1, h0]), V3(m.y - DOOR.hinge, -(m.x - DOOR.xHinge), 0).normalize(), PAL.black);
   }
 }
-// THE AIRSTAIR DOOR (port): the panel above as a kit door leaf, hinged on its foot (the hinge line along z), swinging
-// out and down until its top rests on the ground; it opens as someone comes within 2.6 m of its foot
-export const STAIR = { angle: -(Math.atan2(DOOR.head - DOOR.hinge, DOOR.xHead - DOOR.xHinge) + Math.asin(DOOR.hinge / DOOR_LEN)), slope: Math.asin(DOOR.hinge / DOOR_LEN) };
 function ebAirstair(p) {
-  p.leaf('eb:airstair', (lp) => { const acc = new Acc(); hatchPanel(acc, 1, true); acc.flush(lp); }, { door: 'stair', hinge: { at: [DOOR.xHinge, DOOR.hinge - DECK, 0], axis: [0, 0, 1], angle: STAIR.angle } });
+  const hinge = { at: [DOOR.xHinge, DOOR.hinge - DECK, 0], axis: [0, 0, 1], angle: STAIR.angle };
+  p.leaf('eb:airstair', (lp) => { const acc = new Acc(); airstair(acc, 'steps'); acc.flush(lp); }, { door: 'stair', hinge });
+  p.leaf('eb:airstair outside', (lp) => { const acc = new Acc(); airstair(acc, 'outside'); acc.flush(lp); }, { door: 'stair', hinge, still: true });
   p.door('stair', [DOOR.xHinge + 1.8, -DECK + 1.0, (DOOR.z[0] + DOOR.z[1]) / 2], 2.6, 0.9);
   return p;
 }
