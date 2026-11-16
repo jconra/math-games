@@ -46,7 +46,7 @@ export function rangeWords(lo, hi, n) {
 }
 
 const CSS = `
-.lr { position: relative; padding-top: 30px; color: var(--lr-ink, inherit); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.lr { position: relative; z-index: 0; isolation: isolate; padding-top: 30px; color: var(--lr-ink, inherit); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .lr-track { position: relative; height: 44px; margin: 0 16px; cursor: pointer; touch-action: pan-y; }
 .lr-rail, .lr-fill { position: absolute; top: 50%; height: 8px; margin-top: -4px; border-radius: 99px; }
 .lr-rail { left: -8px; right: -8px; background: var(--lr-rail, rgba(255, 255, 255, 0.16)); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45); }
