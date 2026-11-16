@@ -113,3 +113,42 @@ test('the stats page lists the places played, with the level, what was set, and 
   M.levelFor(r, 'deer', { now: T0 });
   assert.equal(placeRows(r).length, 1);
 });
+
+test('the range and keep to these levels in plain words: the settings, where the rider is, the one line, the stats page', () => {
+  const r = rider();
+  const L = PLACE.roundup.levels, n = L.length;
+  M.setRange(r, 'roundup', L[8].id, L[16].id, { now: T0 });
+  assert.equal(V.settingsWords(r, 'roundup'), `Levels 9 to 17 of ${n} on: the game moves you up and down by itself, between them.`);
+  assert.equal(V.gridWords(r), 'Round-up: levels 9–17');
+  const v = V.placeView(r, 'roundup');
+  assert.deepEqual([v.range.lo, v.range.hi, v.kept], [8, 16, false]);
+  assert.deepEqual(v.rows.map((x) => x.on), v.rows.map((x, i) => i >= 8 && i <= 16), 'the rows outside the range are off');
+  assert.equal(v.hereI, 8, 'a new rider would start at the easiest level of the range');
+  M.setKeep(r, 'roundup', true, { now: T0 });
+  assert.equal(V.settingsWords(r, 'roundup'), `Levels 9 to 17 of ${n} on. Kept to these levels: the game doesn’t move you up or down; the arrows by the level do.`);
+  assert.equal(V.gridWords(r), 'Round-up: levels 9–17, kept to them');
+  assert.match(V.statusWords(r, 'roundup'), /^Kept on level 9 of \d+: The 10s\. The game won’t move you up or down; the arrows by the level do\.$/);
+  M.setRange(r, 'roundup', L[12].id, L[12].id, { now: T0 });
+  assert.equal(V.settingsWords(r, 'roundup'), `Only level 13 of ${n} on: every question is from it.`);
+  assert.equal(V.gridWords(r), 'Round-up: level 13 only');
+  // an older save's single skipped level inside a range
+  const o = rider();
+  M.setRange(o, 'sheep', 'add10', 'carry', { now: T0 });
+  M.setOn(o, 'sheep', 'doubles', false, { now: T0 });
+  assert.match(V.settingsWords(o, 'sheep'), /^Levels 3 to 13 of 30 on: the game moves you up and down by itself, between them\. Level 7 skipped too\.$/);
+  // the stats page says what was set
+  for (let k = 0; k < 3; k++) S.recordAnswer(o, true, { place: 'sheep', level: M.levelFor(o, 'sheep', { now: T0 }).id, now: T0 });
+  M.setKeep(o, 'sheep', true, { now: T0 });
+  assert.deepEqual(placeRows(o)[0].set, ['levels 3–13', '1 level skipped', 'kept to them']);
+});
+
+test('where the rider is: at the top of the range chosen, and brought into a range set below them', () => {
+  const r = rider();
+  const L = PLACE.lockbox.levels;
+  M.setLevelAt(r, 'lockbox', L[5].id, { now: T0 });
+  M.setRange(r, 'lockbox', L[2].id, L[5].id, { now: T0 });
+  assert.equal(V.statusWords(r, 'lockbox'), `You’re on level 6 of ${L.length}: ${L[5].title}, the hardest of the levels chosen.`);
+  M.setRange(r, 'lockbox', L[0].id, L[3].id, { now: T0 });
+  assert.match(V.statusWords(r, 'lockbox'), new RegExp(`^You’re on level 4 of ${L.length}: ${L[3].title}`), 'the level the next question comes from');
+  assert.equal(V.placeView(r, 'lockbox').hereI, 3);
+});

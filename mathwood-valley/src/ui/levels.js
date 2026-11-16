@@ -4,13 +4,22 @@
 // is, and change it if they like:
 //   - a tab for every place, each with a picture (for riders who can't read yet), its short name and the rider's %
 //   - the place: its picture, name, kind of math, one line about it, the rider's % up its ladder and where they are
-//     ("Finding your level", "Not played yet: you'd start at level 3"), and THE SETTINGS IN PLAIN WORDS (all levels
-//     on, or which are skipped; a level picked by hand with the level tool; the job switched off in the Jobs list)
+//     ("Finding your level", "Not played yet: you'd start at level 3")
+//   - THE LEVELS TO ASK (the game's maker, 2026-11-16: "a range selector at the top that had a min and max value (kind
+//     of like a price filter on Amazon). So instead of having 30 check boxes to uncheck, a slider can easily be
+//     adjusted to get medium-range questions"): a two-handled slider (shared/levelrange.js) for the easiest and the
+//     hardest level this place may ask, the names of the levels at its ends shown as the handles move, and the levels
+//     outside it greyed in the list below as they go (model.js setRange; all of them at the start). Under it, KEEP TO
+//     THESE LEVELS (his words: "a setting in the menu to disable adaptive level changes. So if someone wants to really
+//     practice for a test..."): off at the start (the game moves the level up and down by itself, inside the range);
+//     on, the level stays where it is, and only the arrows by the level move it, inside the range (model.js setKeep)
+//   - THE SETTINGS IN PLAIN WORDS (the range, or all levels on; keep to these levels; a level picked by hand with the
+//     level tool; the job switched off in the Jobs list; an older save's single skipped levels)
 //   - its levels going down, easiest first: each with what's asked, 2 or 3 real examples made by the place's own
-//     question maker (fresh each time the page opens; "New examples" makes more) and a tick
-//   - every tick on (the start) = the game moves the rider up and down by itself; untick a level to skip it (the last
-//     one on stays on). Stepping onto a level by hand is the level tool's, by each job (src/ui/tools.js, leveltool.js:
-//     its arrows, unless the rider was made with "Let the rider pick levels" off); this page has no "Start here".
+//     question maker (fresh each time the page opens; "New examples" makes more); the ones outside the range greyed
+//     and marked "skipped"
+// Stepping onto a level by hand is the level tool's, by each job (src/ui/tools.js, leveltool.js: its arrows, inside the
+// range, unless the rider was made with "Let the rider pick levels" off); this page has no "Start here".
 // No grown-up lock: the page always shows the settings as they are, so a grown-up who looks can see them.
 // Every change is saved straight away (save.js saveRider) and takes effect on the next question asked: each job asks
 // src/levels/model.js levelFor for every question.
@@ -18,7 +27,7 @@
 //   const page = openLevels(root, rider, { place, onClose, onChange(rider), speak(text) })
 //   page.show(placeId); page.close()
 //     place     the tab to open on (a place id); else the place the rider played last, else the first
-//     onChange  called after every change (a tick, all on)
+//     onChange  called after every change (the range, keep to these levels, every level on)
 //     speak     optional: reads a place's name and line when its tab is picked (the game passes it for a rider who
 //               is read to: skill.js readAloud)
 //   Esc, the close button or a click on the dark backdrop closes it. z-index 52: over the stats page (50), which can
@@ -27,12 +36,13 @@
 // Pure parts for the tests and for the title and stats pages: placeView(rider, placeId, { seed, n }), settingsWords,
 // statusWords, gridWords (the settings of every place in one line), placeOfJob(jobId), PIC (the pictures), picSVG(key).
 //
-// The page reads only what the levels contract names: PLACES, examplesOf, pctOf, stateOf, isOn, onIds, setOn,
-// setAllOn, seedLevel, then saveRider.
+// The page reads only what the levels contract names: PLACES, examplesOf, pctOf, stateOf, onIds, rangeOf, setRange,
+// setKeep, setAllOn, seedLevel, levelHere, then saveRider.
 
 import { PLACES, PLACE, examplesOf } from '../levels/places.js';
-import { stateOf, pctOf, isOn, onIds, setOn, setAllOn, seedLevel, levelPct } from '../levels/model.js';
+import { stateOf, pctOf, onIds, setAllOn, seedLevel, levelPct, rangeOf, setRange, setKeep, levelHere } from '../levels/model.js';
 import { saveRider, jobOn, MISSIONS } from '../save.js';
+import { makeLevelRange, rangeWords } from '../../../shared/levelrange.js';
 
 // ---- the pictures: one small drawing for each place's `pic` key, in the text colour (details in the card's ink) ----
 
@@ -79,6 +89,8 @@ const ICON = {
   // two curved arrows: new examples
   shuffle: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 6.2A5.4 5.4 0 0 0 3.4 5M2.8 9.8a5.4 5.4 0 0 0 9.8 1.2"/><path d="M13.6 2.6v3.8H9.8M2.4 13.4V9.6h3.8"/></svg>',
   flag: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 14.5V1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4.4 2.2h8.4l-2.2 3.2 2.2 3.2H4.4z" fill="currentColor"/></svg>',
+  // a padlock: keep to these levels
+  hold: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="7" width="10" height="7.5" rx="1.6" fill="currentColor"/></svg>',
   info: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.8" r="1.1" fill="currentColor"/></svg>',
 };
 
@@ -109,16 +121,25 @@ export function placeOfJob(jobId) {
   return P ? P.id : null;
 }
 
-// What the grown-ups have set for a place, in plain words (always shown, so the page never hides a setting).
+// What the grown-ups have set for a place, in plain words (always shown, so the page never hides a setting): the range
+// of levels (or every level), keep to these levels, an older save's single skipped levels, a level picked by hand with
+// the level tool, the job switched off in the Jobs list.
+const KEPT_WORDS = 'Kept to these levels: the game doesn’t move you up or down; the arrows by the level do.';
 export function settingsWords(rider, placeId) {
   const P = PLACE[placeId];
   if (!P) return '';
-  const s = stateOf(rider, placeId), n = P.levels.length;
-  const off = s ? s.off : [];
-  const nums = off.map((id) => P.levels.findIndex((L) => L.id === id) + 1).filter((k) => k > 0);
-  const parts = [nums.length
-    ? `${n - nums.length} of ${n} levels on: level${nums.length === 1 ? '' : 's'} ${runs(nums)} skipped.`
-    : `All ${n} levels on: the game moves you up and down by itself.`];
+  const s = stateOf(rider, placeId), n = P.levels.length, R = rangeOf(rider, placeId);
+  const holes = R.holes.map((id) => P.levels.findIndex((L) => L.id === id) + 1).filter((k) => k > 0);
+  const one = R.lo === R.hi;
+  const parts = [];
+  if (R.full && !holes.length) parts.push(R.keep ? `All ${n} levels on.` : `All ${n} levels on: the game moves you up and down by itself.`);
+  else if (R.full) parts.push(`${n - holes.length} of ${n} levels on: level${holes.length === 1 ? '' : 's'} ${runs(holes)} skipped.`);
+  else {
+    parts.push(one ? `Only level ${R.lo + 1} of ${n} on: every question is from it.`
+      : `Levels ${R.lo + 1} to ${R.hi + 1} of ${n} on${R.keep ? '.' : ': the game moves you up and down by itself, between them.'}`);
+    if (holes.length) parts.push(`Level${holes.length === 1 ? '' : 's'} ${runs(holes)} skipped too.`);
+  }
+  if (R.keep && !(one && !holes.length)) parts.push(KEPT_WORDS);
   if (s && s.start) {
     const k = P.levels.findIndex((L) => L.id === s.start);
     if (k >= 0) parts.push(`Level ${k + 1} picked by hand with the level tool.`);
@@ -128,7 +149,7 @@ export function settingsWords(rider, placeId) {
   return parts.join(' ');
 }
 
-// Where the rider is in a place, in plain words.
+// Where the rider is in a place, in plain words (the level the next question comes from: inside the range).
 export function statusWords(rider, placeId) {
   const P = PLACE[placeId];
   if (!P) return '';
@@ -137,23 +158,29 @@ export function statusWords(rider, placeId) {
     const id = seedLevel(rider, placeId), k = P.levels.findIndex((L) => L.id === id);
     return `Not played yet. You’d start at level ${k + 1} of ${n}: ${P.levels[k].title}.`;
   }
-  const k = P.levels.findIndex((L) => L.id === s.id), L = P.levels[k];
+  const here = levelHere(rider, placeId);
+  const k = P.levels.findIndex((L) => L.id === here), L = P.levels[k];
+  if (s.keep === true) return `Kept on level ${k + 1} of ${n}: ${L.title}. The game won’t move you up or down; the arrows by the level do.`;
   if (!s.placed) return `Finding your level: trying level ${k + 1} of ${n}, ${L.title}. Each right answer tries the next level up.`;
-  const count = Math.max(1, Math.round(L.count || 5)), into = Math.floor(s.into);
+  const count = Math.max(1, Math.round(L.count || 5)), into = here === s.id ? Math.floor(s.into) : 0;
   if (k === n - 1) return `You’re on the top level, ${k + 1} of ${n}: ${L.title}.`;
-  return `You’re on level ${k + 1} of ${n}: ${L.title}. ${into} of ${count} right answers toward level ${k + 2}.`;
+  const next = onIds(rider, placeId).map((id) => P.levels.findIndex((x) => x.id === id)).find((j) => j > k);
+  if (next == null) return `You’re on level ${k + 1} of ${n}: ${L.title}, the hardest of the levels chosen.`;
+  return `You’re on level ${k + 1} of ${n}: ${L.title}. ${into} of ${count} right answers toward level ${next + 1}.`;
 }
 
 // Every place's settings that differ from "all on", in one short line (the title's panel and the Grown-ups corner):
-// 'Lock boxes: levels 1–3 skipped · Round-up: started at level 9', or '' when everything is as it starts.
+// 'Lock boxes: levels 4–9, kept to them · Round-up: level 10 picked by hand', or '' when everything is as it starts.
 export function gridWords(rider) {
   const out = [];
   for (const P of PLACES) {
     const s = stateOf(rider, P.id);
     if (!s) continue;
-    const bits = [];
-    const nums = s.off.map((id) => P.levels.findIndex((L) => L.id === id) + 1).filter((k) => k > 0);
+    const bits = [], R = rangeOf(rider, P.id);
+    if (!R.full) bits.push(R.lo === R.hi ? `level ${R.lo + 1} only` : `levels ${R.lo + 1}–${R.hi + 1}`);
+    const nums = R.holes.map((id) => P.levels.findIndex((L) => L.id === id) + 1).filter((k) => k > 0);
     if (nums.length) bits.push(`level${nums.length === 1 ? '' : 's'} ${runs(nums)} skipped`);
+    if (R.keep && R.lo !== R.hi) bits.push(R.full ? 'the level kept where it is' : 'kept to them');
     if (s.start) { const k = P.levels.findIndex((L) => L.id === s.start); if (k >= 0) bits.push(`level ${k + 1} picked by hand`); }
     if (bits.length) out.push(`${P.short}: ${bits.join(', ')}`);
   }
@@ -165,9 +192,10 @@ export function placeView(rider, placeId, { seed = 1, n = 3 } = {}) {
   const P = PLACE[placeId];
   if (!P) return null;
   const s = stateOf(rider, placeId);
-  const here = s ? s.id : seedLevel(rider, placeId);
+  const here = levelHere(rider, placeId);
   const hereI = P.levels.findIndex((L) => L.id === here);
   const on = new Set(onIds(rider, placeId));
+  const range = rangeOf(rider, placeId);
   const rows = P.levels.map((L, i) => ({
     i, n: i + 1, id: L.id, title: L.title, line: L.line, read: !!L.read,
     on: on.has(L.id), here: i === hereI, start: !!(s && s.start === L.id),
@@ -176,9 +204,9 @@ export function placeView(rider, placeId, { seed = 1, n = 3 } = {}) {
   const L = P.levels[hereI];
   return {
     id: P.id, name: P.name, short: P.short, math: P.math, line: P.line, pic: P.pic,
-    met: !!s, placing: !!(s && !s.placed), pct: s ? pctOf(rider, placeId) : null, wouldPct: s ? null : levelPct(placeId, here, 0),
-    here, hereI, hereTitle: L.title, into: s ? s.into : 0, count: Math.max(1, Math.round(L.count || 5)),
-    offCount: P.levels.length - on.size, start: s ? s.start : null,
+    met: !!s, placing: !!(s && !s.placed && !range.keep), pct: s ? pctOf(rider, placeId) : null, wouldPct: s ? null : levelPct(placeId, here, 0),
+    here, hereI, hereTitle: L.title, into: s && s.id === here ? s.into : 0, count: Math.max(1, Math.round(L.count || 5)),
+    offCount: P.levels.length - on.size, start: s ? s.start : null, range, kept: range.keep,
     jobsOff: jobsOf(P).filter((j) => !jobOn(rider, j)).map(jobName),
     counts: (() => { const c = [...new Set(P.levels.map((x) => Math.max(1, Math.round(x.count || 5))))].sort((a, b) => a - b); return c.length > 1 ? `${c[0]} to ${c[c.length - 1]}` : String(c[0]); })(),
     status: statusWords(rider, placeId), settings: settingsWords(rider, placeId), rows,
@@ -246,13 +274,12 @@ export function openLevels(root, rider, opts = {}) {
     }).join('');
     const hereTag = x.here
       ? `<span class="bmlv-here">${ICON.pin}${v.met ? (v.placing ? 'Finding your level here' : 'You are here') : 'You’d start here'}</span>` : '';
-    const prog = x.here && v.met && !v.placing
+    const prog = x.here && v.met && !v.placing && !v.kept
       ? `<span class="bmlv-prog" aria-label="${Math.floor(v.into)} of ${v.count} right toward the next level">${Array.from({ length: v.count }, (_, k) => `<i class="${k < Math.floor(v.into) ? 'on' : ''}"></i>`).join('')}</span>` : '';
-    return `<li class="bmlv-row${x.here ? ' is-here' : ''}${x.on ? '' : ' is-off'}" id="bmlv-row-${v.id}-${x.id}">
-      <button type="button" class="bmlv-tick" role="checkbox" aria-checked="${x.on}" data-do="tick" data-id="${x.id}"
-        aria-label="Level ${x.n}, ${esc(x.title)}: ${x.on ? 'on' : 'skipped'}">${ICON.check}</button>
+    // (no tick: the range above says which levels are asked; "skipped" shows on the ones outside it as the handles move)
+    return `<li class="bmlv-row${x.here ? ' is-here' : ''}${x.on ? '' : ' is-off'}" id="bmlv-row-${v.id}-${x.id}" data-i="${x.i}">
       <div class="bmlv-info">
-        <div class="bmlv-title"><span class="bmlv-n">${x.n}</span><b>${esc(x.title)}</b>${x.on ? '' : '<em class="bmlv-skip">skipped</em>'}${x.start ? '<em class="bmlv-started">picked by hand</em>' : ''}</div>
+        <div class="bmlv-title"><span class="bmlv-n">${x.n}</span><b>${esc(x.title)}</b><em class="bmlv-skip">skipped</em>${x.start ? '<em class="bmlv-started">picked by hand</em>' : ''}</div>
         <div class="bmlv-line">${esc(x.line)}</div>
         ${hereTag || prog ? `<div class="bmlv-herebox">${hereTag}${prog}</div>` : ''}
       </div>
@@ -262,11 +289,13 @@ export function openLevels(root, rider, opts = {}) {
 
   function placeHTML() {
     const v = placeView(rider, S.place, { seed: S.seed });
+    S.view = v;
     const i = PLACES.findIndex((P) => P.id === S.place);
     const prev = PLACES[(i - 1 + PLACES.length) % PLACES.length], next = PLACES[(i + 1) % PLACES.length];
     const pct = v.pct == null ? null : v.pct;
     const note = S.note && S.note.place === v.id
       ? `<p class="bmlv-note" role="status">${esc(S.note.text)}</p>` : '';
+    const R = v.range, set = !R.full || R.holes.length > 0;
     return `
       <div class="bmlv-phead">
         <button type="button" class="bmlv-arrow" data-do="tab" data-dir="prev" data-id="${prev.id}" aria-label="Before: ${esc(prev.name)}">${ICON.prev}</button>
@@ -275,22 +304,51 @@ export function openLevels(root, rider, opts = {}) {
         <button type="button" class="bmlv-arrow" data-do="tab" data-dir="next" data-id="${next.id}" aria-label="Next: ${esc(next.name)}">${ICON.next}</button>
       </div>
       <p class="bmlv-pline">${esc(v.line)}</p>
+      <section class="bmlv-range${set || v.kept ? ' is-set' : ''}" aria-label="Levels to ask">
+        <div class="bmlv-rhead"><h4>Levels to ask</h4>
+          ${set ? '<button type="button" class="bmlv-chip" data-do="allon">Every level</button>' : '<small>Drag either end to ask fewer.</small>'}</div>
+        <div class="bmlv-slider"></div>
+        <div class="bmlv-keep">
+          <button type="button" class="bmlv-switch" role="switch" aria-checked="${v.kept}" data-do="keep">${ICON.hold}<span>Keep to these levels</span><b>${v.kept ? 'On' : 'Off'}</b></button>
+          <small>${v.kept ? 'On: you stay on your level. Only the arrows by the level move it, and only inside these levels.'
+            : 'Off: the game moves you up and down by itself, inside these levels. On: you stay on your level, say to practise for a test.'}</small>
+        </div>
+      </section>
       <div class="bmlv-where">
         <div class="bmlv-pct"><b>${pct == null ? '–' : `${pct}%`}</b><small>${pct == null ? 'not played yet' : v.placing ? 'finding your level' : 'up this ladder'}</small></div>
         <div class="bmlv-wbar" aria-hidden="true"><i style="width:${pct == null ? 0 : pct}%"></i>${pct == null ? `<i class="would" style="left:${v.wouldPct}%"></i>` : ''}</div>
         <p class="bmlv-status">${v.placing ? ICON.compass : ICON.pin}<span>${esc(v.status)}</span></p>
       </div>
-      <div class="bmlv-settings${v.offCount || v.start || v.jobsOff.length ? ' is-set' : ''}">
+      <div class="bmlv-settings${v.offCount || v.start || v.jobsOff.length || v.kept ? ' is-set' : ''}">
         <p><b>Settings:</b> ${esc(v.settings)}</p>
         <div class="bmlv-sbtns">
-          ${v.offCount ? '<button type="button" class="bmlv-chip" data-do="allon">Turn every level on</button>' : ''}
           <button type="button" class="bmlv-chip" data-do="here">${ICON.pin}Where am I?</button>
           <button type="button" class="bmlv-chip" data-do="more">${ICON.shuffle}New examples</button>
         </div>
         ${note}
       </div>
-      <p class="bmlv-how">Every tick on: the game moves you up a level after ${v.counts} right answers and back a little after a miss, so about 4 answers in 5 are right. Untick a level to skip it. The level tool at the bottom of the screen, by a job, steps you down or up a level by hand.</p>
+      <p class="bmlv-how">${v.kept ? 'Kept to these levels: the game doesn’t move you; the level tool at the bottom of the screen, by a job, steps you down or up a level by hand, inside the levels above.'
+        : `The game moves you up a level after ${v.counts} right answers and back a little after a miss, so about 4 answers in 5 are right, only between the levels above. The level tool at the bottom of the screen, by a job, steps you down or up a level by hand.`}</p>
       <ol class="bmlv-rows" aria-label="${esc(v.name)} levels, easiest first">${v.rows.map((x) => rowHTML(v, x)).join('')}</ol>`;
+  }
+
+  // THE SLIDER (shared/levelrange.js), put in once the place is drawn: the rows outside it grey as a handle moves; let
+  // go (or a key), the range is set and saved
+  let slider = null;
+  function mountSlider() {
+    const host = el.querySelector('.bmlv-slider'), v = S.view, P = PLACE[S.place];
+    if (!host || !v) return;
+    slider = makeLevelRange({ n: P.levels.length, lo: v.range.lo, hi: v.range.hi, here: v.hereI, name: (i) => P.levels[i].title,
+      label: `${P.name}: the levels to ask`, onInput: preview, onChange: commit });
+    host.appendChild(slider.el);
+  }
+  function preview(lo, hi) {
+    for (const row of el.querySelectorAll('.bmlv-row[data-i]')) { const i = +row.dataset.i; row.classList.toggle('is-off', i < lo || i > hi); }
+  }
+  function commit(lo, hi) {
+    const P = PLACE[S.place], k = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.k : null;
+    if (setRange(rider, S.place, P.levels[lo].id, P.levels[hi].id)) changed(`${rangeWords(lo, hi, P.levels.length)} on: ${lo === hi ? P.levels[lo].title : `${P.levels[lo].title} to ${P.levels[hi].title}`}.`);
+    draw({ focus: k === 'lo' || k === 'hi' ? `.lr-thumb[data-k="${k}"]` : null });
   }
 
   // top: a new place (the card scrolled back to its top, under the tabs); else the reader's place in the list is kept
@@ -306,6 +364,7 @@ export function openLevels(root, rider, opts = {}) {
       <div class="bmlv-tabs" role="tablist" aria-label="Places">${tabsHTML()}</div>
       <section class="bmlv-place" id="bmlv-place" role="tabpanel" aria-labelledby="bmlv-tab-${S.place}">${placeHTML()}</section>
     </div>`;
+    mountSlider();
     const c = el.querySelector('.bmlv-card');
     c.scrollTop = keep;
     centerTab();
@@ -334,7 +393,6 @@ export function openLevels(root, rider, opts = {}) {
 
   function act(what, b) {
     const id = b && b.dataset.id;
-    const P = PLACE[S.place];
     switch (what) {
       case 'close': close(); return;
       case 'tab': {
@@ -344,23 +402,15 @@ export function openLevels(root, rider, opts = {}) {
         if (speak) { try { speak(`${PLACE[id].name}. ${PLACE[id].line}`); } catch (e) { /* the voice is a help, never in the way */ } }
         return;
       }
-      case 'tick': {
-        const L = P.levels.find((x) => x.id === id);
-        if (!L) return;
-        const k = P.levels.indexOf(L) + 1;
-        const was = isOn(rider, S.place, id);
-        if (!setOn(rider, S.place, id, !was)) {
-          S.note = { place: S.place, text: 'The last level that is on stays on: there has to be something to ask.' };
-          draw({ focus: `.bmlv-tick[data-id="${id}"]` });
-          return;
-        }
-        changed(was ? `Level ${k} skipped.` : `Level ${k} is on again.`);
-        draw({ focus: `.bmlv-tick[data-id="${id}"]` });
+      case 'allon': {
+        if (setAllOn(rider, S.place)) changed(rangeOf(rider, S.place).keep ? 'Every level is on.' : 'Every level is on: the game moves you up and down by itself.');
+        draw({ focus: '.lr-thumb[data-k="lo"]' });
         return;
       }
-      case 'allon': {
-        if (setAllOn(rider, S.place)) changed('Every level is on: the game moves you up and down by itself.');
-        draw({ focus: '[data-do="here"]' });
+      case 'keep': {
+        const on = !rangeOf(rider, S.place).keep;
+        if (setKeep(rider, S.place, on)) changed(on ? 'Kept to these levels: the level stays where it is until the arrows move it.' : 'The game moves the level up and down by itself again, inside these levels.');
+        draw({ focus: '[data-do="keep"]' });
         return;
       }
       case 'here': scrollToHere(); return;

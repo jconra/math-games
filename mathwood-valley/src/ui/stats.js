@@ -108,7 +108,10 @@ export function placeRows(rider) {
     const k = P.levels.findIndex((L) => L.id === x.id);
     const h = x.history || [], first = h[0], last = h[h.length - 1];
     const set = [];
+    const lo = x.lo ? P.levels.findIndex((L) => L.id === x.lo) : 0, hi = x.hi ? P.levels.findIndex((L) => L.id === x.hi) : P.levels.length - 1;
+    if (lo > 0 || hi < P.levels.length - 1) set.push(lo === hi ? `level ${lo + 1} only` : `levels ${lo + 1}–${hi + 1}`);
     if (x.off.length) set.push(`${x.off.length} level${x.off.length === 1 ? '' : 's'} skipped`);
+    if (x.keep && lo !== hi) set.push(lo > 0 || hi < P.levels.length - 1 ? 'kept to them' : 'the level kept where it is');
     if (x.start) { const j = P.levels.findIndex((L) => L.id === x.start); if (j >= 0) set.push(`level ${j + 1} picked by hand`); }
     return {
       ...x, line: P.line, n: k + 1, of: P.levels.length,

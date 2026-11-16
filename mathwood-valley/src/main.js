@@ -1230,7 +1230,14 @@ function openMenu() {
     if (what === 'box') then = () => { const bx = rider.lockboxes[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); };
     if (what === 'left') then = () => { pause('left'); openWhatsLeft(document.body, rider, { onClose: () => resume('left') }); };
     if (what === 'stats') then = () => { pause('stats'); openStats(document.body, rider, { face: faceSVG(rider.look), speak: levelsSpeak, onClose: () => resume('stats') }); };
-    if (what === 'levels') then = () => { pause('levels'); openLevels(document.body, rider, { place: jobWas, speak: levelsSpeak, onClose: () => resume('levels') }); };
+    // (the levels page: a range set there that moves the job's level, as the arrows would, deals its questions again at
+    // the level now once the page closes; relevel above)
+    if (what === 'levels') then = () => {
+      pause('levels');
+      const here = () => { try { return jobWas && LEVELS.isMet(rider, jobWas) ? LEVELS.levelHere(rider, jobWas) : null; } catch (e) { return null; } };
+      const was = here();
+      openLevels(document.body, rider, { place: jobWas, speak: levelsSpeak, onClose: () => { resume('levels'); if (was && here() !== was) { saveRider(rider); relevel(jobWas); } } });
+    };
     if (what === 'album') then = () => { pause('album'); makePanel({ title: 'Photo album', sub: rider.name, body: albumBody(rider), wide: true, onClose: () => resume('album') }); };
     menu.close();
   });

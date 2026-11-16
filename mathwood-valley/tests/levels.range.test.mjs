@@ -206,6 +206,25 @@ test('keep to these levels: with the whole ladder, the rider just stays on their
   assert.equal(isKept(back, 'range'), true);
 });
 
+test('the slider\'s sums (shared/levelrange.js): a spot on the track, the handles never crossing, the keys, the words', async () => {
+  const R = await import('../../shared/levelrange.js');
+  assert.equal(R.valueAt(0, 41), 0); assert.equal(R.valueAt(1, 41), 40); assert.equal(R.valueAt(0.5, 41), 20);
+  assert.equal(R.valueAt(-3, 41), 0); assert.equal(R.valueAt(9, 41), 40); assert.equal(R.valueAt(0.7, 1), 0);
+  assert.deepEqual(R.pairWith(5, 12, 'lo', 20), [12, 12], 'the easiest handle stops at the hardest (they meet)');
+  assert.deepEqual(R.pairWith(5, 12, 'hi', 2), [5, 5], 'and the hardest at the easiest');
+  assert.deepEqual(R.pairWith(5, 12, 'lo', 7), [7, 12]);
+  assert.equal(R.keyMove('ArrowRight', 41, 5, 12, 'lo'), 6);
+  assert.equal(R.keyMove('ArrowDown', 41, 5, 12, 'hi'), 11);
+  assert.equal(R.keyMove('PageUp', 41, 5, 12, 'hi'), 16, 'a tenth of the ladder');
+  assert.equal(R.keyMove('End', 41, 5, 12, 'lo'), 12, 'as far as it goes: the other handle');
+  assert.equal(R.keyMove('Home', 41, 5, 12, 'hi'), 5);
+  assert.equal(R.keyMove('Home', 41, 5, 12, 'lo'), 0);
+  assert.equal(R.keyMove('a', 41, 5, 12, 'lo'), null);
+  assert.equal(R.rangeWords(0, 40, 41), 'All 41 levels');
+  assert.equal(R.rangeWords(4, 11, 41), 'Levels 5 to 12 of 41');
+  assert.equal(R.rangeWords(4, 4, 41), 'Only level 5 of 41');
+});
+
 test('levelHere: the level the next question comes from, without meeting the place', () => {
   const r = fresh({ start: 'hard' });
   assert.equal(levelHere(r, 'lockbox'), 'two');
