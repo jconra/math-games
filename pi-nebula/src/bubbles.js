@@ -134,6 +134,9 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
     api.asking = h;
     return h;
   }
-  const api = { say, update, clear, clearAll() { for (const b of [...live.values()]) drop(b); }, count: () => live.size, live, ask, asking: null, hideAsk(on) { if (asking) q.hidden = !!on; } };
+  // (shown only while walking: never over the title screen, where the station's life goes on behind it)
+  let showing = true;
+  const show = (on) => { if (on === showing) return; showing = on; layer.style.visibility = on ? '' : 'hidden'; };
+  const api = { say, update, clear, show, clearAll() { for (const b of [...live.values()]) drop(b); }, count: () => live.size, live, ask, asking: null, hideAsk(on) { if (asking) q.hidden = !!on; } };
   return api;
 }

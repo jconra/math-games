@@ -171,7 +171,7 @@ export function shadeUnder(root) { const m = new THREE.Mesh(SHADE.geo, SHADE.mat
 // THE CAPTAINS' MARKER (the game's maker: "I'd be fine with them having a yellow marker above them (a captain symbol or
 // something) to easily tell that they are a captain looking for help"): a yellow four-pointed star in a ring, as on the
 // captains' own uniforms, floating over the head and bobbing gently; hidden by walls like anything else
-const MARK = { size: 0.36, over: 0.62, bob: 0.035 };
+const MARK = { size: 0.3, over: 0.55, bob: 0.03 };
 const MARKER = (() => {
   const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
   const g = cv.getContext('2d'), c = s / 2;
@@ -669,7 +669,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       }
       c.update(P.animDt); P.animDt = 0;
     }
-    bubbles.update(dt);
+    bubbles.show(!!player); bubbles.update(dt);
     audit(dt);
   }
 
@@ -859,7 +859,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (K.state === 'answered') { if (K.t > 3.5) { K.state = 'idle'; K.busy = false; } return; }
-    if (!pl || P.away || !P.shown || K.cool > 0 || bubbles.asking) return;
+    // (never while the player is at a job, answering its questions)
+    if (!pl || P.away || !P.shown || K.cool > 0 || bubbles.asking || (jobs && jobs.busy && jobs.busy())) return;
     if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
     const d = pl.pos.distanceTo(P.pos);
     if (d > FRIENDLY.offer || Math.abs(pl.pos.y - P.pos.y) > 1.2) return;
