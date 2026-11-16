@@ -118,11 +118,14 @@ export function pushFrom(camera, move, ahead = null) {
 // square to the rail, and a push meant along the rail should not creep across)
 export function squarePush(push, yaw) {
   const [x, z] = push; if (!x && !z) return push;
-  const ship = Math.abs(Math.sin(yaw)) > 0.5, rail = ship ? z : x, beam = ship ? x : z;
-  if (Math.abs(beam) < Math.abs(rail) * 0.45) return ship ? [0, z] : [x, 0];
-  if (Math.abs(rail) < Math.abs(beam) * 0.45) return ship ? [x, 0] : [0, z];
+  const ship = Math.abs(Math.sin(yaw)) > 0.5, rail = ship ? z : x, beam = ship ? x : z, m = Math.hypot(x, z);
+  // (within about 37 degrees of one way, that way only, at the push's whole strength: from a view at a slant to the
+  // rail, the four ways of the stick or the keys are the crane's four ways; nearer a true diagonal, both)
+  if (Math.abs(beam) < Math.abs(rail) * SQUARE) return ship ? [0, Math.sign(z) * m] : [Math.sign(x) * m, 0];
+  if (Math.abs(rail) < Math.abs(beam) * SQUARE) return ship ? [Math.sign(x) * m, 0] : [0, Math.sign(z) * m];
   return push;
 }
+const SQUARE = 0.75;
 
 // ── the HUD ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function openDrive(root, { crane, input, W, walls, onClose = () => {} } = {}) {
