@@ -232,6 +232,23 @@ function split(lo, hi, cover) {
 }
 // (a face's run, minus the openings in it: the doorways' panels)
 const minus = (lo, hi, holes) => split(lo, hi, holes).outside;
+// A HATCH'S HOLE in its room's floor ([x0, z0, x1, z1]): the shell's own belly opening (the space file's doors.belly,
+// the Miner's lift) where there is one, else the blueprint's square
+export function hatchHole(w, space) {
+  const b = space?.doors?.belly;
+  return b ? [b.x[0], b.z[0], b.x[1], b.z[1]] : w.rect.slice();
+}
+// a floor's rectangle less a hole: the strips round it (up to four), [x0, z0, x1, z1] each
+function cutOut([a0, b0, a1, b1], [h0, k0, h1, k1]) {
+  if (h0 >= a1 || h1 <= a0 || k0 >= b1 || k1 <= b0) return [[a0, b0, a1, b1]];
+  const x0 = Math.max(a0, h0), x1 = Math.min(a1, h1), out = [];
+  if (k0 > b0) out.push([a0, b0, a1, k0]);                          // (aft of it, across the whole width)
+  if (k1 < b1) out.push([a0, k1, a1, b1]);                          // (ahead of it)
+  const z0 = Math.max(b0, k0), z1 = Math.min(b1, k1);
+  if (x0 > a0) out.push([a0, z0, x0, z1]);                          // (beside it, each side)
+  if (x1 < a1) out.push([x1, z0, a1, z1]);
+  return out;
+}
 
 export function buildCabin(p, bp, opts = {}) {
   const { space = null, which = 'all', outer = {}, look = 'light', items = true } = opts, oct = (opts.doorFrame ?? bp.doorFrame) === 'oct';
@@ -343,7 +360,10 @@ export function buildCabin(p, bp, opts = {}) {
       // (where the ship's own door is in this room's side, the deck stops at its step, across its opening)
       const od = outerDoors.find((o) => o.d.rooms[0] === r.id && o.w.along === 'z');
       const [s0, s1] = od ? od.w.span : [0, 0];
-      const parts = od && outer.sill != null ? [[x0, z0, x1, s0], od.w.x > 0 ? [x0, s0, outer.sill, s1] : [-outer.sill, s0, x1, s1], [x0, s1, x1, z1]] : [[x0, z0, x1, z1]];
+      let parts = od && outer.sill != null ? [[x0, z0, x1, s0], od.w.x > 0 ? [x0, s0, outer.sill, s1] : [-outer.sill, s0, x1, s1], [x0, s1, x1, z1]] : [[x0, z0, x1, z1]];
+      // (a hatch in this room's floor, the ship's own door in its belly (the Miner's lift): no deck over its hole. The
+      // hole is the shell's own belly opening where the space file has one (the blueprint draws the hatch as a square))
+      for (const { d, w } of doors) if (w.hatch && d.rooms[0] === r.id) parts = parts.flatMap((P) => cutOut(P, hatchHole(w, space)));
       for (const [a0, b0, a1, b1] of parts) {
         if (a1 - a0 < 0.02 || b1 - b0 < 0.02) continue;
         // (in 1 m tiles: the cabin kit's floor maps a metre of floor to one plate of the floor's texture, so a bigger tile

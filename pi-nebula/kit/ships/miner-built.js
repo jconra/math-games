@@ -35,7 +35,8 @@
 //                            a flight deck raised over the cabin's, in its tub under the canopy
 import * as THREE from 'three';
 import { Acc } from '../shipparts/outside/facet.js';
-import { part } from '../shipparts/place.js';
+import { part, placeInto } from '../shipparts/place.js';
+import { engineerStation } from '../shipparts/cockpit/consoles.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD, DECK as DECK0, HATCH, PARTS, Q } from './miner-built.hull.js';
@@ -805,7 +806,84 @@ export const LIFT = (() => {
   const [x0, x1] = HATCH.x, [z0, z1] = HATCH.z, belly = 1.37, top = DECK - 0.12;
   return { x: [x0, x1], z: [z0, z1], zc: (z0 + z1) / 2, hx: (x1 - x0) / 2 - 0.06, hz: (z1 - z0) / 2 - 0.06, belly, top, drop: belly, leaf: 0.04, rail: 0.9, rod: 1.5, column: { h: 1.55, t: 0.1 }, airlock: { x: (x1 - x0) / 2 + 0.1, z: [z0 - 0.25, z1 + 0.25], h: 2.1 }, speed: 0.35, hatchSpeed: 0.8 };
 })();
-function mbLift(p) {
+// THE LIFT WITH THE CABIN INSIDE ('belly, cabin', kit/ships/cabin-built.js builds the rooms from a blueprint): the
+// cabin's own airlock stands over the hatch, its deck cut round the hole, so the stand-in airlock goes and the lift is a
+// way in that people ride (src/boarding.js):
+//   - the platform rides between the airlock's floor (shut: its top flush with the deck, the middle of the airlock's
+//     floor) and the ground; the hatch's doors go (up, the platform is the floor);
+//   - his picture's tower at its back and the rods at its front corners TELESCOPE, each in CLIFT.n nested sections, the
+//     top one fixed in the shaft: down, they stand from the platform up into the shaft; up, they are folded down into
+//     the platform, so nothing stands in the airlock and people walk over it fore and aft;
+//   - railings stand along the back of each side; the front of each side (from CLIFT.gap forward) is left open to step
+//     on and off by, under the side blocks beside the hatch (the belly there is 1.68 m up);
+//   - the shaft's sides start at the hull's own underside just outside the hatch (worked out from the hull's faces),
+//     so nothing hangs below the belly beside it (the stand-in shaft's walls all reach down to the keel's 1.37 m).
+// One kit door, 'lift' (0 up, 1 down), heavy (it starts and lands gently), CLIFT.speed of its way a second.
+export const CLIFT = { drop: +(DECK - 0.33).toFixed(3), thick: 0.33, n: 6, gap: -0.45, speed: 0.2, rail: 0.9 };
+function cabinLift(p) {
+  const L = LIFT, K = CLIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, hx = L.hx, hz = L.hz, zc = L.zc;
+  // the shaft: its four walls from the hull's underside just outside each edge (sampled along it) up to the deck
+  const under = (x, z) => { const h = rayHull(V3(x, 0.2, z), V3(0, 1, 0)); return h ? Math.min(DECK - 0.05, Math.max(L.belly, h.p.y)) : L.belly; };
+  for (const [a, b, n, o] of [[[x0, z0], [x1, z0], V3(0, 0, 1), [0, -0.03]], [[x1, z1], [x0, z1], V3(0, 0, -1), [0, 0.03]], [[x1, z0], [x1, z1], V3(-1, 0, 0), [0.03, 0]], [[x0, z1], [x0, z0], V3(1, 0, 0), [-0.03, 0]]]) {
+    const m = 12;
+    for (let i = 0; i < m; i++) {
+      const u0 = i / m, u1 = (i + 1) / m, pa = [a[0] + (b[0] - a[0]) * u0, a[1] + (b[1] - a[1]) * u0], pb = [a[0] + (b[0] - a[0]) * u1, a[1] + (b[1] - a[1]) * u1];
+      const ya = under(pa[0] + o[0], pa[1] + o[1]), yb = under(pb[0] + o[0], pb[1] + o[1]);
+      polyTo(acc, [V3(pa[0], ya, pa[1]), V3(pb[0], yb, pb[1]), V3(pb[0], DECK, pb[1]), V3(pa[0], DECK, pa[1])], n, PAL.dark);
+    }
+  }
+  acc.flush(p);
+  const pt = DECK, pb = DECK - K.thick, D = K.drop, slide = [0, -D, 0];
+  // THE PLATFORM: as the stand-in's (a dark slab, its grey tread, the hazard band round its top edge and down its sides)
+  p.leaf('mb:clift platform', (lp) => {
+    const a = new Acc();
+    C.boxAt(a, V3(0, (pt + pb) / 2, zc), AX, [hx, (pt - pb) / 2, hz], PAL.dark, [], dk);
+    a.poly([V3(-hx + 0.1, pt + 0.004, zc - hz + 0.1), V3(hx - 0.1, pt + 0.004, zc - hz + 0.1), V3(hx - 0.1, pt + 0.004, zc + hz - 0.1), V3(-hx + 0.1, pt + 0.004, zc + hz - 0.1)].map(dk), V3(0, 1, 0), PAL.deck, 'solid', 99);
+    const n = 12;
+    for (let i = 0; i < n; i++) for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const hu = sx ? hz : hx, u0 = -hu + (2 * hu) * i / n, u1 = -hu + (2 * hu) * (i + 1) / n, col = i % 2 ? PAL.black : PAL.yellow, e = 0.1;
+      const q = sx ? [V3(sx * (hx - e), pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u1), V3(sx * (hx - e), pt + 0.004, zc + u1)] : [V3(u0, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * hz), V3(u0, pt + 0.004, zc + sz * hz)];
+      a.poly(q.map(dk), V3(0, 1, 0), col, 'solid', 99);
+      const y0 = pt - 0.12, d = sx ? [V3(sx * (hx + 0.003), y0, zc + u0), V3(sx * (hx + 0.003), y0, zc + u1), V3(sx * (hx + 0.003), pt, zc + u1), V3(sx * (hx + 0.003), pt, zc + u0)] : [V3(u0, y0, zc + sz * (hz + 0.003)), V3(u1, y0, zc + sz * (hz + 0.003)), V3(u1, pt, zc + sz * (hz + 0.003)), V3(u0, pt, zc + sz * (hz + 0.003))];
+      a.poly(d.map(dk), sx ? V3(sx, 0, 0) : V3(0, 0, sz), col, 'solid', 99);
+    }
+    a.flush(lp);
+  }, { door: 'lift', slide });
+  // THE TOWER and THE RODS: K.n nested sections each, `h` tall; up, every section stands inside the platform (from its
+  // underside to its top); down, they reach from the platform's top to the deck, each overlapping the next. Section k
+  // (0 the lowest, on the platform; n-1 the top, which never moves) slides (its place down) - (its place up).
+  const h = K.thick, step = (D - h) / (K.n - 1), sec = (k) => (pt - D + k * step) - (pt - h);
+  const T = L.column, zt = zc - hz + 0.06 + T.t / 2;
+  for (let k = 0; k < K.n; k++) {
+    const w = hx - 0.12 - 0.012 * k, t = T.t / 2 - 0.006 * k, yb = pt - h;
+    p.leaf('mb:clift tower:' + k, (lp) => {
+      const a = new Acc();
+      C.boxAt(a, V3(0, yb + h / 2, zt), AX, [w, h / 2, t], PAL.dark, [], dk);
+      // (its amber lights: a short strip each side on its face, so the tower down reads as his lit tower's two lines)
+      for (const xs of [-0.62, 0.62]) a.poly([V3(xs - 0.03, yb + 0.06, zt + t + 0.004), V3(xs + 0.03, yb + 0.06, zt + t + 0.004), V3(xs + 0.03, yb + h - 0.08, zt + t + 0.004), V3(xs - 0.03, yb + h - 0.08, zt + t + 0.004)].map(dk), V3(0, 0, 1), GLOW.warm, 'glow', 99);
+      a.flush(lp);
+    }, { door: 'lift', slide: [0, sec(k), 0] });
+    for (const sx of [1, -1]) {
+      const r = 0.03 - 0.003 * k;
+      p.leaf('mb:clift rod:' + k, (lp) => { const a = new Acc(); C.boxAt(a, V3(0, h / 2, 0), AX, [r, h / 2, r], PAL.metal, [], (v) => v); a.flush(lp); }, { at: dk(V3(sx * (hx - 0.04), pt - h, zc + hz - 0.04)).toArray(), door: 'lift', slide: [0, sec(k), 0] });
+    }
+  }
+  // THE RAILINGS: posts and two rails along the back of each side, standing, riding with the platform
+  const zr0 = zc - hz + 0.06 + T.t + 0.08, zr1 = K.gap, zrm = (zr0 + zr1) / 2;
+  for (const sx of [1, -1]) {
+    const rx = sx * (hx - 0.04);
+    p.leaf(`mb:clift railing:${sx > 0 ? 'port' : 'starboard'}`, (lp) => {
+      const a = new Acc(), R = K.rail;
+      for (const z of [zr0, zrm, zr1]) C.boxAt(a, V3(rx, pt + R / 2, z), AX, [0.02, R / 2, 0.02], PAL.yellow, [], dk);
+      for (const y of [pt + R, pt + R * 0.55]) C.boxAt(a, V3(rx, y, zrm), AX, [0.02, 0.02, (zr1 - zr0) / 2], PAL.yellow, [], dk);
+      a.flush(lp);
+    }, { door: 'lift', slide });
+  }
+  p.door('lift', [0, -DECK, zc], 0, K.speed, true);
+  return p;
+}
+function mbLift(p, variant) {
+  if (variant === 'belly, cabin') return cabinLift(p);
   const L = LIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, y0 = L.belly, A = L.airlock, top = DECK + A.h;
   // the shaft: the hole's four walls from the belly to the deck
   for (const [a, b, n] of [[[x0, z0], [x1, z0], V3(0, 0, 1)], [[x1, z1], [x0, z1], V3(0, 0, -1)], [[x1, z0], [x1, z1], V3(-1, 0, 0)], [[x0, z1], [x0, z0], V3(1, 0, 0)]]) polyTo(acc, [V3(a[0], y0, a[1]), V3(b[0], y0, b[1]), V3(b[0], DECK, b[1]), V3(a[0], DECK, a[1])], n, PAL.dark);
@@ -921,9 +999,67 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
-function mbCockpit(p) {
+// THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'; the blueprint "Ore station on the flight deck"): the cabin's
+// own wall at CABIN_COCKPIT.wall (the mess's forward wall, its doorway in it) closes the cockpit at the back. The flight
+// deck (the seats, pedestal, side consoles and dash, as the family has them) starts at `deck`; behind it, on the cabin's
+// deck, the ORE STATION against the port side (the cockpit family's engineer's desk, its screens toward the middle, the
+// claw arm in view through the side glass over it) and a step up to the flight deck on the starboard side. The tub is cut
+// at the flight deck's edge (its riser the step up); behind that the cockpit's sides come down to the cabin's deck
+// (`side`: x of its side walls, the cabin's room line), a floor under them, and over the cabin's wall a panel up to the
+// glass's back edge (`lid`: how far behind the glass it starts, so nothing of the empty hull shows through it).
+export const CABIN_COCKPIT = { wall: 3.0, deck: 3.75, side: 1.0, step: { x: [-1.0, -0.75], z: [3.25, 3.75], h: 0.31 }, ore: { z: [3.0, 3.75], d: 0.5, w: 0.75 }, lid: 0.02 };
+function cabinCockpit(p) {
+  const Cp = COCKPIT, K = CABIN_COCKPIT, acc = new Acc(), fy = DECK + Cp.floor, out = canopyPanes().outline;
+  // the tub ahead of the flight deck's edge (as built-common.js cockpitTub, each polygon clipped at the edge)
+  const ahead = [0, 0, -1, -K.deck];
+  const inside = new Map(), halfAt = (s, z) => { const k = s + ':' + z.toFixed(3); if (!inside.has(k)) { const hh = rayHull(V3(0, fy + 0.04, z), V3(s, 0, 0)); inside.set(k, hh ? Math.abs(hh.p.x) - 0.1 : 0); } return inside.get(k); };
+  const foot = (v, y = fy, most = Cp.tubX) => { const s = Math.sign(v.x) || 1; return V3(s * Math.max(0, Math.min(Math.abs(v.x), most, halfAt(s, v.z))), y, v.z); };
+  const ctr = out.reduce((s2, sp) => s2.add(sp.a).add(sp.b), V3(0, 0, 0)).multiplyScalar(1 / (2 * out.length));
+  const face = (q) => { const n = tnorm(q.slice(0, 3)).lengthSq() > 1e-10 ? tnorm(q.slice(0, 3)).normalize() : tnorm([q[0], q[2], q[3] || q[1]]).normalize(); return n; };
+  for (const sp of out) {
+    if (Math.abs(sp.a.y - fy) < 0.02 && Math.abs(sp.b.y - fy) < 0.02) continue;
+    const mid = sp.a.clone().add(sp.b).multiplyScalar(0.5);
+    // (ahead of the flight deck's edge: down to the flight deck)
+    const q = C.clipPlane([sp.a, sp.b, foot(sp.b), foot(sp.a)], ahead)[0].filter((v, i, Q) => Q.findIndex((w) => w.distanceTo(v) < 1e-6) === i);
+    if (q.length >= 3) { const n = face(q); if (n.dot(V3(ctr.x - mid.x, 0, ctr.z - mid.z)) < 0) n.negate(); polyTo(acc, q, n, PAL.dark); }
+    // (behind it, the cockpit's sides down to the cabin's deck at the room's side line: only the side edges, |x| past
+    // the side line, not the glass's back edge over the roof)
+    if (Math.min(Math.abs(sp.a.x), Math.abs(sp.b.x)) < K.side) continue;
+    const r = C.clipPlane([sp.a, sp.b, foot(sp.b, DECK, K.side), foot(sp.a, DECK, K.side)], [0, 0, 1, K.deck])[0].filter((v, i, Q) => Q.findIndex((w) => w.distanceTo(v) < 1e-6) === i);
+    if (r.length >= 3) { const n = face(r); if (n.dot(V3(-mid.x, 0, 0)) < 0) n.negate(); polyTo(acc, r, n, PAL.dark); }
+  }
+  // (the flight deck's floor, ahead of its edge; its riser, the step up from the cabin's deck)
+  const fl = []; for (const sp of out) fl.push(foot(sp.a), foot(sp.b));
+  const floor = C.clipPlane(C.convexHullXZ(fl).map((v) => V3(v.x, fy, v.z)), ahead)[0];
+  polyTo(acc, floor, V3(0, 1, 0), PAL.deck);
+  const fx = Math.max(...floor.filter((v) => Math.abs(v.z - K.deck) < 1e-4).map((v) => Math.abs(v.x)), K.side);
+  polyTo(acc, [V3(-fx, DECK, K.deck), V3(fx, DECK, K.deck), V3(fx, fy, K.deck), V3(-fx, fy, K.deck)], V3(0, 0, -1), PAL.dark);
+  for (let i = 0; i < 6; i++) polyTo(acc, [V3(-fx + i * fx / 3, fy - 0.004, K.deck - 0.004), V3(-fx + (i + 0.5) * fx / 3, fy - 0.004, K.deck - 0.004), V3(-fx + (i + 0.5) * fx / 3, fy - 0.07, K.deck - 0.004), V3(-fx + i * fx / 3, fy - 0.07, K.deck - 0.004)], V3(0, 0, -1), PAL.yellow);
+  // (the deck behind it, between the cabin's wall and the flight deck, its sides at the room's line)
+  polyTo(acc, [V3(-K.side, DECK, K.wall), V3(K.side, DECK, K.wall), V3(K.side, DECK, K.deck), V3(-K.side, DECK, K.deck)], V3(0, 1, 0), PAL.deck);
+  // (over the cabin's wall: a panel in its plane from the wall's top up to the hull, and a lid from there to the glass's
+  // back edge, so the empty hull between them never shows)
+  const back = Math.min(...out.flatMap((sp) => [sp.a.z, sp.b.z])), wy = DECK + 2.5;
+  const roof = rayHull(V3(0, wy, K.wall + K.lid), V3(0, 1, 0)), ry = roof ? roof.p.y - 0.02 : wy + 0.3;
+  polyTo(acc, [V3(-K.side, wy, K.wall + K.lid), V3(K.side, wy, K.wall + K.lid), V3(K.side, ry, K.wall + K.lid), V3(-K.side, ry, K.wall + K.lid)], V3(0, 0, 1), PAL.dark);
+  if (back > K.wall + K.lid) polyTo(acc, [V3(-K.side, ry, K.wall + K.lid), V3(K.side, ry, K.wall + K.lid), V3(K.side, ry, back + 0.02), V3(-K.side, ry, back + 0.02)], V3(0, -1, 0), PAL.dark);
+  // THE STEP up to the flight deck, starboard (a tread and its yellow nosing)
+  const S = K.step;
+  boxAt(acc, V3((S.x[0] + S.x[1]) / 2, DECK + S.h / 2, (S.z[0] + S.z[1]) / 2), AX, [(S.x[1] - S.x[0]) / 2, S.h / 2, (S.z[1] - S.z[0]) / 2], PAL.dark, ['v-']);
+  polyTo(acc, [V3(S.x[0], DECK + S.h + 0.003, S.z[0]), V3(S.x[1], DECK + S.h + 0.003, S.z[0]), V3(S.x[1], DECK + S.h + 0.003, S.z[0] + 0.06), V3(S.x[0], DECK + S.h + 0.003, S.z[0] + 0.06)], V3(0, 1, 0), PAL.yellow);
+  acc.flush(p);
+  // THE ORE STATION: the engineer's desk of the cockpit family against the port side behind the pilot, facing in
+  const O = K.ore;
+  placeInto(p, part(engineerStation, { w: O.w, d: O.d }), { at: dk(V3(K.side, DECK, (O.z[0] + O.z[1]) / 2)).toArray(), rot: [0, -PI / 2, 0] });
+  for (const x of [-0.5, 0.5]) p.light([x, Cp.floor + 1.9, Cp.seatsZ - 0.2], 1.0, [1.25, 0.85, 0.55], [0, -1, 0.2], 3.0);
+  p.light([0, Cp.floor + 1.2, Cp.seatsZ + 0.9], 0.7, [0.35, 0.65, 1.0], [0, 0.2, -1], 2.5);
+  p.light([0.45, 1.9, (O.z[0] + O.z[1]) / 2], 0.6, [1.2, 0.9, 0.6], [0.3, -1, 0], 2.5);
+  return p;
+}
+function mbCockpit(p, variant) {
   const Cp = COCKPIT;
   C.cockpitParts(p, builtCockpitPlan(), Cp);
+  if (variant === 'two seats, cabin') return cabinCockpit(p);
   const acc = new Acc(), fy = DECK + Cp.floor;
   const hull2 = C.cockpitTub(acc, canopyPanes().outline, { fy, tubX: Cp.tubX, rayIn: rayHull, wallSurf: PAL.dark, floorSurf: PAL.deck, dk });
   const zb = Math.min(...hull2.map((v) => v.z)) + 0.3;
@@ -1083,6 +1219,10 @@ export const LAB = {
   dirt: { None: 0, Some: 0.85, Lots: 1.25 },
   spots: { Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.05, 3.75], look: [0, 3.5, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } },
   doorTip: 'Lower the lift\'s platform to the ground and open the hatch over it, or close it and raise the platform',
+  // (the cabin built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with it (the lift
+  // that people ride, its platform the airlock's floor when up; the cockpit open to the cabin behind it), and the
+  // ship's own door as the cabin meets it: none in its sides, its door is the hatch in the airlock's floor)
+  cabin: { swap: { mbLift: { belly: 'belly, cabin' }, mbCockpit: { 'two seats': 'two seats, cabin' } }, outer: {} },
   // (the lab's first call, before it builds the ship: here it asks for every tool on both arms, so its menu can swap
   // them on the ship as it stands. The game builds each arm's one tool: it calls grimeMaterials itself.)
   materials: (mats, dirt) => { ARMS.spare = true; return grimeMaterials(mats, { dirt }); },
@@ -1159,9 +1299,9 @@ export const SHIP_MINER_BUILT = {
   mbCanister: { name: 'Miner (built): ore canister', group: GR, at: 'free', foot: [1, 1, 2.2], variants: CANISTERS.spots.map((q) => q.name), build: mbCanister },
   mbArm: { name: 'Miner (built): mining arm', group: GR, at: 'free', foot: [1.2, 3, 7], variants: ['port', 'starboard'], build: mbArm },
   mbPod: { name: 'Miner (built): thruster pod', group: GR, at: 'free', foot: [1, 1, 1.3], variants: PODS.map((q) => q.name), build: mbPod },
-  mbLift: { name: 'Miner (built): belly lift', group: GR, at: 'free', foot: [2, 4, 2], variants: ['belly'], build: (p) => mbLift(p) },
+  mbLift: { name: 'Miner (built): belly lift', group: GR, at: 'free', foot: [2, 4, 2], variants: ['belly', 'belly, cabin'], build: (p, v) => mbLift(p, v) },
   mbGear: { name: 'Miner (built): landing leg', group: GR, at: 'free', foot: [1, 1.4, 2], variants: ['port', 'starboard'], build: legLeaves },
   mbGearDoors: { name: 'Miner (built): leg pod doors', group: GR, at: 'free', foot: [1, 0.5, 2], variants: ['port', 'starboard'], build: mbGearDoors },
   mbWells: { name: 'Miner (built): leg pods', group: GR, at: 'free', foot: [5, 0.6, 2], variants: ['pods'], build: mbWells },
-  mbCockpit: { name: 'Miner (built): cockpit', group: GR, at: 'free', foot: [2.5, 2, 3], variants: ['two seats'], build: (p) => mbCockpit(p) },
+  mbCockpit: { name: 'Miner (built): cockpit', group: GR, at: 'free', foot: [2.5, 2, 3], variants: ['two seats', 'two seats, cabin'], build: (p, v) => mbCockpit(p, v) },
 };

@@ -151,6 +151,9 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
       }
       ctx.put('mess: drink unit', part(drinkUnit, { w: len, depth: W.depth, top: faceTop(W, mid), base: +(counter?.h || 0.9), wall: wallEnd == null ? 0 : Math.sign(localX(W, mid, wallEnd)), clear: clear.map((v) => +v.toFixed(3)), cup: A.cup, handle: A.handle }), at(W, mid));
       done.add(it.id);
+    } else if (it.kind === 'locker' && /\bsuit/i.test(it.name || '')) {
+      // (a suit locker in the mess, by its door: the airlock's own suit lockers, as one)
+      ctx.put('mess: suit locker', part(suitLockers, { len, depth: W.depth, h: +it.h || 2, handle: A.handle, trim: A.trim }), at(W, mid)); done.add(it.id);
     } else if (it.kind === 'locker' && +it.h >= 1.8) {
       const flush = besideDrinks(W);
       ctx.put('mess: cold store', part(coldStore, { w: len, depth: flush ? W.depth : W.depth - 0.03, h: +it.h, ...(flush ? { top: faceTop(W, mid) } : {}), poster: 3, handle: A.handle }), at(W, mid)); done.add(it.id);
@@ -693,6 +696,8 @@ function inDoorway(bp, room, x, z, r) {
   for (const d of bp.doors || []) {
     if (!d.rooms.includes(room.id)) continue;
     const [dx, dz] = d.at, hw = d.width / 2;
+    // (a hatch in the floor, the Miner's lift: nothing stands on it)
+    if (d.hatch) { if (Math.abs(x - dx) < hw + r && Math.abs(z - dz) < hw + r) return true; continue; }
     for (const W of [{ axis: 'x', v: X0, side: 1 }, { axis: 'x', v: X1, side: -1 }, { axis: 'z', v: Z0, side: 1 }, { axis: 'z', v: Z1, side: -1 }]) {
       if (Math.abs((W.axis === 'x' ? dx : dz) - W.v) > EPS) continue;
       const n = W.axis === 'x' ? (x - W.v) * W.side : (z - W.v) * W.side, t = W.axis === 'x' ? z : x, c = W.axis === 'x' ? dz : dx;

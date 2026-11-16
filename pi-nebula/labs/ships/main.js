@@ -58,7 +58,7 @@ const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.sea
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
 // .space.json measured from it)
 // (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
-const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-mess-forward', 'miner-bunks-forward', 'miner-ore-cockpit'];
+const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-ore-cockpit', 'miner-mess-forward', 'miner-bunks-forward'];   // (his pick first, so the lab opens on it)
 const MEDIC_BPS = ['medic-open-bench', 'medic-open', 'medic-open-daybed', 'medic-bunks-across', 'medic-side-by-side', 'medic-one-ramp'];   // (the first three: one airlock, drawn from the marks of the game's maker, the first of them the plan he chose, so the lab opens on it; the rest: the earlier two-airlock plans)
 const SHIPS = [
   { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
