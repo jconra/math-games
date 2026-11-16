@@ -38,7 +38,7 @@ const SEEN = 46;        // people further than this from the camera are not draw
 // middle to middle), who counts as in their lane ahead (m ahead, m to the side), how long a wait before stepping aside,
 // working the way out again, and giving up (s); how long a planned way may take each frame, for everyone (ms)
 export const LIFE = {
-  speed: [1.05, 1.35], turn: 5, body: 0.6, keepFrom: 0.75, lane: [2.0, 0.75], sidestep: 1.0, replan: 2.0, stillWait: 0.8, replanEvery: 1.5, giveUp: 7,
+  speed: [1.05, 1.35], turn: 3, body: 0.6, keepFrom: 0.75, lane: [2.0, 0.75], sidestep: 1.0, replan: 2.0, stillWait: 0.8, replanEvery: 1.5, giveUp: 7,
   planMs: 2.5, planMost: 250, sit: 0.7, room: 0.75,     // (room: no two spots anyone has are nearer than this, m)
   near: 12, mid: 24,    // m from the camera: clips played every frame nearer, every other frame to `mid`, every fourth beyond
   drawn: { low: 8, medium: 12, high: 20 },   // the most drawn at once, the nearest (?drawn=N for the cost rigs)
@@ -243,7 +243,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const dir = s.front ? s.back.clone().negate() : s.back, out = s.front ? 0.5 : 0.55;
         const ap = walls.snap(s.seat.x + dir.x * out, s.seat.y + 0.35, s.seat.z + dir.z * out, 0.35);
         if (!ap || noGo(ap.x, ap.z) || !roomy(ap, 0.28)) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
-        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, who: null, bad: 0 });
+        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, who: null, bad: 0 });
       }
     }
   }
@@ -279,15 +279,21 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const s = pick(free); P.claim = s; s.who = P; taken.set(P, [s.pos, s.seat]); return { kind, step, spot: s };
     }
     if (kind === 'talk') {
-      // (a talking spot with someone waiting there already, near enough to get to them soon: to join them; else an
-      // empty one, to wait there for someone)
+      // (a talking spot with someone already on their way to talk there, near enough: to join them; else someone
+      // standing about near by is asked over to an empty one, and both go; nobody near: no talk this time)
       const all = (talks[group] || []).filter((t) => t.bad < 2);
       const near = (t) => { const q = t.who[0] || t.who[1]; return q && q.pos && (!P.pos || q.pos.distanceTo(P.pos) < 40); };
       const waiting = all.filter((t) => ((t.who[0] && !t.who[1]) || (!t.who[0] && t.who[1])) && near(t) && !crowded(t.at[t.who[0] ? 1 : 0], P));
-      const T = waiting.length ? pick(waiting) : pick(all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P)));
-      if (!T) return null;
-      const i = T.who[0] ? 1 : 0; T.who[i] = P; P.claim = { talk: T, i }; taken.set(P, [T.at[i]]);
-      return { kind, step, spot: { name: T.name, pos: T.at[i], heading: Math.atan2(T.at[1 - i].x - T.at[i].x, T.at[1 - i].z - T.at[i].z), talk: T, i } };
+      if (waiting.length) { const T = pick(waiting); return talkAt(P, T, T.who[0] ? 1 : 0, step); }
+      if (!P.pos) return null;
+      const Q = list.filter((q) => q !== P && !q.hidden && q.act && (q.act.kind === 'stand' || q.act.kind === 'wait') && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && q.pos.distanceTo(P.pos) < 30)
+        .sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
+      if (!Q) return null;
+      const free = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P) && !crowded(t.at[1], Q))
+        .sort((a, b) => a.at[0].distanceTo(P.pos) + a.at[0].distanceTo(Q.pos) - b.at[0].distanceTo(P.pos) - b.at[0].distanceTo(Q.pos));
+      const T = free[0]; if (!T) return null;
+      release(Q); const q = talkAt(Q, T, 1, step); begin(Q, q);
+      return talkAt(P, T, 0, step);
     }
     if (kind === 'walk') {
       const L = (groups[group] || []).filter(Boolean); if (!L.length) return null;
@@ -468,6 +474,24 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     return best;
   }
+  // (a place at a talking spot, claimed: facing the other place)
+  function talkAt(P, T, i, step) {
+    T.who[i] = P; P.claim = { talk: T, i }; taken.set(P, [T.at[i]]);
+    return { kind: 'talk', step, spot: { name: T.name, pos: T.at[i], heading: Math.atan2(T.at[1 - i].x - T.at[i].x, T.at[1 - i].z - T.at[i].z), talk: T, i } };
+  }
+  // (still at a spot or a seat: now and then a slow turn a little to one side or the other of the way it faces, as
+  // anyone shifts and looks round; toward a visitor or the player who comes up, a little more)
+  function idle(P, a, dt, most) {
+    const L = a.look || (a.look = { off: 0, want: 0, next: rnd(2, 6) });
+    L.next -= dt;
+    if (L.next <= 0) { L.want = rnd(-most, most); L.next = rnd(4, 10); }
+    const base = a.spot.heading ?? P.heading;
+    const q = (playerNow && playerNow.pos.distanceTo(P.pos) < 3) ? playerNow : (a.kind === 'post' ? visitor(P) : null);
+    let want = L.want;
+    if (q) want = Math.max(-most * 2, Math.min(most * 2, wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base)));
+    L.off += Math.sign(want - L.off) * Math.min(Math.abs(want - L.off), 0.7 * dt);
+    P.heading = wrap(base + L.off);
+  }
   // what a person does this moment
   function think(P, dt) {
     const a = P.act; if (!a) { next(P); return; }
@@ -493,7 +517,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     // (getting up only when nobody is standing where they would step)
-    if (a.phase === 'sat') { play(P, CLIPS.sit); if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body)) { a.phase = 'rising'; a.t = 0; } return; }
+    if (a.phase === 'sat') { play(P, CLIPS.sit); idle(P, a, dt, a.spot.front ? 0.15 : 0.4); if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body)) { a.phase = 'rising'; a.t = 0; } return; }
     if (a.phase === 'rising') {
       const k = Math.min(1, a.t / LIFE.sit);
       play(P, STAND, { fade: 0.45 });
@@ -505,11 +529,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.kind === 'talk') {
       const other = a.spot.talk.who[1 - a.spot.i], there = other && other.act && other.act.phase === 'do' && other.act.spot.talk === a.spot.talk;
       play(P, STAND);
+      idle(P, a, dt, 0.12);
       if (there) { a.both = (a.both || 0) + dt; if (a.both > a.len) next(P); }
-      else if (a.t > 30 + (a.both || 0)) next(P);      // (nobody came: on with the day)
+      else if (a.both > 0 || a.t > 20 || !other) next(P);      // (the other gone, or not come: on with the day)
       return;
     }
     play(P, a.clip || STAND);
+    // (at work with a clip of its own: turned to the work; standing about, or a captain at the booth: a look round now
+    // and then, and toward whoever comes up)
+    if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
     if (a.t > a.len) next(P);
   }
 
@@ -668,7 +696,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
 
   // ── for the station: who the doors open for, who a ship's way waits for ─────────────────────────────────────
   const eyeList = [];
-  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && P.walking) eyeList.push(P.pos); return eyeList; }
+  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
   function onWays(out) {
     for (const P of list) { if (P.hidden) continue; for (const w of wayFeet) if (P.pos.x > w.box.min.x - 0.5 && P.pos.x < w.box.max.x + 0.5 && P.pos.z > w.box.min.z - 0.5 && P.pos.z < w.box.max.z + 0.5) { out.push(P.pos); break; } }
     return out;
