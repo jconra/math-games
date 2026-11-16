@@ -320,20 +320,41 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   }
   // THE FILM of an answered move: from beside its way (the hangar's middle side of it), far enough to see it all,
   // looking at the hook as it goes; for a move up or down, from beside the hook at its middle height
+  // (where the film camera stands: beside the move, toward the hangar's middle, but never where something stands
+  // between it and the move (the Miner's hull, the catwalk): candidate places round the move, each one's line to the
+  // move walked through the crane's own voxels (the station as built), the clear one nearest the first choice taken)
+  function filmSpot(F, mid, dx, dz, len) {
+    const cx = (site.rail.x[0] + site.rail.x[1]) / 2, cz = (site.rail.z[0] + site.rail.z[1]) / 2;
+    const V = (() => { try { return crane.voxels(); } catch (e) { return null; } })();
+    const inside = (x, z) => x > site.rail.x[0] - 1.2 && x < site.rail.x[1] + 1.2 && z > site.rail.z[0] - 0.6 && z < site.rail.z[1] + 0.6;
+    const at = (o) => (len > 0.8 ? [mid[0] + o.px * o.d - dx * 0.15, o.y, mid[2] + o.pz * o.d - dz * 0.15] : [mid[0] + o.px * o.d + o.pz * 2, o.y, mid[2] + o.pz * o.d - o.px * 2]);
+    const look = [F.to[0], Math.max(0.6, Math.min(F.from[1], F.to[1]) - 0.6), F.to[2]];
+    const clear = (p) => {
+      if (!V) return true;
+      const ex = look[0] - p[0], ey = look[1] - p[1], ez = look[2] - p[2], L = Math.hypot(ex, ey, ez), n = Math.floor((L - 1.4) / 0.05);   // (half a voxel a step: a wall's shell is one voxel thick)
+      for (let i = 0; i <= n; i++) { const k = (i * 0.05) / L; if (V.full(p[0] + ex * k, p[1] + ey * k, p[2] + ez * k)) return false; }
+      return true;
+    };
+    let first, d, y;
+    if (len > 0.8) {
+      first = Math.atan2(dx / len, -dz / len);   // (the way across the move: px = -dz / len, pz = dx / len)
+      if ((cx - mid[0]) * (-dz / len) + (cz - mid[2]) * (dx / len) < 0) first += Math.PI;   // (toward the hangar's middle)
+      d = Math.max(7, len * 0.75 + 3); y = Math.max(2.6, Math.min(7.8, Math.max(F.from[1], F.to[1]) - 0.5));
+    } else { first = Math.atan2(cz - mid[2], cx - mid[0]); d = 7; y = Math.max(2.2, mid[1] + 0.8); }
+    const tries = [];
+    for (const turn of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.2, -2.2, Math.PI]) for (const [dd, yy] of [[d, y], [d, y + 1.6], [d * 0.75, y + 1.2]]) {
+      const a = first + turn; tries.push({ px: Math.cos(a), pz: Math.sin(a), d: dd, y: Math.min(7.8, yy), turn: Math.abs(turn) });
+    }
+    for (const o of tries) { const p = at(o); if (inside(p[0], p[2]) && !(V && V.full(p[0], p[1], p[2])) && clear(p)) return o; }
+    return tries[0];
+  }
   function filmCam(camera, S, dt, shift) {
     const F = film, mid = [(F.from[0] + F.to[0]) / 2, (F.from[1] + F.to[1]) / 2, (F.from[2] + F.to[2]) / 2];
     const dx = F.to[0] - F.from[0], dz = F.to[2] - F.from[2], len = Math.hypot(dx, dz);
-    const cx = (site.rail.x[0] + site.rail.x[1]) / 2, cz = (site.rail.z[0] + site.rail.z[1]) / 2;
-    let px, pz, d;
-    if (len > 0.8) {
-      px = -dz / len; pz = dx / len;
-      if ((cx - mid[0]) * px + (cz - mid[2]) * pz < 0) { px = -px; pz = -pz; }   // (toward the hangar's middle)
-      d = Math.max(7, len * 0.75 + 3);
-      _w.set(mid[0] + px * d - dx * 0.15, Math.max(2.6, Math.min(7.8, Math.max(F.from[1], F.to[1]) - 0.5)), mid[2] + pz * d - dz * 0.15);
-    } else {
-      const ax = cx - mid[0], az = cz - mid[2], L = Math.hypot(ax, az) || 1; px = ax / L; pz = az / L; d = 7;
-      _w.set(mid[0] + px * d + pz * 2, Math.max(2.2, mid[1] + 0.8), mid[2] + pz * d - px * 2);
-    }
+    if (!F.spot) F.spot = filmSpot(F, mid, dx, dz, len);
+    const o = F.spot;
+    if (len > 0.8) _w.set(mid[0] + o.px * o.d - dx * 0.15, o.y, mid[2] + o.pz * o.d - dz * 0.15);
+    else _w.set(mid[0] + o.px * o.d + o.pz * 2, o.y, mid[2] + o.pz * o.d - o.px * 2);
     _w.x = Math.max(site.rail.x[0] - 1.2, Math.min(site.rail.x[1] + 1.2, _w.x)); _w.z = Math.max(site.rail.z[0] - 0.6, Math.min(site.rail.z[1] + 0.6, _w.z));
     _l.set(S.x * 0.65 + mid[0] * 0.35, S.hoist - 0.6, S.z * 0.65 + mid[2] * 0.35);
     if (shift) { const fx = _l.x - _w.x, fz = _l.z - _w.z, L = Math.hypot(fx, fz) || 1, k = Math.hypot(fx, fz); _l.x += (-fz / L) * shift[0] * k; _l.z += (fx / L) * shift[0] * k; _l.y += shift[1] * k; }
