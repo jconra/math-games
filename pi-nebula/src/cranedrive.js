@@ -62,7 +62,8 @@ export function followCam(W, walls, site = null) {
       if (chair) { want.copy(chair.at); wantLook.copy(chair.look); if (camera.fov !== chair.fov) { camera.fov = chair.fov; camera.updateProjectionMatrix(); } }
       else {
         if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
-        hook.set(S.x + Math.sin(S.yaw) * S.slide, S.hoist, S.z + Math.cos(S.yaw) * S.slide);
+        // (it follows the carriage across the beam only half way, so a move across, as into a socket, is seen to move)
+        hook.set(S.x + Math.sin(S.yaw) * S.slide * 0.5, S.hoist, S.z + Math.cos(S.yaw) * S.slide * 0.5);
         const ship = Math.abs(Math.sin(S.yaw)) > 0.5;
         // (the wall's leg: from the hangar floor's side; the ship's leg: off the side of the ship the load is on, but never
         // behind the hangar's wall: coming toward the turntable it swings round to look from beside the rail)
@@ -160,6 +161,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
   // (a push keeps the way it was given while it is held, though the view swings round as the load goes past the
   // ship's middle: let go and push again for the view's new way)
   let ahead = null;
+  // (the place a canister was just let go at, until the crane leaves it: for the hint)
+  let lastLet = null, heldBefore = -1;
   const cam = followCam(W, walls, crane.L && crane.L.site);
   if (input) input.enabled = true;
   crane.take();
@@ -208,6 +211,10 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     show(D, r0);
   }
   function show(D, r) {
+    const here = r.place ? r.place.kind + r.place.i : null;
+    if (heldBefore >= 0 && r.held < 0) lastLet = { place: here, socket: !!(r.place && r.place.kind === 'socket') };
+    else if (lastLet && (r.held >= 0 || here !== lastLet.place)) lastLet = null;
+    heldBefore = r.held;
     const w = readout(r);
     for (const k of ['rail', 'hook', 'load']) { const dd = el.querySelector(`[data-r="${k}"]`); if (dd.textContent !== w[k]) dd.textContent = w[k]; }
     const grab = $('.pcd-grab span'), shutNow = D.state.arms > 0.5;
@@ -223,6 +230,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     if (noteText && t - noteT < 2.6) hint = noteText;
     else if (D.busy && D.action === 'turn') hint = 'Turning on the turntable...';
     else if (D.busy) hint = '';
+    // (just let go, still at it: what next, not "grab it again")
+    else if (r.held < 0 && lastLet && lastLet.place === here) hint = lastLet.socket ? 'Let go: it is docked. Back away from the wall, then up.' : 'Let go: it rests there. Up, and on to the next.';
     else if (r.held < 0) hint = r.seated ? 'On a canister: Grab it (G).' : r.place ? 'Lined up: lower the grab onto it.' : r.nearTurn && !r.onTurntable ? 'Near the turntable: Turn (T) to go along the other rail.' : 'Bring the grab over a canister (on the rack, the ship or at the wall), then lower it.';
     else hint = r.resting ? 'It can rest here: Let go (G).' : r.place && r.place.kind === 'socket' ? 'Lined up with a socket: lower it to the socket, then push it in toward the wall.' : r.place ? 'Lined up: lower it down.' : 'Take it to a socket, the rack or the ship\'s tray.';
     const h = $('.pcd-hint'); if (h.textContent !== hint) { h.textContent = hint; h.classList.toggle('is-note', !!noteText && t - noteT < 2.6); }
