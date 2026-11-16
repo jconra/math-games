@@ -614,7 +614,14 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
   // where the card says by the time it is read
   Q.before = function before() {
     const R = Q.reserved;
-    return R && R.k > cursor ? upTo(R.k - 1) : [];
+    if (!R || R.led) return [];
+    const out = R.k > cursor ? upTo(R.k - 1) : [], s = queue[R.k];
+    // (and the start of the asked move, the part the crane makes by itself: onto the mark or height the card starts from)
+    if ((R.kind === 'along' || R.kind === 'time') && s.kind === 'along') out.push({ axis: 'along', to: alongOf(s.leg, R.mark) });
+    else if (R.kind === 'hoist' && s.kind === 'hoist') out.push({ axis: 'hoist', to: R.from });
+    else if (R.kind === 'slide' && s.kind === 'slide') out.push({ axis: 'slide', to: R.from });
+    R.led = true;
+    return out;
   };
   // a right answer: the moves up to and including the one it held (a weight: through the lift; a trip: the first move;
   // a route: the whole way); a question that held none: the next move

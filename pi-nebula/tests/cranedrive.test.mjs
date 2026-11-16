@@ -294,4 +294,8 @@ test('the job\'s queue: the moves before an asked one are made as the card comes
   const right = Qu.right(w.id);
   assert.equal(right[0].grab, 'shut');
   assert.ok(right.some((s) => s.axis === 'hoist'));
+  // a card about the last 5 m of a longer way: the crane makes the rest by itself first, onto the mark the card starts on
+  const Q2 = makeJobQueue(site, { start: () => S, oreOf: () => 1.2 }), h = Q2.ask('along', { prec: 1, most: 5 }), b2 = Q2.before();
+  const last = b2[b2.length - 1], at0 = h.leg === 'wall' ? site.rail.wall[0] + h.mark : site.turn[1] + h.mark;
+  assert.equal(last.axis, 'along'); assert.ok(Math.abs(last.to - at0) < 1e-9, JSON.stringify({ h, last }));
 });
