@@ -7,10 +7,12 @@
 //   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn }, crane })
 //                                 live: what a job's own props are doing right now, for its questions (the smelter's
 //                                 load in the hangar: src/crane.js load()); a job without one asks nothing of the world
-//                                 crane: the smelter's crane (src/crane.js), for the operator area's two options
-// THE OPERATOR AREA at the smelter's crane chair holds two options, one each side, the one looked at coming up (see
-// sideMarks): FREE CONTROL (job.drive: src/cranedrive.js, the crane by hand, no questions) and the CRANE OPERATOR JOB
-// (questions whose answers move the crane: src/jobs/crane.js, joined to the crane by src/jobs/cranelink.js).
+//                                 crane: the smelter's crane (src/crane.js), for the operator's chair
+// THE OPERATOR'S CHAIR at the smelter's crane is one seat (the game's maker, 2026-11-16: "a single option to get into
+// the seat and then when the crane operator UI comes up then you can select a toggle button for 'Free Control'"): the
+// crane game comes up (src/jobs/crane.js, joined to the crane by src/jobs/cranelink.js), its screen's Free control
+// switch swaps it for the crane by hand (src/cranedrive.js) and that one's Crane game switch back, the player seated
+// all the while. (Two jobs can still share an area, a side each: job.pair, job.side; none does now.)
 //   jobs.update(dt, P, playing)   each frame: the prompt, the rings' glow; -> true while a job panel is up (the player
 //                                 stands still at the job and jobs.aim(camera) frames the job's props)
 //   jobs.aim(camera, dt)          the camera while a job is up: through the player's eyes, at the counter or desk
@@ -26,7 +28,7 @@ import { credits } from './engine.js';
 import { JOB as galley } from './galley.js';
 import { JOB as medical } from './medical.js';
 import { JOB as smelter } from './smelter.js';
-import { JOB as crane, FREE as craneFree } from './crane.js';
+import { JOB as crane } from './crane.js';
 import { craneLink } from './cranelink.js';
 import { openDrive, chairScreen } from '../cranedrive.js';
 import { JOB as arena } from './arena.js';
@@ -34,7 +36,7 @@ import { openMathball, mathballIdle } from '../mathball/index.js';
 import { JOB as dock } from './dock.js';
 import { dockLink } from './docklink.js';
 
-export const JOBS = [galley, medical, smelter, crane, craneFree, arena, dock];
+export const JOBS = [galley, medical, smelter, crane, arena, dock];
 export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -128,20 +130,42 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     for (const x of pairOf(s)) x.ring.visible = x.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input && !s.job.game) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
-    const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; if (link) { link.close(); link = null; } at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };
+    const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; api.crane = null; if (link) { link.close(); link = null; } at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };
     if (s.job.game) {
       // a job that is a game (the arena's Mathball: src/mathball/): it walks the player and works the camera itself
       panel = openMathball({ W, walls, input, crew: c, lib, job: s.job, people, onSave: () => save(c), onCredits: showWallet, onClose: done });
-    } else if (s.job.drive) {
+    } else if (s.job.id === 'crane' && crane && crane.on) openCrane(s, c, done, 'game');
+    else if (s.job.drive) {
       // free control: the crane by hand (src/cranedrive.js), no questions
       panel = openDrive(document.body, { crane, input, W, walls, onClose: done });
     } else {
-      // (a job joined to its props: the crane operator job's crane; the dock's bridge outside the port, src/jobs/docklink.js)
-      link = s.job.id === 'crane' && crane ? craneLink({ crane, W, walls }) : s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos }) : null;
+      // (a job joined to its props: the dock's bridge outside the port, src/jobs/docklink.js; the crane's: openCrane)
+      link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos }) : null;
       panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
     api.panel = panel;
     return true;
+  }
+  // the crane's seat: the game, or free control; each one's switch swaps to the other in place (the crane stays live)
+  let craneDone = null;
+  function openCrane(s, c, done, how) {
+    craneDone = done;
+    if (how === 'free') {
+      if (input) input.enabled = true;
+      panel = openDrive(document.body, { crane, input, W, walls, onClose: done, onGame: () => swapCrane(s, c, done, 'game') });
+    } else {
+      if (input) input.enabled = false;
+      link = craneLink({ crane, W, walls, onFree: () => swapCrane(s, c, done, 'free') });
+      panel = openPanel(document.body, { job: s.job, crew: c, live: link, onSave: () => save(c), onCredits: showWallet, onClose: done });
+    }
+    api.panel = panel; api.crane = how;
+  }
+  function swapCrane(s, c, done, how) {
+    if (!panel) return;
+    const was = panel; panel = null;
+    if (link) { link.close(true); link = null; }
+    was.close(true);
+    openCrane(s, c, done, how);
   }
   function close() { if (panel) panel.close(); }
 
@@ -254,6 +278,6 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   const inEyes = () => !!(at && !at.job.game && (at.job.seated || !(at.job.view && W.view(at.job.view))));
   // (a game job walks the player itself: main.js asks it how, each frame)
   const control = (dt, P) => (panel && at && at.job.game && panel.control ? panel.control(dt, P) : null);
-  const api = { update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; } };
+  const api = { update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
   return api;
 }

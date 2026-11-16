@@ -119,10 +119,10 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       return `<header class="pnj-cardtop is-chart"><span class="pnj-icon is-cross" aria-hidden="true"></span><b>Patient chart</b><small>Triage</small></header>
         ${who ? `<dl class="pnj-chart"><div><dt>Patient</dt><dd>${esc(who.name)}</dd></div>${who.why ? `<div><dt>In for</dt><dd>${esc(who.why)}</dd></div>` : ''}</dl>` : ''}`;
     }
-    if (job.card === 'workorder') {
-      // (the crane operator job: a move of the crane's that is about to be made, or one from the log)
+    if (job.card === 'crane') {
+      // (the crane game: a move the crane is about to make, to be verified)
       const now = !!(o.facts && o.facts.live);
-      return `<header class="pnj-cardtop is-order"><span class="pnj-icon is-hook" aria-hidden="true"></span><b>Work order</b><small>${now ? 'The crane, right now' : 'From the log'}</small></header>`;
+      return `<header class="pnj-cardtop is-order"><span class="pnj-icon is-hook" aria-hidden="true"></span><b>Crane check</b><small>${now ? 'Verify the next move' : 'From the log'}</small></header>`;
     }
     if (job.card === 'payslip') {
       // (a count taken from the hangar as the slip was made says so; any other slip is someone's load from the log)
@@ -139,6 +139,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     const pic = o.picFirst ? helpPicture(o) : null;
     // (a job's own question may bring its picture with it, drawn: o.lead, the dock's panel with its gap)
     const lead = o.lead || (pic && pic.svg) || '';
+    el.dataset.key = o.key || '';   // (which maker made the card: a job's props may draw for it, the crane game's grid)
     card.innerHTML = `${sceneHtml(o)}
       ${storyHtml(o)}
       ${lead ? `<div class="pnj-pic is-lead">${lead}</div>` : ''}
@@ -187,25 +188,32 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     const end = own && own.over ? own.over() : null;
     if (end) { showEnd(end, slide); return; }
     el.classList.remove('is-over');
-    let now = null;
-    const read = live ? (typeof live === 'function' ? live : live.now) : null;
-    if (read) { try { now = read(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
-    q = E.deal(crew, job, { last: lastAsk, live: now });
-    lastAsk = q.order.ask_ || null;
-    onSave();
-    helped = helpOn; t0 = performance.now();
+    const deal = () => {
+      let now = null;
+      const read = live ? (typeof live === 'function' ? live : live.now) : null;
+      if (read) { try { now = read(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
+      q = E.deal(crew, job, { last: lastAsk, live: now });
+      lastAsk = q.order.ask_ || null;
+      onSave();
+      helped = helpOn; t0 = performance.now();
+    };
     if (slide) {
       // (no picks while the cards change over: the buttons on screen are still the last card's)
       const show = () => {
+        // (a job joined to its props deals its card only once they are still: the crane game's next move is worked out
+        // from where the crane has got to)
+        if (holdDeal) deal();
         busy = true;
         card.classList.remove('is-done');
         card.classList.add('is-out');
         setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); busy = false; t0 = performance.now(); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); if (helpOn) fillHelp(); }, 260);
       };
+      const holdDeal = !!(live && typeof live === 'object' && live.ready);
+      if (!holdDeal) deal();
       // (a job joined to its props that is not ready for the new card, the crane still on its way to where the card
       // starts: the last card stays, its buttons shut, until it is; then the new card comes, matching the picture)
       if (readyNow()) show(); else holdFor(show);
-    } else { draw(q.order); if (helpOn) fillHelp(); }
+    } else { deal(); draw(q.order); if (helpOn) fillHelp(); }
     showLevel(); helpBtn.classList.remove('is-nudge');
   }
   // the end card: { html (its card), buttons: [{ label, again }] }: a button with `again` starts over (again() first, then
@@ -358,16 +366,18 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   }
   addEventListener('keydown', onKey, true);
   $('.pnj-x').addEventListener('click', () => close());
-  function close() {
+  // (silent: the panel goes without its job ending: the crane game's switch to free control)
+  function close(silent = false) {
     if (closed) return;
-    closed = true; closeSheet();
+    closed = true; closeSheet(); clearInterval(waitTimer);
     if (levelsSheet) { const L = levelsSheet; levelsSheet = null; L.close(); }
     removeEventListener('keydown', onKey, true);
     el.classList.add('is-going');
     setTimeout(() => el.remove(), 250);
-    onClose();
+    if (!silent) onClose();
   }
 
+  if (live && typeof live === 'object' && live.mount) live.mount(el);
   showCredits(); next();
   requestAnimationFrame(() => el.classList.add('is-on'));
   return {

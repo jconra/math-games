@@ -139,119 +139,13 @@ Object.assign(DRAW, {
   },
 });
 
-// ── the crane operator job's pictures (src/jobs/crane.js) ─────────────────────────────────────────────────────────
+// ── the crane game's pictures are its own (src/jobs/cranepics.js): its orders carry them ready made (help.svg) ──────
 const t1 = (x) => String(Math.round(x * 10) / 10);
-// the trolley, seen from the side: a block under a rail with the cradle hanging
-const trolleyAt = (x, y) => `<rect x="${x - 13}" y="${y - 7}" width="26" height="12" rx="2" fill="${DARK}"/><path d="M${x} ${y + 5}v14" stroke="${INK}" stroke-width="1.6"/><rect x="${x - 9}" y="${y + 19}" width="18" height="7" rx="1.5" fill="${AMBER}" stroke="${INK}" stroke-width="1"/>`;
-// a place the crane goes to, under the rail: a socket's ring, a canister on the rack, the turntable
-// (by the place's words: the turntable; a socket, "socket 7" (not the Miner's "sockets' side"); a bay of the rack or an
-// empty canister; else a full canister)
-const placeAt = (x, y, what) => (/turntable/.test(what) ? `<circle cx="${x}" cy="${y + 2}" r="11" fill="${STEEL}" stroke="${INK}" stroke-width="1.4"/>`
-  : /socket \d/.test(what) ? `<circle cx="${x}" cy="${y + 30}" r="12" fill="${FILL2}" stroke="${INK}" stroke-width="1.4"/><circle cx="${x}" cy="${y + 30}" r="5" fill="${DARK}"/>`
-    : canEnd(x, y + 30, /empty|bay \d/.test(what) ? 'empty' : 'full'));
-Object.assign(DRAW, {
-  // the rail as a number line: its metre marks, the trolley, the place it goes to; hops to count, numbers to read, or
-  // the gap between two marks
-  rail({ from, to, hops = false, read = false, gap = false, what = '' }) {
-    const lo = Math.min(from, to), hi = Math.max(from, to), whole = Math.abs(lo - Math.round(lo)) < 1e-6 && Math.abs(hi - Math.round(hi)) < 1e-6;
-    const a = Math.floor(lo) - 1, b = Math.ceil(hi) + 1, n = b - a, x0 = 24, x1 = W - 24, X = (v) => x0 + (v - a) * (x1 - x0) / n, y = 38;
-    const every = n > 24 ? 5 : n > 12 ? 2 : 1;
-    let s = `<path d="M${x0 - 8} ${y}H${x1 + 8}" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`;
-    for (let v = a; v <= b; v++) {
-      const big = v % every === 0;
-      s += `<path d="M${X(v).toFixed(1)} ${y - 4}v${big ? -10 : -6}" stroke="${INK}" stroke-width="${big ? 1.6 : 1}"/>`;
-      if ((read || (gap && !whole)) && big && !hops) s += text(X(v), y - 18, String(v), { size: 10.5, fill: SOFT });
-    }
-    if (hops) {
-      const dir = to > from ? 1 : -1;
-      for (let v = from; dir > 0 ? v < to - 1e-6 : v > to + 1e-6; v += dir) { const p = X(v), q = X(v + dir), m = (p + q) / 2; s += `<path d="M${p.toFixed(1)} ${y - 6}Q${m.toFixed(1)} ${y - 24} ${q.toFixed(1)} ${y - 6}" fill="none" stroke="${ASK}" stroke-width="1.6"/>`; }
-    }
-    s += trolleyAt(X(from), y) + placeAt(X(to), y + 8, what);
-    if (gap) {
-      s += text(X(from), y - 18, t1(from), { size: 12, weight: 800 }) + text(X(to), y - 18, t1(to), { size: 12, weight: 800 });
-      s += `<path d="M${X(lo).toFixed(1)} ${y + 58}v-6H${X(hi).toFixed(1)}v6" fill="none" stroke="${ASK}" stroke-width="1.5"/>` + text((X(lo) + X(hi)) / 2, y + 74, '? m', { size: 14, fill: ASK, weight: 800 });
-    }
-    // (a long name, as the Miner's places have, does not fit: then just the question)
-    const say = hops ? 'Each hop is one metre: count the hops' : read ? (what.length <= 24 ? `${what}: which mark is it under?` : 'Which mark is it under?') : gap ? 'the way between the two marks' : '';
-    s += text(W / 2, gap ? 128 : 112, say, { size: 12.5, fill: SOFT });
-    return { svg: svg(gap ? 138 : 122, s), line: '' };
-  },
-  // the hoist's scale: the hook's height and where it goes, up or down (signed: up is plus, down is minus)
-  hoist({ from, to, what = '', signed = false }) {
-    const top = Math.max(7, Math.ceil(Math.max(from, to))), y0 = 112, y1 = 14, Y = (v) => y0 - v * (y0 - y1) / top, x = 120;
-    let s = `<path d="M${x} ${y0}V${y1}" stroke="${INK}" stroke-width="2"/>`;
-    for (let v = 0; v <= top; v++) s += `<path d="M${x - 6} ${Y(v).toFixed(1)}h12" stroke="${INK}" stroke-width="1.2"/>` + text(x - 22, Y(v) + 4, String(v), { size: 10.5, fill: SOFT });
-    s += `<path d="M${x - 40} ${y0}H${x + 200}" stroke="${SOFT}" stroke-width="1.4"/>` + text(x + 170, y0 + 13, 'the floor', { size: 10.5, fill: SOFT });
-    const hy = Y(from), ty = Y(to);
-    s += `<rect x="${x + 24}" y="${hy - 6}" width="30" height="12" rx="2" fill="${AMBER}" stroke="${INK}" stroke-width="1"/>` + text(x + 92, hy + 4, `hook ${t1(from)} m`, { size: 11.5, weight: 700 });
-    s += `<path d="M${x + 24} ${ty}h30" stroke="${COOL}" stroke-width="3"/>` + text(x + 120, ty + 4, `${what.length > 22 ? 'the place' : what} ${t1(to)} m`, { size: 11, fill: SOFT, anchor: 'start' });
-    s += `<path d="M${x + 39} ${hy + (to < from ? 7 : -7)}V${ty + (to < from ? -4 : 4)}" stroke="${ASK}" stroke-width="1.8" marker-end="url(#ah)"/>`;
-    s += text(x + 70, (hy + ty) / 2 + 4, signed ? (to < from ? '− ?' : '+ ?') : '? m', { size: 14, fill: ASK, weight: 800 });
-    const defs = `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0L8 4L0 8z" fill="${ASK}"/></marker></defs>`;
-    return { svg: svg(126, defs + s), line: '' };
-  },
-  // a way at a speed: a second at a time
-  speed({ d, v }) {
-    const secs = Math.round(d / v), shown = Math.min(secs, 6), x0 = 20, x1 = W - 20, w = (x1 - x0) / (secs > 6 ? shown + 1.5 : shown);
-    let s = '';
-    for (let i = 0; i < shown; i++) s += `<rect x="${(x0 + i * w).toFixed(1)}" y="34" width="${(w - 3).toFixed(1)}" height="22" rx="3" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>` + text(x0 + i * w + (w - 3) / 2, 49, `${t1(v)} m`, { size: 10.5 }) + text(x0 + i * w + (w - 3) / 2, 72, '1 s', { size: 10.5, fill: SOFT });
-    if (secs > 6) s += text(x0 + shown * w + w * 0.7, 50, '…', { size: 18, fill: SOFT, weight: 800 });
-    s += `<path d="M${x0} 22v-6H${x1}v6" fill="none" stroke="${SOFT}" stroke-width="1.3"/>` + text(W / 2, 12, `${t1(d)} m in all`, { size: 12.5 });
-    s += text(W / 2, 100, `${t1(v)} m every second: how many seconds make ${t1(d)} m? ?`, { size: 13, fill: ASK, weight: 800 });
-    return { svg: svg(110, s), line: '' };
-  },
-  // across the trolley's beam: its marks from the middle, the carriage, where it goes
-  beam({ from, to }) {
-    const x0 = 40, x1 = W - 40, X = (v) => x0 + (v + 1.3) * (x1 - x0) / 2.6, y = 46;
-    let s = `<rect x="${x0 - 10}" y="${y - 9}" width="${x1 - x0 + 20}" height="14" rx="3" fill="${STEEL}" stroke="${INK}" stroke-width="1.2"/>`;
-    for (let v = -12; v <= 12; v += 2) { const p = X(v / 10); s += `<path d="M${p.toFixed(1)} ${y + 5}v${v % 10 === 0 ? 9 : 5}" stroke="${INK}" stroke-width="1"/>`; if (v % 4 === 0) s += text(p, y + 26, t1(v / 10), { size: 10, fill: SOFT }); }
-    s += `<rect x="${X(from) - 12}" y="${y - 16}" width="24" height="12" rx="2" fill="${AMBER}" stroke="${INK}" stroke-width="1"/>` + `<path d="M${X(to)} ${y - 22}v14" stroke="${COOL}" stroke-width="3"/>`;
-    s += `<path d="M${X(Math.min(from, to))} ${y + 40}v-5H${X(Math.max(from, to))}v5" fill="none" stroke="${ASK}" stroke-width="1.5"/>` + text((X(from) + X(to)) / 2, y + 56, '? m', { size: 14, fill: ASK, weight: 800 });
-    return { svg: svg(112, s), line: '' };
-  },
-  // the crane's plate and the load: the canister and its ore, against what the plate says
-  plate({ empty, ore, rated, more = false }) {
-    const x0 = 24, x1 = W - 24, X = (v) => x0 + v * (x1 - x0) / rated, y = 40;
-    let s = `<rect x="${x0}" y="${y}" width="${x1 - x0}" height="26" rx="3" fill="#fff" stroke="${INK}" stroke-width="1.3"/>`;
-    s += `<rect x="${x0}" y="${y}" width="${(X(empty) - x0).toFixed(1)}" height="26" fill="${STEEL}" stroke="${INK}" stroke-width="1"/>` + text((x0 + X(empty)) / 2, y + 17, `${t1(empty)} t`, { size: 11 });
-    s += `<rect x="${X(empty).toFixed(1)}" y="${y}" width="${(X(empty + ore) - X(empty)).toFixed(1)}" height="26" fill="${AMBER}" opacity="0.8" stroke="${INK}" stroke-width="1"/>` + text((X(empty) + X(empty + ore)) / 2, y + 17, `ore ${t1(ore)} t`, { size: 11, weight: 700 });
-    s += text(x0, y - 8, 'the canister', { size: 10.5, fill: SOFT, anchor: 'start' }) + text(x1, y - 8, `the plate: ${rated} t`, { size: 11.5, weight: 800, anchor: 'end' });
-    s += `<path d="M${x1} ${y - 4}v34" stroke="${ASK}" stroke-width="2" stroke-dasharray="4 3"/>`;
-    s += more ? `<path d="M${X(empty + ore).toFixed(1)} ${y + 36}v-5H${x1}v5" fill="none" stroke="${ASK}" stroke-width="1.5"/>` + text((X(empty + ore) + x1) / 2, y + 52, '? t to spare', { size: 13, fill: ASK, weight: 800 })
-      : `<path d="M${x0} ${y + 36}v-5H${X(empty + ore).toFixed(1)}v5" fill="none" stroke="${ASK}" stroke-width="1.5"/>` + text((x0 + X(empty + ore)) / 2, y + 52, '? t on the hook', { size: 13, fill: ASK, weight: 800 });
-    return { svg: svg(104, s), line: '' };
-  },
-  // the round's trips: one canister a trip, in lots
-  trips({ lots }) {
-    const names = ['to the wall', 'onto the ship', 'back to the rack'];
-    let s = '';
-    lots.forEach((n, r) => {
-      const y = 22 + r * 30;
-      s += text(14, y + 4, names[r] || '', { size: 11, fill: SOFT, anchor: 'start' });
-      for (let i = 0; i < n; i++) s += canEnd(118 + i * 28, y, r === 0 ? 'full' : 'empty').replace(/r="9"/, 'r="7"');
-      s += text(W - 16, y + 5, String(n), { size: 13, weight: 800, anchor: 'end' });
-    });
-    s += text(W / 2, 22 + lots.length * 30 + 6, 'one canister a trip: how many trips? ?', { size: 13, fill: ASK, weight: 800 });
-    return { svg: svg(30 + lots.length * 30 + 12, s), line: '' };
-  },
-  // the way along and across: the T of the rail from above, each part with its marks
-  route({ legs, across }) {
-    const tx = 240, ty = 26;
-    let s = `<path d="M24 ${ty}H${W - 20}" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><path d="M${tx} ${ty}V${ty + 86}" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><circle cx="${tx}" cy="${ty}" r="8" fill="${STEEL}" stroke="${INK}" stroke-width="1.4"/>`;
-    const w = legs.find((g) => g.leg === 'wall'), sh = legs.find((g) => g.leg === 'ship');
-    if (w) s += `<path d="M${tx + 90} ${ty - 10}H${tx + 12}" stroke="${ASK}" stroke-width="2" marker-end="url(#rh)"/>` + text(tx + 52, ty - 14, `${t1(w.mark)} → ${t1(w.markTo)} m`, { size: 11, weight: 700 }) + text(tx + 52, ty + 18, '? m', { size: 12, fill: ASK, weight: 800 });
-    if (sh) s += `<path d="M${tx + 10} ${ty + 12}V${ty + 70}" stroke="${ASK}" stroke-width="2" marker-end="url(#rh)"/>` + text(tx + 18, ty + 46, `${t1(sh.mark)} → ${t1(sh.markTo)} m`, { size: 11, weight: 700, anchor: 'start' }) + text(tx + 18, ty + 62, '? m', { size: 12, fill: ASK, weight: 800, anchor: 'start' });
-    s += `<path d="M${tx} ${ty + 80}H${tx - 50}" stroke="${ASK}" stroke-width="2" marker-end="url(#rh)"/>` + text(tx - 30, ty + 98, `across ${t1(Math.abs(across.to - across.from))} m`, { size: 11, weight: 700 });
-    s += text(70, ty + 18, 'the wall rail', { size: 10.5, fill: SOFT }) + text(tx - 50, ty + 46, 'the ship rail', { size: 10.5, fill: SOFT });
-    const defs = `<defs><marker id="rh" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0L8 4L0 8z" fill="${ASK}"/></marker></defs>`;
-    s += text(W / 2, ty + 120, 'each part, then add them: ?', { size: 13, fill: ASK, weight: 800 });
-    return { svg: svg(ty + 130, defs + s), line: '' };
-  },
-});
 
 export function helpPicture(order) {
   if (!order) return { svg: '', title: '', line: '' };
-  // (a job's own question may bring its help picture drawn already: the dock's, src/jobs/dock.js)
+  // (a job's own question may bring its help picture drawn already: the dock's, src/jobs/dock.js; the crane game's,
+  // src/jobs/cranepics.js)
   if (order.help && order.help.svg) return { svg: order.help.svg, title: order.help.title || '', line: order.help.line || '' };
   if (order.help && order.help.pic && DRAW[order.help.pic.kind]) {
     const d = DRAW[order.help.pic.kind](order.help.pic);

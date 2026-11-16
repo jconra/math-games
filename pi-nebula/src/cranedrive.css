@@ -94,3 +94,41 @@
   .pcd-stickhint { bottom: max(12px, env(safe-area-inset-bottom)); max-width: 40vw; }
   .pcd-chip .pcd-reads { top: max(8px, env(safe-area-inset-top)); }
 }
+
+/* THE CRANE GAME'S SCREEN (src/jobs/cranelink.js): the crane system's strip over the top of the view, its switches,
+   the banner when a check is verified, the view's name; the grid laid over the view from above */
+.pcg { position: fixed; left: max(16px, env(safe-area-inset-left)); top: 14px; z-index: 26; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px - min(480px, 44vw) - 16px);
+  font: 400 14px/1.3 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; color: #eef1f4; pointer-events: none; }
+.pcg * { box-sizing: border-box; }
+.pcg-sys { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; background: rgba(12, 18, 24, 0.88); box-shadow: inset 0 0 0 1.5px rgba(127, 216, 255, 0.45);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); min-width: 0; }
+.pcg-sys b { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: #7fd8ff; }
+.pcg-fault { font-size: 14.5px; font-weight: 700; color: #ffd29e; }
+.pcg-check { display: flex; align-items: center; gap: 10px; }
+.pcg-check small { font-size: 12.5px; color: #a7b0ba; }
+.pcg-dots { display: inline-flex; gap: 5px; }
+.pcg-dots i { width: 11px; height: 11px; border-radius: 50%; background: #2a3138; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2); }
+.pcg-dots i.is-done { background: #4fe08a; box-shadow: 0 0 8px rgba(79, 224, 138, 0.8); }
+.pcg-btns { display: flex; flex-direction: column; gap: 6px; }
+.pcg button { font: inherit; border: 0; cursor: pointer; pointer-events: auto; height: 34px; padding: 0 12px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #eef1f4;
+  background: rgba(40, 47, 56, 0.92); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.4); clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+.pcg button:hover { box-shadow: inset 0 0 0 1.5px rgba(232, 243, 252, 0.95); }
+.pcg .pcg-free { background: #ff8f2e; color: #1c1205; }
+.pcg kbd { font: 700 10px/1 inherit; padding: 3px 5px; margin-left: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); color: #a7b0ba; }
+.pcg-banner { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 24px;
+  background: rgba(8, 30, 18, 0.92); box-shadow: inset 0 0 0 2px #4fe08a; clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px); }
+.pcg-banner[hidden] { display: none; }
+.pcg-banner b { font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: #8ff0b5; }
+.pcg-banner span { font-size: 15px; }
+.pcg-banner.is-pop { animation: pcd-pop 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+.pcg-viewname { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); margin: 0; padding: 6px 14px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #bfe9ff;
+  background: rgba(12, 18, 24, 0.86); opacity: 0; }
+.pcg-viewname.is-show { animation: pcd-name 2.6s ease forwards; }
+.pcg-grid { position: fixed; inset: 0; z-index: 23; pointer-events: none; width: 100vw; height: 100vh; }
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pcg { left: 8px; right: 8px; top: max(8px, env(safe-area-inset-top)); max-width: none; gap: 6px; }
+  .pcg-sys { flex: 1; padding: 6px 10px; }
+  .pcg-fault { font-size: 12.5px; }
+  .pcg button { height: 30px; padding: 0 9px; font-size: 11px; }
+  .pcg kbd { display: none; }
+}

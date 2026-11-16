@@ -1,675 +1,562 @@
-// THE CRANE OPERATOR JOB, at the operator's chair: the smelter's crane worked by sums, for credits. The game's maker,
-// 2026-11-16: "I suppose it could just be an optional job that asked questions to help calculate crane movements" and
-// "if they want to make credits then math will be involved. So they have 2 options pop up. Each when they look at the
-// sides of the operator area. Free control or crane operator job." This is the second option (the first, free
-// control with no sums, is src/cranedrive.js; FREE below is its place among the jobs).
+// THE CRANE GAME at the operator's chair: the crane system reports a fault and asks the crew member to verify crane
+// operations, one move at a time, credits for each right answer. The game's maker, 2026-11-16: "if the player goes to
+// the chair then it could say the system is having a malfunction, please verify crane operations. Then it could ask
+// basically any math questions like identifying the coordinates of the pods with a overhead camera and a overlaid
+// grid. And/or doing math to figure out how much further the crane needs to travel to get into the correct position
+// ... With each math question answered they could get paid some credits ... I wonder if it might be better to have a
+// single option to get into the seat and then when the crane operator UI comes up then you can select a toggle button
+// for 'Free Control', but otherwise it will guide you through problems to calculate the measurements for picking up
+// and dropping off the containers ... we just want to make sure there are no big jumps in difficulty."
 //
-// THE ANSWERS ARE THE MOVES. The crane does one canister's trip at a time, the round's own trips (the ship's full
-// canisters to the wall, empties from the rack onto the ship, the drained ones back to the rack: planned here by
-// tripFrom). Each trip is a list of moves; at each level some of them are asked (how far along the rail, how far
-// down, how long at this speed ...) and the rest the crane does by itself. A right answer and the crane makes that
-// move, by exactly the answer (src/jobs/cranelink.js works the live crane, kit/crane-drive.js); a wrong one, and a
-// faint path shows where that answer would have taken it, and Help glows. The numbers are read from the hangar:
-// the rail's metre marks (the wall rail from its west end, the ship rail from the turntable), the hook's height on
-// the chair's screens, the rated load on the crane's plate, the canisters' weights (the pay slips' load: one weight
-// for the crane's whole round). Before an asked move the crane lines itself up on the level's marks (a whole metre,
-// a tenth), and after it, onto the place itself: so "18 m to 6 m" is exactly 12 m.
+// THE ANSWERS ARE THE MOVES. The crane does the round's own trips (planned from where everything is: kit/crane-plan.js
+// planFrom's next), one canister at a time: over the canister (x and y at once), down to it, the grab, up, the turn,
+// over the place it goes to, down to it, in (a socket), let go, up. Five of those moves are asked about in each trip:
+// over the canister, down to it, the turn (where a level asks about turns; else the crane turns by itself), over the
+// place, down to it. A right answer and the crane makes that move, by exactly the answer (src/jobs/cranelink.js works
+// the live crane, kit/crane-drive.js), and a short film of it shows it go. Five answers are one check; some of the
+// round's other canisters "magically" take their places as the check goes on (his words: "the crane game should last
+// a couple minutes (maybe 5 questions) and maybe some of the canisters should magically appear in the sockets during
+// the game"), so a check moves a whole part of the round along.
+// The numbers are the hangar's GRID (the station file's place 'crane' grid: metres from the hangar's south-west corner,
+// x along the hangar, y across it, on the screen from above with x to the right and y up), the height the hoist's (on
+// the trolley's screen and the operator's), the turn in degrees. Before an asked move the crane lines itself up on the
+// level's marks (a whole metre, a tenth, a hundredth) and after it onto the place itself, so "x = 12 to x = 22" is
+// exactly 10 m.
 //
-// The ladder, easiest first (Mathwood's school guide in brackets): counting the canisters to move and the metre hops
-// (0); counting along the rail (6); reading the rail's marks (10); distances along the rail (18); the hook up and
-// down (24); up and down as plus and minus (34: Mathwood's own negatives card, src/math/negatives.js makeCard, on
-// the hook's real move); time from speed (40); tenths along the rail and up and down (48); time from speed in halves
-// and tenths (52); weights against the crane's limit (56); how many trips (60: and Mathwood's whole-crates word
-// problems told through SETTING); routes along and across (70); route times (78).
-// Mathwood's makers tell what they fit (the trips in whole canisters, the plus and minus); the moves are this job's
-// own makers (MAKERS), written the way Mathwood's are: the wrong answers are the slips kids really make, each with
-// one plain line why.
+// The ladder, easiest first (Mathwood's school guide in brackets: 0 starting kindergarten ... 80 eighth grade), each a
+// small step from the last: which quadrant (2); counting squares (6); reading the grid (10); how far along x or y (18);
+// coordinates (24); turns in degrees (32); up is plus, down is minus (36); time from speed (40); tenths (48); hundredths
+// (56); time with tenths (62); both ways at once (70); straight across (78).
 //
-//   tripFrom(site, P, rand)   the next trip from a planned state: { name, story, c, steps } (P changed to its end)
-//   the makers read `live` (src/jobs/cranelink.js now()): live.ask(kind, opts) reserves the next move of a kind and
-//   gives its numbers; without it (node, the levels page) a maker's numbers are its own ("from the log")
+//   tripFrom(site, S) -> { c, from, to, phase }    the round's next trip from a state (a test lift when it is done)
+//   makeGame(site, { state, hurry }) -> Q            the trip's moves held for the questions (Q.ask, Q.before, Q.right)
+//   the makers read `live` (src/jobs/cranelink.js now()): live.ask(kind, opts) reserves the next asked move of that kind
+//   and gives its numbers on the level's marks; without it (node, the levels page) a maker's numbers are its own
 import { dec } from '../../../mathwood-valley/src/math/counterkit.js';
 import { makeCard, classify as signSlip } from '../../../mathwood-valley/src/math/negatives.js';
 import { ownOrder } from './engine.js';
-import { DRIVE } from '../../kit/crane-drive.js';
+import { planFrom, alongNear, near0, SPEED } from '../../kit/crane-plan.js';
+import { picture } from './cranepics.js';
 
-const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
-const METRE = ['metre', 'metres'], SEC = ['second', 'seconds'], TONNE = ['tonne', 'tonnes'], TRIP = ['trip', 'trips'], CAN = ['canister', 'canisters'];
-export const RATED = DRIVE.rated;     // tonnes: the crane's plate (kit/crane-drive.js, kit/smelter.js PLATE)
-export const EMPTY = DRIVE.canister;  // tonnes: an empty canister
+export const GAME = { questions: 5 };
+// the speeds the questions give (the crane's own: kit/crane-plan.js SPEED): the bridge along x, the trolley along y,
+// the hoist up and down (metres a second)
+export const SPEEDS = { x: SPEED.bridge.v, y: SPEED.trolley.v, h: SPEED.hoist.v };
 export const CHANGE_AT = 1000;   // (a plus-or-minus answer's button value: the change plus this, so it is above zero)
-const r1 = (x) => Math.round(x * 10) / 10, r2 = (x) => Math.round(x * 100) / 100;
-const t1 = (x) => dec(Math.round(x * 10), 1, { trim: true });          // 6.6 -> "6.6", 12 -> "12"
+const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
+const METRE = ['metre', 'metres'], SEC = ['second', 'seconds'], DEG = ['degree', 'degrees'], SQUARE = ['square', 'squares'];
+const r2 = (x) => Math.round(x * 100) / 100;
+const t2 = (x) => dec(Math.round(x * 100), 2, { trim: true });          // 13.95 -> "13.95", 12 -> "12"
 const kit = (rand) => ({ int: (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1)), pick: (a) => a[Math.floor(rand() * a.length)], chance: (p) => rand() < p });
-// a face for an answer button: the number big (as the level reads it), its unit small
-const t2 = (x) => dec(Math.round(x * 100), 2, { trim: true });   // 13.95 -> "13.95", 12 -> "12"
+// an answer: its value, the number big, the unit small
 const F = (v, unit, { sign = false } = {}) => { const n = r2(v), big = (sign && n > 0 ? '+' : '') + (n < 0 ? '−' : '') + t2(Math.abs(n)); return { v: n, big, small: Math.abs(n) === 1 ? unit[0] : unit[1], label: `${big} ${Math.abs(n) === 1 ? unit[0] : unit[1]}` }; };
-
-// ── the places, in words, and on the rail's marks ────────────────────────────────────────────────────────────────
-// (the wall rail's marks from its west end; the ship rail's from the turntable)
-export function marksOf(site) {
-  const w0 = site.rail.wall[0], z0 = site.turn[1];
-  return { wall: (x) => x - w0, ship: (z) => z - z0, turn: site.turn[0] - w0 };
-}
-const sockName = (site, k) => { const K = site.sockets, cols = [...new Set(K.map((s) => s.at[0].toFixed(2)))].sort((a, b) => a - b); return `socket ${cols.indexOf(K[k].at[0].toFixed(2)) * 2 + (K[k].upper ? 2 : 1)}`; };
-const bayName = (j) => `bay ${j + 1} of the rack`;
-// a place on the Miner in words: top or bottom; the ship's end (the wall's end, toward the turntable, or the far end:
-// each end's trays slide out toward it); and its side, the rack's or the sockets' (the eight places are all different)
-const sideOf = (site, x) => { const rack = site.bays.length ? site.bays.reduce((q, b) => q + b.at[0], 0) / site.bays.length : site.shipX + 1; return (x - site.shipX) * (rack - site.shipX) > 0 ? 'the rack\'s' : 'the sockets\''; };
-export const mountName = (site, i, noun = 'canister') => { const m = site.mounts[i]; return `the ${m.upper ? 'top' : 'bottom'} ${noun} on ${sideOf(site, m.at[0])} side at the ship's ${m.out[1] < 0 ? 'wall' : 'far'} end`; };
-
-// ── the trips: what the round would do next, as moves ────────────────────────────────────────────────────────────
-// P: { x, z, yaw, slide, hoist, held, cans: [{ where, i, fill }] } (a planned state: where things will be once the
-// moves already given are done). A step: { kind: 'along' | 'slide' | 'hoist' | 'push' | 'turn' | 'grab' | 'wait' |
-// 'trip', ... }; 'along' moves the trolley on its leg, 'push' the carriage into or out of a socket (slowly).
-export function tripFrom(site, P, rand = Math.random) {
-  const M = site.mounts, K = site.sockets, B = site.bays, half = site.can.half, lift = site.can.lift || 0, seat = site.can.seat, clear = site.can.clear, rise = site.can.rise;
-  const steps = [], leg = () => (Math.abs(Math.sin(P.yaw)) > 0.5 ? 'ship' : 'wall'), W = marksOf(site);
-  const who = (where, i) => P.cans.findIndex((q) => q.where === where && q.i === i);
-  const ore = (c) => P.cans[c].fill > 1e-6;
-  const over = (list, i) => list.findIndex((q, j) => j !== i && q.upper && !list[i].upper && Math.abs(q.at[0] - list[i].at[0]) < 0.1 && Math.abs(q.at[2] - list[i].at[2]) < 0.1);
-  const under = (list, i) => list.findIndex((q, j) => j !== i && !q.upper && list[i].upper && Math.abs(q.at[0] - list[i].at[0]) < 0.1 && Math.abs(q.at[2] - list[i].at[2]) < 0.1);
-  const mReach = (i) => { const o = over(M, i); return o < 0 || who('mount', o) < 0; }, kReach = (k) => { const o = over(K, k); return o < 0 || who('socket', o) < 0; };
-  // moves, each from where the last left it
-  const along = (to, what) => { const lg = leg(), from = lg === 'wall' ? P.x : P.z; if (Math.abs(to - from) < 1e-6) return; steps.push({ kind: 'along', leg: lg, from, to, mark: lg === 'wall' ? W.wall(from) : W.ship(from), markTo: lg === 'wall' ? W.wall(to) : W.ship(to), what }); if (lg === 'wall') P.x = to; else P.z = to; };
-  // (where the hook is when a move up, down or across starts: [x, z, the beam's heading, height], for the faint path of
-  // a wrong answer about a move still ahead of the crane)
-  const hookAt = () => [P.x + Math.sin(P.yaw) * P.slide, P.z + Math.cos(P.yaw) * P.slide, P.yaw, P.hoist];
-  const slide = (to, what, push = false) => { if (Math.abs(to - P.slide) < 1e-6) return; steps.push({ kind: push ? 'push' : 'slide', from: P.slide, to, what, at: hookAt() }); P.slide = to; };
-  const hoist = (to, what) => { if (Math.abs(to - P.hoist) < 1e-6) return; steps.push({ kind: 'hoist', from: P.hoist, to, what, carrying: P.held >= 0, at: hookAt() }); P.hoist = to; };
-  const up = () => { hoist(site.carry, 'the top'); slide(0, 'the beam\'s middle'); };
-  const toLeg = (lg) => {
-    if (leg() === lg) return;
-    up(); along(leg() === 'wall' ? site.turn[0] : site.turn[1], 'the turntable');   // (the turntable on the leg it is on now)
-    steps.push({ kind: 'turn', to: lg }); P.yaw += lg === 'ship' ? Math.PI / 2 : -Math.PI / 2;
-    if (lg === 'ship') P.z = site.turn[1]; else P.x = site.turn[0];
-  };
-  const slideFor = (x, z) => (x - P.x) * Math.sin(P.yaw) + (z - P.z) * Math.cos(P.yaw);
-  const grab = (how, what, c) => { steps.push({ kind: 'grab', how, what, c, fill: c >= 0 ? P.cans[c].fill : 0 }); };
-  // ── the moves at each kind of place ──
-  function takeFromMount(i) {
-    const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = who('mount', i), what = mountName(site, i);
-    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `${sideOf(site, o[0])} side of the ship`);
-    steps.push({ kind: 'wait', for: 'tray', i });
-    hoist(m.at[1] + lift, what); grab('shut', what, c); P.held = c; P.cans[c].where = 'held';
-    up();
-  }
-  function putOnMount(i) {
-    const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = P.held, what = mountName(site, i, 'mount');
-    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `${sideOf(site, o[0])} side of the ship`);
-    steps.push({ kind: 'wait', for: 'tray', i });
-    hoist(m.at[1] + lift, what); grab('open', what, c); P.cans[c].where = 'mount'; P.cans[c].i = i; P.held = -1;
-    up();
-  }
-  function takeFromBay(j) {
-    const b = B[j], c = who('bay', j);
-    toLeg('wall'); up(); along(b.at[0], bayName(j)); slide(slideFor(b.at[0], b.at[2]), bayName(j));
-    hoist(b.at[1], `the canister in ${bayName(j)}`); grab('shut', `the canister in ${bayName(j)}`, c); P.held = c; P.cans[c].where = 'held';
-    up();
-  }
-  function putInBay(j) {
-    const b = B[j], c = P.held;
-    toLeg('wall'); up(); along(b.at[0], bayName(j)); slide(slideFor(b.at[0], b.at[2]), bayName(j));
-    hoist(b.at[1], bayName(j)); grab('open', bayName(j), c); P.cans[c].where = 'bay'; P.cans[c].i = j; P.held = -1;
-    up();
-  }
-  function putInSocket(k) {
-    const s = K[k], c = P.held, n = s.n, what = sockName(site, k);
-    const Wt = [s.at[0] + n[0] * (half + clear), s.at[2] + n[1] * (half + clear)], Dk = [s.at[0] + n[0] * (half - seat), s.at[2] + n[1] * (half - seat)];
-    toLeg('wall'); up(); along(Wt[0], what); slide(slideFor(Wt[0], Wt[1]), `in front of ${what}`);
-    hoist(s.at[1], what); steps.push({ kind: 'wait', for: 'iris', k });
-    slide(slideFor(Dk[0], Dk[1]), what, true); steps.push({ kind: 'wait', for: 'dogs', k });
-    grab('open', what, c); P.cans[c].where = 'socket'; P.cans[c].i = k; P.held = -1;
-    P.cans[c].fill = 0;   // (drained by the time the crane comes back for it: the live crane waits for it if not)
-    hoist(s.at[1] + rise, `just over the canister in ${what}`); slide(slideFor(Wt[0], Wt[1]), `in front of ${what}`);
-    up();
-  }
-  function takeFromSocket(k) {
-    const s = K[k], c = who('socket', k), n = s.n, what = sockName(site, k);
-    const Wt = [s.at[0] + n[0] * (half + clear), s.at[2] + n[1] * (half + clear)], Dk = [s.at[0] + n[0] * (half - seat), s.at[2] + n[1] * (half - seat)];
-    toLeg('wall'); up(); along(Wt[0], what); slide(slideFor(Wt[0], Wt[1]), `in front of ${what}`);
-    steps.push({ kind: 'wait', for: 'drained', c });
-    hoist(s.at[1] + rise, `just over the canister in ${what}`); slide(slideFor(Dk[0], Dk[1]), `over the canister in ${what}`);
-    hoist(s.at[1], `the canister in ${what}`); grab('shut', `the canister in ${what}`, c);
-    steps.push({ kind: 'wait', for: 'held', c }); P.held = c; P.cans[c].where = 'held';
-    slide(slideFor(Wt[0], Wt[1]), `out of ${what}`, true);
-    up();
-  }
-  // ── which trip (the round's order of things: kit/crane-plan.js planFrom's, one trip at a time) ──
-  const onShipFull = M.map((_, i) => i).filter((i) => who('mount', i) >= 0 && ore(who('mount', i))).sort((a, b) => M[b].upper - M[a].upper);
-  const freeSock = K.map((_, k) => k).filter((k) => who('socket', k) < 0 && kReach(k)).sort((a, b) => (K[a].upper - K[b].upper) || Math.abs(K[a].at[0] - site.turn[0]) - Math.abs(K[b].at[0] - site.turn[0]));
-  const goodSock = freeSock.filter((k) => !K[k].upper || who('socket', under(K, k)) >= 0);
-  const freeMount = M.map((_, i) => i).filter((i) => who('mount', i) < 0 && mReach(i) && (!M[i].upper || who('mount', under(M, i)) >= 0)).sort((a, b) => M[a].upper - M[b].upper);
-  const freeBay = B.map((_, j) => j).filter((j) => who('bay', j) < 0).sort((a, b) => Math.abs(B[a].at[0] - site.turn[0]) - Math.abs(B[b].at[0] - site.turn[0]));
-  const bayEmpty = B.map((_, j) => j).filter((j) => who('bay', j) >= 0 && !ore(who('bay', j))).sort((a, b) => Math.abs(B[a].at[0] - site.turn[0]) - Math.abs(B[b].at[0] - site.turn[0]));
-  const drained = K.map((_, k) => k).filter((k) => who('socket', k) >= 0 && !ore(who('socket', k)) && kReach(k)).sort((a, b) => K[b].upper - K[a].upper);
-  let name, story, c = -1, count = 0, from = null, to = null;
-  if (P.held >= 0) {
-    c = P.held;
-    if (ore(c) && (goodSock[0] ?? freeSock[0]) != null) { const k = goodSock[0] ?? freeSock[0]; name = 'unload'; story = `Take the canister in the grab to ${sockName(site, k)}.`; putInSocket(k); to = sockName(site, k); }
-    else if (!ore(c) && freeMount.length && !onShipFull.length) { const i = freeMount[0]; name = 'load'; story = 'Put the empty canister in the grab onto the ship.'; putOnMount(i); }
-    else if (freeBay.length) { name = 'clear'; story = 'Put the canister in the grab on the rack.'; putInBay(freeBay[0]); }
-    else return null;
-  } else if (onShipFull.length && (goodSock[0] ?? freeSock[0]) != null && onShipFull.some(mReach)) {
-    const i = onShipFull.find(mReach), k = goodSock[0] ?? freeSock[0];
-    c = who('mount', i); count = onShipFull.length; name = 'unload'; from = mountName(site, i); to = sockName(site, k);
-    story = `Take ${from} to ${to}.`;
-    steps.push({ kind: 'trip', name, count, what: 'full canisters on the Miner' });
-    takeFromMount(i); putInSocket(k);
-  } else if (!onShipFull.length && freeMount.length && bayEmpty.length) {
-    const j = bayEmpty[0], i = freeMount[0];
-    c = who('bay', j); count = freeMount.length; name = 'load'; from = bayName(j);
-    story = `Take the empty canister in ${from} onto the ship.`;
-    steps.push({ kind: 'trip', name, count, what: 'free mounts on the Miner' });
-    takeFromBay(j); putOnMount(i);
-  } else if (drained.length && freeBay.length) {
-    const k = drained[0], j = freeBay[0];
-    c = who('socket', k); count = K.filter((_, q) => who('socket', q) >= 0).length; name = 'clear'; from = sockName(site, k); to = bayName(j);
-    story = `Take the drained canister in ${from} back to ${to}.`;
-    steps.push({ kind: 'trip', name, count, what: 'canisters at the wall' });
-    takeFromSocket(k); putInBay(j);
-  } else return null;
-  return { name, story, c, count, from, to, steps };
-}
-
-// ── the setting for Mathwood's makers (the whole-crates word problems: canisters and trips) ──────────────────────
-const FOLK = [{ name: 'Crane Hand Pia', she: true }, { name: 'Dock Chief Ibarra', she: false }, { name: 'Miner Kestrel', she: true }, { name: 'Engineer Okafor', she: false }];
-export const SETTING = {
-  folk: FOLK,
-  things: [{ key: 'canisters', unit: CAN, shape: 'can' }],
-  share: [
-    { key: 'ore', thing: TONNE, box: CAN, story: ({ total, groups, f }) => `${f.name} has ${total} tonnes of ore to send to the smelter, shared evenly into ${groups} canisters.`, ask: 'How many tonnes go in each canister?' },
-  ],
-  crates: [
-    { key: 'trips', box: TRIP, story: ({ total, per, f }) => `${f.name} has ${total} tonnes of ore for the smelter. A canister holds ${per} tonnes, and the crane takes one canister a trip.`, ask: 'How many trips will the crane make so all the ore gets to the wall?' },
-    { key: 'racks', box: ['rack', 'racks'], story: ({ total, per }) => `${total} empty canisters are coming in. A rack holds ${per} canisters.`, ask: 'How many racks are needed so every canister has a bay?' },
-  ],
-};
-
-// ── the makers ───────────────────────────────────────────────────────────────────────────────────────────────────
-// each: { strand, at(step), make(step, { rand, live }) }. live.ask(kind, opts) -> the next move of that kind, its
-// numbers already on the level's marks, reserved for this question (src/jobs/cranelink.js), or null
-const fromLive = (live, kind, opts) => (live && live.ask ? live.ask(kind, opts) : null);
-// a move along the rail invented for a question from the log: a start and an end on the level's marks
-function madeAlong(t, prec, most = 26) {
-  const step = prec, n = Math.round(most / step);
-  for (let k = 0; k < 40; k++) { const a = t.int(0, n) * step, b = t.int(0, n) * step; if (Math.abs(a - b) >= Math.max(1, step * 3) && Math.abs(a - b) <= most) return { leg: 'wall', mark: r2(a), markTo: r2(b), what: t.pick(LOG_STOPS), from: null, to: null }; }
-  return { leg: 'wall', mark: 18, markTo: 6, what: 'the next stop' };
-}
-const railWords = (s) => (s.leg === 'wall' ? 'the wall rail' : 'the ship rail');
-// (a question from the log names no real place: its marks are made up)
-const LOG_STOPS = ['the next stop', 'a canister waiting there', 'the stop on the work order'];
-const rowsOfMove = (s, said) => [[s.leg === 'wall' ? 'Wall rail' : 'Ship rail', `at the ${t1(s.mark)} m mark`], ['To', `${s.what}, the ${t1(s.markTo)} m mark`], [said, '?']];
-
-export const MAKERS = {
-  // ── counting the canisters to move: a trip's start (the canisters drawn as they are) ──
-  // step 1  up to 5; step 2  up to 8 (8 came in: how many still to move)
-  count: {
-    strand: 'number', at: (step) => (step <= 1 ? 0 : 6),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), most = step <= 1 ? 5 : 8, s = fromLive(live, 'trip', { most });
-      const n = s ? s.count : t.int(step <= 1 ? 1 : 2, most), what = s ? s.what : 'full canisters on the Miner';
-      const ASK = s ? { 'full canisters on the Miner': 'How many full canisters are still on the Miner?', 'free mounts on the Miner': 'How many mounts on the Miner are empty?', 'canisters at the wall': 'How many canisters are plugged in at the wall?' }
-        : { 'full canisters on the Miner': 'How many full canisters are on the work order?' };   // (made up: not the Miner outside)
-      const look = s && s.name === 'clear' ? 'empty' : s && s.name === 'load' ? 'none' : 'full';
-      const slots = Array(n).fill(look === 'none' ? 'none' : look);
-      return ownOrder({
-        key: `count:${s ? s.name : 'log'}`, story: s ? `Work order: ${s.story}` : 'A work order from the log.', ask: ASK[what] || `How many ${what}?`,
-        right: F(n, CAN), slips: [{ ...F(n + 1, CAN), why: 'One too many. Touch each one once as you count.' }, { ...F(n - 1, CAN), why: 'One short. Touch each one once as you count.' }, { ...F(n + 2, CAN), why: 'Too many. Count again, one at a time.' }],
-        rightWhy: `${u(n, CAN)}: the crane sets off with the first`,
-        picFirst: true, help: { title: 'Count them', pic: { kind: 'cans', place: look === 'none' ? 'ship' : look === 'empty' ? 'wall' : 'ship', slots }, line: 'Touch each one once as you count: 1, 2, 3 ...' },
-        own: { strand: 'number', at: step <= 1 ? 0 : 6 }, facts: { kind: 'count', step: s && s.id, n, live: !!s },
-      }, rand, 3);
-    },
-  },
-  // ── the metre hops along the rail (counting) ──
-  // step 1  up to 5 hops; step 2  up to 10
-  hops: {
-    strand: 'number', at: (step) => (step <= 1 ? 2 : 8),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), most = step <= 1 ? 5 : 10, s = fromLive(live, 'along', { prec: 1, most }) || (() => { const n = t.int(2, most), a = t.int(n, 26); return { leg: 'wall', mark: a, markTo: a - n, what: t.pick(LOG_STOPS) }; })();
-      const n = Math.round(Math.abs(s.markTo - s.mark)), dir = s.markTo > s.mark ? 1 : -1;
-      return ownOrder({
-        key: 'hops', story: `The trolley must go along ${railWords(s)} to ${s.what}.`, ask: 'How many metres is that? Count the hops.',
-        right: F(n, METRE), slips: [{ ...F(n + 1, METRE), why: 'That counts the marks, not the hops between them. Count the hops.' }, { ...F(n - 1, METRE), why: 'One short: count every hop, the last one too.' }, { ...F(n + 2, METRE), why: 'Too many. Count each hop once.' }],
-        rightWhy: `${u(n, METRE)}: the trolley goes ${n} hops`,
-        picFirst: true, help: { title: 'Count the hops', pic: { kind: 'rail', from: s.mark, to: s.markTo, hops: true, what: s.what, leg: s.leg }, line: 'Each hop is one metre, from one mark to the next. Count the hops from the trolley to the place.' },
-        own: { strand: 'number', at: step <= 1 ? 2 : 8 }, facts: { kind: 'along', step: s.id, n, dir, live: s.id != null },
-      }, rand, 3);
-    },
-  },
-  // ── reading the rail's metre marks ──
-  mark: {
-    strand: 'number', at: () => 10,
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.45, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(LOG_STOPS) }; })();
-      const m = Math.round(s.markTo), here = Math.round(s.mark);
-      const flip = m >= 10 && m % 10 !== Math.floor(m / 10) % 10 ? Number(String(m).split('').reverse().join('')) : null;
-      return ownOrder({
-        key: 'mark', story: `The trolley is on ${railWords(s)}, going to ${s.what}. The crane stops on a metre mark, then lines itself up.`, ask: `Which mark is ${s.what} nearest to?`,
-        right: { v: m, big: String(m), small: 'm mark', label: `the ${m} m mark` },
-        slips: [{ v: m + 1, big: String(m + 1), small: 'm mark', label: `the ${m + 1} m mark`, why: 'One mark too far. Find the place, then read the number on the mark above it.' },
-          { v: m - 1, big: String(m - 1), small: 'm mark', label: `the ${m - 1} m mark`, why: 'One mark short. Read the number on the mark right above the place.' },
-          ...(here !== m && here > 0 ? [{ v: here, big: String(here), small: 'm mark', label: `the ${here} m mark`, why: `${here} is the mark the trolley is at now. Find the mark over ${s.what}.` }] : []),
-          ...(flip != null && flip !== m && flip <= 27 ? [{ v: flip, big: String(flip), small: 'm mark', label: `the ${flip} m mark`, why: `The digits are the other way round: it is ${m}.` }] : []),
-          { v: m + 2, big: String(m + 2), small: 'm mark', label: `the ${m + 2} m mark`, why: 'Two marks too far. Read the number on the mark right above the place.' }].filter((x) => x.v > 0),
-        rightWhy: `${cap(s.what)} is nearest the ${m} m mark`,
-        picFirst: true, help: { title: 'Read the marks', pic: { kind: 'rail', from: s.mark, to: s.markTo, read: true, what: s.what, leg: s.leg }, line: 'The numbers count the metres from the start of the rail. Find the place, then read the mark above it.' },
-        own: { strand: 'number', at: 10 }, facts: { kind: 'along', step: s.id, to: m, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── distances along the rail ──
-  // step 1  whole metres (18 m mark to 6 m mark); step 2  tenths (18 to 11.4)
-  rail: {
-    strand: 'words', at: (step) => (step <= 1 ? 18 : 48),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), prec = step <= 1 ? 1 : 0.1, s = fromLive(live, 'along', { prec, most: 27, least: prec === 1 ? 2 : 0.5 }) || madeAlong(t, prec);
-      const a = s.mark, b = s.markTo, d = r2(Math.abs(b - a)), sum = r2(a + b);
-      const pt = prec < 1 && Math.round(d * 10) % 10 !== 0;
-      return ownOrder({
-        key: `rail:${step}`, story: `The trolley is at the ${t1(a)} m mark on ${railWords(s)}. ${cap(s.what)} is at the ${t1(b)} m mark.`, ask: 'How many metres must the trolley go?',
-        right: F(d, METRE),
-        slips: [{ ...F(sum, METRE), why: `That adds the two marks. The way between them is the bigger take away the smaller: ${t1(Math.max(a, b))} − ${t1(Math.min(a, b))}.` },
-          { ...F(b, METRE), why: `${t1(b)} is the mark it goes to. How far is it from the ${t1(a)} m mark?` },
-          { ...F(a, METRE), why: `${t1(a)} is where the trolley is now. How far to the ${t1(b)} m mark?` },
-          { ...F(d + prec, METRE), why: prec === 1 ? 'One metre too far: count on from the smaller mark.' : 'A tenth too far. Line the points up and take away.' },
-          { ...F(Math.max(prec, d - prec), METRE), why: prec === 1 ? 'One metre short: count on from the smaller mark.' : 'A tenth short. Line the points up and take away.' },
-          ...(pt ? [{ ...F(r2(d * 10), METRE), why: `The point went missing: ${t1(d)}, not ${t1(d * 10)}.` }] : [])],
-        rightWhy: `${t1(Math.max(a, b))} − ${t1(Math.min(a, b))} = ${u(d, METRE)}`, sum: { op: 'sub', a: Math.max(a, b), b: Math.min(a, b) },
-        help: { title: 'The rail is a number line', pic: { kind: 'rail', from: a, to: b, gap: true, what: s.what, leg: s.leg }, line: 'Where it is going take away where it is: the bigger mark minus the smaller.', steps: [`${t1(Math.max(a, b))} − ${t1(Math.min(a, b))} = ?`] },
-        own: { strand: prec === 1 ? 'words' : 'dec', at: prec === 1 ? 18 : 48 }, credit: [{ strand: 'sub', at: prec === 1 ? 14 : 45, weight: 0.5 }], facts: { kind: 'along', step: s.id, d, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── the hook up and down ──
-  // step 1  whole metres; step 2  tenths
-  hoist: {
-    strand: 'words', at: (step) => (step <= 1 ? 24 : 48),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), prec = step <= 1 ? 1 : 0.1, s = fromLive(live, 'hoist', { prec, least: prec }) || (() => { const a = prec === 1 ? 6 : 6.3, b = prec === 1 ? t.int(1, 4) : t.pick([0.7, 2.3, 3.7, 2.2]); return { from: a, to: b, what: t.pick(['a canister below it', 'the height on the work order']), carrying: false }; })();
-      const a = s.from, b = s.to, d = r2(Math.abs(b - a)), down = b < a, sum = r2(a + b);
-      return ownOrder({
-        key: `hoist:${step}`, story: `The hook is ${t1(a)} m up${s.carrying ? ', with the canister' : ''}. It must go ${down ? 'down' : 'up'} to ${s.what}, ${t1(b)} m up.`, ask: `How far ${down ? 'down' : 'up'} must the hook go?`,
-        right: F(d, METRE),
-        slips: [{ ...F(sum, METRE), why: `That adds the two heights. The way between is the bigger take away the smaller: ${t1(Math.max(a, b))} − ${t1(Math.min(a, b))}.` },
-          { ...F(b, METRE), why: `${t1(b)} m is the height it goes to, not how far it goes.` }, { ...F(a, METRE), why: `${t1(a)} m is how high it is now.` },
-          { ...F(d + prec, METRE), why: 'One step of the scale too far. Count again from the lower height.' }, { ...F(Math.max(prec, d - prec), METRE), why: 'One step of the scale short.' }],
-        rightWhy: `${t1(Math.max(a, b))} − ${t1(Math.min(a, b))} = ${u(d, METRE)} ${down ? 'down' : 'up'}`, sum: { op: 'sub', a: Math.max(a, b), b: Math.min(a, b) },
-        help: { title: 'The hoist\'s scale', pic: { kind: 'hoist', from: a, to: b, what: s.what }, line: 'The hook\'s height is on the chair\'s screens. How far it goes is the higher height take away the lower.', steps: [`${t1(Math.max(a, b))} − ${t1(Math.min(a, b))} = ?`] },
-        own: { strand: prec === 1 ? 'words' : 'dec', at: prec === 1 ? 24 : 48 }, credit: [{ strand: 'sub', at: prec === 1 ? 14 : 45, weight: 0.5 }], facts: { kind: 'hoist', step: s.id, d, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── up and down as plus and minus: Mathwood's negatives card (its slips) on the hook's real move ──
-  change: {
-    strand: 'number', at: () => 34,
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'hoist', { prec: 1, least: 2 }) || (() => { const a = 6, b = t.int(1, 4); return { from: a, to: b, what: 'a canister below it' }; })();
-      const a = Math.round(s.from), b = Math.round(s.to), c = b - a;
-      // (where it ends take away where it starts: the change, plus up, minus down)
-      const card = makeCard(b, '-', a, { size: 4, rand });
-      const WHY = { way: 'That adds the heights. The change is where it ends take away where it starts.', sign: `Right size, wrong way: ${c < 0 ? '+' : '−'}${Math.abs(c)} would take the hook ${c < 0 ? 'up' : 'down'}. It goes ${c < 0 ? 'down, so it is minus' : 'up, so it is plus'}.`,
-        drop: 'That adds the sizes and drops the signs. The change is where it ends take away where it starts.', start: 'That starts on the wrong side. Ends minus starts.',
-        near: 'One off: count the metres on the hoist\'s scale again.' };
-      // (a change can be minus: the buttons' values are kept above zero by CHANGE_AT, as the engine keeps only counts)
-      const coins = card.targets.map((x) => ({ ...F(x.n, METRE, { sign: true }), v: CHANGE_AT + x.n, good: x.good, why: x.good ? '' : WHY[x.trap] || WHY[signSlip(b, '-', a, x.n)] || 'Count the metres from where the hook is to where it goes, and say which way.' }));
-      const right = coins.find((x) => x.good);
-      return ownOrder({
-        key: 'change', story: `On the hoist's scale, up is plus and down is minus. The hook is at ${a} m; it goes to ${s.what}, at ${b} m.`, ask: 'What is the change in the hook\'s height?',
-        right, slips: coins.filter((x) => !x.good),
-        rightWhy: `${b} − ${a} = ${c > 0 ? '+' : '−'}${Math.abs(c)}: ${Math.abs(c)} m ${c < 0 ? 'down' : 'up'}`,
-        help: { title: 'Up is plus, down is minus', pic: { kind: 'hoist', from: a, to: b, what: s.what, signed: true }, line: 'Where it ends take away where it starts. Going down makes it minus.', steps: [`${b} − ${a} = ?`] },
-        own: { strand: 'number', at: 34 }, credit: [{ strand: 'sub', at: 20, weight: 0.5 }], facts: { kind: 'hoist', step: s.id, change: c, offset: CHANGE_AT, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── time from speed ──
-  // step 1  whole metres at 1 or 2 m a second; step 2  halves and tenths (7.5 m at 0.5 m a second)
-  time: {
-    strand: 'words', at: (step) => (step <= 1 ? 40 : 52),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), speeds = step <= 1 ? [1, 2] : [0.5, 1.5, 0.6, 0.8, 1.2], prec = step <= 1 ? 1 : 0.1;
-      const s = fromLive(live, 'time', { prec, speeds, least: 1.5 }) || (() => { const v = t.pick(speeds), n = t.int(3, 12); return { leg: 'wall', mark: 20, markTo: r2(20 - n * v), what: 'the next stop', speed: v }; })();
-      const d = r2(Math.abs(s.markTo - s.mark)), v = s.speed, secs = r2(d / v);
-      return ownOrder({
-        key: `time:${step}`, story: `${cap(s.what)} is ${t1(d)} m along ${railWords(s)} from the trolley. The trolley runs at ${t1(v)} ${v === 1 ? 'metre' : 'metres'} a second.`, ask: 'How many seconds will it take?',
-        right: F(secs, SEC),
-        slips: [{ ...F(r2(d * v), SEC), why: `That multiplies. Each second covers ${t1(v)} m: how many of those fit in ${t1(d)} m? ${t1(d)} ÷ ${t1(v)}.` },
-          { ...F(d, SEC), why: `${t1(d)} is the metres. At ${t1(v)} m a second it takes ${t1(d)} ÷ ${t1(v)} seconds.` },
-          { ...F(secs + 1, SEC), why: 'One second too many. Count the seconds as the metres add up.' }, { ...F(Math.max(1, secs - 1), SEC), why: 'One second short.' },
-          ...(v < 1 ? [{ ...F(r2(secs / 10), SEC), why: 'The point went the wrong way: a slow trolley takes MORE seconds than metres.' }] : [])],
-        rightWhy: `${t1(d)} ÷ ${t1(v)} = ${u(secs, SEC)}`, sum: { op: 'div', a: d, b: v },
-        help: { title: 'A second at a time', pic: { kind: 'speed', d, v }, line: `Every second the trolley goes ${t1(v)} m. How many seconds make ${t1(d)} m?`, steps: [`${t1(d)} ÷ ${t1(v)} = ?`] },
-        own: { strand: v < 1 || d % 1 ? 'dec' : 'words', at: step <= 1 ? 40 : 52 }, credit: [{ strand: 'div', at: step <= 1 ? 29 : 55, weight: 0.5 }], facts: { kind: 'time', step: s.id, d, v, secs, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── across the beam (the carriage to the ship's side) ──
-  slide: {
-    strand: 'dec', at: () => 48,
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'slide', { prec: 0.1, least: 0.3 }) || { from: 0, to: t.pick([1.2, -1.2, 0.8]), what: 'the rack\'s side of the ship' };
-      const a = s.from, b = s.to, d = r2(Math.abs(b - a));
-      return ownOrder({
-        key: 'slide', story: `The carriage runs along the trolley's beam; its marks count from the middle. It is at ${t1(a)} m and must go to ${t1(b)} m, over ${s.what}.`, ask: 'How far does the carriage move?',
-        right: F(d, METRE), slips: [{ ...F(r2(Math.abs(a) + Math.abs(b)) === d ? r2(d + 0.2) : r2(Math.abs(a) + Math.abs(b)), METRE), why: 'Take away the smaller from the bigger: where it goes and where it is.' }, { ...F(Math.abs(b), METRE), why: 'That is where it goes, not how far.' }, { ...F(d + 0.1, METRE), why: 'A tenth too far.' }],
-        rightWhy: `${u(d, METRE)} across`, sum: { op: 'sub', a: Math.max(a, b), b: Math.min(a, b) },
-        help: { title: 'Across the beam', pic: { kind: 'beam', from: a, to: b }, line: 'The beam\'s marks are a short number line. How far apart are the two marks?', steps: [`${t1(Math.max(a, b))} − ${t1(Math.min(a, b))} = ?`] },
-        own: { strand: 'dec', at: 48 }, facts: { kind: 'slide', step: s.id, d, live: s.id != null },
-      }, rand);
-    },
-  },
-  // ── weights against the crane's limit (the plate on its beam says RATED) ──
-  // step 1  how much the hook lifts (the canister and its ore); step 2  how much more it could lift
-  weight: {
-    strand: 'dec', at: (step) => (step <= 1 ? 56 : 58),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'weight', {}) || { ore: t.pick([1.2, 1.5, 0.8, 2.1, 1.4]), fill: 1, what: 'the canister' };
-      const ore = r1(s.ore * s.fill), all = r1(EMPTY + ore), spare = r1(RATED - all), more = t.chance(0.4) && step > 1;
-      const ask = more ? `The plate on the crane says ${RATED} t. How much more could the hook lift with this canister on it?` : `How much will the hook lift? (The plate on the crane says ${RATED} t.)`;
-      const right = more ? F(spare, TONNE) : F(all, TONNE);
-      const slips = more
-        ? [{ ...F(r1(RATED - ore), TONNE), why: `That leaves out the canister's own ${t1(EMPTY)} t. Add it on first.` }, { ...F(all, TONNE), why: `${t1(all)} t is the load. The question is what is left of the ${RATED} t.` }, { ...F(r1(spare + 0.1), TONNE), why: 'A tenth off. Line the points up and take away.' }]
-        : [{ ...F(ore, TONNE), why: `That is the ore only. The canister weighs ${t1(EMPTY)} t as well.` }, { ...F(r1(ore * 10 + EMPTY), TONNE), why: 'The point went missing in the ore.' }, { ...F(r1(all + 0.1), TONNE), why: 'A tenth too much. Line the points up and add.' }, { ...F(r1(RATED - all), TONNE), why: `That is what is left of the ${RATED} t. The question is the load itself.` }];
-      return ownOrder({
-        key: `weight:${more ? 'spare' : 'load'}`, story: `Before it lifts, the crane weighs its load. ${cap(s.what)} weighs ${t1(EMPTY)} t empty and has ${t1(ore)} t of ore in it.`, ask,
-        right, slips,
-        rightWhy: more ? `${t1(EMPTY)} + ${t1(ore)} = ${t1(all)} t; ${RATED} − ${t1(all)} = ${u(spare, TONNE)} to spare: it lifts` : `${t1(EMPTY)} + ${t1(ore)} = ${u(all, TONNE)}, under ${RATED} t: it lifts`,
-        sum: more ? [{ op: 'add', a: EMPTY, b: ore, say: 'First the load: the canister and its ore' }, { op: 'sub', a: RATED, b: all, say: `Then what is left of the ${RATED} t` }] : { op: 'add', a: EMPTY, b: ore },
-        help: { title: 'Weighing the load', pic: { kind: 'plate', empty: EMPTY, ore, rated: RATED, more }, line: more ? 'First the load (the canister and its ore), then take it away from what the plate says.' : 'The hook lifts the canister and the ore in it: add the two.', steps: more ? [`${t1(EMPTY)} + ${t1(ore)} = ?`, `${RATED} − that = ?`] : [`${t1(EMPTY)} + ${t1(ore)} = ?`] },
-        own: { strand: 'dec', at: more ? 58 : 56 }, credit: [{ strand: 'add', at: 45, weight: 0.5 }], facts: { kind: 'weight', step: s.id, all, spare, more, live: s.id != null }, size: more ? 2 : 1,
-      }, rand);
-    },
-  },
-  // ── how many trips: the round's swap, canister by canister ──
-  trips: {
-    strand: 'mul', at: () => 60,
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'trip', { most: 8 });
-      const toWall = s && s.name === 'unload' ? s.count : t.int(3, 8), n = 8, all = toWall + 2 * n;
-      return ownOrder({
-        key: 'trips', story: `${s ? 'Work order' : 'From the log'}: ${toWall} full ${toWall === 1 ? 'canister goes' : 'canisters go'} from the Miner to the wall, then ${n} empties from the rack onto the Miner, then the ${n} drained ones back to the rack. The crane carries one canister a trip.`,
-        ask: 'How many trips is that in all?',
-        right: F(all, TRIP), slips: [{ ...F(toWall + n, TRIP), why: `That leaves out one lot of ${n}. There are three lots: ${toWall}, ${n} and ${n}.` }, { ...F(3 * n, TRIP), why: `Only ${toWall} go to the wall this time, not ${n}.` }, { ...F(all + 1, TRIP), why: 'One too many. Add the three lots.' }, { ...F(toWall * n, TRIP), why: 'That multiplies. Each canister is one trip: add the lots.' }].filter((x) => x.v !== all),
-        rightWhy: `${toWall} + ${n} + ${n} = ${u(all, TRIP)}`, sum: [{ op: 'add', a: toWall, b: n, say: 'First the canisters to the wall and the empties onto the ship' }, { op: 'add', a: toWall + n, b: n, say: 'Then the drained ones back to the rack' }],
-        help: { title: 'One canister a trip', pic: { kind: 'trips', lots: [toWall, n, n] }, line: 'Each canister is one trip. Add up the three lots.', steps: [`${toWall} + ${n} = ?`, `that + ${n} = ?`] },
-        own: { strand: 'add', at: 30 }, credit: [], facts: { kind: 'trip', step: s && s.id, all, live: !!s },
-      }, rand);
-    },
-  },
-  // ── routes along and across: the whole way to a canister, as the hook goes ──
-  // step 1  how far in all; step 2  how long in all, at the rails' and the beam's speeds
-  route: {
-    strand: 'dec', at: (step) => (step <= 1 ? 70 : 78),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'route', { prec: 0.1 }) || (() => { const a = t.pick([18, 20.3, 22.6]), b = 11.4, c = t.pick([8.6, 15]), x = 1.2; return { legs: [{ leg: 'wall', mark: a, markTo: b, what: 'the turntable' }, { leg: 'ship', mark: 0, markTo: c, what: 'the canister\'s mark' }], across: { from: 0, to: x }, what: 'the canister on the ship\'s tray' }; })();
-      const L = s.legs.map((g) => r2(Math.abs(g.markTo - g.mark))), X = r2(Math.abs(s.across.to - s.across.from)), all = r2(L.reduce((p, q) => p + q, 0) + X);
-      const time = step > 1, V = 2, VX = 0.6, secs = r2(L.reduce((p, q) => p + q / V, 0) + X / VX);
-      const lines = [...s.legs.map((g) => [g.leg === 'wall' ? 'Wall rail' : 'Ship rail', `${t1(g.mark)} → ${t1(g.markTo)} m`]), ['Across', `${t1(s.across.from)} → ${t1(s.across.to)} m`], [time ? 'Time' : 'In all', '?']];
-      const right = time ? F(secs, SEC) : F(all, METRE);
-      const slips = time
-        ? [{ ...F(r2(all / V), SEC), why: `The carriage is slower: across goes at ${VX} m a second, not ${V}.` }, { ...F(all, SEC), why: 'That is the metres. Each part takes its metres ÷ its speed.' }, { ...F(r2(secs - X / VX), SEC), why: 'That leaves out the carriage\'s part, across the beam.' }, { ...F(r2(secs + 1), SEC), why: 'A second too many. Add up each part\'s time.' }]
-        : [{ ...F(r2(all - X), METRE), why: 'That leaves out the carriage\'s part, across the beam.' }, { ...F(r2(s.legs.reduce((p, g) => p + g.markTo, 0) + s.across.to), METRE), why: 'That adds the marks themselves. Each part is the way between its two marks.' }, { ...F(r2(all + 0.1), METRE), why: 'A tenth too far. Line up the points and add.' }, { ...F(r2(all - L[0]), METRE), why: 'That leaves out the wall rail\'s part.' }];
-      const sums = time ? s.legs.map((g, i) => ({ op: 'div', a: L[i], b: V, say: `${g.leg === 'wall' ? 'The wall rail' : 'The ship rail'}: ${t1(L[i])} m at ${V} m a second` })).concat([{ op: 'div', a: X, b: VX, say: `Across: ${t1(X)} m at ${VX} m a second` }])
-        : s.legs.map((g, i) => ({ op: 'sub', a: Math.max(g.mark, g.markTo), b: Math.min(g.mark, g.markTo), say: `${g.leg === 'wall' ? 'The wall rail' : 'The ship rail'}: from ${t1(g.mark)} to ${t1(g.markTo)}` }));
-      return ownOrder({
-        key: `route:${time ? 'time' : 'far'}`, story: `The way to ${s.what}: along the wall rail to the turntable, a quarter turn, out along the ship rail, then the carriage across the beam.${time ? ` The trolley runs at ${V} m a second on the rails, the carriage at ${VX} m a second across.` : ''}`,
-        ask: time ? 'How many seconds does the whole way take (the turn left out)?' : 'How far does the hook go in all (the turn left out)?',
-        right, slips, lines,
-        rightWhy: time ? `${[...L.map((q) => `${t1(q)} ÷ ${V}`), `${t1(X)} ÷ ${VX}`].join(' + ')} = ${u(secs, SEC)}` : `${[...L.map(t1), t1(X)].join(' + ')} = ${u(all, METRE)}`,
-        sum: sums.length > 1 ? sums : sums[0],
-        help: { title: 'The way, part by part', pic: { kind: 'route', legs: s.legs, across: s.across, time, V, VX }, line: time ? 'Each part: its metres ÷ its speed. Then add the times.' : 'Each part is the way between its two marks. Then add the parts.', steps: time ? ['Each part: metres ÷ speed', 'Then add the times'] : ['Each part: the bigger mark − the smaller', 'Then add the parts'] },
-        own: { strand: 'dec', at: time ? 78 : 70 }, credit: [{ strand: 'add', at: 50, weight: 0.5 }], facts: { kind: 'route', step: s.id, all, secs, time, live: s.id != null }, size: time ? 3 : 2,
-      }, rand);
-    },
-  },
-};
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const ROMAN = ['I', 'II', 'III', 'IV'];
 
-// ── the ladder: easiest first ────────────────────────────────────────────────────────────────────────────────────
-const M = (maker, step, w = 1) => ({ maker, step, w });
-const Wd = (step, types, w = 1) => ({ maker: 'words', step, types, w });
-export const PLACE = {
-  id: 'crane', name: 'The crane operator job', short: 'Crane', math: 'Moving the crane by sums: marks, distances, heights, speeds, weights, trips', pic: 'smelter', job: null,
-  line: 'Work the smelter\'s ceiling crane: every right answer is the crane\'s next move.',
-  levels: [
-    { id: 'cCount', title: 'Counting canisters to move', line: 'Up to 5: the canisters to move, the metre hops', grade: 0, strand: 'number', gen: { mix: [M('count', 1), M('hops', 1, 2)] } },
-    { id: 'cHops', title: 'Counting along the rail', line: 'Up to 10 metre hops; 8 came in', grade: 6, strand: 'number', gen: { mix: [M('hops', 2, 2), M('count', 2)] } },
-    { id: 'cMarks', title: 'Reading the rail\'s metre marks', line: 'Which mark is socket 5 under?', grade: 10, strand: 'number', gen: { mix: [M('mark', 1, 2), M('hops', 2)] } },
-    { id: 'cAlong', title: 'Distances along the rail', line: 'From the 18 m mark to the 6 m mark', grade: 18, strand: 'words', gen: { mix: [M('rail', 1, 2), M('mark', 1)] } },
-    { id: 'cHoist', title: 'The hook up and down', line: 'The hook is 6 m up; the canister 1 m up', grade: 24, strand: 'words', gen: { mix: [M('hoist', 1, 2), M('rail', 1)] } },
-    { id: 'cChange', title: 'Up and down as plus and minus', line: 'From 6 m to 1 m is a change of −5', grade: 34, strand: 'number', gen: { mix: [M('change', 1, 2), M('hoist', 1), M('rail', 1)] } },
-    { id: 'cSpeed', title: 'Time from speed', line: '12 m at 2 m a second', grade: 40, strand: 'words', gen: { mix: [M('time', 1, 2), M('rail', 1)] } },
-    { id: 'cTenths', title: 'Tenths along, up and down', line: 'From the 18 m mark to 11.4; the hook from 6.3 m to 3.7', grade: 48, strand: 'dec', gen: { mix: [M('rail', 2, 1.5), M('hoist', 2, 1.5), M('slide', 1)] } },
-    { id: 'cHalves', title: 'Time from speed in tenths', line: '7.5 m at half a metre a second', grade: 52, strand: 'dec', gen: { mix: [M('time', 2, 2), M('rail', 2)] } },
-    { id: 'cWeight', title: 'Weights against the crane\'s limit', line: 'A 0.4 t canister with 1.6 t of ore; the plate says 3 t', grade: 56, strand: 'dec', gen: { mix: [M('weight', 2, 2), M('rail', 2), M('hoist', 2)] } },
-    { id: 'cTrips', title: 'How many trips', line: 'One canister a trip; whole canisters for the ore', grade: 60, strand: 'words', gen: { mix: [M('trips', 1, 1.5), Wd(7, ['share']), M('weight', 2)] } },
-    { id: 'cRoute', title: 'Routes along and across', line: 'Along the wall rail, round, out along the ship rail, across', grade: 70, strand: 'dec', gen: { mix: [M('route', 1, 2), M('time', 2)] } },
-    { id: 'cRouteTime', title: 'Route times', line: 'The whole way at 2 m a second, 0.6 across', grade: 78, strand: 'dec', gen: { mix: [M('route', 2, 2), M('route', 1)] } },
-  ],
-};
+// ── the grid ─────────────────────────────────────────────────────────────────────────────────────────────────────
+export const gridOf = (site) => ({ origin: site.grid?.origin || [0, 0], size: site.grid?.size || [40, 28] });
+export const toGrid = (site, X, Z) => { const g = gridOf(site); return [r2(X - g.origin[0]), r2(g.origin[1] - Z)]; };
+export const fromGrid = (site, gx, gy) => { const g = gridOf(site); return [gx + g.origin[0], g.origin[1] - gy]; };
+// which quadrant a point of the grid is in (the grid's middle lines; I top right, II top left, III bottom left, IV
+// bottom right, as a coordinate plane's), or 0 on a middle line
+export function quadrantOf(site, gx, gy) {
+  const [w, h] = gridOf(site).size, cx = w / 2, cy = h / 2;
+  if (Math.abs(gx - cx) < 0.3 || Math.abs(gy - cy) < 0.3) return 0;
+  return gx > cx ? (gy > cy ? 1 : 4) : (gy > cy ? 2 : 3);
+}
 
-// ── THE JOB'S QUEUE OF MOVES (what joins a question to a move; src/jobs/cranelink.js runs it on the live crane) ──────
-// The trips are planned ahead from where everything will be once the moves already given are done (tripFrom), as a
-// queue. A maker asks for the next move of its kind (ask): its numbers are put on the level's marks (a whole metre, a
-// tenth) and it is held for that question. A right answer (right) gives the moves up to and including it as the
-// live crane's autopilot steps (kit/crane-drive.js go): the asked one by exactly the answer's numbers, with the crane
-// lining itself up onto the marks before it and onto the place after it; the moves no question asked about, the
-// crane makes by itself. A question that held no move lets the crane make its next move.
-//   const Q = makeJobQueue(site, { start: () => state, oreOf: () => tonnes })   state: the live crane's (stateAt's shape)
-//   Q.ask(kind, opts) -> numbers for the question (with .id), or null     kinds: 'along', 'time', 'hoist', 'slide',
-//                        'weight', 'trip', 'route'; opts: { prec, most, least, near, speeds }
-//   Q.right(id) -> the autopilot's steps          Q.reserved, Q.queue, Q.cursor
-const rnd2 = (x) => Math.round(x * 100) / 100;
-const roundTo = (x, p) => rnd2(Math.round(x / p) * p);
-export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
-  const queue = [];
-  let cursor = 0, planned = null, ids = 0;
-  const Q = { queue, reserved: null, get cursor() { return cursor; }, get planned() { return planned; } };
-  function begin() {
-    const S = start(), held = S.cans.findIndex((q) => q.where === 'held');
-    planned = { x: S.x, z: S.z, yaw: S.yaw, slide: S.slide, hoist: S.hoist, held, cans: S.cans.map((q) => ({ where: q.where, i: q.i, fill: q.fill })) };
-    // (where it is now is a little odd: up and the carriage home first)
-    if (Math.abs(S.hoist - site.carry) > 1e-3) { queue.push({ kind: 'hoist', from: S.hoist, to: site.carry, what: 'the top', carrying: held >= 0, id: ids++ }); planned.hoist = site.carry; }
-    if (Math.abs(S.slide) > 1e-3) { queue.push({ kind: 'slide', from: S.slide, to: 0, what: 'the beam\'s middle', id: ids++ }); planned.slide = 0; }
+// ── the places ───────────────────────────────────────────────────────────────────────────────────────────────────
+// the Miner's places by name (the game's maker: "Upper-Forward-Starboard ... I wouldn't make the player depend on that
+// knowledge. You can just use it in the questions though"): its row, its end (its nose is the way +x of the hangar
+// when parked nose +x), its side (port is its left, looking forward)
+export function mountName(site, i) {
+  const M = site.mounts, m = M[i], mx = M.reduce((q, a) => q + a.at[0], 0) / M.length, mz = M.reduce((q, a) => q + a.at[2], 0) / M.length;
+  const nose = site.nose || 1;
+  return `${m.upper ? 'Upper' : 'Lower'}-${(m.at[0] - mx) * nose > 0 ? 'Forward' : 'Aft'}-${(m.at[2] - mz) * nose < 0 ? 'Port' : 'Starboard'}`;
+}
+// a place, where the crane goes for it: the hook's point there (a canister's middle at rest; a mount's tray slid out),
+// the way a canister lies there, and in words
+export function placeOf(site, kind, i) {
+  if (kind === 'mount') { const m = site.mounts[i]; return { kind, i, at: [m.at[0] + m.out[0], m.at[1] + site.can.lift, m.at[2] + m.out[1]], axis: m.yaw, name: `the ${mountName(site, i)} tray`, short: 'the ship\'s tray' }; }
+  if (kind === 'socket') {
+    const k = site.sockets[i], n = k.n, h = site.can.half, D = [k.at[0] + n[0] * (h - site.can.seat), k.at[1], k.at[2] + n[1] * (h - site.can.seat)], W = [k.at[0] + n[0] * (h + site.can.clear), k.at[2] + n[1] * (h + site.can.clear)];
+    return { kind, i, at: D, wait: W, axis: Math.atan2(n[0], n[1]), name: `socket ${k.number || i + 1}`, short: `socket ${k.number || i + 1}`, number: k.number || i + 1 };
   }
-  function more() {
-    let T = tripFrom(site, planned);
-    if (!T) {
-      // (nothing left to move: the Miner is back from a run with its canisters full, as at the end of a round)
-      for (const q of planned.cans) if (q.where === 'mount') q.fill = 1;
-      queue.push({ kind: 'refill', id: ids++ });
-      T = tripFrom(site, planned);
-      if (!T) return false;
-    }
-    for (const s of T.steps) queue.push({ ...s, trip: T, id: ids++ });
-    return true;
-  }
-  // the next move from the cursor that passes `test`, planning up to two more trips for it -> its index, or -1
-  function findFrom(test, from = cursor) {
-    for (let k = from, made = 0; ; k++) {
-      while (k >= queue.length) { if (made >= 2 || !more()) return -1; made++; }
-      if (test(queue[k], k)) return k;
-    }
-  }
-  const speedFor = (d, speeds) => { for (const v of speeds) { const s = d / v; if (Math.abs(s - Math.round(s)) < 1e-6 && s >= 2 && s <= 40) return v; } return null; };
-  // a route: along a leg to the turntable, the turn, out along the other leg, the carriage across
-  function routeAt(i) {
-    const a = queue[i];
-    let j = i + 1;
-    while (j < queue.length && queue[j].kind !== 'turn') { if (queue[j].kind !== 'hoist') return null; j++; }
-    if (j >= queue.length) return null;
-    j++;
-    while (j < queue.length && queue[j].kind !== 'along') { if (queue[j].kind !== 'hoist') return null; j++; }
-    if (j >= queue.length) return null;
-    const b = queue[j]; j++;
-    if (j >= queue.length || queue[j].kind !== 'slide') return null;
-    const across = queue[j], to = queue.slice(j + 1).find((q) => q.kind === 'hoist' || q.kind === 'trip');
-    return { legs: [a, b], across, end: j, what: to && to.kind === 'hoist' ? to.what : across.what };
-  }
-  // (planning again from where the crane is now: after a move that could not be made)
-  Q.restart = function restart() { queue.length = 0; cursor = 0; planned = null; Q.reserved = null; };
-  // the kinds of question the crane's next move could be asked as: ['along'], ['along', 'route'], ['hoist'], ['grab'],
-  // ['trip'] ... (the moves it makes by itself, the waits and the turns, are passed over)
-  const moving = (s) => s.kind === 'along' || s.kind === 'hoist' || s.kind === 'slide' || (s.kind === 'grab' && s.how === 'shut' && s.c >= 0);
-  const kinds = (k) => { const s = queue[k]; return s.kind === 'grab' ? ['grab'] : s.kind === 'along' ? (s.what === 'the turntable' && routeAt(k) ? ['along', 'route'] : ['along']) : [s.kind]; };
-  Q.peek = function peek() {
-    if (!planned) begin();
-    const k = findFrom((s) => moving(s) || s.kind === 'trip');
-    if (k < 0) return [];
-    // (at a trip's start: the trip itself, to be counted, or its first move)
-    if (queue[k].kind === 'trip') { const m = findFrom(moving, k + 1); return ['trip', ...(m >= 0 ? kinds(m) : [])]; }
-    return kinds(k);
-  };
-  // the next few moves' kinds, in order (a level none of whose questions suits the very next move asks about the first
-  // move one of them does suit; the crane makes the ones before it by itself)
-  Q.ahead = function ahead(n = 8) {
-    if (!planned) begin();
-    const out = [];
-    for (let k = cursor; out.length < n;) {
-      k = findFrom((s) => moving(s) || s.kind === 'trip', k);
-      if (k < 0) break;
-      if (queue[k].kind === 'trip') { const m = findFrom(moving, k + 1); out.push(['trip', ...(m >= 0 ? kinds(m) : [])]); k = m >= 0 ? m + 1 : k + 1; } else { out.push(kinds(k)); k++; }
-    }
-    return out;
-  };
-  Q.ask = function ask(kind, o = {}) {
-    if (!planned) begin();
-    const prec = o.prec || 1;
-    let k = -1, out = null;
-    if (kind === 'along' || kind === 'time') {
-      k = findFrom((s) => {
-        if (s.kind !== 'along') return false;
-        const a = roundTo(s.mark, prec), b = roundTo(s.markTo, prec), d = Math.abs(b - a);
-        if (o.near != null && Math.abs(s.markTo - b) > o.near) return false;
-        if (Math.abs(s.markTo - b) > prec / 2 + 1e-9 || d < (o.least || prec) - 1e-9) return false;
-        return kind === 'time' ? !!speedFor(Math.min(d, o.most || Infinity), o.speeds || [1, 2]) : true;
-      });
-      if (k < 0) return null;
-      const s = queue[k];
-      let a = roundTo(s.mark, prec);
-      const b = roundTo(s.markTo, prec);
-      // (a long way at the youngest levels: the crane does most of it by itself, the last `most` metres are asked)
-      if (o.most && Math.abs(b - a) > o.most) a = rnd2(b - Math.sign(b - a) * o.most);
-      out = { leg: s.leg, mark: a, markTo: b, what: s.what };
-      if (kind === 'time') out.speed = speedFor(Math.abs(b - a), o.speeds || [1, 2]);
-    } else if (kind === 'hoist') {
-      k = findFrom((s) => s.kind === 'hoist' && Math.abs(roundTo(s.to, prec) - s.to) <= Math.max(prec / 2, 0.06) + 1e-9 && Math.abs(roundTo(s.to, prec) - roundTo(s.from, prec)) >= (o.least || prec) - 1e-9 && roundTo(s.to, prec) > 0);
-      if (k < 0) return null;
-      const s = queue[k];
-      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what, carrying: !!s.carrying, at: s.at || null };
-    } else if (kind === 'slide') {
-      k = findFrom((s) => s.kind === 'slide' && Math.abs(roundTo(s.to, prec) - roundTo(s.from, prec)) >= (o.least || prec) - 1e-9);
-      if (k < 0) return null;
-      const s = queue[k];
-      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what, at: s.at || null };
-    } else if (kind === 'weight') {
-      k = findFrom((s) => s.kind === 'grab' && s.how === 'shut' && s.c >= 0);
-      if (k < 0) return null;
-      const s = queue[k];
-      out = { ore: oreOf(), fill: s.fill, what: s.what };
-    } else if (kind === 'trip') {
-      k = findFrom((s) => s.kind === 'trip' && (!o.most || s.count <= o.most));
-      if (k < 0) return null;
-      const s = queue[k];
-      out = { name: s.name, count: s.count, what: s.what, story: s.trip.story };
-    } else if (kind === 'route') {
-      k = findFrom((s, i) => s.kind === 'along' && s.what === 'the turntable' && !!routeAt(i));
-      if (k < 0) return null;
-      const R = routeAt(k);
-      out = { legs: R.legs.map((g) => ({ leg: g.leg, mark: roundTo(g.mark, prec), markTo: roundTo(g.markTo, prec), what: g.what })), across: { from: roundTo(R.across.from, prec), to: roundTo(R.across.to, prec) }, what: R.what, end: R.end };
-    } else return null;
-    Q.reserved = { ...out, kind, k, id: queue[k].id, prec };
-    return { ...out, id: queue[k].id };
-  };
-  // the autopilot's steps for the moves from the cursor up to and including index `last`
-  const alongOf = (leg, mark) => (leg === 'wall' ? site.rail.wall[0] + mark : site.turn[1] + mark);
-  function stepsOf(s, asked) {
-    switch (s.kind) {
-      case 'along': {
-        if (!asked || (asked.kind !== 'along' && asked.kind !== 'time' && asked.kind !== 'route')) return [{ axis: 'along', to: s.to }];
-        let a = asked.mark, b = asked.markTo;
-        if (asked.kind === 'route') { const g = asked.legs.find((x) => x.leg === s.leg); a = g.mark; b = g.markTo; }
-        return [{ axis: 'along', to: alongOf(s.leg, a) }, { axis: 'along', to: alongOf(s.leg, b), v: asked.kind === 'time' ? asked.speed : undefined, asked: true }, { axis: 'along', to: s.to }];
+  const b = site.bays[i]; return { kind: 'bay', i, at: [...b.at], axis: b.yaw ?? 0, name: `bay ${i + 1} of the rack`, short: 'the rack' };
+}
+
+// ── the next trip ────────────────────────────────────────────────────────────────────────────────────────────────
+const plainState = (S) => ({ x: S.x, z: S.z, yaw: S.yaw, hoist: S.hoist, arms: S.arms, latch: S.latch, tray: [...S.tray], iris: [...S.iris], lit: [...S.lit], cans: S.cans.map((q) => ({ ...q })) });
+// the round's next trip from a state: the first canister planFrom moves, where from (null: in the cradle now) and to;
+// with nothing left to do, a test lift: an empty canister from the rack to a free socket, or back
+export function tripFrom(site, S) {
+  let plan = null;
+  try { plan = planFrom(site, plainState(S)); } catch (e) { plan = null; }
+  if (plan) {
+    let best = null;
+    plan.cans.forEach((can, c) => { const k = can.spans.findIndex((s) => s.where === 'held'); if (k < 0) return; if (!best || can.spans[k].t0 < best.t0) best = { c, k, t0: can.spans[k].t0 }; });
+    if (best) {
+      const sp = plan.cans[best.c].spans, a = best.k > 0 ? sp[best.k - 1] : null, b = sp[best.k + 1];
+      if (b) {
+        const full = S.cans[best.c].fill > 0.01;
+        const phase = b.where === 'socket' && full ? 'unload' : b.where === 'mount' ? 'load' : a && a.where === 'socket' ? 'clear' : 'move';
+        return { c: best.c, from: a && a.where !== 'held' ? { kind: a.where, i: a.i } : null, to: { kind: b.where, i: b.i }, phase };
       }
-      case 'hoist': return asked && asked.kind === 'hoist' ? [{ axis: 'hoist', to: asked.from }, { axis: 'hoist', to: asked.to, asked: true }, { axis: 'hoist', to: s.to }] : [{ axis: 'hoist', to: s.to }];
-      case 'slide': return asked && asked.kind === 'slide' ? [{ axis: 'slide', to: asked.from }, { axis: 'slide', to: asked.to, asked: true }, { axis: 'slide', to: s.to }]
-        : asked && asked.kind === 'route' ? [{ axis: 'slide', to: asked.across.to, asked: true }, { axis: 'slide', to: s.to }] : [{ axis: 'slide', to: s.to }];
-      case 'push': return [{ axis: 'slide', to: s.to, v: 0.2 }];
-      case 'turn': return [{ turn: true }];
-      case 'grab': return [{ grab: s.how }];
-      case 'wait': return [{ until: s.for === 'tray' ? (D) => D.state.tray[s.i] > 0.999 : s.for === 'iris' ? (D) => D.state.iris[s.k] > 0.999 : s.for === 'dogs' ? (D) => D.state.lit[s.k] > 0.999 : s.for === 'drained' ? (D) => D.state.cans[s.c].fill <= 0 : (D) => D.held === s.c, waiting: s.for }];
-      case 'refill': return [{ until: (D) => { for (const q of D.state.cans) if (q.where === 'mount') q.fill = 1; return true; }, refill: true }];
-      default: return [];
     }
   }
-  function upTo(last, asked = null) {
-    const out = [];
-    for (let k = cursor; k <= last && k < queue.length; k++) out.push(...stepsOf(queue[k], asked && k >= asked.k && k <= (asked.end ?? asked.k) ? asked : null));
-    cursor = Math.max(cursor, last + 1);
-    return out;
-  }
-  // the moves before the one a question holds, which the crane makes by itself: made as the card comes, so the crane is
-  // where the card says by the time it is read
-  Q.before = function before() {
-    const R = Q.reserved;
-    if (!R || R.led) return [];
-    const out = R.k > cursor ? upTo(R.k - 1) : [], s = queue[R.k];
-    // (and the start of the asked move, the part the crane makes by itself: onto the mark or height the card starts from)
-    if ((R.kind === 'along' || R.kind === 'time') && s.kind === 'along') out.push({ axis: 'along', to: alongOf(s.leg, R.mark) });
-    else if (R.kind === 'hoist' && s.kind === 'hoist') out.push({ axis: 'hoist', to: R.from });
-    else if (R.kind === 'slide' && s.kind === 'slide') out.push({ axis: 'slide', to: R.from });
-    R.led = true;
-    return out;
-  };
-  // a right answer: the moves up to and including the one it held (a weight: through the lift; a trip: the first move;
-  // a route: the whole way); a question that held none: the next move
-  Q.right = function right(id) {
-    if (!planned) begin();
-    const R = Q.reserved;
-    let steps;
-    if (id != null && R && R.id === id) {
-      let last = R.k;
-      if (R.kind === 'weight') { const k = findFrom((s, i) => i > R.k && s.kind === 'hoist', R.k + 1); last = k >= 0 ? k : R.k; }
-      else if (R.kind === 'route') last = R.end;
-      else if (R.kind === 'trip') { const k = findFrom((s, i) => i > R.k && (s.kind === 'along' || s.kind === 'hoist'), R.k + 1); last = k >= 0 ? k : R.k; }
-      steps = upTo(last, R);
+  // (the round is done: a test lift)
+  const held = S.cans.findIndex((q) => q.where === 'held');
+  const freeSock = site.sockets.map((_, k) => k).filter((k) => !S.cans.some((q) => q.where === 'socket' && q.i === k));
+  const lowerFree = freeSock.filter((k) => !site.sockets[k].upper);
+  const freeBay = site.bays.map((_, j) => j).filter((j) => !S.cans.some((q) => q.where === 'bay' && q.i === j));
+  if (held >= 0) return freeBay.length ? { c: held, from: null, to: { kind: 'bay', i: freeBay[0] }, phase: 'test' } : null;
+  const inSock = S.cans.findIndex((q) => q.where === 'socket' && q.fill <= 0.01 && !(site.sockets[q.i].upper === false && S.cans.some((r) => r.where === 'socket' && site.sockets[r.i].upper && Math.abs(site.sockets[r.i].at[0] - site.sockets[q.i].at[0]) < 0.1)));
+  if (inSock >= 0 && freeBay.length) return { c: inSock, from: { kind: 'socket', i: S.cans[inSock].i }, to: { kind: 'bay', i: freeBay[0] }, phase: 'test' };
+  const onRack = S.cans.findIndex((q) => q.where === 'bay');
+  const k = lowerFree[0] ?? freeSock[0];
+  if (onRack >= 0 && k != null) return { c: onRack, from: { kind: 'bay', i: S.cans[onRack].i }, to: { kind: 'socket', i: k }, phase: 'test' };
+  return null;
+}
+
+// ── a trip's moves ─────────────────────────────────────────────────────────────────────────────────────────────────
+// each: an autopilot step for the live crane (kit/crane-drive.js go), and, for the five a trip asks about, `ask`:
+// 'over' (x and y to a place), 'lower' (down to it), 'turn' (the cradle turning the canister)
+function movesOf(site, S, trip) {
+  const out = [], carry = site.carry, rise = site.can.rise, push = SPEED.push.v;
+  let yaw = S.yaw;
+  const c = trip.c, rel = trip.from ? 0 : (S.cans[c].rel || 0);
+  if (trip.from) {
+    const P = placeOf(site, trip.from.kind, trip.from.i), yawP = alongNear(S.cans[c].yaw, yaw);
+    yaw = yawP;
+    if (P.kind === 'socket') {
+      out.push({ ask: 'over', what: 'pick', place: P, c, to: { x: P.wait[0], z: P.wait[1], yaw: yawP }, aim: [P.at[0], P.at[2]] });
+      out.push({ ask: 'lower', what: 'pick', place: P, c, from: carry, to: { hoist: P.at[1] }, via: [{ to: { hoist: P.at[1] + rise } }, { to: { x: P.at[0], z: P.at[2] } }] });
+      out.push({ grab: 'shut' }, { until: 'held', c });
+      out.push({ to: { x: P.wait[0], z: P.wait[1] }, v: { x: push, z: push }, even: true });
     } else {
-      const k = findFrom((s) => s.kind === 'along' || s.kind === 'hoist' || s.kind === 'slide' || s.kind === 'push');
-      steps = k >= 0 ? upTo(k) : [];
+      out.push({ ask: 'over', what: 'pick', place: P, c, to: { x: P.at[0], z: P.at[2], yaw: yawP } });
+      if (P.kind === 'mount') out.push({ until: 'tray', i: P.i });
+      out.push({ ask: 'lower', what: 'pick', place: P, c, from: carry, to: { hoist: P.at[1] } });
+      out.push({ grab: 'shut' }, { until: 'held', c });
     }
-    Q.reserved = null;
+    out.push({ to: { hoist: carry } });
+  }
+  const D = placeOf(site, trip.to.kind, trip.to.i), canYaw = yaw + (trip.from ? 0 : rel);
+  // (the canister's own turn in the cradle when it was taken: 0 or a half turn; the cradle turns it to lie the place's way)
+  const relNow = trip.from ? near0(S.cans[c].yaw - yaw) : rel, yawD = alongNear(D.axis - relNow, yaw), deg = Math.round(Math.abs(yawD - yaw) * 180 / Math.PI);
+  out.push({ ask: deg === 90 ? 'turn' : null, what: 'turn', place: D, c, to: { yaw: yawD }, deg, fromAxis: Math.abs(Math.sin(canYaw)) > 0.5 ? 'x' : 'y', toAxis: Math.abs(Math.sin(D.axis)) > 0.5 ? 'x' : 'y' });
+  if (D.kind === 'socket') {
+    out.push({ ask: 'over', what: 'drop', place: D, c, to: { x: D.wait[0], z: D.wait[1] }, aim: [D.at[0], D.at[2]] });
+    out.push({ ask: 'lower', what: 'drop', place: D, c, from: carry, to: { hoist: D.at[1] } });
+    out.push({ to: { x: D.at[0], z: D.at[2] }, v: { x: push, z: push }, even: true }, { until: 'lit', k: D.i }, { grab: 'open' });
+    out.push({ to: { hoist: D.at[1] + rise } }, { to: { x: D.wait[0], z: D.wait[1] } }, { to: { hoist: carry } });
+  } else {
+    out.push({ ask: 'over', what: 'drop', place: D, c, to: { x: D.at[0], z: D.at[2] } });
+    if (D.kind === 'mount') out.push({ until: 'tray', i: D.i });
+    out.push({ ask: 'lower', what: 'drop', place: D, c, from: carry, to: { hoist: D.at[1] } });
+    out.push({ grab: 'open' }, { to: { hoist: carry } });
+  }
+  return out;
+}
+
+// ── the game's queue: the trip's moves, held for the questions ─────────────────────────────────────────────────────
+// Q.peek()                  the kind the next asked move is ('over', 'lower', 'turn'), or null (no trip)
+// Q.ask(kind, opts)         that move, reserved for a card, its numbers on the level's marks (opts.prec, opts.axis,
+//                           opts.most: no further than this, the crane getting nearer by itself first): { id, kind,
+//                           axis, from, to, target, what, place, c, ... } in the grid's numbers; null if it is not next
+// Q.before()                the autopilot steps up to the asked move (the crane makes them as the card comes)
+// Q.right(value)            the asked move by exactly that value, then onto the place itself: the steps
+// Q.skip()                  a card that asked about no move: the next asked move made by itself
+// Q.restart()               planned again from the crane as it is
+export function makeGame(site, { state }) {
+  const Q = { trip: null, moves: [], reserved: null, n: 0 };
+  function plan() {
+    const S = state(); Q.trip = tripFrom(site, S); Q.moves = Q.trip ? movesOf(site, S, Q.trip) : []; Q.reserved = null;
+    return Q.trip;
+  }
+  const stepsOf = (m) => (m.until ? [{ until: m.until, i: m.i, k: m.k, c: m.c }] : m.grab ? [{ grab: m.grab }] : [...(m.via || []), { to: m.to, v: m.v, even: m.even }]);
+  Q.peek = () => { if (!Q.moves.length) plan(); const m = Q.moves.find((q) => q.ask); return m ? m.ask : null; };
+  Q.restart = () => { plan(); return Q; };
+  // the asked move's numbers on the level's marks: where the crane starts it, where the answer takes it
+  Q.ask = (kind, opts2 = {}) => {
+    const { prec = 1, axis = 'auto', most = Infinity, least = 0, rand = Math.random, round = 'near' } = opts2;
+    if (!Q.moves.length && !plan()) return null;
+    const k = Q.moves.findIndex((q) => q.ask);
+    if (k < 0 || Q.moves[k].ask !== kind) return null;
+    const m = Q.moves[k], S = state(), pre = [];
+    const onMark = (v, how = round) => r2((how === 'up' ? Math.ceil(v / prec - 1e-9) : how === 'down' ? Math.floor(v / prec + 1e-9) : Math.round(v / prec)) * prec);
+    let R;
+    if (kind === 'over') {
+      // where the crane is now (after the moves before this one), and the place, in the grid's numbers
+      const hereW = endOf(Q.moves.slice(0, k), S), here = toGrid(site, hereW.x, hereW.z), there = toGrid(site, m.to.x, m.to.z);
+      const aim = m.aim ? toGrid(site, m.aim[0], m.aim[1]) : there;
+      // (one axis, or both: an axis of its own is asked with the other already lined up by itself)
+      const ax = axis === 'auto' ? (Math.abs(there[0] - here[0]) >= Math.abs(there[1] - here[1]) ? 'x' : 'y') : axis;
+      // (toward a socket's line, y is taken to the mark short of the wall)
+      const toMark = (v, a) => onMark(v, m.place.kind === 'socket' && a === 'y' ? 'down' : round);
+      const target = [toMark(there[0], 'x'), toMark(there[1], 'y')];
+      // (where the hook can go, in the grid's numbers, a mark inside it at each end)
+      const g0 = gridOf(site).origin, reach = [[site.rail.x[0] - g0[0], site.rail.x[1] - g0[0]], [g0[1] - site.rail.z[1], g0[1] - site.rail.z[0]]];
+      const inside = (v, i) => Math.min(onMark(reach[i][1], 'down'), Math.max(onMark(reach[i][0], 'up'), v));
+      let start = [inside(onMark(here[0]), 0), inside(onMark(here[1]), 1)];
+      if (ax === 'x' || ax === 'y') {
+        const i = ax === 'x' ? 0 : 1, j = 1 - i;
+        start[j] = target[j];
+        // (no further than `most`, no nearer than `least`: the crane gets there by itself first)
+        let d = target[i] - start[i];
+        if (Math.abs(d) > most) start[i] = r2(target[i] - Math.sign(d) * most);
+        d = target[i] - start[i];
+        if (Math.abs(d) < least) { const w = d >= 0 ? 1 : -1, s1 = r2(target[i] - w * least); start[i] = s1 >= reach[i][0] && s1 <= reach[i][1] ? s1 : r2(target[i] + w * least); }
+      } else if (opts2.straight || opts2.both) {
+        // (two moves at once: from a start that makes the numbers come out whole, inside the crane's reach)
+        const shapes = opts2.straight ? [[3, 4], [4, 3], [6, 8], [8, 6], [5, 12], [12, 5], [9, 12], [12, 9], [8, 15], [12, 16], [16, 12]] : [];
+        if (opts2.both) for (let a = 2; a <= 9; a++) for (let b = 1; b <= 6; b++) if (a !== b * 1.5) shapes.push([a * SPEEDS.x, b * 2 * SPEEDS.y]);
+        const fits = [];
+        for (const [dx, dy] of shapes) for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const p = [r2(target[0] - sx * dx), r2(target[1] - sy * dy)]; if (p[0] >= reach[0][0] && p[0] <= reach[0][1] && p[1] >= reach[1][0] && p[1] <= reach[1][1]) fits.push(p); }
+        if (fits.length) start = fits[Math.floor(rand() * fits.length)];
+      }
+      const sw = fromGrid(site, start[0], start[1]);
+      pre.push({ to: { x: sw[0], z: sw[1], yaw: m.to.yaw } });
+      R = { kind, axis: ax, from: start, to: target, there, aim, quad: quadrantOf(site, aim[0], aim[1]) };
+    } else if (kind === 'lower') {
+      // (from a mark at or under the top, to the mark at or above the place: it never goes below it on an answer)
+      const from = onMark(site.carry, 'down'), to = onMark(m.to.hoist, 'up');
+      pre.push({ to: { hoist: from } });
+      R = { kind, from, to, there: m.to.hoist };
+    } else {
+      R = { kind, deg: m.deg, fromAxis: m.fromAxis, toAxis: m.toAxis };
+    }
+    Q.reserved = { ...R, id: ++Q.n, k, what: m.what, place: m.place, c: m.c, pre };
+    return Q.reserved;
+  };
+  // the steps up to the reserved move: the moves before it, and onto its starting marks
+  Q.before = () => {
+    const R = Q.reserved; if (!R) return [];
+    const steps = Q.moves.slice(0, R.k).flatMap(stepsOf).concat(R.pre);
+    Q.moves.splice(0, R.k); R.k = 0;
     return steps;
   };
+  // the reserved move by exactly the answer, then onto the place itself
+  Q.right = (value = null, { even = false, v = null } = {}) => {
+    const R = Q.reserved; if (!R) return Q.skip();
+    const m = Q.moves[R.k]; Q.moves.splice(0, R.k + 1); Q.reserved = null;
+    if (R.kind === 'over') {
+      const to = value && Array.isArray(value) ? value : R.to, w = fromGrid(site, to[0], to[1]);
+      return [{ to: { x: w[0], z: w[1] }, v, even, asked: true }, { to: m.to }];
+    }
+    if (R.kind === 'lower') {
+      // (all the way down by the answer: for a socket's canister, down to clear over it, in over it, and down)
+      const v2 = value ?? R.to, steps = [];
+      for (const st of m.via || []) steps.push(st.to.hoist != null ? { to: { hoist: Math.max(v2, st.to.hoist) }, v, even, asked: true } : { ...st, asked: true });
+      steps.push({ to: { hoist: v2 }, v, even, asked: true }, { to: m.to });
+      return steps;
+    }
+    return [{ to: m.to, v, even, asked: true }];
+  };
+  // a card that asked about no move: the next asked move, made by itself
+  Q.skip = () => { const k = Q.moves.findIndex((q) => q.ask); if (k < 0) return []; const steps = Q.moves.slice(0, k + 1).flatMap(stepsOf); Q.moves.splice(0, k + 1); Q.reserved = null; return steps; };
+  // the rest of the trip, made by itself (the check is over; or a move could not be made)
+  Q.rest = () => { const steps = Q.moves.flatMap(stepsOf); Q.moves = []; Q.reserved = null; return steps; };
+  Q.left = () => Q.moves.filter((m) => m.ask).length;
   return Q;
 }
+// where a list of moves leaves the crane (its x and z), from a state
+function endOf(moves, S) { let x = S.x, z = S.z; for (const m of moves) { if (m.to && m.to.x != null) x = m.to.x; if (m.to && m.to.z != null) z = m.to.z; } return { x, z }; }
 
-// THE OPERATOR AREA: the operator's chair in the smelter's control room. Its two options are its two sides (as you
-// sit: the yellow stick on the left, the red on the right); which one comes up is the side you look at.
-export const OPERATOR = { piece: 'opChair', local: [0, 0, -0.95], face: [0, 1] };
-// which of the job's makers can ask about which kind of move (route: the way out to a canister, from the turntable)
-const SUITS = { hops: ['along'], mark: ['along'], rail: ['along'], time: ['along'], hoist: ['hoist'], change: ['hoist'], slide: ['slide'], weight: ['grab'], trips: ['trip'], count: ['trip'], route: ['route'], words: [] };
-// the level's makers that suit the crane's next move, one of them by weight; none: null (Mathwood's own pick)
-function pickAsk(mix, { rand = Math.random, live = null } = {}) {
-  const ahead = live && live.ahead ? live.ahead() : live && live.peek ? [live.peek()] : [];
-  let fits = [];
-  for (const next of ahead) { fits = mix.filter((a) => (SUITS[a.maker] || []).some((k) => next.includes(k))); if (fits.length) break; }
-  if (!fits.length) return null;
-  // (a question about no move, Mathwood's word problems, comes as often as its weight says, whatever the move)
-  const all = fits.concat(mix.filter((a) => !(SUITS[a.maker] || []).length));
-  let r = rand() * all.reduce((q, a) => q + (a.w ?? 1), 0);
-  for (const a of all) if ((r -= a.w ?? 1) <= 0) return a;
-  return all[all.length - 1];
-}
-export const JOB = {
-  id: 'crane', name: 'Crane operator job', short: 'Crane', open: true, pickAsk,
-  pair: 'operator', side: 'right', spot: OPERATOR, near: 2.3, seated: true,
-  sign: 'Crane operator job', hint: 'Right answers move the crane: credits for each',
-  place: PLACE, setting: SETTING, makers: MAKERS, card: 'workorder',
+// ── the makers ───────────────────────────────────────────────────────────────────────────────────────────────────
+// each: { strand, at(step), make(step, { rand, live }) }. live.ask(kind, opts) -> the next asked move of that kind,
+// reserved for this card, its numbers on the level's marks (src/jobs/cranelink.js), or null: the card's numbers are
+// then made up ("from the log")
+const fromLive = (live, kind, opts) => (live && live.ask ? live.ask(kind, opts) : null);
+const AX = { x: 'the x-axis', y: 'the y-axis' }, PART = { x: 'the bridge', y: 'the trolley' };
+const targetWords = (s) => (s && s.what === 'drop' ? (s.place.kind === 'socket' ? `${cap(s.place.name)}` : cap(s.place.name)) : 'The blinking canister');
+const madeOver = (t, prec, most = 30) => {
+  const a = t.int(2, 36), b0 = t.int(2, 26), b = Math.max(1, Math.min(38, a + (t.chance(0.5) ? 1 : -1) * t.int(Math.max(2, prec === 1 ? 3 : 1), Math.min(most, 20))));
+  const k = prec === 1 ? 0 : prec === 0.1 ? 1 : 2, p = 10 ** k, f = (v) => Math.round((v + t.int(0, p - 1) / p) * p) / p;
+  return { kind: 'over', axis: 'x', from: [f(a), b0], to: [f(b), b0], what: 'pick', place: { kind: 'bay', name: 'the canister on the work order' }, made: true };
 };
-export const FREE = {
-  id: 'craneFree', name: 'Free control', short: 'Free control', open: true, drive: true, place: null,
-  pair: 'operator', side: 'left', spot: OPERATOR, near: 2.3, seated: true,
-  sign: 'Free control', signSub: 'Just for fun', hint: 'Drive the crane by hand: no credits, just for fun',
+const madeLower = (t, prec) => { const p = prec, from = prec === 1 ? 6 : prec === 0.1 ? 6.3 : 6.28, to = prec === 1 ? t.int(1, 4) : prec === 0.1 ? t.pick([0.7, 2.3, 3.7, 2.2]) : t.pick([0.75, 2.34, 3.73, 2.2]); void p; return { kind: 'lower', from, to, what: 'pick', place: { name: 'the canister on the work order' }, made: true }; };
+const facts = (s, extra = {}) => ({ kind: s ? s.kind : null, step: s && !s.made ? s.id : null, live: !!(s && !s.made), ...extra });
+// the card's picture of the grid from above, for a move over the hangar
+const gridPic = (s, opts) => ({ kind: 'grid', crane: s.from, target: s.aim || s.to, ...opts });
+
+export const MAKERS = {
+  // ── which quadrant (the youngest): the blinking canister, or the place it goes to ──
+  quad: {
+    strand: 'number', at: () => 2,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'over', { prec: 1, axis: 'both' });
+      const q = s && s.quad ? s.quad : t.int(1, 4), what = targetWords(s);
+      const slips = ROMAN.map((r, i) => ({ v: i + 1, big: r, small: 'quadrant', label: `quadrant ${r}`, why: i + 1 === q ? '' : `${r} is the other ${(i + 1 + q) % 2 ? 'side' : 'corner'}: find the blinking one, then read the big number in that part of the grid.` })).filter((c) => c.v !== q);
+      return ownOrder({
+        key: 'quad', story: `${what === 'The blinking canister' ? 'The blinking canister is where the crane goes next.' : `The canister goes to ${what.toLowerCase()} next.`} The grid's two middle lines cut the hangar into four quadrants.`, ask: `Which quadrant is ${what === 'The blinking canister' ? 'the blinking canister' : what.toLowerCase()} in?`,
+        right: { v: q, big: ROMAN[q - 1], small: 'quadrant', label: `quadrant ${ROMAN[q - 1]}` }, slips,
+        rightWhy: `Quadrant ${ROMAN[q - 1]}: the crane goes there`,
+        picFirst: false, help: { title: 'The four quadrants', svg: picture(gridPic(s || { from: [8, 6], to: [[30, 22], [10, 22], [10, 6], [30, 6]][q - 1] }, { quads: true })), line: 'The middle lines cut the grid into four. Find the blinking canister and read the big number in its part.' },
+        own: { strand: 'number', at: 2 }, facts: facts(s, { quad: q, axis: 'both' }),
+      }, rand, 4);
+    },
+  },
+  // ── counting squares along one axis: step 1 up to 5, step 2 up to 10 ──
+  count: {
+    strand: 'number', at: (step) => (step <= 1 ? 4 : 6),
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), most = step <= 1 ? 5 : 10, s = fromLive(live, 'over', { prec: 1, most, least: 2 }) || madeOver(t, 1, most);
+      const i = s.axis === 'y' ? 1 : 0, n = Math.round(Math.abs(s.to[i] - s.from[i])), way = s.axis === 'y' ? (s.to[1] > s.from[1] ? 'up' : 'down') : (s.to[0] > s.from[0] ? 'right' : 'left');
+      return ownOrder({
+        key: 'count:' + step, story: `The crane is ${n} squares from ${targetWords(s) === 'The blinking canister' ? 'the blinking canister' : targetWords(s).toLowerCase()}, along ${AX[s.axis]}. Each square of the grid is one metre.`, ask: `How many squares ${way} must the crane go?`,
+        right: F(n, SQUARE), slips: [{ ...F(n + 1, SQUARE), why: 'One too many: count the squares between, not the lines.' }, { ...F(n - 1, SQUARE), why: 'One short: count every square, the last one too.' }, { ...F(n + 2, SQUARE), why: 'Too many. Touch each square once as you count.' }],
+        rightWhy: `${u(n, SQUARE)}: ${n} metres along ${AX[s.axis]}`,
+        help: { title: 'Count the squares', svg: picture({ kind: 'line', axis: s.axis, from: s.from[i], to: s.to[i], count: true }), line: 'Each square is one metre. Count them from the crane to the place: 1, 2, 3 ...' },
+        own: { strand: 'number', at: step <= 1 ? 4 : 6 }, facts: facts(s, { n, axis: s.axis }),
+      }, rand, 3);
+    },
+  },
+  // ── reading the grid: the place's x (or y), a whole metre ──
+  read: {
+    strand: 'number', at: () => 10,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'over', { prec: 1, least: 2 }) || madeOver(t, 1);
+      const i = s.axis === 'y' ? 1 : 0, v = Math.round(s.to[i]), here = Math.round(s.from[i]);
+      const flip = v >= 10 && v % 10 !== Math.floor(v / 10) % 10 ? Number(String(v).split('').reverse().join('')) : null;
+      return ownOrder({
+        key: 'read', story: `${targetWords(s)} ${s.what === 'drop' ? 'is where the canister goes' : 'is where the crane goes'}. The numbers along the grid's edge count the metres from the hangar's corner.`, ask: `What is its ${s.axis}, to the nearest metre?`,
+        right: { v, big: String(v), small: `on ${s.axis}`, label: `${s.axis} = ${v}` },
+        slips: [{ v: v + 1, big: String(v + 1), small: `on ${s.axis}`, label: `${s.axis} = ${v + 1}`, why: 'One too far. Follow the line from it to the edge, and read the number there.' },
+          { v: Math.max(1, v - 1), big: String(Math.max(1, v - 1)), small: `on ${s.axis}`, label: `${s.axis} = ${v - 1}`, why: 'One short. Follow the line from it to the edge.' },
+          ...(here !== v && here > 0 ? [{ v: here, big: String(here), small: `on ${s.axis}`, label: `${s.axis} = ${here}`, why: `${here} is where the crane is now.` }] : []),
+          ...(flip != null && flip !== v && flip > 0 ? [{ v: flip, big: String(flip), small: `on ${s.axis}`, label: `${s.axis} = ${flip}`, why: `The digits are the other way round: it is ${v}.` }] : [])],
+        rightWhy: `${s.axis} = ${v}: the crane goes to ${s.axis} = ${v}`,
+        help: { title: 'Read the grid', svg: picture(gridPic(s, { numbers: true })), line: `Follow the grid line from it down to the edge (for x) or across to the side (for y), and read the number.` },
+        own: { strand: 'number', at: 10 }, facts: facts(s, { to: v, axis: s.axis }),
+      }, rand);
+    },
+  },
+  // ── how far along one axis: step 1 whole metres, step 2 tenths, step 3 hundredths ──
+  dist: {
+    strand: 'words', at: (step) => (step <= 1 ? 18 : step === 2 ? 48 : 56),
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), prec = step <= 1 ? 1 : step === 2 ? 0.1 : 0.01, s = fromLive(live, 'over', { prec, least: prec === 1 ? 2 : 0.5 }) || madeOver(t, prec);
+      const i = s.axis === 'y' ? 1 : 0, a = s.from[i], b = s.to[i], d = r2(Math.abs(b - a)), sum = r2(a + b);
+      const lost = prec < 1 && Math.round(d * 100) % 100 !== 0;
+      return ownOrder({
+        key: `dist:${step}`, story: `${cap(PART[s.axis])} is at ${s.axis} = ${t2(a)}. ${targetWords(s)} is at ${s.axis} = ${t2(b)}.`, ask: `How much further must the crane move along ${AX[s.axis]}?`,
+        right: F(d, METRE),
+        slips: [{ ...F(sum, METRE), why: `That adds the two. The way between is the bigger take away the smaller: ${t2(Math.max(a, b))} − ${t2(Math.min(a, b))}.` },
+          { ...F(b, METRE), why: `${t2(b)} is where it goes. How far is that from ${t2(a)}?` },
+          { ...F(a, METRE), why: `${t2(a)} is where the crane is now. How far to ${t2(b)}?` },
+          { ...F(d + prec, METRE), why: prec === 1 ? 'One metre too far: count on from the smaller number.' : 'Too far by the last place. Line the points up and take away.' },
+          { ...F(Math.max(prec, d - prec), METRE), why: prec === 1 ? 'One metre short: count on from the smaller number.' : 'Short by the last place. Line the points up and take away.' },
+          ...(lost ? [{ ...F(r2(Math.round(d * 100)), METRE), why: `The point went missing: ${t2(d)}, not ${t2(Math.round(d * 100))}.` }] : [])],
+        rightWhy: `${t2(Math.max(a, b))} − ${t2(Math.min(a, b))} = ${u(d, METRE)}`, sum: { op: 'sub', a: Math.max(a, b), b: Math.min(a, b) },
+        help: { title: `Along ${AX[s.axis]}`, svg: picture({ kind: 'line', axis: s.axis, from: a, to: b }), line: 'Where it goes take away where it is: the bigger number minus the smaller.', steps: [`${t2(Math.max(a, b))} − ${t2(Math.min(a, b))} = ?`] },
+        own: { strand: prec === 1 ? 'words' : 'dec', at: prec === 1 ? 18 : prec === 0.1 ? 48 : 56 }, credit: [{ strand: 'sub', at: prec === 1 ? 14 : 45, weight: 0.5 }], facts: facts(s, { d, axis: s.axis }),
+      }, rand);
+    },
+  },
+  // ── the coordinates of a place: (x, y) ──
+  pair: {
+    strand: 'number', at: () => 24,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'over', { prec: 1, axis: 'both' }) || (() => { const m = madeOver(t, 1); m.to = [m.to[0], t.int(2, 26)]; m.axis = 'both'; return m; })();
+      const [x, y] = s.to.map((v) => Math.round(v)), P = (a, b) => ({ v: a * 100 + b, big: `(${a}, ${b})`, small: '', label: `x ${a}, y ${b}` });
+      const slips = [{ ...P(y, x), why: 'Those are the other way round: x comes first (along), then y (up).' }, { ...P(x, y + 1), why: `y is one too many: read the line ${y} it is on.` }, { ...P(x + 1, y), why: `x is one too many: read the line ${x} it is on.` }, { ...P(x - 1, y), why: 'x is one short.' }].filter((c) => c.v !== x * 100 + y && c.v > 0);
+      return ownOrder({
+        key: 'pair', story: `${targetWords(s)} is ${s.what === 'drop' ? 'where the canister goes' : 'the next one to move'}. On the grid, x goes along the hangar and y goes up the screen.`, ask: `What are its coordinates (x, y)?`,
+        right: P(x, y), slips,
+        rightWhy: `(${x}, ${y}): ${x} along, ${y} up`,
+        help: { title: 'Coordinates', svg: picture(gridPic(s, { numbers: true })), line: 'Along first, then up: read x on the bottom edge, then y on the side.' },
+        own: { strand: 'number', at: 24 }, facts: facts(s, { to: [x, y], axis: 'both' }),
+      }, rand);
+    },
+  },
+  // ── the turn: words (a quarter turn), then degrees ──
+  turn: {
+    strand: 'number', at: (step) => (step <= 1 ? 22 : 32),
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'turn') || { kind: 'turn', deg: 90, fromAxis: t.pick(['x', 'y']), made: true, place: { name: t.pick(['socket 3', 'the rack']) } };
+      const to = s.toAxis || (s.fromAxis === 'x' ? 'y' : 'x'), where = s.place ? s.place.name : 'its place';
+      const story = `The canister lies along ${AX[s.fromAxis]}. In ${where} it must lie along ${AX[to]}. The grab turns it.`;
+      if (step <= 1) {
+        const W = (v, big, why = '') => ({ v, big, small: '', label: big, why });
+        return ownOrder({
+          key: 'turn:1', story, ask: 'How far round must the grab turn it?',
+          right: W(1, 'a quarter turn'), slips: [W(2, 'a half turn', 'A half turn leaves it lying the same way, end for end.'), W(4, 'a whole turn', 'A whole turn brings it back to where it started.'), W(3, 'no turn', 'It lies the wrong way for its place now: it must turn.')],
+          rightWhy: 'A quarter turn: from along one axis to along the other',
+          help: { title: 'Turning', svg: picture({ kind: 'turn', from: s.fromAxis === 'x' ? 90 : 0, to: to === 'x' ? 90 : 0 }), line: 'Along x to along y is a quarter of the way round.' },
+          own: { strand: 'number', at: 22 }, facts: facts(s, { deg: 90 }),
+        }, rand, 4);
+      }
+      return ownOrder({
+        key: 'turn:2', story, ask: 'How many degrees must the grab turn it?',
+        right: F(90, DEG), slips: [{ ...F(180, DEG), why: '180 degrees is a half turn: it would lie the same way, end for end.' }, { ...F(360, DEG), why: '360 degrees is a whole turn, back to where it started.' }, { ...F(45, DEG), why: '45 degrees is half of a quarter turn: it would lie across the corner.' }, { ...F(270, DEG), why: '270 degrees is three quarters of the way round: the long way.' }],
+        rightWhy: 'A quarter turn: 90 degrees',
+        help: { title: 'Degrees', svg: picture({ kind: 'turn', from: s.fromAxis === 'x' ? 90 : 0, to: to === 'x' ? 90 : 0 }), line: 'A whole turn is 360 degrees, so a quarter turn is 360 ÷ 4.', steps: ['360 ÷ 4 = ?'] },
+        sum: { op: 'div', a: 360, b: 4 },
+        own: { strand: 'number', at: 32 }, facts: facts(s, { deg: 90 }),
+      }, rand);
+    },
+  },
+  // ── the hook down to a place: step 1 counting (up to 5), step 2 whole metres, step 3 tenths, step 4 hundredths ──
+  lower: {
+    strand: 'words', at: (step) => [0, 4, 16, 48, 56][Math.min(4, step)],
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), prec = step <= 2 ? 1 : step === 3 ? 0.1 : 0.01, s = fromLive(live, 'lower', { prec }) || madeLower(t, prec);
+      const a = s.from, b = s.to, d = r2(Math.abs(a - b)), sum = r2(a + b), where = s.place && s.place.name ? (s.what === 'drop' ? s.place.name : 'the canister') : 'the canister';
+      if (step <= 1) {
+        const n = Math.round(d);
+        return ownOrder({
+          key: 'lower:1', story: `The grab is at the ${Math.round(a)} m mark. ${cap(where)} is at the ${Math.round(b)} m mark.`, ask: 'How many metres down must the grab go? Count the marks.',
+          right: F(n, METRE), slips: [{ ...F(n + 1, METRE), why: 'That counts the marks, not the metres between them.' }, { ...F(Math.max(1, n - 1), METRE), why: 'One short: count every metre down.' }, { ...F(n + 2, METRE), why: 'Too many: count one metre at a time.' }],
+          rightWhy: `${u(n, METRE)} down`,
+          help: { title: 'Count down the scale', svg: picture({ kind: 'height', from: a, to: b, count: true }), line: 'Count the metres from the grab down to the canister: 1, 2, 3 ...' },
+          own: { strand: 'number', at: 4 }, facts: facts(s, { d: n }),
+        }, rand, 3);
+      }
+      return ownOrder({
+        key: `lower:${step}`, story: `The grab is ${t2(a)} m up. ${cap(where)} is ${t2(b)} m up.`, ask: 'How far must the grab come down?',
+        right: F(d, METRE),
+        slips: [{ ...F(sum, METRE), why: `That adds the two heights. The way down is the higher take away the lower: ${t2(a)} − ${t2(b)}.` },
+          { ...F(b, METRE), why: `${t2(b)} m is the height it goes to, not how far it goes.` }, { ...F(a, METRE), why: `${t2(a)} m is how high it is now.` },
+          { ...F(d + prec, METRE), why: 'Too far by the last place: line up the points and take away.' }, { ...F(Math.max(prec, d - prec), METRE), why: 'Short by the last place.' }],
+        rightWhy: `${t2(a)} − ${t2(b)} = ${u(d, METRE)} down`, sum: { op: 'sub', a, b },
+        help: { title: 'The hoist\'s scale', svg: picture({ kind: 'height', from: a, to: b }), line: 'How far it comes down is the higher height take away the lower.', steps: [`${t2(a)} − ${t2(b)} = ?`] },
+        own: { strand: prec === 1 ? 'words' : 'dec', at: prec === 1 ? 16 : prec === 0.1 ? 48 : 56 }, credit: [{ strand: 'sub', at: prec === 1 ? 14 : 45, weight: 0.5 }], facts: facts(s, { d }),
+      }, rand);
+    },
+  },
+  // ── up and down as plus and minus: Mathwood's negatives card on the hook's real move ──
+  change: {
+    strand: 'number', at: () => 36,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'lower', { prec: 1 }) || madeLower(t, 1);
+      const a = Math.round(s.from), b = Math.round(s.to), c = b - a, where = s.what === 'drop' && s.place ? s.place.name : 'the canister';
+      const card = makeCard(b, '-', a, { size: 4, rand });
+      const WHY = { way: 'That adds the heights. The change is where it ends take away where it starts.', sign: `Right size, wrong way: going down makes it minus.`, drop: 'That adds the sizes and drops the signs. Ends minus starts.', start: 'That starts on the wrong side. Ends minus starts.', near: 'One off: count the metres on the scale again.' };
+      const coins = card.targets.map((x) => ({ ...F(x.n, METRE, { sign: true }), v: CHANGE_AT + x.n, good: x.good, why: x.good ? '' : WHY[x.trap] || WHY[signSlip(b, '-', a, x.n)] || 'Count the metres from where the grab is to where it goes, and say which way.' }));
+      const right = coins.find((x) => x.good);
+      return ownOrder({
+        key: 'change', story: `On the hoist's scale, up is plus and down is minus. The grab is at ${a} m; ${where} is at ${b} m.`, ask: 'What is the change in the grab\'s height?',
+        right, slips: coins.filter((x) => !x.good),
+        rightWhy: `${b} − ${a} = ${c > 0 ? '+' : '−'}${Math.abs(c)}: ${Math.abs(c)} m ${c < 0 ? 'down' : 'up'}`,
+        help: { title: 'Up is plus, down is minus', svg: picture({ kind: 'height', from: a, to: b, signed: true }), line: 'Where it ends take away where it starts. Going down makes it minus.', steps: [`${b} − ${a} = ?`] },
+        own: { strand: 'number', at: 36 }, credit: [{ strand: 'sub', at: 20, weight: 0.5 }], facts: facts(s, { change: c, offset: CHANGE_AT }),
+      }, rand);
+    },
+  },
+  // ── time from speed along one axis: step 1 whole seconds, step 2 with tenths ──
+  time: {
+    strand: 'words', at: (step) => (step <= 1 ? 40 : 62),
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), prec = step <= 1 ? 1 : 0.1;
+      // (whole seconds: along x, an even number of metres at 2 m a second)
+      const s = fromLive(live, 'over', { prec: step <= 1 ? 2 : 0.1, axis: step <= 1 ? 'x' : 'auto', least: 2 }) || madeOver(t, step <= 1 ? 1 : 0.1);
+      const i = s.axis === 'y' ? 1 : 0, v = SPEEDS[s.axis === 'y' ? 'y' : 'x'], d = r2(Math.abs(s.to[i] - s.from[i])), T = r2(d / v);
+      const ok = Math.abs(T * 10 - Math.round(T * 10)) < 1e-6 ? T : r2(Math.round(T * 10) / 10);
+      return ownOrder({
+        key: `time:${step}`, story: `${cap(PART[s.axis])} moves ${t2(v)} m every second. It must go ${t2(d)} m along ${AX[s.axis]}, from ${t2(s.from[i])} to ${t2(s.to[i])}.`, ask: 'How many seconds will that take?',
+        right: F(ok, SEC),
+        slips: [{ ...F(r2(d * v), SEC), why: `That multiplies. Seconds are metres shared out ${t2(v)} at a time: ${t2(d)} ÷ ${t2(v)}.` }, { ...F(d, SEC), why: `${t2(d)} is the metres. Each second it goes ${t2(v)} m.` }, { ...F(r2(ok + 1), SEC), why: 'One second too many.' }, { ...F(Math.max(0.5, r2(ok - 1)), SEC), why: 'One second short.' }],
+        rightWhy: `${t2(d)} ÷ ${t2(v)} = ${u(ok, SEC)}`, sum: { op: 'div', a: d, b: v },
+        help: { title: 'Metres a second', svg: picture({ kind: 'speed', d, v, axis: s.axis }), line: `Each second it goes ${t2(v)} m. How many of those make ${t2(d)} m?`, steps: [`${t2(d)} ÷ ${t2(v)} = ?`] },
+        own: { strand: step <= 1 ? 'words' : 'dec', at: step <= 1 ? 40 : 62 }, credit: [{ strand: 'div', at: 38, weight: 0.5 }], facts: facts(s, { T: ok, axis: s.axis, speed: v, even: true }),
+      }, rand);
+    },
+  },
+  // ── the hook's time down at the hoist's speed ──
+  htime: {
+    strand: 'words', at: () => 40,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'lower', { prec: 1 }) || madeLower(t, 1), v = SPEEDS.h, d = r2(Math.abs(s.from - s.to)), T = r2(d / v);
+      return ownOrder({
+        key: 'htime', story: `The hoist lowers the grab ${t2(v)} m every second. It goes from ${t2(s.from)} m down to ${t2(s.to)} m.`, ask: 'How many seconds will that take?',
+        right: F(T, SEC), slips: [{ ...F(s.from, SEC), why: `${t2(s.from)} is where it starts, not how far it goes.` }, { ...F(r2(T + 1), SEC), why: 'One second too many.' }, { ...F(Math.max(1, r2(T - 1)), SEC), why: 'One second short.' }, { ...F(r2(s.from + s.to), SEC), why: 'That adds the heights: take away instead.' }],
+        rightWhy: `${t2(d)} m at ${t2(v)} m a second: ${u(T, SEC)}`, sum: { op: 'sub', a: s.from, b: s.to },
+        help: { title: 'Down a metre each second', svg: picture({ kind: 'height', from: s.from, to: s.to }), line: 'How far down, then a second for every metre.', steps: [`${t2(s.from)} − ${t2(s.to)} = ?`] },
+        own: { strand: 'words', at: 40 }, facts: facts(s, { T, speed: v, even: true }),
+      }, rand);
+    },
+  },
+  // ── both ways at once: the longer of the two times ──
+  both: {
+    strand: 'words', at: () => 70,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'over', { prec: 1, axis: 'both', both: true }) || (() => { const m = madeOver(t, 1); m.axis = 'both'; m.from = [10, 6]; m.to = [10 + 2 * t.int(2, 8), 6 + 3 * t.int(1, 5)]; return m; })();
+      const dx = r2(Math.abs(s.to[0] - s.from[0])), dy = r2(Math.abs(s.to[1] - s.from[1])), tx = r2(dx / SPEEDS.x), ty = r2(dy / SPEEDS.y), T = Math.max(tx, ty);
+      return ownOrder({
+        key: 'both', story: `The bridge goes ${t2(dx)} m along x at ${t2(SPEEDS.x)} m a second, and at the same time the trolley goes ${t2(dy)} m along y at ${t2(SPEEDS.y)} m a second.`, ask: 'How many seconds until the crane is over its place?',
+        right: F(T, SEC), slips: [{ ...F(r2(tx + ty), SEC), why: 'That adds the two times, but they move at the same time: it is there when the longer one is done.' }, { ...F(Math.min(tx, ty), SEC), why: 'That is the shorter one: the other is still moving then.' }, { ...F(r2((dx + dy) / SPEEDS.x), SEC), why: 'Each part has its own speed: work each one out.' }, { ...F(r2(T + 1), SEC), why: 'One second too many.' }].filter((c) => Math.abs(c.v - T) > 1e-6),
+        rightWhy: `x takes ${t2(tx)} s, y ${t2(ty)} s: there in ${u(T, SEC)}`,
+        help: { title: 'Both at once', svg: picture({ kind: 'both', dx, vx: SPEEDS.x, dy, vy: SPEEDS.y }), line: 'Work out each one\'s time. Moving together, it is there when the longer one is done.', steps: [`${t2(dx)} ÷ ${t2(SPEEDS.x)} = ?`, `${t2(dy)} ÷ ${t2(SPEEDS.y)} = ?`, 'the longer of the two'] },
+        own: { strand: 'words', at: 70 }, credit: [{ strand: 'div', at: 45, weight: 0.5 }], facts: facts(s, { T, axis: 'both', both: true }),
+      }, rand);
+    },
+  },
+  // ── straight across: the move along x and along y at once, and the straight line between (Pythagoras) ──
+  straight: {
+    strand: 'number', at: () => 78,
+    make(step, { rand = Math.random, live = null } = {}) {
+      const t = kit(rand), s = fromLive(live, 'over', { prec: 1, axis: 'both', straight: true }) || (() => { const [a, b] = t.pick([[3, 4], [6, 8], [5, 12], [9, 12], [8, 15], [12, 16]]); const m = madeOver(t, 1); m.axis = 'both'; m.from = [6, 4]; m.to = [6 + a, 4 + b]; return m; })();
+      const dx = r2(Math.abs(s.to[0] - s.from[0])), dy = r2(Math.abs(s.to[1] - s.from[1])), d = r2(Math.hypot(dx, dy));
+      return ownOrder({
+        key: 'straight', story: `The bridge moves ${t2(dx)} m along x and the trolley ${t2(dy)} m along y, at the same time, so the canister goes in a straight line.`, ask: 'How far does the canister go?',
+        right: F(d, METRE), slips: [{ ...F(r2(dx + dy), METRE), why: 'That goes along and then up. Straight across is shorter: x × x + y × y is the long side times itself.' }, { ...F(Math.max(dx, dy), METRE), why: 'That is only the longer side. The straight line is longer still.' }, { ...F(r2(dx * dx + dy * dy), METRE), why: `${t2(dx * dx + dy * dy)} is the long side times itself: which number times itself makes it?` }, { ...F(r2(d + 1), METRE), why: 'One metre too far.' }],
+        rightWhy: `${t2(dx)}² + ${t2(dy)}² = ${t2(d * d)} = ${t2(d)}²: ${u(d, METRE)}`,
+        help: { title: 'Straight across', svg: picture({ kind: 'straight', dx, dy }), line: 'The two moves are the short sides of a right triangle; the straight line is its long side.', steps: [`${t2(dx)} × ${t2(dx)} + ${t2(dy)} × ${t2(dy)} = ?`, '? × ? = that'] },
+        own: { strand: 'number', at: 78 }, facts: facts(s, { d, axis: 'both', straight: true }),
+      }, rand);
+    },
+  },
+};
+
+// ── the ladder ───────────────────────────────────────────────────────────────────────────────────────────────────
+const M = (maker, step, w = 1) => ({ maker, step, w });
+export const PLACE = {
+  id: 'crane', name: 'The crane check', short: 'Crane', math: 'A crane over a grid: quadrants, coordinates, distances, heights, turns, speeds', pic: 'crane', job: null,
+  line: 'The crane reports a fault: verify each move, from which quadrant to straight-line distances.',
+  levels: [
+    { id: 'quad', title: 'Which quadrant', line: 'Which quadrant is the blinking canister in? Count the metres down', grade: 2, gen: { mix: [M('quad', 1, 2), M('lower', 1), M('turn', 1, 0.5)] } },
+    { id: 'count', title: 'Counting squares', line: 'Up to 10 squares along the grid; up to 10 metres down', grade: 6, gen: { mix: [M('count', 2, 2), M('lower', 1), M('turn', 1, 0.5)] } },
+    { id: 'read', title: 'Reading the grid', line: 'What is the x of the blinking canister?', grade: 10, gen: { mix: [M('read', 1, 2), M('lower', 2), M('turn', 1, 0.5)] } },
+    { id: 'dist', title: 'How far along', line: 'From x = 12 to x = 22; the grab from 6 m to 2 m', grade: 18, gen: { mix: [M('dist', 1, 2), M('lower', 2), M('turn', 1, 0.5)] } },
+    { id: 'pair', title: 'Coordinates', line: 'The blinking canister is at (22, 16)', grade: 24, gen: { mix: [M('pair', 1, 2), M('dist', 1), M('lower', 2), M('turn', 1, 0.5)] } },
+    { id: 'degrees', title: 'Turns in degrees', line: 'A quarter turn is 90 degrees', grade: 32, gen: { mix: [M('turn', 2, 2), M('dist', 1), M('lower', 2)] } },
+    { id: 'change', title: 'Up is plus, down is minus', line: 'From 6 m to 2 m is a change of −4', grade: 36, gen: { mix: [M('change', 1, 2), M('dist', 1), M('turn', 2)] } },
+    { id: 'time', title: 'Time from speed', line: '14 m at 2 m a second; 4 m down at 1 m a second', grade: 40, gen: { mix: [M('time', 1, 2), M('htime', 1, 1), M('turn', 2)] } },
+    { id: 'tenths', title: 'Tenths', line: 'From x = 12.4 to x = 21.6; the grab from 6.3 m to 2.3 m', grade: 48, gen: { mix: [M('dist', 2, 2), M('lower', 3), M('turn', 2)] } },
+    { id: 'hundredths', title: 'Hundredths', line: 'The crane at x = 5.78, the canister at x = 22.08', grade: 56, gen: { mix: [M('dist', 3, 2), M('lower', 4), M('turn', 2)] } },
+    { id: 'timeTenths', title: 'Time with tenths', line: '9.4 m at 2 m a second; 6.3 m at 1.5 m a second', grade: 62, gen: { mix: [M('time', 2, 2), M('lower', 4), M('turn', 2)] } },
+    { id: 'both', title: 'Both ways at once', line: 'x 12 m at 2 m a second and y 9 m at 1.5 m a second, together', grade: 70, gen: { mix: [M('both', 1, 2), M('lower', 4), M('turn', 2)] } },
+    { id: 'straight', title: 'Straight across', line: '6 m along x and 8 m along y at once: 10 m in a straight line', grade: 78, gen: { mix: [M('straight', 1, 2), M('lower', 4), M('turn', 2)] } },
+  ],
+};
+
+// which of the job's makers can ask about which kind of move
+const SUITS = { quad: 'over', count: 'over', read: 'over', dist: 'over', pair: 'over', time: 'over', both: 'over', straight: 'over', lower: 'lower', change: 'lower', htime: 'lower', turn: 'turn' };
+// the level's makers that suit the crane's next asked move, one of them by weight; none: null (Mathwood's own pick)
+function pickAsk(mix, { rand = Math.random, live = null } = {}) {
+  const next = live && live.peek ? live.peek() : null;
+  if (!next) return null;
+  const fits = mix.filter((a) => SUITS[a.maker] === next);
+  if (!fits.length) {
+    // (a level with nothing for this move: the crane makes it by itself, and the card is about the next one)
+    if (live.pass) live.pass();
+    const again = live.peek ? live.peek() : null;
+    const f2 = mix.filter((a) => SUITS[a.maker] === again);
+    if (!f2.length) return null;
+    return f2[Math.floor(rand() * f2.length)];
+  }
+  let r = rand() * fits.reduce((q, a) => q + (a.w ?? 1), 0);
+  for (const a of fits) if ((r -= a.w ?? 1) <= 0) return a;
+  return fits[fits.length - 1];
+}
+
+// THE OPERATOR'S CHAIR in the smelter's control room: one seat (the game's maker: "a single option to get into the
+// seat"); the crane game comes up, with free control a switch on its screen (src/cranedrive.js)
+export const OPERATOR = { piece: 'opChair', local: [0, 0, -0.95], face: [0, 1] };
+export const JOB = {
+  id: 'crane', name: 'Crane system', short: 'Crane', open: true, pickAsk,
+  spot: OPERATOR, near: 2.3, seated: true,
+  sign: 'Crane operator', hint: 'Verify the crane\'s moves: credits for each right answer',
+  place: PLACE, makers: MAKERS, card: 'crane', game: GAME,
 };

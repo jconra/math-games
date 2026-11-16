@@ -7,6 +7,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planCycle, planFrom, stateAt, startOf, loadAt } from '../kit/crane-plan.js';
 import { makeDrive, DRIVE } from '../kit/crane-drive.js';
+import { JOB as craneJob, MAKERS, PLACE, makeGame, tripFrom, toGrid, quadrantOf, mountName, SPEEDS, CHANGE_AT } from '../src/jobs/crane.js';
+import * as E from '../src/jobs/engine.js';
+import { helpPicture } from '../src/jobs/pics.js';
+import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 
 const Q = Math.PI / 2, deg = Math.PI / 180;
 const mounts = [];
@@ -128,4 +132,78 @@ test('the round, taken up after a canister was docked by hand, carries on: the o
   const p = planFrom(site, S), L0 = loadAt(p, 0);
   assert.equal(L0.docked.length, 1); assert.equal(L0.onShip, 7);
   const L = loadAt(p, p.length); assert.equal(L.phase, 'done'); assert.equal(L.onShip, 8); assert.equal(L.fullOnShip, 0);
+});
+
+// ── the crane game (src/jobs/crane.js): its cards, from the live crane, and the moves they make ──────────────────────
+const stepsFor = (D, S, list) => list.map((s) => (typeof s.until === 'string' ? { until: s.until === 'tray' ? () => S.tray[s.i] > 0.999 : s.until === 'lit' ? () => S.lit[s.k] > 0.999 : () => D.held === s.c } : s));
+function playLevel(L, cards = 10) {
+  const S = startOf(site), D = makeDrive(site, S, { solid, eyes: [] }); D.byHand = false;
+  const Q = makeGame(site, { state: () => S });
+  const live = { ask: (k, o) => { const r = Q.ask(k, o); if (r) D.go(stepsFor(D, S, Q.before())); return r; }, peek: () => Q.peek(), pass: () => D.go(stepsFor(D, S, Q.skip())) };
+  const out = [];
+  for (let n = 0; n < cards; n++) {
+    const a = craneJob.pickAsk(L.gen.mix, { live });
+    assert.ok(a, `${L.id}: a maker for the next move (${Q.peek()})`);
+    const o = MAKERS[a.maker].make(a.step, { live });
+    assert.ok(until(D, () => !D.busy, 90) != null && !D.failed, `${L.id} card ${n}: getting into place: ${JSON.stringify(D.failed)}`);
+    const f = o.facts || {};
+    const v = f.straight ? null : f.both ? { x: SPEEDS.x, z: SPEEDS.y } : f.even ? (f.speed === SPEEDS.h && f.kind === 'lower' ? { hoist: SPEEDS.h } : f.axis === 'y' ? { z: SPEEDS.y } : { x: SPEEDS.x }) : null;
+    const st = Q.right(null, { even: !!(f.even || f.both), v });
+    D.go(stepsFor(D, S, st.concat(Q.left() === 0 ? Q.rest() : [])));
+    assert.ok(until(D, () => !D.busy, 120) != null && !D.failed, `${L.id} card ${n}: the answer's move: ${JSON.stringify(D.failed)}`);
+    out.push({ o, f, maker: a.maker });
+  }
+  return { S, out };
+}
+
+test('the crane game: every level deals good cards from the crane as it is, ten in a row, and the crane makes every move', () => {
+  for (const L of PLACE.levels) {
+    const { S, out } = playLevel(L);
+    for (const { o, f, maker } of out) {
+      const words = `${o.story} ${o.ask} ${o.coins.map((c) => c.big + ' ' + c.small + ' ' + (c.why || '')).join(' ')}`;
+      assert.ok(!/NaN|undefined|Infinity|\[object/.test(words), `${L.id}: ${words}`);
+      assert.equal(o.coins.filter((c) => c.good).length, 1, `${L.id}: one right answer`);
+      assert.ok(o.coins.length >= 3, `${L.id} ${maker}: ${o.coins.length} answers`);
+      for (const c of o.coins) assert.ok(!/^\s*[1-4][.)]\s/.test(c.big), c.big);
+      assert.ok(f.live, `${L.id} ${maker}: a card about the crane as it is, not one from the log`);
+      const pic = helpPicture(o); assert.ok(pic.svg.startsWith('<svg') && !/NaN|undefined/.test(pic.svg), `${L.id} ${maker}: its picture`);
+      if (o.sum) assert.ok(workOf(o.sum.chain ? o.sum.chain[0] : o.sum), `${L.id} ${maker}: its sum can be worked on paper`);
+    }
+    // (two whole trips: two canisters off the ship and docked)
+    assert.equal(S.cans.filter((q) => q.where === 'socket').length, 2, `${L.id}: two docked`);
+  }
+});
+
+test('the crane game\'s makers are right: quadrants, squares, readings, distances, pairs, turns, heights, plus and minus, times, both at once, straight across', () => {
+  const at = (L, n) => playLevel(PLACE.levels.find((q) => q.id === L), n).out;
+  const right = (o) => o.coins.find((c) => c.good);
+  for (const { o, f } of at('quad', 5).filter((x) => x.maker === 'quad')) assert.equal(right(o).v, f.quad);
+  for (const { o, f } of at('dist', 5).filter((x) => x.maker === 'dist')) assert.ok(Math.abs(right(o).v - f.d) < 1e-9 && f.d >= 2);
+  for (const { o } of at('degrees', 5).filter((x) => x.maker === 'turn')) assert.equal(right(o).v, 90);
+  for (const { o, f } of at('change', 5).filter((x) => x.maker === 'change')) { assert.equal(right(o).v - CHANGE_AT, f.change); assert.ok(f.change < 0, 'down is minus'); }
+  for (const { o, f } of at('time', 5).filter((x) => x.maker === 'time')) assert.ok(Number.isInteger(right(o).v) && f.T === right(o).v, 'whole seconds at the first time level');
+  for (const { o, f } of at('both', 5).filter((x) => x.maker === 'both')) assert.ok(Number.isInteger(right(o).v) && right(o).v === f.T);
+  for (const { o, f } of at('straight', 5).filter((x) => x.maker === 'straight')) assert.ok(Number.isInteger(right(o).v), 'a whole straight line: ' + f.d);
+  // (from the log, without a crane: still good cards)
+  for (const L of PLACE.levels) for (const a of L.gen.mix) { const o = MAKERS[a.maker].make(a.step, {}); assert.equal(o.coins.filter((c) => c.good).length, 1); assert.ok(!/NaN|undefined/.test(o.story + o.ask)); }
+});
+
+test('the crane game: the grid counts from the hangar\'s south-west corner, the quadrants as a coordinate plane\'s, the Miner\'s places by name', () => {
+  assert.deepEqual(toGrid(site, 19, 9), [0, 0]);
+  assert.deepEqual(toGrid(site, 59, -19), [40, 28]);
+  assert.equal(quadrantOf(site, 30, 20), 1); assert.equal(quadrantOf(site, 10, 20), 2); assert.equal(quadrantOf(site, 10, 5), 3); assert.equal(quadrantOf(site, 30, 5), 4);
+  const names = mounts.map((_, i) => mountName(site, i));
+  assert.equal(new Set(names).size, 8, names.join(', '));
+  assert.ok(names.every((n) => /^(Upper|Lower)-(Forward|Aft)-(Port|Starboard)$/.test(n)));
+  // (the trip: the round's own next one, and a test lift once the round is done)
+  const S = startOf(site), t1 = tripFrom(site, S);
+  assert.equal(t1.phase, 'unload'); assert.equal(t1.from.kind, 'mount'); assert.equal(t1.to.kind, 'socket');
+});
+
+test('the crane game pays as every job does: about 50 credits at the first level, 200 at the last', () => {
+  E.register(craneJob);
+  const pays = PLACE.levels.map((L) => E.payFor(L));
+  assert.equal(pays[0], 50); assert.equal(pays[pays.length - 1], 200);
+  for (let i = 1; i < pays.length; i++) assert.ok(pays[i] >= pays[i - 1] && pays[i] - pays[i - 1] <= 20, 'no big jumps: ' + pays.join(', '));
+  const grades = PLACE.levels.map((L) => L.grade); for (let i = 1; i < grades.length; i++) assert.ok(grades[i] > grades[i - 1] && grades[i] - grades[i - 1] <= 10, 'small steps up the school guide: ' + grades.join(', '));
 });

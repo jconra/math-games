@@ -223,10 +223,10 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     closed = true;
     removeEventListener('keydown', onKey, true);
     crane.places = [];
-    if (!silent) crane.give();
     el.classList.add('is-going');
     setTimeout(() => el.remove(), 250);
-    onClose();
+    // (silent: the crane game takes over, the crane still live)
+    if (!silent) { crane.give(); onClose(); }
   }
   requestAnimationFrame(() => el.classList.add('is-on'));
   showView();
