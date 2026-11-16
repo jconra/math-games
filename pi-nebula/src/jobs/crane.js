@@ -69,9 +69,12 @@ export function tripFrom(site, P, rand = Math.random) {
   const mReach = (i) => { const o = over(M, i); return o < 0 || who('mount', o) < 0; }, kReach = (k) => { const o = over(K, k); return o < 0 || who('socket', o) < 0; };
   // moves, each from where the last left it
   const along = (to, what) => { const lg = leg(), from = lg === 'wall' ? P.x : P.z; if (Math.abs(to - from) < 1e-6) return; steps.push({ kind: 'along', leg: lg, from, to, mark: lg === 'wall' ? W.wall(from) : W.ship(from), markTo: lg === 'wall' ? W.wall(to) : W.ship(to), what }); if (lg === 'wall') P.x = to; else P.z = to; };
-  const slide = (to, what, push = false) => { if (Math.abs(to - P.slide) < 1e-6) return; steps.push({ kind: push ? 'push' : 'slide', from: P.slide, to, what }); P.slide = to; };
-  const hoist = (to, what) => { if (Math.abs(to - P.hoist) < 1e-6) return; steps.push({ kind: 'hoist', from: P.hoist, to, what, carrying: P.held >= 0 }); P.hoist = to; };
-  const up = () => { hoist(site.carry, 'the top, to travel'); slide(0, 'the beam\'s middle'); };
+  // (where the hook is when a move up, down or across starts: [x, z, the beam's heading, height], for the faint path of
+  // a wrong answer about a move still ahead of the crane)
+  const hookAt = () => [P.x + Math.sin(P.yaw) * P.slide, P.z + Math.cos(P.yaw) * P.slide, P.yaw, P.hoist];
+  const slide = (to, what, push = false) => { if (Math.abs(to - P.slide) < 1e-6) return; steps.push({ kind: push ? 'push' : 'slide', from: P.slide, to, what, at: hookAt() }); P.slide = to; };
+  const hoist = (to, what) => { if (Math.abs(to - P.hoist) < 1e-6) return; steps.push({ kind: 'hoist', from: P.hoist, to, what, carrying: P.held >= 0, at: hookAt() }); P.hoist = to; };
+  const up = () => { hoist(site.carry, 'the top'); slide(0, 'the beam\'s middle'); };
   const toLeg = (lg) => {
     if (leg() === lg) return;
     up(); along(leg() === 'wall' ? site.turn[0] : site.turn[1], 'the turntable');   // (the turntable on the leg it is on now)
@@ -465,7 +468,7 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
     const S = start(), held = S.cans.findIndex((q) => q.where === 'held');
     planned = { x: S.x, z: S.z, yaw: S.yaw, slide: S.slide, hoist: S.hoist, held, cans: S.cans.map((q) => ({ where: q.where, i: q.i, fill: q.fill })) };
     // (where it is now is a little odd: up and the carriage home first)
-    if (Math.abs(S.hoist - site.carry) > 1e-3) { queue.push({ kind: 'hoist', from: S.hoist, to: site.carry, what: 'the top, to travel', carrying: held >= 0, id: ids++ }); planned.hoist = site.carry; }
+    if (Math.abs(S.hoist - site.carry) > 1e-3) { queue.push({ kind: 'hoist', from: S.hoist, to: site.carry, what: 'the top', carrying: held >= 0, id: ids++ }); planned.hoist = site.carry; }
     if (Math.abs(S.slide) > 1e-3) { queue.push({ kind: 'slide', from: S.slide, to: 0, what: 'the beam\'s middle', id: ids++ }); planned.slide = 0; }
   }
   function more() {
@@ -552,12 +555,12 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
       k = findFrom((s) => s.kind === 'hoist' && Math.abs(roundTo(s.to, prec) - s.to) <= Math.max(prec / 2, 0.06) + 1e-9 && Math.abs(roundTo(s.to, prec) - roundTo(s.from, prec)) >= (o.least || prec) - 1e-9 && roundTo(s.to, prec) > 0);
       if (k < 0) return null;
       const s = queue[k];
-      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what, carrying: !!s.carrying };
+      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what, carrying: !!s.carrying, at: s.at || null };
     } else if (kind === 'slide') {
       k = findFrom((s) => s.kind === 'slide' && Math.abs(roundTo(s.to, prec) - roundTo(s.from, prec)) >= (o.least || prec) - 1e-9);
       if (k < 0) return null;
       const s = queue[k];
-      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what };
+      out = { from: roundTo(s.from, prec), to: roundTo(s.to, prec), what: s.what, at: s.at || null };
     } else if (kind === 'weight') {
       k = findFrom((s) => s.kind === 'grab' && s.how === 'shut' && s.c >= 0);
       if (k < 0) return null;

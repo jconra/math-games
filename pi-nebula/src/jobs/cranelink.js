@@ -70,12 +70,16 @@ export function craneLink({ crane, W, walls }) {
       const dir = Math.sign(R.markTo - R.mark) || 1, end = q.order.key === 'mark' ? val : R.mark + dir * (R.kind === 'time' ? val * R.speed : val);
       const y = Math.max(hk.y, 1), P = (m) => { const a = alongOf(R.leg, m); return R.leg === 'wall' ? new THREE.Vector3(a, y, site.wallZ) : new THREE.Vector3(site.shipX, y, a); };
       drawPath([P(R.mark), P(end)], R.leg === 'wall' ? 0 : Math.PI / 2);
-    } else if (R.kind === 'hoist') {
-      const down = R.to < R.from, endY = f.change != null ? R.from + val : R.from + (down ? -val : val);
-      drawPath([hk.clone().setY(R.from), hk.clone().setY(Math.max(0.05, Math.min(site.carry + 1.5, endY)))], yaw);
-    } else if (R.kind === 'slide') {
-      const dir = Math.sign(R.to - R.from) || 1, b = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-      drawPath([hk.clone(), hk.clone().addScaledVector(b, dir * val)], yaw);
+    } else if (R.kind === 'hoist' || R.kind === 'slide') {
+      // (where the asked move starts: it can be a move or two ahead of the crane)
+      const h0 = R.at ? new THREE.Vector3(R.at[0], R.at[3], R.at[1]) : hk, hy = R.at ? R.at[2] : yaw;
+      if (R.kind === 'hoist') {
+        const down = R.to < R.from, endY = f.change != null ? R.from + val : R.from + (down ? -val : val);
+        drawPath([h0.clone().setY(R.from), h0.clone().setY(Math.max(0.05, Math.min(site.carry + 1.5, endY)))], hy);
+      } else {
+        const dir = Math.sign(R.to - R.from) || 1, b = new THREE.Vector3(Math.sin(hy), 0, Math.cos(hy));
+        drawPath([h0.clone(), h0.clone().addScaledVector(b, dir * val)], hy);
+      }
     } else if (R.kind === 'route' && q.order.key !== 'route:time') {
       // (along the way it would go, as far as the wrong answer's metres reach)
       const y = site.carry, way = [];
