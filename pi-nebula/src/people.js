@@ -1029,7 +1029,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     let best = null, bs = -Infinity;
     for (const [s, b] of [[0.75, -0.15], [-0.75, -0.15], [0.55, -0.55], [-0.55, -0.55], [0, -0.8], [0.9, 0.1], [-0.9, 0.1]]) {
       _y.set(P.pos.x - uz * s + ux * b, P.pos.y, P.pos.z + ux * s + uz * b);
-      const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26, !!P.away);
+      const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26, openFor(P));
       if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || onPatch(t.x, t.z) || someoneAt(t, P, LIFE.body)) continue;
       // (the further from the line the other is walking along, the better)
       const score = Math.abs(s) - Math.max(0, b) * 0.5 + Math.random() * 0.05;
@@ -1039,6 +1039,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // walking the way, keeping clear of everyone (everyone about as they are: someone away passes nobody, and nobody them)
   const _d = new THREE.Vector3(), _t = new THREE.Vector3();
+  // (someone away opens no doors (nobody sees them): the station's own doors they pass as if open; never a parked
+  // ship's (its stairs, ramps and lift, all in the hangars), a locked door or the scanner's ring)
+  const homeDoors = walls.doors.filter((d) => !d.locked && !d.glide && !d.part && !/^hangar/.test((d.D && d.D.zone) || ''));
+  const byDoor = (p) => { for (const d of homeDoors) { const b = d.box; if (p.x > b.min.x - 0.9 && p.x < b.max.x + 0.9 && p.z > b.min.z - 0.9 && p.z < b.max.z + 0.9) return true; } return false; };
+  const openFor = (P) => !!P.away && byDoor(P.pos);
   function walk(P, dt) {
     P.walkT = (P.walkT || 0) + dt;
     // (making way for someone: to the spot aside, then waiting there till they have gone by)
@@ -1048,7 +1053,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (yd > 0.05 && Y.t < 2) {
         const s = Math.min(yd, P.speed * 0.8 * dt);
         P.heading = wrap(P.heading + Math.sign(wrap(Math.atan2(yx, yz) - P.heading)) * Math.min(Math.abs(wrap(Math.atan2(yx, yz) - P.heading)), LIFE.turn * dt));
-        const g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26, !!P.away);
+        const g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26, openFor(P));
         if (g < s * 0.3) { Y.t = 2; play(P, STAND); } else play(P, CLIPS.walk, { speed: 0.8 });   // (blocked: no walking on the spot)
       } else {
         const Q = Y.for; play(P, STAND);
@@ -1111,8 +1116,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     _d.set(P.pos.x + dx * step, 0, P.pos.z + dz * step);
     if (!by) for (const Q of others) { const d1 = Math.hypot(Q.pos.x - _d.x, Q.pos.z - _d.z); if (d1 < LIFE.body && d1 < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z)) { by = Q; break; } }
     let got = 0;
-    // (someone away opens no doors (nobody sees them): they pass through as if open)
-    if (!by) got = walls.move(P.pos, dx * step, dz * step, 0.26, !!P.away);
+    if (!by) got = walls.move(P.pos, dx * step, dz * step, 0.26, openFor(P));
     // (pressed into a corner, or steered into one: the freest small step near the way wanted, never back the way they
     // came, onto a patch or toward anyone)
     if (!by && got < step * 0.3) {
@@ -1122,10 +1126,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const a = i / 16 * Math.PI * 2, vx = Math.sin(a), vz = Math.cos(a), dot = vx * ux + vz * uz;
         if (dot <= bd) continue;
         _t.copy(P.pos);
-        if (walls.move(_t, vx * step, vz * step, 0.26, !!P.away) < step * 0.7 || onPatch(_t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
+        if (walls.move(_t, vx * step, vz * step, 0.26, openFor(P)) < step * 0.7 || onPatch(_t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
         bd = dot; bx = vx; bz = vz;
       }
-      if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26, !!P.away);
+      if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26, openFor(P));
     }
     P.blocker = by && typeof by === 'object' ? by : null;
     // (held up by a walker who is held up by them: the one later in the roster makes way)
