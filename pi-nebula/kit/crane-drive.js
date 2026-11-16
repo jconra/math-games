@@ -352,8 +352,9 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       // (and it stays out while the cradle is down at it, whatever it holds)
       if (far < 0.15 && hy < o[1] + 1.2 && S.tray[i] > 0.5) to = 1;
       if (Math.abs(S.tray[i] - to) < 1e-9) return;
-      // (it moves only with the cradle and any load clear above it, and never out over someone)
-      const clearOf = hy > m.at[1] + lift + (held >= 0 ? DRIVE.clearHeld : DRIVE.clearEmpty) || Math.hypot(hx - (m.at[0] + o[0]) / 2, hz - (m.at[2] + o[2]) / 2) > half + 1.4;
+      // (it moves only with the cradle and any load clear above it, and never out over someone; "clear" is the very
+      // height the hook is held at while a tray comes out under it, so a hook waiting there never stops the tray)
+      const clearOf = hy > m.at[1] + lift + (held >= 0 ? DRIVE.clearHeld : DRIVE.clearEmpty) - 0.02 || Math.hypot(hx - (m.at[0] + o[0]) / 2, hz - (m.at[2] + o[2]) / 2) > half + 1.4;
       if (!clearOf) return;
       if (to > S.tray[i] && trayPeople(i)) { note('people', 'Someone is by the ship\'s tray: it stays in.'); return; }
       S.tray[i] = approach(S.tray[i], to, dt * k / sp.tray);

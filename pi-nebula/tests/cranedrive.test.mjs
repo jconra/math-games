@@ -51,6 +51,12 @@ test('by hand: a canister off the ship by itself, turned end on, docked by itsel
   assert.equal(D.held, -1);
 });
 
+test('by hand: lowered the moment it is over the tray, the tray still coming out: it waits for the tray, then takes the canister', () => {
+  const { S, D } = fresh(), m = mounts[1], o = [m.at[0], m.at[2] + m.out[1]];
+  assert.ok(until(D, () => Math.hypot(S.x - o[0], S.z - o[1]) < 0.12, 20, toward(S, o[0], o[1])) != null, 'over the tray');
+  assert.ok(S.tray[1] < 0.999, 'its tray still on its way out: ' + S.tray[1].toFixed(3));
+  assert.ok(until(D, () => D.held === 1, 15, { hoist: -1 }) != null, 'down at once: the tray all the way out (' + S.tray[1].toFixed(3) + '), and the canister taken (the hook at ' + S.hoist.toFixed(2) + ')');
+});
 test('by hand: the lights go amber near a place and green when each way is right', () => {
   const { S, D } = fresh(), m = mounts[0], o = [m.at[0], m.at[2] + m.out[1]];
   D.step(1 / 60, {}); assert.deepEqual(D.read().aids, { x: 'off', y: 'off', h: 'off' }, 'far from everything');
