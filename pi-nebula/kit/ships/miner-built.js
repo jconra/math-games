@@ -28,11 +28,15 @@
 //                            (pitch), a jet at each end (podJets; the lab, or the game, aims them: podStep)
 //   mbLift       'belly'     the belly's lift: its shaft and the airlock over it; the platform (with its railings and
 //                            corner rods: door 'lift', 1 down) and the hatch's two sliding doors (door 'hatch', 1 open)
+//                'belly, cabin'   the lift people ride, with the cabin built inside (cabinLift, CLIFT): its platform the
+//                            airlock's floor when up, the tower and rods telescoping into it (door 'lift', 1 down)
 //   mbGear       'port' / 'starboard'   a landing leg (strut and foot: door 'gear', 1 folded)
 //   mbGearDoors  'port' / 'starboard'   its pod's doors (door 'doors', 1 shut)
 //   mbWells      'pods'      the legs' pods under the lower canisters
 //   mbCockpit    'two seats' two bucket seats side by side, the pedestal between them, the dash and side consoles, on
 //                            a flight deck raised over the cabin's, in its tub under the canopy
+//                'two seats, cabin'   the same with the cabin built inside (cabinCockpit): the cabin's wall behind it,
+//                            the ore station behind the pilot, a step up on the starboard side
 import * as THREE from 'three';
 import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
@@ -1221,7 +1225,7 @@ export const LAB = {
   controls: ['arms', 'thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
   dirt: { None: 0, Some: 0.85, Lots: 1.25 },
   spots: { Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.05, 3.75], look: [0, 3.5, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } },
-  doorTip: 'Lower the lift\'s platform to the ground and open the hatch over it, or close it and raise the platform',
+  doorTip: 'Lower the lift\'s platform to the ground, or bring it back up (with the rooms inside, up to the airlock\'s floor)',
   // (the cabin built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with it (the lift
   // that people ride, its platform the airlock's floor when up; the cockpit open to the cabin behind it), and the
   // ship's own door as the cabin meets it: none in its sides, its door is the hatch in the airlock's floor)
