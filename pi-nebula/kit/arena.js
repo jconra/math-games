@@ -21,14 +21,14 @@ import { COURT, CORNERS, WALLS, GOALS, PORTS } from '../src/mathball/court.js';
 const PI = Math.PI;
 // the arena's surfaces: dark, never pure black (their bevels must catch the glow)
 const FLOOR = { c: '#15181e', r: 0.24, m: 0.45, w: 0.15 };
-const WALL = { c: '#252a33', r: 0.42, m: 0.3, w: 0.2 };
+const WALL = { c: '#2c323d', r: 0.42, m: 0.3, w: 0.2 };
 const DEEP = { c: '#101318', r: 0.5, m: 0.2, w: 0.1 };
 const TRIM = { c: '#4a525e', r: 0.3, m: 0.55, w: 0.3 };
 const GLOSS = { c: '#0f1116', r: 0.12, m: 0.6, w: 0.1 };
 const HOUSE = { c: '#7f8a9b', r: 0.35, m: 0.3, w: 0.2 };
 const PORT = { c: '#07080b', r: 0.6, m: 0.1, w: 0.05 };
 // lines of light (linear): the room's cyan, the ceiling's white
-export const ARENA_GLOW = { line: [0.06, 0.62, 1.25], corner: [0.09, 0.8, 1.6], ceiling: [2.4, 2.5, 2.6], port: [0.05, 0.55, 1.1] };
+export const ARENA_GLOW = { line: [0.06, 0.62, 1.25], corner: [0.09, 0.8, 1.6], ceiling: [3.4, 3.5, 3.7], port: [0.05, 0.55, 1.1] };
 const mul = (c, k) => c.map((v) => v * k);
 const lightOf = (c) => { const m = Math.max(...c); return c.map((v) => v / m); };
 
@@ -73,7 +73,7 @@ function minus(r, holes) {
 const T = 0.2, BAR = COURT.bar.y;
 function wall(q, W, holes) {
   const L = W.len, x0 = -L / 2, x1 = L / 2, n = Math.max(1, Math.round(L / 2.1)), H = COURT.height;
-  q.slab(DEEP, x0, x1, 0, H, -T, -0.03, { r: 0, cell: 1.5, skip: ['-z'] });           // (the dark backing the seams show)
+  for (const [a, b, c, d] of minus([x0, x1, 0, H], holes)) q.slab(DEEP, a, b, c, d, -T, -0.03, { r: 0, cell: 1.5, skip: ['-z'] });   // (the dark backing the seams show)
   for (let i = 0; i < n; i++) {
     const a = x0 + (L * i) / n, b = x0 + (L * (i + 1)) / n;
     for (const [y0, y1] of [[0, BAR - 0.05], [BAR + 0.05, H]]) for (const [c0, c1, d0, d1] of minus([a + 0.012, b - 0.012, y0 + 0.012, y1 - 0.012], holes)) q.slab(WALL, c0, c1, d0, d1, -0.06, 0, { r: 0.01, cell: 0.9, skip: ['-z'] });
@@ -145,10 +145,10 @@ export function arenaRoom(p) {
   p.slab(FLOOR, -hx - 0.2, hx + 0.2, -0.12, 0, -hz - 0.24, hz + 0.24, { r: 0.01, cell: 0.7, loops: [] });
   p.slab(DEEP, -hx - 0.2, hx + 0.2, H, H + 0.12, -hz - 0.24, hz + 0.24, { r: 0.01, cell: 1.2, loops: [] });
   // the ceiling's light strips (dim: the court is lit mostly by its own lines), and their light for the bake
-  for (const x of [-2.4, 0, 2.4]) {
-    const z0 = -hz + 1.2 + (Math.abs(x) > 2 ? 1.6 : 0), z1 = hz - 1.2 - (Math.abs(x) > 2 ? 1.6 : 0);
+  for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) {
+    const z0 = -hz + 1.2 + (Math.abs(x) > 1.8 ? 1.8 : 0), z1 = hz - 1.2 - (Math.abs(x) > 1.8 ? 1.8 : 0);
     glow(p, ARENA_GLOW.ceiling, x - 0.05, x + 0.05, H - 0.03, H, z0, z1);
-    for (let z = z0 + 1.4; z < z1 - 0.5; z += 3.1) p.light([x, H - 0.4, z], 9, [0.85, 0.92, 1.0], [0, -1, 0], 10);
+    for (let z = z0 + 1.4; z < z1 - 0.5; z += 3.1) p.light([x, H - 0.4, z], 13, [0.85, 0.92, 1.0], [0, -1, 0], 10);
   }
   // the walls, with their holes: the door in the south wall, a goal's mouth in each slanted one
   const goalOn = new Map(GOALS.map((g) => [g.wall, g]));

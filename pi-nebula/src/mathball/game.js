@@ -48,7 +48,7 @@ export const ROUND = {
 export const OTHER = {
   levels: [
     { key: 'easy', share: 0.72, acc: 0.72, run: 3.4 },
-    { key: 'even', share: 0.95, acc: 0.85, run: 3.9 },
+    { key: 'even', share: 0.9, acc: 0.85, run: 3.9 },
     { key: 'hard', share: 1.18, acc: 0.94, run: 4.3 },
   ],
   band: { at: 2, ahead: 0.62, behind: 1.4, step: 0.12 },   // ahead by 2 or more: slower; behind by 2 or more: quicker

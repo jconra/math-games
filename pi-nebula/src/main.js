@@ -118,7 +118,7 @@ async function boot() {
   // the station's jobs: their spots, the prompt, the job panel (jobs/index.js); credits are saved with the crew member
   // (the smelter's pay slips count the canisters really in the hangar: the crane's load, as it is when a slip is made)
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
-  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) }, crane });
+  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) }, crane, lib, people: () => people });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -136,8 +136,9 @@ async function boot() {
     if (GAME.mode === 'title' || !P) drift(now);
     else {
       const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
-      const move = atJob ? null : auto.way ? autoMove() : input.move;
-      P.update(dt, { move, run: auto.way ? auto.run : input.run, yaw: chase.yaw, others: people ? people.list : [] });
+      const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
+      const move = ctl ? ctl.move : atJob ? null : auto.way ? autoMove() : input.move;
+      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? people.list : [], clip: ctl && ctl.clip, clipSpeed: ctl && ctl.clipSpeed });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);

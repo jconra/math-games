@@ -153,19 +153,36 @@ export const dealable = (rules, pool) => pool.filter((b) => { const n = goalsFor
 // the fewest balls with nowhere to go is made, and those balls are swapped out (they fade, new ones come in): `strand`.
 //   -> { rule (its name), rules (the goals after), strand: [balls that fit no goal or every goal], safe }  or null
 export function pickChange(rules, at, pool, balls, { held = [], rand = Math.random, spares = [] } = {}) {
-  const now = rules.map((r) => ruleOf(r).id), cands = [...new Set(spares.map((r) => ruleOf(r).id))].filter((id) => !now.includes(id));
-  let best = null;
-  for (const id of cands) {
-    const next = now.map((r, i) => (i === at ? id : r));
-    const bad = (b) => { const n = goalsFor(next, b).length; return n === 0 || n === next.length; };
-    if (held.some(bad)) continue;                                   // (never under a player's feet)
-    const strand = balls.filter(bad), keep = balls.filter((b) => !bad(b));
-    const deal = dealable(next, pool), dead = next.filter((r) => !deal.some((b) => fits(r, b))).length;
-    if (dead) continue;                                              // (the pool could never feed some goal)
-    const empty = next.filter((r) => !keep.some((b) => fits(r, b))).length;   // (goals no ball on the court fits now)
-    const choice = keep.filter((b) => goalsFor(next, b).length >= 2).length;
-    const score = strand.length * 10 + empty * 3 - choice * 0.5 + rand() * 0.9;
-    if (!best || score < best.score) best = { rule: id, rules: next, strand, safe: !strand.length, score };
+  const now = rules.map((r) => ruleOf(r).id);
+  const tryAll = (cands) => {
+    let best = null;
+    for (const id of cands) {
+      const next = now.map((r, i) => (i === at ? id : r));
+      const bad = (b) => { const n = goalsFor(next, b).length; return n === 0 || n === next.length; };
+      if (held.some(bad)) continue;                                   // (never under a player's feet)
+      const strand = balls.filter(bad), keep = balls.filter((b) => !bad(b));
+      const deal = dealable(next, pool), dead = next.filter((r) => !deal.some((b) => fits(r, b))).length;
+      if (dead) continue;                                              // (the pool could never feed some goal)
+      const empty = next.filter((r) => !keep.some((b) => fits(r, b))).length;   // (goals no ball on the court fits now)
+      const choice = keep.filter((b) => goalsFor(next, b).length >= 2).length;
+      const score = strand.length * 10 + empty * 3 - choice * 0.5 + rand() * 0.9;
+      if (!best || score < best.score) best = { rule: id, rules: next, strand, safe: !strand.length, score };
+    }
+    return best;
+  };
+  const own = [...new Set(spares.map((r) => ruleOf(r).id))].filter((id) => !now.includes(id));
+  // (a ball in someone's hand that every rule of the set would leave with no goal, or with every goal: a plainer rule is
+  // made for the change, by the nearest round numbers either side of it ("more than 20", "less than 30" take it; "less
+  // than 70", "more than 80" leave it out), or odd or even)
+  let best = tryAll(own);
+  if (!best && held.length) {
+    const vs = held.map(value).map((v) => v.n / v.d), lo = Math.min(...vs), hi = Math.max(...vs), gen = ['odd', 'even'];
+    for (const step of [5, 10]) {
+      const below = Math.floor((lo - 0.001) / step) * step, above = Math.ceil((hi + 0.001) / step) * step;
+      if (below > 0) gen.push('more:' + below, 'less:' + below);
+      gen.push('less:' + above, 'more:' + above);
+    }
+    best = tryAll([...new Set(gen)].filter((id) => !now.includes(id)));
   }
   return best;
 }

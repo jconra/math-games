@@ -30,6 +30,7 @@ import { JOB as crane, FREE as craneFree } from './crane.js';
 import { craneLink } from './cranelink.js';
 import { openDrive, chairScreen } from '../cranedrive.js';
 import { JOB as arena } from './arena.js';
+import { openMathball, mathballIdle } from '../mathball/index.js';
 import { JOB as dock } from './dock.js';
 import { dockLink } from './docklink.js';
 
@@ -76,7 +77,7 @@ function sideMarks(s) {
   return new THREE.Vector3(s.pos.x + lx * SIDE.far * k + fx * 0.6, s.pos.y, s.pos.z + lz * SIDE.far * k + fz * 0.6);
 }
 
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, crane = null } = {}) {
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, crane = null, lib = null, people = () => null } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -125,10 +126,13 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     if (!s || !s.job.open || !c || panel) return false;
     at = s; camFresh = true;
     for (const x of pairOf(s)) x.ring.visible = x.sign.visible = false;   // (the job's own props in view, not its marker)
-    if (input) input.enabled = false;
+    if (input && !s.job.game) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
     const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; if (link) { link.close(); link = null; } at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };
-    if (s.job.drive) {
+    if (s.job.game) {
+      // a job that is a game (the arena's Mathball: src/mathball/): it walks the player and works the camera itself
+      panel = openMathball({ W, walls, input, crew: c, lib, job: s.job, people, onSave: () => save(c), onCredits: showWallet, onClose: done });
+    } else if (s.job.drive) {
       // free control: the crane by hand (src/cranedrive.js), no questions
       panel = openDrive(document.body, { crane, input, W, walls, onClose: done });
     } else {
@@ -166,6 +170,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       if (s.job.pair) s.sign.material.opacity = lit ? 1 : 0.22;
     }
     if (!playing || !P) { prompt.hidden = true; wallet.hidden = true; near = null; other = null; api.near = null; api.nearJobs = []; return false; }
+    if (panel && at && at.job.game) { panel.update(dt, P); return true; }
     if (panel) {
       if (panel.update) panel.update(dt);
       if (link) link.update(dt);
@@ -175,6 +180,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       return true;
     }
     if (wallet.hidden) { showWallet(); wallet.hidden = false; }
+    for (const s of spots) if (s.job.game) { const z = W.room('arena'); mathballIdle(W, crew(), s.job, !!(z && z.group.visible)); }
     let best = null, bd = Infinity;
     for (const s of spots) { const d = Math.hypot(s.pos.x - P.pos.x, s.pos.z - P.pos.z); if (d < bd && d < (s.job.near ?? NEAR) && Math.abs(s.pos.y - P.pos.y) < 1.5) { bd = d; best = s; } }
     // (at a shared area: the side looked at; at first, the side the player is on)
@@ -245,7 +251,9 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   }
 
   // true while the camera is the player's own eyes, or they are in the job's seat (main.js puts the body away then)
-  const inEyes = () => !!(at && (at.job.seated || !(at.job.view && W.view(at.job.view))));
-  const api = { update, aim, close, start, spots, missing, near: null, nearJobs: [], panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; } };
+  const inEyes = () => !!(at && !at.job.game && (at.job.seated || !(at.job.view && W.view(at.job.view))));
+  // (a game job walks the player itself: main.js asks it how, each frame)
+  const control = (dt, P) => (panel && at && at.job.game && panel.control ? panel.control(dt, P) : null);
+  const api = { update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; } };
   return api;
 }

@@ -4,8 +4,9 @@
 //
 //   const P = await makePlayer({ lib, recipe, walls, scene })
 //   P.place(feet, heading)          stand them somewhere (a spot walls.snap gave)
-//   P.update(dt, { move, run, yaw, others })   move: { x, y, mag } from the input; yaw: the camera's; others: the
-//                                   people about ({ pos } each), whom the player does not walk through
+//   P.update(dt, { move, run, yaw, others, clip })   move: { x, y, mag } from the input; yaw: the camera's; others: the
+//                                   people about ({ pos } each), whom the player does not walk through; clip: one to
+//                                   play this frame whatever the legs are doing (a throw in the arena's game), at clipSpeed
 //   P.pos, P.heading, P.speed (the ground really covered, m/s), P.c (the crew kit's character)
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
@@ -45,7 +46,7 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
   };
 
   const before = new THREE.Vector3();
-  P.update = (dt, { move = null, run = false, yaw = 0, others = [] } = {}) => {
+  P.update = (dt, { move = null, run = false, yaw = 0, others = [], clip = null, clipSpeed = 1 } = {}) => {
     let target = 0;
     if (move && move.mag >= 0.08) {
       // the push, turned by the camera's yaw: forward is the way the camera looks
@@ -79,7 +80,8 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     // the body: stairs eased (the feet's height steps a riser at a time)
     P.drawnY = Math.abs(P.pos.y - P.drawnY) > 0.6 ? P.pos.y : damp(P.drawnY, P.pos.y, 18, dt);
     c.root.position.set(P.pos.x, P.drawnY, P.pos.z); c.root.rotation.set(0, P.heading, 0);
-    if (P.speed > 2.6) play('Run', Math.max(0.6, Math.min(1.6, P.speed / c.stride.Run)));
+    if (clip) play(clip, clipSpeed);
+    else if (P.speed > 2.6) play('Run', Math.max(0.6, Math.min(1.6, P.speed / c.stride.Run)));
     else if (P.speed > 0.15) play('Walk', Math.max(0.5, Math.min(1.8, P.speed / c.stride.Walk)));
     else play(STAND);
     c.update(dt);
