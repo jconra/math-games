@@ -2724,9 +2724,12 @@ export async function makeCrew(lib, recipe) {
       if (!o.isSkinnedMesh || o.userData.part !== 'head' || ['eye', 'cornea', 'visor'].includes(o.material && o.material.name)) return;
       if (!hm || o.geometry.attributes.position.count > hm.geometry.attributes.position.count) hm = o;
     });
-    // (a suit whose collar stands open round the neck (crew.json `collarRide: false`: atlantis1) keeps the neck's own
-    // weights: there the riding neck is in view, and as the head turned it sheared from the neck above into steps of
-    // light and dark, Sol's "dark triangles", 2026-11-10)
+    // (a suit whose collar stands open round the neck (crew.json `collarRide: false`: atlantis1, atlantis2) keeps the
+    // neck's own weights: there the riding neck is in view, and as the head turned it sheared from the neck above into
+    // steps of light and dark, Sol's "dark triangles", 2026-11-10. atlantis2 since 2026-11-16: its collar stands 6 cm
+    // off the neck behind, the game's camera looks down into it from behind and above, and with the heads seated lower
+    // the riding neck showed as a dark ragged band at the neck's foot (Zuri's, Ivy's). Through all 19 clips no neck
+    // comes through that collar without the ride: ~/pw/space-math/rigs/proportions/ride_check.cjs)
     if (collar && hm) neck = neckFit(hm, collar, lib.collarRide !== false && (lib.entry('suit', R.suit) || {}).collarRide !== false);
   }
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
