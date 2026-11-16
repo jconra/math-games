@@ -36,8 +36,10 @@
 //            (the hairline along the forehead), Reset; and Show: Stubble, Scalp shade, Ears (tinted), Smooth Mathwood hair
 //   POSE     the clips their outfit's skeleton has (the men's or the women's), grouped; the speed; Pause
 //   CAMERA   Full, Front, Side, Back, Face, Head, Nape (these three follow the head), Hands, Down the collar (2026-11-11:
-//            from above the shoulder, down between the collar and the neck, following it); Painted, Plain, Wireframe;
-//            the 1.8 m post; Bones
+//            from above the shoulder, down between the collar and the neck, following it), As the game and As the game,
+//            close (2026-11-15: the game's own camera, from behind and above: AS THE GAME SEES THEM, below); Painted,
+//            Plain, Wireframe; the 1.8 m post; the Normal figure (2026-11-15: a mannequin of normal adult proportions
+//            beside them, reference.js); Bones
 //   COLORS   Job colours (the outfit's marks, light lines and panels; an outfit keeping its own colours takes none),
 //            Bands (the outfit's whites: as made, BAND_COLOURS by name, then More: the older uniform colours, or any),
 //            Skin tone, Hair colour, Eyes (a head with real eyes: the iris's colour, Look at camera)
@@ -81,9 +83,11 @@ import { buildRoom } from '../../kit/layout.js';
 import { makeMenus } from './windows.js';
 import { makeThumbs } from './thumbs.js';
 import { makeLineup, KINDS as LINEUPS } from './lineup.js';
+import { referenceFigure } from './reference.js';
+import { figureOf } from './sweeps.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, recipe: null, look: q.has('look'), dirty: false };
+const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, ref: false, recipe: null, look: q.has('look'), dirty: false };
 // (the clips in the Pose window, grouped as the people use them)
 const CLIP_GROUPS = [
   ['Stand', ['Idle', 'Idle_Neutral', 'Wave', 'Interact', 'Stand_Listen', 'Stand_Clap']],
@@ -93,8 +97,17 @@ const CLIP_GROUPS = [
   ['Hit', ['HitRecieve', 'Death']],
 ];
 const LABEL = { Idle_Neutral: 'Idle 2', HitRecieve: 'Hit', Run_Back: 'Run back', Run_Left: 'Run left', Run_Right: 'Run right', Stand_Listen: 'Listen', Stand_Clap: 'Clap', Sit_Listen: 'Sit', Sit_Clap: 'Sit clap', Stool_Bar: 'Stool', Stool_Clap: 'Stool clap', Bar_Polish: 'Polish', Tend_Forge: 'Tend' };
-const CAMS = { Full: [1.15, 1.25, 3.5, 0.93], Front: [0, 1.1, 3.8, 0.93], Side: [3.8, 1.1, 0, 0.93], Back: [0, 1.1, -3.8, 0.93], Face: null, Head: null, Nape: null, Hands: null, Collar: null };
-const CAM_LABEL = { Collar: 'Down the collar' };
+const CAMS = { Full: [1.15, 1.25, 3.5, 0.93], Front: [0, 1.1, 3.8, 0.93], Side: [3.8, 1.1, 0, 0.93], Back: [0, 1.1, -3.8, 0.93], Face: null, Head: null, Nape: null, Hands: null, Collar: null,
+  Game: [0, 1.5 + Math.sin(0.26) * 2.6, -Math.cos(0.26) * 2.6, 1.5], GameClose: [0, 1.5 + Math.sin(0.26) * 0.7, -Math.cos(0.26) * 0.7, 1.5] };
+const CAM_LABEL = { Collar: 'Down the collar', Game: 'As the game', GameClose: 'As the game, close' };
+// AS THE GAME SEES THEM (2026-11-15; the game's maker, of a look seen from behind in a ship: "this neck is freakishly
+// long"; every check till then had looked from the front). The game's own camera (src/chase.js): behind the player and
+// 0.26 radians above, looking at a point 1.5 m over their feet, 60 degrees tall; 2.6 m away on the station's open
+// floors, about 0.7 m in a ship's corridor. These two views are that camera, so a neck, a nape or a collar's back can be
+// judged here as the player will see it (every other view keeps the lab's own 38 degrees)
+const CAM_FOV = { Game: 60, GameClose: 60 }, LAB_FOV = 38;
+const CAM_TITLE = { Collar: 'From above the shoulder, down between the collar and the neck (follows the neck)', Game: 'From behind and above, as the game\'s camera follows the player on the station\'s open floors (2.6 m off)',
+  GameClose: 'From behind and above, as the game\'s camera comes in a ship\'s corridor (0.7 m off)' };
 // (the close cameras, following the head or the neck as the clip moves them: from the front-left, straight in front,
 // from behind; and down the collar, from above their left shoulder and a little behind, onto the gap between the
 // collar and the neck. Offsets in metres from the anchor)
@@ -115,7 +128,7 @@ sun.position.set(2.5, 5, 3.5); sun.castShadow = true; sun.shadow.mapSize.set(204
 Object.entries({ left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 14 }).forEach(([k, v]) => { sun.shadow.camera[k] = v; });
 scene.add(sun);
 const fill = new THREE.DirectionalLight(0xbfd8ff, 0.7); fill.position.set(-3, 2.5, 2); scene.add(fill);
-const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 120);
+const camera = new THREE.PerspectiveCamera(LAB_FOV, 1, 0.05, 120);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 0.25; controls.maxDistance = 25;
 
@@ -150,6 +163,19 @@ const marker = new THREE.Group();
   marker.position.set(0.65, 0, -0.1);
 }
 scene.add(marker);
+// THE NORMAL FIGURE (2026-11-15, reference.js): a plain mannequin of normal adult proportions stood beside the person
+// shown, as tall as they are (their height measured in the pose shown: sweeps.js figureOf) and built for their outfit's
+// skeleton (the women's or the men's), with level lines at its chin, shoulders, elbows, wrists, fingertips, crotch and
+// knees reaching across the person. Put together again whenever the person changes
+let refFig = null;
+function setRef(on) {
+  st.ref = on;
+  if (refFig) { scene.remove(refFig); refFig.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); refFig = null; }
+  if (!on || !st.crew) return;
+  let tall = 1.7; try { const f = figureOf(st.crew); if (f) tall = f.stature * (st.crew.size || 1); } catch (e) { /* a person with no head: the usual height */ }
+  refFig = referenceFigure({ sex: st.crew.body, stature: tall, guides: true, reach: 1.05 });
+  refFig.position.set(0.8, 0, 0); scene.add(refFig);
+}
 const PLAIN = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: 0.6, metalness: 0.05 });
 const WIRE = new THREE.MeshBasicMaterial({ color: 0x9fdcff, wireframe: true, transparent: true, opacity: 0.55 });
 let skel = null;
@@ -178,6 +204,7 @@ async function show(recipe) {
   setPaint(st.paint); setBones(st.bones); c.paintView(buzzSt.view);
   c.play(st.clip in c.person.actions ? st.clip : 'Idle', { fade: 0 }); c.update(0);
   if (!st.look) c.lookAt(null);
+  if (st.ref) setRef(true);
   triCount(); menu();
 }
 // (a part picked from a grid: the recipe with it, the rest kept)
@@ -217,6 +244,8 @@ function anchorAt(kind, v, c = st.crew) {
 }
 function setCam(name) {
   st.cam = name;
+  // (the game's own views are 60 degrees tall, the lab's 38)
+  const fov = CAM_FOV[name] || LAB_FOV; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   if (FOLLOW[name]) { const [k, o] = FOLLOW[name]; anchorAt(k, _h); controls.target.copy(_h); camera.position.set(_h.x + o[0], _h.y + o[1], _h.z + o[2]); }
   else if (name === 'Hands') { controls.target.set(0, 1.0, 0.1); camera.position.set(0.7, 1.35, 1.4); }
   else { const [x, y, z, ty] = CAMS[name]; controls.target.set(0, ty, 0); camera.position.set(x, y, z); }
@@ -346,9 +375,10 @@ function poseWin() {
 }
 // CAMERA: where from, and what shows
 function cameraWin() {
-  return [sec('Look from', row(Object.keys(CAMS).map((k) => chip(CAM_LABEL[k] || k, k === st.cam, () => { setCam(k); menu(); }, true, k === 'Collar' ? 'From above the shoulder, down between the collar and the neck (follows the neck)' : FOLLOW[k] ? 'Close on the head (follows it)' : '')))),
+  return [sec('Look from', row(Object.keys(CAMS).map((k) => chip(CAM_LABEL[k] || k, k === st.cam, () => { setCam(k); menu(); }, true, CAM_TITLE[k] || (FOLLOW[k] ? 'Close on the head (follows it)' : ''))))),
     sec('Show', row(...[['paint', 'Painted'], ['plain', 'Plain'], ['wire', 'Wireframe']].map(([k, t]) => chip(t, st.paint === k, () => { setPaint(k); menu(); }, true)),
       chip('1.8 m', st.marker, () => { st.marker = !st.marker; marker.visible = st.marker; menu(); }, true, 'A 1.8 m post beside them'),
+      chip('Normal figure', st.ref, () => { setRef(!st.ref); menu(); }, true, 'A plain mannequin of normal adult proportions beside them, as tall as they are, with level lines at its chin, shoulders, elbows, wrists, fingertips, crotch and knees'),
       chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton')))];
 }
 // COLORS: job, bands, skin, hair colour, eyes
@@ -988,9 +1018,12 @@ renderer.setAnimationLoop((t) => {
     if (fo) { anchorAt(fo[0], _h); _h.sub(_prev); controls.target.add(_h); camera.position.add(_h); }
   }
   fly(dt); controls.update();
+  // (the lamps stand on the side the camera looks from, so a view from behind (Back, Nape, As the game) is lit as a
+  // front view is: before 2026-11-15 the back of every head and neck stood in shadow, one reason a long nape went unseen)
+  if ((camera.position.z < 0) !== (sun.position.z < 0)) { sun.position.z = -sun.position.z; fill.position.z = -fill.position.z; }
   if (wallGroup) wallGroup.visible = camera.position.z > wallZ;
   // (the Line-up: the person shown hidden, a tile a person drawn in its place)
-  if (c) c.root.visible = !LU?.on; if (skel) skel.visible = !LU?.on;
+  if (c) c.root.visible = !LU?.on; if (skel) skel.visible = !LU?.on; if (refFig) refFig.visible = !LU?.on;
   if (LU?.on) { LU.update(dt, st.paused); LU.render(camera, fo && fo[0]); } else renderer.render(scene, camera);
   frames++;
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
@@ -1027,7 +1060,7 @@ function measure() {
 }
 window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
-  show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
+  show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'ref') setRef(on); if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
   colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), face: (v) => { face(v); menu(); },
   state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
