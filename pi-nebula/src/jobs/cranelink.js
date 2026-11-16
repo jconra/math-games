@@ -19,7 +19,7 @@
 //   makers, link.right(q, coin), link.wrong(q, coin), link.ready(), link.update(dt), link.aim(camera, dt),
 //   link.mount(el), link.close(keep); link.state() (rigs)
 import * as THREE from 'three';
-import { makeGame, toGrid, fromGrid, gridOf, quadrantOf, placeOf, GAME, SPEEDS } from './crane.js';
+import { makeGame, toGrid, fromGrid, gridOf, quadrantOf, placeOf, magicMoves, GAME, SPEEDS } from './crane.js';
 import { followCam, viewCam, ensureCss, VIEWS as DRIVE_VIEWS, VIEW_NAMES } from '../cranedrive.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -103,33 +103,12 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   }
 
   // ── the magic: some of the round's other canisters take their places as the check goes on ──────────────────────
-  // (the same rules as the round's: the ship's upper ones off first, lower sockets filled first, empties onto the lower
-  // mounts first, the upper sockets cleared first; never the canister of the trip under way, nor the place it goes to)
-  function magicMoves(S, phase, keep, keepPlace) {
-    const M = site.mounts, K = site.sockets, B = site.bays, who = (w, i) => S.cans.findIndex((q) => q.where === w && q.i === i);
-    const twin = (list, i, up) => list.findIndex((q, j) => j !== i && !!q.upper === up && Math.abs(q.at[0] - list[i].at[0]) < 0.1 && Math.abs(q.at[2] - list[i].at[2]) < 0.1);
-    const free = (w, i) => who(w, i) < 0 && !(keepPlace && keepPlace.kind === w && keepPlace.i === i);
-    const sockFree = () => K.map((_, k) => k).filter((k) => free('socket', k) && (K[k].upper ? twin(K, k, false) < 0 || who('socket', twin(K, k, false)) >= 0 : true)).sort((a, b) => K[a].upper - K[b].upper);
-    const mountFree = () => M.map((_, i) => i).filter((i) => free('mount', i) && (M[i].upper ? twin(M, i, false) < 0 || who('mount', twin(M, i, false)) >= 0 : who('mount', twin(M, i, true)) < 0)).sort((a, b) => M[a].upper - M[b].upper);
-    const out = [];
-    if (phase === 'unload') {
-      const full = M.map((_, i) => i).filter((i) => { const c = who('mount', i); return c >= 0 && c !== keep && S.cans[c].fill > 0.5 && (M[i].upper || twin(M, i, true) < 0 || who('mount', twin(M, i, true)) < 0); }).sort((a, b) => M[b].upper - M[a].upper);
-      const k = sockFree()[0]; if (full.length && k != null) out.push({ c: who('mount', full[0]), to: { where: 'socket', i: k } });
-    } else if (phase === 'load') {
-      const empt = B.map((_, j) => j).filter((j) => { const c = who('bay', j); return c >= 0 && c !== keep && S.cans[c].fill <= 0.01; });
-      const i = mountFree()[0]; if (empt.length && i != null && !M.some((_, q) => { const c = who('mount', q); return c >= 0 && S.cans[c].fill > 0.5; })) out.push({ c: who('bay', empt[0]), to: { where: 'mount', i } });
-    } else if (phase === 'clear') {
-      const dr = K.map((_, k) => k).filter((k) => { const c = who('socket', k); return c >= 0 && c !== keep && S.cans[c].fill <= 0.01 && (K[k].upper || twin(K, k, true) < 0 || who('socket', twin(K, k, true)) < 0); }).sort((a, b) => K[b].upper - K[a].upper);
-      const j = B.map((_, q) => q).find((q) => free('bay', q)); if (dr.length && j != null) out.push({ c: who('socket', dr[0]), to: { where: 'bay', i: j } });
-    }
-    return out;
-  }
   function magic(n) {
     const D = live(); if (!D || !trip) return 0;
     const S = D.state, keepPlace = trip.to ? { kind: trip.to.kind, i: trip.to.i } : null;
     let done = 0;
     for (let k = 0; k < n; k++) {
-      const [m] = magicMoves(S, check.phase, trip.c, keepPlace); if (!m) break;
+      const [m] = magicMoves(site, S, check.phase, trip.c, keepPlace); if (!m) break;
       const q = S.cans[m.c], was = { where: q.where, i: q.i };
       if (was.where === 'socket') { S.lit[was.i] = 0; }
       if (was.where === 'mount') S.tray[was.i] = 0;
@@ -146,7 +125,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const D = live(); if (!D || !trip) return 0;
     const S = { ...D.state, cans: D.state.cans.map((q) => ({ ...q })), lit: [...D.state.lit], iris: [...D.state.iris], tray: [...D.state.tray] }, keepPlace = trip.to ? { kind: trip.to.kind, i: trip.to.i } : null;
     let n = 0;
-    for (; n < 16; n++) { const [m] = magicMoves(S, check.phase, trip.c, keepPlace); if (!m) break; const q = S.cans[m.c]; q.where = m.to.where; q.i = m.to.i; }
+    for (; n < 16; n++) { const [m] = magicMoves(site, S, check.phase, trip.c, keepPlace); if (!m) break; const q = S.cans[m.c]; q.where = m.to.where; q.i = m.to.i; }
     return n;
   }
 

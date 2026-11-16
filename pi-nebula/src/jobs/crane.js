@@ -263,6 +263,30 @@ export function makeGame(site, { state }) {
 // where a list of moves leaves the crane (its x and z), from a state
 function endOf(moves, S) { let x = S.x, z = S.z; for (const m of moves) { if (m.to && m.to.x != null) x = m.to.x; if (m.to && m.to.z != null) z = m.to.z; } return { x, z }; }
 
+// ── THE MAGIC (src/jobs/cranelink.js): the round's next move of a part of it, made at once, for the canisters a check is
+// not about (the game's maker: "maybe some of the canisters should magically appear in the sockets during the game")
+// (the same rules as the round's: the ship's upper ones off first, lower sockets filled first, empties onto the lower
+// mounts first, the upper sockets cleared first; never the canister of the trip under way, nor the place it goes to)
+export function magicMoves(site, S, phase, keep = -1, keepPlace = null) {
+  const M = site.mounts, K = site.sockets, B = site.bays, who = (w, i) => S.cans.findIndex((q) => q.where === w && q.i === i);
+  const twin = (list, i, up) => list.findIndex((q, j) => j !== i && !!q.upper === up && Math.abs(q.at[0] - list[i].at[0]) < 0.1 && Math.abs(q.at[2] - list[i].at[2]) < 0.1);
+  const free = (w, i) => who(w, i) < 0 && !(keepPlace && keepPlace.kind === w && keepPlace.i === i);
+  const sockFree = () => K.map((_, k) => k).filter((k) => free('socket', k) && (K[k].upper ? twin(K, k, false) < 0 || who('socket', twin(K, k, false)) >= 0 : true)).sort((a, b) => K[a].upper - K[b].upper);
+  const mountFree = () => M.map((_, i) => i).filter((i) => free('mount', i) && (M[i].upper ? twin(M, i, false) < 0 || who('mount', twin(M, i, false)) >= 0 : who('mount', twin(M, i, true)) < 0)).sort((a, b) => M[a].upper - M[b].upper);
+  const out = [];
+  if (phase === 'unload') {
+    const full = M.map((_, i) => i).filter((i) => { const c = who('mount', i); return c >= 0 && c !== keep && S.cans[c].fill > 0.5 && (M[i].upper || twin(M, i, true) < 0 || who('mount', twin(M, i, true)) < 0); }).sort((a, b) => M[b].upper - M[a].upper);
+    const k = sockFree()[0]; if (full.length && k != null) out.push({ c: who('mount', full[0]), to: { where: 'socket', i: k } });
+  } else if (phase === 'load') {
+    const empt = B.map((_, j) => j).filter((j) => { const c = who('bay', j); return c >= 0 && c !== keep && S.cans[c].fill <= 0.01; });
+    const i = mountFree()[0]; if (empt.length && i != null && !M.some((_, q) => { const c = who('mount', q); return c >= 0 && S.cans[c].fill > 0.5; })) out.push({ c: who('bay', empt[0]), to: { where: 'mount', i } });
+  } else if (phase === 'clear') {
+    const dr = K.map((_, k) => k).filter((k) => { const c = who('socket', k); return c >= 0 && c !== keep && S.cans[c].fill <= 0.01 && (K[k].upper || twin(K, k, true) < 0 || who('socket', twin(K, k, true)) < 0); }).sort((a, b) => K[b].upper - K[a].upper);
+    const j = B.map((_, q) => q).find((q) => free('bay', q)); if (dr.length && j != null) out.push({ c: who('socket', dr[0]), to: { where: 'bay', i: j } });
+  }
+  return out;
+}
+
 // ── the makers ───────────────────────────────────────────────────────────────────────────────────────────────────
 // each: { strand, at(step), make(step, { rand, live }) }. live.ask(kind, opts) -> the next asked move of that kind,
 // reserved for this card, its numbers on the level's marks (src/jobs/cranelink.js), or null: the card's numbers are

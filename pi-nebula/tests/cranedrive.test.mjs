@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planCycle, planFrom, stateAt, startOf, loadAt } from '../kit/crane-plan.js';
 import { makeDrive, DRIVE } from '../kit/crane-drive.js';
-import { JOB as craneJob, MAKERS, PLACE, makeGame, tripFrom, toGrid, quadrantOf, mountName, SPEEDS, CHANGE_AT } from '../src/jobs/crane.js';
+import { JOB as craneJob, MAKERS, PLACE, makeGame, tripFrom, toGrid, quadrantOf, mountName, magicMoves, SPEEDS, CHANGE_AT } from '../src/jobs/crane.js';
 import * as E from '../src/jobs/engine.js';
 import { helpPicture } from '../src/jobs/pics.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
@@ -206,4 +206,26 @@ test('the crane game pays as every job does: about 50 credits at the first level
   assert.equal(pays[0], 50); assert.equal(pays[pays.length - 1], 200);
   for (let i = 1; i < pays.length; i++) assert.ok(pays[i] >= pays[i - 1] && pays[i] - pays[i - 1] <= 20, 'no big jumps: ' + pays.join(', '));
   const grades = PLACE.levels.map((L) => L.grade); for (let i = 1; i < grades.length; i++) assert.ok(grades[i] > grades[i - 1] && grades[i] - grades[i - 1] <= 10, 'small steps up the school guide: ' + grades.join(', '));
+});
+
+test('the magic keeps the round\'s rules: upper canisters off the ship first, lower sockets first, never the trip\'s own canister or place', () => {
+  const S = startOf(site), keep = 1, keepPlace = { kind: 'socket', i: 0 };
+  const apply = (m) => { const q = S.cans[m.c]; if (q.where === 'socket') S.lit[q.i] = 0; q.where = m.to.where; q.i = m.to.i; if (m.to.where === 'socket') S.lit[m.to.i] = 1; };
+  const twin = (list, i, up) => list.findIndex((q, j) => j !== i && !!q.upper === up && Math.abs(q.at[0] - list[i].at[0]) < 0.1 && Math.abs(q.at[2] - list[i].at[2]) < 0.1);
+  let moves = 0;
+  for (;;) {
+    const [m] = magicMoves(site, S, 'unload', keep, keepPlace); if (!m) break;
+    assert.notEqual(m.c, keep, 'never the trip\'s canister');
+    assert.ok(!(m.to.where === 'socket' && m.to.i === 0), 'never the trip\'s place');
+    const from = S.cans[m.c];
+    if (from.where === 'mount' && !mounts[from.i].upper) { const up = twin(mounts, from.i, true); assert.ok(!S.cans.some((q) => q.where === 'mount' && q.i === up), 'a lower one only with the one over it gone'); }
+    if (sockets[m.to.i].upper) { const lo = twin(sockets, m.to.i, false); assert.ok(S.cans.some((q) => q.where === 'socket' && q.i === lo), 'an upper socket only over a filled lower one'); }
+    apply(m); moves++;
+  }
+  assert.ok(moves >= 5, moves + ' moved');
+  assert.equal(S.cans[keep].where, 'mount', 'the trip\'s own canister is still on the ship');
+  // (loading only once no ore is left on the ship; clearing only drained canisters)
+  assert.equal(magicMoves(site, S, 'load', -1, null).length, 0, 'no loading while ore is still on the ship');
+  S.cans.forEach((q) => { if (q.where === 'socket') q.fill = 0.5; });
+  assert.equal(magicMoves(site, S, 'clear', -1, null).length, 0, 'none cleared while still draining');
 });
