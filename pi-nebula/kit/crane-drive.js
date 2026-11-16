@@ -275,7 +275,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   const cfg = () => ({ x: S.x, z: S.z, yaw: S.yaw, slide: S.slide, hoist: S.hoist, arms: S.arms });
   const hitWords = (h) => (h.what === 'canister' ? 'Another canister is in the way.' : h.what === 'iris' ? 'The socket\'s iris is still shut.' : h.what === 'floor' ? 'That is the floor.'
     : h.what === 'tray' ? 'It is down on the tray.' : h.what === 'trayIn' ? 'Waiting for the ship\'s tray to come out.' : h.what === 'rack' ? 'It is down on the rack.' : h.what === 'seated' ? 'It is all the way in.'
-      : h.part === 'cable' ? 'The cables would touch something.' : 'Something is in the way.');
+      : h.part === 'cable' ? 'The cables would touch something.' : h.over ? (h.wall ? 'Something is in the way above: back away from the wall first.' : 'Something is in the way above.') : h.under ? 'Something is in the way below.' : 'Something is in the way.');
   // try to move `axis` by dv (metres); -> how far it got
   function nudge(axis, dv) {
     if (Math.abs(dv) < 1e-9) return 0;
@@ -297,7 +297,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       if (axis === 'hoist' && each < 0 && under(c)) { note('people', 'Someone is under the load: it will not come down.'); break; }
       if (axis !== 'hoist' && underside(c) < DRIVE.low && under(c) && !under(cfg())) { note('people', 'Someone is under there: a load this low will not go over them.'); break; }
       const hit = blocked(c, held >= 0, held >= 0 ? S.cans[held].rel : 0, axis === 'hoist' && each < 0);
-      if (hit) { note('hit:' + hit.what, hitWords(hit)); break; }
+      if (hit) {
+        // (where it is: over the cradle or under it, for the words)
+        if (hit.what === 'solid' && hit.at) { if (axis === 'hoist' && each > 0) { hit.over = true; hit.wall = leg() === 'wall'; } else if (axis === 'hoist') hit.under = true; }
+        note('hit:' + hit.what, hitWords(hit)); break;
+      }
       if (axis === 'along') { if (leg() === 'wall') S.x = c.x; else S.z = c.z; } else S[axis] = c[axis];
       got += each;
     }

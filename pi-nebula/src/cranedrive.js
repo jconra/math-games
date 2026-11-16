@@ -80,7 +80,8 @@ export function followCam(W, walls, site = null) {
         // (kept clear of a panel: the load left of a panel on the right, above one along the bottom)
         if (shift) { const fx = wantLook.x - want.x, fz = wantLook.z - want.z, L = Math.hypot(fx, fz) || 1; wantLook.x += (-fz / L) * shift[0] * d; wantLook.z += (fx / L) * shift[0] * d; wantLook.y += shift[1] * d; }
       }
-      if (fresh) { at.copy(camera.position); look.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3())); fresh = false; }
+      // (it starts where it belongs, not swooping there through the walls)
+      if (fresh) { at.copy(want); look.copy(wantLook); fresh = false; }
       const k = 1 - Math.exp(-4.5 * dt), kl = 1 - Math.exp(-7 * dt);
       at.lerp(want, k); look.lerp(wantLook, kl);
       camera.position.copy(at); camera.lookAt(look);
