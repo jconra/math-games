@@ -275,7 +275,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     view.update(dt, W.camera);
     otherBodyStep(dt);
     hud(dt);
-    if (hintUntil && G.t > hintUntil && phase === 'play') { hintUntil = 0; hint.textContent = G.you.holding ? '' : ''; hint.className = 'mbl-hint'; }
+    if (hintUntil && G.t > hintUntil && phase === 'play') { hintUntil = 0; hint.textContent = ''; hint.className = 'mbl-hint'; }
   }
   function showGoals(on) {
     goalsShown = on; goalsEl.hidden = !on; if (!on) return;
@@ -324,15 +324,18 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     showEnd({ you: e.you, them: e.them });
     if (hiddenPerson) { /* (they stay out of the station's crowd while they are here on the court) */ }
   }
+  // (the HUD is written only when something on it changes)
+  const hudEl = { you: $('.mbl-you em'), them: $('.mbl-them em'), cr: $('.mbl-cr span'), bar: $('.mbl-lap u'), pips: [...el.querySelectorAll('.mbl-lap i')] };
+  hudEl.pips.forEach((p, i) => { p.style.left = `${((COURT.bar.first + i * COURT.bar.every) / COURT.bar.lap * 100).toFixed(2)}%`; });
+  const shown = {};
+  const put = (k, node, v) => { if (shown[k] !== v) { shown[k] = v; node.textContent = v; } };
   function hud() {
     if (phase !== 'play' && phase !== 'end') return;
-    $('.mbl-you em').textContent = G.score.you; $('.mbl-them em').textContent = G.score.them;
-    $('.mbl-cr span').textContent = earned.toLocaleString('en-US');
+    put('you', hudEl.you, String(G.score.you)); put('them', hudEl.them, String(G.score.them)); put('cr', hudEl.cr, earned.toLocaleString('en-US'));
     // the lap: four goal marks where the bar reaches them, the bar's light moving along
-    const k = Math.min(1, G.t / COURT.bar.lap);
-    $('.mbl-lap u').style.left = `${(k * 100).toFixed(2)}%`;
-    const pips = el.querySelectorAll('.mbl-lap i');
-    pips.forEach((p, i) => { p.style.left = `${((COURT.bar.first + i * COURT.bar.every) / COURT.bar.lap * 100).toFixed(2)}%`; p.classList.toggle('is-done', G.t >= COURT.bar.first + i * COURT.bar.every); });
+    const left = `${(Math.min(1, G.t / COURT.bar.lap) * 100).toFixed(1)}%`;
+    if (shown.bar !== left) { shown.bar = left; hudEl.bar.style.left = left; }
+    hudEl.pips.forEach((p, i) => { const done = G.t >= COURT.bar.first + i * COURT.bar.every; if (shown['p' + i] !== done) { shown['p' + i] = done; p.classList.toggle('is-done', done); } });
   }
 
   // the other player's body: where the round has them, its clip from what they are doing
