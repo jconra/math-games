@@ -146,7 +146,7 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     b.p = [P.x + rx * s + fx * f, y, P.z + rz * s + fz * f]; b.v = [P.vx || 0, 0, P.vz || 0];
   }
   function grab(P, who, b) {
-    b.mode = 'held'; b.owner = who; b.w = [0, 0, 0]; P.holding = b; P.target = null;
+    b.mode = 'held'; b.owner = who; b.w = [0, 0, 0]; P.holding = b; P.target = null; P.grabT = G.t;
     emit('got', { who, ball: b.id });
     if (who === 'them' && G.you.target === b) { G.you.target = null; emit('taken', { ball: b.id }); }
   }

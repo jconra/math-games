@@ -346,6 +346,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     let clip = 'Stand_Listen', speed = 1;
     if (phase === 'end' && O.mode === 'cheer') clip = 'Stand_Clap';
     else if (O.mode === 'throw') { clip = 'Interact'; speed = 1.5; }
+    else if (O.holding && G.t - (O.grabT ?? -9) < 0.45) { clip = 'Interact'; speed = 1.7; }   // (the reach as they pick it up)
     else if (sp > 0.2) {
       // (which way they move against the way they face: forward, sideways or back)
       const fx = Math.sin(O.heading), fz = Math.cos(O.heading), along = (O.vx * fx + O.vz * fz) / sp, across = (O.vx * fz - O.vz * fx) / sp;
@@ -378,6 +379,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (manual) move = input.move;
     // throwing: the arm's swing (the crew's reach, quick)
     if (throwT >= 0) { throwT += dt; clip = throwT < 0.55 ? 'Interact' : null; if (throwT > 0.55) throwT = -1; }
+    else if (G.you.holding && G.t - (G.you.grabT ?? -9) < 0.4) clip = 'Interact';   // (the reach as you pick it up)
     return { move, run: true, yaw, clip, clipSpeed: 1.7, others: otherBody ? [{ pos: otherBody.root.position, hidden: false }] : [] };
   }
 
