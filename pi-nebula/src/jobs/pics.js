@@ -2,8 +2,9 @@
 // counterPicture, which falls back to src/ui/storepics.js: equal groups, sharing out, the ratio table, the ratio bar,
 // the things to count), and this game's few for its own makers (the recipe's batches of cups, the drip bag hour by
 // hour, an hour of drops; the smelter's canisters to count, a load cut into equal parts, canisters of ore each cut
-// into parts of a tonne, tonne by tonne at a price, down the pay slip), drawn the same way: on a light card, the numbers given, the answer always a "?". A job's own
-// order can also name one of Mathwood's pictures (order.pic) and give it its own title and line (order.help).
+// into parts of a tonne, tonne by tonne at a price, down the pay slip), drawn the same way: on a light card, the
+// numbers given, the answer always a "?". A job's own order can also name one of Mathwood's pictures (order.pic) and
+// give it its own title and line (order.help).
 //   helpPicture(order) -> { svg, title, line }
 import { counterPicture } from '../../../mathwood-valley/src/ui/counterpics.js';
 import { fracText } from '../../../mathwood-valley/src/levels/kit.js';
