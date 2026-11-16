@@ -822,7 +822,7 @@ export const LIFT = (() => {
 //   - the shaft's sides start at the hull's own underside just outside the hatch (worked out from the hull's faces),
 //     so nothing hangs below the belly beside it (the stand-in shaft's walls all reach down to the keel's 1.37 m).
 // One kit door, 'lift' (0 up, 1 down), heavy (it starts and lands gently), CLIFT.speed of its way a second.
-export const CLIFT = { drop: +(DECK - 0.1).toFixed(3), thick: 0.1, sec: 0.3, n: 6, gap: -0.45, speed: 0.2, rail: 0.9 };
+export const CLIFT = { drop: +(DECK - 0.1).toFixed(3), thick: 0.1, sec: 0.3, n: 6, gap: -0.6, speed: 0.2, rail: 0.9 };
 function cabinLift(p) {
   const L = LIFT, K = CLIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, hx = L.hx, hz = L.hz, zc = L.zc;
   // the shaft: its four walls from the hull's underside just outside each edge (sampled along it) up to the deck

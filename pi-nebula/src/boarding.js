@@ -45,7 +45,7 @@ import { shine } from './player.js';
 export const SHIPS = [
   { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, bp: 'explorer-c-row', ways: ['ebAirstair'] },
   { id: 'medic', zone: 'ship-medic', lab: MD.LAB, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
-  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.05], drop: MB.CLIFT.drop }] },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
 ];
 // how near (m, along the floor) a person must be to a way in for it to come down (the door's own reach, if it has one);
 // how long (s) after everyone has left a ship's hangar its cabin is dropped; the cabin's look
@@ -257,8 +257,9 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   // slide, kit/layout.js setLeaf)
   const smooth = (t) => t * t * (3 - 2 * t), liftDy = (L) => -L.drop * smooth(L.D.heavy ? smooth(L.D.t) : L.D.t);
   // its platform and railings, as they stand up (t 0), as a part of the walls that moves (walls.lift); and its patch:
-  // the floor under its platform at the bottom, CLEAR wider, from under the floor to the platform's underside, moved with
-  // it (so its top is always the platform's underside), shut to walkers only while the lift comes down
+  // a FENCE round the floor its platform comes down on, CLEAR wide, from the floor to over a person's head, shut to
+  // walkers only while the lift comes down: nobody walks in under it, and its riders, inside the fence, are not in it
+  // (anyone already under it when it starts: it waits, and the player is walked off, liftStep)
   function liftParts(s, L, i) {
     const D = L.D, t0 = D.t, geos = [], box = new THREE.Box3(), low = new THREE.Box3();
     ONE[0] = D; setDoors(ONE, 0);
@@ -277,11 +278,13 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     tread.setAttribute('position', new THREE.Float32BufferAttribute([box.min.x - e, box.max.y, box.min.z - e, box.max.x + e, box.max.y, box.min.z - e, box.max.x + e, box.max.y, box.max.z + e, box.min.x - e, box.max.y, box.max.z + e], 3));
     tread.setIndex([0, 2, 1, 0, 3, 2]);
     walls.add(L.key, { solid: geos, up: [...geos, tread], voxel: CABIN_WALLS.voxel });
-    const y0 = box.max.y - L.drop - 0.1, g = new THREE.BoxGeometry(box.max.x - box.min.x + 2 * CLEAR, box.min.y - y0, box.max.z - box.min.z + 2 * CLEAR);
-    g.translate((box.min.x + box.max.x) / 2, (box.min.y + y0) / 2, (box.min.z + box.max.z) / 2);
+    const y0 = box.max.y - L.drop - 0.1, H = 2.2, fence = [], C = CLEAR, [a0, a1, b0, b1] = [box.min.x, box.max.x, box.min.z, box.max.z];
+    for (const [x0, x1, z0, z1] of [[a0 - C, a1 + C, b0 - C, b0], [a0 - C, a1 + C, b1, b1 + C], [a0 - C, a0, b0, b1], [a1, a1 + C, b0, b1]]) {
+      const g = new THREE.BoxGeometry(x1 - x0, H, z1 - z0); g.translate((x0 + x1) / 2, y0 + H / 2, (z0 + z1) / 2); fence.push(g);
+    }
     L.patch = 'liftpatch:' + s.id + ':' + i;
-    walls.add(L.patch, { solid: [g], when: () => !!D.coming });
-    const dy = liftDy(L); walls.lift(L.key, dy); walls.lift(L.patch, dy);
+    walls.add(L.patch, { solid: fence, when: () => !!D.coming });
+    walls.lift(L.key, liftDy(L));
     // (its patch on the hangar floor at the bottom, for who is standing there, and where it senses people from)
     low.set(new THREE.Vector3(box.min.x - CLEAR, box.max.y - L.drop - 0.3, box.min.z - CLEAR), new THREE.Vector3(box.max.x + CLEAR, box.max.y - L.drop + 1.0, box.max.z + CLEAR));
     D.foot = low;
@@ -320,7 +323,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     if (D.t !== L.goal && !waits) {
       D.t = L.goal > D.t ? Math.min(L.goal, D.t + dt * D.speed) : Math.max(L.goal, D.t - dt * D.speed);
       ONE[0] = D; setDoors(ONE, D.t);
-      if (L.key) { const dy = liftDy(L); walls.lift(L.key, dy, riders); walls.lift(L.patch, dy); }
+      if (L.key) walls.lift(L.key, liftDy(L), riders);
     }
   }
 
