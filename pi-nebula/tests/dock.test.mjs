@@ -23,7 +23,10 @@ test('the dock is open, a try of three rings, and joins Mathwood\'s levels: easi
   assert.ok(PLACES.dock);
   for (let i = 1; i < PLACE.levels.length; i++) assert.ok(PLACE.levels[i].grade > PLACE.levels[i - 1].grade, `${PLACE.levels[i].id} after ${PLACE.levels[i - 1].id}`);
   for (const L of PLACE.levels) assert.equal(L.strand, 'geo', L.id);
-  assert.deepEqual(PLACE.levels.map((L) => L.id), ['brace', 'fit', 'corner', 'area', 'third', 'diag']);
+  assert.deepEqual(PLACE.levels.map((L) => L.id), ['brace', 'fit', 'count', 'angle', 'corner', 'area', 'third', 'diag']);
+  // (a new crew member climbs a level for each right answer while their level is found, and the squares can't be
+  // missed: the try's three rings for the youngest stay young, up to counting the triangles)
+  assert.ok(PLACE.levels[2].grade < 30, 'the third level is still for the young');
 });
 
 test('every level deals good questions: one right answer, words for every wrong one, help with a picture', () => {
@@ -69,6 +72,13 @@ test('the right answers are right', () => {
     assert.ok(f.coins.every((c) => c.svg && c.svg.startsWith('<svg')), 'every pane drawn');
     assert.equal(new Set(f.coins.map((c) => c.v)).size, 4);
     assert.ok([[2, 2], [2, 3], [3, 2]].some(([a, b]) => a === F.a && b === F.b));
+    // the triangles: two in every braced square
+    const n = MAKERS.count.make(1, { rand }), nr = n.coins.find((x) => x.good);
+    assert.equal(nr.v, 2 * n.facts.n, n.story);
+    // a kind of angle: the one its size says
+    const g = MAKERS.angle.make(1, { rand }), gr = g.coins.find((x) => x.good), deg = g.facts.deg;
+    assert.equal(gr.v, deg < 90 ? 'acute' : deg === 90 ? 'right' : deg < 180 ? 'obtuse' : 'straight', `${deg}°`);
+    assert.equal(g.coins.length, 4);
     // a square corner: the two parts make 90
     const c = MAKERS.corner.make(1, { rand }), cr = c.coins.find((x) => x.good);
     assert.equal(cr.v + c.facts.a, 90, c.story);

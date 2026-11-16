@@ -34,6 +34,7 @@ const frame = (pts, w = 6, col = STRUT, joint = JOINT) => pts.map((p, i) => seg(
 function arc(V, A, B, r, fill = 'rgba(232,146,42,.28)') {
   const a0 = Math.atan2(A[1] - V[1], A[0] - V[0]), a1 = Math.atan2(B[1] - V[1], B[0] - V[0]);
   let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  if (Math.abs(Math.abs(d) - Math.PI) < 1e-6) d = Math.sin(a0 + Math.PI / 2) < 0 ? Math.PI : -Math.PI;   // (a straight angle: its arc over the line, not under)
   const p0 = [V[0] + Math.cos(a0) * r, V[1] + Math.sin(a0) * r], p1 = [V[0] + Math.cos(a0 + d) * r, V[1] + Math.sin(a0 + d) * r];
   return `<path d="M${f1(V[0])} ${f1(V[1])} L${f1(p0[0])} ${f1(p0[1])} A${r} ${r} 0 0 ${d > 0 ? 1 : 0} ${f1(p1[0])} ${f1(p1[1])} Z" fill="${fill}" stroke="${INK}" stroke-width="1.2"/>`;
 }
@@ -41,6 +42,7 @@ function arc(V, A, B, r, fill = 'rgba(232,146,42,.28)') {
 function mid(V, A, B, r) {
   const a0 = Math.atan2(A[1] - V[1], A[0] - V[0]), a1 = Math.atan2(B[1] - V[1], B[0] - V[0]);
   let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  if (Math.abs(Math.abs(d) - Math.PI) < 1e-6) d = Math.sin(a0 + Math.PI / 2) < 0 ? Math.PI : -Math.PI;   // (a straight angle: its arc over the line, not under)
   const m = a0 + d / 2; return [V[0] + Math.cos(m) * r, V[1] + Math.sin(m) * r + 5];
 }
 const squareMark = (V, A, B, r = 13) => {
@@ -80,43 +82,88 @@ export function squareSvg(i = 0) {
 }
 
 // ── 2. which pane fits the gap ─────────────────────────────────────────────────────────────────────────────────
-// A panel of the new ring, braced corner to corner: one half has its glass, the other is the gap. The panes on offer
-// are drawn to the same scale as the gap, so a pane too big or too small looks it.
-const U = 26;   // pixels to a unit of the plan, in the gap's picture and on the panes alike
+// A panel of the new ring, braced corner to corner: one half has its glass, the other is the gap. The panes on offer are
+// other shapes beside the gap's own (turned round or not), all drawn to one scale among themselves: the question is the
+// shape (3 corners or 4, a square corner or none, long and short sides as the gap's), not the size, as the card's picture
+// and its buttons are not drawn to one scale on every screen.
+const U = 26;   // pixels to a unit of a panel (the corner's picture)
+const UL = 40, UC = 22;   // (the gap's picture; the panes on the buttons)
 // a right triangle with legs a (across) and b (up), its square corner at the bottom left, turned by `turn` quarter
-// turns, centred at c: its three points
-function rightTri(a, b, turn, c) {
-  let P = [[0, 0], [a, 0], [0, b]].map(([x, y]) => [x * U, -y * U]);
+// turns, centred at c, u pixels to a unit: its three points
+function rightTri(a, b, turn, c, u = UC) {
+  let P = [[0, 0], [a, 0], [0, b]].map(([x, y]) => [x * u, -y * u]);
   for (let k = 0; k < turn; k++) P = P.map(([x, y]) => [-y, x]);
   const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   return P.map(([x, y]) => [x - cx + c[0], y - cy + c[1]]);
 }
 const paneOf = (pts) => poly(pts, 'rgba(169,209,238,.8)', GLASS_LINE, 3);
-// the pieces: { kind, pts (a function of the centre), why (when wrong) }
+// the panes: their points about a centre, and why each wrong one won't fit
 const PIECES = {
   right: (a, b, turn) => ({ pts: (c) => rightTri(a, b, turn, c), why: '' }),
-  square: (a, b) => ({ pts: (c) => [[c[0] - a * U / 2, c[1] + b * U / 2], [c[0] + a * U / 2, c[1] + b * U / 2], [c[0] + a * U / 2, c[1] - b * U / 2], [c[0] - a * U / 2, c[1] - b * U / 2]],
+  square: (a, b) => ({ pts: (c) => [[c[0] - a * UC / 2, c[1] + b * UC / 2], [c[0] + a * UC / 2, c[1] + b * UC / 2], [c[0] + a * UC / 2, c[1] - b * UC / 2], [c[0] - a * UC / 2, c[1] - b * UC / 2]],
     why: 'That pane has 4 corners: it is the whole panel. The gap is a triangle, with 3 corners.' }),
-  small: (a, b, turn) => ({ pts: (c) => rightTri(a / 2, b / 2, turn, c), why: 'The right shape, but too small: it would leave a gap round it.' }),
-  big: (a, b, turn) => ({ pts: (c) => rightTri(a * 1.5, b * 1.5, turn, c), why: 'The right shape, but too big: it would stick out past the struts.' }),
-  other: (a, b, turn) => ({ pts: (c) => (a === b ? rightTri(a, b * 1.5, turn, c) : rightTri(Math.max(a, b), Math.max(a, b), turn, c)), why: 'A triangle, but not the gap\'s shape: its sides are not as long as the gap\'s.' }),
-  even: (a) => ({ pts: (c) => { const s = a * U * 1.1, h = s * Math.sqrt(3) / 2; return [[c[0] - s / 2, c[1] + h / 2], [c[0] + s / 2, c[1] + h / 2], [c[0], c[1] - h / 2]]; }, why: 'A triangle, but it has no square corner. The gap has one, where the struts meet.' }),
+  other: (a, b, turn) => ({ pts: (c) => (a === b ? rightTri(a, b * 1.75, turn, c) : rightTri(Math.max(a, b), Math.max(a, b), turn, c)),
+    why: 'A triangle with a square corner, but its sides are not like the gap\'s: see how long and how short they are.' }),
+  even: (a) => ({ pts: (c) => { const s = 2.6 * UC, h = s * Math.sqrt(3) / 2; return [[c[0] - s / 2, c[1] + h / 2], [c[0] + s / 2, c[1] + h / 2], [c[0], c[1] - h / 2]]; },
+    why: 'A triangle, but it has no square corner. The gap has one, where the struts meet.' }),
+  wide: (a, b, turn) => ({ pts: (c) => { let P = [[-1.9, 0.7], [1.9, 0.7], [1.2, -0.7]].map(([x, y]) => [x * UC, y * UC]); if (turn % 2) P = P.map(([x, y]) => [-x, y]); return P.map(([x, y]) => [x + c[0], y + c[1]]); },
+    why: 'A triangle, but one of its corners is wider than a square corner. The gap\'s widest corner is square.' }),
 };
-const NAMES = { right: 'the triangle pane', square: 'the square pane', small: 'the small triangle', big: 'the big triangle', other: 'the long triangle', even: 'the triangle with even sides' };
+const NAMES = { right: 'the triangle with a square corner', square: 'the four-cornered pane', other: 'the long triangle', even: 'the triangle with even sides', wide: 'the flat triangle' };
 function gapPicture(a, b, half, flip, { answer = false } = {}) {
   // the panel: a by b units, its brace from one corner to the other; `half` 0: the gap below the brace, 1: above it
-  const x0 = (W - a * U) / 2 - 40, y1 = 128, x1 = x0 + a * U, y0 = y1 - b * U;
+  const h = b * UL + 26, x0 = (W - a * UL) / 2 - 50, y1 = h - 12, x1 = x0 + a * UL, y0 = y1 - b * UL;
   const P = flip ? [[x1, y1], [x0, y1], [x0, y0], [x1, y0]] : [[x0, y1], [x1, y1], [x1, y0], [x0, y0]];
   const lower = [P[0], P[1], P[2]], upper = [P[0], P[2], P[3]], gap = half ? upper : lower, glass = half ? lower : upper;
   let s = poly(glass, 'rgba(169,209,238,.8)', GLASS_LINE, 2);
   s += answer ? paneOf(gap) : poly(gap, 'rgba(232,146,42,.10)', BRACE, 2.5, ' stroke-dasharray="7 5"');
   s += frame(P) + seg(P[0], P[2], BRACE, 6);
-  if (!answer) { const c = [(gap[0][0] + gap[1][0] + gap[2][0]) / 3, (gap[0][1] + gap[1][1] + gap[2][1]) / 3]; s += text(c[0], c[1] + 7, '?', { size: 22, fill: ASK }); }
-  s += text(x1 + 74, y0 + 34, answer ? 'It fits:' : 'The gap', { size: 14, fill: SOFT }) + text(x1 + 74, y0 + 54, answer ? 'same shape,' : 'in the panel', { size: 14, fill: SOFT });
-  if (answer) s += text(x1 + 74, y0 + 74, 'same size', { size: 14, fill: SOFT });
-  return svg(150, s);
+  if (!answer) { const c = [(gap[0][0] + gap[1][0] + gap[2][0]) / 3, (gap[0][1] + gap[1][1] + gap[2][1]) / 3]; s += text(c[0], c[1] + 8, '?', { size: 26, fill: ASK }); }
+  const tx = Math.max(x0, x1) + 30, ty = (y0 + y1) / 2;
+  s += answer ? text(tx, ty - 8, 'It fits:', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 14, 'the same shape', { size: 15, fill: SOFT, anchor: 'start' })
+    : text(tx, ty - 8, 'The gap:', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 14, 'which pane', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 34, 'is its shape?', { size: 15, fill: SOFT, anchor: 'start' });
+  return svg(h, s);
 }
-const paneCoin = (pts) => svg(130, paneOf(pts([85, 65])), 170);
+const paneCoin = (pts) => svg(100, paneOf(pts([70, 50])), 140);
+
+// ── counting the triangles: n squares in a row, each braced, two triangles each (help: each triangle numbered) ──────
+function countPicture(n, { numbered = false } = {}) {
+  const s = Math.min(58, 300 / n), x0 = (W - n * s) / 2, y1 = 110, y0 = y1 - s;
+  let o = '';
+  for (let i = 0; i < n; i++) {
+    const a = [x0 + i * s, y1], b = [x0 + (i + 1) * s, y1], c = [x0 + (i + 1) * s, y0], d = [x0 + i * s, y0], up = i % 2 === 0;
+    const [t1, t2] = up ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+    o += poly(t1, 'rgba(169,209,238,.9)') + poly(t2, 'rgba(169,209,238,.45)');
+    // (help: the first two squares' triangles counted, the rest to count on)
+    if (numbered && i < 2) for (const [k, t] of [[2 * i + 1, t1], [2 * i + 2, t2]]) o += text((t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3 + 5, String(k), { size: 13, fill: ASK });
+  }
+  for (let i = 0; i < n; i++) { const a = [x0 + i * s, y1], b = [x0 + (i + 1) * s, y1], c = [x0 + (i + 1) * s, y0], d = [x0 + i * s, y0]; o += i % 2 === 0 ? seg(a, c, BRACE, 5) : seg(b, d, BRACE, 5); }
+  for (let i = 0; i < n; i++) o += seg([x0 + i * s, y1], [x0 + (i + 1) * s, y1]) + seg([x0 + i * s, y0], [x0 + (i + 1) * s, y0]);
+  for (let i = 0; i <= n; i++) o += seg([x0 + i * s, y1], [x0 + i * s, y0]);
+  o += numbered ? text(W / 2, y1 + 28, 'Count on by 2s: 2, 4, ...', { size: 15 })
+    : text(W / 2 - 16, y1 + 28, `${n} squares, each braced:`, { size: 15 }) + text(W / 2 + 100, y1 + 29, '?', { size: 20, fill: ASK }) + text(W / 2 + 144, y1 + 28, 'triangles', { size: 15 });
+  return svg(150, o);
+}
+// ── kinds of angles: two struts meeting at a joint (Mathwood's numbers) ────────────────────────────────────────────
+const KINDS = ['acute', 'right', 'obtuse', 'straight'], cap = (s) => s[0].toUpperCase() + s.slice(1);
+function anglePicture(deg, flip, { w = W, h = 150, label = '' } = {}) {
+  const V = [w / 2 + (flip ? 40 : -40) * (w / W), h - (label ? 34 : 24)], L = Math.min(w * 0.36, 120), a0 = flip ? 180 : 0, a1 = flip ? 180 - deg : deg;
+  const at = (a) => [V[0] + Math.cos(a * Math.PI / 180) * L, V[1] - Math.sin(a * Math.PI / 180) * L];
+  const A = at(a0), B = at(a1), r = L * 0.32;
+  let o = deg === 90 ? squareMark(V, A, B, r * 0.75) : arc(V, A, B, r);
+  o += seg(V, A, STRUT, w < W ? 5 : 7) + seg(V, B, STRUT, w < W ? 5 : 7) + `<circle cx="${f1(V[0])}" cy="${f1(V[1])}" r="${w < W ? 4 : 6}" fill="${JOINT}"/>`;
+  if (label) o += text(w / 2, h - 8, label, { size: 13 });
+  return o;
+}
+function angleKinds(kind) {
+  // the four kinds side by side, the one asked shaded (help: what each looks like)
+  let o = '';
+  [45, 90, 135, 180].forEach((d, i) => {
+    const k = KINDS[i];
+    o += `<svg x="${i * 90}" y="0" width="90" height="120" viewBox="0 0 90 120">${k === kind ? '<rect x="3" y="3" width="84" height="114" rx="8" fill="rgba(63,138,90,.18)"/>' : ''}${anglePicture(d, false, { w: 90, h: 120, label: cap(k) })}</svg>`;
+  });
+  return svg(120, o);
+}
 
 // ── 3. a brace in a square corner (Mathwood's numbers) ───────────────────────────────────────────────────────────
 // The panel drawn so its brace really leans at the angle: the given part at the bottom strut, the asked part at the side
@@ -207,20 +254,66 @@ export const MAKERS = {
     make(step, { rand = Math.random } = {}) {
       const [a, b] = pick([[2, 2], [2, 2], [2, 3], [3, 2]], rand), half = rand() < 0.5 ? 1 : 0, flip = rand() < 0.5;
       const turn = Math.floor(rand() * 4) % 4;
-      const wrongs = shuffle(['square', 'small', 'big', 'other', 'even'], rand).slice(0, 3);
+      const wrongs = shuffle(['square', 'other', 'even', 'wide'], rand).slice(0, 3);
       const coin = (kind) => { const P = PIECES[kind](a, b, turn); return { v: kind, big: '', small: '', label: NAMES[kind], svg: paneCoin(P.pts), slip: kind, why: P.why }; };
       const right = coin('right');
       const o = ownOrder({
-        key: `fit:${a}x${b}`, story: 'The new ring needs its glass. One pane of a panel is missing.', ask: 'Which pane fits the gap?',
+        key: `fit:${a}x${b}`, story: 'The new ring needs its glass. One pane of a panel is missing.', ask: 'Which pane is the same shape as the gap?',
         right, slips: wrongs.map(coin),
-        rightWhy: 'Same shape, same size: it fits, even turned round.',
-        help: { title: 'The same shape and size', svg: gapPicture(a, b, half, flip, { answer: true }), line: 'The pane must be the same shape as the gap and just as big. Turning it round is fine.',
-          steps: ['Count the corners: the gap has 3.', 'Find its square corner, where two struts meet.', 'Check its sides are as long as the gap\'s.'] },
+        rightWhy: 'The same shape: it fits, even turned round.',
+        help: { title: 'The same shape', svg: gapPicture(a, b, half, flip, { answer: true }), line: 'The pane must be the same shape as the gap: 3 corners, one of them square, and its long and short sides like the gap\'s. Turned round is fine.',
+          steps: ['Count the corners: the gap has 3.', 'Find its square corner, where two struts meet.', 'Look at its sides: one long, two shorter, like the gap\'s.'] },
         own: { strand: 'geo', at: 14 }, facts: { a, b, half, flip, turn, wrongs },
       }, rand);
       // (the panel shows each pane's picture on its button: ownOrder keeps only the plain fields, so put them back)
       for (const c of o.coins) { const k = c.good ? right : coin(c.v); c.svg = k.svg; }
       o.lead = gapPicture(a, b, half, flip);
+      return o;
+    },
+  },
+  // counting the triangles: each braced square is two (counting by 2s)
+  count: {
+    strand: 'geo', at: () => 18,
+    make(step, { rand = Math.random } = {}) {
+      const n = pick([3, 4, 5, 5, 6], rand), ans = 2 * n;
+      const N = (v) => ({ v, big: String(v), small: v === 1 ? 'triangle' : 'triangles', label: `${v} ${v === 1 ? 'triangle' : 'triangles'}` });
+      const o = ownOrder({
+        key: 'count', story: `On the plan, ${n} squares of the ring are braced. Each brace makes a square two triangles.`, ask: 'How many triangles is that?',
+        right: N(ans),
+        slips: [
+          { ...N(n), slip: 'squares', why: `${n} is the squares. Each square is 2 triangles: count 2 for every square.` },
+          { ...N(ans + 2), slip: 'over', why: `That's one square too many: ${n + 1} squares would make ${ans + 2}.` },
+          { ...N(ans - 2), slip: 'under', why: `That's one square short: ${n - 1} squares make ${ans - 2}.` },
+          { ...N(n + 2), slip: 'plus', why: `Not ${n} and 2 more: 2 triangles in every one of the ${n} squares.` },
+        ],
+        rightWhy: `${n} squares, 2 triangles in each: ${ans} triangles`,
+        sum: { op: 'mul', a: n, b: 2, say: 'The squares, 2 triangles in each' },
+        help: { title: 'Two in every square', svg: countPicture(n, { numbered: true }), line: 'A brace cuts a square into 2 triangles. Count by 2s, one square at a time.',
+          steps: ['Count the squares.', 'Each square is 2 triangles: count 2, 4, 6, ...'] },
+        own: { strand: 'geo', at: 18 }, credit: [{ strand: 'mul', at: 14, weight: 0.4 }], facts: { n, ans },
+      }, rand);
+      o.lead = countPicture(n);
+      return o;
+    },
+  },
+  // kinds of angles: Mathwood's maker (which kind, the angle), the bridge's struts
+  angle: {
+    strand: 'geo', at: () => 40,
+    make(step, { rand = Math.random } = {}) {
+      const q = windmillQ('name-angle', 1, rand), kind = q.answer, deg = q.geo.deg, flip = rand() < 0.5;
+      const why = {
+        acute: 'Acute is narrower than a square corner.', right: 'A right angle is a square corner, exactly 90°.',
+        obtuse: 'Obtuse is wider than a square corner, but not a flat line.', straight: 'Straight is a flat line, 180°.',
+      };
+      const K = (k) => ({ v: k, big: cap(k), small: '', label: `${cap(k)}` });
+      const o = ownOrder({
+        key: 'angle', story: 'Two struts of the lattice meet at a joint.', ask: 'What kind of angle do they make?',
+        right: K(kind), slips: KINDS.filter((k) => k !== kind).map((k) => ({ ...K(k), slip: k, why: `${why[k]} These two struts are not.` })),
+        rightWhy: q.why,
+        help: { title: 'What kind of angle?', svg: angleKinds(kind), line: q.rule, steps: ['Hold it up to a square corner (90°).', 'Narrower is acute, square is right, wider is obtuse, flat is straight.'] },
+        own: { strand: 'geo', at: 40 }, facts: { kind, deg },
+      }, rand);
+      o.lead = svg(150, anglePicture(deg, flip) + text(W - 70, 40, '?', { size: 26, fill: ASK }));
       return o;
     },
   },
@@ -334,7 +427,9 @@ export const PLACE = {
   line: 'Build the docking bridge ring by ring: brace the squares, fit the panes, the angles and lengths of its triangles.',
   levels: [
     { id: 'brace', title: 'Brace the squares', line: 'Tap each wobbly square: a brace makes two triangles', gen: { mix: [M('brace')] } },
-    { id: 'fit', title: 'Which pane fits?', line: 'The same shape and size, even turned round', gen: { mix: [M('fit')] } },
+    { id: 'fit', title: 'Which pane fits?', line: 'The gap\'s shape, even turned round', gen: { mix: [M('fit')] } },
+    { id: 'count', title: 'Count the triangles', line: '5 squares braced: 2 triangles in each', gen: { mix: [M('count')] } },
+    { id: 'angle', title: 'Kinds of angles', line: 'Acute, right, obtuse or straight?', gen: { mix: [M('angle')] } },
     { id: 'corner', title: 'A brace in a square corner', line: 'One part is 35°: the other part of the 90°', gen: { mix: [M('corner')] } },
     { id: 'area', title: 'A triangle pane\'s glass', line: 'Half of base × height: 80 cm by 60 cm', gen: { mix: [M('area')] } },
     { id: 'third', title: 'The third corner', line: 'Two corners are 60° and 70°: the third?', gen: { mix: [M('third')] } },

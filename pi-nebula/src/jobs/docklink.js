@@ -31,14 +31,14 @@ export const WOBBLE = { amp: 0.13, hz: 1.25, jolt: 0.22 };
 // the squares a young player braces, as the card shows them: the panels on the camera's side (the near side, the one
 // above it, the top), each with its twin across the tube (kit/dockbridge.js PANELS: 0 the +x side ... 4 the -x side)
 const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
-// THE VIEW, in the bridge's frame (y over the port's middle): from beside the airlock module, above it, looking out
-// along the bridge to the ship (the near rings big, the ship ahead), on a wide screen kept left of the panel, on a phone
-// in the band above it (looking steeply down); `follow`: how far along the bridge the view moves with each ring built.
-// The end of the try: back a little, the whole of the bridge so far and the ship.
+// THE VIEW: the camera stands `from` the middle of the ring being built (metres, in the bridge's frame: to its side,
+// above it, back toward the station), looking out along the bridge to the ship, and turns so that ring lands at the
+// screen point `on` (-1..1 across, -1..1 up): on a wide screen left of the panel, on a phone in the band above it,
+// whatever the screen's shape. It moves on with each ring. The end of the try: back a little, on the middle ring.
 export const VIEW = {
-  wide: { at: [-5.0, 3.8, -2.6], look: [-3.6, -0.3, 6.2], fov: 52, follow: 0.35 },
-  tall: { at: [-3.6, 6.4, -3.6], look: [0.6, -6.5, 6.2], fov: 62, follow: 0.4 },
-  end: { wide: { at: [-6.4, 4.8, -3.8], look: [-3.8, -0.5, 6.6], fov: 52 }, tall: { at: [-4.4, 7.8, -4.4], look: [0.6, -7.6, 6.4], fov: 64 } },
+  wide: { from: [-6.2, 3.6, -5.2], on: [-0.42, -0.05], fov: 50 },
+  tall: { from: [-5.0, 5.6, -5.6], on: [0, 0.52], fov: 58 },
+  end: { wide: { from: [-7.6, 4.6, -6.6], on: [-0.45, -0.1], fov: 50 }, tall: { from: [-6.2, 7.0, -6.8], on: [0, 0.5], fov: 60 } },
 };
 // the light outside (the kit's saved-light units): the sun, the planet's glow, the port's floodlights
 const SUN = { i: 2.2, c: [1, 0.95, 0.88] }, SHINE = { i: 0.45, c: [0.55, 0.75, 1.0] }, FLOOD = { i: 7, c: [1, 0.97, 0.92], cone: [Math.cos(52 * Math.PI / 180), Math.cos(24 * Math.PI / 180)] };
@@ -131,7 +131,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
 
   // ── the rings' states: off, out (sliding out of the last), wait (asking: wobbling), brace (its braces going in),
   // lock (its glow, glass and lights), done ──────────────────────────────────────────────────────────────────────
-  let cur = 0, answered = 0, finished = false, closed = false, clock = 0, order = null, ui = null;
+  let cur = 0, answered = 0, finished = false, closed = false, clock = 0, order = null, ui = null, endT = -1;
   const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), jolt: 0, loose: 1, flash: 0 }));
   function reset() {
     cur = 0; answered = 0; finished = false;
@@ -150,12 +150,16 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     const done = SQUARES.every((x) => s.braced.has(x));
     if (ui) {
       const b = ui.answers.querySelector(`.dkb-sq[data-k="${k}"]`); if (b) { b.classList.add('is-braced'); b.setAttribute('aria-pressed', 'true'); b.disabled = true; }
+      markNext(ui.answers);
       const n = SQUARES.filter((x) => s.braced.has(x)).length, c = ui.answers.querySelector('.dkb-count');
       if (c) c.textContent = done ? 'All braced!' : `${n} of ${SQUARES.length} braced`;
     }
-    if (done) { order.played = true; const u = ui; setTimeout(() => { if (!closed && u) u.pick(0); }, 380); }
+    // (a moment to see the last brace go in; then it is the answer, if the card is still this one)
+    if (done) { order.played = true; const u = ui, o = order; setTimeout(() => { if (!closed && u && order === o) u.pick(0); }, 380); }
     return true;
   }
+  // (the first square still to brace calls for a tap: a soft amber pulse)
+  function markNext(root) { let first = true; root.querySelectorAll('.dkb-sq').forEach((b) => { const next = first && !b.classList.contains('is-braced'); if (next) first = false; b.classList.toggle('is-next', next); }); }
   // a tap on the ring itself: the panel found under it (only the squares on the camera's side count)
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   function onTap(e) {
@@ -170,6 +174,9 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     if (k >= 0 && brace(k)) e.preventDefault();
   }
   W.renderer.domElement.addEventListener('pointerdown', onTap);
+  // (on a keyboard, keys 1 to 3 brace the squares, as they pick the answers at the other levels)
+  function onKey(e) { if (closed || !isBrace() || !/^[1-9]$/.test(e.key)) return; brace(+e.key - 1); }
+  addEventListener('keydown', onKey);
 
   // ── the panel's live ──────────────────────────────────────────────────────────────────────────────────────────
   // (a card can be answered once its ring has slid out)
@@ -203,6 +210,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
       + `<p class="dkb-count">${SQUARES.filter((x, k) => braced(k)).length} of ${SQUARES.length} braced</p>`;
     u.answers.innerHTML = ''; u.answers.appendChild(strip);
     strip.querySelectorAll('.dkb-sq').forEach((b) => b.addEventListener('click', () => brace(+b.dataset.k)));
+    markNext(strip);
     return true;
   }
   // the try's end, once its last ring is answered: the card in place of a question
@@ -227,8 +235,8 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
       s.t += dt;
       if (s.state === 'out') { s.ext = back(clamp01(s.t / TIMES.out)); if (s.t >= TIMES.out) { s.state = 'wait'; s.t = 0; s.ext = 1; } }
       // how loose the ring is: 1 with nothing braced, 0 braced all round (the young player's squares count one by one)
-      const want = s.state === 'wait' || s.state === 'out' ? 1 - SQUARES.filter((x) => s.braced.has(x)).length / SQUARES.length : 0;
-      s.loose += (want - s.loose) * (1 - Math.exp(-6 * dt));
+      const goal = s.state === 'wait' || s.state === 'out' ? 1 - SQUARES.filter((x) => s.braced.has(x)).length / SQUARES.length : 0;
+      s.loose += (goal - s.loose) * (1 - Math.exp(-6 * dt));
       if (s.state === 'brace') {
         // (a right answer: the braces still out go in one after another, the camera's side first; then it locks, as
         // soon as the last is in: at once when a young player braced them all)
@@ -262,22 +270,38 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
       R.g.matrix.makeTranslation(0, 0, DOCK.z0 + i * DOCK.L).multiply(_sh).multiply(_sc); R.g.matrixWorldNeedsUpdate = true;
     });
     M.outlineMat.opacity = 0.55 + 0.4 * Math.sin(clock * 5);
+    // the try done (its last ring locked): the rings' hoops light up one after another, out along the bridge, again
+    // and again, while the end card is up
+    if (finished && S.every((s, i) => i >= TRY.rings || s.state === 'done')) {
+      if (endT < 0) endT = clock;
+      const t = (clock - endT) * 2.2 % (TRY.rings + 2.5);
+      for (let i = 0; i < TRY.rings; i++) { const f = 0.9 + 5 * Math.max(0, 1 - Math.abs(t - i - 0.5) * 1.4); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
+    } else endT = -1;
   }
 
   // ── the camera: outside, beside the port ──────────────────────────────────────────────────────────────────────
-  const camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
-  let fresh = true, fov = null;
+  const want = new THREE.Vector3(), ringAt = new THREE.Vector3(), probe = new THREE.PerspectiveCamera();
+  const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion();   // (the view's own, eased: the walking camera has it each frame first)
+  let fresh = true, forced = null;   // (forced: a ring to look at, for the rigs)
+  // where the camera wants to be, and which way it wants to face, for ring i (into `want` and probe.quaternion)
+  function poseFor(V, i, aspect) {
+    ringAt.set(0, DOCK.c, DOCK.z0 + (i + 0.5) * DOCK.L).applyMatrix4(frame);
+    want.set(V.from[0], V.from[1] + DOCK.c, V.from[2] + DOCK.z0 + (i + 0.5) * DOCK.L).applyMatrix4(frame);
+    probe.position.copy(want); probe.up.set(0, 1, 0); probe.lookAt(ringAt);
+    // (turned so the ring sits at V.on: right to put it left, down to put it high)
+    const tv = Math.tan(V.fov * Math.PI / 360), th = tv * aspect;
+    probe.rotateY(Math.atan(V.on[0] * th)); probe.rotateX(-Math.atan(V.on[1] * tv));
+  }
   function aim(camera, dt = 1 / 60) {
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
-    const V = finished && S.every((s, i) => i >= TRY.rings || s.state === 'done') ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
-    const along = (V.follow || 0) * Math.min(cur, TRY.rings - 1) * DOCK.L;
-    want.set(V.at[0], V.at[1] + DOCK.c, V.at[2] + along).applyMatrix4(frame);
-    wantLook.set(V.look[0], V.look[1] + DOCK.c, V.look[2] + along).applyMatrix4(frame);
-    if (fresh) { camAt.copy(want); camLook.copy(wantLook); fresh = false; }
+    const end = finished && S.every((s, i) => i >= TRY.rings || s.state === 'done');
+    const V = end ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
+    poseFor(V, forced != null ? forced : end ? (TRY.rings - 1) / 2 : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
+    if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); fresh = false; }
     const k = 1 - Math.exp(-2.5 * dt);
-    camAt.lerp(want, k); camLook.lerp(wantLook, k);
-    camera.position.copy(camAt); camera.lookAt(camLook);
-    if (fov !== V.fov || camera.fov !== V.fov) { fov = V.fov; camera.fov = V.fov; camera.updateProjectionMatrix(); }
+    camPos.lerp(want, k); camQ.slerp(probe.quaternion, k);
+    camera.position.copy(camPos); camera.quaternion.copy(camQ);
+    if (camera.fov !== V.fov) { camera.fov = V.fov; camera.updateProjectionMatrix(); }
   }
   // (a short fade from black as the view goes outside, and again as it comes back in)
   function fade() {
@@ -291,6 +315,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     if (closed) return;
     closed = true;
     W.renderer.domElement.removeEventListener('pointerdown', onTap);
+    removeEventListener('keydown', onKey);
     W.scene.remove(M.root);
     W.seenFrom = null;
     if (W.dust) W.dust.visible = dustWas;
@@ -301,13 +326,16 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     ready, right, wrong, head, play, over, update, aim, close,
     // (for the rigs: the rings' states, the squares to tap on screen, a tap on one of them)
     state: () => ({ cur, answered, finished, rings: S.slice(0, TRY.rings).map((s) => ({ state: s.state, braced: [...s.braced].sort(), loose: +s.loose.toFixed(2) })), made: M.ms }),
-    squaresOnScreen: () => {
+    lookAtRing: (i = null) => { forced = i; },
+    // (where ring i's squares are on the screen, as the camera is now: its squares' middles, standing still)
+    squaresOnScreen: (i = cur) => {
       const r = W.renderer.domElement.getBoundingClientRect(), out = [], v = new THREE.Vector3();
-      if (!M.rings[cur]) return out;
-      M.rings[cur].g.updateMatrixWorld(true);
-      for (const t of M.rings[cur].targets) {
+      if (!M.rings[i]) return out;
+      W.camera.updateMatrixWorld();
+      for (const t of M.rings[i].targets) {
         const j = t.userData.panel; if (!SQUARES.includes(j)) continue;
-        t.geometry.computeBoundingSphere(); v.copy(t.geometry.boundingSphere.center).applyMatrix4(t.matrixWorld).project(W.camera);
+        t.geometry.computeBoundingSphere(); v.copy(t.geometry.boundingSphere.center); v.z += DOCK.z0 + i * DOCK.L;
+        v.applyMatrix4(frame).project(W.camera);
         out.push({ k: SQUARES.indexOf(j), x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height });
       }
       return out;
