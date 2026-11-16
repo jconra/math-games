@@ -51,9 +51,9 @@ export const SPOTS = {
   // the cook behind the serving counter, facing whoever comes up to it
   cook: [{ piece: 'counter', variant: 'serve', local: [0, 0, -0.85], face: [0, 1] }],
   // the terminal: the jobs board (hung high: looked up at from the floor), the serving counter's front, the drinks
-  // (the jobs board hangs high over the floor: read from either side of it, never square under it, where someone would
-  // seem to stare at whoever comes in from the corridor)
-  board: [{ piece: 'jobs', variant: 'hang', local: [-2.6, -4.3, 0.9], face: [0.6, -1] }, { piece: 'jobs', variant: 'hang', local: [2.6, -4.3, 0.9], face: [-0.6, -1] }],
+  // (the jobs board hangs high over the floor: read from its open east side, never square under it, where someone
+  // would seem to stare at whoever comes in from the corridor, nor by the booths, where people queue for the captains)
+  board: [{ piece: 'jobs', variant: 'hang', local: [2.6, -4.3, 0.9], face: [-0.6, -1] }, { piece: 'jobs', variant: 'hang', local: [3.5, -4.3, 1.8], face: [-0.7, -1] }],
   counter: [{ piece: 'counter', variant: 'serve', local: [0, 0, 0.95], face: [0, -1] }],
   drinks: [{ piece: 'dispenser', variant: 'drinks', local: [0, 0, 0.95], face: [0, -1] }],
   // standing about in the terminal, the corridors, the spine

@@ -208,7 +208,26 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (a spot: on the floor, never on top of a crate; off every patch kept off; with room all round, except a post, a
   // spot placed by hand for one person, as a captain at the corner of a booth's counter)
   const posts = new Set(ROSTER.flatMap((d) => d.day.map((s) => (typeof s === 'string' ? s : s.do))).filter((s) => /^post:[^.]+\.\d+$/.test(s)).map((s) => s.slice(5).split('.')[0]));
-  const okSpot = (p, post = false) => p && p.y < 0.45 && !noGo(p.x, p.z) && (post || roomy(p));
+  // (and room to walk away: a quarter-metre walk out from the spot, as a person walks, gets 2.5 m off; a spot in a
+  // pocket between a table and a wall, that nobody who stood there could leave, is no spot)
+  const _w = new THREE.Vector3();
+  const walkOut = (p) => {
+    const G = 0.25, seen = new Set([0]), q = [[p.x, p.y, p.z]];
+    const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    while (q.length && seen.size < 600) {
+      const [x, y, z] = q.shift();
+      for (const [dx, dz] of D8) {
+        _w.set(x, y, z); walls.move(_w, dx * G, dz * G, 0.26);
+        if (Math.abs(_w.x - x - dx * G) > 0.02 || Math.abs(_w.z - z - dz * G) > 0.02) continue;
+        const k = Math.round((_w.x - p.x) / G) * 1000 + Math.round((_w.z - p.z) / G); if (seen.has(k)) continue;
+        seen.add(k);
+        if (Math.hypot(_w.x - p.x, _w.z - p.z) >= 2.5) return true;
+        q.push([_w.x, _w.y, _w.z]);
+      }
+    }
+    return false;
+  };
+  const okSpot = (p, post = false) => p && p.y < 0.45 && !noGo(p.x, p.z) && (post || (roomy(p) && walkOut(p)));
   for (const [name, defs] of Object.entries(SPOTS)) {
     groups[name] = [];
     for (const at of defs) {
@@ -255,7 +274,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         // where one stands to sit down: behind a stool (away from its table), in front of a bench
         const dir = s.front ? s.back.clone().negate() : s.back, out = s.front ? 0.5 : 0.55;
         const ap = walls.snap(s.seat.x + dir.x * out, s.seat.y + 0.35, s.seat.z + dir.z * out, 0.35);
-        if (!ap || noGo(ap.x, ap.z) || !roomy(ap, 0.28)) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
+        if (!ap || noGo(ap.x, ap.z) || !roomy(ap, 0.28) || !walkOut(ap)) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
         seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, who: null, bad: 0 });
       }
     }
@@ -602,6 +621,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (P.jam) {
       P.jam = false; if (P.trail) P.trail.length = 0;
       alarms.jams = (alarms.jams || 0) + 1;
+      if (alarms.jams <= 40) console.info('people: jam: ' + P.id + ' at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.spot?.name || '') : '-') + ', held by ' + (P.by || '-') + ', ' + (P.jammed ? 'again' : 'first') + ')');
       if (!P.jammed) { P.jammed = true; P.side = 0; stillV++; play(P, STAND); route(P, P.way[P.way.length - 1]); return; }
       alarms.gaveUp++; next(P); return;
     }
