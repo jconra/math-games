@@ -538,7 +538,6 @@
         {"piece":"rib","cell":[2.5,10.5],"turn":0,"variant":"strip"},
         {"piece":"rib","cell":[2.5,10.5],"turn":0,"variant":"strip","deck":1},
         {"piece":"rib","cell":[3.5,10.5],"turn":0,"variant":"strip"},
-        {"piece":"rib","cell":[3.5,10.5],"turn":0,"variant":"strip","deck":1},
         {"piece":"rib","cell":[4.5,10.5],"turn":0,"variant":"strip"},
         {"piece":"rib","cell":[4.5,10.5],"turn":0,"variant":"strip","deck":1},
         {"piece":"label","cell":[-3,10.5],"turn":0,"variant":"CREW","off":[0,1.95,-0.048]},

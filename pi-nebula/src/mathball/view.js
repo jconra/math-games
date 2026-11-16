@@ -23,7 +23,7 @@
 //   V.strike(fromXZ, goal, who)       start a strike
 //   V.dispose()
 import * as THREE from 'three';
-import { COURT, GOALS, PORTS, TRACK, CORNERS, WALLS, BALL_COLOURS, toStation } from './court.js';
+import { COURT, GOALS, PORTS, TRACK, CORNERS, WALLS, STATIONS, BALL_COLOURS, toStation } from './court.js';
 import { ruleOf } from './rules.js';
 
 const MID = COURT.mid;
@@ -329,8 +329,10 @@ export function makeView({ W, G: G0 }) {
       // the bar: where it is, in the colour of the goal it is heading for (white once past the last)
       bar.U.uTime.value = t; bar.U.uHead.value = G.barS();
       const nx = G.next();
-      const col = nx.goal != null ? GOALS[nx.goal].glow : [1.5, 1.6, 1.7], m = Math.max(...col);
-      bar.U.uCol.value.set(col[0] / m * 1.6, col[1] / m * 1.6, col[2] / m * 1.6);
+      // (for a second after it reaches a goal it keeps that goal's colour, flaring, then takes the next one's)
+      const just = STATIONS.find((st) => G.t >= st.t && G.t < st.t + 1.1);
+      const col = just ? GOALS[just.goal].glow : nx.goal != null ? GOALS[nx.goal].glow : [1.5, 1.6, 1.7], m = Math.max(...col), fl = just ? 1 + (1 - (G.t - just.t) / 1.1) * 0.9 : 1;
+      bar.U.uCol.value.set(col[0] / m * 1.6 * fl, col[1] / m * 1.6 * fl, col[2] / m * 1.6 * fl);
       // the signs: the next one to change brightens as the bar nears (its last 3 seconds); a change flickers in
       for (let i = 0; i < 4; i++) {
         const S = signs[i];

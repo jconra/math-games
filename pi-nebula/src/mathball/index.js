@@ -50,8 +50,8 @@ const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours
 // THE CAMERA: behind the player and above, looking down the court (a phone held upright sees a narrow strip, so it
 // stands further back and higher, looking more steeply down)
 export const MBCAM = {
-  wide: { dist: 4.3, height: 3.3, ahead: 2.6, lookY: 0.75, fov: 62 },
-  tall: { dist: 5.0, height: 4.7, ahead: 3.4, lookY: 0.2, fov: 74 },
+  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62 },
+  tall: { dist: 5.0, height: 4.9, ahead: 3.6, lookY: 0.05, fov: 74 },
   turn: 0.0052, swing: 1.9, after: 1.1,
 };
 
@@ -288,7 +288,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const ball = e.ball != null ? G.balls.find((b) => b.id === e.ball) : null;
     if (e.type === 'launch') { view.flashPort(e.port); sound.play('launch', { gain: 0.7, pan: panOf(ball && ball.p) }); }
     else if (e.type === 'got') sound.play('grab', { gain: e.who === 'you' ? 1 : 0.5 });
-    else if (e.type === 'throw') { sound.play('throw', { gain: e.who === 'you' ? 1 : 0.6 }); if (e.who === 'you') throwT = 0; }
+    else if (e.type === 'throw') { sound.play('throw', { gain: e.who === 'you' ? 1 : 0.6 }); if (e.who === 'you') { throwT = 0; if (/^Now /.test(hint.textContent)) say('', 0); } }
     else if (e.type === 'score') {
       view.strike(e.from, e.goal, 1);
       if (e.who === 'you') {
@@ -385,11 +385,14 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const feet = new THREE.Vector3(MID[0] + youNow.x, 0, MID[2] + youNow.z);
     // left alone, it swings round behind the way the player is going, or toward the goal they are throwing at
     const sp = Math.hypot(youNow.vx, youNow.vz), w = G.you.want;
+    // (left alone it looks toward the goal being thrown at, else from behind the player toward the court's middle and
+    // on down its length, so the balls are in view wherever the player runs: never into a wall or a corner)
     if (cam.idle > MBCAM.after) {
-      let want = null;
-      if (w.face != null) want = w.face;
-      else if (sp > 0.8) want = Math.atan2(youNow.vx, youNow.vz);
-      if (want != null) { const d = wrapA(want - cam.yaw); cam.yaw = wrapA(cam.yaw + Math.sign(d) * Math.min(Math.abs(d), MBCAM.swing * dt * (w.face != null ? 1.5 : Math.min(1, sp / 3)))); }
+      let want = null, rate = MBCAM.swing;
+      if (w.face != null) { want = w.face; rate *= 1.5; }
+      else if (Math.hypot(youNow.x, youNow.z) > 2.2) { want = Math.atan2(-youNow.x * 0.55, -youNow.z); rate *= 0.6; }
+      else if (sp > 0.8) { want = Math.atan2(youNow.vx, youNow.vz); rate *= Math.min(1, sp / 3); }
+      if (want != null) { const d = wrapA(want - cam.yaw); cam.yaw = wrapA(cam.yaw + Math.sign(d) * Math.min(Math.abs(d), rate * dt)); }
     }
     if (cam.fresh) { cam.yaw = Math.PI; }
     const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw), lift = cam.lift;
