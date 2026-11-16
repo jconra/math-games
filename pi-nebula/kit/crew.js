@@ -106,6 +106,15 @@
 // wears none unless named. The hand is laid on the suit's own wrists (HANDS, below): its stub runs back inside the
 // cuff, and stub and cuff fade from the forearm to the wrist by the same rule, so they move together in every clip.
 //
+// THE FAR COPY (2026-11-16; the game's maker: "Can we use that mesh optimization tool to reduce the triangles?"): every
+// part file has a simplified copy, made once by script with meshoptimizer's simplifier (~/pw/space-math/rigs/station-life-2/
+// far/far-make.cjs; never at play time): a shorter list of the SAME part's triangles (pi-nebula/assets/crew/far/: far.json
+// says what each part's copy keeps, <file>.bin holds them), so the far copy draws the part's own points, with the
+// person's own skinning, colours, hair fit and collar fit as they are. makeCrew(lib, recipe, { far: true }) gets them
+// ready and c.setFar(true) draws the person with them (the station's people beyond a few metres: src/people.js); the
+// eyes have none (never drawn far off). A part re-made since its copy was (its triangles not as far.json says) is drawn
+// whole, and the console says so once.
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
 //                                               -> { body, rig, clips (fitted to that suit), stride, moves, shoulders
 //                                               (SHOULDER WIDTH's) }; lib.hairAtlas();
@@ -116,8 +125,10 @@
 //                                               lib.buzzOf(hair id) -> the buzz makeCrew gives that hair; lib.buzzes
 //                                               { hair id: buzz | null } (empty: a layer over crew.json's; the Crew Lab's
 //                                               while it's edited); lib.earsOf(head id) -> that head's ears
-//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes }, size }
+//   const c = await makeCrew(lib, recipe, { far })   recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes }, size }
 //     (size: the whole person scaled about the feet, SIZES; left out 1; c.size; c.stride scaled with it)
+//     (far: the far copies made ready (THE FAR COPY): c.setFar(on), c.far (whether it is drawn), c.tris() (the
+//     triangles drawn, eyes and all); lib.farReady(kind, id) gets one part's ready)
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, hand, visor, eyes, cornea },
 //     c.bones, c.lookAt(point | null, { dart }) (real eyes: where they look; null straight ahead), c.gaze (null without),
@@ -391,6 +402,33 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
     const S = lib.entry('suit', suit); if (!S || S.ownHands) return null;
     const H = (list.parts.hand || []).filter((h) => (h.skeleton || 'm') === (S.skeleton || 'm'));
     return (H.find((h) => h.default) || H[0] || {}).id || null;
+  };
+  // THE FAR COPY: far.json once; a part file's far triangles once, the first time someone wearing it is made with them.
+  // lib.farIndex: each part mesh's own triangle list -> its far copy's (a person's own copy of a part's points, for the
+  // hair's or the collar's fit, keeps the part's triangle list, so it finds its far copy there too)
+  let farList = null;
+  const farFiles = new Map();
+  lib.farIndex = new WeakMap();
+  lib.farReady = (kind, id) => {
+    const file = lib.fileOf(kind, id); if (!file) return Promise.resolve();
+    if (!farFiles.has(file)) farFiles.set(file, (async () => {
+      farList = farList || fetch(dir + 'far/far.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const L = await farList, E = L && L.parts && L.parts[file]; if (!E) return;
+      const [g, buf] = await Promise.all([lib.part(kind, id), fetch(dir + 'far/' + file.replace(/\.glb$/, '.bin')).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)]);
+      if (!buf) return;
+      const meshes = []; g.scene.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+      let at = 0;
+      meshes.forEach((o, i) => {
+        const M = E.meshes[i], I = o.geometry.index; if (!M) return;
+        const n = M.far * 3;
+        if (!n) return;
+        if (I && M.triangles * 3 === I.count && M.points === o.geometry.attributes.position.count && farCheck(I.array) === M.check && (at + n) * 2 <= buf.byteLength) {
+          lib.farIndex.set(I, new THREE.BufferAttribute(new Uint16Array(buf, at * 2, n), 1));
+        } else console.warn(`crew: the far copy of ${file} (${M.material}) no longer matches the part (re-made since?): drawn whole; make the far copies again`);
+        at += n;
+      });
+    })());
+    return farFiles.get(file);
   };
   return lib;
 }
@@ -2713,14 +2751,31 @@ function addOwnBones(list, bones) {
   }
 }
 
-export async function makeCrew(lib, recipe) {
+// THE FAR COPY: the check far.json keeps of a part's own triangle list (the far copies' maker sums it the same way)
+function farCheck(I) { let s = 0; for (let i = 0; i < I.length; i++) s = (s + I[i] * ((i % 7) + 1)) % 1000000007; return s; }
+// a far copy's geometry: the near one's points, all of them shared (as worn: the part's own, or the person's own copy for
+// a fit), with the far triangle list
+function farGeometry(g, index) {
+  const f = new THREE.BufferGeometry(); f.name = (g.name || 'part') + ' (far)';
+  for (const [k, a] of Object.entries(g.attributes)) f.setAttribute(k, a);
+  f.setIndex(index); f.userData.nearOf = g;
+  if (g.boundingSphere) f.boundingSphere = g.boundingSphere;
+  return f;
+}
+// (only its own wrapper freed: the points and the triangle lists are shared with the near copy and every other person)
+function disposeFar(f) { if (!f) return; f.setIndex(null); for (const k of Object.keys(f.attributes)) f.deleteAttribute(k); f.dispose(); }
+
+export async function makeCrew(lib, recipe, { far = false } = {}) {
   // (the hands: the recipe's if it names them (null: none), else the suit's skeleton's: HANDS)
   const R = { suit: recipe.suit, head: recipe.head, hair: recipe.hair, hand: recipe.hand !== undefined ? recipe.hand : lib.handFor(recipe.suit) };
   // (card hair, paint hair and the scalp's shade under a hair draw from the shared strand atlas; paint hair has no part of
   // its own unless it gives a `file` too (BOTH, at PAINTS): then its mesh and its paint together, the paint's marks loaded)
   const HE = (R.hair && lib.entry('hair', R.hair)) || {}, cards = !!HE.cards, paint = HE.paint && PAINTS[HE.paint] ? HE.paint : null;
-  const [suit, head, hair, hand, fit, atlas0, marks] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (R[k] && !(k === 'hair' && paint && !HE.file) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
-    cards || paint || (HE.scalp && HE.scalp.line) ? lib.hairAtlas() : null, paint && HE.marks ? lib.paintMarks(HE.marks) : null]);
+  const hasPart = (k) => R[k] && !(k === 'hair' && paint && !HE.file);
+  const [suit, head, hair, hand, fit, atlas0, marks] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (hasPart(k) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
+    cards || paint || (HE.scalp && HE.scalp.line) ? lib.hairAtlas() : null, paint && HE.marks ? lib.paintMarks(HE.marks) : null,
+    // (THE FAR COPY: each part's far triangles, when asked for)
+    ...(far && lib.farReady ? ['suit', 'head', 'hair', 'hand'].filter(hasPart).map((k) => lib.farReady(k, R[k])) : [])]);
   // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
@@ -2868,6 +2923,9 @@ export async function makeCrew(lib, recipe) {
     }
     person.root.updateMatrixWorld(true);
   }
+  // THE FAR COPY: the person's meshes that have one (made ready above when asked for; the eyes have none)
+  const farMeshes = [];
+  if (far) person.root.traverse((o) => { const fi = o.isSkinnedMesh && o.geometry.index && lib.farIndex && lib.farIndex.get(o.geometry.index); if (fi) farMeshes.push({ mesh: o, index: fi, near: null, geo: null }); });
   const c = {
     root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK, shoulders: fit.shoulders,
     // (ARMS OUT: the outfit's angles, degrees, and the angle worn this frame)
@@ -2914,26 +2972,16 @@ export async function makeCrew(lib, recipe) {
     // the hair's fit (a hair's fit, above): each hair mesh gets its own positions while it wears one
     fit: null, fitStats: { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0, relaxed: 0, relaxMostMm: 0 }, fitSkirt: [],
     async setFit(fit) {
-      // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
-      const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head), lib.hugDefaultOf(R.hair))) : null, plain = asMade(f);
-      // (the head's reach: for the tuck and the hug, and for the shade's line as worn (a placement by hand too))
-      const field = !plain && R.head ? await lib.headField(R.head) : null, tris = field ? await lib.headTris(R.head) : null;
-      const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0, relaxed: 0, relaxMostMm: 0 }, skirts = [];
-      for (const [m, g0, M] of hairFit) {
-        if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
-        if (m.geometry === g0) m.geometry = ownGeometry(g0);
-        const s = applyFit(m.geometry, g0, M, f, field, { cards, tris });
-        for (const k of Object.keys(stats)) stats[k] = k.endsWith('MostMm') ? Math.max(stats[k], s[k] || 0) : stats[k] + (s[k] || 0);
-        skirts.push(s.skirt || null); if (s.dbg) c.fitDbg = s.dbg;
-      }
-      c.fitSkirt = skirts;
-      c.fit = plain ? null : f; c.fitStats = stats;
-      // (THE SHADE FOLLOWS THE HAIR: the paint field again, from the hair's edge as worn on this head)
-      const sc = HE.scalp && HE.scalp.line ? HE.scalp : null;
-      c.paintScalp = sc && field ? wornScalp(sc, hairFit, field) : sc;
-      if (painted && sc) { paintField(c.paintScalp === sc ? HE : { ...HE, scalp: c.paintScalp }, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
-      return stats;
+      // (THE FAR COPY is taken off while the hair's own points are made, and put back after: a fit is worked on the
+      // geometry as worn up close)
+      fitting++; if (c.far) applyFar(false);
+      try { return await fitHair(fit); } finally { fitting--; if (!fitting && farWanted) applyFar(true); }
     },
+    // THE FAR COPY: drawn with each part's far triangles (on), or as made (off); c.far says which is drawn
+    far: false,
+    setFar(on) { farWanted = !!on; if (!fitting) applyFar(farWanted); },
+    // (the triangles drawn, eyes and all, as the person is drawn now)
+    tris() { let n = 0; person.root.traverse((o) => { if (o.isMesh && o.visible && o.geometry) n += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); return n; },
     // the hair's buzz (THE PAINT FIELD), live: { sideburns, nape, look } as lib.buzzOf gives (null: none); the field
     // remade (a look's change needs the person put together again)
     buzz: lib.buzzOf(R.hair),
@@ -2950,6 +2998,8 @@ export async function makeCrew(lib, recipe) {
       if (u && u.crPaintShow) u.crPaintShow.value.set(S.buzz ? 1 : 0, S.under ? 1 : 0, 0, S.ears ? 1 : 0);
     },
     dispose() {
+      // (the far copy's wrappers first, the person as made again: THE FAR COPY)
+      farWanted = false; applyFar(false); for (const F of farMeshes) { disposeFar(F.geo); F.geo = null; }
       for (const m of mats) m.dispose(); if (visor) visor.dispose();
       if (painted) painted.field.dispose();
       for (const [m, g0] of hairFit) if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; }
@@ -2957,6 +3007,40 @@ export async function makeCrew(lib, recipe) {
       person.mixer.stopAllAction(); person.root.removeFromParent();
     },
   };
+  let fitting = 0, farWanted = false;
+  function applyFar(on) {
+    on = !!on && farMeshes.length > 0;
+    if (on === c.far) return;
+    c.far = on;
+    for (const F of farMeshes) {
+      if (on) {
+        F.near = F.mesh.geometry;
+        if (!F.geo || F.geo.userData.nearOf !== F.near) { disposeFar(F.geo); F.geo = farGeometry(F.near, F.index); }
+        F.mesh.geometry = F.geo;
+      } else if (F.near) { F.mesh.geometry = F.near; F.near = null; }
+    }
+  }
+  async function fitHair(fit) {
+    // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
+    const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head), lib.hugDefaultOf(R.hair))) : null, plain = asMade(f);
+    // (the head's reach: for the tuck and the hug, and for the shade's line as worn (a placement by hand too))
+    const field = !plain && R.head ? await lib.headField(R.head) : null, tris = field ? await lib.headTris(R.head) : null;
+    const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0, relaxed: 0, relaxMostMm: 0 }, skirts = [];
+    for (const [m, g0, M] of hairFit) {
+      if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
+      if (m.geometry === g0) m.geometry = ownGeometry(g0);
+      const s = applyFit(m.geometry, g0, M, f, field, { cards, tris });
+      for (const k of Object.keys(stats)) stats[k] = k.endsWith('MostMm') ? Math.max(stats[k], s[k] || 0) : stats[k] + (s[k] || 0);
+      skirts.push(s.skirt || null); if (s.dbg) c.fitDbg = s.dbg;
+    }
+    c.fitSkirt = skirts;
+    c.fit = plain ? null : f; c.fitStats = stats;
+    // (THE SHADE FOLLOWS THE HAIR: the paint field again, from the hair's edge as worn on this head)
+    const sc = HE.scalp && HE.scalp.line ? HE.scalp : null;
+    c.paintScalp = sc && field ? wornScalp(sc, hairFit, field) : sc;
+    if (painted && sc) { paintField(c.paintScalp === sc ? HE : { ...HE, scalp: c.paintScalp }, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
+    return stats;
+  }
   // (each hair mesh, the part's own geometry it shares, and its bind space -> the head's frame)
   const hairFit = hairMeshes.map((m) => [m, m.geometry, frameOf(m)]);
   c.setColours(recipe.colours || {});

@@ -1,0 +1,1267 @@
+{
+ "about": "The crew parts' far copies (made by ~/pw/space-math/rigs/station-life-2/far/far-make.cjs with meshoptimizer 1.3.0): for each part file, its skinned meshes in the order met, their points and triangles as made, and the triangles the far copy keeps (<file stem>.bin, Uint16, one mesh after another). check: a sum over the part's own triangle list, so a part re-made since is noticed (kit/crew.js then draws it whole and says so).",
+ "made": "2026-11-16T22:25:33.550Z",
+ "rules": {
+  "about": "how far each kind of crew part is taken down: keep (the share of its triangles aimed for), error (the most a point may move off the part's surface, in metres: a pixel at 7 m on a 1280 x 720 screen is about 11 mm), normals (their weight, so the shading keeps its shape), uv (the weight of the texture's place on the part, so a big triangle never drags a texture's detail where it was not), flags (meshoptimizer's: ErrorAbsolute: the error in metres; LockBorder keeps the open edges where a part meets another in place: an outfit's collar and cuffs, a hand's stub, a head's neck; RegularizeLight: more even triangles, which bend better with the skin; Permissive: may fold across the texture's seams (hair: one colour all over)). A mesh under smallUnder triangles is kept as made; the eyes and their clear layer are never drawn far off.",
+  "smallUnder": 700,
+  "suit": {
+   "keep": 0.12,
+   "error": 0.02,
+   "normals": 0.1,
+   "uv": 4,
+   "lockSeams": true,
+   "flags": [
+    "ErrorAbsolute",
+    "LockBorder"
+   ]
+  },
+  "head": {
+   "keep": 0.12,
+   "error": 0.008,
+   "normals": 0.15,
+   "uv": 4,
+   "lockSeams": true,
+   "flags": [
+    "ErrorAbsolute",
+    "LockBorder"
+   ]
+  },
+  "hand": {
+   "keep": 0.06,
+   "error": 0.01,
+   "normals": 0.05,
+   "uv": 2,
+   "flags": [
+    "ErrorAbsolute",
+    "LockBorder"
+   ]
+  },
+  "hair": {
+   "keep": 0.2,
+   "error": 0.02,
+   "normals": 0.05,
+   "uv": 1,
+   "flags": [
+    "ErrorAbsolute",
+    "Permissive"
+   ]
+  },
+  "cards": {
+   "keep": 0.3,
+   "error": 0.02,
+   "normals": 0.02,
+   "uv": 2,
+   "flags": [
+    "ErrorAbsolute"
+   ]
+  },
+  "small": {
+   "keep": 1
+  }
+ },
+ "parts": {
+  "suit_captain1.glb": {
+   "kind": "suit",
+   "id": "captain1",
+   "meshes": [
+    {
+     "name": "suit_captain1",
+     "material": "suit_captain1",
+     "points": 10772,
+     "triangles": 15681,
+     "far": 4911,
+     "check": 993577026,
+     "error": 0.01977
+    }
+   ],
+   "bytes": 29466
+  },
+  "suit_vega.glb": {
+   "kind": "suit",
+   "id": "vega",
+   "meshes": [
+    {
+     "name": "suit_vega",
+     "material": "tripo_mat_ad75ea44-1a1e-4f5b-a122-87bb1e6fb418",
+     "points": 11782,
+     "triangles": 9851,
+     "far": 8419,
+     "check": 655834509,
+     "error": 0.01869
+    }
+   ],
+   "bytes": 50514
+  },
+  "suit_smelter.glb": {
+   "kind": "suit",
+   "id": "smelter",
+   "meshes": [
+    {
+     "name": "suit_smelter",
+     "material": "tripo_mat_35c07fc7-1769-48f8-bea7-b4a7171ddc75.001",
+     "points": 6703,
+     "triangles": 7048,
+     "far": 4574,
+     "check": 274095988,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 27444
+  },
+  "suit_medic.glb": {
+   "kind": "suit",
+   "id": "medic",
+   "meshes": [
+    {
+     "name": "suit_medic",
+     "material": "tripo_mat_02f58299-cb77-48c7-b596-cc797e15b9c8",
+     "points": 6328,
+     "triangles": 7247,
+     "far": 4021,
+     "check": 258981591,
+     "error": 0.01884
+    }
+   ],
+   "bytes": 24126
+  },
+  "suit_cook.glb": {
+   "kind": "suit",
+   "id": "cook",
+   "meshes": [
+    {
+     "name": "suit_cook",
+     "material": "tripo_mat_e20f03f5-6f9f-430d-868c-c43956e533e0.001",
+     "points": 6668,
+     "triangles": 7743,
+     "far": 4429,
+     "check": 296880430,
+     "error": 0.01904
+    }
+   ],
+   "bytes": 26574
+  },
+  "suit_security.glb": {
+   "kind": "suit",
+   "id": "security",
+   "meshes": [
+    {
+     "name": "suit_security",
+     "material": "tripo_mat_19ca71f4-5fe9-4b41-88ae-e8f8488c8081.001",
+     "points": 6168,
+     "triangles": 7188,
+     "far": 4068,
+     "check": 258956253,
+     "error": 0.01995
+    }
+   ],
+   "bytes": 24408
+  },
+  "suit_dockWorker.glb": {
+   "kind": "suit",
+   "id": "dockWorker",
+   "meshes": [
+    {
+     "name": "suit_dockWorker",
+     "material": "tripo_mat_daf9fbd5-4bc9-4424-9efe-954ab223dcc6.001",
+     "points": 6620,
+     "triangles": 7062,
+     "far": 4542,
+     "check": 269354560,
+     "error": 0.01994
+    }
+   ],
+   "bytes": 27252
+  },
+  "suit_civilian.glb": {
+   "kind": "suit",
+   "id": "civilian",
+   "meshes": [
+    {
+     "name": "suit_civilian",
+     "material": "tripo_mat_5f92d2cf-156c-47e8-a404-7df99e82335a.001",
+     "points": 5898,
+     "triangles": 7032,
+     "far": 3876,
+     "check": 234327619,
+     "error": 0.01988
+    }
+   ],
+   "bytes": 23256
+  },
+  "suit_spaceMan.glb": {
+   "kind": "suit",
+   "id": "spaceMan",
+   "meshes": [
+    {
+     "name": "suit_spaceMan",
+     "material": "tripo_mat_22922ad2-4fc3-4bbf-a00a-540df823c830.001",
+     "points": 6123,
+     "triangles": 7018,
+     "far": 4074,
+     "check": 245341577,
+     "error": 0.01973
+    }
+   ],
+   "bytes": 24444
+  },
+  "suit_spaceWoman.glb": {
+   "kind": "suit",
+   "id": "spaceWoman",
+   "meshes": [
+    {
+     "name": "suit_spaceWoman",
+     "material": "tripo_mat_ba45db8f-5283-4aaf-81cc-76d452686429.001",
+     "points": 6327,
+     "triangles": 7049,
+     "far": 4199,
+     "check": 256509110,
+     "error": 0.01921
+    }
+   ],
+   "bytes": 25194
+  },
+  "suit_captainMan.glb": {
+   "kind": "suit",
+   "id": "captainMan",
+   "meshes": [
+    {
+     "name": "suit_captainMan",
+     "material": "tripo_mat_27300f8a-1393-43f5-a5bd-5604becbb1d1.001",
+     "points": 6220,
+     "triangles": 6723,
+     "far": 4321,
+     "check": 240530501,
+     "error": 0.01856
+    }
+   ],
+   "bytes": 25926
+  },
+  "suit_captainOld.glb": {
+   "kind": "suit",
+   "id": "captainOld",
+   "meshes": [
+    {
+     "name": "suit_captainOld",
+     "material": "tripo_mat_defb590d-45ef-40f1-919e-6da53eacad51.001",
+     "points": 6271,
+     "triangles": 7052,
+     "far": 4190,
+     "check": 257169767,
+     "error": 0.01984
+    }
+   ],
+   "bytes": 25140
+  },
+  "suit_captainWoman.glb": {
+   "kind": "suit",
+   "id": "captainWoman",
+   "meshes": [
+    {
+     "name": "suit_captainWoman",
+     "material": "tripo_mat_2cb921fe-282b-4ab1-ac49-dfc79a2ccfc5.001",
+     "points": 5756,
+     "triangles": 7059,
+     "far": 3665,
+     "check": 232658900,
+     "error": 0.01976
+    }
+   ],
+   "bytes": 21990
+  },
+  "suit_atlantis1.glb": {
+   "kind": "suit",
+   "id": "atlantis1",
+   "meshes": [
+    {
+     "name": "suit_atlantis1",
+     "material": "tripo_mat_a2d5ae38-23b1-472c-ba2a-bde07e0a71bc.001",
+     "points": 5536,
+     "triangles": 6740,
+     "far": 3610,
+     "check": 216811931,
+     "error": 0.0196
+    }
+   ],
+   "bytes": 21660
+  },
+  "suit_atlantis2.glb": {
+   "kind": "suit",
+   "id": "atlantis2",
+   "meshes": [
+    {
+     "name": "suit_atlantis2",
+     "material": "tripo_mat_2ca2ab6c-403a-4adc-b7bd-895e84eb3d3c.001",
+     "points": 5926,
+     "triangles": 6726,
+     "far": 4052,
+     "check": 229162265,
+     "error": 0.01961
+    }
+   ],
+   "bytes": 24312
+  },
+  "suit_crew1.glb": {
+   "kind": "suit",
+   "id": "crew1",
+   "meshes": [
+    {
+     "name": "suit_crew1",
+     "material": "tripo_mat_7b951650-4ca7-4dde-a7c9-749ec941bc35",
+     "points": 9360,
+     "triangles": 8440,
+     "far": 6734,
+     "check": 443474448,
+     "error": 0.0189
+    }
+   ],
+   "bytes": 40404
+  },
+  "head_captain1.glb": {
+   "kind": "head",
+   "id": "captain1",
+   "meshes": [
+    {
+     "name": "head_captain1",
+     "material": "head_captain1",
+     "points": 3700,
+     "triangles": 5991,
+     "far": 1985,
+     "check": 128864421,
+     "error": 0.00799
+    }
+   ],
+   "bytes": 11910
+  },
+  "head_vega.glb": {
+   "kind": "head",
+   "id": "vega",
+   "meshes": [
+    {
+     "name": "head_vega_1",
+     "material": "head_vega",
+     "points": 2033,
+     "triangles": 2190,
+     "far": 1682,
+     "check": 24081717,
+     "error": 0.00799
+    },
+    {
+     "name": "head_vega_2",
+     "material": "visor",
+     "points": 925,
+     "triangles": 1558,
+     "far": 416,
+     "check": 8548633,
+     "error": 0.00794
+    }
+   ],
+   "bytes": 12588
+  },
+  "head_t1.glb": {
+   "kind": "head",
+   "id": "t1",
+   "meshes": [
+    {
+     "name": "cornea_t1",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t1",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t1",
+     "material": "head_t1",
+     "points": 5886,
+     "triangles": 7529,
+     "far": 4055,
+     "check": 254004230,
+     "error": 0.00799
+    }
+   ],
+   "bytes": 24330
+  },
+  "head_t2.glb": {
+   "kind": "head",
+   "id": "t2",
+   "meshes": [
+    {
+     "name": "cornea_t2",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t2",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t2",
+     "material": "head_t2",
+     "points": 5847,
+     "triangles": 6932,
+     "far": 4072,
+     "check": 231272013,
+     "error": 0.00779
+    }
+   ],
+   "bytes": 24432
+  },
+  "head_t3.glb": {
+   "kind": "head",
+   "id": "t3",
+   "meshes": [
+    {
+     "name": "cornea_t3",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t3",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t3",
+     "material": "head_t3",
+     "points": 6311,
+     "triangles": 7515,
+     "far": 4245,
+     "check": 266458271,
+     "error": 0.00798
+    }
+   ],
+   "bytes": 25470
+  },
+  "head_t4.glb": {
+   "kind": "head",
+   "id": "t4",
+   "meshes": [
+    {
+     "name": "cornea_t4",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t4",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t4",
+     "material": "head_t4",
+     "points": 6166,
+     "triangles": 7868,
+     "far": 4028,
+     "check": 289340920,
+     "error": 0.00781
+    }
+   ],
+   "bytes": 24168
+  },
+  "head_t5.glb": {
+   "kind": "head",
+   "id": "t5",
+   "meshes": [
+    {
+     "name": "cornea_t5",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t5",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t5",
+     "material": "head_t5",
+     "points": 5989,
+     "triangles": 7506,
+     "far": 4026,
+     "check": 256689911,
+     "error": 0.008
+    }
+   ],
+   "bytes": 24156
+  },
+  "head_t6.glb": {
+   "kind": "head",
+   "id": "t6",
+   "meshes": [
+    {
+     "name": "cornea_t6",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t6",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t6",
+     "material": "head_t6",
+     "points": 5957,
+     "triangles": 7620,
+     "far": 3970,
+     "check": 261413961,
+     "error": 0.00781
+    }
+   ],
+   "bytes": 23820
+  },
+  "head_t7.glb": {
+   "kind": "head",
+   "id": "t7",
+   "meshes": [
+    {
+     "name": "cornea_t7",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t7",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t7",
+     "material": "head_t7",
+     "points": 6072,
+     "triangles": 7479,
+     "far": 4085,
+     "check": 257928042,
+     "error": 0.00794
+    }
+   ],
+   "bytes": 24510
+  },
+  "head_t8.glb": {
+   "kind": "head",
+   "id": "t8",
+   "meshes": [
+    {
+     "name": "cornea_t8",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t8",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t8",
+     "material": "head_t8",
+     "points": 6549,
+     "triangles": 8005,
+     "far": 4505,
+     "check": 298502080,
+     "error": 0.00781
+    }
+   ],
+   "bytes": 27030
+  },
+  "head_t9.glb": {
+   "kind": "head",
+   "id": "t9",
+   "meshes": [
+    {
+     "name": "cornea_t9",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t9",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t9",
+     "material": "head_t9",
+     "points": 6333,
+     "triangles": 7890,
+     "far": 4216,
+     "check": 284863151,
+     "error": 0.00784
+    }
+   ],
+   "bytes": 25296
+  },
+  "head_t10.glb": {
+   "kind": "head",
+   "id": "t10",
+   "meshes": [
+    {
+     "name": "cornea_t10",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t10",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t10",
+     "material": "head_t10",
+     "points": 5625,
+     "triangles": 7309,
+     "far": 3627,
+     "check": 232028567,
+     "error": 0.00798
+    }
+   ],
+   "bytes": 21762
+  },
+  "head_t11.glb": {
+   "kind": "head",
+   "id": "t11",
+   "meshes": [
+    {
+     "name": "cornea_t11",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_t11",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_t11",
+     "material": "head_t11",
+     "points": 5629,
+     "triangles": 6716,
+     "far": 4042,
+     "check": 214691595,
+     "error": 0.00793
+    }
+   ],
+   "bytes": 24252
+  },
+  "head_crew1.glb": {
+   "kind": "head",
+   "id": "crew1",
+   "meshes": [
+    {
+     "name": "cornea_crew1",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_crew1",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_crew1",
+     "material": "head_crew1",
+     "points": 6689,
+     "triangles": 7846,
+     "far": 4742,
+     "check": 298666980,
+     "error": 0.00798
+    }
+   ],
+   "bytes": 28452
+  },
+  "head_captain.glb": {
+   "kind": "head",
+   "id": "captain",
+   "meshes": [
+    {
+     "name": "cornea_captain",
+     "material": "cornea",
+     "points": 290,
+     "triangles": 544,
+     "far": 0,
+     "check": 920219,
+     "error": 0
+    },
+    {
+     "name": "eyes_captain",
+     "material": "eye",
+     "points": 386,
+     "triangles": 736,
+     "far": 0,
+     "check": 1668076,
+     "error": 0
+    },
+    {
+     "name": "head_captain",
+     "material": "head_captain",
+     "points": 6339,
+     "triangles": 7553,
+     "far": 4341,
+     "check": 285423971,
+     "error": 0.00794
+    }
+   ],
+   "bytes": 26046
+  },
+  "hair_captain1.glb": {
+   "kind": "hair",
+   "id": "captain1",
+   "meshes": [
+    {
+     "name": "hair_captain1",
+     "material": "hair_captain1",
+     "points": 3974,
+     "triangles": 3897,
+     "far": 1302,
+     "check": 87090460,
+     "error": 0.01986
+    }
+   ],
+   "bytes": 7812
+  },
+  "hair_q_short.glb": {
+   "kind": "hair",
+   "id": "q_short",
+   "meshes": [
+    {
+     "name": "hair_q_short",
+     "material": "Hair",
+     "points": 3564,
+     "triangles": 1188,
+     "far": 836,
+     "check": 25400627,
+     "error": 0.01993
+    }
+   ],
+   "bytes": 5016
+  },
+  "hair_q_short_smooth.glb": {
+   "kind": "hair",
+   "id": "q_short",
+   "meshes": [
+    {
+     "name": "hair_q_short",
+     "material": "Hair",
+     "points": 639,
+     "triangles": 1188,
+     "far": 859,
+     "check": 4516947,
+     "error": 0.01976
+    }
+   ],
+   "bytes": 5154
+  },
+  "hair_q_mohawk.glb": {
+   "kind": "hair",
+   "id": "q_mohawk",
+   "meshes": [
+    {
+     "name": "hair_q_mohawk",
+     "material": "Red",
+     "points": 1512,
+     "triangles": 504,
+     "far": 504,
+     "check": 4575312,
+     "error": 0
+    }
+   ],
+   "bytes": 3024
+  },
+  "hair_q_mohawk_smooth.glb": {
+   "kind": "hair",
+   "id": "q_mohawk",
+   "meshes": [
+    {
+     "name": "hair_q_mohawk",
+     "material": "Red",
+     "points": 270,
+     "triangles": 504,
+     "far": 504,
+     "check": 816870,
+     "error": 0
+    }
+   ],
+   "bytes": 3024
+  },
+  "hair_q_bob.glb": {
+   "kind": "hair",
+   "id": "q_bob",
+   "meshes": [
+    {
+     "name": "hair_q_bob",
+     "material": "Hair_Blond",
+     "points": 6384,
+     "triangles": 2128,
+     "far": 1615,
+     "check": 81523680,
+     "error": 0.01989
+    }
+   ],
+   "bytes": 9690
+  },
+  "hair_q_bob_smooth.glb": {
+   "kind": "hair",
+   "id": "q_bob",
+   "meshes": [
+    {
+     "name": "hair_q_bob",
+     "material": "Hair_Blond",
+     "points": 1127,
+     "triangles": 2128,
+     "far": 1550,
+     "check": 14527653,
+     "error": 0.01999
+    }
+   ],
+   "bytes": 9300
+  },
+  "hair_q_long.glb": {
+   "kind": "hair",
+   "id": "q_long",
+   "meshes": [
+    {
+     "name": "hair_q_long",
+     "material": "Hair_Black",
+     "points": 6780,
+     "triangles": 2260,
+     "far": 1628,
+     "check": 91909684,
+     "error": 0.01991
+    }
+   ],
+   "bytes": 9768
+  },
+  "hair_q_long_smooth.glb": {
+   "kind": "hair",
+   "id": "q_long",
+   "meshes": [
+    {
+     "name": "hair_q_long",
+     "material": "Hair_Black",
+     "points": 1196,
+     "triangles": 2260,
+     "far": 1613,
+     "check": 16334662,
+     "error": 0.01983
+    }
+   ],
+   "bytes": 9678
+  },
+  "hair_crop.glb": {
+   "kind": "hair",
+   "id": "crop",
+   "meshes": [
+    {
+     "name": "hair_crop",
+     "material": "hair_cards",
+     "points": 3835,
+     "triangles": 3696,
+     "far": 2051,
+     "check": 88970069,
+     "error": 0.01996
+    }
+   ],
+   "bytes": 12306
+  },
+  "hair_sidepart.glb": {
+   "kind": "hair",
+   "id": "sidepart",
+   "meshes": [
+    {
+     "name": "hair_sidepart",
+     "material": "hair_cards",
+     "points": 3106,
+     "triangles": 2728,
+     "far": 1661,
+     "check": 51617610,
+     "error": 0.02
+    }
+   ],
+   "bytes": 9966
+  },
+  "hair_wavy.glb": {
+   "kind": "hair",
+   "id": "wavy",
+   "meshes": [
+    {
+     "name": "hair_wavy",
+     "material": "hair_cards",
+     "points": 4220,
+     "triangles": 3934,
+     "far": 2847,
+     "check": 101624955,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 17082
+  },
+  "hair_ponytail.glb": {
+   "kind": "hair",
+   "id": "ponytail",
+   "meshes": [
+    {
+     "name": "hair_ponytail",
+     "material": "hair_cards",
+     "points": 4866,
+     "triangles": 4068,
+     "far": 2441,
+     "check": 121782017,
+     "error": 0.01992
+    }
+   ],
+   "bytes": 14646
+  },
+  "hair_afro.glb": {
+   "kind": "hair",
+   "id": "afro",
+   "meshes": [
+    {
+     "name": "hair_afro",
+     "material": "hair_cards",
+     "points": 3844,
+     "triangles": 3074,
+     "far": 1778,
+     "check": 66704358,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 10668
+  },
+  "hair_braidcrown.glb": {
+   "kind": "hair",
+   "id": "braidcrown",
+   "meshes": [
+    {
+     "name": "hair_braidcrown",
+     "material": "tripo_mat_78738cb1-8a52-40be-9163-1e784e6e9088",
+     "points": 5388,
+     "triangles": 3565,
+     "far": 1722,
+     "check": 105255813,
+     "error": 0.01986
+    }
+   ],
+   "bytes": 10332
+  },
+  "hair_crew1hair.glb": {
+   "kind": "hair",
+   "id": "crew1hair",
+   "meshes": [
+    {
+     "name": "hair_crew1hair",
+     "material": "tripo_mat_91248462-1bb0-45a5-911c-3bbdc70a7cce",
+     "points": 6817,
+     "triangles": 4812,
+     "far": 2024,
+     "check": 171615277,
+     "error": 0.01994
+    }
+   ],
+   "bytes": 12144
+  },
+  "hair_pinkSide.glb": {
+   "kind": "hair",
+   "id": "pinkSide",
+   "meshes": [
+    {
+     "name": "hair_pinkSide",
+     "material": "tripo_mat_f99dd1d6-fbcb-4ac7-8169-e199dbcda88b.001",
+     "points": 6586,
+     "triangles": 4531,
+     "far": 2010,
+     "check": 158960196,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 12060
+  },
+  "hair_coil.glb": {
+   "kind": "hair",
+   "id": "coil",
+   "meshes": [
+    {
+     "name": "hair_bumpy",
+     "material": "tripo_mat_cc80cca4-e179-4524-a6bb-3b9ec5293182.001",
+     "points": 5666,
+     "triangles": 2819,
+     "far": 1943,
+     "check": 91010912,
+     "error": 0.01991
+    }
+   ],
+   "bytes": 11658
+  },
+  "hair_mohawk.glb": {
+   "kind": "hair",
+   "id": "mohawk",
+   "meshes": [
+    {
+     "name": "hair_mohawk",
+     "material": "tripo_mat_322d62bc-cb76-4913-a02c-6bc75b94e611.002",
+     "points": 4951,
+     "triangles": 3135,
+     "far": 1335,
+     "check": 84584116,
+     "error": 0.01994
+    }
+   ],
+   "bytes": 8010
+  },
+  "hair_mediumFull.glb": {
+   "kind": "hair",
+   "id": "mediumFull",
+   "meshes": [
+    {
+     "name": "hair_mediumFull",
+     "material": "tripo_mat_2ffdf2b6-b9b1-4f07-bbf7-9a6990c0a976.001",
+     "points": 5792,
+     "triangles": 3689,
+     "far": 2070,
+     "check": 115038844,
+     "error": 0.01993
+    }
+   ],
+   "bytes": 12420
+  },
+  "hair_whiteStripeLeftLong.glb": {
+   "kind": "hair",
+   "id": "whiteStripeLeftLong",
+   "meshes": [
+    {
+     "name": "hair_whiteStripeLeftLong",
+     "material": "tripo_mat_4f640618-8a12-483f-890b-f5a0d77f5c49.001",
+     "points": 4500,
+     "triangles": 3316,
+     "far": 1177,
+     "check": 76890852,
+     "error": 0.01989
+    }
+   ],
+   "bytes": 7062
+  },
+  "hair_spikey.glb": {
+   "kind": "hair",
+   "id": "spikey",
+   "meshes": [
+    {
+     "name": "hair_spikey",
+     "material": "tripo_mat_136bc0fe-90e0-4538-8713-b4cf177655d9",
+     "points": 6047,
+     "triangles": 3683,
+     "far": 2063,
+     "check": 124454037,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 12378
+  },
+  "hair_shortFull.glb": {
+   "kind": "hair",
+   "id": "shortFull",
+   "meshes": [
+    {
+     "name": "hair_shortFull",
+     "material": "tripo_mat_1e49cf7a-f4fd-47dd-aed5-13b6065e7f22",
+     "points": 4188,
+     "triangles": 3190,
+     "far": 1249,
+     "check": 66747293,
+     "error": 0.01989
+    }
+   ],
+   "bytes": 7494
+  },
+  "hair_shortHairToSide.glb": {
+   "kind": "hair",
+   "id": "shortHairToSide",
+   "meshes": [
+    {
+     "name": "hair_shortHairToSide",
+     "material": "tripo_mat_b636ff53-d3e0-4cae-8372-213af16e838b",
+     "points": 2293,
+     "triangles": 1638,
+     "far": 920,
+     "check": 19046034,
+     "error": 0.01976
+    }
+   ],
+   "bytes": 5520
+  },
+  "hair_shortHairToRight.glb": {
+   "kind": "hair",
+   "id": "shortHairToRight",
+   "meshes": [
+    {
+     "name": "hair_shortHairToRight",
+     "material": "tripo_mat_ac55817a-e5a1-4453-912a-7c3c05645d4f",
+     "points": 5929,
+     "triangles": 3192,
+     "far": 2023,
+     "check": 102228740,
+     "error": 0.0199
+    }
+   ],
+   "bytes": 12138
+  },
+  "hair_curlyHead.glb": {
+   "kind": "hair",
+   "id": "curlyHead",
+   "meshes": [
+    {
+     "name": "hair_curlyHead",
+     "material": "tripo_mat_14b2219f-6925-4177-9a9e-24bbc3f1f797",
+     "points": 9697,
+     "triangles": 6633,
+     "far": 2979,
+     "check": 346472126,
+     "error": 0.01992
+    }
+   ],
+   "bytes": 17874
+  },
+  "hair_curlyShort.glb": {
+   "kind": "hair",
+   "id": "curlyShort",
+   "meshes": [
+    {
+     "name": "hair_curlyShort",
+     "material": "tripo_mat_dd9e00f1-9717-45b9-b8ef-6b58e58019eb",
+     "points": 8620,
+     "triangles": 5106,
+     "far": 2260,
+     "check": 242012635,
+     "error": 0.01992
+    }
+   ],
+   "bytes": 13560
+  },
+  "hand_man.glb": {
+   "kind": "hand",
+   "id": "man",
+   "meshes": [
+    {
+     "name": "hand_man",
+     "material": "tripo_mat_dcef6bb5-ef8b-4900-8999-bae0d49218da",
+     "points": 5634,
+     "triangles": 7024,
+     "far": 926,
+     "check": 228967492,
+     "error": 0.00991
+    }
+   ],
+   "bytes": 5556
+  },
+  "hand_woman.glb": {
+   "kind": "hand",
+   "id": "woman",
+   "meshes": [
+    {
+     "name": "hand_woman",
+     "material": "tripo_mat_a154e553-64c7-46d9-8ff9-c5dae9fe6ebc",
+     "points": 5514,
+     "triangles": 7036,
+     "far": 786,
+     "check": 228786875,
+     "error": 0.0099
+    }
+   ],
+   "bytes": 4716
+  }
+ }
+}
