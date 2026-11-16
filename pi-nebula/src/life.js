@@ -69,8 +69,8 @@ export const SPOTS = {
   medicHangar: hangarSpots('hangar-medic'),
   // work: the mechanic at the Explorer hangar's long crate, the dock worker by the far crates
   // the mechanics at the parked ships' tails, at their engines
-  mechanic: [{ room: 'hangar', at: [0.285, 0.43], face: [1, 0.05] }],
-  minerMechanic: [{ room: 'hangar-miner', at: [0.285, 0.57], face: [1, -0.05] }],
+  mechanic: [{ room: 'hangar', at: [0.285, 0.43], face: [1, 0.08] }, { room: 'hangar', at: [0.285, 0.57], face: [1, -0.08] }],
+  minerMechanic: [{ room: 'hangar-miner', at: [0.285, 0.43], face: [1, 0.08] }, { room: 'hangar-miner', at: [0.285, 0.57], face: [1, -0.08] }],
   dock: [{ piece: 'crate', variant: 'small', room: 'hangar', all: true, local: [0, 0, -1.1], face: [0, 1] }],
   // the smelter: by the forge (the hall's middle), its store, its lobby
   forge: [{ room: 'smelter-hall', at: [0.5, 0.5], face: [0, -1] }],
@@ -120,7 +120,7 @@ export const ROSTER = [
   { id: 'smelter', name: 'The smelter', look: 'smelter', day: [{ do: 'post:forge', clip: 'forge', for: T(50, 100) }, { do: 'stand:forgeConsole', for: T(12, 25) }, { do: 'stand:store', for: T(10, 20), p: 0.5 }] },
   { id: 'medic', name: 'The medic', look: 'medic', day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },
   { id: 'mechanic', name: 'A mechanic', look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'hauler', uniform: '#f0892e', skin: '#a66d45', hair: '#17110d' }, size: 1.07 },
-    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'post:mechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach' }, { do: 'post:mechanic', clip: 'hammer', for: T(30, 60) }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
+    day: [{ do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'post:mechanic', clip: 'reach', for: T(15, 30) }, { do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.6 }, { do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach', p: 0.5 }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
   { id: 'traveller', name: 'A traveller', look: { suit: 'civilian', head: 't1', hair: 'shortFull', colours: { job: 'explorer', skin: '#c48a62', hair: '#8f8a84' } },
     day: [{ do: 'stand:board', for: T(12, 25) }, { do: 'sit:window', for: T(40, 90) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(120, 240) }, { do: 'stand:booth', for: T(15, 30) }] },
   { id: 'crew-ada', name: 'A crew member', look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#9b6ddb', skin: '#e8bf9f', hair: '#6b4127' } },
@@ -135,10 +135,10 @@ export const ROSTER = [
   { id: 'medic-ren', name: 'A medic', look: { suit: 'atlantis2', head: 't3', hair: 'wavy', colours: { job: 'medic', uniform: '#2ec4b6', skin: '#f2d3bd', hair: '#a83c22' } },
     day: [{ do: 'stand:medic', for: T(25, 50), clip: 'reach' }, { do: 'talk:medical', for: T(20, 40) }, { do: 'stand:medicHangar', for: T(20, 40) }, { do: 'sit:cafe', for: T(120, 240) }, { do: 'stand:counter', for: T(6, 12) }] },
   { id: 'mechanic-ade', name: 'A mechanic', look: { suit: 'atlantis1', head: 't4', hair: 'shortFull', colours: { job: 'miner', uniform: '#3b4a5c', skin: '#86522f', hair: '#2e1f15' } },
-    day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'post:minerMechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(15, 30), clip: 'reach' }, { do: 'post:minerMechanic', clip: 'hammer', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40), p: 0.4 }] },
+    day: [{ do: 'post:minerMechanic', clip: 'hammer', for: T(25, 45) }, { do: 'post:minerMechanic', clip: 'reach', for: T(15, 30) }, { do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.6 }, { do: 'post:minerMechanic', clip: 'hammer', for: T(25, 45) }, { do: 'stand:minerHangar', for: T(15, 30), clip: 'reach' }, { do: 'talk:lobby', for: T(20, 40), p: 0.4 }] },
   { id: 'medic-ana', name: 'A medic', look: { suit: 'atlantis2', head: 't5', hair: 'q_long', colours: { job: 'medic', uniform: '#3f8fe8', skin: '#86522f', hair: '#17110d' } },
     day: [{ do: 'stand:medic', for: T(25, 50) }, { do: 'sit:waiting', for: T(20, 40) }, { do: 'stand:medic', for: T(20, 40), clip: 'reach' }, { do: 'talk:medical', for: T(20, 40) }] },
-  { id: 'miner-jon', name: 'A miner', look: { suit: 'crew1', head: 't1', hair: 'crop', colours: { job: 'miner', skin: '#e8bf9f', hair: '#b4824f' } },
+  { id: 'miner-jon', name: 'A miner', look: { suit: 'spaceMan', head: 't1', hair: 'crop', colours: { job: 'miner', skin: '#e8bf9f', hair: '#b4824f' } },
     day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:store', for: T(15, 30), clip: 'reach' }, { do: 'sit:control', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(25, 50) }, { do: 'sit:waiting', for: T(25, 50) }] },
   { id: 'miner-oso', name: 'A miner', look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#663b22', hair: '#17110d' } },
     day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:minerHangar', for: T(30, 60), clip: 'reach' }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(120, 240) }] },

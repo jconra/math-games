@@ -333,7 +333,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // the next thing in a person's day
   function next(P) {
-    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false;
+    release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false;
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
       const step = P.day[P.k];
@@ -588,13 +588,22 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (yd > 0.05 && Y.t < 2) {
         const s = Math.min(yd, P.speed * 0.8 * dt);
         P.heading = wrap(P.heading + Math.sign(wrap(Math.atan2(yx, yz) - P.heading)) * Math.min(Math.abs(wrap(Math.atan2(yx, yz) - P.heading)), LIFE.turn * dt));
-        walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26); play(P, CLIPS.walk, { speed: 0.8 });
+        const g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26);
+        if (g < s * 0.3) { Y.t = 2; play(P, STAND); } else play(P, CLIPS.walk, { speed: 0.8 });   // (blocked: no walking on the spot)
       } else {
         const Q = Y.for; play(P, STAND);
         const gone = !Q.walking || Q.hidden || Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) > 1.6 || Y.t > 6;
         if (gone) { P.yielding = null; P.held = 0; P.side = 0; }
       }
       return;
+    }
+    // (getting nowhere for two seconds while walking, jiggling on the spot: the way worked out afresh from here; a
+    // second time on one errand, the errand given up)
+    if (P.jam) {
+      P.jam = false; if (P.trail) P.trail.length = 0;
+      alarms.jams = (alarms.jams || 0) + 1;
+      if (!P.jammed) { P.jammed = true; P.side = 0; stillV++; play(P, STAND); route(P, P.way[P.way.length - 1]); return; }
+      alarms.gaveUp++; next(P); return;
     }
     const W2 = P.way;
     let goal = W2[P.wi];
@@ -646,7 +655,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // came, onto a patch or toward anyone)
     if (!by && got < step * 0.3) {
       const ux = gx / (gd || 1), uz = gz / (gd || 1);
-      let bx = 0, bz = 0, bd = -0.35;
+      let bx = 0, bz = 0, bd = 0.2;
       for (let i = 0; i < 16; i++) {
         const a = i / 16 * Math.PI * 2, vx = Math.sin(a), vz = Math.cos(a), dot = vx * ux + vz * uz;
         if (dot <= bd) continue;
@@ -696,18 +705,22 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const T = auditClock; auditClock = 0;
     for (const P of list) {
       if (P.hidden) continue;
-      // stuck: a way to go, and less than 0.25 m gained in LIFE.stuck seconds
-      // (making way for someone is not being stuck)
+      // stuck: a way to go, and less than 0.4 m from where they were LIFE.stuck seconds ago (as the crow flies, so someone
+      // jiggling back and forth on the spot is stuck too); making way for someone is not being stuck
+      const tr = P.trail || (P.trail = []);
       if (P.walking && !P.yielding) {
-        P.gain += T;
-        if (P.pos.distanceTo(P.lastGain) > 0.25) { P.lastGain.copy(P.pos); P.gain = 0; P.stuckSaid = false; }
-        else if (P.gain > LIFE.stuck && !P.stuckSaid) {
+        tr.push(P.pos.x, P.pos.z); if (tr.length > 2 * Math.round(LIFE.stuck / 0.25 + 1)) tr.splice(0, 2);
+        const full = tr.length >= 2 * Math.round(LIFE.stuck / 0.25 + 1), moved = Math.hypot(P.pos.x - tr[0], P.pos.z - tr[1]);
+        // (not getting anywhere for two seconds, walking or not: held, so they stand and work the way out afresh)
+        const two = tr.length >= 18 ? Math.hypot(P.pos.x - tr[tr.length - 18], P.pos.z - tr[tr.length - 17]) : Infinity;
+        P.jam = two < 0.3;
+        if (full && moved < 0.4 && !P.stuckSaid) {
           P.stuckSaid = true;
           // (waiting for the player to get out of the way is good manners, not stuck: counted apart)
           if (P.by === 'player') alarms.waitedForPlayer = (alarms.waitedForPlayer || 0) + 1;
           else alarm('stuck', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (held by ' + (P.by || '?') + ', ' + (P.act?.spot?.name || P.act?.kind) + ')');
-        }
-      } else { P.gain = 0; P.lastGain.copy(P.pos); }
+        } else if (moved > 0.8) P.stuckSaid = false;
+      } else { tr.length = 0; P.jam = false; }
       // in a wall (a sitter is on a seat: not counted)
       const sitting = P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising');
       if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.phase || '') + ' ' + (P.act.spot?.name || '') : '-') + (P.walking ? ', walking' : '') + (P.yielding ? ', making way' : '') + ')');
