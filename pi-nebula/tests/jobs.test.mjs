@@ -223,6 +223,19 @@ test('an answer: the first pick counts, a right one pays, a miss pays nothing, t
   assert.equal(crew.jobs.galley.n, 9);
 });
 
+test('the pay: about 50 credits at the easiest level, about 100 in the middle, 200 at the top, in tens, for every job', () => {
+  assert.equal(E.payFor({ grade: 0 }), 50);
+  assert.equal(E.payFor({ grade: 80 }), 200);
+  assert.equal(E.payFor({ grade: 100 }), 200, 'no more above the top');
+  assert.ok(E.payFor({ grade: 30 }) >= 90 && E.payFor({ grade: 30 }) <= 110, String(E.payFor({ grade: 30 })));
+  for (const J of OPEN) {
+    E.register(J);
+    for (const L of J.place.levels) { const p = E.payFor(L); assert.ok(p >= 50 && p <= 200 && p % 10 === 0, `${J.id}/${L.id}: ${p}`); }
+  }
+  assert.ok(E.PAY.after > 0 && E.PAY.after < E.payFor({ grade: 0 }), 'a right pick after a miss pays a little');
+  assert.equal(E.SHIP, 50000);
+});
+
 test('the arrows step the level by hand, and stop at the ends', () => {
   const crew = crewOf();
   E.deal(crew, medical, { rand: seeded(1) });
