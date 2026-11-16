@@ -57,7 +57,7 @@ export function followCam(W, walls, site = null) {
   const from = new THREE.Vector3();
   const at = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3(), dir = new THREE.Vector3(), hook = new THREE.Vector3();
   let fresh = true;
-  const F = { orbit: 0, zoom: 7.5, fresh() { fresh = true; },
+  const F = { orbit: 0, zoom: 7.5, side: 1, fresh() { fresh = true; },
     aim(camera, S, dt, { chair = null, shift = null, below = 0 } = {}) {
       if (chair) { want.copy(chair.at); wantLook.copy(chair.look); if (camera.fov !== chair.fov) { camera.fov = chair.fov; camera.updateProjectionMatrix(); } }
       else {
@@ -66,7 +66,9 @@ export function followCam(W, walls, site = null) {
         const ship = Math.abs(Math.sin(S.yaw)) > 0.5;
         // (the wall's leg: from the hangar floor's side; the ship's leg: off the side of the ship the load is on, but never
         // behind the hangar's wall: coming toward the turntable it swings round to look from beside the rail)
-        const side = ship && shipMid != null ? (hook.z < shipMid ? -1 : 1) : 1;
+        // (it changes ends only once the load is well past the ship's middle: not back and forth there)
+        const side = !ship || shipMid == null ? 1 : hook.z < shipMid - 0.6 ? -1 : hook.z > shipMid + 0.6 ? 1 : F.side;
+        F.side = side;
         let base = ship ? Math.atan2(0.35, side) : Math.atan2(0.38, 1);
         if (ship && shipMid != null && site.wallZ != null) {
           const hang = Math.sign(shipMid - site.wallZ) || 1;   // (which way the hangar lies from the wall)
@@ -99,10 +101,11 @@ export function followCam(W, walls, site = null) {
   return F;
 }
 
-// a push on the stick (x right, y forward on the screen) as a push across the station's plane, from the camera
-export function pushFrom(camera, move) {
+// a push on the stick (x right, y forward on the screen) as a push across the station's plane, from the camera (or
+// from `ahead`, the camera's level forward as it was when the push began: see openDrive)
+export function pushFrom(camera, move, ahead = null) {
   if (!move || !move.mag) return [0, 0];
-  const f = camera.getWorldDirection(new THREE.Vector3()); f.y = 0;
+  const f = ahead ? ahead.clone() : camera.getWorldDirection(new THREE.Vector3()); f.y = 0;
   if (f.lengthSq() < 1e-6) return [0, 0];
   f.normalize();
   const rx = -f.z, rz = f.x;   // (the camera's right, level)
@@ -151,6 +154,9 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
   const $ = (s) => el.querySelector(s);
   const held = { up: false, down: false };
   let closed = false, view = 'follow', taps = { grab: false, turn: false }, noteText = '', noteT = 0, t = 0, peopleT = -9;
+  // (a push keeps the way it was given while it is held, though the view swings round as the load goes past the
+  // ship's middle: let go and push again for the view's new way)
+  let ahead = null;
   const cam = followCam(W, walls, crane.L && crane.L.site);
   if (input) input.enabled = true;
   crane.take();
@@ -188,7 +194,10 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
     const kb = (c) => !!(input && input.enabled && input.held && input.held(c));
     const up = held.up || kb('KeyR') || kb('Space'), down = held.down || kb('KeyF') || kb('KeyC');
     const r0 = D.read();
-    const cmd = { move: squarePush(pushFrom(W.camera, input && input.move), D.state.yaw), hoist: (up ? 1 : 0) - (down ? 1 : 0) };
+    const mv = input && input.move;
+    if (!(mv && mv.mag)) ahead = null;
+    else if (!ahead) { ahead = W.camera.getWorldDirection(new THREE.Vector3()); ahead.y = 0; if (ahead.lengthSq() < 1e-6) ahead = null; else ahead.normalize(); }
+    const cmd = { move: squarePush(pushFrom(W.camera, mv, ahead), D.state.yaw), hoist: (up ? 1 : 0) - (down ? 1 : 0) };
     if (taps.grab) cmd.grab = r0.shut || D.state.arms > 0.5 ? 'open' : 'shut';
     if (taps.turn) cmd.turn = true;
     taps = { grab: false, turn: false };
