@@ -2629,6 +2629,12 @@ function assemble(suit, others) {
 // necks are long above the joint (t1, t5, t6, t8, t11, crew 1, the captains) sit 15 mm lower. No seat brings that
 // uniform's nape and chin both well inside a person's range: its collar's back wants raising in Blender.
 // ~/pw/space-math/PROPORTIONS.md)
+// (2026-11-16; the game's maker: "Can we fix those issues like the elbow position and men's heads being to small". The
+// men's Tripo heads were made at a woman's size: 20.5 to 21.7 cm chin to crown and 14.0 to 14.9 cm wide, where a man's
+// is 23.2 and 15.2 on the mean, so the men stood 8.2 to 8.7 heads tall (a person: 7.1 to 8.15) on outfits of an average
+// man's height. Each is sized at its own level, THIS HEAD, EVERY OUTFIT: t6 and t8 112%, crew1 110%, t1 108%, t4 105%,
+// t2 103%; the men now stand 7.7 to 7.9 heads tall. The women's heads and t10 (a boy of about 16) as made.
+// ~/pw/space-math/PROPORTIONS_2.md)
 // Done on the bind, not the points (placeHead): each outfit bone the head and hair are skinned to carries them by the
 // move at rest (its inverse bind led by it), and the part's own bones (eyes, face) are moved, turned and sized the same,
 // so every point moves alike whatever its weights, the head's neck as made (never cut, never stretched), its eyes, face

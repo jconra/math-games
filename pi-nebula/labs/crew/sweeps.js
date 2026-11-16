@@ -103,11 +103,15 @@ export function pokeOf(c) {
   if (!hm || !hairs.length) return null;
   return atRest(c, () => {
     const head = c.bones.Head, H = pointsOf(hm, head, true);
+    // (2026-11-16: a head worn sized (kit/crew.js THE HEAD'S PLACE: size) carries its hair sized with it, so every length
+    // here is the head's own, times its size, k: a sized pair reads as it did unsized, its millimetres k times. A
+    // head as made: k 1, as before)
+    const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
     // (the skull's centre: the middle of the head's top 12 cm, side to side and front to back, 9 cm under its top)
     let x0 = Infinity, x1 = -Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let i = 0; i < H.n; i++) if (H.HW[i] > 0.5) y1 = Math.max(y1, H.P[i * 3 + 1]);
-    for (let i = 0; i < H.n; i++) { if (H.HW[i] <= 0.5 || H.P[i * 3 + 1] < y1 - 0.12) continue; x0 = Math.min(x0, H.P[i * 3]); x1 = Math.max(x1, H.P[i * 3]); z0 = Math.min(z0, H.P[i * 3 + 2]); z1 = Math.max(z1, H.P[i * 3 + 2]); }
-    const O = [(x0 + x1) / 2, y1 - 0.09, (z0 + z1) / 2];
+    for (let i = 0; i < H.n; i++) { if (H.HW[i] <= 0.5 || H.P[i * 3 + 1] < y1 - 0.12 * k) continue; x0 = Math.min(x0, H.P[i * 3]); x1 = Math.max(x1, H.P[i * 3]); z0 = Math.min(z0, H.P[i * 3 + 2]); z1 = Math.max(z1, H.P[i * 3 + 2]); }
+    const O = [(x0 + x1) / 2, y1 - 0.09 * k, (z0 + z1) / 2];
     const bin = (x, y, z) => {
       const dx = x - O[0], dy = y - O[1], dz = z - O[2], r = Math.hypot(dx, dy, dz);
       const a = Math.floor(((Math.atan2(dx, dz) * DEG + 360) % 360) / STEP) % NA, e = Math.min(NE - 1, Math.floor((Math.asin(Math.max(-1, Math.min(1, dy / r))) * DEG + 90) / STEP));
@@ -121,9 +125,9 @@ export function pokeOf(c) {
         const ia = I ? I.getX(t) : t, ib = I ? I.getX(t + 1) : t + 1, ic = I ? I.getX(t + 2) : t + 2;
         A.fromArray(P, ia * 3); B.fromArray(P, ib * 3); Cc.fromArray(P, ic * 3);
         // (each triangle sampled about every 1.5 mm)
-        const L = Math.max(A.distanceTo(B), B.distanceTo(Cc), Cc.distanceTo(A)), k = Math.min(40, Math.max(1, Math.ceil(L / 0.0015)));
-        for (let u = 0; u <= k; u++) for (let v = 0; v <= k - u; v++) {
-          const w = k - u - v, x = (A.x * u + B.x * v + Cc.x * w) / k, y = (A.y * u + B.y * v + Cc.y * w) / k, z = (A.z * u + B.z * v + Cc.z * w) / k;
+        const L = Math.max(A.distanceTo(B), B.distanceTo(Cc), Cc.distanceTo(A)), ks = Math.min(40, Math.max(1, Math.ceil(L / (0.0015 * k))));
+        for (let u = 0; u <= ks; u++) for (let v = 0; v <= ks - u; v++) {
+          const w = ks - u - v, x = (A.x * u + B.x * v + Cc.x * w) / ks, y = (A.y * u + B.y * v + Cc.y * w) / ks, z = (A.z * u + B.z * v + Cc.z * w) / ks;
           const [b, r] = bin(x, y, z); if (r < lo[b]) lo[b] = r; if (r > hi[b]) hi[b] = r;
         }
       }
@@ -155,9 +159,9 @@ export function pokeOf(c) {
       if (Math.abs(Math.abs(az) - 90) < 35 && el < 20) continue;
       out.points++;
       const di = (r - lo[b]) * 1000, dout = (r - hi[b]) * 1000;
-      if (di > 1) { out.inner++; out.innerMm = Math.max(out.innerMm, di); }
-      if (dout > 0.5) { out.outer++; if (dout > out.outerMm) { out.outerMm = dout; out.worst = [Math.round(az), Math.round(el)]; } }
-      if (dout > 0.5 && ringed(b)) { out.through++; if (dout > out.throughMm) { out.throughMm = dout; out.throughWorst = [Math.round(az), Math.round(el)]; } }
+      if (di > 1 * k) { out.inner++; out.innerMm = Math.max(out.innerMm, di); }
+      if (dout > 0.5 * k) { out.outer++; if (dout > out.outerMm) { out.outerMm = dout; out.worst = [Math.round(az), Math.round(el)]; } }
+      if (dout > 0.5 * k && ringed(b)) { out.through++; if (dout > out.throughMm) { out.throughMm = dout; out.throughWorst = [Math.round(az), Math.round(el)]; } }
     }
     out.innerMm = Math.round(out.innerMm * 10) / 10; out.outerMm = Math.round(out.outerMm * 10) / 10; out.throughMm = Math.round(out.throughMm * 10) / 10;
     return out;
