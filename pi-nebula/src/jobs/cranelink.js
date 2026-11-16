@@ -29,7 +29,9 @@ export function craneLink({ crane, W, walls }) {
   let closed = false, waiting = [];
 
   // ── the questions ask, a right answer moves ───────────────────────────────────────────────────────────────────
-  const ask = (kind, opts) => (crane.live ? Q.ask(kind, opts) : null);
+  // (the moves before the one asked about, the crane makes by itself straight away: it is in place as the card is read,
+  // not still where the last answer left it)
+  const ask = (kind, opts) => { if (!crane.live) return null; const r = Q.ask(kind, opts); if (r) go(Q.before()); return r; };
   function go(steps) { if (!steps.length) return; if (crane.live) crane.live.go(steps); else waiting.push(...steps); }
   function right(q) {
     const f = q && q.order && q.order.facts;

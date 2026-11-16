@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planCycle, planFrom, stateAt, cleanAt, canAt, loadAt } from '../kit/crane-plan.js';
 import { makeDrive, DRIVE } from '../kit/crane-drive.js';
-import { JOB as crane, FREE, tripFrom, makeJobQueue, marksOf, RATED, EMPTY, CHANGE_AT } from '../src/jobs/crane.js';
+import { JOB as crane, FREE, tripFrom, makeJobQueue, marksOf, mountName, RATED, EMPTY, CHANGE_AT } from '../src/jobs/crane.js';
 import * as E from '../src/jobs/engine.js';
 import { helpPicture } from '../src/jobs/pics.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
@@ -216,6 +216,10 @@ test('the job\'s queue: a question holds the next move of its kind, on the level
   assert.deepEqual(ahead[0], ['trip', 'along', 'route']);
   assert.ok(ahead.some((k) => k.includes('grab')), JSON.stringify(ahead));
   assert.equal(crane.pickAsk([{ maker: 'weight', step: 1 }], { live: { ahead: Qu.ahead } }).maker, 'weight');
+  // the Miner's eight places each have their own name on the cards
+  const names = site.mounts.map((m, i) => mountName(site, i));
+  assert.equal(new Set(names).size, 8, names.join(' | '));
+  assert.equal(names[0], "the top canister on the rack's side at the ship's wall end");
   // and a question about no move (Mathwood's word problems) still comes, by its weight
   const mixT = [{ maker: 'trips', step: 1, w: 1.5 }, { maker: 'words', step: 7, w: 1 }];
   assert.equal(crane.pickAsk(mixT, { rand: () => 0, live: { ahead: Qu.ahead } }).maker, 'trips');
@@ -275,4 +279,19 @@ test('the job\'s makers are right: distances, heights, plus and minus, times, we
 test('free control and the crane operator job share the operator area, a side each', () => {
   assert.equal(FREE.pair, crane.pair); assert.notEqual(FREE.side, crane.side);
   assert.equal(FREE.drive, true); assert.equal(FREE.place, null); assert.ok(crane.place && crane.open && FREE.open);
+});
+
+test('the job\'s queue: the moves before an asked one are made as the card comes, the asked one on the right answer', () => {
+  const plan = planCycle(site), S = stateAt(plan, 0), Qu = makeJobQueue(site, { start: () => S, oreOf: () => 1.2 });
+  // a weight card holds the first grab of a canister: the crane goes there (and down to it) by itself first
+  const w = Qu.ask('weight');
+  assert.ok(w);
+  const before = Qu.before();
+  assert.ok(before.some((s) => s.axis === 'along') && before.some((s) => s.axis === 'hoist'), JSON.stringify(before));
+  assert.ok(!before.some((s) => s.grab === 'shut'));
+  assert.deepEqual(Qu.before(), []);   // (made once)
+  // the right answer: the grab and the lift
+  const right = Qu.right(w.id);
+  assert.equal(right[0].grab, 'shut');
+  assert.ok(right.some((s) => s.axis === 'hoist'));
 });

@@ -53,7 +53,10 @@ export function marksOf(site) {
 }
 const sockName = (site, k) => { const K = site.sockets, cols = [...new Set(K.map((s) => s.at[0].toFixed(2)))].sort((a, b) => a - b); return `socket ${cols.indexOf(K[k].at[0].toFixed(2)) * 2 + (K[k].upper ? 2 : 1)}`; };
 const bayName = (j) => `bay ${j + 1} of the rack`;
-const mountName = (site, i) => { const m = site.mounts[i], front = m.out[1] < 0; return `the ${m.upper ? 'top' : 'bottom'} canister on the ship's ${front ? 'wall' : 'far'} side`; };
+// a place on the Miner in words: top or bottom; the ship's end (the wall's end, toward the turntable, or the far end:
+// each end's trays slide out toward it); and its side, the rack's or the sockets' (the eight places are all different)
+const sideOf = (site, x) => { const rack = site.bays.length ? site.bays.reduce((q, b) => q + b.at[0], 0) / site.bays.length : site.shipX + 1; return (x - site.shipX) * (rack - site.shipX) > 0 ? 'the rack\'s' : 'the sockets\''; };
+export const mountName = (site, i, noun = 'canister') => { const m = site.mounts[i]; return `the ${m.upper ? 'top' : 'bottom'} ${noun} on ${sideOf(site, m.at[0])} side at the ship's ${m.out[1] < 0 ? 'wall' : 'far'} end`; };
 
 // ── the trips: what the round would do next, as moves ────────────────────────────────────────────────────────────
 // P: { x, z, yaw, slide, hoist, held, cans: [{ where, i, fill }] } (a planned state: where things will be once the
@@ -86,14 +89,14 @@ export function tripFrom(site, P, rand = Math.random) {
   // ── the moves at each kind of place ──
   function takeFromMount(i) {
     const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = who('mount', i), what = mountName(site, i);
-    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
+    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `${sideOf(site, o[0])} side of the ship`);
     steps.push({ kind: 'wait', for: 'tray', i });
     hoist(m.at[1] + lift, what); grab('shut', what, c); P.held = c; P.cans[c].where = 'held';
     up();
   }
   function putOnMount(i) {
-    const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = P.held, what = `the ship's ${m.upper ? 'top' : 'bottom'} mount on its ${m.out[1] < 0 ? 'wall' : 'far'} side`;
-    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `the ship's ${m.out[1] < 0 ? 'wall' : 'far'} side`);
+    const m = M[i], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]], c = P.held, what = mountName(site, i, 'mount');
+    toLeg('ship'); up(); along(o[1], what); slide(slideFor(o[0], o[1]), `${sideOf(site, o[0])} side of the ship`);
     steps.push({ kind: 'wait', for: 'tray', i });
     hoist(m.at[1] + lift, what); grab('open', what, c); P.cans[c].where = 'mount'; P.cans[c].i = i; P.held = -1;
     up();
@@ -118,7 +121,7 @@ export function tripFrom(site, P, rand = Math.random) {
     slide(slideFor(Dk[0], Dk[1]), what, true); steps.push({ kind: 'wait', for: 'dogs', k });
     grab('open', what, c); P.cans[c].where = 'socket'; P.cans[c].i = k; P.held = -1;
     P.cans[c].fill = 0;   // (drained by the time the crane comes back for it: the live crane waits for it if not)
-    hoist(s.at[1] + rise, `clear of ${what}`); slide(slideFor(Wt[0], Wt[1]), `in front of ${what}`);
+    hoist(s.at[1] + rise, `just over the canister in ${what}`); slide(slideFor(Wt[0], Wt[1]), `in front of ${what}`);
     up();
   }
   function takeFromSocket(k) {
@@ -346,7 +349,7 @@ export const MAKERS = {
   slide: {
     strand: 'dec', at: () => 48,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'slide', { prec: 0.1, least: 0.3 }) || { from: 0, to: t.pick([1.2, -1.2, 0.8]), what: 'the ship\'s wall side' };
+      const t = kit(rand), s = fromLive(live, 'slide', { prec: 0.1, least: 0.3 }) || { from: 0, to: t.pick([1.2, -1.2, 0.8]), what: 'the rack\'s side of the ship' };
       const a = s.from, b = s.to, d = r2(Math.abs(b - a));
       return ownOrder({
         key: 'slide', story: `The carriage runs along the trolley's beam; its marks count from the middle. It is at ${t1(a)} m and must go to ${t1(b)} m, over ${s.what}.`, ask: 'How far does the carriage move?',
@@ -607,6 +610,12 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
     cursor = Math.max(cursor, last + 1);
     return out;
   }
+  // the moves before the one a question holds, which the crane makes by itself: made as the card comes, so the crane is
+  // where the card says by the time it is read
+  Q.before = function before() {
+    const R = Q.reserved;
+    return R && R.k > cursor ? upTo(R.k - 1) : [];
+  };
   // a right answer: the moves up to and including the one it held (a weight: through the lift; a trip: the first move;
   // a route: the whole way); a question that held none: the next move
   Q.right = function right(id) {
