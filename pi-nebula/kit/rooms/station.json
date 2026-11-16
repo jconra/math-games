@@ -6020,7 +6020,7 @@
         {"piece":"trim","cell":[23.5,42],"turn":3,"variant":"cornice"},
         {"piece":"bigscanner","cell":[21.5,42.5],"turn":2,"variant":"slim ring","off":[0,0,0.22]},
         {"piece":"cabinStretcher","cell":[20.5,40.5],"turn":0,"variant":"low","off":[-0.4,0,-0.4]},
-        {"piece":"pulse","cell":[21.5,42.5],"turn":2,"variant":"long","off":[0,2.66,0.36]},
+        {"piece":"pulse","cell":[21.5,42.5],"turn":2,"variant":"long","off":[0,2.63,0.36]},
         {"piece":"screen","cell":[19.5,40],"turn":1,"variant":"status","off":[0,1.35,0]}
       ]
     },

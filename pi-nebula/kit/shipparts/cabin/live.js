@@ -15,8 +15,10 @@
 //                             width, o.lean how the band lies (0: flat in the circle's plane, a washer facing +z;
 //                             PI / 2: a hoop's inner wall, facing the middle; between: a cone opening toward +z),
 //                             o.every seconds a turn (a whole number, 4), o.turn 1 or -1 (which way round), o.seg 64,
-//                             o.glow and o.gain as a lamp's. The circle lies in the x-y plane, centred on `at`, before
-//                             it is turned. Its brightest is twice its colour, its dimmest three tenths of it.
+//                             o.glow and o.gain as a lamp's, o.rest how bright the band is away from its bright part
+//                             (0..1 of its colour, 0.12). The circle lies in the x-y plane, centred on `at`, before it
+//                             is turned. Its bright part is twice its colour and more, with a tail a quarter of the
+//                             way round behind it.
 //   liveScreenMaterial(o)     the material (o.time: the clock uniform, U.time by default; o.dark: false for the kit's
 //                             blue panel instead of the dark one; o.palette: 'soft' or 'vivid', LIVE_PALETTES)
 //   livePalette(m, name)      change a live material's palette while it runs (every screen at once)
@@ -98,10 +100,12 @@ export function liveLamp(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
 // seam of doubled vertices, so no triangle runs from the end of the round back to its start)
 export function liveBand(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
   const r = o.r ?? 0.5, hw = (o.w ?? 0.06) / 2, lean = o.lean ?? 0, seg = o.seg ?? 64, every = Math.max(1, Math.round(o.every ?? 4)), back = (o.turn ?? 1) < 0;
+  // (the lamp's kind, and after the point its resting level: 0..1 of its colour, written as 0..0.45)
+  const kind = 2 + LAMP_MODES.turn + 0.45 * clamp(o.rest ?? 0.12, 0, 1);
   const cl = Math.cos(lean), sl = Math.sin(lean), pos = [], nrm = [], uv = [], ix = [];
   for (let i = 0; i <= seg; i++) {
     const a = i / seg * Math.PI * 2, cs = Math.cos(a), sn = Math.sin(a), round = every + 0.02 + 0.96 * (back ? 1 - i / seg : i / seg);
-    for (const s of [-1, 1]) { const rr = r + s * hw * cl; pos.push(rr * cs, rr * sn, s * hw * sl); nrm.push(-sl * cs, -sl * sn, cl); uv.push(2 + LAMP_MODES.turn, round); }
+    for (const s of [-1, 1]) { const rr = r + s * hw * cl; pos.push(rr * cs, rr * sn, s * hw * sl); nrm.push(-sl * cs, -sl * sn, cl); uv.push(kind, round); }
     if (i < seg) ix.push(i * 2, i * 2 + 1, i * 2 + 3, i * 2, i * 2 + 3, i * 2 + 2);
   }
   const g = new THREE.BufferGeometry();

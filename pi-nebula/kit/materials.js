@@ -136,7 +136,7 @@ varying vec3 vRMW;
     vec3 hq = vKitW - uHoopAt; float ha = dot( hq, uHoopAxis ); vec3 hr = hq - ha * uHoopAxis; float hl = max( length( hr ), 1e-4 );
     vec3 hto = hr * ( uHoopSize.x / hl - 1.0 ) - ha * uHoopAxis; float hd = length( hto ), hw = clamp( 1.0 - hd / uHoopSize.y, 0.0, 1.0 );
     float hc = 0.15 + 0.85 * max( dot( inverseTransformDirection( normal, viewMatrix ), hto / max( hd, 1e-3 ) ), 0.0 );
-    float hs = 0.72 + 0.28 * dot( hr / hl, uHoopHead );
+    float hs = 0.55 + 0.45 * dot( hr / hl, uHoopHead );
     reflectedLight.indirectDiffuse += uHoopLight * BRDF_Lambert( material.diffuseColor ) * ( hw * hw * hc * hs / ( hd * hd + 0.15 ) ) * mix( 1.0, ambientOcclusion, 0.5 );
   }
   #endif`);
