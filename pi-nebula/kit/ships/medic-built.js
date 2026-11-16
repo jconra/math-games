@@ -423,7 +423,7 @@ export const RAMP = (() => {
   const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [OPENING.z[0] + 0.02, OPENING.z[1] - 0.02];
   // (the slope: down, its underside runs from the hinge to the ground)
   const slope = Math.asin(sill / (A + B));
-  return { face, sill, head, A, B, T, z, slope, swing: PI / 2 + slope, speed: 0.32, hinge: [face, sill], unfold: 0.4, lintel: { y: [head + 0.005, BAY.ceil + 0.02], x: [BAY.x - 0.02, face + 0.005] } };
+  return { face, sill, head, A, B, T, z, slope, swing: PI / 2 + slope, speed: 0.2, hinge: [face, sill], unfold: 0.4, lintel: { y: [head + 0.005, BAY.ceil + 0.02], x: [BAY.x - 0.02, face + 0.005] } };
 })();
 // (a slab along the ramp from u0 to u1, metres from the hinge (stowed: up the opening), across z, T thick: its tread at
 // x = face - T (stowed), its outside at the face; B is drawn as A's continuation in line, then folded by its leaf's base)
@@ -503,7 +503,7 @@ function mdRamp(p, side) {
   const J = V3(s * xt, R.sill + R.A, 0), fold = C.turnAbout(dk(J), V3(0, 0, 1), s * PI);
   p.leaf('md:ramp A:' + side, (lp) => { const a = new Acc(); rampSection(a, s, 0, R.A, true); a.flush(lp); }, { door: 'ramp', hinge: h1 });
   p.leaf('md:ramp B:' + side, (lp) => { const a = new Acc(); rampSection(a, s, R.A, R.A + R.B, false); a.flush(lp); }, { ...C.leafPose(fold), door: 'ramp', hinge: [h1, { at: dk(J).toArray(), axis: [0, 0, 1], angle: -s * PI }] });
-  p.door('ramp', [s * 4.5, -DECK + 1, 0], 0, R.speed);
+  p.door('ramp', [s * 4.5, -DECK + 1, 0], 0, R.speed, true);   // (heavy: five seconds down, gently at both ends)
   return p;
 }
 // (B's hinge timed: the main section turns as the kit turns it, eased; the foot unfolds over the rest of the way, once
@@ -522,7 +522,7 @@ export function rampFoot(built) {
 // a ceiling light, the inner door into the cabin, shut), and the door: an airstair hinged at the sill, white outside
 // with a graphite edge, a round window and a lit keypad; open, it rests on the ground and its inside is a steep stair
 // (treads level, yellow nosings, side rails).
-export const CREWDOOR = { face: 2.74, inner: 1.35, top: 2.06, speed: 0.9, near: 2.6 };
+export const CREWDOOR = { face: 2.74, inner: 1.35, top: 2.06, speed: 0.2, near: 7 };   // (five seconds down, and it starts sooner)
 export const CREWSTAIR = (() => { const L = CREW.y[1] - CREW.y[0]; return { L, angle: PI / 2 + Math.asin(DECK / L) }; })();
 function crewPanel(acc, s, steps) {
   const [z0, z1] = CREW.z, e = 0.03, za = z0 + e, zb = z1 - e, L = CREWSTAIR.L - 0.008, T = 0.06, B = 0.05, xo = s * CREWDOOR.face;
@@ -576,7 +576,7 @@ function mdCrewDoor(p, side) {
   // THE AIRSTAIR (door 'crew'): hinged at the sill on the skin's face, swinging out and down until its top rests on
   // the ground; it opens as someone comes within reach of its foot (or as the lab says)
   p.leaf('md:crew stair:' + side, (lp) => { const a = new Acc(); crewPanel(a, s, true); a.flush(lp); }, { door: 'crew', hinge: { at: dk(V3(xo, DECK, 0)).toArray(), axis: [0, 0, 1], angle: -s * CREWSTAIR.angle } });
-  p.door('crew', [xo + s * 1.8, -DECK + 1.0, (z0 + z1) / 2], CREWDOOR.near, CREWDOOR.speed);
+  p.door('crew', [xo + s * 1.8, -DECK + 1.0, (z0 + z1) / 2], CREWDOOR.near, CREWDOOR.speed, true);
   return p;
 }
 // THE AIRLOCK behind each crew door (a piece of its own, so the measuring of the inside can leave it out): its floor,

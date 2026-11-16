@@ -89,7 +89,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
   function doorAt(x, y, z, r, doorsOpen = false) {
     for (const d of doors) {
       if (d.when && !d.when(pathing)) continue;
-      if (!d.locked && (doorsOpen || d.D.t >= BODY.doorOpen)) continue;
+      if (!d.locked && (doorsOpen || d.D.t >= (d.open ?? BODY.doorOpen))) continue;
       const B = d.box;
       if (x > B.min.x - r && x < B.max.x + r && z > B.min.z - r && z < B.max.z + r && y + 1.7 > B.min.y && y < B.max.y) return d;
     }
@@ -243,7 +243,7 @@ export function makeWalls(built, { voxel = 0.1 } = {}) {
     for (const L of extra) { if (!L.V || !live(L)) continue; const u = L.V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, t, L.V.s * 0.5); if (u >= 0) t = Math.min(t, u); }
     for (const d of doors) {
       if (d.when && !d.when(pathing)) continue;
-      if (!d.locked && d.D.t >= BODY.doorOpen) continue;
+      if (!d.locked && d.D.t >= (d.open ?? BODY.doorOpen)) continue;
       // (the ray against the door's box: the slab test)
       let t0 = 0, t1 = t, hit = true;
       for (const ax of ['x', 'y', 'z']) {

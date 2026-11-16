@@ -17,12 +17,13 @@
 //     and so are the ship's ways in, each a door of the ship that comes down to the floor (its stair or ramp), once it
 //     is down: up its treads into the ship.
 //   - The ways in open as a person comes near, only while the cabin is in (otherwise there is nothing behind them),
-//     and close behind; the cabin's own sliding doors open as the station's do.
+//     and close behind; they are heavy and slow, and never come down onto anyone (WAY_REACH below); the cabin's own
+//     sliding doors open as the station's do.
 //   - Inside, the light is the Ship Lab's: the cabin's own baked strips and the beams of dusty light, the picture a
 //     little brighter (the lab's exposure) and the station's haze held off; the station's saved light outside is as it
 //     was.
 import * as THREE from 'three';
-import { updateDoors } from '../kit/layout.js';
+import { updateDoors, setDoors } from '../kit/layout.js';
 import { placeMatrix } from '../kit/grid.js';
 import { makeBeams } from '../kit/beams.js';
 import { cabinMaterials } from '../kit/ships/cabin-built.js';
@@ -46,6 +47,12 @@ export const SHIPS = [
 // how near (m, along the floor) a person must be to a way in for it to come down (the door's own reach, if it has one);
 // how long (s) after everyone has left a ship's hangar its cabin is dropped; the cabin's look
 export const NEAR = 4.5, LINGER = 4, LOOK = 'light';
+// a way in is a heavy door and comes down slowly (the kit: five seconds, gently at both ends), so it starts for whoever
+// comes within WAY_REACH of its foot, and nobody is ever under it: the patch of floor it comes down on (its own box
+// when down, CLEAR wider) is kept clear while it moves, and it waits while anyone is still standing there. A person
+// walks through its doorway only once it is fully down (WAY_OPEN). The game's maker, of the Explorer's door: "a total
+// safety hazard dropping that fast. Can you imagine if someone was standing there?"
+export const WAY_REACH = 7, CLEAR = 0.35, WAY_OPEN = 0.97;
 // where a person can walk in a cabin: its walls felt on a finer grid than the station's (m), and a person there
 // slimmer (half width, m; the station's is 0.28), as the cabins' doors are drawn for a person 0.5 m across (a washroom's
 // door is 0.6 m)
@@ -80,7 +87,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     const ways = W.built.doors.filter((D) => D.zone === S.zone && D.hold == null && S.ways.includes(D.piece));
     for (const D of ways) { W.driven.add(D); W.keepShut.delete(D); }
     const entries = ways.map((D) => walls.doors.find((d) => d.D === D)).filter(Boolean);
-    for (const e of entries) e.locked = true;
+    for (const e of entries) { e.locked = true; e.open = WAY_OPEN; }
     ships.push({ ...S, zd, zone, hangar, near, ways, entries, state: 'out', away: 0, cabin: null, wayParts: new Map(), M: null, inv: null, stats: null });
   }
 
@@ -187,6 +194,43 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     s.wayParts.set(key, D);
   }
 
+  // ── a way in, on its way down: the patch of floor it comes down on, kept clear (see WAY_REACH). Worked out once, by
+  // posing the way down and back: its walked-on leaves' box there (a still leaf, its outside skin, lies under those),
+  // CLEAR wider, from the floor to over a person's head; added to
+  // where nobody can walk for as long as the way is coming down (D.coming). Anyone caught on it is moved off it, as
+  // walls.js does for anywhere a person cannot stand.
+  const _fb = new THREE.Box3();
+  function keepClear(s, D, i) {
+    const key = 'clear:' + s.id + ':' + i; if (s.wayParts.has(key)) return;
+    s.wayParts.set(key, D);
+    const t0 = D.t, box = new THREE.Box3();
+    ONE[0] = D; setDoors(ONE, 1);
+    for (const leaf of D.leaves) {
+      for (const im of leaf.meshes || []) { if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); box.union(_fb.copy(im.geometry.boundingBox).applyMatrix4(_im)); }
+    }
+    ONE[0] = D; setDoors(ONE, t0);
+    if (box.isEmpty()) return;
+    const y0 = box.min.y - 0.1;
+    D.foot = new THREE.Box3(new THREE.Vector3(box.min.x - CLEAR, y0, box.min.z - CLEAR), new THREE.Vector3(box.max.x + CLEAR, y0 + 2.2, box.max.z + CLEAR));
+    const size = D.foot.getSize(new THREE.Vector3()), c = D.foot.getCenter(new THREE.Vector3());
+    const g = new THREE.BoxGeometry(size.x, size.y, size.z); g.translate(c.x, c.y, c.z);
+    walls.add(key, { solid: [g], when: (pathing) => !pathing && !!D.coming });
+  }
+
+  // a person standing on a way's patch of floor as it is about to come down, walked off it at an easy pace: out past
+  // its nearer side, or past its far end if that is nearer (never toward the ship)
+  const _c = new THREE.Vector3(), _h = new THREE.Vector3(), _mid = new THREE.Vector3();
+  function standClear(s, D, p, dt) {
+    const f = D.foot; f.getCenter(_c); f.getSize(_h).multiplyScalar(0.5);
+    _mid.set(0, 0, 0).applyMatrix4(s.M);
+    let ox = D.sense.x - _mid.x, oz = D.sense.z - _mid.z; const L = Math.hypot(ox, oz) || 1; ox /= L; oz /= L;   // (out from the ship)
+    const sx = -oz, sz = ox;                                                                                 // (along its side)
+    const a = (p.x - _c.x) * sx + (p.z - _c.z) * sz, b = (p.x - _c.x) * ox + (p.z - _c.z) * oz;
+    const side = Math.abs(sx) * _h.x + Math.abs(sz) * _h.z - Math.abs(a), end = Math.abs(ox) * _h.x + Math.abs(oz) * _h.z - b;
+    const k = Math.min(1.4 * dt, Math.min(side, end) + 0.3), sg = a < 0 ? -1 : 1;
+    if (side <= end) { p.x += sx * sg * k; p.z += sz * sg * k; } else { p.x += ox * k; p.z += oz * k; }
+  }
+
   // the room of a ship's cabin a point is in (its blueprint's room), or null
   function roomOf(s, p) {
     _p.copy(p).applyMatrix4(s.inv);
@@ -218,10 +262,17 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       s.ways.forEach((D, i) => {
         let open = false;
         if (s.state === 'in') {
-          const reach = D.near || NEAR;
+          const reach = Math.max(D.near || NEAR, WAY_REACH);
           for (const e of eyes) if (Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < reach && Math.abs(e.y - D.sense.y) < 3) { open = true; break; }
+          keepClear(s, D, i);
         }
-        ONE[0] = D; updateDoors(ONE, FAR, dt, open ? 'open' : 'shut');
+        // (on its way down: its patch of floor is shut to walkers, and it waits while anyone still stands on it)
+        D.coming = open && D.t < 1;
+        const onPatch = (e) => e.x > D.foot.min.x && e.x < D.foot.max.x && e.z > D.foot.min.z && e.z < D.foot.max.z && e.y < D.foot.min.y + 1.4;
+        const waits = D.coming && D.foot && eyes.some(onPatch);
+        // (the player standing there is walked off it first, the shortest way that is not into the ship's side)
+        if (waits && player && onPatch(player.pos)) standClear(s, D, player.pos, dt);
+        if (!waits) { ONE[0] = D; updateDoors(ONE, FAR, dt, open ? 'open' : 'shut'); }
         if (D.t >= 1 && s.state === 'in') wayDown(s, D, i);
       });
       if (s.step) s.step(s.ways);

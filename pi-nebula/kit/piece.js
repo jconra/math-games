@@ -81,7 +81,8 @@ export class Piece {
     if (hinge) mv.hinge = (Array.isArray(hinge) ? hinge : [hinge]).map((H) => ({ at: [...H.at], axis: new THREE.Vector3(...H.axis).normalize().toArray(), angle: H.angle }));
     this.movers.push(mv);
   }
-  door(id, sense, near = 2.6, speed = 1.6) { this.doors.push({ id, sense, near, speed }); }
+  // (heavy: a big door, a ship's stair or ramp: it starts and lands gently, kit/layout.js setLeaf)
+  door(id, sense, near = 2.6, speed = 1.6, heavy = false) { this.doors.push({ id, sense, near, speed, heavy }); }
 }
 Piece.coarse = false;
 

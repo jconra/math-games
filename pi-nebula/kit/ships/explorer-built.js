@@ -749,11 +749,15 @@ function airstair(acc, what) {
     polyTo(acc, ring([...edge, h1, h0]), V3(m.y - DOOR.hinge, -(m.x - DOOR.xHinge), 0).normalize(), PAL.black);
   }
 }
+export const STAIR_TIME = 5, STAIR_NEAR = 7;
 function ebAirstair(p) {
   const hinge = { at: [DOOR.xHinge, DOOR.hinge - DECK, 0], axis: [0, 0, 1], angle: STAIR.angle };
   p.leaf('eb:airstair', (lp) => { const acc = new Acc(); airstair(acc, 'steps'); acc.flush(lp); }, { door: 'stair', hinge });
   p.leaf('eb:airstair outside', (lp) => { const acc = new Acc(); airstair(acc, 'outside'); acc.flush(lp); }, { door: 'stair', hinge, still: true });
-  p.door('stair', [DOOR.xHinge + 1.8, -DECK + 1.0, (DOOR.z[0] + DOOR.z[1]) / 2], 2.6, 0.9);
+  // (it takes STAIR_TIME seconds to come down, gently at both ends, and starts for whoever comes within STAIR_NEAR: the
+  // game's maker, of the door dropping in a second: "a total safety hazard dropping that fast. Can you imagine if
+  // someone was standing there?")
+  p.door('stair', [DOOR.xHinge + 1.8, -DECK + 1.0, (DOOR.z[0] + DOOR.z[1]) / 2], STAIR_NEAR, 1 / STAIR_TIME, true);
   return p;
 }
 
