@@ -71,11 +71,12 @@ export const POOL_N = 10;
 // here, never by the station's frame:
 //   - it comes down for whoever comes within WAY_REACH of it on the hangar floor while nobody is aboard, waits on the
 //     ground while they are near, and goes back up once nobody is near it and nobody is on it;
-//   - someone standing still on its tread for RIDE.wait seconds (feet on it, RIDE.inset inside its edge) is carried:
+//   - the player standing still on its tread for RIDE.wait seconds (feet on it, RIDE.inset inside its edge) is carried
+//     (the station's people never board a ship; one of them standing on it holds the ride back):
 //     up if it is down, down if it is up (walking across it in the airlock does not). Once carried, they must step off
 //     before it carries them again;
-//   - coming down, the floor under it is shut to walkers (its own patch, whose top is always the platform's underside)
-//     and it waits while anyone not riding stands there, the player walked off it first, as the ways do;
+//   - coming down, a fence round the floor it lands on stops anyone walking in under it (the way-finder too), and it
+//     waits while anyone not riding stands there, the player walked off it first, as the ways do;
 //   - its riders move with it: its platform and railings are a moving floor (walls.lift), and the feet of whoever
 //     stands on them go up and down with them, smoothly (the kit's heavy door: it starts and lands gently).
 export const RIDE = { wait: 1.0, still: 0.15, inset: 0.15 };
@@ -300,7 +301,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   const onTread = (L, e, top) => e.x > L.box.min.x + RIDE.inset && e.x < L.box.max.x - RIDE.inset && e.z > L.box.min.z + RIDE.inset && e.z < L.box.max.z - RIDE.inset && Math.abs(e.y - top) < 0.07;
   function liftStep(s, L, dt, eyes, player) {
     const D = L.D, inCabin = s.state === 'in' && L.key, top = inCabin ? L.top0 + liftDy(L) : 0;
-    const riders = inCabin ? eyes.filter((e) => onTread(L, e, top)) : [];
+    // (the player rides it; the station's people never board a ship: one standing on its tread holds a ride back)
+    const riders = inCabin && player && onTread(L, player.pos, top) ? [player.pos] : [], others = inCabin ? eyes.filter((e) => e !== player?.pos && onTread(L, e, top)) : [];
     for (const p of L.carried) if (!riders.includes(p)) L.carried.delete(p);   // (stepped off: may ride again)
     const waited = riders.map((e) => stillFor(e, dt)), ready = riders.some((e, k) => waited[k] >= RIDE.wait && !L.carried.has(e));
     for (const e of eyes) if (!riders.includes(e)) stillOf.delete(e);
@@ -309,7 +311,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     const atRest = L.goal == null || D.t === L.goal;
     if (!inCabin) L.goal = 0;
     else if (atRest) {
-      if (ready) { L.goal = D.t >= 1 ? 0 : 1; for (const e of riders) L.carried.add(e); }
+      if (ready && !others.length) { L.goal = D.t >= 1 ? 0 : 1; for (const e of riders) L.carried.add(e); }
       else if (D.t <= 0 && callers && !aboard && !riders.length) L.goal = 1;
       else if (D.t >= 1 && !callers && !riders.length) L.goal = 0;
       else L.goal = D.t >= 1 ? 1 : 0;
