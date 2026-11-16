@@ -31,6 +31,7 @@
 //   canAt(plan, c, t)                 where canister c is: { where: 'mount' | 'held' | 'socket' | 'bay', i, yaw, rel }
 //   fillAt(plan, c, t)                how full it is, 1 to 0
 //   loadAt(plan, t)                   the load in plain numbers, for the job's pay slip
+//   steadyAt(plan, t, ahead)          for how many seconds each of those numbers stays as it is
 //   gateAt(plan, t)                   the patch of floor the crane is working over (or about to), or null
 export const SPEED = {
   travel: { v: 2.0, a: 0.8 },      // the trolley along the rail: metres a second, and how fast it gets there
@@ -265,5 +266,17 @@ export function loadAt(plan, t) {
     else if (at.where === 'bay') out.onRack++; else out.carried++;
   });
   out.docked.sort((a, b) => a.socket - b.socket);
+  return out;
+}
+// HOW LONG THE LOAD STAYS AS IT IS: for each of the pay slip's counts, the seconds (up to `ahead`, looked at every
+// `step`) before the timetable changes it, so the job can ask about a number that is still true when it is answered
+export function steadyAt(plan, t, ahead = 60, step = 5) {
+  const counts = (L) => ({ onShip: L.onShip, fullOnShip: L.fullOnShip, docked: L.docked.length, drained: L.drained, onRack: L.onRack });
+  const now = counts(loadAt(plan, t)), out = {};
+  for (const k in now) out[k] = ahead;
+  for (let s = step; s <= ahead; s += step) {
+    const then = counts(loadAt(plan, Math.min(plan.length - 1e-3, t + s)));
+    for (const k in now) if (out[k] === ahead && then[k] !== now[k]) out[k] = s - step;
+  }
   return out;
 }

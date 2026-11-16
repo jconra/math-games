@@ -3,7 +3,7 @@
 // eight mounts (two rows, front and back, both sides), the eight sockets (four along, two high), the rack's eight bays.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planCycle, valueAt, canAt, fillAt, dockedAt, gateAt, loadAt, moveTime, along, SPEED } from '../kit/crane-plan.js';
+import { planCycle, valueAt, canAt, fillAt, dockedAt, gateAt, loadAt, steadyAt, moveTime, along, SPEED } from '../kit/crane-plan.js';
 
 const Q = Math.PI / 2;
 const mounts = [];
@@ -117,6 +117,25 @@ test('the load in plain numbers: eight full at the start, none on the ship when 
   const c = at(P.pause.t0 + 1); assert.deepEqual([c.onShip, c.fullOnShip, c.onRack, c.docked.length], [8, 0, 8, 0]);
   const e = at(plan.length - 0.01); assert.deepEqual([e.onShip, e.fullOnShip, e.onRack], [8, 8, 8]);
   for (const t of times) { const L = at(t); assert.equal(L.onShip + L.onRack + L.docked.length + L.carried, 16); for (const d of L.docked) assert.ok(d.percent >= 0 && d.percent <= 100); }
+});
+
+test('how long the load stays as it is: a count said to hold for so many seconds does, and one about to change says so', () => {
+  const counts = (L) => ({ onShip: L.onShip, fullOnShip: L.fullOnShip, docked: L.docked.length, drained: L.drained, onRack: L.onRack });
+  let short = 0, long = 0;
+  for (let t = 0; t < plan.length - 61; t += 7.3) {
+    const now = counts(loadAt(plan, t)), S = steadyAt(plan, t, 60, 5);
+    for (const k in now) {
+      assert.ok(S[k] >= 0 && S[k] <= 60 && S[k] % 5 === 0, `${k} at ${t}: ${S[k]}`);
+      // it holds for as long as it says (looked at every second) ...
+      for (let s = 0; s <= S[k]; s += 1) assert.equal(counts(loadAt(plan, t + s))[k], now[k], `${k} at ${t} + ${s} (said ${S[k]})`);
+      // ... and where it says less than the whole minute, it has changed 5 seconds after that
+      if (S[k] < 60) { short++; assert.notEqual(counts(loadAt(plan, t + S[k] + 5))[k], now[k], `${k} at ${t}: said ${S[k]}`); } else long++;
+    }
+  }
+  assert.ok(short > 20 && long > 20, `${short} short, ${long} long`);
+  // during the pause nothing changes until the Miner's canisters are full again
+  const P = Object.fromEntries(plan.phases.map((p) => [p.name, p]));
+  assert.equal(steadyAt(plan, P.pause.t0 + 1, 20).onShip, 20);
 });
 
 test('round after round: it ends where it began, and the next round starts from what this one left', () => {

@@ -1,4 +1,4 @@
-// The station jobs' math (src/jobs/engine.js, galley.js, medical.js): every level of every open job deals good
+// The station jobs' math (src/jobs/engine.js, galley.js, medical.js, smelter.js): every level of every open job deals good
 // questions, answers move the level and pay credits as they should, the arrows step, and Mathwood's own places are
 // untouched by the jobs joining them.
 //   node --test pi-nebula/tests/*.test.mjs
@@ -7,14 +7,16 @@ import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
 import { JOB as galley } from '../src/jobs/galley.js';
 import { JOB as medical } from '../src/jobs/medical.js';
-import { JOB as smelter } from '../src/jobs/smelter.js';
+import { JOB as smelter, STEADY, CARRIES, METALS, LOADS } from '../src/jobs/smelter.js';
+import { helpPicture } from '../src/jobs/pics.js';
+import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { JOB as arena } from '../src/jobs/arena.js';
 import { JOB as dock } from '../src/jobs/dock.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PROBLEMS, PLACE } from '../../mathwood-valley/src/levels/places.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 
-const OPEN = [galley, medical];
+const OPEN = [galley, medical, smelter];
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 
 test('the open jobs join Mathwood\'s levels cleanly', () => {
@@ -68,6 +70,106 @@ test('the own makers: the galley\'s cups and the medical drip are right', () => 
   }
 });
 
+// ── the smelter's own makers ─────────────────────────────────────────────────────────────────────────────────
+const num = (label) => Number(String(label).replace(/,/g, '').split(' ')[0]);
+const rightOf = (o) => num(o.coins.find((c) => c.good).label);
+const near = (a, b) => Math.abs(a - b) < 1e-9;
+
+test('the smelter: counting, parts, weights, percents and pay are right, and decimals stay decimals', () => {
+  const rand = seeded(11), M = smelter.makers;
+  for (let k = 0; k < 300; k++) {
+    const frac = (k % 5) / 4;
+    // counting: the right answer is the number of canisters drawn that the question asks for
+    for (const step of [1, 2, 3]) {
+      const o = M.count.make(step, { rand }), f = o.facts, pic = o.help.pic;
+      assert.equal(o.picFirst, true); assert.equal(o.coins.length, 3, o.story);
+      if (f.kind === 'racks') { assert.equal(rightOf(o), f.g * f.e); assert.equal(pic.g * pic.e, rightOf(o)); }
+      else if (f.kind === 'full' || f.kind === 'empty') assert.equal(pic.slots.filter((x) => x === f.kind).length, rightOf(o), o.ask);
+      else assert.equal(pic.slots.filter((x) => x !== 'none').length, rightOf(o), o.ask);
+      assert.ok(rightOf(o) <= (step === 1 ? 5 : step === 2 ? CARRIES : 12));
+    }
+    // a part of the load
+    for (const step of [1, 2]) { const o = M.part.make(step, { rand, frac }), f = o.facts; assert.ok(near(rightOf(o), f.whole * f.n / f.d), o.story); assert.ok(Number.isInteger(rightOf(o))); }
+    // weights in tenths: adding, taking away, a load of canisters
+    const a = M.weigh.make(1, { rand, frac }), fa = a.facts;
+    assert.ok(near(rightOf(a), (fa.op === '+' ? fa.a + fa.b : fa.a - fa.b) / 10), a.story);
+    const l = M.weigh.make(2, { rand, frac }), fl = l.facts;
+    assert.ok(near(rightOf(l), fl.n * fl.w / 10), l.story);
+    // percent
+    for (const step of [1, 2]) { const o = M.percent.make(step, { rand, frac }), f = o.facts; assert.ok(near(rightOf(o), f.whole * f.pct / 100), `${o.story} -> ${o.answer}`); }
+    // pay: tonnes times the price; the whole slip
+    const p = M.pay.make(1, { rand, frac }), fp = p.facts;
+    assert.ok(near(rightOf(p), fp.w / 10 * fp.price), p.story);
+    assert.ok(METALS.some((m) => m.price === fp.price && p.story.includes(m.name)), 'a metal at its own price');
+    const s = M.pay.make(2, { rand, frac }), fs = s.facts;
+    assert.ok(near(rightOf(s), fs.n * fs.w / 10 * fs.pct / 100 * fs.price), s.story);
+    assert.ok(near(fs.ore, fs.n * fs.w / 10) && near(fs.metal, fs.ore * fs.pct / 100));
+    assert.equal(s.lines[s.lines.length - 1][1], '?');
+    // no answer button hides a decimal as a fraction, and none shows a number gone wrong
+    for (const o of [a, l, p, s]) for (const c of o.coins) assert.ok(/^[\d,]+(\.\d{1,2})?$/.test(c.big), `${o.story}: ${c.big}`);
+  }
+});
+
+test('the smelter: every question has a picture and steps for Help, and its sums can be worked on paper', () => {
+  const rand = seeded(23), M = smelter.makers;
+  for (const [maker, steps] of [['count', [1, 2, 3]], ['part', [1, 2]], ['weigh', [1, 2]], ['percent', [1, 2]], ['pay', [1, 2]]]) {
+    for (const step of steps) for (let k = 0; k < 60; k++) {
+      const o = M[maker].make(step, { rand, frac: (k % 3) / 2 }), pic = helpPicture(o);
+      assert.ok(pic.svg.startsWith('<svg') && !/NaN|undefined/.test(pic.svg), `${maker} ${step}: no picture`);
+      // the picture never gives the answer away (the youngest count theirs; the others show a "?")
+      if (maker !== 'count') assert.ok(pic.svg.includes('?'), `${maker} ${step}: the picture has no "?"`);
+      if (maker === 'count') continue;
+      // the sums: every step can be laid out by the worked sheet, the last one ends on the right answer, and each
+      // later step works on from one before it
+      assert.ok(o.sum, `${maker} ${step}: no sum`);
+      const chain = o.sum.chain || [o.sum];
+      for (const x of chain) assert.doesNotThrow(() => workOf(x), `${maker} ${step}: ${JSON.stringify(x)}`);
+      chain.slice(1).forEach((x, i) => assert.ok(x.carried, `${maker} ${step}: step ${i + 2} does not follow on: ${JSON.stringify(chain)}`));
+      const last = chain[chain.length - 1], end = last.op === 'add' ? last.a + last.b : last.op === 'sub' ? last.a - last.b : last.op === 'mul' ? last.a * last.b : last.a / last.b;
+      assert.ok(near(end, rightOf(o)), `${maker} ${step}: ${o.story} ends on ${end}, the answer is ${o.answer}`);
+    }
+  }
+});
+
+test('the smelter: a slip counts the canisters in the hangar when the count suits and will stay; else its own', () => {
+  const rand = seeded(31), M = smelter.makers;
+  const load = (over = {}) => ({ canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 2, percent: 40 }], drained: 1, onRack: 8, carried: 1,
+    steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 }, ...over });
+  for (let k = 0; k < 120; k++) {
+    // the youngest: one of the counts that are 5 or fewer (5 on the ship, 2 at the wall), never the rack's 8
+    const c = M.count.make(1, { rand, live: load() });
+    assert.equal(c.facts.live, true); assert.ok(['ship', 'wall'].includes(c.facts.kind)); assert.equal(rightOf(c), c.facts.kind === 'ship' ? 5 : 2);
+    // how many are still on the Miner: the ones really on it
+    const st = M.count.make(2, { rand, live: load() });
+    assert.equal(st.facts.kind, 'still'); assert.equal(rightOf(st), 5); assert.equal(st.help.pic.slots.filter((x) => x === 'none').length, CARRIES - 5);
+    // a load of canisters: the canisters counted are the full ones on the ship, the ones at the wall, or all the ship carries
+    const w = M.weigh.make(2, { rand, live: load() });
+    assert.equal(w.facts.live, true); assert.equal(w.facts.n, { ship: 5, wall: 2, load: CARRIES }[w.facts.kind]);
+    // ... and each of them holds the same on every slip about that load (one weight for the crane's whole round)
+    for (const round of [0, 3, LOADS.length + 1]) assert.equal(M.weigh.make(2, { rand, live: load({ round }) }).facts.w, LOADS[round % LOADS.length]);
+    // the whole slip is for the canisters the Miner carries, but it is a load from the log: it does not say "now"
+    const slip = M.pay.make(2, { rand, live: load() });
+    assert.equal(slip.facts.n, CARRIES); assert.equal(slip.facts.live, false);
+    // a count about to change is not asked about; nor one that does not suit the level
+    const soon = load({ steady: { onShip: STEADY - 5, fullOnShip: STEADY - 5, docked: STEADY - 5, drained: 60, onRack: 60 } });
+    assert.equal(M.count.make(1, { rand, live: soon }).facts.live, false);
+    assert.notEqual(M.weigh.make(2, { rand, live: soon }).facts.kind, 'ship');
+    assert.equal(M.count.make(1, { rand, live: load({ onShip: 8, fullOnShip: 8, docked: [], onRack: 8 }) }).facts.live, false);
+    // while empties are going back on, the ship's canisters are not "still full"
+    const loading = load({ phase: 'load', onShip: 3, fullOnShip: 0 });
+    assert.notEqual(M.weigh.make(2, { rand, live: loading }).facts.kind, 'ship');
+    // no hangar (node, the levels page): the job's own numbers
+    assert.equal(M.count.make(1, { rand }).facts.live, false);
+    assert.equal(M.weigh.make(2, { rand }).facts.live, false);
+  }
+  // through the engine: the live load reaches the maker
+  const crew = crewOf();
+  setLevelAt(crew, 'smelter', 'kCount');
+  let seen = 0;
+  for (let k = 0; k < 40; k++) { const q = E.deal(crew, smelter, { rand: seeded(k + 1), live: load() }); if (q.order.facts && q.order.facts.live) seen++; }
+  assert.ok(seen > 5, `only ${seen} of 40 slips used the hangar's count`);
+});
+
 test('an answer: the first pick counts, a right one pays, a miss pays nothing, the level moves', () => {
   const crew = crewOf(9);
   const q = E.deal(crew, galley, { rand: seeded(3) });
@@ -102,7 +204,7 @@ test('the arrows step the level by hand, and stop at the ends', () => {
 });
 
 test('the jobs still to come are marked, with nothing to play yet', () => {
-  for (const J of [smelter, arena, dock]) {
+  for (const J of [arena, dock]) {
     assert.equal(J.open, false); assert.equal(J.place, null);
     assert.ok(J.spot && J.sign && J.hint, J.id);
   }

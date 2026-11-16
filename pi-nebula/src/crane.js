@@ -19,7 +19,8 @@
 //
 //   const crane = makeCrane({ W, walls })
 //   crane.update(dt, { eyes })     once a frame, before the picture: eyes are where people are (the player, the crew)
-//   crane.load()                   the load in plain numbers, for the job's pay slip (kit/crane-plan.js loadAt)
+//   crane.load()                   the load in plain numbers, and for how long each stays as it is, for the job's
+//                                  pay slip (kit/crane-plan.js loadAt, steadyAt)
 //   crane.t, crane.round, crane.waiting, crane.seek(t), crane.skip(seconds), crane.pose()     for the rigs
 import { makeOreLine } from '../kit/crane.js';
 
@@ -58,7 +59,7 @@ export function makeCrane({ W, walls }) {
       if (blocked) { flash += dt; L.beacon(flash % RULES.flash < RULES.flash * 0.5); } else if (flash) { flash = 0; L.beacon(false); }
       if (rate > 0 && dt > 0) { t += dt * rate; while (t >= L.length) { t -= L.length; L.next(); } L.pose(t); }
     },
-    load: () => ({ ...L.load(t), round: L.round, t, length: L.length }),
+    load: () => ({ ...L.load(t), steady: L.steady(t), round: L.round, t, length: L.length }),
     // (for the rigs: the round as it is now, drawn again; a moment of this round; so many seconds on, with nobody about)
     pose() { L.pose(t); },
     seek(to) { t = Math.max(0, Math.min(L.length - 1e-3, to)); L.pose(t); return t; },

@@ -21,7 +21,7 @@
 //   jobs: { [id]: { n, right, earned } }   a small tally per job
 //
 //   register(job)                     the job's place joins Mathwood's levels (once)
-//   deal(crew, job, { rand, last })   -> a question: the order (story, ask, coins [{ big, small, label, good, why }],
+//   deal(crew, job, { rand, last, live })   -> a question: the order (story, ask, coins [{ big, small, label, good, why }],
 //                                        pic, rightWhy, sum, own) and lv (levelFor's answer: the level, its place)
 //   answer(crew, job, q, coin, { ms, helped })   -> { right, first, pay, credits, moved, level, up, down }
 //                                        the first pick of a question is the one that counts for the level; a right
@@ -74,6 +74,8 @@ export function register(job) {
 
 // ── a job's own makers: the same order shape as Mathwood's counter (src/math/counter.js counterOrder) ─────────────
 // core = { key, story, ask, right: Face, slips: [Face & { slip, why }], pic, rightWhy, sum, help, own: { strand, at } }
+// and, where a job wants them: picFirst (its picture is on the card from the start: the things to count ARE the
+// question), lines (the card's own lines for the story, [[label, value], ...]: a pay slip's rows)
 export function ownOrder(core, rand = Math.random, coins = 4) {
   const t = tools(rand);
   const seen = new Set([String(core.right.v)]), wrong = [];
@@ -87,19 +89,21 @@ export function ownOrder(core, rand = Math.random, coins = 4) {
   const all = t.shuffle([{ v: R.v, big: R.big, small: R.small || '', label: R.label, good: true, slip: null, why: '' }, ...wrong]);
   return {
     id: Math.floor(rand() * 1e9).toString(36), key: core.key, story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`,
-    coins: all, answer: R.label, pic: core.pic || null, picFirst: false, rightWhy: core.rightWhy, sum: core.sum ? sumOf(core.sum) : null,
-    help: core.help || null, own: core.own, credit: core.credit || [], facts: core.facts || null, size: core.size || 1,
+    coins: all, answer: R.label, pic: core.pic || null, picFirst: !!core.picFirst, rightWhy: core.rightWhy, sum: core.sum ? sumOf(core.sum) : null,
+    help: core.help || null, own: core.own, credit: core.credit || [], facts: core.facts || null, size: core.size || 1, lines: core.lines || null,
   };
 }
 
 // ── a question ────────────────────────────────────────────────────────────────────────────────────────────────────
-function make(job, L, { rand = Math.random, last = null, who = null, frac = 0 } = {}) {
+// live: what the job's own props are doing right now, for a maker that asks about it (the smelter's load in the hangar:
+// src/crane.js load()); null where there is none (node, the levels page)
+function make(job, L, { rand = Math.random, last = null, who = null, frac = 0, live = null } = {}) {
   const ask = pickAsk(L.gen.mix, rand, last);
   const own = job.makers && job.makers[ask.maker];
   for (let tries = 0; tries < 8; tries++) {
     try {
       const w = who || pickWho(job, rand);
-      const o = own ? own.make(ask.step, { rand, who: w, frac })
+      const o = own ? own.make(ask.step, { rand, who: w, frac, live })
         : storeOrder(ask, { rand, who: w, frac, longMost: 0, setting: job.setting });
       o.who = o.who || w;
       o.ask_ = { maker: ask.maker, step: ask.step };
@@ -111,10 +115,10 @@ function make(job, L, { rand = Math.random, last = null, who = null, frac = 0 } 
 }
 const pickWho = (job, rand) => { const F = job.setting && job.setting.folk; return F && F.length ? F[Math.floor(rand() * F.length)] : null; };
 
-export function deal(crew, job, { rand = Math.random, last = null, now = Date.now() } = {}) {
+export function deal(crew, job, { rand = Math.random, last = null, now = Date.now(), live = null } = {}) {
   register(job);
   const lv = levelFor(crew, job.place.id, { now });
-  const order = make(job, lv.level, { rand, last, frac: lv.count ? lv.into / lv.count : 0 });
+  const order = make(job, lv.level, { rand, last, frac: lv.count ? lv.into / lv.count : 0, live });
   return { job: job.id, order, lv, level: lv.level, misses: 0, picked: new Set(), done: false, t0: now };
 }
 

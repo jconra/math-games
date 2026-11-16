@@ -3,8 +3,9 @@
 //
 //   the top strip    the job's name, the level with its arrows (Mathwood's level tool: ◀ 9 of 14: Recipes made bigger ▶,
 //                    a thin bar for the right answers toward the next level), and "Done" (Esc)
-//   the card         the job's scene (a recipe card in the galley, a patient chart at the triage desk), the story and
-//                    the question, and for the youngest the things to count drawn on it
+//   the card         the job's scene (a recipe card in the galley, a patient chart at the triage desk, a pay slip at
+//                    the smelter: its rows in place of the story where the order has them), the story and the
+//                    question, and for the youngest the things to count drawn on it
 //   the answers      four buttons, each the number big and its unit small under it. No key numbers on them (keys 1 to
 //                    4 still pick). A wrong pick shakes and goes dull with one plain line why, and the Help button
 //                    glows; a right one lights up, its credits fly to the count, and the next card slides in by itself
@@ -14,8 +15,9 @@
 //                    opens Mathwood's worked sheet (src/ui/longwork.js) on the question's own sums. It never opens by
 //                    itself, has an X, and Esc closes it. Using it never costs credits.
 //
-//   const J = openPanel(root, { job, crew, onClose, onSave, onCredits })    J.close(), J.state() (for rigs), J.pick(i),
-//   J.help(), J.step(dir)
+//   const J = openPanel(root, { job, crew, live, onClose, onSave, onCredits })    J.close(), J.state() (for rigs),
+//   J.pick(i), J.help(), J.step(dir). live: a function giving what the job's props are doing right now (the smelter's
+//   load in the hangar), asked once for each new question; or null
 import * as E from './engine.js';
 import { helpPicture } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
@@ -29,7 +31,7 @@ export function ensureCss() {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const PANEL = { nextMs: 1350, shakeMs: 420 };
 
-export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => {}, onCredits = () => {} } = {}) {
+export function openPanel(root, { job, crew, live = null, onClose = () => {}, onSave = () => {}, onCredits = () => {} } = {}) {
   ensureCss();
   const el = document.createElement('div');
   el.className = 'pnj';
@@ -94,12 +96,21 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
       return `<header class="pnj-cardtop is-chart"><span class="pnj-icon is-cross" aria-hidden="true"></span><b>Patient chart</b><small>Triage</small></header>
         ${who ? `<dl class="pnj-chart"><div><dt>Patient</dt><dd>${esc(who.name)}</dd></div>${who.why ? `<div><dt>In for</dt><dd>${esc(who.why)}</dd></div>` : ''}</dl>` : ''}`;
     }
+    if (job.card === 'payslip') {
+      // (a count taken from the hangar as the slip was made says so; any other slip is someone's load from the log)
+      const now = !!(o.facts && o.facts.live);
+      return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>${now ? 'The hangar, right now' : who ? `${esc(who.name)}'s load` : 'From the log'}</small></header>`;
+    }
     return `<header class="pnj-cardtop is-recipe"><span class="pnj-icon is-pot" aria-hidden="true"></span><b>Galley order</b><small>${who ? `from ${esc(who.name)}` : 'Recipe card'}</small></header>`;
   }
+  // an order with rows of its own (the whole pay slip): the rows are the story, set out as the slip
+  const storyHtml = (o) => (o.lines && o.lines.length
+    ? `<dl class="pnj-chart is-slip">${o.lines.map(([k, v]) => `<div${v === '?' ? ' class="is-ask"' : ''}><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`
+    : `<p class="pnj-story">${esc(o.story)}</p>`);
   function draw(o) {
     const pic = o.picFirst ? helpPicture(o) : null;
     card.innerHTML = `${sceneHtml(o)}
-      <p class="pnj-story">${esc(o.story)}</p>
+      ${storyHtml(o)}
       ${pic && pic.svg ? `<div class="pnj-pic is-lead">${pic.svg}</div>` : ''}
       <p class="pnj-ask">${esc(o.ask)}</p>`;
     answers.innerHTML = '';
@@ -116,7 +127,9 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
   }
   function next({ slide = 0 } = {}) {
     closeSheet();
-    q = E.deal(crew, job, { last: lastAsk });
+    let now = null;
+    if (live) { try { now = live(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
+    q = E.deal(crew, job, { last: lastAsk, live: now });
     lastAsk = q.order.ask_ || null;
     onSave();
     helped = helpOn; t0 = performance.now();
@@ -240,6 +253,7 @@ export function openPanel(root, { job, crew, onClose = () => {}, onSave = () => 
   return {
     el, close, pick, help, step,
     state: () => ({ job: job.id, level: q && q.level.id, levelN: E.level(crew, job), story: q && q.order.story, ask: q && q.order.ask, coins: q ? q.order.coins.map((c) => ({ label: c.label, good: c.good })) : [],
+      key: q && q.order.key, facts: q && q.order.facts,
       right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet }),
   };
 }

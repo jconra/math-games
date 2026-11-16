@@ -66,6 +66,12 @@
 .pnj-icon { width: 18px; height: 18px; flex: none; background: currentColor; }
 .pnj-icon.is-pot { color: #9fd6ff; clip-path: polygon(0 35%, 100% 35%, 100% 45%, 88% 45%, 84% 100%, 16% 100%, 12% 45%, 0 45%, 0 35%, 30% 35%, 30% 15%, 70% 15%, 70% 35%); }
 .pnj-icon.is-cross { color: #8ff0c0; clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
+.pnj-cardtop.is-slip b { color: #ffc98a; }
+.pnj-icon.is-bar { color: #ffc98a; clip-path: polygon(22% 22%, 78% 22%, 100% 78%, 0 78%); }
+.pnj-chart.is-slip { margin: 2px 0 10px; font-size: 16px; gap: 5px 14px; }
+.pnj-chart.is-slip dt { font-size: 12px; padding-top: 4px; }
+.pnj-chart.is-slip .is-ask dd { color: #ffd29e; font-weight: 700; }
+.pnj-chart.is-slip .is-ask dt, .pnj-chart.is-slip .is-ask dd { border-top: 1px dashed rgba(150, 210, 250, 0.35); padding-top: 6px; }
 .pnj-chart { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 8px; font-size: 13px; }
 .pnj-chart div { display: contents; }
 .pnj-chart dt { color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; padding-top: 2px; }

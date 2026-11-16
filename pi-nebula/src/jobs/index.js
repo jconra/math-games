@@ -1,9 +1,11 @@
 // THE STATION'S JOB SPOTS, in the world: a glowing ring on the floor and a sign over it at each job (by the station
 // file's names, as spots.js's markers are), a prompt when the player walks up ("Galley kitchen: Start, E"), and the
 // job panel (panel.js) once started. Every job is open from the start, as in Mathwood; a job whose props are still
-// being picked (the smelter, the arena, the dock's bridge) is marked "coming soon" and has nothing to press.
+// being picked (the arena, the dock's bridge) is marked "coming soon" and has nothing to press.
 //
-//   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...} })
+//   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn } })
+//                                 live: what a job's own props are doing right now, for its questions (the smelter's
+//                                 load in the hangar: src/crane.js load()); a job without one asks nothing of the world
 //   jobs.update(dt, P, playing)   each frame: the prompt, the rings' glow; -> true while a job panel is up (the player
 //                                 stands still at the job and jobs.aim(camera) frames the job's props)
 //   jobs.aim(camera, dt)          the camera while a job is up: through the player's eyes, at the counter or desk
@@ -53,7 +55,7 @@ function ringOf(job) {
   return m;
 }
 
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {} } = {}) {
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {} } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -94,7 +96,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     s.ring.visible = s.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
-    panel = openPanel(document.body, { job: s.job, crew: c, onSave: () => save(c), onCredits: showWallet,
+    panel = openPanel(document.body, { job: s.job, crew: c, live: live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet,
       onClose: () => { s.ring.visible = s.sign.visible = true; panel = null; at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; } });
     api.panel = panel;
     return true;
@@ -162,8 +164,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     camera.position.copy(camAt); camera.lookAt(camLook);
   }
 
-  // true while the camera is the player's own eyes (main.js puts the body away then)
-  const inEyes = () => !!(at && !(at.job.view && W.view(at.job.view)));
+  // true while the camera is the player's own eyes, or they are in the job's seat (main.js puts the body away then)
+  const inEyes = () => !!(at && (at.job.seated || !(at.job.view && W.view(at.job.view))));
   const api = { update, aim, close, start, spots, missing, near: null, panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null) };
   return api;
 }

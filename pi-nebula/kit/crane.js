@@ -7,14 +7,15 @@
 //   const L = makeOreLine(built)        null if the station has no crane (or not all of its parts)
 //   L.pose(t)                           everything as it is at time t of the round (0 .. L.length)
 //   L.next()                            the round is over: the next one (the canisters have changed places)
-//   L.load(t), L.gate(t, ahead)         the load in plain numbers; the patch of floor it is working over (crane-plan.js)
+//   L.load(t), L.steady(t), L.gate(t, ahead)   the load in plain numbers and how long each stays so; the patch of
+//                                       floor it is working over (crane-plan.js)
 //   L.hook(t)                           where the cradle hangs (a point, the station's frame)
 //   L.beacon(on)                        its warning lamps bright or dark
 //   L.meshes, L.doors                   what it moves: the kit's instanced meshes and doors (the game hangs the meshes
 //                                       on the hangar's room, and tells its walls about the doors)
 import * as THREE from 'three';
 import { setDoors } from './layout.js';
-import { planCycle, valueAt, canAt, fillAt, dockedAt, gateAt, loadAt } from './crane-plan.js';
+import { planCycle, valueAt, canAt, fillAt, dockedAt, gateAt, loadAt, steadyAt } from './crane-plan.js';
 import { CRANE, SOCKET, ARMS, GLOWS, DIGIT, GAUGE } from './smelter.js';
 import { MARKS_CAN } from './ships/miner-built.js';
 import { CANISTER_AT } from './ships/miner-built.hull.js';
@@ -147,7 +148,7 @@ export function makeOreLine(built, speed = undefined) {
   let lamp = null;
   const L = {
     site, mounts, sockets, bays, cans, get plan() { return plan; }, get length() { return plan.length; }, get round() { return round; },
-    pose, next, load: (t) => loadAt(plan, t), gate: (t, ahead = 0) => gateAt(plan, t, ahead),
+    pose, next, load: (t) => loadAt(plan, t), steady: (t, ahead) => steadyAt(plan, t, ahead), gate: (t, ahead = 0) => gateAt(plan, t, ahead),
     hook(t) { const T = plan.T, yaw = valueAt(T.yaw, t), u = valueAt(T.slide, t); return new THREE.Vector3(valueAt(T.x, t) + Math.sin(yaw) * u, valueAt(T.hoist, t), valueAt(T.z, t) + Math.cos(yaw) * u); },
     beacon(on) { if (on === lamp) return; lamp = on; for (const leaf of [P.beacon, P.lamp]) if (leaf) tint(leaf, on ? GLOWS.beaconOn : GLOWS.beaconOff, GLOWS.beaconOff); },
     meshes: [...meshes], doors,
