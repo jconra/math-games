@@ -251,7 +251,7 @@ function saddleLeaf(side) {
     // where the pad's middle is when it holds the canister, from the beam's middle line; parked, R.travel further out
     const ux = (R.touch + 0.05) * k - R.x + R.travel, uy = -(R.touch + 0.05) * k - R.y;
     const x0 = side * (ux - 0.06), x1 = side * R.tail;
-    lp.slab('gun', Math.min(x0, x1), Math.max(x0, x1), uy - 0.03, uy + 0.03, zc - d + 0.02, zc + d - 0.02, { r: 0.008, cell: 9, loops: [] });
+    lp.slab('white', Math.min(x0, x1), Math.max(x0, x1), uy - 0.03, uy + 0.03, zc - d + 0.02, zc + d - 0.02, { r: 0.008, cell: 9, loops: [] });
     lp.add('solid', put(bevelBox([0.1, 0.2, 2 * d], [0, 0, 0], { r: 0.012, cell: 9, loops: [] }), [side * ux, uy, zc], [0, 0, -side * PI / 4]), 'yellow');
   };
 }
@@ -285,7 +285,8 @@ export function oreSocket(p) {
   // the rests: a beam each side (it stands REST.x out, clear of a canister and cradle coming down past this socket),
   // and on it the saddle that slides in under a seated canister with the dogs
   for (const s of [-1, 1]) {
-    B(p, 'gun', s * REST.x - REST.w / 2, s * REST.x + REST.w / 2, REST.y - REST.h / 2, REST.y + REST.h / 2, 0.05, REST.z1 + 0.06, { r: 0.012, cell: 2, loops: [] });
+    // (pale, like the rail and its hangers: a dark beam could not be told from the wall behind it)
+    B(p, 'white', s * REST.x - REST.w / 2, s * REST.x + REST.w / 2, REST.y - REST.h / 2, REST.y + REST.h / 2, 0.05, REST.z1 + 0.06, { r: 0.012, cell: 2, loops: [] });
     B(p, 'yellow', s * REST.x - REST.w / 2 - 0.006, s * REST.x + REST.w / 2 + 0.006, REST.y - REST.h / 2 - 0.006, REST.y + REST.h / 2 + 0.006, REST.z1 + 0.06, REST.z1 + 0.1);
     p.leaf('sock:saddle', saddleLeaf(s), { at: [s * REST.x, REST.y, 0], slide: [-s * REST.travel, 0, 0], door: 'lit' });
   }
