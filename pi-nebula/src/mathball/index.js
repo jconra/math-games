@@ -20,11 +20,11 @@
 //   mathballIdle(W, crew)    the arena with nobody playing: its floor's light and its signs, while someone is in it
 import * as THREE from 'three';
 import * as E from '../jobs/engine.js';
-import { makeRound, OTHER, ROUND } from './game.js';
+import { makeRound, OTHER } from './game.js';
 import { facing } from './physics.js';
-import { makeView, BALL_COLOURS } from './view.js';
-import { COURT, GOALS, GOAL_CSS, SPOTS, clampIn } from './court.js';
-import { LADDER, SETS } from './ladder.js';
+import { makeView } from './view.js';
+import { COURT, GOALS, GOAL_CSS, clampIn } from './court.js';
+import { LADDER } from './ladder.js';
 import { ruleOf, value as valueOf } from './rules.js';
 import { makeCrew } from '../../kit/crew.js';
 import { ROSTER } from '../life.js';
