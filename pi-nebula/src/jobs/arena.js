@@ -16,6 +16,10 @@ import { ruleOf, goalsFor, dealable } from '../mathball/rules.js';
 import { GOALS } from '../mathball/court.js';
 
 const setOf = (step) => LADDER[Math.max(0, Math.min(LADDER.length - 1, step - 1))];
+// (a level's grade never drops below the one before it, whatever order the game's maker puts the sets in: a set moved
+// up the ladder pays at least what the sets under it pay, and Mathwood's ladders stay easiest first)
+const GRADES = LADDER.reduce((a, S) => [...a, Math.max(S.grade, a.length ? a[a.length - 1] : 0)], []);
+const gradeAt = (step) => GRADES[Math.max(0, Math.min(GRADES.length - 1, step - 1))];
 // a goal as an answer button: the number big (or the word), the words small
 const face = (rule, gi) => {
   const R = ruleOf(rule), big = R.sign.length === 2 ? R.sign[1] : R.sign[0].split(' ')[0], small = R.sign.length === 2 ? R.sign[0] : R.sign[0].split(' ').slice(1).join(' ');
@@ -24,7 +28,7 @@ const face = (rule, gi) => {
 
 export const MAKERS = {
   goal: {
-    strand: 'mul', at: (step) => setOf(step).grade,
+    strand: 'mul', at: (step) => gradeAt(step),
     make(step, { rand = Math.random } = {}) {
       const S = setOf(step), goals = S.goals;
       const one = dealable(goals, S.pool).filter((b) => goalsFor(goals, b).length === 1);
@@ -36,7 +40,7 @@ export const MAKERS = {
         slips: goals.map((r, i) => (i === gi ? null : { ...face(r, i), slip: 'rule', why: ruleOf(r).why(ball) })).filter(Boolean),
         rightWhy: R.why(ball),
         help: { title: 'Which goal?', pic: null, line: goals.map((r) => `${ruleOf(r).say}: ${ruleOf(r).list}`).join(' · '), steps: goals.map((r) => ruleOf(r).help) },
-        own: { strand: S.strand, at: S.grade }, facts: { ball, goal: gi, set: S.key },
+        own: { strand: S.strand, at: gradeAt(step) }, facts: { ball, goal: gi, set: S.key },
       }, rand);
     },
   },
@@ -45,7 +49,7 @@ export const MAKERS = {
 export const PLACE = {
   id: 'arena', name: 'Mathball', short: 'Mathball', math: 'Number rules: odd and even, times tables, factors, squares', pic: 'arena', job: null,
   line: 'Throw number balls into the goals they fit; the goals\' rules change as the light bar goes round.',
-  levels: LADDER.map((S, i) => ({ id: S.key, title: S.short, line: S.line, grade: S.grade, strand: S.strand, count: 5, gen: { mix: [{ maker: 'goal', step: i + 1 }] } })),
+  levels: LADDER.map((S, i) => ({ id: S.key, title: S.short, line: S.line, grade: GRADES[i], strand: S.strand, count: 5, gen: { mix: [{ maker: 'goal', step: i + 1 }] } })),
 };
 
 export const JOB = {

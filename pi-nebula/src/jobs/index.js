@@ -180,7 +180,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       return true;
     }
     if (wallet.hidden) { showWallet(); wallet.hidden = false; }
-    for (const s of spots) if (s.job.game) { const z = W.room('arena'); mathballIdle(W, crew(), s.job, !!(z && z.group.visible)); }
+    for (const s of spots) if (s.job.game) { const z = W.room('arena'); mathballIdle(W, crew(), s.job, !!(z && z.group.visible), dt); }
     let best = null, bd = Infinity;
     for (const s of spots) { const d = Math.hypot(s.pos.x - P.pos.x, s.pos.z - P.pos.z); if (d < bd && d < (s.job.near ?? NEAR) && Math.abs(s.pos.y - P.pos.y) < 1.5) { bd = d; best = s; } }
     // (at a shared area: the side looked at; at first, the side the player is on)

@@ -269,6 +269,7 @@ export function makeView({ W, G: G0 }) {
   const ringGeo = new THREE.RingGeometry(0.42, 0.5, 40).rotateX(-Math.PI / 2);
   const ringOf = (c) => { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending })); m.renderOrder = 2; group.add(m); return m; };
   const youRing = ringOf(new THREE.Color(0.1, 0.9, 1.8)), themRing = ringOf(new THREE.Color(1.8, 0.55, 0.06));
+  youRing.visible = themRing.visible = false;   // (only while a round is played: V.playing)
   const balls = new Map();
   const env = W.envAt(new THREE.Vector3(MID[0], 1.5, MID[2]));
   let t = 0, strikeK = 0;
@@ -366,6 +367,7 @@ export function makeView({ W, G: G0 }) {
       }
       for (const id of [...balls.keys()]) if (!seen.has(id)) dropBall(id);
       // the players' rings
+      youRing.visible = themRing.visible = !!V.playing;
       youRing.position.set(MID[0] + G.you.x, 0.012, MID[2] + G.you.z);
       themRing.position.set(MID[0] + G.other.x, 0.012, MID[2] + G.other.z);
     },

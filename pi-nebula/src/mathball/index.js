@@ -57,13 +57,14 @@ export const MBCAM = {
 
 // ── the arena with nobody playing: the floor's light and the signs (the round's first rules at this crew's level) ──
 let idle = null;
-export function mathballIdle(W, crew, job, here) {
+export function mathballIdle(W, crew, job, here, dt = 1 / 60) {
   if (!here) { if (idle && !idle.busy) { idle.V.dispose(); idle = null; } return null; }
   if (!idle) {
     const set = setFor(crew, job);
     const G = makeRound({ set, rand: Math.random });
     idle = { V: makeView({ W, G }), G, busy: false };
   }
+  idle.V.update(dt, W.camera);   // (the floor's light alive, the signs lit)
   return idle;
 }
 function setFor(crew, job) {
@@ -178,7 +179,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const tally = E.jobTally(crew, job.id);
     tally.other = choice; onSave();
     G = makeRound({ set, rand: Math.random, other: { level: opp.level }, youRate: tally.rate || OTHER.youRate });
-    view.use(G);
+    view.use(G); view.playing = true;
     other = opp; earned = 0; round++;
     $('.mbl-pick').hidden = true; $('.mbl-end').hidden = true; $('.mbl-top').hidden = false;
     $('.mbl-them b').textContent = opp.name.replace(/^(Captain|Pilot) /, '');
