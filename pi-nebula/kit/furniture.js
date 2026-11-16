@@ -103,18 +103,19 @@ export function chair(p, v) {
 
 // the food in a serving well (its pan 0.42 by 0.40 m, the food's bed at y 0.945): the game's maker asked for "better
 // food than color squares ... burrito looking things or rolls, or just round slices of color". One kind a well, each
-// made of a few small shapes so it reads as food from across the counter: wraps, bread rolls, round slices, a stew.
+// made of a few small shapes so it reads as food from across the counter: wraps, bread rolls, round slices, a pizza.
 const TORTILLA = { c: '#d8bf8c', r: 0.8 }, FOIL = { c: '#c9ccd0', r: 0.3, m: 0.6 }, BUN = { c: '#c58a3f', r: 0.7 }, BUN_TOP = { c: '#e0b56a', r: 0.65 };
 const SLICE = [{ c: '#c5402e', r: 0.6 }, { c: '#8fb04a', r: 0.65 }, { c: '#e08a2c', r: 0.6 }, { c: '#e6cb55', r: 0.6 }];
-const STEW = { c: '#a8552a', r: 0.55 }, BITS = [{ c: '#d98a2b', r: 0.6 }, { c: '#7fa83a', r: 0.7 }, { c: '#e9dcb4', r: 0.7 }];
+const CRUST = { c: '#c99a55', r: 0.8 }, CHEESE = { c: '#e9c66a', r: 0.55 }, PEPPERONI = { c: '#a8322a', r: 0.6 }, CUT = { c: '#b0823f', r: 0.8 };
 function wellFood(p, k, x) {
   const y = 0.945;
   if (k === 0) {
-    // wraps: five lying across the pan, a foil band round the middle of each, none quite straight
-    for (let i = 0; i < 5; i++) {
-      const wx = x - 0.14 + i * 0.07, yaw = [0.05, -0.07, 0.03, -0.04, 0.08][i], dz = [0.01, -0.012, 0.004, 0.012, -0.006][i];
-      p.cyl(TORTILLA, 0.031, 0.27, [wx, y + 0.031, dz], [PI / 2, 0, yaw], 10);
-      p.cyl(FOIL, 0.033, 0.09, [wx, y + 0.031, dz - 0.03], [PI / 2, 0, yaw], 10);
+    // wraps: two rows of four, each a hand long (the game's maker: "the wraps are very long"), the rows a gap apart and
+    // half a wrap out of step so no two read as one long one; a foil band round each one's outer end; none quite straight
+    for (let i = 0; i < 8; i++) {
+      const row = i > 3 ? 1 : -1, wx = x - 0.12 + (i % 4) * 0.08 + row * 0.02, yaw = [0.06, -0.08, 0.04, -0.05, -0.07, 0.05, -0.03, 0.08][i], wz = row * 0.098 + [0.006, -0.006, 0.003, 0.006, -0.004, 0.006, -0.005, 0.003][i];
+      p.cyl(TORTILLA, 0.033, 0.15, [wx, y + 0.033, wz], [PI / 2, 0, yaw], 10);
+      p.cyl(FOIL, 0.035, 0.055, [wx, y + 0.033, wz + row * 0.04], [PI / 2, 0, yaw], 10);
     }
   } else if (k === 1) {
     // bread rolls: two rows of three, each a low dome with a paler crown
@@ -130,12 +131,13 @@ function wellFood(p, k, x) {
       p.cyl(SLICE[(r + (i === 4 ? 1 : 0)) % SLICE.length], 0.04, 0.012, [sx, y + 0.02, sz], [0, 0, -0.5], 10);
     }
   } else {
-    // a stew: a thick sauce with bits standing out of it, and a ladle's handle resting on the pan's edge
-    p.slab(STEW, x - 0.18, x + 0.18, y - 0.012, y + 0.022, -0.17, 0.17, { r: 0.02, seg: 2 });
-    const at = [[-0.11, -0.1], [0.02, -0.12], [0.12, -0.06], [-0.05, -0.02], [0.08, 0.03], [-0.12, 0.07], [0.01, 0.1], [0.13, 0.12], [-0.02, -0.07], [0.06, -0.01]];
-    at.forEach(([dx, dz], i) => p.box(BITS[i % 3], [0.032, 0.02, 0.028], [x + dx, y + 0.024, dz], [0, i * 0.9, 0], { r: 0.006 }));
-    p.cyl('chrome', 0.008, 0.3, [x + 0.1, y + 0.1, 0.08], [0.5, 0, -0.75], 8);
-    p.lathe('chrome', [[0.001, 0], [0.03, 0.004], [0.04, 0.02], [0.038, 0.022], [0.028, 0.008], [0.001, 0.004]], 10, [x + 0.01, y + 0.018, 0.035]);
+    // a pizza (the game's maker: "How about pizza? Everyone loves pizza."; the stew that was here stood above the sides
+    // of its pan): a crust with a raised rim lying on the tray, cheese inside the rim, eight slices cut, pepperoni
+    p.lathe(CRUST, [[0.001, 0], [0.164, 0], [0.171, 0.008], [0.167, 0.02], [0.153, 0.022], [0.147, 0.013], [0.001, 0.013]], 20, [x, y, 0]);
+    p.cyl(CHEESE, 0.148, 0.004, [x, y + 0.0145, 0], null, 20);
+    for (let c = 0; c < 4; c++) p.box(CUT, [0.29, 0.0015, 0.004], [x, y + 0.0167, 0], [0, c * PI / 4 + 0.2, 0]);
+    const at = [[0.105, 0.03], [0.06, 0.1], [-0.03, 0.115], [-0.1, 0.06], [-0.115, -0.03], [-0.06, -0.1], [0.03, -0.112], [0.1, -0.055], [0.04, 0.035], [-0.045, 0.02], [0.005, -0.05]];
+    at.forEach(([dx, dz]) => p.cyl(PEPPERONI, 0.021, 0.004, [x + dx, y + 0.0185, dz], null, 8));
   }
 }
 // ── the galley ────────────────────────────────────────────────────────────────────────────────────────────────────
