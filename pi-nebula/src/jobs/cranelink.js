@@ -122,5 +122,12 @@ export function craneLink({ crane, W, walls }) {
   }
   const peek = () => (crane.live ? Q.peek() : null), ahead = () => (crane.live ? Q.ahead() : []);
   const now = () => ({ ask, peek, ahead, rated: DRIVE.rated, site, marks });
-  return { now, right, wrong, update, aim, close, Q, state: () => ({ cursor: Q.cursor, queued: Q.queue.length, reserved: Q.reserved && { ...Q.reserved }, busy: crane.live ? crane.live.busy : null, steps: crane.live ? crane.live.steps : null, failed: crane.live ? crane.live.failed : null, mode: crane.mode, ghost: ghostT > 0 }) };
+  // (a card can be answered once the crane is where it starts: the answered move and the moves before the asked one
+  // made; until then the panel dims its answers and says so)
+  function ready() {
+    const D = crane.live;
+    if (!D || !D.busy) return true;
+    return { ok: false, why: D.notes.some((n) => n.key === 'people') ? 'The crane is waiting: someone is under it.' : 'The crane is getting into place...' };
+  }
+  return { now, right, wrong, ready, update, aim, close, Q, state: () => ({ cursor: Q.cursor, queued: Q.queue.length, reserved: Q.reserved && { ...Q.reserved }, busy: crane.live ? crane.live.busy : null, steps: crane.live ? crane.live.steps : null, failed: crane.live ? crane.live.failed : null, mode: crane.mode, ghost: ghostT > 0 }) };
 }

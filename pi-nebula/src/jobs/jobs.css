@@ -169,3 +169,6 @@
 @media (max-height: 480px) and (min-width: 641px) {
   .pnj-panel { left: auto; right: 8px; width: min(460px, 56vw); top: 8px; bottom: 8px; max-height: none; transform: none; }
 }
+/* a card waiting for the job's props to be in place (the crane getting to where the card starts): answers dimmed */
+.pnj-answers.is-waiting .pnj-coin { opacity: 0.42; pointer-events: none; transition: opacity 0.25s; }
+.pnj-line.is-wait { color: #9fb3c6; font-style: italic; }

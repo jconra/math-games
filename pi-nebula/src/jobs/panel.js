@@ -130,6 +130,28 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       answers.appendChild(b);
     });
     line.textContent = ''; line.className = 'pnj-line';
+    waitReady();
+  }
+  // (a job joined to its props may need them in place before a card can be answered: the crane operator job's crane
+  // getting to where the card starts. Its answers wait, dimmed, with a line saying why; live.ready() -> true, or
+  // { ok: false, why })
+  let waitTimer = 0;
+  function waitReady() {
+    clearInterval(waitTimer); waitTimer = 0;
+    const ready = live && typeof live === 'object' && live.ready;
+    if (!ready) { answers.classList.remove('is-waiting'); return; }
+    const check = () => {
+      if (closed) { clearInterval(waitTimer); waitTimer = 0; return; }
+      let v = true;
+      try { v = ready(); } catch (e) { v = true; }
+      const ok = v === true || !!(v && v.ok), was = answers.classList.contains('is-waiting');
+      answers.classList.toggle('is-waiting', !ok);
+      if (!ok) { const why = (v && v.why) || 'Getting ready...'; if (line.textContent !== why) { line.textContent = why; line.className = 'pnj-line is-wait'; } return; }
+      clearInterval(waitTimer); waitTimer = 0;
+      if (was) { if (line.classList.contains('is-wait')) { line.textContent = ''; line.className = 'pnj-line'; } t0 = performance.now(); }
+    };
+    check();
+    if (answers.classList.contains('is-waiting')) waitTimer = setInterval(check, 150);
   }
   function next({ slide = 0 } = {}) {
     closeSheet();
@@ -152,7 +174,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
 
   // ── an answer ─────────────────────────────────────────────────────────────────────────────────────────────────
   function pick(i) {
-    if (busy || !q || q.done || closed) return null;
+    if (busy || !q || q.done || closed || answers.classList.contains('is-waiting')) return null;
     const btn = answers.children[i];
     if (!btn || btn.classList.contains('is-dull')) return null;
     const r = E.answer(crew, job, q, i, { ms: performance.now() - t0, helped });
@@ -264,6 +286,6 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     el, close, pick, help, step,
     state: () => ({ job: job.id, level: q && q.level.id, levelN: E.level(crew, job), story: q && q.order.story, ask: q && q.order.ask, coins: q ? q.order.coins.map((c) => ({ label: c.label, good: c.good })) : [],
       key: q && q.order.key, facts: q && q.order.facts,
-      right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet }),
+      right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, waiting: answers.classList.contains('is-waiting'), help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet }),
   };
 }
