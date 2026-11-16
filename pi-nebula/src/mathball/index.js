@@ -92,7 +92,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   el.innerHTML = `
     <header class="mbl-top" hidden>
       <div class="mbl-score"><span class="mbl-you"><b>You</b><em>0</em></span>
-        <span class="mbl-lap" aria-label="The light bar: how far round the room it is">${GOALS.map((g) => `<i style="--c:${GOAL_CSS[g.colour]}"></i>`).join('')}<u></u></span>
+        <span class="mbl-lap" title="The light bar going round the room: as it reaches a goal, that goal's rule changes. Back at the start, the round ends." aria-label="The light bar: as it reaches a goal, that goal's rule changes">${GOALS.map((g) => `<i style="--c:${GOAL_CSS[g.colour]}"></i>`).join('')}<u></u></span>
         <span class="mbl-them"><em>0</em><b></b></span></div>
       <div class="mbl-cr" aria-label="Credits this round"><i aria-hidden="true"></i><span>0</span></div>
       <p class="mbl-theirs" aria-live="polite"></p>
@@ -214,7 +214,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function toggleHelp(on = helpBox.hidden) {
     if (on) {
       helpBox.querySelector('ul').innerHTML = G.goals.map((g, i) => { const R = ruleOf(g.rule); return `<li style="--c:${GOAL_CSS[GOALS[i].colour]}"><b>The ${GOALS[i].colour} goal: ${esc(R.say)}</b><span>${esc(R.help)}</span><small>${esc(R.list)}</small></li>`; }).join('');
-      helpBox.querySelector('.mbl-hhow').textContent = `${press('a ball')} to run to it and pick it up, then ${touchy() ? 'tap' : 'click'} a goal its number fits (or one of the goal buttons). A ball can fit more than one goal.`;
+      helpBox.querySelector('.mbl-hhow').textContent = `${press('a ball')} to run to it and pick it up, then ${touchy() ? 'tap' : 'click'} a goal its number fits (or one of the goal buttons). A ball can fit more than one goal. The bar of light going round the room over the goals (and along the top of the screen) changes a goal's rule when it gets to that goal; back where it started, the round ends.`;
     }
     helpBox.hidden = !on; paused = on && phase === 'play';
     $('.mbl-help').classList.remove('is-nudge');
