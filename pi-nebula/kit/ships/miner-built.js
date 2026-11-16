@@ -320,14 +320,17 @@ export function canisterLeaves(p, { at, rot = [0, 0, 0], slide = [0, 0, 0], door
 // hands it out: two flat bars under it between its saddles, in two stages, slide out sideways by CANISTERS.out with
 // the canister on them (door 'tray', heavy: slowly, gently at both ends), the crane takes it from there, and the bars
 // slide home. Drawn in the mount's frame turned so +x is away from the hull; the canister's middle at the origin.
-export const TRAY = { z: 0.3, w: 0.09, half: 0.45, y0: -CANISTER_AT.R - 0.065, y1: -CANISTER_AT.R - 0.008, first: 0.45, secs: 5 };
+export const TRAY = { z: 0.3, w: 0.09, half: 0.45, y0: -CANISTER_AT.R - 0.065, y1: -CANISTER_AT.R - 0.008, first: 0.45, secs: 5,
+  chock: 0.36, chockTop: -Math.sqrt(CANISTER_AT.R ** 2 - 0.31 ** 2) - 0.012 };   // (a chock: how far from the middle line; its top, just under the canister there)
 const trayLeaf = (stage) => (lp) => {
   const acc = new Acc(), T = TRAY;
   for (const sz of [1, -1]) {
     if (stage === 1) C.boxAt(acc, V3(0, T.y0 - 0.02, sz * T.z), AX, [T.half, 0.02, T.w / 2 + 0.03], PAL.metal, [], I3);                // (the outer bar: a flat channel)
     else {
       C.boxAt(acc, V3(0, (T.y0 + T.y1) / 2, sz * T.z), AX, [T.half, (T.y1 - T.y0) / 2, T.w / 2], PAL.dark, [], I3);                   // (the inner bar the canister sits on)
-      for (const sx of [1, -1]) C.boxAt(acc, V3(sx * 0.3, T.y1 + 0.03, sz * T.z), AX, [0.045, 0.03, T.w / 2], PAL.rubber, ['v-'], I3);   // (its pads, either side of the canister's lowest line)
+      // (its chocks, either side of the canister's lowest line and up to just under its flanks: yellow, so that what
+      // keeps a canister on its tray can be seen. A blind critic took the tray for a flat blade it could roll off.)
+      for (const sx of [1, -1]) C.boxAt(acc, V3(sx * T.chock, (T.y1 + T.chockTop) / 2, sz * T.z), AX, [0.05, (T.chockTop - T.y1) / 2, T.w / 2], PAL.yellow, ['v-'], I3);
       C.boxAt(acc, V3(T.half - 0.03, (T.y0 + T.y1) / 2, sz * T.z), AX, [0.03, (T.y1 - T.y0) / 2 + 0.004, T.w / 2 + 0.004], PAL.yellow, [], I3);   // (a yellow tip)
     }
   }
