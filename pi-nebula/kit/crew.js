@@ -2827,7 +2827,9 @@ export async function makeCrew(lib, recipe) {
   // one); a clip that sits, drives or works (ARMS_KEEP) puts the hands on something: none. crew.json gives each
   // outfit { Walk, Run, Run_Back }, each the smallest that keeps its sleeves and hands 5 mm off its hips and thighs
   // through that clip (the runs sideways are left on the standing one: there a knee comes up to the hand in the clip
-  // itself, which no angle clears). What is worn is the clips' own mix: each playing clip's angle by its weight in
+  // itself, which no angle clears). (2026-11-16: every value measured again once the elbows were put at a person's
+  // place, THE ELBOW at the top: the forearm swings from lower down, and most outfits need less, the walk and the run
+  // most of all; Vega standing one degree more.) What is worn is the clips' own mix: each playing clip's angle by its weight in
   // the mixer, so while one clip fades into another the arms follow that same fade, and nothing steps when someone
   // starts or stops walking. (And never faster than ARMS_RATE: a fade cut short by the next clip makes the mixer's
   // own weights jump (a station person stopping for the player and setting off again within a third of a second), and
