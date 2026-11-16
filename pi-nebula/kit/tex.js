@@ -181,7 +181,9 @@ function cockpitPrint(g, cell, uvOf, rect) {
 //   each kind of crew (192 x 128) and the fuel pump's screen; then two rows of lit signs (256 x 64)
 const SUV = (x, y, w, h) => [x / 1024, 1 - (y + h) / 1024, (x + w) / 1024, 1 - y / 1024];
 export const SIGNS = ['TERMINAL', 'HANGAR', 'QUARTERS', 'GALLEY', 'JOBS', 'DOCK', 'DECK 2', 'EXIT'];
-export const CREWS = { medic: ['MEDIC', 'CAPT. R. VANCE', '#ff6a5a'], mining: ['MINING', 'CAPT. D. HOLLIS', '#ffa53a'], explore: ['EXPLORER', 'CAPT. I. NAKAMURA', '#5fe08a'], security: ['SECURITY', 'CAPT. B. ADAIR', '#5aa8ff'] };
+// (the captains hiring, as the station's own people are: Captain Hale of the Medic, Captain Ruiz of the Miner, Captain
+// Vega of the Explorer, who walk about the terminal and offer the player a place: src/life.js, src/lines.js)
+export const CREWS = { medic: ['MEDIC', 'CAPT. HALE', '#ff6a5a'], mining: ['MINING', 'CAPT. RUIZ', '#ffa53a'], explore: ['EXPLORER', 'CAPT. VEGA', '#5fe08a'], security: ['SECURITY', 'CAPT. B. ADAIR', '#5aa8ff'] };
 export const SCREEN_RECT = {
   math: SUV(0, 0, 512, 256), status: SUV(512, 0, 512, 256), terminal: SUV(0, 256, 512, 256), radar: SUV(512, 256, 512, 256),
   jobs: SUV(0, 512, 640, 256), menu: SUV(640, 512, 384, 160), drinks: SUV(640, 672, 384, 96), fuel: SUV(768, 768, 192, 128),

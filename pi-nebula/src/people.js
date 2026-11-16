@@ -1321,7 +1321,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     },
     put(id, at, heading = 0) { const P = byId(id); if (!P) return false; release(P); P.req = null; P.walking = false; P.way = null; P.pos.copy(at); P.heading = heading; P.act = { kind: 'wait', until: 3, t: 0 }; return true; },
   };
-  const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage,
+  const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };
   return api;
 }
