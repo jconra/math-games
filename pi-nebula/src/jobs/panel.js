@@ -166,6 +166,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       // (no picks while the cards change over: the buttons on screen are still the last card's)
       const show = () => {
         busy = true;
+        card.classList.remove('is-done');
         card.classList.add('is-out');
         setTimeout(() => { if (closed) return; card.classList.remove('is-out'); draw(q.order); busy = false; t0 = performance.now(); card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400); if (helpOn) fillHelp(); }, 260);
       };
@@ -182,9 +183,12 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   }
   function holdFor(then) {
     clearInterval(waitTimer);
-    // (not busy, as the cards are not changing over yet: the last card's buttons are shut by is-waiting)
+    // (not busy, as the cards are not changing over yet: the last card's buttons are shut by is-waiting; the card itself
+    // says it is done, faded, so its picture of where things were is not taken for where they are now)
     busy = false;
     answers.classList.add('is-waiting');
+    card.classList.add('is-done');
+    const top = card.querySelector('.pnj-cardtop small'); if (top) top.textContent = 'Done';
     waitTimer = setInterval(() => {
       if (closed) { clearInterval(waitTimer); waitTimer = 0; return; }
       if (!readyNow()) return;

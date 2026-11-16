@@ -172,3 +172,5 @@
 /* a card waiting for the job's props to be in place (the crane getting to where the card starts): answers dimmed */
 .pnj-answers.is-waiting .pnj-coin { opacity: 0.42; pointer-events: none; transition: opacity 0.25s; }
 .pnj-line.is-wait { color: #9fb3c6; font-style: italic; }
+/* the card just answered, held while the job's props get ready for the next (the crane on its way): done, faded */
+.pnj-card.is-done { opacity: 0.5; transition: opacity 0.3s; }

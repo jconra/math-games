@@ -144,9 +144,11 @@ const t1 = (x) => String(Math.round(x * 10) / 10);
 // the trolley, seen from the side: a block under a rail with the cradle hanging
 const trolleyAt = (x, y) => `<rect x="${x - 13}" y="${y - 7}" width="26" height="12" rx="2" fill="${DARK}"/><path d="M${x} ${y + 5}v14" stroke="${INK}" stroke-width="1.6"/><rect x="${x - 9}" y="${y + 19}" width="18" height="7" rx="1.5" fill="${AMBER}" stroke="${INK}" stroke-width="1"/>`;
 // a place the crane goes to, under the rail: a socket's ring, a canister on the rack, the turntable
+// (by the place's words: the turntable; a socket, "socket 7" (not the Miner's "sockets' side"); a bay of the rack or an
+// empty canister; else a full canister)
 const placeAt = (x, y, what) => (/turntable/.test(what) ? `<circle cx="${x}" cy="${y + 2}" r="11" fill="${STEEL}" stroke="${INK}" stroke-width="1.4"/>`
-  : /socket/.test(what) ? `<circle cx="${x}" cy="${y + 30}" r="12" fill="${FILL2}" stroke="${INK}" stroke-width="1.4"/><circle cx="${x}" cy="${y + 30}" r="5" fill="${DARK}"/>`
-    : canEnd(x, y + 30, /empty|rack|bay/.test(what) ? 'empty' : 'full'));
+  : /socket \d/.test(what) ? `<circle cx="${x}" cy="${y + 30}" r="12" fill="${FILL2}" stroke="${INK}" stroke-width="1.4"/><circle cx="${x}" cy="${y + 30}" r="5" fill="${DARK}"/>`
+    : canEnd(x, y + 30, /empty|bay \d/.test(what) ? 'empty' : 'full'));
 Object.assign(DRAW, {
   // the rail as a number line: its metre marks, the trolley, the place it goes to; hops to count, numbers to read, or
   // the gap between two marks
@@ -169,7 +171,8 @@ Object.assign(DRAW, {
       s += text(X(from), y - 18, t1(from), { size: 12, weight: 800 }) + text(X(to), y - 18, t1(to), { size: 12, weight: 800 });
       s += `<path d="M${X(lo).toFixed(1)} ${y + 58}v-6H${X(hi).toFixed(1)}v6" fill="none" stroke="${ASK}" stroke-width="1.5"/>` + text((X(lo) + X(hi)) / 2, y + 74, '? m', { size: 14, fill: ASK, weight: 800 });
     }
-    const say = hops ? 'Each hop is one metre: count the hops' : read ? `${what}: which mark is it under?` : gap ? 'the way between the two marks' : '';
+    // (a long name, as the Miner's places have, does not fit: then just the question)
+    const say = hops ? 'Each hop is one metre: count the hops' : read ? (what.length <= 24 ? `${what}: which mark is it under?` : 'Which mark is it under?') : gap ? 'the way between the two marks' : '';
     s += text(W / 2, gap ? 128 : 112, say, { size: 12.5, fill: SOFT });
     return { svg: svg(gap ? 138 : 122, s), line: '' };
   },
