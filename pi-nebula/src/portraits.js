@@ -63,10 +63,13 @@ async function draw(lib, recipe, kinds, pose = null) {
   const c = await makeCrew(lib, recipe);
   S.scene.add(c.root);
   c.play(stand.clip, { fade: 0 }); c.update(0); c.update(stand.at);
+  // (a head sized on its outfit, kit/crew.js THE HEAD'S PLACE, is sized about its Head joint: its middle, and the face
+  // picture's camera, are taken by that size, so every face fills its window alike. 1 for a head as made)
+  const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
   for (const kind of kinds) {
     const [w, h] = SIZES[kind] || SIZES.face, cam = S.camera;
     c.root.updateMatrixWorld(true);
-    c.bones.Head.getWorldPosition(_h); _h.y += 0.09; _h.z += 0.03;   // (the middle of the head)
+    c.bones.Head.getWorldPosition(_h); _h.y += 0.09 * k; _h.z += 0.03 * k;   // (the middle of the head)
     if (kind === 'body') {
       // the whole person: a little room over the head, the feet at the bottom edge
       const top = _h.y + 0.2, bottom = -0.03, tall = top - bottom;
@@ -75,8 +78,8 @@ async function draw(lib, recipe, kinds, pose = null) {
       cam.position.set(d * 0.24, _t.y + d * 0.05, d * 0.97);
     } else {
       // the head, with the collar under it, turned a little
-      cam.fov = 24; _t.set(_h.x, _h.y - 0.04, _h.z - 0.03);
-      cam.position.set(_t.x + 0.26, _t.y + 0.04, _t.z + 0.88);
+      cam.fov = 24; _t.set(_h.x, _h.y - 0.04 * k, _h.z - 0.03 * k);
+      cam.position.set(_t.x + 0.26 * k, _t.y + 0.04 * k, _t.z + 0.88 * k);
     }
     cam.aspect = w / h; cam.updateProjectionMatrix(); cam.lookAt(_t);
     // the eyes on whoever looks at the picture (held still), then a moment for the eyes to settle
