@@ -24,7 +24,7 @@ export function craneLink({ crane, W, walls }) {
   crane.take();
   const site = crane.L.site, marks = marksOf(site);
   const Q = makeJobQueue(site, { start: () => crane.live.state, oreOf: () => crane.oreOf() });
-  const cam = followCam(W, walls);
+  const cam = followCam(W, walls, site);
   cam.zoom = 8.5;
   let closed = false, waiting = [];
 

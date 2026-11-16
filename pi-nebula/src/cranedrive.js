@@ -48,9 +48,13 @@ export function readout(r) {
 }
 
 // ── the view that follows the load ────────────────────────────────────────────────────────────────────────────────
-// From the hook, out into the open: at the wall's leg toward the hangar floor (a little toward the ship), at the
-// ship's leg up and aft over the hull; `orbit` (radians) swings it round, `zoom` (metres) brings it nearer or further.
-export function followCam(W, walls) {
+// From the hook, out into the open: at the wall's leg toward the hangar floor (a little toward the ship); at the
+// ship's leg off the side of the ship the load is on (where its trays slide out to), and up; the lower the load, the
+// higher it looks down from (so the guard rail or the hull does not pull it in close). `orbit` (radians) swings it
+// round, `zoom` (metres) brings it nearer or further. site: kit/crane.js's (for the ship's middle)
+export function followCam(W, walls, site = null) {
+  const shipMid = site && site.mounts.length ? site.mounts.reduce((q, m) => q + m.at[2], 0) / site.mounts.length : null;
+  const from = new THREE.Vector3();
   const at = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3(), dir = new THREE.Vector3(), hook = new THREE.Vector3();
   let fresh = true;
   const F = { orbit: 0, zoom: 7.5, fresh() { fresh = true; },
@@ -60,11 +64,14 @@ export function followCam(W, walls) {
         if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
         hook.set(S.x + Math.sin(S.yaw) * S.slide, S.hoist, S.z + Math.cos(S.yaw) * S.slide);
         const ship = Math.abs(Math.sin(S.yaw)) > 0.5;
-        // (the wall's leg: from the hangar floor's side; the ship's leg: aft and above, looking down over the hull)
-        const base = ship ? Math.atan2(-1, 0.42) : Math.atan2(0.38, 1), a = base + F.orbit, up = ship ? 0.62 : 0.34;
+        // (the wall's leg: from the hangar floor's side; the ship's leg: off the side of the ship the load is on)
+        const side = ship && shipMid != null ? (hook.z < shipMid ? -1 : 1) : 1;
+        const base = ship ? Math.atan2(0.35, side) : Math.atan2(0.38, 1), a = base + F.orbit;
+        const up = (ship ? 0.6 : 0.34) + Math.max(0, 2.8 - hook.y) * 0.22;
         dir.set(Math.sin(a), up, Math.cos(a)).normalize();
         let d = F.zoom;
-        const r = walls && walls.reach ? walls.reach(hook, dir, d) : d; d = Math.max(2.2, Math.min(d, r - 0.35));
+        from.copy(hook); from.y += 0.4;
+        const r = walls && walls.reach ? walls.reach(from, dir, d) : d; d = Math.max(3.2, Math.min(d, r - 0.35));
         want.copy(hook).addScaledVector(dir, d);
         want.y = Math.min(Math.max(want.y, 1.5), 8.1);
         // (looking a little past the load toward the wall it is going to, or down at the ship)
@@ -134,7 +141,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {} } =
   const $ = (s) => el.querySelector(s);
   const held = { up: false, down: false };
   let closed = false, view = 'follow', taps = { grab: false, turn: false }, noteText = '', noteT = 0, t = 0;
-  const cam = followCam(W, walls);
+  const cam = followCam(W, walls, crane.L && crane.L.site);
   if (input) input.enabled = true;
   crane.take();
 
