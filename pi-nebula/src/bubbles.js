@@ -95,7 +95,8 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
         else {
           const w = -cz, nx = (p[0] * cx + p[8] * cz) / w, ny = (p[5] * cy + p[9] * cz) / w;
           sx = (nx + 1) / 2 * W; sy = (1 - ny) / 2 * H;
-          if (sx < -60 || sx > W + 60 || sy < 20 || sy > H + 40) seen = false;
+          // (the speaker's head off the screen: no bubble (one pulled in from the edge would seem to be someone else's))
+          if (sx < 0 || sx > W || sy < 20 || sy > H + 40) seen = false;
         }
       }
       if (seen !== b.on) { b.on = seen; b.el.classList.toggle('is-on', seen); }
