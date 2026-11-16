@@ -2621,6 +2621,14 @@ function assemble(suit, others) {
 // default: a person as made. Per outfit, because a neck's length shows against each outfit's own collar: t9 and t3 20 mm
 // lower in the station uniform (atlantis2) look right, but in the medic's high collar and the spacesuit's ring the same
 // 20 mm rested the chin on the collar.
+// (2026-11-15; the game's maker, of a look seen from BEHIND in a ship: "this neck is freakishly long". Those 20 mm were
+// judged from the front; the game's camera follows the player from behind. Measured from behind, the side and the
+// front (labs/crew/sweeps.js figureOf, against real adults' ranges): the station uniform's collar is cut level, as low
+// behind as in front, so EVERY head showed a long neck from behind on it. Now atlantis2 seats every head 30 mm (the
+// outfit's own), t3 10 mm more, each other head its own few millimetres; and in atlantis1's open collar the heads whose
+// necks are long above the joint (t1, t5, t6, t8, t11, crew 1, the captains) sit 15 mm lower. No seat brings that
+// uniform's nape and chin both well inside a person's range: its collar's back wants raising in Blender.
+// ~/pw/space-math/PROPORTIONS.md)
 // Done on the bind, not the points (placeHead): each outfit bone the head and hair are skinned to carries them by the
 // move at rest (its inverse bind led by it), and the part's own bones (eyes, face) are moved, turned and sized the same,
 // so every point moves alike whatever its weights, the head's neck as made (never cut, never stretched), its eyes, face
