@@ -86,13 +86,17 @@ const RUN_RE = /^run \d+(\.\d+)?$/;
 export function craneRail(p, v) {
   const { w, h, roof } = CRANE.rail;
   if (v === 'hanger') {
-    // a saddle over the rail, a rod each side up to a plate on the roof
-    B(p, 'black', -0.07, 0.07, h - 0.01, h + 0.05, -w / 2 - 0.07, w / 2 + 0.07);
+    // a saddle over the rail, a stout rod each side up to a plate on the roof, a brace between the rods. Pale, as the
+    // rail is: black and thin they could not be seen against the roof, and the rail looked as if nothing held it up
+    // (two blind critics said so)
+    const zr = w / 2 + 0.07, mid = (h + roof) / 2;
+    B(p, 'white', -0.07, 0.07, h - 0.01, h + 0.05, -zr, zr);
     for (const s of [-1, 1]) {
-      B(p, 'black', -0.07, 0.07, h - 0.2, h + 0.05, s * (w / 2 + 0.07) - 0.035, s * (w / 2 + 0.07) + 0.035);
-      p.slab('black', -0.022, 0.022, h + 0.05, roof, s * (w / 2 + 0.07) - 0.022, s * (w / 2 + 0.07) + 0.022, { r: 0, cell: 3, loops: [] });
-      B(p, 'black', -0.1, 0.1, roof - 0.03, roof, s * (w / 2 + 0.07) - 0.1, s * (w / 2 + 0.07) + 0.1);
+      B(p, 'white', -0.07, 0.07, h - 0.2, h + 0.05, s * zr - 0.035, s * zr + 0.035);
+      p.cyl('white', 0.04, roof - h - 0.08, [0, (h + 0.05 + roof - 0.03) / 2, s * zr], null, 10);
+      B(p, 'gun', -0.14, 0.14, roof - 0.03, roof, s * zr - 0.14, s * zr + 0.14);
     }
+    B(p, 'white', -0.03, 0.03, mid - 0.035, mid + 0.035, -zr, zr);
     return;
   }
   if (v === 'stop') {
