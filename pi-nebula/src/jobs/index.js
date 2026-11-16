@@ -3,9 +3,13 @@
 // job panel (panel.js) once started. Every job is open from the start, as in Mathwood; a job whose props are still
 // being picked (the arena, the dock's bridge) is marked "coming soon" and has nothing to press.
 //
-//   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn } })
+//   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn }, crane })
 //                                 live: what a job's own props are doing right now, for its questions (the smelter's
 //                                 load in the hangar: src/crane.js load()); a job without one asks nothing of the world
+//                                 crane: the smelter's crane (src/crane.js), for the operator area's two options
+// THE OPERATOR AREA at the smelter's crane chair holds two options, one each side, the one looked at coming up (see
+// sideMarks): FREE CONTROL (job.drive: src/cranedrive.js, the crane by hand, no questions) and the CRANE OPERATOR JOB
+// (questions whose answers move the crane: src/jobs/crane.js, joined to the crane by src/jobs/cranelink.js).
 //   jobs.update(dt, P, playing)   each frame: the prompt, the rings' glow; -> true while a job panel is up (the player
 //                                 stands still at the job and jobs.aim(camera) frames the job's props)
 //   jobs.aim(camera, dt)          the camera while a job is up: through the player's eyes, at the counter or desk
@@ -21,10 +25,13 @@ import { credits } from './engine.js';
 import { JOB as galley } from './galley.js';
 import { JOB as medical } from './medical.js';
 import { JOB as smelter } from './smelter.js';
+import { JOB as crane, FREE as craneFree } from './crane.js';
+import { craneLink } from './cranelink.js';
+import { openDrive, chairScreen } from '../cranedrive.js';
 import { JOB as arena } from './arena.js';
 import { JOB as dock } from './dock.js';
 
-export const JOBS = [galley, medical, smelter, arena, dock];
+export const JOBS = [galley, medical, smelter, crane, craneFree, arena, dock];
 export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -55,7 +62,19 @@ function ringOf(job) {
   return m;
 }
 
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {} } = {}) {
+// THE OPERATOR AREA'S TWO SIDES (the game's maker, 2026-11-16: "they have 2 options pop up. Each when they look at the
+// sides of the operator area. Free control or crane operator job"). Two jobs share one area (job.pair), each on a
+// side of it (job.side, as you sit in the chair: left or right). Near the area, the one that comes up is the side the
+// camera looks at (the point of the view nearest the area's middle, left or right of it); its ring and sign are lit,
+// the other's are faint, and the other is on the prompt too, small, to be picked by a click or a tap.
+export const SIDE = { far: 0.85, dead: 0.12 };
+function sideMarks(s) {
+  // (the chair's own left, as you sit facing its forward: its +x)
+  const fx = Math.sin(s.heading), fz = Math.cos(s.heading), lx = fz, lz = -fx, k = s.job.side === 'left' ? 1 : -1;
+  return new THREE.Vector3(s.pos.x + lx * SIDE.far * k + fx * 0.6, s.pos.y, s.pos.z + lz * SIDE.far * k + fz * 0.6);
+}
+
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, crane = null } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -65,26 +84,35 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     let heading = s.heading;
     if (heading == null && job.face) { const p = W.place(job.face); if (p) heading = Math.atan2(p.x - s.pos.x, p.z - s.pos.z); }
     if (heading == null && job.spot.place) { const p = W.place(job.spot.place); if (p && Math.hypot(p.x - s.pos.x, p.z - s.pos.z) > 0.2) heading = Math.atan2(p.x - s.pos.x, p.z - s.pos.z); }
-    const ring = ringOf(job); ring.position.copy(s.pos); ring.position.y += 0.02;
-    const sign = signOf(job); sign.position.copy(s.pos); sign.position.y += 2.3;
+    const spot = { job, pos: s.pos.clone(), heading: heading ?? 0 };
+    // (a side of a shared area: its ring and sign on its own side)
+    const mark = job.pair ? sideMarks(spot) : spot.pos;
+    const ring = ringOf(job); ring.position.copy(mark); ring.position.y += 0.02;
+    const sign = signOf(job); sign.position.copy(mark); sign.position.y += 2.3;
+    if (job.pair) { sign.position.y -= 0.1; sign.scale.multiplyScalar(0.9); }
     group.add(ring, sign);
-    spots.push({ job, pos: s.pos.clone(), heading: heading ?? 0, ring, sign });
+    spots.push(Object.assign(spot, { ring, sign, mark }));
   }
   if (missing.length) console.info('job spots left out (the station has no such place): ' + missing.join(', '));
+  const pairOf = (s) => (s.job.pair ? spots.filter((x) => x.job.pair === s.job.pair) : [s]);
+  // (the operator's chair's middle screen shows the crane's numbers, live: the rail's mark, the hook's height, the load)
+  const screen = crane && crane.on ? chairScreen(W, crane) : null;
 
   // ── the prompt ────────────────────────────────────────────────────────────────────────────────────────────────
   const prompt = document.createElement('div');
   prompt.className = 'pnj-prompt'; prompt.hidden = true;
-  prompt.innerHTML = '<div class="pnj-pw"><b></b><small></small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  prompt.innerHTML = '<div class="pnj-pw"><b></b><small></small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>'
+    + '<button type="button" class="pnj-other" hidden><span></span><small></small></button>';
   document.body.appendChild(prompt);
-  const goBtn = prompt.querySelector('.pnj-go');
+  const goBtn = prompt.querySelector('.pnj-go'), otherBtn = prompt.querySelector('.pnj-other');
   goBtn.addEventListener('click', () => { if (near && near.job.open) start(near.job.id); });
+  otherBtn.addEventListener('click', () => { if (other) start(other.job.id); });
   const wallet = document.createElement('div');
   wallet.className = 'pnj-wallet'; wallet.hidden = true; wallet.innerHTML = '<i aria-hidden="true"></i><span></span>';
   document.body.appendChild(wallet);
   const showWallet = () => { const c = crew(); wallet.querySelector('span').textContent = `${credits(c)} ${credits(c) === 1 ? 'credit' : 'credits'}`; };
 
-  let near = null, panel = null, at = null, playing = false, t = 0;
+  let near = null, other = null, panel = null, link = null, at = null, playing = false, t = 0, faced = null;
   const camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
   let camFresh = true;
 
@@ -93,11 +121,17 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     const c = crew();
     if (!s || !s.job.open || !c || panel) return false;
     at = s; camFresh = true;
-    s.ring.visible = s.sign.visible = false;   // (the job's own props in view, not its marker)
+    for (const x of pairOf(s)) x.ring.visible = x.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
-    panel = openPanel(document.body, { job: s.job, crew: c, live: live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet,
-      onClose: () => { s.ring.visible = s.sign.visible = true; panel = null; at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; } });
+    const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; if (link) { link.close(); link = null; } at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };
+    if (s.job.drive) {
+      // free control: the crane by hand (src/cranedrive.js), no questions
+      panel = openDrive(document.body, { crane, input, W, walls, onClose: done });
+    } else {
+      link = s.job.id === 'crane' && crane ? craneLink({ crane, W, walls }) : null;
+      panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
+    }
     api.panel = panel;
     return true;
   }
@@ -108,28 +142,64 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') { e.preventDefault(); start(near.job.id); }
   });
 
+  // which side of a shared area the camera is looking at (with a little slack, so it does not flicker)
+  const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _c = new THREE.Vector3();
+  function facing(s) {
+    const cam = W.camera; cam.getWorldDirection(_d); _o.copy(cam.position);
+    _c.set(s.pos.x, s.pos.y + 0.9, s.pos.z);
+    const tt = Math.max(0, _c.clone().sub(_o).dot(_d)), p = _o.addScaledVector(_d, tt);
+    // (its place across the area, along the chair's own left: + left, - right)
+    const lx = Math.cos(s.heading), lz = -Math.sin(s.heading), across = (p.x - s.pos.x) * lx + (p.z - s.pos.z) * lz;
+    if (across > SIDE.dead) return 'left';
+    if (across < -SIDE.dead) return 'right';
+    return null;
+  }
   function update(dt, P, isPlaying = true) {
     t += dt;
     playing = isPlaying;
-    for (const s of spots) { s.ring.material.opacity = (s.job.open ? 0.6 : 0.3) + Math.sin(t * 2.2 + s.pos.x) * (s.job.open ? 0.25 : 0.08); }
-    if (!playing || !P) { prompt.hidden = true; wallet.hidden = true; near = null; api.near = null; return false; }
+    if (screen) screen.update(dt);
+    for (const s of spots) {
+      const lit = !s.job.pair || (near === s), base = s.job.open ? 0.6 : 0.3;
+      s.ring.material.opacity = (lit ? base : 0.14) + Math.sin(t * 2.2 + s.pos.x) * (s.job.open ? (lit ? 0.25 : 0.05) : 0.08);
+      if (s.job.pair) s.sign.material.opacity = lit ? 1 : 0.32;
+    }
+    if (!playing || !P) { prompt.hidden = true; wallet.hidden = true; near = null; other = null; api.near = null; api.nearJobs = []; return false; }
     if (panel) {
+      if (panel.update) panel.update(dt);
+      if (link) link.update(dt);
       // standing at the job, facing it
       const k = 1 - Math.exp(-8 * dt), dh = Math.atan2(Math.sin(at.heading - P.heading), Math.cos(at.heading - P.heading));
       P.pos.lerp(at.pos, k); P.heading += dh * k;
       return true;
     }
     if (wallet.hidden) { showWallet(); wallet.hidden = false; }
-    let best = null, bd = NEAR;
+    let best = null, bd = Infinity;
     for (const s of spots) { const d = Math.hypot(s.pos.x - P.pos.x, s.pos.z - P.pos.z); if (d < bd && d < (s.job.near ?? NEAR) && Math.abs(s.pos.y - P.pos.y) < 1.5) { bd = d; best = s; } }
-    if (best !== near) {
-      near = best; api.near = best ? best.job.id : null;
+    // (at a shared area: the side looked at; at first, the side the player is on)
+    let alt = null;
+    if (best && best.job.pair) {
+      const two = pairOf(best);
+      const side = facing(best) || faced || (((P.pos.x - best.pos.x) * Math.cos(best.heading) - (P.pos.z - best.pos.z) * Math.sin(best.heading)) > 0 ? 'left' : 'right');
+      faced = side;
+      best = two.find((x) => x.job.side === side) || two[0];
+      alt = two.find((x) => x !== best) || null;
+    } else faced = null;
+    if (best !== near || alt !== other) {
+      near = best; other = alt; api.near = best ? best.job.id : null; api.nearJobs = best ? [best.job.id, ...(alt ? [alt.job.id] : [])] : [];
       prompt.hidden = !best;
       if (best) {
         prompt.classList.toggle('is-soon', !best.job.open);
+        prompt.classList.toggle('is-pair', !!alt);
         prompt.querySelector('b').textContent = best.job.sign;
         prompt.querySelector('small').textContent = best.job.hint;
-        goBtn.hidden = !best.job.open;
+        goBtn.hidden = !best.job.open; goBtn.dataset.job = best.job.id;
+        otherBtn.hidden = !alt;
+        if (alt) {
+          otherBtn.dataset.job = alt.job.id;
+          otherBtn.querySelector('span').textContent = alt.job.sign;
+          otherBtn.querySelector('small').textContent = alt.job.side === 'left' ? '◀ look left' : 'look right ▶';
+          otherBtn.setAttribute('aria-label', `${alt.job.sign} (look ${alt.job.side}, or pick it here)`);
+        }
       }
     }
     return false;
@@ -137,6 +207,9 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
 
   function aim(camera, dt = 1 / 60) {
     if (!at) return;
+    // (free control and the crane operator job: the view that follows the load)
+    if (panel && panel.aim) return panel.aim(camera, dt);
+    if (link) return link.aim(camera, dt);
     const h = at.heading, fx = Math.sin(h), fz = Math.cos(h), rx = -fz, rz = fx;   // (forward, and the player's right)
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     const V = at.job.view ? W.view(at.job.view) : null;
@@ -166,6 +239,6 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
 
   // true while the camera is the player's own eyes, or they are in the job's seat (main.js puts the body away then)
   const inEyes = () => !!(at && (at.job.seated || !(at.job.view && W.view(at.job.view))));
-  const api = { update, aim, close, start, spots, missing, near: null, panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null) };
+  const api = { update, aim, close, start, spots, missing, near: null, nearJobs: [], panel: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; } };
   return api;
 }

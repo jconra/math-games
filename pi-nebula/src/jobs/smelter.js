@@ -505,14 +505,15 @@ export const PLACE = {
 
 export const JOB = {
   // (named in the game's maker's own word for it: "they could go over to the controls and start calculating")
-  id: 'smelter', name: 'The smelter controls', short: 'Smelter', open: true,
-  // where the job is: beside the operator's chair, on the door's side of it (the chair's own frame: it faces +z, the
-  // window and the hangar)
-  spot: { piece: 'opChair', local: [-0.78, 0, -0.05], face: [0, 1] },
-  // the camera while it's up: from the chair's seat, out of the window at the Miner and the crane (the station file's
-  // view). The crew member is in the chair, so their body is put away as it is where a job is seen through their eyes
-  view: 'smelter-console', seated: true,
-  sign: 'Smelter controls', hint: 'Work out what the load pays',
+  id: 'smelter', name: 'The smelter pay desk', short: 'Smelter', open: true,
+  // where the job is: at its own desk in the smelter's control room, by the window at the room's door end, looking out
+  // at the hangar (the desk's own frame: its front, where one sits, is its +z). It moved here from the operator's chair
+  // (2026-11-16), which now holds the crane's two options (src/jobs/crane.js): the game's maker to say whether it stays
+  // its own job here or folds into the crane operator job's upper levels.
+  spot: { piece: 'desk', variant: 'screen', room: 'smelter-control', local: [0, 0, 0.95], face: [0, -1] },
+  // the camera while it's up: through the crew member's eyes at the desk, out of the window (their body is put away)
+  seated: true,
+  sign: 'Smelter pay desk', hint: 'Work out what the load pays',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'payslip',
 };

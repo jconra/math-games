@@ -117,7 +117,8 @@ async function boot() {
   prebuild(chosen);
   // the station's jobs: their spots, the prompt, the job panel (jobs/index.js); credits are saved with the crew member
   // (the smelter's pay slips count the canisters really in the hangar: the crane's load, as it is when a slip is made)
-  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) } });
+  // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
+  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) }, crane });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');

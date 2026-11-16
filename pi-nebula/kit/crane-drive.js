@@ -145,7 +145,8 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       M.forEach((m, i) => {
         const there = whoAt('mount', i); if (carrying ? there >= 0 : there < 0) return;
         if (mOver[i] >= 0 && whoAt('mount', mOver[i]) >= 0) return;   // (under a canister: out of reach)
-        const o = outPos(i), dd = Math.hypot(hx - o[0], hz - o[2]); if (dd < reach) offer({ kind: 'mount', i, at: o, c: there, d: dd, dy: hy - o[1] });
+        // (two free mounts one over the other: the one whose tray is out, else the lower, as the round loads them)
+        const o = outPos(i), dd = Math.hypot(hx - o[0], hz - o[2]); if (dd < reach) offer({ kind: 'mount', i, at: o, c: there, d: dd + (S.tray[i] > 0.01 ? 0 : 1e-3) + (m.upper ? 5e-4 : 0), dy: hy - o[1] });
       });
     }
     return best;
@@ -169,11 +170,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     if (L.kind === 'mount' && S.tray[L.i] < 0.999) return null;
     return L;
   }
-  // the lowest the hook may come where it is lined up (on a canister's crown, or a canister set down at rest; over a
-  // ship's tray that is not out yet, high enough for it to come out under the cradle) -> a height, or null
-  function floorAt(L, carrying) {
+  // the lowest the hook may come where it is lined up (on a canister's crown, or a canister set down at rest; coming
+  // down over a ship's tray that is not out yet, high enough for it to come out under the cradle) -> a height, or null
+  function floorAt(L, carrying, down = false) {
     if (!L || L.kind === 'socket') return null;
-    if (L.kind === 'mount' && S.tray[L.i] < 0.999) return M[L.i].at[1] + lift + (carrying ? DRIVE.clearHeld : DRIVE.clearEmpty);
+    if (L.kind === 'mount' && S.tray[L.i] < 0.999) return down ? M[L.i].at[1] + lift + (carrying ? DRIVE.clearHeld : DRIVE.clearEmpty) : null;
     if (!carrying && L.c < 0) return null;
     return L.at[1];
   }
@@ -217,11 +218,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   // c: { x, z, yaw, slide, hoist, arms }. Where it is lined up with a place, what touches by design there is not in
   // the way: the collar round a canister going into it (the canister must then be through an open iris, and no
   // deeper than seated), the canister the cradle comes down onto (only to its crown), what a canister is set down on.
-  function blocked(c, carrying = held >= 0, rel = carrying ? S.cans[held].rel : 0) {
+  function blocked(c, carrying = held >= 0, rel = carrying ? S.cans[held].rel : 0, down = false) {
     const L = lineup(c, carrying, 0.03);
     const [hx, , hz] = hookAt(c);
     const target = !carrying && L && L.c >= 0 ? L.c : -1;
-    const fl = floorAt(L, carrying);
+    const fl = floorAt(L, carrying, down);
     if (fl != null && c.hoist < fl - 1e-4) return { what: L.kind === 'mount' && S.tray[L.i] < 0.999 ? 'trayIn' : carrying ? (L.kind === 'bay' ? 'rack' : 'tray') : 'canister' };
     // (a socket lined up with: its collar is where the canister and the cradle's near arms go)
     const inSock = L && L.kind === 'socket' && (!carrying || Math.abs(L.dy) < 0.03) ? L.i : -1;
@@ -292,7 +293,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       // people: nothing comes down over anyone, and a low load is not moved over them
       if (axis === 'hoist' && each < 0 && under(c)) { note('people', 'Someone is under the load: it will not come down.'); break; }
       if (axis !== 'hoist' && underside(c) < DRIVE.low && under(c) && !under(cfg())) { note('people', 'Someone is under there: a load this low will not go over them.'); break; }
-      const hit = blocked(c);
+      const hit = blocked(c, held >= 0, held >= 0 ? S.cans[held].rel : 0, axis === 'hoist' && each < 0);
       if (hit) { note('hit:' + hit.what, hitWords(hit)); break; }
       if (axis === 'along') { if (leg() === 'wall') S.x = c.x; else S.z = c.z; } else S[axis] = c[axis];
       got += each;
@@ -359,10 +360,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   // the trays, the irises, the collars' dogs, the draining: each frame, whoever is working the crane
   function stepParts(dt) {
     const [hx, hy, hz] = hookAt(S), onShip = leg() === 'ship';
+    // (the one mount the cradle is over and could use: its tray comes out; one at a time)
+    const wanted = onShip ? lineup(S, held >= 0, 1.0) : null;
     M.forEach((m, i) => {
-      const o = outPos(i), far = Math.hypot(hx - o[0], hz - o[2]), there = whoAt('mount', i);
-      let to = 0;
-      if (onShip && far < 1.0 && !(mOver[i] >= 0 && whoAt('mount', mOver[i]) >= 0)) to = held >= 0 ? (there < 0 ? 1 : 0) : there >= 0 ? 1 : 0;
+      const o = outPos(i), far = Math.hypot(hx - o[0], hz - o[2]);
+      let to = wanted && wanted.kind === 'mount' && wanted.i === i ? 1 : 0;
       // (and it stays out while the cradle is down at it, whatever it holds)
       if (onShip && far < 0.1 && hy < o[1] + 1.2 && S.tray[i] > 0.5) to = 1;
       if (Math.abs(S.tray[i] - to) < 1e-9) return;
@@ -461,7 +463,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       if (inMouth) wantHoist = 0;
     }
     // (the last of a set-down, slowly)
-    const fl = floorAt(lineup(S, held >= 0, 0.03), held >= 0);
+    const fl = floorAt(lineup(S, held >= 0, 0.03), held >= 0, true);
     if (fl != null && wantHoist < 0 && S.hoist - fl < 0.35) wantHoist = Math.max(wantHoist, -sp.set.v);
     const g = lining(push);
     const tA = clamp(wantAlong + g.along, -sp.travel.v, sp.travel.v), tS = clamp(wantSlide + g.slide, -sp.slide.v, sp.slide.v), tH = clamp(wantHoist + g.hoist, -sp.hoist.v, sp.hoist.v);
@@ -538,7 +540,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     for (let i = 1; i <= n; i++) {
       const v = from + (to - from) * i / n;
       if (axis === 'along') { if (legOf(c.yaw) === 'wall') c.x = v; else c.z = v; } else c[axis] = v;
-      if (blocked(c)) return null;
+      if (blocked(c, held >= 0, held >= 0 ? S.cans[held].rel : 0, axis === 'hoist' && to < from)) return null;
     }
     return c;
   }

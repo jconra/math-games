@@ -5588,6 +5588,7 @@
         {"piece":"screen","cell":[26.5,-12],"turn":3,"variant":"radar","off":[0,1.35,0]},
         {"piece":"jbox","cell":[26.5,-12],"turn":3,"variant":"plain","off":[0,2.3,0]},
         {"piece":"opChair","cell":[24.5,-10.5],"turn":0,"variant":"crane","off":[0,0,0.2]},
+        {"piece":"desk","cell":[23,-9.5],"turn":2,"variant":"screen","off":[-0.4,0,0.24]},
         {"piece":"table","cell":[25.5,-11.5],"turn":0,"variant":"long","off":[0.2,0,-0.3]},
         {"piece":"chair","cell":[25.5,-12],"turn":0,"variant":"stool","off":[-0.3,0,0]},
         {"piece":"chair","cell":[26,-12],"turn":0,"variant":"stool","off":[-0.3,0,0]},

@@ -17,7 +17,8 @@
 //
 //   const J = openPanel(root, { job, crew, live, onClose, onSave, onCredits })    J.close(), J.state() (for rigs),
 //   J.pick(i), J.help(), J.step(dir). live: a function giving what the job's props are doing right now (the smelter's
-//   load in the hangar), asked once for each new question; or null
+//   load in the hangar), or an object joined to them (the crane operator job: src/jobs/cranelink.js): { now() for the
+//   makers, right(q, coin) and wrong(q, coin) told of each pick, close() }; asked once for each new question; or null
 import * as E from './engine.js';
 import { helpPicture } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
@@ -96,6 +97,11 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       return `<header class="pnj-cardtop is-chart"><span class="pnj-icon is-cross" aria-hidden="true"></span><b>Patient chart</b><small>Triage</small></header>
         ${who ? `<dl class="pnj-chart"><div><dt>Patient</dt><dd>${esc(who.name)}</dd></div>${who.why ? `<div><dt>In for</dt><dd>${esc(who.why)}</dd></div>` : ''}</dl>` : ''}`;
     }
+    if (job.card === 'workorder') {
+      // (the crane operator job: a move of the crane's that is about to be made, or one from the log)
+      const now = !!(o.facts && o.facts.live);
+      return `<header class="pnj-cardtop is-order"><span class="pnj-icon is-hook" aria-hidden="true"></span><b>Work order</b><small>${now ? 'The crane, right now' : 'From the log'}</small></header>`;
+    }
     if (job.card === 'payslip') {
       // (a count taken from the hangar as the slip was made says so; any other slip is someone's load from the log)
       const now = !!(o.facts && o.facts.live);
@@ -128,7 +134,8 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   function next({ slide = 0 } = {}) {
     closeSheet();
     let now = null;
-    if (live) { try { now = live(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
+    const read = live ? (typeof live === 'function' ? live : live.now) : null;
+    if (read) { try { now = read(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
     q = E.deal(crew, job, { last: lastAsk, live: now });
     lastAsk = q.order.ask_ || null;
     onSave();
@@ -151,6 +158,9 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     const r = E.answer(crew, job, q, i, { ms: performance.now() - t0, helped });
     if (!r) return null;
     onSave();
+    // (a job joined to its props hears each pick: the crane operator job's crane makes the move, or shows the wrong one's path)
+    const coin = q.order.coins[i];
+    if (live && typeof live === 'object') { try { (r.right ? live.right : live.wrong)?.(q, coin); } catch (e) { console.warn('Pi Nebula: the job\'s props could not take the answer', e); } }
     if (r.right) {
       busy = true;
       btn.classList.add('is-right');

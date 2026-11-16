@@ -68,6 +68,8 @@
 .pnj-icon.is-cross { color: #8ff0c0; clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
 .pnj-cardtop.is-slip b { color: #ffc98a; }
 .pnj-icon.is-bar { color: #ffc98a; clip-path: polygon(22% 22%, 78% 22%, 100% 78%, 0 78%); }
+.pnj-cardtop.is-order b { color: #ffd29e; }
+.pnj-icon.is-hook { color: #ffd29e; clip-path: polygon(40% 0, 60% 0, 60% 52%, 78% 52%, 78% 82%, 60% 100%, 32% 100%, 18% 84%, 30% 76%, 38% 84%, 52% 84%, 60% 76%, 60% 66%, 40% 66%); }
 .pnj-chart.is-slip { margin: 2px 0 10px; font-size: 16px; gap: 5px 14px; }
 .pnj-chart.is-slip dt { font-size: 12px; padding-top: 4px; }
 .pnj-chart.is-slip .is-ask dd { color: #ffd29e; font-weight: 700; }
@@ -140,12 +142,20 @@
 .pnj-go { flex: none; height: 44px; padding: 0 18px; font-size: 15px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--accent-ink) !important; background: var(--accent) !important; clip-path: var(--oct); --cut: 9px; }
 .pnj-go kbd { background: rgba(0, 0, 0, 0.18); color: var(--accent-ink); }
+.pnj-other { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; height: 44px; padding: 0 14px; justify-content: center;
+  color: var(--dim) !important; background: rgba(255, 255, 255, 0.05) !important; box-shadow: inset 0 0 0 1px rgba(196, 220, 240, 0.22); clip-path: var(--oct); --cut: 9px; opacity: 0.78; }
+.pnj-other[hidden] { display: none; }
+.pnj-other span { font-size: 12.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.pnj-other small { font-size: 11.5px; color: var(--faint); }
+.pnj-other:hover { opacity: 1; box-shadow: inset 0 0 0 1px var(--line-hi); }
 .pnj-wallet { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 14; height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 8px;
   font-size: 14px; font-weight: 700; color: var(--accent); background: rgba(14, 18, 24, 0.72); box-shadow: inset 0 0 0 1.5px rgba(150, 200, 240, 0.45); clip-path: var(--oct); --cut: 10px; pointer-events: none; }
 .pnj-wallet[hidden] { display: none; }
 
 /* ── a phone: the panel along the bottom, the props in view above ─────────────────────────────────────────── */
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj-prompt.is-pair { flex-wrap: wrap; row-gap: 6px; padding-right: 8px; }
+  .pnj-prompt.is-pair .pnj-other { order: 3; flex: 1 1 100%; height: 36px; flex-direction: row; justify-content: space-between; align-items: center; }
   .pnj-panel { left: 8px; right: 8px; width: auto; top: auto; bottom: max(8px, env(safe-area-inset-bottom)); max-height: 66vh; padding: 10px 12px 12px; gap: 8px; transform: translateY(24px); }
   .pnj.is-going .pnj-panel { transform: translateY(24px); }
   .pnj-story { font-size: 15px; }
