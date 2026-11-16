@@ -64,7 +64,7 @@ function label(text, colour) {
   g.font = 'bold 30px system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
   g.lineWidth = 5; g.strokeStyle = 'rgba(12, 16, 22, 0.85)'; g.strokeText(text, 6, 25); g.fillStyle = colour; g.fillText(text, 6, 25);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false })); s.scale.set(0.8, 0.06, 1); s.center.set(0, 0.5);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false })); s.scale.set(0.8, 0.06, 1); s.center.set(0, 0.2);
   return s;
 }
 
@@ -77,9 +77,9 @@ export function referenceFigure({ sex = 'f', stature = 1.7, guides = false, reac
   // the line from the front hairline down to the nape's hairline
   {
     const rx = w('headBreadth') / 2, rz = w('headLength') / 2, ry = H / 2, cy = top - ry, cz = 0.012 * S, rings = [];
-    for (let i = 0; i <= 20; i++) { const t = i / 20, yy = cy - ry * Math.cos(t * Math.PI), s = Math.sin(t * Math.PI), low = Math.max(0, (cy - yy) / ry); rings.push([yy, Math.max(1e-4, rx * s * (1 - 0.22 * low * low)), Math.max(1e-4, rz * s * (1 - 0.1 * low * low)), cz + 0.012 * S * low * low]); }
+    for (let i = 0; i <= 48; i++) { const t = i / 48, yy = cy - ry * Math.cos(t * Math.PI), s = Math.sin(t * Math.PI), low = Math.max(0, (cy - yy) / ry); rings.push([yy, Math.max(1e-4, rx * s * (1 - 0.22 * low * low)), Math.max(1e-4, rz * s * (1 - 0.1 * low * low)), cz + 0.012 * S * low * low]); }
     const yF = top - HEAD_MARKS.hairline * H, yB = top - HEAD_MARKS.nape * H;
-    G.add(new THREE.Mesh(loft(rings, (x, yy, z, c) => { const f = (z - (cz - rz)) / (2 * rz), line = yB + (yF - yB) * Math.min(1, Math.max(0, f * 1.15)); c.copy(yy > line ? TONE.hair : TONE.skin); }, 40), both));
+    G.add(new THREE.Mesh(loft(rings, (x, yy, z, c) => { const f = (z - (cz - rz)) / (2 * rz), line = yB + (yF - yB) * Math.min(1, Math.max(0, f * 1.15)); c.copy(yy > line ? TONE.hair : TONE.skin); }, 72), both));
   }
   // THE NECK AND THE BODY, one skin from the crotch up into the head: the hips, the waist, the chest, the shoulders
   // (as wide as the shoulder points, at their height), the slope up to the neck, the neck. Clothes below the neckline
@@ -116,14 +116,14 @@ export function referenceFigure({ sex = 'f', stature = 1.7, guides = false, reac
   const marks = { 'top of the head': top, 'skull base': top - HEAD_MARKS.skullBase * H, chin, 'neck ends (back)': y('cervicale'), 'shoulder points': y('acromion'), elbows: y('elbow'), wrists: y('wrist'), crotch: y('crotch'), fingertips: y('fingertip'), knees: y('knee') };
   if (guides) {
     const bar = new THREE.MeshBasicMaterial({ color: 0xf2b547 });
-    // (a bar a landmark, from 0.3 m to the mannequin's left to `reach` to its right; landmarks under 1.5 cm apart
+    // (a bar a landmark, from 0.3 m to the mannequin's left to `reach` to its right; landmarks under 3 cm apart
     // (the chin and the neck's end behind; the wrists and the crotch) share one name tag)
     const rows = [];
     for (const [name, yy] of Object.entries(marks).sort((a, b) => b[1] - a[1])) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(reach + 0.3, 0.003, 0.003), bar); b.position.set((0.3 - reach) / 2, yy, 0); G.add(b);
-      const last = rows[rows.length - 1]; if (last && last.y - yy < 0.015) last.names.push(name); else rows.push({ y: yy, names: [name] });
+      const last = rows[rows.length - 1]; if (last && last.y - yy < 0.03) last.names.push(name); else rows.push({ y: yy, names: [name] });
     }
-    for (const r of rows) { const t = label(r.names.join(' + '), '#f2b547'); t.position.set(0.32, r.y, 0); G.add(t); }
+    for (const r of rows) { const t = label(r.names.join(' + '), '#f2b547'); t.position.set(0.32, r.y + 0.004, 0); G.add(t); }
   }
   G.userData.marks = marks; G.userData.proportions = R; G.userData.stature = S; G.userData.head = H;
   return G;
