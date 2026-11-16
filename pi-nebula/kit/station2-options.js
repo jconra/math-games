@@ -21,14 +21,10 @@
 //     '2 twin-rail spreader'  two rails, a wide trolley, a spreader beam whose end clamps grip the canister's ends
 //     '3 arm on a track'   an enclosed track with a light strip, a carriage with a jointed arm and four fingers
 //     '4 telescopic mast'  a stiff mast of three sliding sections down to a round lifting magnet with a ring of light
-//   scanneropt   the medical centre's big scanner (2.2 wide, 2.4 tall, 1.9 deep, its table 3.1 m long), its back on a
-//                stretch of wall: '1 ring' (the classic: a rounded housing, a round bore with a ring of light), '2 open'
-//                (two great round plates above and below), '3 thin ring' (a slim ring on a low base), '4 pod' (a
-//                capsule under a clear lid, an arch of light over it)
+//   (the big scanner's four sketches are gone: the game's maker picked, and it is built: kit/bigscanner.js)
 //   socketopt    the wall sockets the canisters are emptied through: one in use, one empty, on a stretch of wall:
 //                '1 clamp collar', '2 cradle and valve', '3 floor well' (the canister stands upright), '4 hatch'
-import { bevelBox, put, circle, bend, line, cylinder, rrect, lathe as lathe2 } from './geo.js';
-import { pulseLine } from './shipparts/cabin/medical.js';
+import { bevelBox, put, circle, bend, line, cylinder, lathe as lathe2 } from './geo.js';
 import { liveFace } from './shipparts/cabin/live.js';
 import { floorQuad } from './shell.js';
 import { floorDecal } from './station2.js';
@@ -331,64 +327,6 @@ export function craneOption(p, v) {
   deck(p, -4.5, 4.5, -3.0, 3.0); placed(p, person, [2.4, 0, 1.6], -0.5);
 }
 
-// ── THE BIG SCANNER (the medical centre's MRI-type scanner: a magnet 2.2 wide, 2.4 tall, 1.9 deep, its bore 0.7 m across,
-// its table 3.1 m long toward the way in, +z). Each sketch stands with its back on z = 0 (a wall) ──────────────────
-const MAG = { w: 2.2, h: 2.4, d: 1.9, bore: 0.35, by: 1.15 };
-function scanTable(p, z0, len, y = 0.82) {
-  p.slab('white2', -0.42, 0.42, 0, y - 0.12, z0 + len - 1.3, z0 + len - 0.2, o9);   // (its pedestal, at the room end)
-  p.slab('band', -0.38, 0.38, y - 0.12, y - 0.04, z0, z0 + len, o9);
-  p.slab({ c: '#2b3a52', r: 0.8, m: 0, w: 0 }, -0.3, 0.3, y - 0.04, y + 0.02, z0 + 0.3, z0 + len - 0.1, { r: 0.03, cell: 9, loops: [] });
-}
-function scanRing(p) {
-  // 1: the classic: a pale rounded housing with a round bore, a teal ring of light at its mouth, a long table into it
-  const g = p.extrude('white2', rrect(MAG.w, MAG.h, 0.5, 6, 0, MAG.h / 2).pts, MAG.d, 0.06, { holes: [circle(MAG.bore, 40).pts.map(([x, y]) => [x, y + MAG.by]).reverse()], curve: 24 }); put(g, [0, 0, 0.05]);
-  p.slab('band', -MAG.w / 2 + 0.1, MAG.w / 2 - 0.1, 0, 0.18, 0.1, MAG.d, o9);
-  const ring = p.lathe('black', [[MAG.bore + 0.06, 0], [MAG.bore + 0.2, 0], [MAG.bore + 0.2, 0.03], [MAG.bore + 0.06, 0.03]], 40); put(ring, [0, MAG.by, MAG.d + 0.06], [PI / 2, 0, 0]);
-  p.add('glow', put(lathe2([[MAG.bore + 0.19, 0], [MAG.bore + 0.07, 0]], 40), [0, MAG.by, MAG.d + 0.1], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
-  p.add('glow', put(cylinder(MAG.bore - 0.005, 0.01, [0, 0, 0], 40), [0, MAG.by, 0.4], [PI / 2, 0, 0]), [0.2, 1.4, 1.3]);
-  pulseLine(p, -0.5, 0.5, 2.05, MAG.d + 0.07, 0.12);
-  scanTable(p, MAG.d - 0.9, 3.1 + 0.9);
-  p.light([0, 1.3, MAG.d + 0.6], 1.2, [0.5, 1, 0.95], [0, 0, 1], 4);
-}
-function scanOpen(p) {
-  // 2: open: two great round plates above and below the patient, a pillar behind joining them, open on three sides
-  p.lathe('white2', [[0.001, 0], [1.1, 0], [1.15, 0.12], [1.15, 0.55], [1.05, 0.62], [0.001, 0.62]], 40, [0, 0, 1.1]);
-  p.lathe('white2', [[0.001, 1.65], [1.05, 1.65], [1.15, 1.72], [1.15, 2.2], [1.05, 2.4], [0.001, 2.4]], 40, [0, 0, 1.1]);
-  p.slab('white2', -0.75, 0.75, 0.3, 2.2, 0.02, 0.6, { r: 0.08, cell: 1.5, loops: [] });
-  p.add('glow', cylinder(0.9, 0.01, [0, 1.645, 1.1], 40), [0.25, 2.6, 2.3]); p.add('glow', cylinder(0.9, 0.01, [0, 0.625, 1.1], 40), [0.2, 1.6, 1.4]);
-  pulseLine(p, -0.45, 0.45, 2.0, 1.25 + 0.0, 0.1);
-  scanTable(p, 0.5, 3.1 + 0.6, 0.95);
-  p.light([0, 1.2, 1.6], 1.2, [0.5, 1, 0.95], null, 4);
-}
-function scanThin(p) {
-  // 3: a slim ring on a low base, bands of light round it, the table passing through it
-  const R = 1.05, T = 0.24, cy = 1.2, zc = 0.9;
-  const ring = p.lathe('white2', [[R - T, -0.3], [R + T, -0.3], [R + T + 0.04, -0.2], [R + T + 0.04, 0.2], [R + T, 0.3], [R - T, 0.3], [R - T - 0.03, 0.2], [R - T - 0.03, -0.2], [R - T, -0.3]], 56); put(ring, [0, cy, zc], [PI / 2, 0, 0]);
-  for (const dz of [-0.31, 0.31]) p.add('glow', put(lathe2([[R - T + 0.1, 0], [R - T + 0.02, 0]], 56), [0, cy, zc + dz], [dz < 0 ? -PI / 2 : PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
-  p.slab('band', -0.55, 0.55, 0, 0.25, zc - 0.45, zc + 0.45, o9); p.slab('white2', -0.35, 0.35, 0.25, cy - R - T + 0.05, zc - 0.25, zc + 0.25, o9);
-  pulseLine(p, -0.4, 0.4, cy + R + 0.05, zc + 0.31, 0.1);
-  scanTable(p, -0.4, 3.1 + 1.3);
-  p.light([0, 1.3, zc + 0.8], 1.2, [0.5, 1, 0.95], [0, 0, 1], 4);
-}
-function scanPod(p) {
-  // 4: a closed pod: the patient lies in a capsule under a clear lid, an arch of light slides along over it
-  p.slab('white2', -0.6, 0.6, 0, 0.5, 0.2, 3.3, { r: 0.12, cell: 1.5, loops: [] });
-  p.slab('band', -0.62, 0.62, 0.5, 0.62, 0.15, 3.35, o9);
-  p.glass(1.0, 2.9, [0, 0.95, 1.75], [-PI / 2, 0, 0]);
-  for (const s of [-1, 1]) p.slab('white2', s * 0.62 - 0.08, s * 0.62 + 0.08, 0.6, 1.0, 0.2, 3.3, o9);
-  const arch = p.lathe('white2', [[1.15, -0.18], [1.32, -0.18], [1.32, 0.18], [1.15, 0.18], [1.15, -0.18]], 48); put(arch, [0, 0, 2.2], [PI / 2, 0, 0]);
-  p.add('glow', put(lathe2([[1.16, 0], [1.2, 0]], 48), [0, 0, 2.39], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
-  p.slab('white2', -0.5, 0.5, 0, 1.6, 0.0, 0.25, o9); pulseLine(p, -0.35, 0.35, 1.3, 0.255, 0.1);
-  p.light([0, 1.3, 2.2], 1.2, [0.5, 1, 0.95], null, 4);
-}
-const SCANS = { 1: scanRing, 2: scanOpen, 3: scanThin, 4: scanPod };
-export function scannerOption(p, v) {
-  (SCANS[v[0]] || scanRing)(p);
-  p.slab('white2', -2.6, 2.6, 0, 3, -0.3, -0.05, { r: 0, cell: 9, loops: [] });   // (a stretch of the room's back wall)
-  floorQuad(p, 'deck', -2.6, 2.6, -0.05, 5.2, 0.006);
-  placed(p, person, [2.0, 0, 2.7], -0.9);
-}
-
 // ── THE WALL SOCKETS where the Miner's canisters are emptied into the crusher: a stretch of the hangar's wall with
 // one socket in use (a canister plugged in) and one empty ─────────────────────────────────────────────────────────
 function sockCollar(p, x, y, used) {
@@ -437,6 +375,5 @@ export function socketOption(p, v) {
 export const OPTIONS2 = {
   furnaceopt: { name: 'Furnace (options to choose from)', group: 'Options', at: 'point', variants: ['1 like the picture', '2 pouring tower', '3 two towers', '4 hooded crucible', '1 in the hall', '2 in the hall', '3 in the hall', '4 in the hall'], foot: [9, 7, 9], build: furnaceOption },
   craneopt: { name: 'Crane (options to choose from)', group: 'Options', at: 'point', variants: ['1 monorail hoist', '2 twin-rail spreader', '3 arm on a track', '4 telescopic mast'], foot: [9, 11, 6], build: craneOption },
-  scanneropt: { name: 'Big scanner (options to choose from)', group: 'Options', at: 'point', variants: ['1 ring', '2 open', '3 thin ring', '4 pod'], foot: [5.2, 3, 5.4], build: scannerOption },
   socketopt: { name: 'Wall socket (options to choose from)', group: 'Options', at: 'point', variants: ['1 clamp collar', '2 cradle and valve', '3 floor well', '4 hatch'], foot: [6.4, 3, 4.4], build: socketOption },
 };

@@ -39,14 +39,31 @@ export const SURF = {
 // the glows: linear colours, well over 1 so the bloom picks them out
 export const GLOW = { white: [4.6, 4.6, 4.6], strip: [3.0, 3.0, 2.95], flare: [7, 7, 6.9], soft: [1.7, 1.75, 1.85], blue: [1.2, 3.2, 7.0], orange: [7.0, 2.6, 0.6], green: [0.8, 5.0, 1.6], red: [6.5, 0.5, 0.35], amber: [6.5, 4.2, 1.0] };
 
-export const U = { aoDirect: { value: 0.6 }, bakeGain: { value: 1 }, aoStrength: { value: 1 }, time: { value: 0 } };
+export const U = { aoDirect: { value: 0.6 }, bakeGain: { value: 1 }, aoStrength: { value: 1 }, time: { value: 0 },
+  // (a hoop of light that moves, hoopLit below: its middle and the way its axis points, in the world; the way from its
+  // middle to its brightest part; its colour times its strength; its radius and how far it reaches)
+  hoop: { at: { value: new THREE.Vector3() }, axis: { value: new THREE.Vector3(0, 0, 1) }, head: { value: new THREE.Vector3(1, 0, 0) }, light: { value: new THREE.Vector3() }, size: { value: new THREE.Vector2(1, 3) } } };
+
+// A HOOP OF LIGHT THAT MOVES (the big scanner's ring as it glides: its band's glow on the bed, the floor and the wall
+// behind it). The saved light cannot hold it: a glow saved in one place would stay behind. So the painted materials of
+// ONE room can be told to take light from a hoop whose place is handed to them each frame (U.hoop, set by
+// kit/layout.js updateGlides): each pixel is lit as if from the nearest point of the hoop, a little more on the side
+// its bright part is on, with no shadows. Only that room's materials pay for it (a few sums a pixel), and only where
+// it is switched on (the game and the Kit Lab: on the high quality setting). One such hoop in a station.
+export function hoopLit(set, on = true) {
+  for (const k of ['solid', 'floor', 'decal']) { const m = set?.[k]; if (!m || ('KIT_HOOP' in m.defines) === on) continue; if (on) m.defines.KIT_HOOP = ''; else delete m.defines.KIT_HOOP; m.needsUpdate = true; }
+}
 
 function patch(mat, { rmw = false, inst = false, wear = null } = {}) {
   mat.defines = { ...(mat.defines || {}), ...(rmw ? { KIT_RMW: '' } : {}), ...(inst ? { KIT_INST: '' } : {}) };
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uWear = { value: wear }; sh.uniforms.uAODirect = U.aoDirect; sh.uniforms.uBakeGain = U.bakeGain; sh.uniforms.uAOStrength = U.aoStrength;
+    sh.uniforms.uHoopAt = U.hoop.at; sh.uniforms.uHoopAxis = U.hoop.axis; sh.uniforms.uHoopHead = U.hoop.head; sh.uniforms.uHoopLight = U.hoop.light; sh.uniforms.uHoopSize = U.hoop.size;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
+#ifdef KIT_HOOP
+varying vec3 vKitW;
+#endif
 attribute float aAO;
 #ifdef KIT_RMW
 attribute vec3 aRMW;
@@ -67,10 +84,18 @@ vRMW = aRMW;
 vBake = iBake;
 #else
 vBake = aBake;
+#endif`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+#ifdef KIT_HOOP
+vKitW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
 #endif`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D uWear; uniform float uAODirect; uniform float uBakeGain; uniform float uAOStrength;
+#ifdef KIT_HOOP
+uniform vec3 uHoopAt; uniform vec3 uHoopAxis; uniform vec3 uHoopHead; uniform vec3 uHoopLight; uniform vec2 uHoopSize;
+varying vec3 vKitW;
+#endif
 varying float vAO; varying vec3 vBake; varying vec2 vWearUv;
 #ifdef KIT_RMW
 varying vec3 vRMW;
@@ -103,7 +128,18 @@ varying vec3 vRMW;
     reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNVao, ambientOcclusion, material.roughness );
   #endif
   // the strips' light, baked into the vertex (its own shadows already in it), with a little of the corner darkening
-  reflectedLight.indirectDiffuse += vBake * uBakeGain * BRDF_Lambert( material.diffuseColor ) * mix( 1.0, ambientOcclusion, 0.35 );`);
+  reflectedLight.indirectDiffuse += vBake * uBakeGain * BRDF_Lambert( material.diffuseColor ) * mix( 1.0, ambientOcclusion, 0.35 );
+  #ifdef KIT_HOOP
+  {
+    // the moving hoop of light: from this point to the nearest point of the hoop (in the world), how far that is, and
+    // whether that point is on the side the hoop's bright part is on
+    vec3 hq = vKitW - uHoopAt; float ha = dot( hq, uHoopAxis ); vec3 hr = hq - ha * uHoopAxis; float hl = max( length( hr ), 1e-4 );
+    vec3 hto = hr * ( uHoopSize.x / hl - 1.0 ) - ha * uHoopAxis; float hd = length( hto ), hw = clamp( 1.0 - hd / uHoopSize.y, 0.0, 1.0 );
+    float hc = 0.15 + 0.85 * max( dot( inverseTransformDirection( normal, viewMatrix ), hto / max( hd, 1e-3 ) ), 0.0 );
+    float hs = 0.72 + 0.28 * dot( hr / hl, uHoopHead );
+    reflectedLight.indirectDiffuse += uHoopLight * BRDF_Lambert( material.diffuseColor ) * ( hw * hw * hc * hs / ( hd * hd + 0.15 ) ) * mix( 1.0, ambientOcclusion, 0.5 );
+  }
+  #endif`);
   };
   mat.customProgramCacheKey = () => 'kit' + (rmw ? 'r' : '') + (inst ? 'i' : '');
   return mat;

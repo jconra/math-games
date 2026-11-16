@@ -18,7 +18,7 @@ import { makeMaterials, U } from '../../kit/materials.js';
 import { liveTick } from '../../kit/shipparts/cabin/live.js';
 import { createSky, SKY_VIEWS } from '../../world/sky.js';
 import { PIECES, GROUPS, SHIP_GROUPS, pieceList } from '../../kit/catalog.js';
-import { buildRoom, updateDoors, updateGlides, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
+import { buildRoom, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
 import { loadBake, packBake } from '../../kit/bakefile.js';
 import { plane, put } from '../../kit/geo.js';
 import { Piece } from '../../kit/piece.js';
@@ -211,6 +211,7 @@ async function showRoom(id = state.room) {
   clearStage();
   built = buildRoom(R, mats, { bake: QUALITY[state.quality].bake, ...more });
   STAGE.add(built.group);
+  hoopLights(built, state.quality === 'high', mats);   // (the big scanner's band lighting its room as it glides: High only, as in the game)
   if (built.stats.problems.length) console.warn('kit lab: the room has problems', built.stats.problems);
   setDoors(built.doors, state.doors === 'open' ? 1 : 0); showBeams();   // (the beams of lit haze some lights carry: the forge's)
   dust.visible = false; if (R.rooms) updateZones(built, new THREE.Vector3(...(R.views?.start?.at || [0, 1.6, 0])), 0.01);

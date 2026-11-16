@@ -14,7 +14,7 @@ import { placeMatrix, onGrid, WALL_FACE } from './grid.js';
 import { Piece } from './piece.js';
 import { bake, bakeWith, makeVoxels, lightBins, lightAt } from './bake.js';
 import { applyBake } from './bakefile.js';
-import { MAT_KEYS, BAKED, GLOWING } from './materials.js';
+import { MAT_KEYS, BAKED, GLOWING, U, hoopLit } from './materials.js';
 
 const CACHE = new Map();
 // a piece drawn once in its own frame, kept for every copy
@@ -149,6 +149,7 @@ export function buildRoom(room, mats, opts = {}) {
         if (mv.still) {
           const leaf = { key: mv.key, piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: held || null, meshes: [], own: [] };
           if (mv.hinge) leaf.hinge = mv.hinge;
+          if (mv.hoop) leaf.hoop = mv.hoop;
           const e0 = leafMatrix(leaf, 0, _lm).elements.slice();
           leaf.shut = new THREE.Matrix4().fromArray(e0).invert();
           for (const [k, g] of Object.entries(pieceByMat(mv.piece))) (stills[k] ||= []).push({ geo: g, e: e0, leaf });
@@ -158,6 +159,7 @@ export function buildRoom(room, mats, opts = {}) {
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
         const leaf = { piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
         if (mv.hinge) leaf.hinge = mv.hinge;
+        if (mv.hoop) leaf.hoop = mv.hoop;
         leafGroups.get(mv.key).list.push(leaf); if (leaf.door) leaf.door.leaves.push(leaf);
       }
     }
@@ -241,6 +243,8 @@ export function buildRoom(room, mats, opts = {}) {
       if (!part.geo.boundingBox) part.geo.computeBoundingBox();
       for (const t of [0, 1]) D.sweep.union(_gb.copy(part.geo.boundingBox).applyMatrix4(leafMatrix(leaf, t, _lm)));
     }
+    // (the hoop of light one of its leaves carries, if any: dark until hoopLights switches it on)
+    const hl = D.leaves.find((l) => l.hoop); D.hoop = hl ? { leaf: hl, ...hl.hoop } : null; D.lit = false;
   }
   stats.tris = Math.round(stats.tris); stats.ms = Math.round(performance.now() - t0); stats.mergeMs = Math.round(tMerge - t0);
   return { group, doors, glides, lights, stats, zones, get voxels() { return V; }, dispose() { group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); } };
@@ -336,11 +340,29 @@ export function updateGlides(built, now) {
   let moved = false;
   for (const D of built?.glides || []) {
     if (D.hold != null || (D.room && !D.room.group.visible)) continue;
-    const t = glideAt(D.glide, now); if (t === D.t) continue;
-    D.t = D.target = t; for (const leaf of D.leaves) setLeaf(leaf, t);
-    moved = true;
+    const t = glideAt(D.glide, now);
+    if (t !== D.t) { D.t = D.target = t; for (const leaf of D.leaves) setLeaf(leaf, t); moved = true; }
+    // its hoop of light, where switched on: where the hoop is now and which side its bright part is on (three small
+    // vectors handed to its room's materials: materials.js U.hoop)
+    if (D.lit) {
+      const H = D.hoop, m = leafMatrix(H.leaf, D.t, _lm).premultiply(built.group.matrixWorld), a = (now / (H.every || 4) % 1) * Math.PI * 2;
+      U.hoop.at.value.fromArray(H.at || [0, 0, 0]).applyMatrix4(m); U.hoop.axis.value.set(0, 0, 1).transformDirection(m);
+      U.hoop.head.value.set(Math.cos(a), Math.sin(a), 0).transformDirection(m);
+      U.hoop.light.value.fromArray(H.color || [1, 1, 1]).multiplyScalar(H.i ?? 0.3); U.hoop.size.value.set(H.r ?? 1, H.reach ?? 3);
+    }
   }
   return moved;
+}
+// Switch a station's moving hoop of light on or off (a glide whose leaf carries one: piece.js leaf `hoop`): its room's
+// own painted materials are told to take its light (materials.js hoopLit). Call it once, after buildRoom and before the
+// first picture; the game and the Kit Lab switch it on at the high quality setting only. (A room built with materials
+// shared by everything, a part alone in the lab, is left as it is.)
+export function hoopLights(built, on = true, shared = null) {
+  for (const D of built?.glides || []) {
+    if (!D.hoop || !D.room || D.hold != null || D.room.mats === shared) continue;
+    hoopLit(D.room.mats, on); D.lit = on;
+    if (!on) U.hoop.light.value.set(0, 0, 0);
+  }
 }
 
 // the box a room's pieces fill (their own parts and door leaves, as placed)

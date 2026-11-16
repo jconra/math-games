@@ -19,17 +19,18 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeMaterials, U } from '../kit/materials.js';
 import { createSky } from '../world/sky.js';
-import { buildRoom, updateDoors, updateGlides, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
+import { buildRoom, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
 import { makeBeams, beamsOf } from '../kit/beams.js';
 
 // low: no bloom, 1x; medium: bloom, 1.5x; high: bloom, a sharper room picture, 2x (the Kit Lab's own three steps; the
-// `bake` numbers are used only for a room whose saved light no longer matches it)
+// `bake` numbers are used only for a room whose saved light no longer matches it). hoop: the big scanner's band of
+// light falls on its room live as it glides (kit/layout.js hoopLights)
 export const QUALITY = {
-  low: { ratio: 1, bloom: false, bake: { voxel: 0.09, rays: 20, shadows: false }, probe: 64 },
-  medium: { ratio: 1.5, bloom: true, bake: { voxel: 0.07, rays: 28, shadows: true }, probe: 128 },
-  high: { ratio: 2, bloom: true, bake: { voxel: 0.05, rays: 40, shadows: true }, probe: 256 },
+  low: { ratio: 1, bloom: false, bake: { voxel: 0.09, rays: 20, shadows: false }, probe: 64, hoop: false },
+  medium: { ratio: 1.5, bloom: true, bake: { voxel: 0.07, rays: 28, shadows: true }, probe: 128, hoop: false },
+  high: { ratio: 2, bloom: true, bake: { voxel: 0.05, rays: 40, shadows: true }, probe: 256, hoop: true },
 };
 export const pickQuality = (asked) => (asked in QUALITY ? asked : (matchMedia('(pointer: coarse)').matches ? 'medium' : 'high'));
 
@@ -93,6 +94,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   };
   const built = buildRoom(R, mats, { bake: Q.bake, saved, zoneMats, compact: true });
   scene.add(built.group);
+  hoopLights(built, Q.hoop, mats);   // (before the first picture: its room's materials are made once, with it or without)
   // (the beams of lit haze some lights carry, as the Kit Lab shows them: the forge's pours; none at low quality)
   const beamList = qName === 'low' ? [] : beamsOf(built.lights || []);
   const beams = beamList.length ? makeBeams(beamList) : null;

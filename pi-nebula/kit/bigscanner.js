@@ -16,6 +16,8 @@
 // hoop's mouth, worked out on the graphics card from the clock: nothing is done for it each frame.
 // THE LIGHT: the moving parts throw no light and cast no shadow in the room's saved light (a shadow or a glow saved
 // in one place would stay behind when the hoop glides off); they are lit as they stand at rest, with their room.
+// On the high quality setting the band's glow falls on the bed, the floor and the wall live, and goes with the hoop
+// (kit/materials.js hoopLit: a few sums a pixel in this one room's materials, nothing anywhere else).
 import { sweep, bend, lathe as lathe2, put } from './geo.js';
 import { floorDecal } from './station2.js';
 import { liveBand, liveFace, liveLamp } from './shipparts/cabin/live.js';
@@ -26,6 +28,7 @@ export const SCAN = {
   home: 0.74, travel: 2.1,                  // where the hoop's middle rests (from the wall's face), how far it glides
   go: 9, rest: 3,                           // seconds gliding each way (eased in and out), seconds still at each end
   turn: 4,                                  // seconds for the light to go once round the hoop
+  glow: 1.0,                                // how strongly the band lights the room round it (live, on the high quality setting only)
   rail: 1.12, railZ: [0.16, 3.42],          // the rails: how far either side of the bed's middle, and their two ends
   bed: { w: 0.6, top: 0.85, z: [0.1, 4.02], foot: [3.36, 3.98] },   // the board (its top, its ends), the pedestal at its foot
   keep: { x: 1.62, z: 4.25 },               // the line painted on the floor round it
@@ -146,7 +149,8 @@ export function bigScanner(p) {
   floorDecal(p, 'solid', keep.x * 2 + 0.05, 0.05, 0, keep.z, 0, LINE);
   // what moves: the hoop on its carriage, and the cable chain's loop at half its speed
   p.glide('scan', { go: SCAN.go, rest: SCAN.rest });
-  p.leaf('bigscan-hoop', carriage, { at: [0, 0, SCAN.home], slide: [0, 0, SCAN.travel], door: 'scan', still: true });
+  p.leaf('bigscan-hoop', carriage, { at: [0, 0, SCAN.home], slide: [0, 0, SCAN.travel], door: 'scan', still: true,
+    hoop: { at: [0, SCAN.y, 0], r: SCAN.bore + 0.05, color: [0.3, 1, 0.85], i: SCAN.glow, reach: 3, every: SCAN.turn } });
   p.leaf('bigscan-loop', chainLoop, { at: [0, 0, LOOP0], slide: [0, 0, SCAN.travel / 2], door: 'scan', still: true });
 }
 
