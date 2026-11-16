@@ -25,6 +25,8 @@ function ensureCss() {
   if (document.querySelector('link[data-dkb]')) return;
   const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CSS; l.dataset.dkb = '1'; document.head.appendChild(l);
 }
+// (loaded with the jobs, not when the job opens: its Start prompt's look on a phone is in it too)
+if (typeof document !== 'undefined') ensureCss();
 // how long things take (seconds), and the wobble (metres the far hoop bobs, how fast)
 export const TIMES = { out: 1.0, brace: 0.13, pop: 0.32, lock: 0.75, glass: 0.9, jolt: 0.7, fade: 0.4 };
 export const WOBBLE = { amp: 0.3, side: 0.12, hz: 1.1, jolt: 0.3 };
@@ -35,13 +37,14 @@ const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
 // THE VIEW: the camera stands `from` the middle of the ring being built (metres, in the bridge's frame: to its side,
 // above it, back toward the station), looking out along the bridge to the ship, and turns so that ring lands at the
 // screen point `on` (-1..1 across, -1..1 up): on a wide screen left of the panel, on a phone in the band above it,
-// whatever the screen's shape. It moves on with each ring. The end of the try: back a little, on the middle ring.
+// whatever the screen's shape. It moves on with each ring. The end of the try: back a little, wider.
 // (Not far back behind the port: the airlock module would stand between the camera and the first ring. From here the
 // ship is ahead, left of the panel at 1280.)
 export const VIEW = {
   wide: { from: [-6.2, 3.6, -2.0], on: [-0.68, -0.1], fov: 50 },
   tall: { from: [-4.6, 6.4, -2.0], on: [0, 0.46], fov: 62 },
-  end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.6, -0.12], fov: 50 }, tall: { from: [-5.4, 7.6, -2.6], on: [0, 0.48], fov: 64 } },
+  // (the end: aimed further out, at the plan's fifth ring, a little wider, so the rings built and the ship both show)
+  end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.35, -0.1], fov: 60, ring: 4 }, tall: { from: [-5.4, 7.6, -2.6], on: [0, 0.48], fov: 64, ring: 1 } },
   // (never further back toward the station than this, metres from the port's face: past it the camera would be in the
   // station's rooms, the terminal behind the airlock)
   back: -4.5,
@@ -324,7 +327,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     const end = finished && S.every((s, i) => i >= TRY.rings || s.state === 'done');
     const V = end ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
-    poseFor(V, forced != null ? forced : end ? (TRY.rings - 1) / 2 : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
+    poseFor(V, forced != null ? forced : end ? V.ring : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
     if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); fresh = false; }
     const k = 1 - Math.exp(-2.5 * dt);
     camPos.lerp(want, k); camQ.slerp(probe.quaternion, k);
