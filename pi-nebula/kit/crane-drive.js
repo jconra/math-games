@@ -78,7 +78,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   const want = { iris: K.map((_, k) => S.iris[k]), lit: K.map((_, k) => S.lit[k]) };
   const trail = [];             // where it has been since it was last up and home, for the way back if all else fails
   const D = { state: S, notes: [], place: null, failed: null, pulling: false,
-    get held() { return held; }, get busy() { return auto.length > 0 || !!action; }, get left() { return left; }, get leaving() { return leaving; }, get action() { return action && action.kind; }, get steps() { return auto.length; } };
+    get held() { return held; }, get busy() { return auto.length > 0 || !!action; }, get moving() { return auto.length > 0 || !!action || Math.abs(vel.along) + Math.abs(vel.slide) + Math.abs(vel.hoist) > 1e-3; }, get left() { return left; }, get leaving() { return leaving; }, get action() { return action && action.kind; }, get steps() { return auto.length; } };
   const note = (key, text) => { if (!D.notes.some((n) => n.key === key)) D.notes.push({ key, text }); };
 
   // ── the rail ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -131,7 +131,8 @@ export function makeDrive(site, state, world = {}, opts = {}) {
         if (carrying) {
           // (anywhere from seated to a little way out in front of its mouth, across and in height)
           const ax = axOf(k, hx, hz), side = latOf(k, hx, hz);
-          if (ax > half - seat - 0.05 && ax < half + clear + 0.9 && side < reach) offer({ kind: 'socket', i: k, at: sockPos(k, Math.min(ax, half + clear)), c: -1, d: side, dy: hy - s.at[1], ax, seat: dockAt(k), wait: waitAt(k) });
+          // (of two sockets one over the other, the one nearer the load's height)
+          if (ax > half - seat - 0.05 && ax < half + clear + 0.9 && side < reach) offer({ kind: 'socket', i: k, at: sockPos(k, Math.min(ax, half + clear)), c: -1, d: side + 0.1 * Math.abs(hy - s.at[1]), dy: hy - s.at[1], ax, seat: dockAt(k), wait: waitAt(k) });
         } else {
           const D0 = dockAt(k), dd = Math.hypot(hx - D0[0], hz - D0[2]);
           if (dd < reach) offer({ kind: 'socket', i: k, at: D0, c: there, d: dd, dy: hy - D0[1] });

@@ -187,10 +187,12 @@ const fromLive = (live, kind, opts) => (live && live.ask ? live.ask(kind, opts) 
 // a move along the rail invented for a question from the log: a start and an end on the level's marks
 function madeAlong(t, prec, most = 26) {
   const step = prec, n = Math.round(most / step);
-  for (let k = 0; k < 40; k++) { const a = t.int(0, n) * step, b = t.int(0, n) * step; if (Math.abs(a - b) >= Math.max(1, step * 3) && Math.abs(a - b) <= most) return { leg: 'wall', mark: r2(a), markTo: r2(b), what: t.pick(['socket 3', 'bay 2 of the rack', 'the turntable', 'socket 6']), from: null, to: null }; }
-  return { leg: 'wall', mark: 18, markTo: 6, what: 'socket 5' };
+  for (let k = 0; k < 40; k++) { const a = t.int(0, n) * step, b = t.int(0, n) * step; if (Math.abs(a - b) >= Math.max(1, step * 3) && Math.abs(a - b) <= most) return { leg: 'wall', mark: r2(a), markTo: r2(b), what: t.pick(LOG_STOPS), from: null, to: null }; }
+  return { leg: 'wall', mark: 18, markTo: 6, what: 'the next stop' };
 }
 const railWords = (s) => (s.leg === 'wall' ? 'the wall rail' : 'the ship rail');
+// (a question from the log names no real place: its marks are made up)
+const LOG_STOPS = ['the next stop', 'a canister waiting there', 'the stop on the work order'];
 const rowsOfMove = (s, said) => [[s.leg === 'wall' ? 'Wall rail' : 'Ship rail', `at the ${t1(s.mark)} m mark`], ['To', `${s.what}, the ${t1(s.markTo)} m mark`], [said, '?']];
 
 export const MAKERS = {
@@ -201,10 +203,11 @@ export const MAKERS = {
     make(step, { rand = Math.random, live = null } = {}) {
       const t = kit(rand), most = step <= 1 ? 5 : 8, s = fromLive(live, 'trip', { most });
       const n = s ? s.count : t.int(step <= 1 ? 1 : 2, most), what = s ? s.what : 'full canisters on the Miner';
+      const ASK = { 'full canisters on the Miner': 'How many full canisters are still on the Miner?', 'free mounts on the Miner': 'How many mounts on the Miner are empty?', 'canisters at the wall': 'How many canisters are plugged in at the wall?' };
       const look = s && s.name === 'clear' ? 'empty' : s && s.name === 'load' ? 'none' : 'full';
       const slots = Array(n).fill(look === 'none' ? 'none' : look);
       return ownOrder({
-        key: `count:${s ? s.name : 'log'}`, story: s ? `Work order: ${s.story}` : 'Work order from the log.', ask: `How many ${what} are there to deal with?`,
+        key: `count:${s ? s.name : 'log'}`, story: s ? `Work order: ${s.story}` : 'A work order from the log.', ask: ASK[what] || `How many ${what}?`,
         right: F(n, CAN), slips: [{ ...F(n + 1, CAN), why: 'One too many. Touch each one once as you count.' }, { ...F(n - 1, CAN), why: 'One short. Touch each one once as you count.' }, { ...F(n + 2, CAN), why: 'Too many. Count again, one at a time.' }],
         rightWhy: `${u(n, CAN)}: the crane sets off with the first`,
         picFirst: true, help: { title: 'Count them', pic: { kind: 'cans', place: look === 'none' ? 'ship' : look === 'empty' ? 'wall' : 'ship', slots }, line: 'Touch each one once as you count: 1, 2, 3 ...' },
@@ -217,7 +220,7 @@ export const MAKERS = {
   hops: {
     strand: 'number', at: (step) => (step <= 1 ? 2 : 8),
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), most = step <= 1 ? 5 : 10, s = fromLive(live, 'along', { prec: 1, most }) || (() => { const n = t.int(2, most), a = t.int(n, 26); return { leg: 'wall', mark: a, markTo: a - n, what: 'socket 3' }; })();
+      const t = kit(rand), most = step <= 1 ? 5 : 10, s = fromLive(live, 'along', { prec: 1, most }) || (() => { const n = t.int(2, most), a = t.int(n, 26); return { leg: 'wall', mark: a, markTo: a - n, what: t.pick(LOG_STOPS) }; })();
       const n = Math.round(Math.abs(s.markTo - s.mark)), dir = s.markTo > s.mark ? 1 : -1;
       return ownOrder({
         key: 'hops', story: `The trolley must go along ${railWords(s)} to ${s.what}.`, ask: 'How many metres is that? Count the hops.',
@@ -232,7 +235,7 @@ export const MAKERS = {
   mark: {
     strand: 'number', at: () => 10,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.4, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(['socket 3', 'bay 2 of the rack', 'the turntable', 'socket 6']) }; })();
+      const t = kit(rand), s = fromLive(live, 'along', { prec: 1, most: 26, near: 0.4, least: 2 }) || (() => { const m0 = t.int(2, 26); let h = t.int(0, 27); while (Math.abs(h - m0) < 3) h = t.int(0, 27); return { leg: 'wall', mark: h, markTo: m0, what: t.pick(LOG_STOPS) }; })();
       const m = Math.round(s.markTo), here = Math.round(s.mark);
       const flip = m >= 10 && m % 10 !== Math.floor(m / 10) % 10 ? Number(String(m).split('').reverse().join('')) : null;
       return ownOrder({
@@ -277,7 +280,7 @@ export const MAKERS = {
   hoist: {
     strand: 'words', at: (step) => (step <= 1 ? 24 : 48),
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), prec = step <= 1 ? 1 : 0.1, s = fromLive(live, 'hoist', { prec, least: prec }) || (() => { const a = prec === 1 ? 6 : 6.3, b = prec === 1 ? t.int(1, 4) : t.pick([0.7, 2.3, 3.7, 2.2]); return { from: a, to: b, what: t.pick(['the canister on the rack', 'the socket', 'the canister on the ship\'s tray']), carrying: false }; })();
+      const t = kit(rand), prec = step <= 1 ? 1 : 0.1, s = fromLive(live, 'hoist', { prec, least: prec }) || (() => { const a = prec === 1 ? 6 : 6.3, b = prec === 1 ? t.int(1, 4) : t.pick([0.7, 2.3, 3.7, 2.2]); return { from: a, to: b, what: t.pick(['a canister below it', 'the height on the work order']), carrying: false }; })();
       const a = s.from, b = s.to, d = r2(Math.abs(b - a)), down = b < a, sum = r2(a + b);
       return ownOrder({
         key: `hoist:${step}`, story: `The hook is ${t1(a)} m up${s.carrying ? ', with the canister' : ''}. It must go ${down ? 'down' : 'up'} to ${s.what}, ${t1(b)} m up.`, ask: `How far ${down ? 'down' : 'up'} must the hook go?`,
@@ -295,7 +298,7 @@ export const MAKERS = {
   change: {
     strand: 'number', at: () => 34,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), s = fromLive(live, 'hoist', { prec: 1, least: 2 }) || (() => { const a = 6, b = t.int(1, 4); return { from: a, to: b, what: 'the canister on the rack' }; })();
+      const t = kit(rand), s = fromLive(live, 'hoist', { prec: 1, least: 2 }) || (() => { const a = 6, b = t.int(1, 4); return { from: a, to: b, what: 'a canister below it' }; })();
       const a = Math.round(s.from), b = Math.round(s.to), c = b - a;
       // (where it ends take away where it starts: the change, plus up, minus down)
       const card = makeCard(b, '-', a, { size: 4, rand });
@@ -320,7 +323,7 @@ export const MAKERS = {
     strand: 'words', at: (step) => (step <= 1 ? 40 : 52),
     make(step, { rand = Math.random, live = null } = {}) {
       const t = kit(rand), speeds = step <= 1 ? [1, 2] : [0.5, 1.5, 0.6, 0.8, 1.2], prec = step <= 1 ? 1 : 0.1;
-      const s = fromLive(live, 'time', { prec, speeds, least: 1.5 }) || (() => { const v = t.pick(speeds), n = t.int(3, 12); return { leg: 'wall', mark: 20, markTo: r2(20 - n * v), what: 'socket 4', speed: v }; })();
+      const s = fromLive(live, 'time', { prec, speeds, least: 1.5 }) || (() => { const v = t.pick(speeds), n = t.int(3, 12); return { leg: 'wall', mark: 20, markTo: r2(20 - n * v), what: 'the next stop', speed: v }; })();
       const d = r2(Math.abs(s.markTo - s.mark)), v = s.speed, secs = r2(d / v);
       return ownOrder({
         key: `time:${step}`, story: `${cap(s.what)} is ${t1(d)} m along ${railWords(s)} from the trolley. The trolley runs at ${t1(v)} ${v === 1 ? 'metre' : 'metres'} a second.`, ask: 'How many seconds will it take?',
@@ -495,8 +498,8 @@ export function makeJobQueue(site, { start, oreOf = () => 1.2 } = {}) {
     if (j >= queue.length) return null;
     const b = queue[j]; j++;
     if (j >= queue.length || queue[j].kind !== 'slide') return null;
-    const across = queue[j], after = queue[j + 1];
-    return { legs: [a, b], across, end: j, what: after && after.kind !== 'trip' && after.what ? after.what : across.what };
+    const across = queue[j], to = queue.slice(j + 1).find((q) => q.kind === 'hoist' || q.kind === 'trip');
+    return { legs: [a, b], across, end: j, what: to && to.kind === 'hoist' ? to.what : across.what };
   }
   Q.ask = function ask(kind, o = {}) {
     if (!planned) begin();

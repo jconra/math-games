@@ -46,6 +46,7 @@ export const RULES = {
   ahead: 1.5,       // it holds this long (seconds) before it would start over a patch someone is on
   ease: 2.5,        // how quickly it slows to a stop and picks up again (the larger the quicker)
   flash: 0.8,       // the beacons' flash (seconds on and off together)
+  travel: 1.6,      // ... their slower flash while the crane is worked by hand and moving
   head: 2.4,        // people higher than this over the floor are not under it (the catwalk)
 };
 export const REACH = { voxel: 0.05, pad: 0.8 };
@@ -75,8 +76,10 @@ export function makeCrane({ W, walls }) {
       if (!seen()) return;
       if (mode === 'live' || mode === 'leaving') {
         live.step(dt, mode === 'live' ? cmd : {}); cmd = {};
-        const people = live.notes.some((n) => n.key === 'people');
-        if (people) { flash += dt; L.beacon(flash % RULES.flash < RULES.flash * 0.5); } else if (flash) { flash = 0; L.beacon(false); }
+        // (its beacons: quick, as the round's, while someone is under the load; slow while it moves, as a working
+        // crane's do; dark when it is still)
+        const people = live.notes.some((n) => n.key === 'people'), period = people ? RULES.flash : live.moving ? RULES.travel : 0;
+        if (period) { flash += dt; L.beacon(flash % period < period * 0.5); } else if (flash) { flash = 0; L.beacon(false); }
         C.waiting = people;
         L.poseState(live.state);
         if (mode === 'leaving' && live.left) { L.resume(live.state); t = 0; mode = 'round'; live = null; C.waiting = false; L.beacon(false); flash = 0; }

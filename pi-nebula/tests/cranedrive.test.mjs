@@ -68,6 +68,19 @@ test('by hand: a canister off the ship and docked in a socket, end on, through i
   const f0 = S.cans[0].fill; run(D, 5); assert.ok(S.cans[0].fill < f0 - 0.05, 'it drains as the round\'s do');
 });
 
+test('by hand: an upper socket too, lined up on the one nearer the load\'s height', () => {
+  const { S, D } = fresh();
+  toShipAndBack(D, S, 1, 3);   // (socket 3: the upper one at the second column)
+  const sk = sockets[3];
+  D.go([{ axis: 'hoist', to: sk.at[1] }]); assert.ok(until(D, () => !D.busy) != null && !D.failed);
+  const L = D.lineup(); assert.ok(L && L.kind === 'socket' && L.i === 3, 'lined up on the upper socket, not the lower: ' + JSON.stringify(L && [L.kind, L.i]));
+  assert.ok(until(D, () => S.iris[3] > 0.999, 5) != null, 'its iris opens');
+  D.go([{ axis: 'slide', to: sk.at[2] + site.can.half - site.can.seat - site.wallZ, v: 0.2 }]); assert.ok(until(D, () => !D.busy) != null && !D.failed, JSON.stringify(D.failed));
+  assert.ok(until(D, () => S.lit[3] > 0.999, 3) != null && D.resting());
+  D.go([{ grab: 'open' }]); until(D, () => !D.busy);
+  assert.deepEqual([S.cans[1].where, S.cans[1].i], ['socket', 3]);
+});
+
 test('by hand: nothing is lowered over a person, and a low load is not moved over one', () => {
   const { S, D } = fresh([{ x: 46.3, y: 0, z: -16.4 }]);
   run(D, 2, { hoist: -1 });
