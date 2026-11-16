@@ -82,8 +82,8 @@ function wall(q, W, holes) {
   for (const [a, b] of minus([x0, x1, 0.03, 0.07], holes.map((h) => ({ ...h, y0: -1 })))) glow(q, ARENA_GLOW.line, a, b, 0.03, 0.07, 0, 0.018);
   glow(q, mul(ARENA_GLOW.line, 0.7), x0, x1, H - 0.14, H - 0.1, 0, 0.018);
   // the bar's rail: a grey channel the light bar runs in (src/mathball/view.js draws the bar along it)
-  q.slab(TRIM, x0, x1, BAR - 0.06, BAR + 0.06, -0.03, 0.05, { r: 0.008, cell: 0.9 });
-  q.slab(DEEP, x0, x1, BAR - 0.03, BAR + 0.03, 0.05, 0.056, { r: 0, cell: 9 });
+  q.slab(TRIM, x0, x1, BAR - 0.09, BAR + 0.09, -0.03, 0.05, { r: 0.008, cell: 0.9 });
+  q.slab(DEEP, x0, x1, BAR - 0.075, BAR + 0.075, 0.05, 0.056, { r: 0, cell: 9 });
   // (a little of the line's light on the floor along the wall's foot, for the bake)
   for (let i = 0; i < n; i++) q.light([x0 + (L * (i + 0.5)) / n, 0.2, 0.25], 0.18, lightOf(ARENA_GLOW.line), [0, 0.2, 1], 1.6);
 }
@@ -154,7 +154,9 @@ export function arenaRoom(p) {
   const goalOn = new Map(GOALS.map((g) => [g.wall, g]));
   for (const W of WALLS) {
     const holes = [];
-    if (W.i === 4) holes.push({ x0: -COURT.door.w / 2, x1: COURT.door.w / 2, y0: 0, y1: COURT.door.h });
+    // (the south wall runs west: its own x is the court's x the other way round)
+    const G2 = COURT.gallery, gal = { x0: -G2.x1, x1: -G2.x0, y0: G2.y0, y1: G2.y1 };
+    if (W.i === 4) holes.push({ x0: -COURT.door.w / 2, x1: COURT.door.w / 2, y0: 0, y1: COURT.door.h }, gal);
     if (goalOn.has(W.i)) holes.push({ x0: -COURT.goal.w / 2, x1: COURT.goal.w / 2, y0: 0, y1: COURT.goal.h });
     const F = frameOf(W);
     sub(p, (q) => wall(q, W, holes), F.at, F.ry);
@@ -165,6 +167,12 @@ export function arenaRoom(p) {
       glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, -w / 2, 0, h + 0.05, 0, 0.03); glow(q, ARENA_GLOW.corner, w / 2, w / 2 + 0.05, 0, h + 0.05, 0, 0.03);
       glow(q, ARENA_GLOW.corner, -w / 2 - 0.05, w / 2 + 0.05, h, h + 0.05, 0, 0.03);
       q.light([0, h + 0.2, 0.3], 0.4, lightOf(ARENA_GLOW.corner), [0, -0.5, 1], 2.5);
+      // the gallery's window: the glass, a dark lining through the wall to the terminal's own window, a frame of light
+      const { x0, x1, y0, y1 } = gal, t = 0.05, back = -0.26;
+      q.slab(DEEP, x0 - t, x0, y0 - t, y1 + t, back, 0, { r: 0, cell: 9 }); q.slab(DEEP, x1, x1 + t, y0 - t, y1 + t, back, 0, { r: 0, cell: 9 });
+      q.slab(DEEP, x0, x1, y0 - t, y0, back, 0, { r: 0, cell: 9 }); q.slab(DEEP, x0, x1, y1, y1 + t, back, 0, { r: 0, cell: 9 });
+      q.glass(x1 - x0, y1 - y0, [(x0 + x1) / 2, (y0 + y1) / 2, -0.03]);
+      glow(q, ARENA_GLOW.line, x0 - 0.05, x1 + 0.05, y0 - 0.06, y0 - 0.03, 0, 0.02); glow(q, ARENA_GLOW.line, x0 - 0.05, x1 + 0.05, y1 + 0.03, y1 + 0.06, 0, 0.02);
     }, F.at, F.ry);
   }
   // a line of light up each corner where two walls meet

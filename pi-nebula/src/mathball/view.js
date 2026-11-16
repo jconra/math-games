@@ -23,12 +23,11 @@
 //   V.strike(fromXZ, goal, who)       start a strike
 //   V.dispose()
 import * as THREE from 'three';
-import { COURT, GOALS, PORTS, TRACK, CORNERS, WALLS, toStation } from './court.js';
+import { COURT, GOALS, PORTS, TRACK, CORNERS, WALLS, BALL_COLOURS, toStation } from './court.js';
 import { ruleOf } from './rules.js';
 
 const MID = COURT.mid;
-// (dark, and none the hue of a goal's colour: pink, violet, gold, green; so a ball's colour never says which goal)
-export const BALL_COLOURS = ['#b5172f', '#1f4dc2', '#0b7f86', '#c2560f', '#6e4420', '#33577f'];
+export { BALL_COLOURS };
 const lin = (hex) => { const c = new THREE.Color(hex); return new THREE.Vector3(c.r, c.g, c.b); };
 
 // ── THE FLOOR ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -118,7 +117,7 @@ function makeFloor() {
 // ── THE LIGHT BAR ──────────────────────────────────────────────────────────────────────────────────────────────────
 // a ribbon along the rail (its face, just proud of the wall), each vertex knowing how far along the track it is
 function makeBar() {
-  const P = [], S = [], I = [], y = COURT.bar.y, h = 0.045, out = 0.004;
+  const P = [], S = [], I = [], y = COURT.bar.y, h = 0.075, out = 0.004;
   const steps = []; for (let s = 0; s <= TRACK.len + 1e-6; s += 0.12) steps.push(Math.min(s, TRACK.len));
   // (the corners exactly, so the ribbon turns with the walls)
   for (const a of TRACK.at) steps.push(a);

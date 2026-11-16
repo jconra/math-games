@@ -24,6 +24,9 @@ export const COURT = {
   goal: { w: 2.4, h: 1.4, cheek: 0.36, brow: 0.36, out: 0.42, deep: 0.95, board: { w: 3.12, h: 0.9, y: 2.22, z: 0.2, tilt: 0.2 } },
   bar: { y: 3.2, lap: 120, first: 15, every: 30 },   // the light bar: its height; a lap is a round; each goal 30 s apart
   door: { x: 0, w: 1.24, h: 2.32 },          // the terminal's door in the south wall (its doorway: kit/shell.js's)
+  // the gallery: the plan's window from the terminal's catwalk (4 m up) into the upper storey, through the south wall:
+  // where the terminal's window band (two panels, station x 5 to 9: court x -3 to 1) meets the court's south wall
+  gallery: { x0: -1.84, x1: 0.6, y0: 5.05, y1: 6.2 },
   hex: { r: 0.62 },                          // the floor's hexagons (round one's: 1.24 m corner to corner)
 };
 
@@ -58,6 +61,8 @@ export const GOALS = [
 });
 // (a CSS colour for each goal's colour, for the page: the same hue as its light)
 export const GOAL_CSS = { pink: '#ff5cc8', violet: '#9b7bff', gold: '#ffc23a', green: '#3be08a' };
+// the balls' colours: dark, and none the hue of a goal's (pink, violet, gold, green), so a ball's colour never says which goal
+export const BALL_COLOURS = ['#b5172f', '#1f4dc2', '#0b7f86', '#c2560f', '#6e4420', '#33577f'];
 
 // THE PORTS the balls are shot out of (AR2-7 B): three in each long wall, over head height, facing across the court
 export const PORTS = [-4.2, 0, 4.2].flatMap((z) => [{ at: [hx, 2.55, z], n: [-1, 0, 0] }, { at: [-hx, 2.55, z], n: [1, 0, 0] }])

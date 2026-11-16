@@ -148,7 +148,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       <div class="mbl-who">${OPPONENTS.map((o, i) => `<button type="button" data-who="${i}" class="${i === choice ? 'is-last' : ''}"><b>${esc(o.name)}</b><small>${esc(o.line)}</small></button>`).join('')}</div>
       ${levelHtml()}`;
     P.hidden = false;
-    for (const id of OPPONENTS.map((o) => o.id)) lookOf(id);   // (their looks on the way, so the start is quick)
+    bodyFor(OPPONENTS[choice]).catch(() => {});   // (the last one played, on the way already, so the start is quick)
   }
 
   // ── the other player's body (the crew kit) ────────────────────────────────────────────────────────────────────
