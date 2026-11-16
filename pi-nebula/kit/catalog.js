@@ -9,7 +9,7 @@ import { LABELS, SIGNS } from './tex.js';
 import { pane, filler } from './windows.js';
 import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTile } from './bigroom.js';
 import { bayDoor, mark, airlock, crate, fuel, gangway } from './hangar.js';
-import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter } from './furniture.js';
+import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider } from './furniture.js';
 import { ship } from './ship.js';
 import { OUTSIDE } from './shipparts/outside.cat.js';
 import { COCKPIT } from './shipparts/cockpit.cat.js';
@@ -39,7 +39,7 @@ export const PIECES = {
   tray: { name: 'Cable tray', group: 'Wall kit', at: 'wall', variants: ['cables'], foot: [2, 0.25, 0.25], build: cableTray },
   sign: { name: 'Lit sign', group: 'Wall kit', at: 'wall', variants: SIGNS.flatMap((n) => [n, n + ' big']), foot: [2.4, 0.6, 0.1], build: sign },
   // windows: wall panels with a window band at eye level; a run is end-left + middles + end-right (a stadium)
-  pane: { name: 'Window wall', group: 'Windows', at: 'edge', variants: ['middle', 'end-left', 'end-right'], foot: [2, 3, 0.4], build: pane },
+  pane: { name: 'Window wall', group: 'Windows', at: 'edge', variants: ['middle', 'end-left', 'end-right', 'single'], foot: [2, 3, 0.4], build: pane },
   // big rooms (two storeys, 7 m: the ordinary panels stacked, deck 0 and deck 1, the filler band between)
   filler: { name: 'Band between storeys', group: 'Big rooms', at: 'edge', variants: ['band', 'ledge'], foot: [2, 1.2, 0.8], build: filler, y: 3.2 },
   column: { name: 'Column', group: 'Big rooms', at: 'point', variants: ['round', 'square', 'post'], foot: [0.8, 7, 0.8], build: column },
@@ -61,6 +61,7 @@ export const PIECES = {
   booth: { name: "Captain's booth", group: 'Furniture', at: 'free', variants: ['medic', 'mining', 'explore', 'security'], foot: [2, 1.8, 2], build: booth },
   planter: { name: 'Planter', group: 'Furniture', at: 'free', variants: ['long', 'tall'], foot: [1.7, 2.2, 0.7], build: planter },
   jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu'], foot: [4.5, 2, 0.3], build: jobs },
+  divider: { name: 'Bed divider', group: 'Medical', at: 'free', variants: ['bed'], foot: [2, 1.8, 0.45], build: divider },
   // the hangar
   baydoor: { name: 'Hangar door', group: 'Hangar', at: 'point', variants: ['open'], foot: [16, 7, 5.5], build: bayDoor },
   mark: { name: 'Floor paint', group: 'Hangar', at: 'free', variants: ['ring', 'line', 'hazard', 'box', 'arrow'], foot: [2, 0.1, 2], build: mark },

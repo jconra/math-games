@@ -6,6 +6,8 @@
 //             end-right   the same, the other way round (wall panels face one way only, so the mirror is its own variant)
 //           so any run is end-left + middles + end-right. The glass is the kit's one glass material (piece.glass /
 //           'glass'): nothing solid stands behind it, so whatever the scene shows outside (the sky) shows through.
+//             single      a whole small window in one panel: the band rounded at both ends, 1.35 m of glass, no
+//                         upright in it (the scanner's booth looks into the scanner room through one)
 //   filler  an EDGE piece, the 1 m between two storeys (decks are 4 m apart, rooms 3 m): two-storey rooms stack the
 //           ordinary 3 m panels, deck 0 and deck 1, with this between them. Drawn from 3 m to 4 m.
 //             band    a dark band with a channel along it (the corridor's dark band, a storey up)
@@ -63,7 +65,46 @@ function endPanel(p) {
   p.add('glass', flat(gl, GZ));
   p.slab('black', 1 - MW, 1, WIN.y0, WIN.y1, RD[0], 0.17, { r: 0.006, cell: 0.6 });
 }
+// A WHOLE WINDOW IN ONE PIECE, its band rounded at both ends (a stadium of its own) and nothing standing in it: a
+// stretch of wall from x = -hw to hw, the round ends' centres at -xc and xc. The wall beside the window on the left (with
+// the dark band through it, like its neighbours) and the curved corner between it and the round end are drawn once and
+// mirrored for the right; the wall over and under the window is one piece across the whole stretch.
+function wholePanel(p, hw, xc) {
+  const X0 = -hw + G, xL = -xc - R - 0.1;
+  backing(p, -hw, hw, 0, WIN.y0); backing(p, -hw, hw, WIN.y1, H);
+  slabRow(p, xL, -xL, 0.15, WIN.y0 - 0.03, [], 'white', [0.02]);
+  slabRow(p, xL, -xL, WIN.y1 + 0.03, H, [], 'white');
+  const q = new (p.constructor)();
+  backing(q, -hw, xL + 0.02, WIN.y0, WIN.y1);
+  slabRow(q, X0, xL, 0.15, BAND[0]); band(q, X0, xL); slabRow(q, X0, xL, BAND[1], TOP); slabRow(q, X0, xL, TOP, H, [], 'white2');
+  const out = [[xL - 0.002, WIN.y0 - 0.03], [-xc, WIN.y0 - 0.03]];
+  for (let i = 1; i < 24; i++) { const a = -PI / 2 - PI * i / 24, rr = R + 0.03; out.push([-xc + Math.cos(a) * rr, YC + Math.sin(a) * rr]); }
+  out.push([-xc, WIN.y1 + 0.03], [xL - 0.002, WIN.y1 + 0.03]);
+  q.extrude('white', out, WF - Z0, 0.006).translate(0, 0, Z0);
+  for (const part of q.parts) {
+    p.parts.push(part);
+    const m = { ...part, geo: part.geo.clone() }; put(m.geo, [0, 0, 0], [0, 0, 0], [-1, 1, 1]); fixWinding(m.geo); p.parts.push(m);
+  }
+  // the rim all the way round the opening (the same way round as an end panel's: along the bottom to the left, up round
+  // the left end, along the top, down round the right end), the sill with a round end at each end, the glass
+  const ring = [], Y = new THREE.Vector3(0, 0, 1), add = (x, y, nx, ny) => ring.push({ p: new THREE.Vector3(x, y, 0), x: new THREE.Vector3(nx, ny, 0), y: Y.clone() });
+  for (let i = 0; i <= 3; i++) add(xc - 2 * xc * i / 3, WIN.y0, 0, -1);
+  for (let i = 1; i < 24; i++) { const a = -PI / 2 - PI * i / 24, c = Math.cos(a), s = Math.sin(a); add(-xc + c * R, YC + s * R, c, s); }
+  for (let i = 0; i <= 3; i++) add(-xc + 2 * xc * i / 3, WIN.y1, 0, 1);
+  for (let i = 1; i < 24; i++) { const a = PI / 2 - PI * i / 24, c = Math.cos(a), s = Math.sin(a); add(xc + c * R, YC + s * R, c, s); }
+  p.sweep('black', rrect(RIM, RD[1] - RD[0], 0.012, 2, RIM / 2 - 0.01, (RD[0] + RD[1]) / 2), ring, { closed: true });
+  // (a short window's sill reaches a little way under its round ends, so it still reads as a ledge)
+  const s0 = Math.max(xc, 0.35);
+  sill(p, -s0, s0, true);
+  p.cyl('black', 0.053, WF + 0.13 - RD[0], [s0, WIN.y0 - 0.047, (RD[0] + WF + 0.15) / 2], [PI / 2, 0, 0], 16);
+  const gl = [[xc, WIN.y0], [-xc, WIN.y0]];
+  for (let i = 1; i < 24; i++) { const a = -PI / 2 - PI * i / 24; gl.push([-xc + Math.cos(a) * R, YC + Math.sin(a) * R]); }
+  gl.push([-xc, WIN.y1], [xc, WIN.y1]);
+  for (let i = 1; i < 24; i++) { const a = PI / 2 - PI * i / 24; gl.push([xc + Math.cos(a) * R, YC + Math.sin(a) * R]); }
+  p.add('glass', flat(gl, GZ));
+}
 export function pane(p, v) {
+  if (v === 'single') return wholePanel(p, 1, 0.1);
   if (v === 'end-left') return endPanel(p);
   if (v === 'end-right') {
     // the left end, mirrored

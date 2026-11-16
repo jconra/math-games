@@ -7,11 +7,13 @@
 //   captains   booth (one per crew: 'medic', 'mining', 'explore', 'security': a U of benches round a table, a screen
 //              with the captain's card, the crew's colour), jobs (the jobs board: 'hang' from the ceiling, both faces,
 //              or 'wall')
+//   the ward   divider ('bed': a screen between two beds)
 import * as THREE from 'three';
 import { rrect, circle, line, put } from './geo.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
 import { GLOW } from './materials.js';
+import { pulseLine } from './shipparts/cabin/medical.js';
 
 const PI = Math.PI;
 const FABRIC = { c: '#b8693a', r: 0.92, m: 0, w: 0.25 }, FABRIC2 = { c: '#8c4a28', r: 0.95, m: 0, w: 0.25 }, LINEN = { c: '#c9ccc9', r: 0.9, m: 0, w: 0.2 };
@@ -245,6 +247,22 @@ export function planter(p, v) {
   for (const x of [-0.78, 0.78]) p.slab('rail', x - 0.015, x + 0.015, 0.5, 1.15, -0.015, 0.015, { r: 0.005 });
   p.slab('black', -0.8, 0.8, 1.15, 1.19, -0.05, 0.05, { r: 0.01 }); p.glowSlab('soft', -0.76, 0.76, 1.145, 1.15, -0.03, 0.03);
   p.light([0, 1.0, 0], 0.5, [1, 0.95, 0.9], [0, -1, 0], 2);
+}
+// ── the ward ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// a bed divider: a free-standing screen between two beds, 2 m along x from x = 0 (its end against the wall the beds'
+// heads are on) to x = 2, 1.75 m tall, its faces on z = +-0.025: a charcoal frame on two splayed feet, a pale panel,
+// the medical mark (a teal pulse line, kit/shipparts/cabin/medical.js) along both faces
+export function divider(p) {
+  const len = 2.0, h = 1.75, t = 0.025;
+  for (const x of [0.03, len - 0.03]) {
+    p.slab('black', x - 0.03, x + 0.03, 0.04, h, -t - 0.01, t + 0.01, { r: 0.01 });
+    p.slab('black', x - 0.04, x + 0.04, 0, 0.04, -0.22, 0.22, { r: 0.012 });
+  }
+  p.slab('black', 0, len, h - 0.05, h, -t - 0.012, t + 0.012, { r: 0.012, cell: 0.8 });
+  p.slab('black', 0.06, len - 0.06, 0.14, 0.18, -t - 0.006, t + 0.006, { r: 0.006, cell: 0.8 });
+  p.slab('white2', 0.06, len - 0.06, 0.18, h - 0.05, -t, t, { r: 0.008, cell: 0.6 });
+  pulseLine(p, 0.4, len - 0.4, 1.3, t + 0.002, 0.08);
+  pulseLine(p, -(len - 0.4), -0.4, 1.3, t + 0.002, 0.08, PI);
 }
 // (an icosphere comes unindexed: merge its corners, give it the blank uv every part carries)
 const mergeV = (g) => { g.deleteAttribute('uv'); const m = mergeVertices(g, 1e-5); m.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(m.attributes.position.count * 2), 2)); return m; };
