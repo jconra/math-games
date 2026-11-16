@@ -637,14 +637,14 @@ const SUITS = { hops: ['along'], mark: ['along'], rail: ['along'], time: ['along
 // the level's makers that suit the crane's next move, one of them by weight; none: null (Mathwood's own pick)
 function pickAsk(mix, { rand = Math.random, live = null } = {}) {
   const ahead = live && live.ahead ? live.ahead() : live && live.peek ? [live.peek()] : [];
-  for (const next of ahead) {
-    const fits = mix.filter((a) => (SUITS[a.maker] || []).some((k) => next.includes(k)));
-    if (!fits.length) continue;
-    let r = rand() * fits.reduce((q, a) => q + (a.w ?? 1), 0);
-    for (const a of fits) if ((r -= a.w ?? 1) <= 0) return a;
-    return fits[fits.length - 1];
-  }
-  return null;
+  let fits = [];
+  for (const next of ahead) { fits = mix.filter((a) => (SUITS[a.maker] || []).some((k) => next.includes(k))); if (fits.length) break; }
+  if (!fits.length) return null;
+  // (a question about no move, Mathwood's word problems, comes as often as its weight says, whatever the move)
+  const all = fits.concat(mix.filter((a) => !(SUITS[a.maker] || []).length));
+  let r = rand() * all.reduce((q, a) => q + (a.w ?? 1), 0);
+  for (const a of all) if ((r -= a.w ?? 1) <= 0) return a;
+  return all[all.length - 1];
 }
 export const JOB = {
   id: 'crane', name: 'Crane operator job', short: 'Crane', open: true, pickAsk,

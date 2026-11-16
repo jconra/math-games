@@ -216,6 +216,10 @@ test('the job\'s queue: a question holds the next move of its kind, on the level
   assert.deepEqual(ahead[0], ['trip', 'along', 'route']);
   assert.ok(ahead.some((k) => k.includes('grab')), JSON.stringify(ahead));
   assert.equal(crane.pickAsk([{ maker: 'weight', step: 1 }], { live: { ahead: Qu.ahead } }).maker, 'weight');
+  // and a question about no move (Mathwood's word problems) still comes, by its weight
+  const mixT = [{ maker: 'trips', step: 1, w: 1.5 }, { maker: 'words', step: 7, w: 1 }];
+  assert.equal(crane.pickAsk(mixT, { rand: () => 0, live: { ahead: Qu.ahead } }).maker, 'trips');
+  assert.equal(crane.pickAsk(mixT, { rand: () => 0.99, live: { ahead: Qu.ahead } }).maker, 'words');
   const a = Qu.ask('along', { prec: 1 });
   assert.ok(a && Number.isInteger(a.mark) && Number.isInteger(a.markTo) && a.what, JSON.stringify(a));
   const steps = Qu.right(a.id), asked = steps.find((s) => s.asked);
