@@ -1,7 +1,8 @@
 // THE STATION'S JOB SPOTS, in the world: a glowing ring on the floor and a sign over it at each job (by the station
 // file's names, as spots.js's markers are), a prompt when the player walks up ("Galley kitchen: Start, E"), and the
 // job panel (panel.js) once started. Every job is open from the start, as in Mathwood; a job whose props are still
-// being picked (the arena, the dock's bridge) is marked "coming soon" and has nothing to press.
+// being picked (the arena) is marked "coming soon" and has nothing to press. The dock's bridge is open as a try (three
+// rings: src/jobs/dock.js, its bridge outside the port src/jobs/docklink.js).
 //
 //   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn }, crane })
 //                                 live: what a job's own props are doing right now, for its questions (the smelter's
@@ -30,6 +31,7 @@ import { craneLink } from './cranelink.js';
 import { openDrive, chairScreen } from '../cranedrive.js';
 import { JOB as arena } from './arena.js';
 import { JOB as dock } from './dock.js';
+import { dockLink } from './docklink.js';
 
 export const JOBS = [galley, medical, smelter, crane, craneFree, arena, dock];
 export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
@@ -129,7 +131,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       // free control: the crane by hand (src/cranedrive.js), no questions
       panel = openDrive(document.body, { crane, input, W, walls, onClose: done });
     } else {
-      link = s.job.id === 'crane' && crane ? craneLink({ crane, W, walls }) : null;
+      // (a job joined to its props: the crane operator job's crane; the dock's bridge outside the port, src/jobs/docklink.js)
+      link = s.job.id === 'crane' && crane ? craneLink({ crane, W, walls }) : s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos }) : null;
       panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
     api.panel = panel;

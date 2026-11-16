@@ -182,3 +182,11 @@
 .pnj-line.is-wait { color: #9fb3c6; font-style: italic; }
 /* the card just answered, held while the job's props get ready for the next (the crane on its way): done, faded */
 .pnj-card.is-done { opacity: 0.5; transition: opacity 0.3s; }
+/* answers that are pictures (the dock's glass panes): each on the light card, drawn to the same scale as the question's */
+.pnj-answers.is-pics .pnj-coin { min-height: 104px; padding: 6px; }
+.pnj-coinpic { display: block; width: 100%; background: #f4ecdc; border-radius: 6px; }
+.pnj-coinpic svg { display: block; width: 100%; height: auto; max-height: 96px; }
+/* a job's end card (the dock's try, after its last ring): no level, no help, two buttons */
+.pnj.is-over .pnj-level, .pnj.is-over .pnj-foot { visibility: hidden; }
+.pnj-endbtn.is-again { background: var(--accent) !important; color: var(--accent-ink) !important; box-shadow: none; }
+.pnj-endbtn b { font-size: 18px; }

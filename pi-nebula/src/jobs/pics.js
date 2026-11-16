@@ -251,6 +251,8 @@ Object.assign(DRAW, {
 
 export function helpPicture(order) {
   if (!order) return { svg: '', title: '', line: '' };
+  // (a job's own question may bring its help picture drawn already: the dock's, src/jobs/dock.js)
+  if (order.help && order.help.svg) return { svg: order.help.svg, title: order.help.title || '', line: order.help.line || '' };
   if (order.help && order.help.pic && DRAW[order.help.pic.kind]) {
     const d = DRAW[order.help.pic.kind](order.help.pic);
     return { svg: d.svg, title: order.help.title || '', line: order.help.line || d.line };

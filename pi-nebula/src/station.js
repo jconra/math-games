@@ -9,6 +9,8 @@
 //                            whatever drives it), what glides by itself (the big scanner's ring, by the clock `now`),
 //                            the dust, the sky, the picture
 //   W.view(name) / W.place(name) / W.room(id)                   the station file's named views, spots and rooms
+//   W.seenFrom = point       a view from outside (the dock's bridge job): the rooms drawn are those seen from this point
+//                            inside the station, not from the camera out in space (null: from the camera, as always)
 //
 // NOTHING HERE KNOWS A COORDINATE. Rooms, doors, views and spots are found by name through the station file, which
 // is being rebuilt; the game's own markers are in spots.js, keyed by those names.
@@ -149,10 +151,13 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   const envAt = (p) => { const z = zoneAt(built, p), set = z && zoneSets.get(z.id); return (set && set.env) || envTex; };
 
   const keepShut = new Set(), driven = new Set();   // (driven: doors something else works, a parked ship's ways in: boarding.js)
+  // (a view from outside the station, the dock's bridge job: the rooms to draw are the ones seen from a point inside it,
+  // W.seenFrom (a Vector3), not from the camera, out in space where no room is near; null: from the camera)
+  const W0 = { seenFrom: null };
   function frame(dt, now, eyes = null) {
     U.time.value = now;
     resize();
-    if (built.zones.length > 1) updateZones(built, camera.position, RANGE, camera, R.portals);
+    if (built.zones.length > 1) updateZones(built, W0.seenFrom || camera.position, RANGE, camera, R.portals);
     if (dust.visible) dust.userData.update(dt, camera.position);
     sky.update(dt);
     // each door opens for whoever is nearest it (the kit's doors sense one point at a time); a door in keepShut (one
@@ -168,5 +173,6 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     draw(dt);
   }
 
-  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; } };
+  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
+    get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; } };
 }

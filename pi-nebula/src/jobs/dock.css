@@ -1,0 +1,40 @@
+/* The dock's bridge job (src/jobs/docklink.js): its card's top, the wobbly squares a young player braces, the try's end,
+   and the short fade as the view goes outside and comes back. The job panel's own look (jobs.css). */
+.pnj-cardtop.is-plan b { color: #9fe3ff; }
+.dkb-icon { width: 18px; height: 18px; flex: none; color: #9fe3ff; }
+
+/* the squares to brace, in place of the answers: each wobbles until braced, then shows its brace and two triangles */
+.dkb-strip { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px 6px;
+  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px rgba(196, 220, 240, 0.18); clip-path: var(--oct); --cut: 10px; transition: background 0.3s, box-shadow 0.3s; }
+.dkb-sqs { display: flex; gap: 16px; justify-content: center; }
+.dkb-sq { width: 96px; height: 96px; padding: 8px; background: rgba(255, 255, 255, 0.06) !important; box-shadow: inset 0 0 0 2px rgba(255, 166, 74, 0.75);
+  clip-path: var(--oct); --cut: 10px; transform-origin: 50% 100%; animation: dkb-wobble 1.15s ease-in-out infinite; }
+.dkb-sq:nth-child(2) { animation-delay: -0.4s; }
+.dkb-sq:nth-child(3) { animation-delay: -0.8s; }
+.dkb-sq:hover:not(.is-braced) { background: rgba(255, 166, 74, 0.16) !important; }
+.dkb-sq-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dkb-sq .dkb-brace { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.28s ease; }
+.dkb-sq .dkb-tris { opacity: 0; transition: opacity 0.3s ease 0.18s; }
+.dkb-sq.is-braced { animation: dkb-set 0.35s ease; box-shadow: inset 0 0 0 2px rgba(110, 226, 160, 0.9); cursor: default; }
+.dkb-sq.is-braced .dkb-brace { stroke-dashoffset: 0; }
+.dkb-sq.is-braced .dkb-tris { opacity: 1; }
+@keyframes dkb-wobble { 0%, 100% { transform: skewX(0deg); } 25% { transform: skewX(-11deg); } 75% { transform: skewX(11deg); } }
+@keyframes dkb-set { 40% { transform: scale(1.08); } }
+.dkb-count { margin: 0; font-size: 14px; color: var(--dim); }
+.dkb-strip.is-right { background: rgba(60, 170, 110, 0.28); box-shadow: inset 0 0 0 2px #b8ffd6; }
+.dkb-strip.is-right .dkb-count { color: #e9fff2; }
+.pnj-answers.is-waiting .dkb-strip { opacity: 0.42; pointer-events: none; transition: opacity 0.25s; }
+
+/* the try's end */
+.pnj-story.dkb-end { font-size: 18px; margin-bottom: 6px; }
+.pnj-story.dkb-end b { color: #8ff0c0; }
+.pnj-story.dkb-end2 { color: var(--dim); margin-bottom: 0; }
+
+/* the view going outside, and back in: a moment of black (under the panel) */
+.dkb-fade { position: fixed; inset: 0; z-index: 24; background: #000; pointer-events: none; opacity: 1; transition: opacity 0.4s ease; }
+.dkb-fade.is-gone { opacity: 0; }
+
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .dkb-sq { width: 84px; height: 84px; padding: 6px; }
+  .dkb-sqs { gap: 12px; }
+}

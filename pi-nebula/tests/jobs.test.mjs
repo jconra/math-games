@@ -235,8 +235,10 @@ test('the arrows step the level by hand, and stop at the ends', () => {
 });
 
 test('the jobs still to come are marked, with nothing to play yet', () => {
-  for (const J of [arena, dock]) {
+  for (const J of [arena]) {
     assert.equal(J.open, false); assert.equal(J.place, null);
     assert.ok(J.spot && J.sign && J.hint, J.id);
   }
+  // (the dock's bridge is open now, a try of three rings: its own tests, dock.test.mjs)
+  assert.equal(dock.open, true);
 });

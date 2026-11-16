@@ -100,6 +100,8 @@ export function mark(p, v) {
 
 // ── the docking airlock ───────────────────────────────────────────────────────────────────────────────────────────
 const AR = 0.95, AC = 1.42, ASKIN = 0.25, AHALF = 2;   // (a raised sill, 0.47 m: a step up each side)   // the round door: radius, centre height; the bulkhead's depth and half-width
+// (the round door's size and place in the piece's own frame, for what docks at the outer port: src/jobs/docklink.js)
+export const AIRLOCK = { r: AR, centre: AC, skin: ASKIN, half: AHALF };
 function roundFace(z) {
   // rings of quads from the round hole out to the 4 x 3 m edge, along rays from the hole's centre
   const m = new MeshData(), T = [0, 0.04, 0.12, 0.26, 0.48, 0.74, 1], N = 48, ang = [];

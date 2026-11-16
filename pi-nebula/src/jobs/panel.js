@@ -21,7 +21,11 @@
 //   const J = openPanel(root, { job, crew, live, onClose, onSave, onCredits })    J.close(), J.state() (for rigs),
 //   J.pick(i), J.help(), J.step(dir). live: a function giving what the job's props are doing right now (the smelter's
 //   load in the hangar), or an object joined to them (the crane operator job: src/jobs/cranelink.js): { now() for the
-//   makers, right(q, coin) and wrong(q, coin) told of each pick, close() }; asked once for each new question; or null
+//   makers, right(q, coin) and wrong(q, coin) told of each pick, close() }; asked once for each new question; or null.
+//   Such an object may also (the dock's bridge, src/jobs/docklink.js): head(o) draw the card's top; play(o, ui) answer
+//   a question by doing (the squares to brace: it fills ui.answers and calls ui.pick(0) when done; the order's `play`
+//   keeps keys and clicks from picking before); over() end the job's run with a card of its own ({ html, buttons }).
+//   An order may bring its picture drawn (o.lead) and coins that are pictures (c.svg).
 import * as E from './engine.js';
 import { helpPicture } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
@@ -104,7 +108,11 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   }
 
   // ── the card ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // (a job joined to its props may draw its card's top itself: the dock's bridge plan, which ring it is on)
+  const own = live && typeof live === 'object' ? live : null;
   function sceneHtml(o) {
+    const top = own && own.head ? own.head(o) : null;
+    if (top) return top;
     const who = o.who || null;
     if (job.card === 'chart') {
       return `<header class="pnj-cardtop is-chart"><span class="pnj-icon is-cross" aria-hidden="true"></span><b>Patient chart</b><small>Triage</small></header>
@@ -128,21 +136,27 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     : `<p class="pnj-story">${esc(o.story)}</p>`);
   function draw(o) {
     const pic = o.picFirst ? helpPicture(o) : null;
+    // (a job's own question may bring its picture with it, drawn: o.lead, the dock's panel with its gap)
+    const lead = o.lead || (pic && pic.svg) || '';
     card.innerHTML = `${sceneHtml(o)}
       ${storyHtml(o)}
-      ${pic && pic.svg ? `<div class="pnj-pic is-lead">${pic.svg}</div>` : ''}
+      ${lead ? `<div class="pnj-pic is-lead">${lead}</div>` : ''}
       <p class="pnj-ask">${esc(o.ask)}</p>`;
     answers.innerHTML = '';
     answers.classList.toggle('is-wide', o.coins.some((c) => String(c.big).length > 7));
+    // (answers that are pictures, the panes the dock offers: the picture on the button, its words for a screen reader)
+    answers.classList.toggle('is-pics', o.coins.some((c) => c.svg));
     o.coins.forEach((c, i) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'pnj-coin'; b.dataset.i = String(i);
       b.setAttribute('aria-label', c.label);
-      b.innerHTML = `<b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}`;
+      b.innerHTML = c.svg ? `<span class="pnj-coinpic">${c.svg}</span>` : `<b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}`;
       b.addEventListener('click', () => pick(i));
       answers.appendChild(b);
     });
     line.textContent = ''; line.className = 'pnj-line';
+    // (a job's own way of answering, in place of the buttons: the dock's squares to brace, which pick when all are)
+    if (own && own.play) own.play(o, { card, answers, line, pick });
     waitReady();
   }
   // (a job joined to its props may need them in place before a card can be answered: the crane operator job's crane
@@ -168,6 +182,10 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   }
   function next({ slide = 0 } = {}) {
     closeSheet();
+    // (a job whose props come to an end, the dock's try after its last ring: its own last card in place of a question)
+    const end = own && own.over ? own.over() : null;
+    if (end) { showEnd(end, slide); return; }
+    el.classList.remove('is-over');
     let now = null;
     const read = live ? (typeof live === 'function' ? live : live.now) : null;
     if (read) { try { now = read(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
@@ -188,6 +206,31 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       if (readyNow()) show(); else holdFor(show);
     } else { draw(q.order); if (helpOn) fillHelp(); }
     showLevel(); helpBtn.classList.remove('is-nudge');
+  }
+  // the end card: { html (its card), buttons: [{ label, again }] }: a button with `again` starts over (again() first, then
+  // a new question), one without is Done
+  function showEnd(end, slide) {
+    q = null;
+    const put = () => {
+      card.classList.remove('is-done', 'is-out');
+      card.innerHTML = end.html;
+      answers.innerHTML = ''; answers.classList.remove('is-waiting', 'is-wide', 'is-pics');
+      for (const B of end.buttons || []) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'pnj-coin pnj-endbtn' + (B.again ? ' is-again' : '');
+        b.innerHTML = `<b>${esc(B.label)}</b>`;
+        b.addEventListener('click', () => { if (closed) return; if (B.again) { B.again(); next({ slide: 1 }); } else close(); });
+        answers.appendChild(b);
+      }
+      line.textContent = ''; line.className = 'pnj-line';
+      if (helpOn) help(false);
+      el.classList.add('is-over'); helpBtn.classList.remove('is-nudge');
+      busy = false;
+      card.classList.add('is-in'); setTimeout(() => card.classList.remove('is-in'), 400);
+    };
+    if (!slide) { put(); return; }
+    busy = true; card.classList.add('is-out');
+    setTimeout(() => { if (!closed) put(); }, 260);
   }
   function readyNow() {
     const ready = live && typeof live === 'object' && live.ready;
@@ -213,6 +256,8 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   // ── an answer ─────────────────────────────────────────────────────────────────────────────────────────────────
   function pick(i) {
     if (busy || !q || q.done || closed || answers.classList.contains('is-waiting')) return null;
+    // (a question answered by doing, the dock's squares to brace: picked by the job once it is done, never by a key)
+    if (q.order.play && !q.order.played) return null;
     const btn = answers.children[i];
     if (!btn || btn.classList.contains('is-dull')) return null;
     const r = E.answer(crew, job, q, i, { ms: performance.now() - t0, helped });
@@ -277,7 +322,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     $('.pnj-paper').hidden = !o.sum;
   }
   function help(on = !helpOn) {
-    helpOn = !!on;
+    helpOn = !!on && !!q;   // (no question, the try's end card: nothing to help with)
     helpEl.hidden = !helpOn; el.classList.toggle('is-help', helpOn);
     helpBtn.setAttribute('aria-pressed', String(helpOn));
     if (helpOn) { helped = true; helpBtn.classList.remove('is-nudge'); fillHelp(); } else closeSheet();
