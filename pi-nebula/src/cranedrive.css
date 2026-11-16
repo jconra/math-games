@@ -115,13 +115,14 @@
 .pcg button:hover { box-shadow: inset 0 0 0 1.5px rgba(232, 243, 252, 0.95); }
 .pcg .pcg-free { background: #ff8f2e; color: #1c1205; }
 .pcg kbd { font: 700 10px/1 inherit; padding: 3px 5px; margin-left: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); color: #a7b0ba; }
-.pcg-banner { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 24px;
+.pcg-banner { position: fixed; left: calc((100vw - min(480px, 44vw) - 16px) / 2); top: 34%;   /* (the middle of the picture, clear of the panel) */
+  transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 24px;
   background: rgba(8, 30, 18, 0.92); box-shadow: inset 0 0 0 2px #4fe08a; clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px); }
 .pcg-banner[hidden] { display: none; }
 .pcg-banner b { font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: #8ff0b5; }
 .pcg-banner span { font-size: 15px; }
 .pcg-banner.is-pop { animation: pcd-pop 0.45s cubic-bezier(.2, 1.6, .4, 1); }
-.pcg-viewname { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); margin: 0; padding: 6px 14px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #bfe9ff;
+.pcg-viewname { position: fixed; left: calc((100vw - min(480px, 44vw) - 16px) / 2); bottom: 20px; transform: translateX(-50%); margin: 0; padding: 6px 14px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #bfe9ff;
   background: rgba(12, 18, 24, 0.86); opacity: 0; }
 .pcg-viewname.is-show { animation: pcd-name 2.6s ease forwards; }
 body.pcg-on .hud-menu { visibility: hidden; }   /* (the crane system's strip is where the Crew button is) */
@@ -132,4 +133,5 @@ body.pcg-on .hud-menu { visibility: hidden; }   /* (the crane system's strip is 
   .pcg-fault { font-size: 12.5px; }
   .pcg button { height: 30px; padding: 0 9px; font-size: 11px; }
   .pcg kbd { display: none; }
+  .pcg-banner, .pcg-viewname { left: 50%; }
 }
