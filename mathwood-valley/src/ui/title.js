@@ -12,12 +12,14 @@
 //
 // What is on it: the game's name; a card for each rider (name, title, bounty, face, when they last rode, the belt
 // buckles won; the chosen rider's card also shows each job's buckle with how far to the next one) and "New rider" (a
-// name, a look, and an optional age); the chosen rider's panel: their math (no level to pick: the game finds each
+// name, a look, and a starting difficulty: Easy, Medium or Hard, src/math/skill.js STARTS, in place of the age it used
+// to ask); the chosen rider's panel: their math (no level to pick: the game finds each
 // kind of math's level by itself as they play, src/math/skill.js; the panel says so and shows the levels found so
 // far, with the levels page, src/ui/levels.js, and the stats page, src/ui/stats.js, a tap away), their goals and completion (src/completion.js, when the game
 // has it: a grown-up pins a goal, "Set a goal"), the read-aloud switch while their math is young, and a folded "Jobs"
 // list where a grown-up can turn some jobs off (every job is on by default); RIDE OUT; "Just lock boxes"; a small
-// build number; and a folded Grown-ups corner (each rider's math, age and progress, the bandits switch; delete a rider).
+// build number; and a folded Grown-ups corner (each rider's math, starting difficulty and progress, the bandits
+// switch; delete a rider).
 // No math topics or missions to tick: every rider gets every job, the bottle range included, at their own level.
 // THE BANDITS SWITCH (src/gun.js): "Lasso only / Lasso or guns", on the new-rider form and on each rider's
 // row in the Grown-ups corner, shown plainly and set to lasso only at the start. It is the rider's saved mode
@@ -30,7 +32,7 @@
 // `completion` (optional): the src/completion.js module, for a page that has it already; otherwise it is loaded here,
 // and the goals and completion stay out of sight until it is (or if the game has none).
 //
-// Keyboard: Tab moves between controls, arrow keys move within a group (riders, ages, jobs, looks), Space or Enter
+// Keyboard: Tab moves between controls, arrow keys move within a group (riders, difficulties, jobs, looks), Space or Enter
 // picks, Escape closes the Grown-ups corner or the new-rider form. RIDE OUT has focus at the start,
 // so a returning rider can just press Enter.
 
@@ -203,9 +205,15 @@ function bucklesSaid(r) {
   return bucklesOf(r).map(b => `${b.name}: ${b.tier ? BUCKLE_NAMES[b.tier] + ' buckle, ' : ''}${buckleProgress(b)}`).join('; ');
 }
 
-// The ages the new-rider form offers (optional; the engine's list). An age only gives a modest head start
-// (src/math/skill.js ageStart: nothing at 5 and under, a third-grade start from 15 on); the game finds the real level
-// as the rider plays.
+// THE STARTING DIFFICULTY on the new-rider form (the engine's row: Easy, Medium, Hard; in place of the age it asked
+// before): only where the questions begin (src/math/skill.js STARTS: Easy the very first, Medium third-grade work, Hard
+// sixth-grade), in each place not played yet; the game finds the real level as the rider plays. What each one means,
+// in the rider's words:
+const DIFFICULTY = {
+  easy: 'Easy starts at the very first questions: counting, and adding small numbers.',
+  medium: 'Medium starts around third-grade math: times tables and two-digit sums.',
+  hard: 'Hard starts around sixth-grade math: fractions, decimals, below zero. For grown-ups too.',
+};
 
 // The plain line that there is no level to pick (the new-rider form, and a rider who hasn't answered anything yet).
 const AUTO_LINE = 'The game finds your level by itself as you play, for each kind of math. The first few questions may feel too easy or too hard for a minute.';
@@ -255,6 +263,7 @@ const WORDS = {
   ready: 'The valley is ready',
   grownIntro: 'How each rider is doing. The game finds each rider\'s level in every kind of math by itself and keeps it where about 4 answers in 5 are right. Names and saves stay on this device, and no personal data is sent: only game data (how answers go and which jobs get played, never names), to help make the game better. It can be switched off in the pause menu.',
   noPlayers: 'No riders yet.',
+  difficultyLine: (id) => DIFFICULTY[id] || '',
   deletePlayer: 'Delete rider',
   deleteAsk: (name) => `Delete ${name} for good? Their gold, fame and progress go too. This can't be undone.`,
 };
@@ -388,10 +397,10 @@ export function showTitle(root, opts = {}) {
       if (fold) fold.addEventListener('toggle', () => { M.jobsOpen = fold.open; });
     },
 
-    // ---- the new-rider form: the hat, "let the rider pick levels", the bandits switch ----
+    // ---- the new-rider form: the hat, the starting difficulty's line, "let the rider pick levels", the bandits switch ----
     draft: () => ({ hat: true, levels: true, bandits: 'lasso' }),
     formTones: (d) => `<div class="bmt-tone"><span>Hat</span><button class="bmt-hat" role="switch" aria-checked="${d.hat}" data-act="hat" data-k="hat">${ICON.hat}${d.hat ? 'On' : 'Off'}</button></div>`,
-    formAge: (d) => `<p class="bmt-auto">${ICON.compass}<span><b>No level to set.</b> ${AUTO_LINE} An age only gives a small head start.</span></p>
+    formDifficulty: (d) => `<p class="bmt-auto bmt-startline">${ICON.compass}<span><b>${esc(DIFFICULTY[d.start] || DIFFICULTY.easy)}</b> ${AUTO_LINE}</span></p>
           <div class="bmt-read"><button class="bmt-hat" role="switch" aria-checked="${d.levels !== false}" data-act="picklv" data-k="picklv">${ICON.ladder}Let the rider pick levels: ${d.levels !== false ? 'On' : 'Off'}</button>
             <small>${d.levels !== false ? 'Arrows by the level at the bottom of the screen step it down or up by hand.' : 'Only the game moves the level: the arrows by it are hidden.'}</small></div>`,
     formMore: (d) => `<section>
@@ -426,7 +435,7 @@ export function showTitle(root, opts = {}) {
       const c = compOf(r);
       return `<dt>Math</dt><dd>${mathText}</dd>
         <dt>Accuracy</dt><dd>${accText}${split}</dd>
-        <dt>Age</dt><dd>${ctx.ageSelect(r)} <small>a small head start for math not met yet</small></dd>
+        ${ctx.difficultyFacts(r)}
         <dt>Read aloud</dt><dd><button class="bmt-chip bmt-readsw" aria-pressed="${readMode(r) !== false}" data-act="read" data-id="${esc(r.id)}" data-k="read:${esc(r.id)}">${readMode(r) !== false ? ICON.speaker : ICON.speakerOff}${esc(readModeWords(r))}</button>
           <small>tap: by itself, always, off</small></dd>
         <dt>Levels</dt><dd>${esc(gridWords(r) || 'every level on in every place: the game finds each one')}</dd>

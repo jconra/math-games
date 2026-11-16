@@ -217,6 +217,13 @@
 .bmt-agech:hover { background: var(--card-hi); }
 .bmt-agech.is-skip { padding: 0 14px; font-size: 14px; }
 .bmt-agech[aria-checked="true"] { background: var(--brass); color: #2a1a0c; border-color: var(--brass-hi); }
+/* the starting difficulty (Easy, Medium, Hard: the engine's row, in place of the ages): three wider buttons; a
+   Grown-ups row's smaller ones, and its button to forget an older save's age */
+.bmt-startpick .bmt-agech { min-width: 96px; height: 38px; font-size: 15px; }
+.bmt-facts .bmt-startpick { margin: 2px 0 2px; }
+.bmt-facts .bmt-startpick .bmt-agech { min-width: 74px; height: 32px; font-size: 13.5px; }
+.bmt-startnote { display: block; }
+.bmt-forget { margin-left: 8px; min-height: 30px; font-size: 12.5px; }
 
 /* the jobs (in the fold): tick boxes in two columns */
 .bmt-missions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

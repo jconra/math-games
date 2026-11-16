@@ -200,6 +200,23 @@
 /* (the ages in ONE row: "Skip", then 5 to 16+) */
 .cst-agepick { display: grid; grid-template-columns: auto repeat(12, minmax(0, 1fr)); gap: 5px; }
 .cst-heights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; max-width: 380px; }   /* the Height row (title.js) */
+/* the starting difficulty (Easy, Medium, Hard: the engine's row, in place of the ages), its line under it, and a
+   Grown-ups row's button to forget an older save's age */
+.cst-agepick.cst-startpick { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 380px; }
+.cst-startline { margin-top: 7px; font-size: 13px; line-height: 1.45; color: var(--dim); }
+.cst-facts .cst-startpick { max-width: 300px; }
+.cst-facts .cst-startpick .cst-agech { height: 32px; font-size: 13px; }
+/* (a Grown-ups row on a wide screen: the name and the buttons along the top, the facts under the name, the whole
+   width; a phone's rows are laid out further down) */
+@media (min-width: 701px), (max-height: 560px) {
+  .cst-row.cst-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .cst-row .cst-face { grid-row: 1 / span 2; align-self: start; }
+  .cst-row .cst-facts { grid-column: 2 / -1; grid-row: 2; }
+  .cst-row .cst-rowbtns { grid-column: 3; grid-row: 1; }
+}
+.cst-startnote { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }
+.cst-forget { margin-left: 8px; font-size: 12px; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; padding: 4px 2px; }
+.cst-forget:hover { color: var(--ink); }
 .cst-agech { --cut: 7px; min-width: 0; height: 36px; padding: 0; display: grid; place-items: center; font-size: 14px; font-weight: 600; color: var(--dim); }
 .cst-agech.is-skip { padding: 0 12px; }
 .cst-agech:hover { color: var(--ink); }
@@ -357,6 +374,10 @@
   .cst-foot { margin-top: 16px; }
   .cst-row { grid-template-columns: auto minmax(0, 1fr); }
   .cst-row .cst-facts, .cst-row .cst-rowbtns { grid-column: 1 / -1; }
+  /* (the facts one under another: the starting difficulty's three buttons get the whole width) */
+  .cst-row .cst-facts { grid-template-columns: minmax(0, 1fr); }
+  .cst-row .cst-facts dd { margin-bottom: 6px; }
+  .cst-facts .cst-startpick { max-width: none; }
   .cst-card { padding: 18px 16px 24px; --cut: 18px; }
 }
 /* very large screens: everything bigger */

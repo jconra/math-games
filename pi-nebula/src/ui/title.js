@@ -8,7 +8,11 @@
 //   T.setProgress(0.4, 'Building the rooms'); T.nudge(); T.hide(); T.show(); T.player()
 //
 // What this game adds to the engine: the look pictures (looks.js), a panel for the chosen crew member with the whole
-// person and rows to change their look and their height (THE HEIGHT, below), and the words. Nothing here opens by itself.
+// person and rows to change their look and their height (THE HEIGHT, below), a button to their job levels (ui/levels.js:
+// each job's range of levels and "keep to these levels"), and the words. Nothing here opens by itself.
+// THE STARTING DIFFICULTY (the engine's row on the new crew member's form, Easy, Medium or Hard, in place of the age it
+// asked before): where each job's questions begin until the crew member's answers say more. Hard starts near the top
+// of each job's ladder (the game's maker: "Start grown-ups higher"); Mathwood's src/math/skill.js STARTS says how high.
 import { showTitle as showShared, esc } from '../../../shared/title/title.js';
 import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
@@ -17,7 +21,7 @@ import { pictureOf, onPicture } from '../portraits.js';
 import { SIZES } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=4', import.meta.url).href;
+const SHEET = new URL('./title.css?v=5', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -131,7 +135,7 @@ const theme = {
     },
   },
   grownLine: (p) => esc(aboard(p.last)),
-  grownFacts: (p, ctx) => `<dt>Joined</dt><dd>${esc(day(p.made))}</dd><dt>Age</dt><dd>${ctx.ageSelect(p)}</dd>`,
+  grownFacts: (p, ctx) => `<dt>Joined</dt><dd>${esc(day(p.made))}</dd>${ctx.difficultyFacts(p)}`,
   icons: {
     // the little ship that rides the loading bar
     runner: '<svg viewBox="0 0 24 16" aria-hidden="true"><path d="M1 8l5-5h8l9 5-9 5H6z" fill="currentColor"/><path d="M6 3L3 0h5zM6 13l-3 3h5z" fill="currentColor" opacity=".7"/></svg>',
@@ -143,7 +147,13 @@ const theme = {
     players: 'Crew',
     newPlayer: 'New crew member',
     formTitle: 'New crew member',
-    formLine: 'Pick a name, a look and a height',
+    formLine: 'A name, a look, where to start and a height',
+    difficultySmall: 'where the jobs\' questions begin',
+    difficultyLine: (id) => ({
+      easy: 'Easy: the very first questions. Counting, and small sums.',
+      medium: 'Medium: around third-grade math. Trays, shares and times tables.',
+      hard: 'Hard: around sixth-grade math. Ratios, decimals and percent. For grown-ups.',
+    }[id] || ''),
     nameHolder: (pick) => `Type a name, or be ${pick}`,
     anyName: 'Crew',
     pickLook: 'Pick your look',

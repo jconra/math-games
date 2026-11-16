@@ -8,14 +8,22 @@
 //   T.hide(); T.show(); T.player()
 //
 // It floats over the live world while that loads behind it. What is on it: the game's name; a card for each saved
-// player and "new player" (a name, a look, skin and hair if the game has them, an optional age); the chosen player's
-// panel; the start button, which can be pressed while the world still loads (it then waits and goes by itself when
-// loading reaches 1; if setProgress is never called the world is taken as ready); a small build number; and a folded
-// Grown-ups corner (a row per player; delete a player). Every change is saved straight away through the theme's save.
+// player and "new player" (a name, a look, skin and hair if the game has them, and a STARTING DIFFICULTY: Easy, Medium
+// or Hard); the chosen player's panel; the start button, which can be pressed while the world still loads (it then
+// waits and goes by itself when loading reaches 1; if setProgress is never called the world is taken as ready); a small
+// build number; and a folded Grown-ups corner (a row per player: their starting difficulty; delete a player). Every
+// change is saved straight away through the theme's save.
 //
-// Keyboard: Tab moves between controls, arrow keys move within a group (players, looks, ages, colours), Space or Enter
-// picks, Escape closes the Grown-ups corner or the new-player form. The start button has focus at the start, so a
-// returning player can just press Enter.
+// THE STARTING DIFFICULTY (the game's maker, 2026-11-16: "We could also just ask for a starting difficulty (Easy,
+// Medium, Hard), that way it doesn't seem like we are trying to harvest data about the player. This would apply to
+// Mathwood also"). It took the age's place on the form: saved as player.start (shared/players.js STARTS), Easy picked
+// at the start so a child who can't read can still just press the go button. What it means for the math is the game's
+// (Mathwood's src/math/skill.js STARTS). The age is asked nowhere now; a player saved with one keeps it, shown in the
+// Grown-ups corner with a button to forget it.
+//
+// Keyboard: Tab moves between controls, arrow keys move within a group (players, looks, difficulties, colours), Space
+// or Enter picks, Escape closes the Grown-ups corner or the new-player form. The start button has focus at the start,
+// so a returning player can just press Enter.
 //
 // THE NAMES IN THE PAGE. The engine was lifted out of Mathwood Valley's title screen, and Mathwood's stylesheet, tests
 // and rigs find things by name, so the names stayed: a player's card is `rider`, the list `riders`, the start button
@@ -27,7 +35,8 @@
 //   prefix        the class prefix, 'bmt'
 //   css           the stylesheet's address (the screen stays invisible until it has loaded)
 //   words         { screen, who, players, newPlayer, formTitle, formLine, name, nameHolder(pick), anyName, pickLook,
-//                   look, skin, hair, age, ageSmall, ageSaid, skip, cancel, create, createAs(pick), start, waiting,
+//                   look, skin, hair, difficulty, difficultySmall, difficulties: { easy, medium, hard }, difficultyLine(id),
+//                   oldAge(age), forgetAge, age, ageSmall, ageSaid, skip, cancel, create, createAs(pick), start, waiting,
 //                   starting, makeFirst, loading, ready, grown, grownIntro, noPlayers, saved, blocked, blockedLong,
 //                   deletePlayer, deleteAsk(nameHtml), keep, del, close, build(n) }   (see WORDS below for each)
 //   icons         { runner: the little figure on the loading bar, ...any of ICONS to replace }
@@ -36,7 +45,7 @@
 //   looks         [{ id, name, hair?, ... }] the looks on the new-player form
 //   skins, hairs  ['#rrggbb', ...] colour dots on the form (leave out for none)
 //   names         ready names for a player who types none
-//   ages          the ages offered (5 reads "5 or under", 16 "16+")
+//   ages          the ages a Grown-ups row's age drop-down offers (ageSelect: no longer used by either game)
 //   portrait(look)            -> html of a player's picture (inside a framed box)
 //   lookOf(draft, lookDef)    -> the look a new player gets from the form
 //   lookCardOf(lookDef, draft)-> the look shown on one look's card
@@ -48,7 +57,7 @@
 //   panelReady(panelEl, ctx)  called after the panel is drawn (to listen to something in it)
 //   draft(players)            -> extra fields for a fresh form
 //   formTones(draft, ctx)     -> html after the skin and hair dots (Mathwood's hat switch)
-//   formAge(draft, ctx)       -> html under the age row
+//   formDifficulty(draft, ctx) -> html under the starting difficulty's row (else the line words.difficultyLine gives)
 //   formMore(draft, ctx)      -> html of extra form sections
 //   created(p, draft)         fill in a new player from the form's extra fields, before the first save
 //   actionsBefore(p, state)   -> html of extra buttons before the start button
@@ -58,7 +67,10 @@
 //   actions       { name(ctx, data) } what the theme's own controls do (data-act="name")
 //   begin(ctx)                called once after the first draw
 // ctx = { el, P, S, players, opts, current(), changed(p), keepFocus(fn), focusKey(k, scroll), draw: { players, panel,
-//         actions, foot, sheet, all }, agePick(cur, kind, label), ageSelect(p), icons, esc, fmt }
+//         actions, foot, sheet, all }, difficultyPick(cur, kind, label, id), difficultyFacts(p) (a Grown-ups row's <dt>/<dd> for
+//         the starting difficulty, and an older save's age), agePick(cur, kind, label), ageSelect(p), icons, esc, fmt }
+
+import { STARTS } from '../players.js';
 
 export function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -77,7 +89,8 @@ export const ICONS = {
   runner: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="currentColor"/></svg>',
 };
 
-// The ages the new-player form offers (optional). 5 stands for "5 or under" and 16 for "16 or older" (it reads "16+").
+// The ages an older form offered (a Grown-ups row's ageSelect still can). 5 stands for "5 or under" and 16 for "16 or
+// older" (it reads "16+").
 export const AGES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 export const ageWord = (a) => (a == null ? 'not set' : a >= 16 ? '16+' : String(a));
 
@@ -95,6 +108,12 @@ const WORDS = {
   pickLook: 'Pick a look',
   look: 'Look',
   skin: 'Skin', hair: 'Hair',
+  difficulty: 'Starting difficulty',         // the new-player form's row, and a Grown-ups row's
+  difficultySmall: 'where the questions begin',
+  difficulties: { easy: 'Easy', medium: 'Medium', hard: 'Hard' },
+  difficultyLine: (id) => ({ easy: 'The very first questions.', medium: 'A little way up.', hard: 'Well up: for older players and grown-ups.' }[id] || ''),
+  oldAge: (age) => `Age ${age >= 16 ? '16 or older' : age}, kept from before`,   // a Grown-ups row, a player saved with an age
+  forgetAge: 'Forget the age',
   age: 'Age', ageSmall: 'if you like', ageSaid: 'Age, if you like', skip: 'Skip',
   cancel: 'Cancel',
   create: 'Start',                           // the form's go button
@@ -222,10 +241,27 @@ export function showTitle(root, theme, opts = {}) {
             ${ages.map((a) => `<option value="${a}"${r.age === a || (a === 16 && r.age != null && r.age > 16) || (a === 5 && r.age != null && r.age < 5) ? ' selected' : ''}>${a <= 5 ? '5 or under' : ageWord(a)}</option>`).join('')}
           </select></label>`;
   }
+  // THE STARTING DIFFICULTY as a row of three round buttons (Easy, Medium, Hard); kind names the action, id the player
+  // (a Grown-ups row) or none (the new-player form). None checked: a player saved before, with an age or nothing.
+  function difficultyPick(cur, kind, label, id = null) {
+    const at = STARTS.includes(cur) ? cur : null;
+    return `<div class="${P}-agepick ${P}-startpick" role="radiogroup" aria-label="${esc(label)}" data-nav="radio">
+      ${STARTS.map((s) => `<button class="${P}-agech is-skip" role="radio" aria-checked="${at === s}" tabindex="${at === s || (!at && s === STARTS[0]) ? 0 : -1}"
+          data-act="${kind}" data-v="${s}"${id ? ` data-id="${esc(id)}"` : ''} data-k="${kind}:${id ? esc(id) + ':' : ''}${s}">${esc(W.difficulties[s] || s)}</button>`).join('')}
+    </div>`;
+  }
+  // a Grown-ups row's starting difficulty (a change is for the places not played yet), and an older save's age, kept
+  // and shown, with a button to forget it
+  function difficultyFacts(r) {
+    const age = r.age != null && Number.isFinite(+r.age) ? +r.age : null;
+    return `<dt>${esc(W.difficulty)}</dt><dd>${difficultyPick(r.start, 'setstart', `${r.name}'s ${W.difficulty.toLowerCase()}`, r.id)}
+        <small class="${P}-startnote">${esc(STARTS.includes(r.start) ? W.difficultyLine(r.start) : age != null ? 'Set from their age until one is picked.' : 'Not picked: the very first questions.')} For places not played yet.</small></dd>
+      ${age != null ? `<dt>${esc(W.age)}</dt><dd>${esc(W.oldAge(age))} <button class="${P}-chip ${P}-forget" data-act="forgetage" data-id="${esc(r.id)}" data-k="forgetage:${esc(r.id)}">${esc(W.forgetAge)}</button></dd>` : ''}`;
+  }
 
   const draw = {};
   const ctx = {
-    el, P, S, players, opts, current, keepFocus, focusKey, draw, agePick, ageSelect, icons: ICON, esc, fmt,
+    el, P, S, players, opts, current, keepFocus, focusKey, draw, agePick, ageSelect, difficultyPick, difficultyFacts, icons: ICON, esc, fmt,
     // a player changed: saved now, and the game is told
     changed(r) { save.save(r); try { onChange(r); } catch (e) { console.error(e); } },
   };
@@ -263,7 +299,7 @@ export function showTitle(root, theme, opts = {}) {
   function freshDraft() {
     const look = LOOKS[players.length % LOOKS.length];
     return { name: '', pick: freeName(new Set(players.map((x) => String(x.name || '').toLowerCase()))), look: look.id,
-      skin: SKINS.length ? SKINS[(2 + players.length) % SKINS.length] : null, hair: look.hair, hairPicked: false, age: null,
+      skin: SKINS.length ? SKINS[(2 + players.length) % SKINS.length] : null, hair: look.hair, hairPicked: false, start: STARTS[0],
       ...(theme.draft ? theme.draft(players) : {}) };
   }
   function draftLook() {
@@ -301,9 +337,9 @@ export function showTitle(root, theme, opts = {}) {
         </section>
         ${tones.trim() ? `<div class="${P}-tones">${tones}</div>` : ''}
         <section>
-          <h3 class="${P}-label">${W.age} <small>${W.ageSmall}</small></h3>
-          ${agePick(d.age, 'age', W.ageSaid)}
-          ${theme.formAge ? theme.formAge(d, ctx) : ''}
+          <h3 class="${P}-label">${W.difficulty} <small>${W.difficultySmall}</small></h3>
+          ${difficultyPick(d.start, 'start', W.difficulty)}
+          ${theme.formDifficulty ? theme.formDifficulty(d, ctx) : `<p class="${P}-startline">${esc(W.difficultyLine(d.start))}</p>`}
         </section>
         ${theme.formMore ? theme.formMore(d, ctx) : ''}
         <div class="${P}-formbtns">
@@ -417,7 +453,7 @@ export function showTitle(root, theme, opts = {}) {
       <span class="${P}-face">${portrait(r.look)}</span>
       <h3>${esc(r.name)}<small>${theme.grownLine ? theme.grownLine(r) : ''}</small></h3>
       <dl class="${P}-facts">
-        ${theme.grownFacts ? theme.grownFacts(r, ctx) : `<dt>${W.age}</dt><dd>${ageSelect(r)}</dd>`}
+        ${theme.grownFacts ? theme.grownFacts(r, ctx) : difficultyFacts(r)}
       </dl>
       <div class="${P}-rowbtns">
         ${theme.grownButtons ? theme.grownButtons(r, ctx) : ''}
@@ -491,11 +527,31 @@ export function showTitle(root, theme, opts = {}) {
       case 'skin': S.draft.skin = data.v; keepFocus(renderPanel); return;
       case 'hair': S.draft.hair = data.v; S.draft.hairPicked = true; keepFocus(renderPanel); return;
       case 'age': S.draft.age = data.v ? Math.round(+data.v) : null; keepFocus(renderPanel); return;
+      // the starting difficulty: on the new-player form, or a Grown-ups row (for the places not played yet)
+      case 'start': if (S.draft && STARTS.includes(data.v)) { S.draft.start = data.v; keepFocus(renderPanel); } return;
+      case 'setstart': {
+        const p = players.find(x => x.id === data.id);
+        if (!p || !STARTS.includes(data.v) || p.start === data.v) return;
+        p.start = data.v;
+        keepFocus(() => { renderSheet(); renderPanel(); });
+        ctx.changed(p);
+        return;
+      }
+      // an older save's age, forgotten (a Grown-ups row)
+      case 'forgetage': {
+        const p = players.find(x => x.id === data.id);
+        if (!p || p.age == null) return;
+        p.age = null;
+        renderSheet(); renderPanel();
+        focusKey(`setstart:${p.id}:${STARTS.includes(p.start) ? p.start : STARTS[0]}`);
+        ctx.changed(p);
+        return;
+      }
       case 'create': {
         const name = (S.draft && S.draft.name || '').trim() || (S.draft && S.draft.pick) || '';
         if (!name || !canMakeMore()) { focusKey('name'); return; }
         const nr = save.make(name, draftLook());
-        nr.age = S.draft.age == null ? null : S.draft.age;   // (optional)
+        nr.start = STARTS.includes(S.draft.start) ? S.draft.start : STARTS[0];   // (in place of an age: nothing more is asked)
         if (theme.created) theme.created(nr, S.draft);
         players.push(nr);
         save.save(nr);
