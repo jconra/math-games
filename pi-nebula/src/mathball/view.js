@@ -385,7 +385,8 @@ export function makeView({ W, G: G0 }) {
       floor.mesh.geometry.dispose(); floor.mesh.material.dispose(); bar.mesh.geometry.dispose(); bar.mesh.material.dispose();
       for (const S of signs) { S.tex.dispose(); S.mesh.material.dispose(); S.mesh.geometry.dispose(); }
       for (const p of ports) p.material.dispose();
-      hitMat.dispose(); ringGeo.dispose(); youRing.material.dispose(); themRing.material.dispose();
+      hitMat.dispose(); for (const h of hits) h.geometry.dispose(); ringGeo.dispose(); youRing.material.dispose(); themRing.material.dispose();
+      if (ports[0]) ports[0].geometry.dispose();   // (the ports' rings share one shape; the balls' shape is kept for the next round)
     },
   };
   return V;
