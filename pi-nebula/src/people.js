@@ -14,15 +14,17 @@
 //   resolve(W, walls, at) -> { pos, heading } | null                where a spot in spots.js is, by the station's names
 //
 // HOW THEY GET ABOUT
-// - A way is worked out a little at a time (walls.plan: a few milliseconds a frame for everyone together, LIFE.planMs),
-//   never across a patch they keep off (noGo) or through someone standing still; while it is being worked out they
-//   stay as they were.
+// - A way is worked out a little at a time (walls.plan: LIFE.planMs a frame for everyone together, taking turns, at most
+//   LIFE.planMost of work for one way), never across a patch they keep off (noGo: a quarter-metre map of the floor) nor
+//   within LIFE.keepFrom of anyone standing or sitting still; while it is worked out they stay as they were.
 // - Walking, they keep clear of each other and of the player: someone ahead in their lane is passed on the side away
-//   from them (both step to their own right when it is head on); they never step to within LIFE.body of anyone; held
-//   up a moment, they wait, then step aside; held up LIFE.replan seconds, they work out the way again from where they
-//   are; still held, they give up on it and go on with their day.
-// - Out of sight (their room not drawn, or behind the camera) nothing of their body is worked out: they are moved on
-//   along their way, a few times a second. Far off, their clips are played every other frame or every fourth.
+//   from them (head on, each to their own right); they never step to within LIFE.body of anyone. Held up by someone
+//   standing still or by a corner, the way is worked out again round them at once; by someone standing where they were
+//   going, somewhere else instead; two walkers holding each other up: the one later in the roster makes way (a step
+//   aside or back, a wait till the other has gone by). Held LIFE.giveUp seconds in all, the errand is given up.
+// - Out of sight (their room not drawn, behind the camera, or past the nearest LIFE.drawn[quality]) their body is out
+//   of the scene altogether and their day goes on six frames at a time. In sight, their clips are played every frame
+//   near, every other frame or every fourth further off, and their eyes are drawn only close up.
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
 import { expand, zonesOf, setDoors } from '../kit/layout.js';
@@ -37,8 +39,10 @@ const SEEN = 46;        // people further than this from the camera are not draw
 // working the way out again, and giving up (s); how long a planned way may take each frame, for everyone (ms)
 export const LIFE = {
   speed: [1.05, 1.35], turn: 5, body: 0.6, keepFrom: 0.75, lane: [2.0, 0.75], sidestep: 1.0, replan: 2.0, stillWait: 0.8, replanEvery: 1.5, giveUp: 7,
-  planMs: 2.5, sit: 0.7, room: 0.75,     // (room: no two spots anyone has are nearer than this, m)
+  planMs: 2.5, planMost: 250, sit: 0.7, room: 0.75,     // (room: no two spots anyone has are nearer than this, m)
   near: 12, mid: 24,    // m from the camera: clips played every frame nearer, every other frame to `mid`, every fourth beyond
+  drawn: { low: 8, medium: 12, high: 20 },   // the most drawn at once, the nearest (?drawn=N for the cost rigs)
+  eyes: 7,              // m from the camera beyond which the eyes are not drawn
   stuck: 3,             // s with a way to go and nothing gained: a loud alarm (counted)
 };
 // the patches nobody stands on or walks across: a job spot's ring (its middle, m), a parked ship's way in (its patch of
@@ -67,8 +71,8 @@ const roomMatch = (W, want) => {
   if (typeof want === 'string') return zones.find((z) => z.id === want) || null;
   return zones.find((z) => want.test(z.id) || want.test(z.name || '')) || null;
 };
-// (a named place: [x, y, z], or the n-th of a list of them)
-const placeAt = (W, name, n = null) => { let p = W.R.places?.[name]; if (n != null && Array.isArray(p) && Array.isArray(p[n])) p = p[n]; return Array.isArray(p) && p.length === 3 && typeof p[0] === 'number' ? new THREE.Vector3(...p) : null; };
+// (a named place: [x, y, z], the n-th of a list of them, or one inside another by a dotted name: 'ships.medic.at')
+const placeAt = (W, name, n = null) => { let p = String(name).split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), W.R.places); if (n != null && Array.isArray(p) && Array.isArray(p[n])) p = p[n]; return Array.isArray(p) && p.length === 3 && typeof p[0] === 'number' ? new THREE.Vector3(...p) : null; };
 // a spot's point and the way it faces (before it is moved to where a person can stand): every match when all is asked
 function roughAll(W, pieces, at) {
   if (at.spawn) {
@@ -253,7 +257,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     c.root.position.copy(P.pos); c.root.rotation.set(0, heading, 0);
     shadeUnder(c.root); shine(c, W.envAt(P.pos));
     c.play(firstClip(c, STAND), { fade: 0 }); P.clip = STAND; c.update(0); c.update(Math.random() * 3);   // (each at its own moment of the clip)
-    c.root.visible = false; W.scene.add(c.root);
+    c.root.visible = false;     // (in the scene only while drawn: update() adds and takes it away)
     return P;
   }
   const play = (P, name, { fade = 0.35, speed = 1 } = {}) => {
@@ -371,13 +375,17 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return false;
     };
   }
+  // (taking turns: each way being worked out gets a slice and goes to the back of the queue, so one long search never
+  // holds up everyone else's; a way that has taken LIFE.planMost ms of work is given up: one that long goes nowhere)
   function planning() {
     const t = performance.now() + LIFE.planMs;
-    while (planQ.length && performance.now() < t) {
-      const P = planQ[0];
-      if (!P.req) { planQ.shift(); continue; }
-      if (!P.req.step(Math.max(0.3, t - performance.now()))) break;
-      planQ.shift();
+    let turns = planQ.length * 2;
+    while (planQ.length && performance.now() < t && turns-- > 0) {
+      const P = planQ.shift();
+      if (!P.req || P.req.dropped) continue;
+      if (!P.req.step(Math.max(0.3, Math.min(1, t - performance.now())))) {
+        if (P.req.ms > LIFE.planMost) { P.req.done = true; P.req.way = null; } else { planQ.push(P); continue; }
+      }
       const w = P.req.way, to = P.req.to; P.req = null;
       if (w && w.length >= 2 && w.short < 0.45) { P.way = w; P.wi = 1; P.walking = true; P.lastGain.copy(P.pos); P.gain = 0; stillV++; }
       else if (w && w.length >= 2 && w.short < 1.2) { w[w.length - 1] = to.clone(); P.way = w; P.wi = 1; P.walking = true; P.lastGain.copy(P.pos); P.gain = 0; stillV++; }
@@ -393,8 +401,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // ── each frame ───────────────────────────────────────────────────────────────────────────────────────────────
   const others = [], near = new THREE.Vector3(), _f = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere(new THREE.Vector3(), 1.15);
   let zoneClock = 0, frame = 0, playerNow = null;
+  const seen = [];
+  let drawnMost = 12;
   function update(dt, { player = null, camera }) {
-    frame++;
+    frame++; seen.length = 0;
     zoneClock -= dt;
     const findZones = zoneClock <= 0; if (findZones) zoneClock = 0.4;
     playerNow = player;
@@ -402,7 +412,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
     for (const P of list) {
       const c = P.c;
-      if (P.hidden) { c.root.visible = false; continue; }
+      if (P.hidden) { P.shown = false; continue; }
       // the body out of sight: their day goes on a few times a second, nothing of the body is worked out
       const shown = P.shown;
       P.acc = (P.acc || 0) + dt;
@@ -411,16 +421,32 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (findZones || !P.zone) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { if (P.zone) shine(c, W.envAt(P.pos)); P.zone = z; } }
       const far = camera.position.distanceTo(P.pos);
       _s.center.set(P.pos.x, P.pos.y + 0.95, P.pos.z);
+      P.far = far;
       P.shown = !!(P.zone && P.zone.group.visible) && far < SEEN && _f.intersectsSphere(_s);
-      c.root.visible = P.shown;
-      if (!P.shown) continue;
+      if (P.shown) seen.push(P);
+    }
+    // the nearest of them drawn, at most DRAWN[quality] (a body out of the scene costs nothing at all: the scene's own
+    // update walks every bone of every body in it, drawn or not)
+    if (seen.length > drawnMost) { seen.sort((a, b) => a.far - b.far); for (let i = drawnMost; i < seen.length; i++) seen[i].shown = false; seen.length = drawnMost; }
+    for (const P of list) {
+      if (P.shown === !!P.inScene) continue;
+      if (P.shown) { W.scene.add(P.c.root); P.fresh = true; } else W.scene.remove(P.c.root);
+      P.inScene = P.shown; P.c.root.visible = P.shown;
+    }
+    for (const P of seen) {
+      const c = P.c, far = P.far;
       // (the body eased up and down steps, a riser at a time; a sitter at the seat's height)
       P.drawnY = Math.abs(P.pos.y - P.drawnY) > 0.6 ? P.pos.y : damp(P.drawnY, P.pos.y, 14, dt);
       c.root.position.set(P.pos.x, P.drawnY + P.sitY, P.pos.z); c.root.rotation.set(0, P.heading, 0);
+      // (the eyes and the clear layer over them, two draws each, too small to see past LIFE.eyes metres)
+      const close = far < LIFE.eyes;
+      if (P.close !== close) { P.close = close; for (const m of [c.meshes.eyes, c.meshes.cornea]) if (m) m.visible = close; }
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
-      if ((frame + P.id.length) % step !== 0) continue;
+      // (just come into view: posed at once, never shown as they were when last seen)
+      if (!P.fresh && (frame + P.id.length) % step !== 0) continue;
+      P.fresh = false;
       // eyes on a player who comes near, or on whoever they are talking to (the eyes only)
       const tk = P.act && P.act.kind === 'talk' && P.act.phase === 'do' && P.act.spot.talk.who[1 - P.act.spot.i];
       const vis = far < 8 && !tk && P.act && (P.act.kind === 'post' || P.act.kind === 'stand') ? visitor(P) : null;
@@ -631,7 +657,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       } else { P.gain = 0; P.lastGain.copy(P.pos); }
       // in a wall (a sitter is on a seat: not counted)
       const sitting = P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising');
-      if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)));
+      if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.phase || '') + ' ' + (P.act.spot?.name || '') : '-') + (P.walking ? ', walking' : '') + (P.yielding ? ', making way' : '') + ')');
       // in another person (or the player)
       for (const Q of list) if (Q !== P && !Q.hidden && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < 0.42 && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, 'and ' + Q.id);
       if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < 0.42) alarm('inPerson', P, 'and the player');
@@ -657,7 +683,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const [g, L] of Object.entries(talks)) for (const T of L) for (const p of T.at) spots.push({ at: [p.x, p.z], kind: 'talk', colour: COL.talk, group: g, label: labels ? T.name : null });
     for (const P of list) {
       const kind = P.act ? P.act.kind : 'wait';
-      spots.push({ at: [P.pos.x, P.pos.z], face: P.heading, label: P.id, colour: COL[kind] || '#fff', kind: 'person' });
+      spots.push({ at: [P.pos.x, P.pos.z], face: P.heading, label: labels || kind === 'post' ? P.id : null, colour: COL[kind] || '#fff', kind: 'person' });
       if (P.way) routes.push({ id: P.id, colour: (COL[kind] || '#fff') + 'cc', way: P.way.map((p) => [p.x, p.z]) });
     }
     return { spots, routes, noGo: patches, notes };
@@ -670,11 +696,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     Object.assign(P, { order: 1e6 + list.length, day: [{ do: 'stand:none' }], k: 0, act: { kind: 'wait', until: Infinity, t: 0 }, speed: 1.2, lastGain: P.pos.clone(), gain: 0, held: 0, side: 0 });
     list.push(P); return P;
   }
-  function remove(P) { const i = list.indexOf(P); if (i >= 0) list.splice(i, 1); release(P); W.scene.remove(P.c.root); P.c.dispose(); }
+  function remove(P) { const i = list.indexOf(P); if (i >= 0) list.splice(i, 1); release(P); W.scene.remove(P.c.root); P.inScene = false; P.c.dispose(); }
   // ── aboard: everyone, one at a time ──────────────────────────────────────────────────────────────────────────
   // (how many: by the picture's quality, or the address's ?crowd=N, for the cost rigs)
   const asked = +new URLSearchParams(location.search).get('crowd');
   const quality = W.quality in CROWD ? W.quality : 'medium', most = asked > 0 ? Math.min(asked, ROSTER.length) : CROWD[quality];
+  const askedDrawn = +new URLSearchParams(location.search).get('drawn');
+  drawnMost = askedDrawn > 0 ? askedDrawn : LIFE.drawn[quality];
   const roster = ROSTER.slice(0, most);
   // where each comes aboard: their first spot (a post's own, or the first free spot of their day), placed there at once
   for (const def of roster) {

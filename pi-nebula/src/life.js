@@ -19,6 +19,21 @@
 // with the time in seconds after it ([least, most]) where the activity's own is not wanted.
 export const CROWD = { low: 12, medium: 20, high: 30 };
 
+// (a hangar's spots: in front of each of its crates and carts and lockers, all along its walls; a crate stacked on
+// another, or one under the crane's loads or by a ship's way in, is left out by people.js)
+const hangarSpots = (room) => [
+  ...['stack', 'large', 'long', 'small'].map((variant) => ({ piece: 'crate', variant, room, all: true, local: [0, 0, -1.25], face: [0, 1] })),
+  { piece: 'crate', variant: 'cart', room, all: true, local: [1.2, 0, 0], face: [-1, 0] },
+  { piece: 'wall', variant: 'locker', room, all: true, local: [0, 0, 0.6], face: [0, -1] },
+];
+
+// (round a parked ship, by fractions of its hangar's box: by its tail, its nose, its sides; a spot on a way in's patch
+// or under the crane is left out by people.js)
+const shipSpots = (room) => [
+  { room, at: [0.27, 0.41], face: [1, 0.15] }, { room, at: [0.27, 0.59], face: [1, -0.15] }, { room, at: [0.52, 0.86], face: [0, -1] },
+  { room, at: [0.47, 0.84], face: [0.2, -1] }, { room, at: [0.77, 0.5], face: [-1, 0] }, { room, at: [0.41, 0.17], face: [0.3, 1] },
+];
+
 // THE SPOTS, by group: each a list of spot definitions (people.js spotsOf): { piece, variant, room, local, face, all }
 // (all: every such piece), { room, at: [across x, across z] (0..1 of its box), face: [x, z] (a way to face) },
 // { place, toward, out }. face [x, z] is in the piece's own frame (or the world's, for a room).
@@ -44,12 +59,11 @@ export const SPOTS = {
   lockers: [{ piece: 'wall', variant: 'locker', room: 'c1', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-n', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-s', all: true, local: [0, 0, 0.6], face: [0, -1] }],
   quarters: [{ room: 'qc', at: [0.62, 0.72], face: [-1, 0] }, { room: 'qc', at: [0.3, 0.86], face: [1, 0] }],
   // the hangars: by their crates and carts (never near a parked ship's ways in, nor under the crane: people.js)
-  hangar: [
-    { piece: 'crate', variant: 'stack', room: 'hangar', local: [0, 0, -1.3], face: [0, 1] }, { piece: 'crate', variant: 'cart', room: 'hangar', local: [1.2, 0, 0], face: [-1, 0] },
-    { piece: 'crate', variant: 'large', room: 'hangar', all: true, local: [0, 0, -1.2], face: [0, 1] },
-  ],
-  minerHangar: [{ piece: 'crate', variant: 'stack', room: 'hangar-miner', local: [0, 0, -1.3], face: [0, 1] }, { piece: 'crate', variant: 'cart', room: 'hangar-miner', local: [1.2, 0, 0], face: [-1, 0] }, { piece: 'crate', variant: 'long', room: 'hangar-miner', local: [0, 0, -1.2], face: [0, 1] }],
-  medicHangar: [{ piece: 'crate', variant: 'stack', room: 'hangar-medic', local: [0, 0, -1.3], face: [0, 1] }, { piece: 'crate', variant: 'cart', room: 'hangar-medic', local: [1.2, 0, 0], face: [-1, 0] }, { piece: 'crate', variant: 'large', room: 'hangar-medic', all: true, local: [0, 0, -1.2], face: [0, 1] }],
+  hangar: hangarSpots('hangar'),
+  ship: [...shipSpots('hangar'), ...shipSpots('hangar-medic')],
+  minerShip: shipSpots('hangar-miner'),
+  minerHangar: hangarSpots('hangar-miner'),
+  medicHangar: hangarSpots('hangar-medic'),
   // work: the mechanic at the Explorer hangar's long crate, the dock worker by the far crates
   mechanic: [{ piece: 'crate', variant: 'long', room: 'hangar', local: [0, 0, -1.0], face: [0, 1] }],
   minerMechanic: [{ piece: 'crate', variant: 'cart', room: 'hangar-miner', local: [-1.2, 0, 0], face: [1, 0] }],
@@ -102,48 +116,49 @@ export const ROSTER = [
   { id: 'smelter', name: 'The smelter', look: 'smelter', day: [{ do: 'post:forge', clip: 'forge', for: T(50, 100) }, { do: 'stand:forgeConsole', for: T(12, 25) }, { do: 'stand:store', for: T(10, 20), p: 0.5 }] },
   { id: 'medic', name: 'The medic', look: 'medic', day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },
   { id: 'mechanic', name: 'A mechanic', look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'hauler', uniform: '#f0892e', skin: '#a66d45', hair: '#17110d' }, size: 1.07 },
-    day: [{ do: 'post:mechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach' }, { do: 'post:mechanic', clip: 'hammer', for: T(30, 60) }, { do: 'sit:cafe', for: T(60, 120), p: 0.35 }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'post:mechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach' }, { do: 'post:mechanic', clip: 'hammer', for: T(30, 60) }, { do: 'sit:cafe', for: T(60, 120), p: 0.35 }] },
   { id: 'traveller', name: 'A traveller', look: { suit: 'civilian', head: 't1', hair: 'shortFull', colours: { job: 'explorer', skin: '#c48a62', hair: '#8f8a84' } },
     day: [{ do: 'stand:board', for: T(12, 25) }, { do: 'sit:window', for: T(40, 90) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(60, 120) }, { do: 'stand:booth', for: T(15, 30) }] },
   { id: 'crew-ada', name: 'A crew member', look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#9b6ddb', skin: '#e8bf9f', hair: '#6b4127' } },
-    day: [{ do: 'stand:quarters', for: T(10, 25) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(70, 140) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(25, 50) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:quarters', for: T(10, 25) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(70, 140) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(25, 50) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
   { id: 'hauler', name: 'A hauler', look: { suit: 'atlantis1', head: 't4', hair: 'spikey', colours: { job: 'hauler', uniform: '#3f8fe8', skin: '#86522f', hair: '#17110d' } },
-    day: [{ do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:spine', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(60, 120) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
-  // ── medium adds these ──
-  { id: 'dockhand', name: 'A dock worker', look: 'dockWorker', day: [{ do: 'post:dock', clip: 'reach', for: T(30, 60) }, { do: 'post:dock', for: T(20, 40) }, { do: 'talk:hangar', for: T(20, 40), p: 0.5 }] },
-  { id: 'miner-oso', name: 'A miner', look: { suit: 'atlantis1', head: 't6', hair: 'curlyShort', colours: { job: 'miner', uniform: '#e3b341', skin: '#663b22', hair: '#17110d' } },
-    day: [{ do: 'stand:minerHangar', for: T(30, 60), clip: 'reach' }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(60, 110) }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:spine', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(60, 120) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
+  // ── Medium adds these: people of the hangars, the medical centre and the smelter (the terminal's crowd stays as
+  // Low's, as today's: it is where the most are seen at once) ──
+  { id: 'dockhand', name: 'A dock worker', look: 'dockWorker', day: [{ do: 'stand:ship', clip: 'reach', for: T(30, 60) }, { do: 'post:dock', clip: 'reach', for: T(30, 60) }, { do: 'stand:ship', for: T(20, 40) }, { do: 'talk:hangar', for: T(20, 40), p: 0.5 }] },
+  { id: 'smelter-ivo', name: 'A smelter hand', look: { suit: 'smelter', head: 't2', hair: 'q_short', colours: { job: 'miner', skin: '#c48a62', hair: '#4a2f1d' } },
+    day: [{ do: 'sit:control', for: T(40, 90) }, { do: 'stand:store', for: T(15, 30), clip: 'reach' }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:minerHangar', for: T(20, 40) }] },
   { id: 'medic-ren', name: 'A medic', look: { suit: 'atlantis2', head: 't3', hair: 'wavy', colours: { job: 'medic', uniform: '#2ec4b6', skin: '#f2d3bd', hair: '#a83c22' } },
     day: [{ do: 'stand:medic', for: T(25, 50), clip: 'reach' }, { do: 'talk:medical', for: T(20, 40) }, { do: 'stand:medicHangar', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 110) }] },
+  { id: 'mechanic-ade', name: 'A mechanic', look: { suit: 'atlantis1', head: 't4', hair: 'shortFull', colours: { job: 'miner', uniform: '#3b4a5c', skin: '#86522f', hair: '#2e1f15' } },
+    day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'post:minerMechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(15, 30), clip: 'reach' }, { do: 'post:minerMechanic', clip: 'hammer', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40), p: 0.4 }] },
+  { id: 'medic-ana', name: 'A medic', look: { suit: 'medic', head: 't5', hair: 'q_long', colours: { job: 'medic', skin: '#86522f', hair: '#17110d' } },
+    day: [{ do: 'stand:medic', for: T(25, 50) }, { do: 'sit:waiting', for: T(20, 40) }, { do: 'stand:medic', for: T(20, 40), clip: 'reach' }, { do: 'talk:medical', for: T(20, 40) }] },
+  { id: 'miner-jon', name: 'A miner', look: { suit: 'atlantis1', head: 't1', hair: 'crop', colours: { job: 'miner', uniform: '#e9ecef', skin: '#e8bf9f', hair: '#b4824f' } },
+    day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:store', for: T(15, 30), clip: 'reach' }, { do: 'sit:control', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(25, 50) }, { do: 'sit:waiting', for: T(25, 50) }] },
+  { id: 'miner-oso', name: 'A miner', look: { suit: 'atlantis1', head: 't6', hair: 'curlyShort', colours: { job: 'miner', uniform: '#e3b341', skin: '#663b22', hair: '#17110d' } },
+    day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:minerHangar', for: T(30, 60), clip: 'reach' }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(60, 110) }] },
   { id: 'patrol', name: 'Station security', look: { suit: 'security', head: 't9', hair: 'q_bob', colours: { job: 'staff', skin: '#d9a37f', hair: '#d6d3cc' } },
     day: [{ do: 'walk:patrol' }, { do: 'stand:terminal', for: T(20, 40) }, { do: 'talk:spine', for: T(15, 30) }] },
+  // ── High adds these: the terminal's own crowd, and more in the hangars ──
   { id: 'diner-kai', name: 'A crew member', look: { suit: 'atlantis1', head: 't2', hair: 'sidepart', colours: { job: 'staff', uniform: '#5cbf5a', skin: '#e8bf9f', hair: '#4a2f1d' } },
     day: [{ do: 'sit:cafe', for: T(90, 160) }, { do: 'stand:drinks', for: T(6, 12) }, { do: 'sit:window', for: T(40, 90) }, { do: 'talk:terminal', for: T(25, 50) }] },
   { id: 'pilot-sol', name: 'A pilot', look: { suit: 'spaceWoman', head: 't9', hair: 'whiteStripeLeftLong', colours: { job: 'explorer', skin: '#a66d45', hair: '#2e1f15' } },
-    day: [{ do: 'stand:board', for: T(15, 30) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(30, 60) }, { do: 'sit:window', for: T(40, 80) }] },
-  { id: 'smelter-ivo', name: 'A smelter hand', look: { suit: 'smelter', head: 't2', hair: 'q_short', colours: { job: 'miner', skin: '#c48a62', hair: '#4a2f1d' } },
-    day: [{ do: 'sit:control', for: T(40, 90) }, { do: 'stand:store', for: T(15, 30), clip: 'reach' }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:minerHangar', for: T(20, 40) }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:board', for: T(15, 30) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(30, 60) }, { do: 'sit:window', for: T(40, 80) }] },
   { id: 'crew-lin', name: 'A crew member', look: { suit: 'atlantis2', head: 't5', hair: 'mediumFull', colours: { job: 'explorer', uniform: '#e9ecef', skin: '#d9a37f', hair: '#d8bc84' } },
     day: [{ do: 'stand:quarters', for: T(15, 30) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:window', for: T(40, 80) }, { do: 'stand:drinks', for: T(6, 12) }, { do: 'talk:terminal', for: T(25, 45) }] },
-  // ── high adds these ──
   { id: 'miner-bex', name: 'A miner', look: { suit: 'spaceMan', head: 't10', hair: 'afro', colours: { job: 'miner', skin: '#47291a', hair: '#17110d' } },
-    day: [{ do: 'stand:minerHangar', for: T(30, 60) }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'sit:cafe', for: T(60, 110) }] },
-  { id: 'medic-ana', name: 'A medic', look: { suit: 'medic', head: 't5', hair: 'q_long', colours: { job: 'medic', skin: '#86522f', hair: '#17110d' } },
-    day: [{ do: 'stand:medic', for: T(25, 50) }, { do: 'sit:waiting', for: T(20, 40) }, { do: 'stand:medic', for: T(20, 40), clip: 'reach' }, { do: 'talk:medical', for: T(20, 40) }] },
+    day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:minerHangar', for: T(30, 60) }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'sit:cafe', for: T(60, 110) }] },
   { id: 'crew-tam', name: 'A crew member', look: { suit: 'atlantis1', head: 't10', hair: 'mohawk', colours: { job: 'explorer', uniform: '#d9463e', skin: '#f2d3bd', hair: '#a83c22' } },
     day: [{ do: 'talk:spine', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(70, 130) }, { do: 'stand:hangar', for: T(25, 50) }] },
   { id: 'visitor-ola', name: 'A visitor', look: { suit: 'civilian', head: 't6', hair: 'coil', colours: { job: 'explorer', skin: '#663b22', hair: '#2e1f15' }, size: 0.9 },
     day: [{ do: 'sit:window', for: T(50, 110) }, { do: 'stand:board', for: T(12, 25) }, { do: 'stand:booth', for: T(15, 30) }, { do: 'sit:cafe', for: T(60, 120) }] },
   { id: 'hauler-pia', name: 'A hauler', look: { suit: 'atlantis2', head: 't11', hair: 'braidcrown', colours: { job: 'hauler', uniform: '#f0892e', skin: '#c48a62', hair: '#8f8a84' } },
-    day: [{ do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:cafe', for: T(60, 110) }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:cafe', for: T(60, 110) }] },
   { id: 'crew-uma', name: 'A crew member', look: { suit: 'atlantis2', head: 't11', hair: 'afro', colours: { job: 'staff', uniform: '#3f8fe8', skin: '#47291a', hair: '#17110d' } },
     day: [{ do: 'stand:quarters', for: T(15, 30) }, { do: 'talk:terminal', for: T(25, 45) }, { do: 'sit:cafe', for: T(60, 120) }, { do: 'stand:drinks', for: T(6, 12) }] },
-  { id: 'miner-jon', name: 'A miner', look: { suit: 'atlantis1', head: 't1', hair: 'crop', colours: { job: 'miner', uniform: '#e9ecef', skin: '#e8bf9f', hair: '#b4824f' } },
-    day: [{ do: 'stand:store', for: T(15, 30), clip: 'reach' }, { do: 'sit:control', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(25, 50) }, { do: 'sit:waiting', for: T(25, 50) }] },
   { id: 'medic-eli', name: 'A medic', look: { suit: 'atlantis1', head: 't6', hair: 'shortHairToRight', colours: { job: 'medic', uniform: '#2ec4b6', skin: '#a66d45', hair: '#2e1f15' } },
-    day: [{ do: 'stand:medicHangar', for: T(25, 50) }, { do: 'stand:medic', for: T(25, 50) }, { do: 'talk:medical', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 110), p: 0.5 }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:medicHangar', for: T(25, 50) }, { do: 'stand:medic', for: T(25, 50) }, { do: 'talk:medical', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 110), p: 0.5 }] },
   { id: 'pilot-rae', name: 'A pilot', look: { suit: 'spaceMan', head: 't10', hair: 'shortHairToSide', colours: { job: 'explorer', skin: '#d9a37f', hair: '#6b4127' } },
-    day: [{ do: 'stand:hangar', for: T(30, 60) }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:board', for: T(12, 25) }, { do: 'sit:window', for: T(40, 80) }] },
-  { id: 'mechanic-ade', name: 'A mechanic', look: { suit: 'atlantis1', head: 't4', hair: 'shortFull', colours: { job: 'miner', uniform: '#3b4a5c', skin: '#86522f', hair: '#2e1f15' } },
-    day: [{ do: 'post:minerMechanic', clip: 'hammer', for: T(40, 80) }, { do: 'stand:minerHangar', for: T(15, 30), clip: 'reach' }, { do: 'post:minerMechanic', clip: 'hammer', for: T(30, 60) }, { do: 'talk:lobby', for: T(20, 40), p: 0.4 }] },
+    day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60) }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:board', for: T(12, 25) }, { do: 'sit:window', for: T(40, 80) }] },
 ];
