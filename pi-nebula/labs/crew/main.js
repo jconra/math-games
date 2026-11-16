@@ -166,10 +166,11 @@ scene.add(marker);
 // THE NORMAL FIGURE (2026-11-15, reference.js): a plain mannequin of normal adult proportions stood beside the person
 // shown, as tall as they are (their height measured in the pose shown: sweeps.js figureOf) and built for their outfit's
 // skeleton (the women's or the men's), with level lines at its chin, shoulders, elbows, wrists, fingertips, crotch and
-// knees reaching across the person. Put together again whenever the person changes
+// knees reaching across the person. Put together again whenever the person changes. While it stands there the 1.8 m
+// post stands on the person's other side (the two would stand in one another)
 let refFig = null;
 function setRef(on) {
-  st.ref = on;
+  st.ref = on; marker.position.x = on ? -0.65 : 0.65;
   if (refFig) { scene.remove(refFig); refFig.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); refFig = null; }
   if (!on || !st.crew) return;
   let tall = 1.7; try { const f = figureOf(st.crew); if (f) tall = f.stature * (st.crew.size || 1); } catch (e) { /* a person with no head: the usual height */ }

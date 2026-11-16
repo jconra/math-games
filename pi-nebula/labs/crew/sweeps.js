@@ -178,13 +178,13 @@ export function pokeOf(c) {
 //       own; nothing is drawn to the screen), from three level pictures BY PART (the person drawn in flat colours:
 //       skin, outfit, hair, hands; from behind, from the front, from their left; a millimetre a pixel): the bare neck
 //       each way, the shoulders' tops, fall and width; and from the game's own camera behind them (src/chase.js), at
-//       each of `game`'s distances, how much bare neck it shows. `paint`: the painted hair (a buzz cut, a nape's
-//       taper, a shaved side's stubble) counted as hair (on unless false). `keep`: the pictures kept (fig._img) for
-//       pictureOf. Returns null for a person with no head.
+//       each of `game`'s distances, how much bare neck it shows (all the skin, and from the skull's base down).
+//       `paint`: the painted hair (a buzz cut, a nape's taper, a shaved side's stubble) counted as hair (on unless
+//       false). `keep`: the pictures kept (fig._img) for pictureOf. Returns null for a person with no head.
 //   proportionsOf(fig, sex)   the figure's proportions in heads and shares of its height, each against NORMAL's range
 //       for that sex ('f' | 'm': the outfit's skeleton, c.body): { rows: [{ key, label, unit, value, lo, hi, mid, out
-//       (how far outside the range, in range-widths; 0 inside), side ('under' | 'over'), src }], score (the outs
-//       added up), worst }
+//       (how far outside the range, in units of the spread real adults show in that measure: see N below; 0
+//       inside), side ('under' | 'over'), src }], score (the outs added up), worst }
 //   NORMAL, MEASURES, SKULL_BASE (below); pictureOf(fig._img, 'back' | 'front' | 'left', lines) a picture by part as a PNG
 // Used by ~/pw/space-math/rigs/proportions/measure.cjs, which measures every figure the game shows. Run it again
 // after any change to the crew (a head, a hair, an outfit, a seat, the stance).
@@ -517,22 +517,25 @@ export function figureOf(c, { renderer = null, game = [2.6, 1.0, 0.7], paint = t
   // THE GAME'S OWN CAMERA, from behind (src/chase.js: it looks at a point 1.5 m over the feet from 0.26 radians
   // above, 60 degrees tall, 2.6 m away on the station's open floors and about 0.7 m in a ship's corridor): on the
   // neck's middle line, the bare skin over the collar's top and the hair over that, in pixels of a 432 x 936 picture;
-  // `neck`: that skin as a length at the neck (the pixels turned back into metres by how far off the neck is)
+  // `neck`: that skin as a length at the neck (the pixels turned back into metres by how far off the neck is): ALL
+  // of it, the back of the head too where the hair is cut high; `bare`: the same from the skull's base down (or from
+  // the hair, where that hangs lower): the level measure's own rule, so the two can be told apart (painted hair is
+  // skin to this camera)
   fig.game = {};
   for (const d of game) {
     const gw = 432, gh = 936, V = viewOf(c, { eye: [cx, 1.5 + Math.sin(0.26) * d, cz - Math.cos(0.26) * d], at: [cx, 1.5, cz], fov: 60, w: gw, h: gh }), I = shoot(renderer, c, P, V);
     const g = (col, row) => (col < 0 || col >= gw || row < 0 || row >= gh ? NONE : I[row * gw + col]);
-    const pc = Math.round(V.px([fig.back.neckX, fig.back.collarY + 0.02, hollow.z])[0]), r0 = Math.max(0, Math.round(V.px(crown.toArray())[1]) - 4), runs = [], hairs = [];
+    const pc = Math.round(V.px([fig.back.neckX, fig.back.collarY + 0.02, hollow.z])[0]), r0 = Math.max(0, Math.round(V.px(crown.toArray())[1]) - 4), sbG = Math.round(V.px(skullBase.toArray())[1]), runs = [], bares = [], hairs = [];
     for (let col = pc - 3; col <= pc + 3; col++) {
       let cr = -1; for (let r = r0; r < gh; r++) if (g(col, r) === SUIT) { cr = r; break; }
       if (cr < 0) continue;
       let rt = cr; while (rt > 0 && g(col, rt - 1) === SKIN) rt--;
       let ht = rt; while (ht > 0 && g(col, ht - 1) === HAIR) ht--;
-      runs.push(cr - rt); hairs.push(rt - ht);
+      runs.push(cr - rt); bares.push(Math.max(0, cr - Math.max(rt, sbG))); hairs.push(rt - ht);
     }
     const eye = new THREE.Vector3(...V.eye), dir = new THREE.Vector3(...V.at).sub(eye).normalize(), depth = new THREE.Vector3(fig.back.neckX, fig.back.collarY + 0.03, hollow.z).sub(eye).dot(dir), f = gh / 2 / Math.tan(30 / DEG);
-    const np = median(runs), hp = median(hairs);
-    fig.game[d] = { neckPx: np, hairPx: hp, neck: np != null ? np * depth / f : null, overHair: hp ? np / hp : null };
+    const np = median(runs), bp = median(bares), hp = median(hairs);
+    fig.game[d] = { neckPx: np, hairPx: hp, neck: np != null ? np * depth / f : null, bare: bp != null ? bp * depth / f : null, overHair: hp ? np / hp : null };
   }
   return fig;
 }
@@ -580,16 +583,20 @@ export function figureOf(c, { renderer = null, game = [2.6, 1.0, 0.7], paint = t
 //   fingertips    where the fingertips reach on the thigh: 0 at the knee, 1 at the crotch (CANON: mid thigh): ANSUR.
 //   fingertipHeight  the fingertips' height over the whole height (for an outfit whose crotch a coat hides): ANSUR.
 //   hand          the hand's length over the whole height: ANSUR (CANON: the face's length).
-const N = (lo, hi, mid, src) => ({ lo, hi, mid, src });
+// HOW FAR OUT a measure is, is told in units of the SPREAD real adults show in it: the survey's own 5th to 95th
+// person. That is the range's width, except where a RULE has widened the range (any less bare neck is normal, a
+// jacket's 3 cm, a boot's sole): there the survey's own spread is given last, so 0.08 of a head too much bare neck
+// counts as the half a spread it is and not as a fifth of a range that starts at nothing.
+const N = (lo, hi, mid, src, spread) => ({ lo, hi, mid, src, spread: spread || hi - lo });
 export const NORMAL = {
-  f: { nape: N(0, 0.40, 0.2, 'ANSUR, RULE'), neckSide: N(0, 0.45, 0.25, 'ANSUR'), neckFront: N(0.10, 0.48, 0.25, 'ANSUR, RULE'), neckWidth: N(0.427, 0.502, 0.462, 'ANSUR'),
-    shoulderDrop: N(0.20, 0.48, 0.36, 'ANSUR, RULE'), shoulderFall: N(19, 32, 25.7, 'ANSUR'), shoulderWidth: N(1.82, 2.31, 1.99, 'ANSUR, RULE'),
-    heads: N(7.0, 8.1, 7.5, 'ANSUR, CANON'), headBreadth: N(0.630, 0.703, 0.664, 'ANSUR'), legs: N(0.449, 0.499, 0.473, 'ANSUR'), hips: N(0.504, 0.554, 0.529, 'ANSUR'), knee: N(0.266, 0.297, 0.281, 'ANSUR'),
-    arm: N(0.420, 0.470, 0.444, 'ANSUR'), armSplit: N(1.05, 1.37, 1.28, 'ANSUR, RULE'), fingertips: N(0.30, 0.67, 0.49, 'ANSUR'), fingertipHeight: N(0.349, 0.399, 0.374, 'ANSUR'), hand: N(0.103, 0.118, 0.111, 'ANSUR') },
-  m: { nape: N(0, 0.41, 0.2, 'ANSUR, RULE'), neckSide: N(0, 0.45, 0.25, 'ANSUR'), neckFront: N(0.10, 0.47, 0.25, 'ANSUR, RULE'), neckWidth: N(0.479, 0.567, 0.521, 'ANSUR'),
-    shoulderDrop: N(0.18, 0.48, 0.35, 'ANSUR, RULE'), shoulderFall: N(20, 33, 26.4, 'ANSUR'), shoulderWidth: N(1.94, 2.45, 2.12, 'ANSUR, RULE'),
-    heads: N(7.1, 8.15, 7.6, 'ANSUR, CANON'), headBreadth: N(0.616, 0.694, 0.654, 'ANSUR'), legs: N(0.454, 0.501, 0.477, 'ANSUR'), hips: N(0.507, 0.553, 0.529, 'ANSUR'), knee: N(0.274, 0.302, 0.287, 'ANSUR'),
-    arm: N(0.4285, 0.4726, 0.450, 'ANSUR'), armSplit: N(1.05, 1.34, 1.26, 'ANSUR, RULE'), fingertips: N(0.27, 0.61, 0.45, 'ANSUR'), fingertipHeight: N(0.347, 0.394, 0.372, 'ANSUR'), hand: N(0.104, 0.1175, 0.110, 'ANSUR') },
+  f: { nape: N(0, 0.40, 0.2, 'ANSUR, RULE', 0.17), neckSide: N(0, 0.45, 0.25, 'ANSUR', 0.16), neckFront: N(0.10, 0.48, 0.25, 'ANSUR, RULE', 0.21), neckWidth: N(0.427, 0.502, 0.462, 'ANSUR'),
+    shoulderDrop: N(0.20, 0.48, 0.36, 'ANSUR, RULE', 0.25), shoulderFall: N(19, 32, 25.7, 'ANSUR'), shoulderWidth: N(1.82, 2.31, 1.99, 'ANSUR, RULE', 0.34),
+    heads: N(7.0, 8.1, 7.5, 'ANSUR, CANON', 0.96), headBreadth: N(0.630, 0.703, 0.664, 'ANSUR'), legs: N(0.449, 0.499, 0.473, 'ANSUR'), hips: N(0.504, 0.554, 0.529, 'ANSUR'), knee: N(0.266, 0.297, 0.281, 'ANSUR'),
+    arm: N(0.420, 0.470, 0.444, 'ANSUR'), armSplit: N(1.05, 1.37, 1.28, 'ANSUR, RULE', 0.17), fingertips: N(0.30, 0.67, 0.49, 'ANSUR'), fingertipHeight: N(0.349, 0.399, 0.374, 'ANSUR'), hand: N(0.103, 0.118, 0.111, 'ANSUR') },
+  m: { nape: N(0, 0.41, 0.2, 'ANSUR, RULE', 0.17), neckSide: N(0, 0.45, 0.25, 'ANSUR', 0.17), neckFront: N(0.10, 0.47, 0.25, 'ANSUR, RULE', 0.21), neckWidth: N(0.479, 0.567, 0.521, 'ANSUR'),
+    shoulderDrop: N(0.18, 0.48, 0.35, 'ANSUR, RULE', 0.26), shoulderFall: N(20, 33, 26.4, 'ANSUR'), shoulderWidth: N(1.94, 2.45, 2.12, 'ANSUR, RULE', 0.36),
+    heads: N(7.1, 8.15, 7.6, 'ANSUR, CANON', 0.94), headBreadth: N(0.616, 0.694, 0.654, 'ANSUR'), legs: N(0.454, 0.501, 0.477, 'ANSUR'), hips: N(0.507, 0.553, 0.529, 'ANSUR'), knee: N(0.274, 0.302, 0.287, 'ANSUR'),
+    arm: N(0.4285, 0.4726, 0.450, 'ANSUR'), armSplit: N(1.05, 1.34, 1.26, 'ANSUR, RULE', 0.16), fingertips: N(0.27, 0.61, 0.45, 'ANSUR'), fingertipHeight: N(0.347, 0.394, 0.372, 'ANSUR'), hand: N(0.104, 0.1175, 0.110, 'ANSUR') },
 };
 // (each measure: its key, what it is called in the tables, its unit)
 export const MEASURES = [
@@ -611,7 +618,7 @@ export function proportionsOf(fig, sex) {
   v.fingertips = fig.crotchY != null && fig.fingertipY != null ? (fig.fingertipY - fig.kneeY) / (fig.crotchY - fig.kneeY) : null;
   v.fingertipHeight = fig.fingertipY != null ? (fig.fingertipY - fig.floor) / st : null; v.hand = fig.handLength != null ? fig.handLength / st : null;
   const rows = MEASURES.map(([key, label, unit]) => {
-    const x = v[key], r = R[key], out = x == null || !Number.isFinite(x) ? 0 : x < r.lo ? (r.lo - x) / (r.hi - r.lo) : x > r.hi ? (x - r.hi) / (r.hi - r.lo) : 0;
+    const x = v[key], r = R[key], out = x == null || !Number.isFinite(x) ? 0 : x < r.lo ? (r.lo - x) / r.spread : x > r.hi ? (x - r.hi) / r.spread : 0;
     return { key, label, unit, value: x == null || !Number.isFinite(x) ? null : Math.round(x * 1000) / 1000, lo: r.lo, hi: r.hi, mid: r.mid, out: Math.round(out * 100) / 100, side: !out ? '' : x < r.lo ? 'under' : 'over', src: r.src };
   });
   const counted = rows.filter((r) => !(fig.helmet && HEADED.includes(r.key)));
