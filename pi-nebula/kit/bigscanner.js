@@ -19,7 +19,6 @@
 // On the high quality setting the band's glow falls on the bed, the floor and the wall live, and goes with the hoop
 // (kit/materials.js hoopLit: a few sums a pixel in this one room's materials, nothing anywhere else).
 import { sweep, bend, lathe as lathe2, put } from './geo.js';
-import { floorDecal } from './station2.js';
 import { liveBand, liveFace, liveLamp } from './shipparts/cabin/live.js';
 
 const PI = Math.PI;
@@ -52,8 +51,13 @@ function outline(points, soft = []) {
   }
   return { pts, nrm };
 }
-// a flat ring of light facing +z, from radius r0 to r1, its middle at `at`
-const washer = (p, look, r0, r1, at, seg = 64) => p.add('glow', put(lathe2([[r1, 0], [r0, 0]], seg), at, [PI / 2, 0, 0]), look);
+// a flat ring of steady light facing +z, from radius r0 to r1, its middle at `at`. It is one of the live glows (a lamp
+// that never changes: its uv says so, as live.js liveLamp's does), so it is drawn with the bands, in their one draw.
+function washer(p, look, r0, r1, at, seg = 64) {
+  const g = put(lathe2([[r1, 0], [r0, 0]], seg), at, [PI / 2, 0, 0]), uv = g.attributes.uv.array;
+  for (let i = 0; i < uv.length; i += 2) { uv[i] = 2; uv[i + 1] = 4.5; }
+  return p.add('live', g, look);
+}
 
 // ── the cable chain: a run of dark links along z, a gap between each ──────────────────────────────────────────────
 // (it lies in a trough outside the east rail: a lower run on the trough's floor from the wall's end, a loop, an upper
@@ -75,7 +79,7 @@ function chainLoop(q) {
 
 // ── the hoop on its carriage, in its own frame: the hoop's middle over the origin, the floor at y = 0, +z the way in ─
 function carriage(q) {
-  const { y, R, bore, deep } = SCAN, hd = deep / 2, R0 = (R + bore) / 2;
+  const { y, R, bore, deep } = SCAN, hd = deep / 2, R0 = (R + bore) / 2, CHEEK = hd + 0.04;
   // the hoop: a slim shell, its mouths cut back at 45 degrees (where the bands of light lie), its outer edge rounded
   const prof = outline([[bore, -hd + 0.1], [bore, hd - 0.1], [bore + 0.1, hd], [R - 0.12, hd], [R - 0.04, hd - 0.05], [R, hd - 0.14], [R, -hd + 0.14], [R - 0.04, -hd + 0.05], [R - 0.12, -hd], [bore + 0.1, -hd]].map(([r, a]) => [r - R0, a]), [3, 4, 5, 6, 7, 8]);
   q.add('solid', sweep(prof, bend([0, y, 0], R0, [1, 0, 0], [0, 1, 0], 0, 2 * PI * (1 - 1 / 64), 63), { closed: true }), SHELL);
@@ -91,16 +95,17 @@ function carriage(q) {
   q.slab(GREY, -0.98, 0.98, 0.04, 0.36, -0.36, 0.36, { r: 0.04, cell: 1.5, loops: [] });
   q.slab('band', -0.98, 0.98, 0.36, 0.385, -0.31, 0.31, o9);
   for (const s of [-1, 1]) {
-    q.slab(SHELL, s * 0.92 - 0.14, s * 0.92 + 0.14, 0.3, 1.0, -0.3, 0.3, { r: 0.05, cell: 1.5, loops: [] });
+    // (the cheeks stand a little proud of the hoop's flat faces, front and back: a face level with them would flicker)
+    q.slab(SHELL, s * 0.92 - 0.14, s * 0.92 + 0.14, 0.3, 1.0, -CHEEK, CHEEK, { r: 0.05, cell: 1.5, loops: [] });
     q.slab('gun', s * SCAN.rail - 0.12, s * SCAN.rail + 0.12, 0.03, 0.32, -0.42, 0.42, { r: 0.03, cell: 1.5, loops: [] });
     q.slab('black', s * SCAN.rail - 0.09, s * SCAN.rail + 0.09, 0.32, 0.4, -0.4, -0.08, o9);
     q.slab('yellow', s * SCAN.rail - 0.122, s * SCAN.rail + 0.122, 0.05, 0.11, 0.4, 0.424, flat);      // (a bumper plate at each end)
     q.slab('yellow', s * SCAN.rail - 0.122, s * SCAN.rail + 0.122, 0.05, 0.11, -0.424, -0.4, flat);
   }
   // on the cheek by the door: the machine's own little screen (live: its readouts). On the other: a red stop button
-  q.slab('black', 0.8, 1.04, 0.66, 0.86, 0.3, 0.312, { r: 0.008, cell: 9, loops: [] });
-  liveFace(q, { show: 'drive', seed: 0.4, w: 0.21, h: 0.16, c: 0.016 }, [0.92, 0.76, 0.3135]);
-  q.cyl('yellow', 0.05, 0.012, [-0.92, 0.78, 0.306], [PI / 2, 0, 0], 16); q.cyl('red', 0.034, 0.03, [-0.92, 0.78, 0.326], [PI / 2, 0, 0], 16);
+  q.slab('black', 0.8, 1.04, 0.66, 0.86, CHEEK, CHEEK + 0.012, { r: 0.008, cell: 9, loops: [] });
+  liveFace(q, { show: 'drive', seed: 0.4, w: 0.21, h: 0.16, c: 0.016 }, [0.92, 0.76, CHEEK + 0.0135]);
+  q.cyl('yellow', 0.05, 0.012, [-0.92, 0.78, CHEEK + 0.006], [PI / 2, 0, 0], 16); q.cyl('red', 0.034, 0.03, [-0.92, 0.78, CHEEK + 0.026], [PI / 2, 0, 0], 16);
   // the tow arm out to the cable chain, and the length of the chain's upper run that goes with the carriage
   q.slab('gun', CH.x - CH.w / 2, -SCAN.rail - 0.1, CH.up[1] - 0.002, CH.up[1] + 0.04, TOW - 0.02, TOW + 0.06, flat);
   chainRun(q, CH.up, TOW, TOW + CH.tail, 0.004);
@@ -114,7 +119,7 @@ export function bigScanner(p) {
     const x = s * rail;
     p.slab('gun', x - 0.13, x + 0.13, 0, 0.02, r0, r1, { r: 0.006, cell: 1.5, loops: [] });
     p.slab('rail', x - 0.02, x + 0.02, 0.02, 0.085, r0 + 0.02, r1 - 0.02, { r: 0.008, cell: 1.5, loops: [] });
-    p.glowSlab(BLUE, x - s * 0.115 - 0.008, x - s * 0.115 + 0.008, 0.02, 0.025, r0 + 0.06, r1 - 0.06);
+    p.glowSlab(BLUE, x - s * 0.115 - 0.008, x - s * 0.115 + 0.008, 0.02, 0.025, r0 + 0.06, r1 - 0.06, { r: 0 });
     for (const [z0, z1] of [[r0 + 0.02, r0 + 0.14], [r1 - 0.14, r1 - 0.02]]) {
       p.slab('black', x - 0.1, x + 0.1, 0.02, 0.2, z0, z1, { r: 0.02, cell: 1.5, loops: [] });
       p.slab('rubber', x - 0.05, x + 0.05, 0.06, 0.15, z0 < 1 ? z1 : z0 - 0.02, z0 < 1 ? z1 + 0.02 : z0, flat);
@@ -139,14 +144,15 @@ export function bigScanner(p) {
   p.slab(PAD, -0.19, 0.19, B.top + 0.05, B.top + 0.1, B.z[0] + 0.36, B.z[0] + 0.68, { r: 0.03, cell: 9, loops: [] });
   p.slab('rail', -0.24, 0.24, B.top - 0.065, B.top - 0.035, B.z[1], B.z[1] + 0.05, { r: 0.012, cell: 9, loops: [] });   // (a grab bar at the foot)
   // the pedestal's front, toward the way in: a bar of blue light low down, and the scanner's screen (live: its sweep)
-  p.glowSlab(BLUE, -0.26, 0.26, 0.13, 0.16, B.foot[1], B.foot[1] + 0.006);
+  p.glowSlab(BLUE, -0.26, 0.26, 0.13, 0.16, B.foot[1], B.foot[1] + 0.006, { r: 0 });
   p.slab('black', -0.19, 0.19, 0.34, 0.62, B.foot[1], B.foot[1] + 0.012, { r: 0.008, cell: 9, loops: [] });
   liveFace(p, { show: 'scan', seed: 0.15, w: 0.33, h: 0.23, c: 0.02 }, [0, 0.48, B.foot[1] + 0.0135]);
   p.light([0, 0.3, B.foot[1] + 0.25], 0.35, [0.35, 0.6, 1.3], [0, -0.287, 0.958], 2.2);
-  // the line on the floor: keep clear of the rails while it runs
-  const LINE = '#8fcfc6';
-  for (const s of [-1, 1]) floorDecal(p, 'solid', 0.05, keep.z - 0.04, s * keep.x, (keep.z + 0.04) / 2, 0, LINE);
-  floorDecal(p, 'solid', keep.x * 2 + 0.05, 0.05, 0, keep.z, 0, LINE);
+  // the line on the floor: keep clear of the rails while it runs (a few millimetres of pale paint, painted parts like
+  // the rest: the room needs no other kind of draw for it)
+  const LINE = { c: '#8fcfc6', r: 0.6, m: 0, w: 0.4 }, lw = 0.025, paint = { r: 0, cell: 1.5, loops: [], skip: ['-y'] };
+  for (const s of [-1, 1]) p.slab(LINE, s * keep.x - lw, s * keep.x + lw, 0, 0.004, 0.04, keep.z + lw, paint);
+  p.slab(LINE, -keep.x + lw, keep.x - lw, 0, 0.004, keep.z - lw, keep.z + lw, paint);
   // what moves: the hoop on its carriage, and the cable chain's loop at half its speed
   p.glide('scan', { go: SCAN.go, rest: SCAN.rest });
   p.leaf('bigscan-hoop', carriage, { at: [0, 0, SCAN.home], slide: [0, 0, SCAN.travel], door: 'scan', still: true,
