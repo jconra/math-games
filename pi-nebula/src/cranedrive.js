@@ -170,8 +170,11 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   function update(dt) {
     if (closed) return;
     t += dt;
+    // (sat down while the Miner was landing: the crane is taken once it is down)
+    if (crane.mode === 'round') crane.take();
     const D = crane.live;
-    $('.pcd-wait').hidden = !!D || crane.mode !== 'handover';
+    $('.pcd-wait').hidden = !!D || (crane.mode !== 'handover' && crane.mode !== 'landing');
+    if (crane.mode === 'landing') $('.pcd-wait').textContent = 'The Miner is landing: the crane waits.';
     // the look and the zoom are the crane camera's while it is up
     if (input) {
       const Lk = input.takeLook(); if (VIEWS[view] === 'follow') cam.orbit = Math.max(-2.6, Math.min(2.6, cam.orbit - Lk.dx * 0.006));

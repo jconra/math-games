@@ -214,6 +214,12 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       // (a job joined to its props that is not ready for the new card, the crane still on its way to where the card
       // starts: the last card stays, its buttons shut, until it is; then the new card comes, matching the picture)
       if (readyNow()) show(); else holdFor(show);
+    } else if (live && typeof live === 'object' && live.ready && !readyNow()) {
+      // (the first card of a job joined to its props that are not ready yet: dealt once they are, its line meanwhile)
+      card.innerHTML = ''; answers.innerHTML = '';
+      holdFor(() => { deal(); draw(q.order); if (helpOn) fillHelp(); });
+      const v = (() => { try { return live.ready(); } catch (e) { return null; } })();
+      line.textContent = (v && v.why) || 'Getting ready...'; line.className = 'pnj-line is-wait';
     } else { deal(); draw(q.order); if (helpOn) fillHelp(); }
     showLevel(); helpBtn.classList.remove('is-nudge');
   }
@@ -321,6 +327,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     });
   };
   function fillHelp() {
+    if (!q) return;
     const o = q.order, pic = helpPicture(o);
     $('.pnj-htitle').textContent = pic.title || 'Help';
     // (a picture already on the card, the things to count, isn't drawn twice)

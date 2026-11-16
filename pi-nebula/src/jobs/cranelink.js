@@ -297,6 +297,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   function update(dt) {
     if (closed) return;
     clock += dt;
+    // (sat down while the Miner was landing: the crane is taken once it is down)
+    if (crane.mode === 'round') crane.take();
     const D = live();
     if (D) {
       D.byHand = false; D.rules.people = true;

@@ -196,7 +196,7 @@ export function makeCrane({ W, walls, boarding = null }) {
       // (the player gone from the hangar's area with it out of sight: the Miner is away; when it is next in sight, in it
       // comes to land, the next haul)
       const here = player ? W.zoneAt(player.pos) : null, inArea = !player || !here || AREA.test(here.id);
-      if (!inArea && !seen() && (mode === 'round' || mode === 'handover') && !C.awayHeld) { mode = 'away'; rate = 1; C.waiting = false; L.beacon(false); }
+      if (!inArea && !seen() && (mode === 'round' || mode === 'handover' || mode === 'leaving') && !C.awayHeld) { mode = 'away'; live = null; rate = 1; C.waiting = false; L.beacon(false); L.aids({}); }
       // (the plan from above: no haze between the camera and the floor, after the boarding's light has had its say)
       if (C.view === 'top' && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; }
       if (!seen()) return;
