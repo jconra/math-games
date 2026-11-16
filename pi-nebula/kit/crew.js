@@ -94,7 +94,8 @@
 // cuff, and stub and cuff fade from the forearm to the wrist by the same rule, so they move together in every clip.
 //
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
-//                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas();
+//                                               -> { body, rig, clips (fitted to that suit), stride, moves, shoulders
+//                                               (SHOULDER WIDTH's) }; lib.hairAtlas();
 //                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
@@ -134,6 +135,9 @@
 //   lib.armsOf(suit id) -> its arm thickness (ARM THICKNESS; 1 as made); lib.arms { suit id: thickness } (a layer over
 //   crew.json's, the Crew Lab's while it's tried); ARMS_LIMITS; c.arms (the thickness a person wears); CALM (THE CALM
 //   STANDING POSE) and lib.calm (tried in its place: set before an outfit's clips are first fitted)
+//   lib.shouldersOf(suit id) -> how far its upper arms' joints are moved out (SHOULDER WIDTH; metres, 0 as made);
+//   lib.shoulders { suit id: metres } (a layer over crew.json's, the Crew Lab's while it's tried); SHOULDER_LIMITS,
+//   SHOULDER_STEP; c.shoulders (what a person wears)
 //   JOBS, UNIFORM_COLOURS, BAND_COLOURS (THE BANDS), SKIN_TONES, SKIN_LIMIT and skinTone (THE SKIN'S LIMITS),
 //   HAIR_UNDERSIDE (THE HAIR'S UNDERSIDE), HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
@@ -286,6 +290,13 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // ARM THICKNESS (makeCrew): lib.arms { suit id: thickness } (the Crew Lab's while it's tried) over the suit entry's `arms`
   lib.arms = {};
   lib.armsOf = (suit) => { const v = own(lib.arms, suit) ? lib.arms[suit] : (lib.entry('suit', suit) || {}).arms; return +v > 0 ? Math.min(ARMS_LIMITS[1], Math.max(ARMS_LIMITS[0], +v)) : 1; };
+  // SHOULDER WIDTH (makeCrew, clipsFor): lib.shoulders { suit id: metres } (the Crew Lab's while it's tried) over the
+  // suit entry's `shoulders`
+  lib.shoulders = {};
+  lib.shouldersOf = (suit) => {
+    const v = +(own(lib.shoulders, suit) ? lib.shoulders[suit] : (lib.entry('suit', suit) || {}).shoulders);
+    return Number.isFinite(v) && v ? +Math.min(SHOULDER_LIMITS[1], Math.max(SHOULDER_LIMITS[0], v)).toFixed(4) : 0;
+  };
   // (the older form: a head entry's `seat`, and lib.seats over it, as the Crew Lab kept them before 2026-11-11)
   lib.seats = {};
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -335,15 +346,18 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   lib.earsOf = (head) => (head && (lib.entry('head', head) || {}).ears) || list.ears || null;
   // the clips fitted to one suit (its own bones' lengths: see the top), once a suit; with hands (HANDS), the hand
   // part's own finger joints in place of the suit's (once a suit and hand)
+  // (and the outfit's shoulder width (SHOULDER WIDTH): its upper arms' joints moved out in the rig's rest places, so a
+  // clip that sets their places (the crowd's) keeps them there; once a suit, hand and width)
   lib.clipsFor = async (id, hand = null) => {
-    const key = id + '|' + (hand || '');
+    const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
         const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm';
-        const rig = handRig(g.scene.userData.crewRig, hand ? (await lib.part('hand', hand)).scene.userData.crewRig : null);
+        const moves = shoulderMoves(g.scene, sh);
+        const rig = shoulderRig(handRig(g.scene.userData.crewRig, hand ? (await lib.part('hand', hand)).scene.userData.crewRig : null), moves);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
         const clips = retargetClips(await lib.rawClips(body), rig, rest);
-        return { body, rig, clips: calmStand(clips, g.scene, lib.calm || CALM), stride: strideOf(rig, body) };
+        return { body, rig, moves, shoulders: sh, clips: calmStand(clips, g.scene, lib.calm || CALM, moves), stride: strideOf(rig, body) };
       })());
     }
     return fitted.get(key);
@@ -435,18 +449,84 @@ export const ARMS_LIMITS = [0.7, 1.1];
 export const CALM = { clip: 'Stand_Listen', upper: [5, 3], lower: [4, 14], shift: 0.5 };
 const CALM_BODY = /^(Body|Hips|Abdomen|Torso|Chest|UpperLeg[LR]|LowerLeg[LR]|Foot[LR])$/;
 const CALM_IDLE = /^(Shoulder[LR]|(Thumb|Index|Middle|Ring|Pinky)\d[LR])$/;
-function calmStand(clips, scene, C = CALM) {
-  const i = clips.findIndex((c) => c.name === C.clip), idle = clips.find((c) => c.name === 'Idle');
-  if (i < 0 || !idle) return clips;
-  const src = clips[i], dur = src.duration;
-  // a bare copy of the suit's bones (the glTF's own is shared: never posed here)
+// SHOULDER WIDTH (crew.json suit entry `shoulders`, metres, 2026-11-15; the game's maker, of Ivy in the grey uniform:
+// "the main problem I think is her shoulders seem to narrow. And its a wierd pose with the shoulders being so narrow").
+// The outfit build places each upper arm's joint by where the Mathwood body has its own, scaled by the two bodies'
+// armpits (rigs/crew-rig/crewkit.py fit_joints). The Mathwood women's body wears a shoulder cape that hangs past its
+// armpit, so its armpit is measured 2.8 cm too far out, and the outfits on the women's skeleton have their upper arms
+// turning 2.4 to 5.9 cm inside their own armpits (the Mathwood woman's own: 3.0; Ivy's 5.8, the joint under the
+// collar's edge). A hanging arm turned about a point that far inside the chest swings in and down: narrow shoulders
+// sloping from the collar. Here the joint is moved out toward its side by the outfit's `shoulders` (Ivy's 3.5 cm:
+// 2.3 cm inside her armpit, as the Security outfit's sits) at rest, each part's bind led by the bone's new place so
+// every point stays exactly where it was made at rest (nothing reshaped; the bone from the shoulder to the elbow just
+// shorter, the collarbone longer), and the arm turns from there in every clip. 0 as made (every outfit unless set);
+// SHOULDER_LIMITS; lib.shouldersOf. (The collarbones are not it: standing, the joint sits 1 to 2 mm lower than at rest)
+export const SHOULDER_LIMITS = [-0.02, 0.06], SHOULDER_STEP = 0.005;
+// (the moves, from the suit's bones at rest: each upper arm's own place moved d metres out toward its side, its
+// forearm's place moved back by as much so the elbow stays; { UpperArmL: local move, LowerArmL: ... }, or null)
+function shoulderMoves(scene, d) {
+  if (!d) return null;
+  const bare = bareBones(scene); if (!bare) return null;
+  const { B } = bare, W = (n) => B[n].getWorldPosition(new THREE.Vector3()), out = {};
+  if (!B.UpperArmL || !B.UpperArmR) return null;
+  const side = { L: Math.sign(W('UpperArmL').x - W('UpperArmR').x) || 1 }; side.R = -side.L;
+  for (const s of ['L', 'R']) {
+    const ua = B['UpperArm' + s], la = B['LowerArm' + s]; if (!ua || !la) continue;
+    const u0 = W(ua.name), l0 = W(la.name), p0 = ua.position.clone(), q0 = la.position.clone();
+    ua.position.copy(ua.parent.worldToLocal(u0.add(new THREE.Vector3(side[s] * d, 0, 0)))); ua.updateMatrixWorld(true);
+    la.position.copy(ua.worldToLocal(l0)); la.updateMatrixWorld(true);
+    out[ua.name] = ua.position.clone().sub(p0); out[la.name] = la.position.clone().sub(q0);
+  }
+  return out;
+}
+// (the rig's rest places with the moves in, for the clips that set those bones' places)
+function shoulderRig(rig, moves) {
+  if (!moves) return rig;
+  const dst = { ...rig.dstRest };
+  for (const k of Object.keys(dst)) { const v = moves[clean(k)]; if (v) dst[k] = [dst[k][0] + v.x, dst[k][1] + v.y, dst[k][2] + v.z]; }
+  return { ...rig, dstRest: dst };
+}
+// (the template's bones moved, and every part's bind for a moved bone led by its new place: the point stays at rest.
+// The bind lists are the glTF's own, shared: each part gets a new list)
+function moveShoulders(tpl, moves) {
+  const bones = {}; tpl.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  tpl.updateMatrixWorld(true);
+  const before = {}; for (const n of Object.keys(moves)) if (bones[n]) before[n] = bones[n].matrixWorld.clone();
+  for (const [n, v] of Object.entries(moves)) if (bones[n]) bones[n].position.add(v);
+  tpl.updateMatrixWorld(true);
+  const lead = new THREE.Matrix4();
+  tpl.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    let inv = null;
+    o.skeleton.bones.forEach((b, i) => {
+      const M0 = before[b.name]; if (!M0) return;
+      inv = inv || o.skeleton.boneInverses.slice();
+      inv[i] = lead.copy(b.matrixWorld).invert().multiply(M0).multiply(o.skeleton.boneInverses[i]).clone();
+    });
+    if (inv) o.skeleton.boneInverses = inv;
+  });
+}
+// (a bare copy of the suit's bones at rest, in a holder standing where the glTF's armature does: { B: by name, holder }
+// (null without bones); the glTF's own is shared, never posed or moved)
+function bareBones(scene) {
   scene.updateMatrixWorld(true);
   const B = {}, holder = new THREE.Object3D(); let top = null;
   scene.traverse((o) => { if (o.isBone) { const b = new THREE.Object3D(); b.name = o.name; b.position.copy(o.position); b.quaternion.copy(o.quaternion); b.scale.copy(o.scale); B[o.name] = b; } });
   scene.traverse((o) => { if (!o.isBone) return; if (o.parent && o.parent.isBone) B[o.parent.name].add(B[o.name]); else { top = o; holder.add(B[o.name]); } });
-  if (!top || !B.UpperArmL || !B.WristL || !B.Middle1L) return clips;
+  if (!top) return null;
   top.parent.matrixWorld.decompose(holder.position, holder.quaternion, holder.scale);
   holder.updateMatrixWorld(true);
+  return { B, holder };
+}
+function calmStand(clips, scene, C = CALM, moves = null) {
+  const i = clips.findIndex((c) => c.name === C.clip), idle = clips.find((c) => c.name === 'Idle');
+  if (i < 0 || !idle) return clips;
+  const src = clips[i], dur = src.duration;
+  const bare = bareBones(scene); if (!bare) return clips;
+  const { B, holder } = bare;
+  if (!B.UpperArmL || !B.WristL || !B.Middle1L) return clips;
+  // (the shoulder width's moves (SHOULDER WIDTH): the arms aimed from where the person's upper arms really turn)
+  if (moves) { for (const [n, v] of Object.entries(moves)) if (B[n]) B[n].position.add(v); holder.updateMatrixWorld(true); }
   const restQ = {}, restDir = {}, W = (n) => B[n].getWorldPosition(new THREE.Vector3());
   for (const s of ['L', 'R']) for (const [n, m] of [['UpperArm' + s, 'LowerArm' + s], ['LowerArm' + s, 'Wrist' + s]]) {
     restQ[n] = B[n].getWorldQuaternion(new THREE.Quaternion()); restDir[n] = W(m).sub(W(n)).normalize();
@@ -2598,6 +2678,8 @@ export async function makeCrew(lib, recipe) {
   // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
+  // SHOULDER WIDTH: the upper arms' joints where this outfit's clips have them (lib.clipsFor), the parts kept as made
+  if (fit.moves) moveShoulders(tpl, fit.moves);
   // THE SEAT, THE HEAD'S PLACE and THE HEAD'S CENTRE: the head (its neck, its eyes and face bones) and its hair lowered,
   // brought forward, moved side to side and sized as the outfit, the head and the pair say, and centred on its joints as
   // the head entry says, before the collar fit measures the neck
@@ -2716,7 +2798,7 @@ export async function makeCrew(lib, recipe) {
     person.root.updateMatrixWorld(true);
   }
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK, shoulders: fit.shoulders,
     // (THE HEAD'S PLACE: how this head sits on this outfit, each level's and the total)
     place,
     // (THE SIZE: the whole person scaled, and their stride with them)

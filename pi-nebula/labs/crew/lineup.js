@@ -64,7 +64,8 @@ export function makeLineup({ lib, makeCrew, scene, renderer, sun, topPx, current
     return R;
   }
   // (what needs the person put together again, and what is worn at once)
-  const buildKey = (R) => JSON.stringify([R.suit, R.head, R.hair, R.hand === undefined ? '-' : R.hand, R.size || 1, R.expression || null, R.head && R.suit ? lib.headPlaceOf(R.head, R.suit) : null, lib.smoothHair, lib.collarFit]);
+  // (an outfit's arm thickness and shoulder width too, the Bodies window's: the person is put together again for them)
+  const buildKey = (R) => JSON.stringify([R.suit, R.head, R.hair, R.hand === undefined ? '-' : R.hand, R.size || 1, R.expression || null, R.head && R.suit ? lib.headPlaceOf(R.head, R.suit) : null, lib.smoothHair, lib.collarFit, R.suit ? lib.armsOf(R.suit) : 1, R.suit ? lib.shouldersOf(R.suit) : 0]);
   const liveKey = (R) => JSON.stringify([lib.fitOf(R.hair, R.head), lib.buzzOf(R.hair), R.colours || {}, R.face || {}]);
 
   function tagsEl() {

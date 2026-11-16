@@ -12,8 +12,10 @@
 //   CREW     the ready-made crew members (crew.json recipes), each a whole recipe
 //   BODIES   a grid of picture buttons, one an outfit (thumbs.js: drawn from the kit as the window opens; the one worn
 //            outlined), and under it Hands (by outfit: the man's on a men's-skeleton outfit, the woman's on a women's;
-//            either; none), Height (the recipe's size, kit/crew.js SIZES: Shorter, Medium, Taller) and Arm thickness
+//            either; none), Height (the recipe's size, kit/crew.js SIZES: Shorter, Medium, Taller), Arm thickness
 //            (2026-11-15, kit/crew.js ARM THICKNESS: this outfit's arms thinner or thicker across in 5% steps, Reset)
+//            and Shoulder width (2026-11-15, kit/crew.js SHOULDER WIDTH: where this outfit's upper arms turn from,
+//            moved out or in 0.5 cm a step, Reset)
 //   HEADS    a grid of picture buttons, one a head, and under it how the head sits on the outfit (kit/crew.js THE SEAT
 //            and THE HEAD'S PLACE): what the changes apply to, one of three (This outfit, every head; This head, every
 //            outfit; This head on this outfit only), a line adding the levels up ("Size: Cook's jacket and apron
@@ -53,7 +55,8 @@
 //   Saved and copied text: { "hairs": { <hair id>: its fit (pairs in fit.heads) }, "heads": { <head id>: its hairFit },
 //     "buzzes": { <hair id>: its buzz | null }, "outfits": { <outfit id>: its headFit { seat, forward, side, size } },
 //     "headPlaces": { <head id>: its headFit { seat, forward, side, size, suits: { <outfit id>: { ... } } } },
-//     "arms": { <outfit id>: its arm thickness (1 as made) } }
+//     "arms": { <outfit id>: its arm thickness (1 as made) }, "shoulders": { <outfit id>: metres its upper arms' joints
+//     are moved out (0 as made) } }
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster); the arrow keys step
 // the hair (left, right) and the head (up, down); Esc closes the window in front.
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
@@ -66,11 +69,13 @@
 //     menus() (the menus' state: { master, open, at, size, scrolls }), refit(id) (a window sized to fit its contents
 //     again), lineup { open(kind), close(), page(d), hair(on), state(), slots(), ready(), tileAt(x, y) } (the Line-up:
 //     its tiles' people in slots()[i].crew, each with .rest, its bones at rest), thumbs (the picture buttons' drawer),
-//     crew() (the person shown), lib (kit/crew.js's loadCrew), three, scene, camera, renderer }
+//     arms() / armStep(d) (Arm thickness: worn, this browser's; a step, 0 Reset), shoulders() / shoulderStep(d)
+//     (Shoulder width, the same), crew() (the person shown), lib (kit/crew.js's loadCrew), three, scene, camera,
+//     renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, HEAD_LIMITS, ARMS_LIMITS, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, BAND_COLOURS, SIZES, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, HEAD_LIMITS, ARMS_LIMITS, SHOULDER_LIMITS, SHOULDER_STEP, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, BAND_COLOURS, SIZES, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 import { makeMenus } from './windows.js';
@@ -294,7 +299,9 @@ function bodiesWin() {
     sec('Height', row(Object.entries(SIZES).map(([k, v]) => chip(k[0].toUpperCase() + k.slice(1), (+R.size || 1) === v, () => resize2(v), true, `${k[0].toUpperCase() + k.slice(1)}: ${Math.round(v * 100)}% of the body as made`)))),
     sec('Arm thickness', row(knob('Arms', Math.round(lib.armsOf(R.suit) * 100) + '%', ['−', () => armStep(-1)], ['+', () => armStep(1)], 'Thinner sleeves (5% a step)', 'Thicker', 'How thick this outfit\'s arms are, across (never shorter); the hands stay their own size'),
       chip('Reset', false, () => armStep(0), true, 'This outfit\'s arms back to crew.json\'s'))),
-    note('Arm thickness is this outfit\'s own: every head worn in it. Saved with your fits.')];
+    sec('Shoulder width', row(knob('Shoulders', shoulderW(lib.shouldersOf(R.suit)), ['−', () => shoulderStep(-1)], ['+', () => shoulderStep(1)], 'Narrower: the arms turn from further in (0.5 cm a step)', 'Wider: the arms turn from further out, toward the real shoulder', 'Where this outfit\'s arms turn from, moved out from where the outfit was built (the outfit itself is not reshaped)'),
+      chip('Reset', false, () => shoulderStep(0), true, 'This outfit\'s shoulders back to crew.json\'s'))),
+    note('Arm thickness and shoulder width are this outfit\'s own: every head worn in it. Saved with your fits.')];
 }
 // ARM THICKNESS (kit/crew.js): this outfit's arms thinner or thicker across, in 5% steps (lib.arms over crew.json's
 // `arms`), kept in this browser; Save fits and Copy fits carry it ("arms")
@@ -309,6 +316,22 @@ async function armStep(dir) {
   if (!dir) delete lib.arms[R.suit];
   else lib.arms[R.suit] = +Math.min(ARMS_LIMITS[1], Math.max(ARMS_LIMITS[0], lib.armsOf(R.suit) + dir * 0.05)).toFixed(2);
   st.dirty = true; saveArms(); await show(R);
+}
+// SHOULDER WIDTH (kit/crew.js): where this outfit's upper arms turn from, moved out (or in) 0.5 cm a step
+// (lib.shoulders over crew.json's `shoulders`, metres), kept in this browser; Save fits and Copy fits carry it
+// ("shoulders")
+const SHOULDERS_KEY = 'crewlab.shoulders.v1';
+const shoulderW = (v) => (Math.abs(v) < 1e-6 ? 'as made' : (v > 0 ? '+' : '−') + (Math.abs(v) * 100).toFixed(1) + ' cm');
+try { const j = JSON.parse(localStorage.getItem(SHOULDERS_KEY) || '{}'); if (j && typeof j === 'object') for (const [k, v] of Object.entries(j)) if (lib.entry('suit', k) && Number.isFinite(+v)) lib.shoulders[k] = +v; } catch (_) { /* none kept */ }
+function saveShoulders() {
+  for (const id of Object.keys(lib.shoulders)) if (Math.abs(lib.shoulders[id] - (+(lib.entry('suit', id) || {}).shoulders || 0)) < 1e-4) delete lib.shoulders[id];
+  try { if (Object.keys(lib.shoulders).length) localStorage.setItem(SHOULDERS_KEY, JSON.stringify(lib.shoulders)); else localStorage.removeItem(SHOULDERS_KEY); } catch (_) { /* this tab only */ }
+}
+async function shoulderStep(dir) {
+  const R = st.recipe; if (!R?.suit) return;
+  if (!dir) delete lib.shoulders[R.suit];
+  else lib.shoulders[R.suit] = +Math.min(SHOULDER_LIMITS[1], Math.max(SHOULDER_LIMITS[0], lib.shouldersOf(R.suit) + dir * SHOULDER_STEP)).toFixed(4);
+  st.dirty = true; saveShoulders(); await show(R);
 }
 // HEADS: the heads, and how this one sits on this outfit
 function headsWin() {
@@ -617,8 +640,8 @@ async function clearMine() {
   const n = changeList().length;
   if (!n) { fitSt.note = 'No changes of yours to clear.'; paint('changes'); return; }
   if (!confirm('Clear all your changes in this browser (hair fits, buzzes, how heads sit) and go back to crew.json\'s? (Save fits first to keep them.)')) return;
-  lib.fits = {}; lib.headFits = {}; lib.buzzes = {}; lib.headPlaces = { suits: {}, heads: {} }; lib.arms = {};
-  saveMine(); saveBuzzes(); savePlaces(); saveArms();
+  lib.fits = {}; lib.headFits = {}; lib.buzzes = {}; lib.headPlaces = { suits: {}, heads: {} }; lib.arms = {}; lib.shoulders = {};
+  saveMine(); saveBuzzes(); savePlaces(); saveArms(); saveShoulders();
   st.dirty = false; fitSt.note = 'Back to crew.json\'s.'; fitSt.out = null;
   if (st.recipe) await show(st.recipe); else menu();
 }
@@ -637,8 +660,11 @@ function fitsText() {
   // (and every outfit's arm thickness that isn't 1, this browser's over crew.json's; 1 for one taken back, so the merge takes it out)
   const arms = [];
   for (const P of lib.list.parts.suit) { const v = lib.armsOf(P.id); if (v !== 1 || has(lib.arms, P.id)) arms.push('    ' + JSON.stringify(P.id) + ': ' + v); }
+  // (and every outfit's shoulder width that isn't 0, the same way; 0 for one taken back)
+  const shoulders = [];
+  for (const P of lib.list.parts.suit) { const v = lib.shouldersOf(P.id); if (v !== 0 || has(lib.shoulders, P.id)) shoulders.push('    ' + JSON.stringify(P.id) + ': ' + v); }
   const block = (L) => (L.length ? '{\n' + L.join(',\n') + '\n  }' : '{}');
-  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + ',\n  "buzzes": ' + block(buzzes) + ',\n  "outfits": ' + block(outfits) + ',\n  "headPlaces": ' + block(places) + ',\n  "arms": ' + block(arms) + '\n}';
+  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + ',\n  "buzzes": ' + block(buzzes) + ',\n  "outfits": ' + block(outfits) + ',\n  "headPlaces": ' + block(places) + ',\n  "arms": ' + block(arms) + ',\n  "shoulders": ' + block(shoulders) + '\n}';
 }
 // (Save fits: the same text as a file, crewFits-<yyyy-mm-dd-hhmm>.json, to the browser's downloads)
 function saveFits() {
@@ -872,6 +898,7 @@ function changeList() {
   for (const id of Object.keys(lib.buzzes)) L.push(['Buzz', nameOf('hair', id)]);
   const placeW = (o) => [o.seat ? 'seat ' + seatW(o.seat) : '', o.forward ? fwdW(o.forward) : '', o.side ? sideW(o.side) : '', o.size != null && o.size !== 1 ? 'size ' + sizeW(o.size) : ''].filter(Boolean).join(', ') || 'back to as made';
   for (const [id, v] of Object.entries(lib.arms)) L.push(['Arm thickness', `${nameOf('suit', id)}: ${Math.round(v * 100)}%`]);
+  for (const [id, v] of Object.entries(lib.shoulders)) L.push(['Shoulder width', `${nameOf('suit', id)}: ${shoulderW(v)}`]);
   for (const [id, o] of Object.entries(lib.headPlaces.suits)) L.push(['Every head on an outfit', `${nameOf('suit', id)}: ${placeW(placeTidy(o))}`]);
   for (const [id, o0] of Object.entries(lib.headPlaces.heads)) {
     const o = placeTidy(o0), w = [];
@@ -1013,6 +1040,7 @@ window.CREWLAB = {
   step: (kind, d) => step(kind, d), win: (id, on) => M.open(id, on), menus: () => M.state(), refit: (id) => M.refit(id), thumbs,
   // (how the head sits: the level chosen, a step of a setting at it, what the person wears, this browser's layer)
   arms: () => ({ worn: st.crew?.arms ?? null, mine: { ...lib.arms } }), armStep: (d) => armStep(d),
+  shoulders: () => ({ worn: st.crew?.shoulders ?? null, mine: { ...lib.shoulders } }), shoulderStep: (d) => shoulderStep(d),
   place: () => ({ scope: headSt.scope, fine: headSt.fine, wearing: st.crew?.place || null, mine: dup(lib.headPlaces) }), placeLevel: (k) => { headSt.scope = k; paint('heads'); }, placeStep: (key, dir) => replace(key, dir),
   measure, crew: () => st.crew, lib, three: THREE, scene, camera, renderer, controls,
   // (the Line-up: opened on a kind, its page, its tiles' people, whether every tile is built and in step)
