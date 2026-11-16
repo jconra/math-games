@@ -25,12 +25,32 @@
 .pcd-done:hover { box-shadow: inset 0 0 0 1.5px var(--line-hi); }
 
 /* the readouts: the chair's screens' numbers */
-.pcd-reads { position: absolute; left: max(16px, env(safe-area-inset-left)); top: 92px; margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; padding: 10px 16px;
+.pcd-reads { position: absolute; left: max(16px, env(safe-area-inset-left)); top: 92px; margin: 0; display: grid; grid-template-columns: auto auto auto; gap: 4px 12px; align-items: center; padding: 10px 16px;
   background: var(--glass); box-shadow: inset 0 0 0 1.5px rgba(127, 216, 255, 0.35); clip-path: var(--oct); --cut: 10px; }
 .pcd-reads div { display: contents; }
 .pcd-reads dt { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b8a96; padding-top: 3px; }
 .pcd-reads dd { margin: 0; font-size: 17px; font-weight: 700; color: #e8f7ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pcd-plate dd { color: #ffd29e; }
+/* the crane's docking lights, one for each way: off, amber when near, green when right */
+.pcd-aid { line-height: 0; }
+.pcd-dot { display: inline-block; width: 13px; height: 13px; border-radius: 50%; background: #2a3138; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.18); }
+.pcd-dot.is-near { background: #ffab3d; box-shadow: 0 0 8px rgba(255, 171, 61, 0.8); }
+.pcd-dot.is-on { background: #4fe08a; box-shadow: 0 0 10px rgba(79, 224, 138, 0.9); }
+.pcd-swap { height: 36px; padding: 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink) !important; background: var(--accent); clip-path: var(--oct); --cut: 8px; }
+/* the view's name, for a moment after it changes */
+.pcd-view-name { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); margin: 0; padding: 6px 14px; font-size: 13.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #bfe9ff;
+  background: var(--glass); clip-path: var(--oct); --cut: 8px; opacity: 0; }
+.pcd-view-name.is-show { animation: pcd-name 2.6s ease forwards; }
+@keyframes pcd-name { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+/* the joke notice: a load brought low over someone */
+.pcd-notice { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 22px; max-width: min(440px, calc(100vw - 32px));
+  text-align: center; background: rgba(40, 18, 8, 0.92); box-shadow: inset 0 0 0 2px #ff8f2e; clip-path: var(--oct); }
+.pcd-notice[hidden] { display: none; }
+.pcd-notice b { font-size: 21px; letter-spacing: 0.1em; text-transform: uppercase; color: #ffb35c; }
+.pcd-notice span { font-size: 15.5px; color: var(--ink); }
+.pcd-notice small { font-size: 12px; color: var(--dim); letter-spacing: 0.06em; }
+.pcd-notice.is-pop { animation: pcd-pop 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes pcd-pop { 0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 
 /* what to do next, or what it would not do */
 .pcd-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; margin: 0; max-width: min(620px, calc(100vw - 420px)); padding: 9px 16px; text-align: center;
@@ -50,10 +70,10 @@
 .pcd-btn:hover { box-shadow: inset 0 0 0 1.5px var(--line-hi); }
 .pcd-btn.is-on { background: rgba(255, 143, 46, 0.35); }
 .pcd-up { grid-column: 2; grid-row: 1; }
-.pcd-grab { grid-column: 2; grid-row: 2; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
-.pcd-down { grid-column: 2; grid-row: 3; }
-.pcd-turn { grid-column: 1; grid-row: 2; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
-.pcd-view { grid-column: 1; grid-row: 3; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
+.pcd-down { grid-column: 2; grid-row: 2; }
+.pcd-ccw { grid-column: 1; grid-row: 1; }
+.pcd-cw { grid-column: 1; grid-row: 2; }
+.pcd-view { grid-column: 1 / span 2; grid-row: 3; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
 .pcd-btn[hidden] { display: none; }
 .pcd-btn.is-ready { color: var(--accent-ink); background: var(--accent); }
 .pcd-btn.is-ready kbd { background: rgba(0, 0, 0, 0.18); color: var(--accent-ink); }
@@ -65,7 +85,8 @@
 @media (max-width: 640px) {
   .pcd-top { left: 8px; right: 8px; top: max(8px, env(safe-area-inset-top)); padding: 8px 8px 8px 12px; justify-content: space-between; }
   .pcd-title small { display: none; }
-  .pcd-reads { left: 8px; right: 8px; top: calc(max(8px, env(safe-area-inset-top)) + 60px); grid-template-columns: auto 1fr auto 1fr; gap: 2px 8px; padding: 8px 12px; }
+  .pcd-reads { left: 8px; right: auto; top: calc(max(8px, env(safe-area-inset-top)) + 60px); grid-template-columns: auto auto auto; gap: 2px 8px; padding: 8px 12px; }
+  .pcd-view-name { top: calc(max(8px, env(safe-area-inset-top)) + 60px); left: auto; right: 8px; transform: none; }
   .pcd-reads dd { font-size: 14px; }
   .pcd-hint { left: 8px; right: 8px; transform: none; max-width: none; bottom: calc(22px + 3 * 64px + 2 * 8px + 10px); font-size: 14px; }
   .pcd-pad { right: 8px; bottom: max(12px, env(safe-area-inset-bottom)); grid-template-columns: 78px 84px; grid-template-rows: 64px 64px 64px; }

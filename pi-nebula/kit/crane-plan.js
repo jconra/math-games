@@ -4,52 +4,62 @@
 // left alone while nobody is watching, and it costs a few look-ups a frame. No three.js here: node tests it
 // (tests/crane.test.mjs) and the smelter job reads the load from it (src/jobs/smelter.js).
 //
-// THE ROUND (the game's maker's, 2026-11-05: "a ceiling crane started grabbing the canisters off the ship and
+// THE CRANE is a bridge crane (kit/smelter.js): the bridge rolls along the hangar (x), the trolley along the bridge
+// (z, across the hangar), the hoist up and down, and the cradle turns the canister itself. The game's maker,
+// 2026-11-16: "I think it would be better if the system could move in all 3 axis at the same time ... So when it
+// picks up a canister it can start moving it in 3 different axis at once". So every trip moves x, z and the turn
+// together, and the lift off a place runs on into the travel once the load is clear of what is round it.
+//
+// THE ROUND (the game's maker, 2026-11-05: "a ceiling crane started grabbing the canisters off the ship and
 // connecting them to the wall socket ... when the full canisters were removed it could grab some empty canisters from
-// a stack and load them back on the ship"):
-//   unload   each full canister off the ship into a free socket (upper row off the ship first: a lower one cannot come
-//            up past one above it; lower sockets first: an upper one cannot be reached over a docked lower... the
-//            other way round), where it drains into the crusher
+// a stack and load them back on the ship"; 2026-11-16: "once the crane work is done it shouldn't automatically start
+// again. Now the ship is ready to go out"):
+//   unload   each full canister off the ship into a free socket (upper ones off the ship first: a lower one cannot
+//            come up past one above it; lower sockets first), where it drains into the crusher
 //   load     the empties from the rack onto the ship's mounts (lower mounts first)
-//   clear    the drained canisters from the sockets to the rack (upper sockets first): they are the next round's
-//            empties, which is what lets the round go on for ever
-//   pause    the Miner "away on its run": nothing moves; then its canisters are full again, and round again
+//   clear    the drained canisters from the sockets to the rack (upper sockets first): they are the next haul's
+//            empties
+//   done     home, and nothing moves: the Miner is ready to go out. The next round is the next haul's, after the
+//            Miner has landed again (src/crane.js)
 //
 // HOW A CANISTER IS HANDLED (kit/smelter.js says why the crane is made this way):
 //   at the ship    the mount's tray slides the canister out sideways (the ship's own move); the open cradle comes
-//                  down on it, the latch takes its lug, the arms slide round under it, up it goes, the tray slides home
-//   on the rail    carried high (site.carry), hanging along the trolley's beam. From the ship's leg to the wall's leg
-//                  the trolley stops on the turntable, which turns it a quarter turn: the canister now points at the wall
-//   at a socket    the iris opens; down to the socket's height just clear of its mouth; the carriage's last half
-//                  metre along the beam pushes it in end-on (slowly); the collar's ring lights; arms open, latch off,
-//                  cradle up. It drains: its strips shorten, its rings go from amber to blue, the display counts down
+//                  down on it, turned along it, the latch takes its lug, the arms slide round under it, up it goes,
+//                  the tray slides home
+//   on the way     carried high (site.carry): the bridge, the trolley and the cradle's turn all at once
+//   at a socket    the canister turned end on to the wall; the iris opens; down to the socket's height just clear of
+//                  its mouth; the trolley's last half metre pushes it in end-on (slowly); the collar's ring lights;
+//                  arms open, latch off, cradle up. It drains: its strips shorten, its rings go from amber to blue,
+//                  the display counts down
 //   on the rack    set down between its neighbours (the arms slide round, they do not swing out)
 //
 //   planCycle(site, state) -> plan    site: the places (below); state: { bayYaw: [...] } how each rack canister lies
-//                                     (and yaw: the trolley's, 0 or half a turn); plan.next is the next round's state
+//                                     (and yaw: the cradle's); plan.next is how things are when it is done
 //   planFrom(site, from) -> plan      the round taken up from a snapshot: after someone drove the crane by hand
 //   stateAt(plan, t)                  everything at time t as plain numbers (the snapshot planFrom starts from)
 //   cleanAt(plan, t)                  the next moment nothing is half done (when someone may take the controls)
-//   valueAt(track, t)                 a moving thing's value at time t (plan.T.x, .z, .yaw, .disc, .slide, .hoist,
-//                                     .arms, .latch, .tray[i], .iris[k], .lit[k])
+//   valueAt(track, t)                 a moving thing's value at time t (plan.T.x, .z, .yaw, .hoist, .arms, .latch,
+//                                     .tray[i], .iris[k], .lit[k])
 //   canAt(plan, c, t)                 where canister c is: { where: 'mount' | 'held' | 'socket' | 'bay', i, yaw, rel }
 //   fillAt(plan, c, t)                how full it is, 1 to 0
 //   loadAt(plan, t)                   the load in plain numbers, for the job's pay slip
 //   steadyAt(plan, t, ahead)          for how many seconds each of those numbers stays as it is
 //   gateAt(plan, t)                   the patch of floor the crane is working over (or about to), or null
+//   startOf(site, state)              the standard start: full canisters on the ship, empties on the rack
 export const SPEED = {
-  travel: { v: 2.0, a: 0.8 },      // the trolley along the rail: metres a second, and how fast it gets there
-  hoist: { v: 1.1, a: 0.8 },       // the cradle up and down
+  bridge: { v: 2.0, a: 0.8 },      // the bridge along the hangar (x): metres a second, and how fast it gets there
+  trolley: { v: 1.5, a: 0.8 },     // the trolley along the bridge (y on the grid, z in the station)
+  hoist: { v: 1.0, a: 0.8 },       // the cradle up and down
+  turn: { v: 0.5, a: 0.5 },        // the cradle's turn (radians a second: a quarter turn in about 4 s)
   set: { v: 0.22, a: 0.3 },        // the last of a set-down
-  slide: { v: 0.6, a: 0.5 },       // the carriage along the beam
-  push: { v: 0.2, a: 0.15 },       // the same, pushing a canister into a collar or drawing it out
-  turn: 4.5,                       // the turntable's quarter turn (seconds)
+  push: { v: 0.2, a: 0.15 },       // the trolley pushing a canister into a collar or drawing it out
   arms: 1.8, latch: 0.7, clamp: 0.6, iris: 1.4, tray: 5,
   drain: 75,                       // a canister emptying into the crusher
   settle: 0.5,                     // a breath between one move and the next
-  pause: 45, refill: 12, rest: 8,  // between rounds: the Miner away; its canisters filling again; then a moment
+  rest: 8,                         // before the first trip of a round
+  clearOff: 0.8,                   // metres short of the top the lift is when the travel sets off (all axes at once)
 };
-const TAU = Math.PI * 2, QUARTER = Math.PI / 2;
+const TAU = Math.PI * 2;
 // a move of `d` at up to v, speeding up and slowing down at a: [how long, the share of that spent speeding up]
 export function moveTime(d, { v, a }) { const ramp = v / a; return d >= v * ramp ? [d / v + ramp, ramp / (d / v + ramp)] : [2 * Math.sqrt(d / a), 0.5]; }
 // how far along (0..1) a move is at share x of its time: speeding up for k of it, steady, slowing down for k
@@ -59,6 +69,8 @@ export function along(x, k) {
   const c = 1 / (2 * k * (1 - k));
   return x < k ? c * x * x : x > 1 - k ? 1 - c * (1 - x) * (1 - x) : (x - k / 2) / (1 - k);
 }
+// the share of its time at which a move is `f` (0..1) of the way
+function shareAt(f, k) { let lo = 0, hi = 1; for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (along(m, k) < f) lo = m; else hi = m; } return (lo + hi) / 2; }
 export function valueAt(track, t) {
   const S = track.segs; if (!S.length) return track.v0;
   let i = Math.min(track.i || 0, S.length - 1);
@@ -75,11 +87,15 @@ function lastAt(list, t) {
   while (i < list.length - 1 && list[i + 1].t0 <= t) i++;
   list.i = i; return list[i];
 }
-const near0 = (a) => { a = ((a % TAU) + TAU) % TAU; return a > Math.PI ? a - TAU : a; };   // an angle as -180..180 degrees
+export const near0 = (a) => { a = ((a % TAU) + TAU) % TAU; return a > Math.PI ? a - TAU : a; };   // an angle as -180..180 degrees
+// the turn of the cradle nearest `from` that lies along `axis` (either way: the cradle is the same end for end)
+export const alongNear = (axis, from) => { let a = axis + Math.round((from - axis) / Math.PI) * Math.PI; return a; };
 
 // THE SITE (plain numbers, metres, the station's frame: x east, z south, y up; angles about up, 0 = pointing +z):
-//   carry          a carried canister's middle line (height)
-//   wallZ, shipX   the two legs' lines; turn: [x, z] where they meet; home: [x, z] where the trolley parks (wall leg)
+//   carry          a carried canister's middle line (height): the hook as high as it goes
+//   rail           { y: the runways' rail top, x: [lo, hi] where the bridge (and so the hook) may be along the hangar,
+//                  z: [lo, hi] where the trolley may be along the bridge }
+//   home           [x, z] where the crane parks
 //   mounts[i]      { at: [x, y, z] the canister's middle on its mount, yaw: the way its +z end points, out: [dx, dz]
 //                    the tray's slide, upper: on the upper row }
 //   sockets[k]     { at: [x, y, z] the middle of the collar's mouth, n: [nx, nz] the way it faces, upper }
@@ -90,12 +106,12 @@ const near0 = (a) => { a = ((a % TAU) + TAU) % TAU; return a > Math.PI ? a - TAU
 //                    mount before sliding out }
 // THE PLANNER: the crane's moves as timetable entries, from a given start. The round (planCycle) and a round picked up
 // from wherever someone left things (planFrom) are both made of these moves; only where they start differs.
-//   init   { x, z, yaw, disc, slide, hoist, arms, latch, tray: [..], iris: [..], lit: [..],
+//   init   { x, z, yaw, hoist, arms, latch, tray: [..], iris: [..], lit: [..],
 //            cans: [{ where: 'mount' | 'socket' | 'bay' | 'held', i, yaw, rel, fill }] }   (a snapshot: stateAt)
 function makePlanner(site, init, speed) {
   const S = speed, { half, seat, clear } = site.can, lift = site.can.lift || 0, rise = site.can.rise || 0, M = site.mounts, K = site.sockets, B = site.bays;
   const track = (v0) => ({ v0, last: v0, end: 0, segs: [] });
-  const T = { x: track(init.x), z: track(init.z), yaw: track(init.yaw), disc: track(init.disc), slide: track(init.slide), hoist: track(init.hoist), arms: track(init.arms), latch: track(init.latch),
+  const T = { x: track(init.x), z: track(init.z), yaw: track(init.yaw), hoist: track(init.hoist), arms: track(init.arms), latch: track(init.latch),
     tray: M.map((_, i) => track(init.tray[i])), iris: K.map((_, k) => track(init.iris[k])), lit: K.map((_, k) => track(init.lit[k])) };
   // a stretch of a track from t0 (or when the track is next free) taking `time`, speeding up for share k of it
   const seg = (tr, t0, to, time, k = 0.3) => { t0 = Math.max(t0, tr.end); if (Math.abs(to - tr.last) < 1e-9) return t0; tr.segs.push({ t0, t1: t0 + time, a: tr.last, b: to, k }); tr.last = to; tr.end = t0 + time; return tr.end; };
@@ -106,165 +122,157 @@ function makePlanner(site, init, speed) {
   const cans = init.cans.map((q) => ({ spans: [{ t0: 0, where: q.where, i: q.i, yaw: q.yaw, rel: q.rel }], fill: [{ t0: 0, t1: 0, a: q.fill, b: q.fill }] }));
   const docks = [];
   init.cans.forEach((q, c) => { if (q.where !== 'socket') return; docks.push({ t0: 0, t1: Infinity, k: q.i, c }); if (q.fill > 0) cans[c].fill.push({ t0: 0, t1: q.fill * S.drain, a: q.fill, b: 0 }); });
-  const yawOf = (c) => cans[c].spans[cans[c].spans.length - 1].yaw;
+  const last = (c) => cans[c].spans[cans[c].spans.length - 1];
   const gates = [], phases = [];
-  const P = { S, M, K, B, T, cans, docks, gates, phases, seg, move, yawOf, t: 0, leg: Math.abs(Math.sin(init.yaw)) > 0.5 ? 'ship' : 'wall' };
+  const P = { S, M, K, B, T, cans, docks, gates, phases, seg, move, last, t: 0 };
 
-  // ── the trolley along the rail, to `p` on a leg; `yawTo`: how it must be turned when it gets to the other leg ──
-  // -> { last: when its last straight run began, end: when it arrived }
-  function travel(to, p, t0, yawTo = null) {
-    if (to === P.leg) {
-      const tr = to === 'wall' ? T.x : T.z;
-      // (straight over the turntable: its piece of rail must lie along this leg)
-      if (to === 'wall' && (tr.last - site.turn[0]) * (p - site.turn[0]) < 0 && Math.abs(Math.sin(T.disc.last)) > 1e-6) throw new Error('crane plan: the turntable lies across the way');
-      return { last: Math.max(t0, tr.end), end: move(tr, t0, p, S.travel) };
-    }
-    // (to the turntable, a quarter turn with it, on along the other leg; the carriage is home before the turn)
-    const a = P.leg === 'wall' ? move(T.x, t0, site.turn[0], S.travel) : move(T.z, t0, site.turn[1], S.travel);
-    const by = yawTo != null ? near0(yawTo - T.yaw.last) : to === 'ship' ? QUARTER : near0(-T.yaw.last);
-    if (Math.abs(Math.abs(by) - QUARTER) > 1e-6) throw new Error('crane plan: not a quarter turn (' + by + ')');
-    const t1 = Math.max(a, T.slide.end) + S.settle * 0.5;
-    seg(T.disc, t1, T.disc.last + by, S.turn, 0.35); const t2 = seg(T.yaw, t1, T.yaw.last + by, S.turn, 0.35) + S.settle * 0.5;
-    P.leg = to;
-    return { last: t2, end: to === 'wall' ? move(T.x, t2, p, S.travel) : move(T.z, t2, p, S.travel) };
+  // ── the crane's moves ──
+  // the hook over [X, Z], the cradle turned to `yaw` (or left as it is), x, z and the turn all at once -> when there
+  function travel(X, Z, yaw, t0) {
+    const a = move(T.x, t0, X, S.bridge), b = move(T.z, t0, Z, S.trolley), c = yaw == null ? t0 : move(T.yaw, t0, yaw, S.turn);
+    return Math.max(a, b, c);
   }
-  // where the carriage must stand along the beam for the hoist to hang over [x, z]
-  const slideFor = (x, z) => (x - T.x.last) * Math.sin(T.yaw.last) + (z - T.z.last) * Math.cos(T.yaw.last);
-  const put = (c, t0, span) => cans[c].spans.push({ t0, ...span });
+  // up to the carrying height from wherever it is, and from (when the load is clear of what is round it) on to [X, Z]
+  // with the cradle turning to `yaw`: -> when it gets there
+  function upAndOver(X, Z, yaw, t0) {
+    const h0 = T.hoist.last, t1 = move(T.hoist, t0, site.carry, S.hoist), sg = T.hoist.segs[T.hoist.segs.length - 1];
+    let go = t1;
+    if (sg && sg.t1 === t1 && site.carry - h0 > S.clearOff + 0.05) go = sg.t0 + (sg.t1 - sg.t0) * shareAt((site.carry - S.clearOff - h0) / (site.carry - h0), sg.k);
+    // (the patch a load was just taken from is watched until the load is well up)
+    if (P.liftGate) { const g = P.liftGate; P.liftGate = null; const high = site.carry - 1.5; g.t1 = Math.max(g.t1, sg && sg.t1 === t1 && h0 < high ? sg.t0 + (sg.t1 - sg.t0) * shareAt((high - h0) / (site.carry - h0), sg.k) + 0.3 : t0); }
+    return Math.max(t1, travel(X, Z, yaw, go));
+  }
+  // the cradle's turn for a canister at a place lying along `axis`, nearest the way it is now
+  const turnFor = (axis) => alongNear(axis, T.yaw.last);
   // (the patch of floor under a canister lying along x or along z, `wide` more across it and `long` more along it)
   const gate = (t0, x, z, alongX, wide = 0, long = 0) => { const g = { t0, t1: t0, x, z, hx: alongX ? half + long : 0.5 + wide, hz: alongX ? 0.5 + wide : half + long }; gates.push(g); return g; };
+  const put = (c, t0, span) => cans[c].spans.push({ t0, ...span });
   // (a canister set down on a mount lies as its mount wants it, or end for end: the way it was carried)
   const mountYaw = (m, yaw) => (Math.cos(yaw - m.yaw) >= 0 ? m.yaw : near0(m.yaw + Math.PI));
+  const isAlongX = (yaw) => Math.abs(Math.sin(yaw)) > 0.5;
 
   // ── at a mount ──
   const outOf = (m) => [m.at[0] + m.out[0], m.at[2] + m.out[1]];
-  function toMount(i, carrying) {
-    const m = M[i], Q = outOf(m);
-    const r = travel('ship', Q[1], P.t, carrying == null ? null : m.yaw - carrying.rel);
-    const tS = move(T.slide, r.last, slideFor(Q[0], Q[1]), S.slide);
+  function toMount(i, rel) {
+    const m = M[i], Q = outOf(m), yaw = turnFor(m.yaw - (rel || 0));
+    const arrive = upAndOver(Q[0], Q[1], yaw, P.t);
     // (its tray out as the crane comes, the patch under it kept clear from then until the tray is home again)
-    const t0 = Math.max(r.last, T.tray[i].end), tT = seg(T.tray[i], Math.max(t0, r.end - S.tray), 1, S.tray, even);
-    const g = gate(Math.max(t0, r.end - S.tray) - 0.6, (m.at[0] + Q[0]) / 2, (m.at[2] + Q[1]) / 2, Math.abs(Math.sin(T.yaw.last)) > 0.5, Math.hypot(m.out[0], m.out[1]) / 2);
-    return { m, at: Math.max(r.end, tS, tT) + S.settle, g };
+    const t0 = Math.max(P.t, T.tray[i].end), tT = seg(T.tray[i], Math.max(t0, arrive - S.tray), 1, S.tray, even);
+    const g = gate(Math.max(t0, arrive - S.tray) - 0.6, (m.at[0] + Q[0]) / 2, (m.at[2] + Q[1]) / 2, isAlongX(m.yaw), Math.hypot(m.out[0], m.out[1]) / 2);
+    return { m, at: Math.max(arrive, tT) + S.settle, g };
   }
   function fromMount(c, i) {
-    const { m, at, g } = toMount(i, null);
+    const { m, at, g } = toMount(i, 0);
     let tt = move(T.hoist, at, m.at[1] + lift, S.hoist);
     tt = seg(T.latch, tt + 0.2, 1, S.latch); tt = seg(T.arms, tt, 1, S.arms) + 0.3;
-    put(c, tt, { where: 'held', rel: near0(yawOf(c) - T.yaw.last) });
-    P.t = move(T.hoist, tt, site.carry, S.hoist);
-    g.t1 = seg(T.tray[i], tt + 1.6, 0, S.tray, even) + 0.3;
-    move(T.slide, P.t, 0, S.slide);
+    put(c, tt, { where: 'held', rel: near0(last(c).yaw - T.yaw.last) });
+    P.t = tt;
+    g.t1 = seg(T.tray[i], tt + 1.6, 0, S.tray, even) + 0.3; P.liftGate = g;
+    return { g, i };
   }
   function ontoMount(c, i) {
-    const rel = cans[c].spans[cans[c].spans.length - 1].rel, { m, at, g } = toMount(i, { rel });
+    const rel = last(c).rel || 0, { m, at, g } = toMount(i, rel);
     let tt = move(T.hoist, at, m.at[1] + lift + 0.3, S.hoist); tt = move(T.hoist, tt, m.at[1] + lift, S.set);
     tt = seg(T.arms, tt + 0.2, 0, S.arms); tt = seg(T.latch, tt, 0, S.latch) + 0.2;
     put(c, tt, { where: 'mount', i, yaw: mountYaw(m, T.yaw.last + rel) });
+    // (straight up, the tray home under it once the open arms are clear of the canister's crown)
     P.t = move(T.hoist, tt, site.carry, S.hoist);
     g.t1 = seg(T.tray[i], tt + 1.5, 0, S.tray, even) + 0.3;
-    move(T.slide, P.t, 0, S.slide);
   }
   // ── at a socket: the canister's middle when it is docked, and when it waits just clear of the mouth ──
   const docked = (k) => [K[k].at[0] + K[k].n[0] * (half - seat), K[k].at[2] + K[k].n[1] * (half - seat)];
   const waiting = (k) => [K[k].at[0] + K[k].n[0] * (half + clear), K[k].at[2] + K[k].n[1] * (half + clear)];
+  const axisOf = (k) => Math.atan2(K[k].n[0], K[k].n[1]);
   function intoSocket(c, k) {
     const s = K[k], W = waiting(k), D = docked(k), alongX = Math.abs(s.n[0]) > 0.5;
-    const r = travel('wall', alongX ? T.x.last : W[0], P.t);
-    const tS = move(T.slide, r.last, slideFor(W[0], W[1]), S.slide);
-    const tI = seg(T.iris[k], Math.max(r.last, r.end - S.iris - 1), 1, S.iris, 0.3);
-    const at = Math.max(r.end, tS, tI) + S.settle, g = gate(at - 0.6, (W[0] + D[0]) / 2, (W[1] + D[1]) / 2, alongX, 0, (seat + clear) / 2);
+    const arrive = upAndOver(W[0], W[1], turnFor(axisOf(k)), P.t);
+    const tI = seg(T.iris[k], Math.max(P.t, arrive - S.iris - 1), 1, S.iris, 0.3);
+    const at = Math.max(arrive, tI) + S.settle, g = gate(at - 0.6, (W[0] + D[0]) / 2, (W[1] + D[1]) / 2, alongX, 0, (seat + clear) / 2);
     let tt = move(T.hoist, at, s.at[1], S.hoist);
-    tt = move(T.slide, tt + 0.2, slideFor(D[0], D[1]), S.push);                        // (pushed in end-on)
+    tt = alongX ? move(T.x, tt + 0.2, D[0], S.push) : move(T.z, tt + 0.2, D[1], S.push);    // (pushed in end-on)
     // (seated: it is the socket's from now; the collar takes hold, its ring coming on; then it drains)
-    put(c, tt, { where: 'socket', i: k, yaw: T.yaw.last + cans[c].spans[cans[c].spans.length - 1].rel }); docks.push({ t0: tt, t1: Infinity, k, c });
+    put(c, tt, { where: 'socket', i: k, yaw: near0(T.yaw.last + (last(c).rel || 0)) }); docks.push({ t0: tt, t1: Infinity, k, c });
     tt = seg(T.lit[k], tt, 1, S.clamp);
     const f0 = cans[c].fill[cans[c].fill.length - 1].b;
     if (f0 > 0) cans[c].fill.push({ t0: tt + 1, t1: tt + 1 + S.drain * f0, a: f0, b: 0 });
     tt = seg(T.arms, tt + 0.3, 0, S.arms); tt = seg(T.latch, tt, 0, S.latch) + 0.2;
     // (the cradle up off it, back out from the wall, then all the way up)
-    tt = move(T.hoist, tt, s.at[1] + rise, S.hoist); tt = move(T.slide, tt, slideFor(W[0], W[1]), S.slide);
+    tt = move(T.hoist, tt, s.at[1] + rise, S.hoist);
+    tt = alongX ? move(T.x, tt, W[0], S.trolley) : move(T.z, tt, W[1], S.trolley);
     P.t = g.t1 = move(T.hoist, tt, site.carry, S.hoist);
-    move(T.slide, P.t, 0, S.slide);
   }
   function outOfSocket(c, k) {
     const s = K[k], W = waiting(k), D = docked(k), alongX = Math.abs(s.n[0]) > 0.5;
-    const r = travel('wall', alongX ? T.x.last : D[0], P.t);
-    const tS = move(T.slide, r.last, slideFor(W[0], W[1]), S.slide);
-    const at = Math.max(r.end, tS) + S.settle, g = gate(at - 0.6, (W[0] + D[0]) / 2, (W[1] + D[1]) / 2, alongX, 0, (seat + clear) / 2);
+    const arrive = upAndOver(W[0], W[1], turnFor(last(c).yaw), P.t);
+    const at = arrive + S.settle, g = gate(at - 0.6, (W[0] + D[0]) / 2, (W[1] + D[1]) / 2, alongX, 0, (seat + clear) / 2);
     // (the open cradle down clear of the wall to just over the docked canister, in over it, and down onto it)
-    let tt = move(T.hoist, at, s.at[1] + rise, S.hoist); tt = move(T.slide, tt, slideFor(D[0], D[1]), S.slide);
+    let tt = move(T.hoist, at, s.at[1] + rise, S.hoist);
+    tt = alongX ? move(T.x, tt, D[0], S.trolley) : move(T.z, tt, D[1], S.trolley);
     tt = move(T.hoist, tt + 0.1, s.at[1] + 0.25, S.hoist); tt = move(T.hoist, tt, s.at[1], S.set);
     tt = seg(T.latch, tt + 0.2, 1, S.latch); tt = seg(T.arms, tt, 1, S.arms);
     // (the cradle has it: the collar lets go, its ring going dark)
-    tt += 0.2; put(c, tt, { where: 'held', rel: near0(yawOf(c) - T.yaw.last) }); docks.find((d) => d.k === k && d.t1 === Infinity).t1 = tt;
+    tt += 0.2; put(c, tt, { where: 'held', rel: near0(last(c).yaw - T.yaw.last) }); docks.find((d) => d.k === k && d.t1 === Infinity).t1 = tt;
     tt = seg(T.lit[k], tt, 0, S.clamp);
-    tt = move(T.slide, tt + 0.2, slideFor(W[0], W[1]), S.push);                        // (drawn out end-on)
-    P.t = g.t1 = move(T.hoist, tt + 0.2, site.carry, S.hoist);
+    tt = alongX ? move(T.x, tt + 0.2, W[0], S.push) : move(T.z, tt + 0.2, W[1], S.push);    // (drawn out end-on)
+    P.t = g.t1 = tt + 0.2; P.liftGate = g;
     seg(T.iris[k], tt + 0.6, 0, S.iris, 0.3);
-    move(T.slide, P.t, 0, S.slide);
   }
   // ── on the rack ──
-  function toBay(j) {
-    const b = B[j], r = travel('wall', b.at[0], P.t), tS = move(T.slide, r.last, slideFor(b.at[0], b.at[2]), S.slide);
-    const at = Math.max(r.end, tS) + S.settle;
-    return { b, at, g: gate(at - 0.6, b.at[0], b.at[2], Math.abs(Math.sin(T.yaw.last)) > 0.5) };
+  function toBay(j, rel) {
+    const b = B[j], arrive = upAndOver(b.at[0], b.at[2], turnFor((B[j].yaw ?? 0) - (rel || 0)), P.t);
+    const at = arrive + S.settle;
+    return { b, at, g: gate(at - 0.6, b.at[0], b.at[2], false) };
   }
   function fromBay(c, j) {
-    const { b, at, g } = toBay(j);
+    const { b, at, g } = toBay(j, 0);
     let tt = move(T.hoist, at, b.at[1], S.hoist);
     tt = seg(T.latch, tt + 0.2, 1, S.latch); tt = seg(T.arms, tt, 1, S.arms) + 0.3;
-    put(c, tt, { where: 'held', rel: near0(yawOf(c) - T.yaw.last) });
-    P.t = g.t1 = move(T.hoist, tt, site.carry, S.hoist);
-    move(T.slide, P.t, 0, S.slide);
+    put(c, tt, { where: 'held', rel: near0(last(c).yaw - T.yaw.last) });
+    // (the patch is watched until the load is well up: it lifts as the next trip sets off)
+    P.t = g.t1 = tt; P.liftGate = g;
   }
   function ontoBay(c, j) {
-    const rel = cans[c].spans[cans[c].spans.length - 1].rel, { b, at, g } = toBay(j);
+    const rel = last(c).rel || 0, { b, at, g } = toBay(j, rel);
     let tt = move(T.hoist, at, b.at[1] + 0.3, S.hoist); tt = move(T.hoist, tt, b.at[1], S.set);
     tt = seg(T.arms, tt + 0.2, 0, S.arms); tt = seg(T.latch, tt, 0, S.latch) + 0.2;
-    put(c, tt, { where: 'bay', i: j, yaw: T.yaw.last + rel });
+    put(c, tt, { where: 'bay', i: j, yaw: near0(T.yaw.last + rel) });
     P.t = g.t1 = move(T.hoist, tt, site.carry, S.hoist);
-    move(T.slide, P.t, 0, S.slide);
   }
   // ── the round's orders of things (what is in the way decides them) ──
   const idx = (n) => [...Array(n).keys()];
-  const fromTurn = (k) => Math.hypot(K[k].at[0] - site.turn[0], K[k].at[2] - site.turn[1]);
-  const fromWall = (i) => Math.abs(M[i].at[2] - site.wallZ) * 100 - M[i].at[0];               // (the wall's side first, then front before back)
+  const fromHome = (k) => Math.hypot(K[k].at[0] - site.home[0], K[k].at[2] - site.home[1]);
+  const shipMid = M.length ? [M.reduce((q, m) => q + m.at[0], 0) / M.length, M.reduce((q, m) => q + m.at[2], 0) / M.length] : [0, 0];
+  const nearFirst = (i) => (K[0] ? Math.hypot(M[i].at[0] - K[0].at[0], M[i].at[2] - K[0].at[2]) : 0);
   const ORDER = {
-    upperFirst: idx(M.length).sort((a, b) => (M[b].upper - M[a].upper) || fromWall(a) - fromWall(b)),
-    lowerFirst: idx(M.length).sort((a, b) => (M[a].upper - M[b].upper) || fromWall(a) - fromWall(b)),
-    sockLower: idx(K.length).sort((a, b) => (K[a].upper - K[b].upper) || fromTurn(a) - fromTurn(b)),
-    sockUpper: idx(K.length).sort((a, b) => (K[b].upper - K[a].upper) || fromTurn(a) - fromTurn(b)),
-    bayNear: idx(B.length).sort((a, b) => Math.abs(B[a].at[0] - site.turn[0]) - Math.abs(B[b].at[0] - site.turn[0])),
+    upperFirst: idx(M.length).sort((a, b) => (M[b].upper - M[a].upper) || nearFirst(a) - nearFirst(b)),
+    lowerFirst: idx(M.length).sort((a, b) => (M[a].upper - M[b].upper) || nearFirst(a) - nearFirst(b)),
+    sockLower: idx(K.length).sort((a, b) => (K[a].upper - K[b].upper) || fromHome(a) - fromHome(b)),
+    sockUpper: idx(K.length).sort((a, b) => (K[b].upper - K[a].upper) || fromHome(a) - fromHome(b)),
+    bayNear: idx(B.length).sort((a, b) => Math.hypot(B[a].at[0] - shipMid[0], B[a].at[2] - shipMid[1]) - Math.hypot(B[b].at[0] - shipMid[0], B[b].at[2] - shipMid[1])),
   };
-  // home; the Miner away; its canisters full again, one after another; then the timetable's last tidying
-  function finish(onMount) {
-    const nM = M.length;
-    P.t = travel('wall', site.home[0], P.t).end;
-    if (Math.abs(near0(T.yaw.last)) > 1e-6 && Math.abs(near0(T.yaw.last - Math.PI)) > 1e-6) throw new Error('crane plan: the trolley does not come home lying along the wall\'s leg');
-    phases.push({ name: 'pause', t0: P.t }); P.t += S.pause;
-    phases.push({ name: 'refill', t0: P.t });
-    idx(nM).forEach((i, n) => { const c = onMount[i], a = P.t + n * S.refill / (nM + 1); cans[c].fill.push({ t0: a, t1: a + 2 * S.refill / (nM + 1), a: 0, b: 1 }); });
-    P.t += S.refill + S.rest;
-    phases.forEach((p, n) => { p.t1 = n + 1 < phases.length ? phases[n + 1].t0 : P.t; });
+  // home, and done: the Miner ready to go out
+  function finish() {
+    P.t = upAndOver(site.home[0], site.home[1], turnFor(0), P.t) + S.settle;
+    phases.push({ name: 'done', t0: P.t });
+    phases.forEach((p, n) => { p.t1 = n + 1 < phases.length ? phases[n + 1].t0 : Infinity; });
     gates.sort((a, b) => a.t0 - b.t0); docks.sort((a, b) => a.t0 - b.t0);
     for (const d of docks) if (d.t1 === Infinity) throw new Error('crane plan: a canister was left in a socket');
   }
-  Object.assign(P, { travel, slideFor, fromMount, ontoMount, intoSocket, outOfSocket, fromBay, ontoBay, ORDER, idx, finish, near0 });
+  Object.assign(P, { travel, upAndOver, fromMount, ontoMount, intoSocket, outOfSocket, fromBay, ontoBay, ORDER, idx, finish, docked, waiting });
   return P;
 }
 
-// the standard start of a round: the trolley parked, the cradle up and open; the Miner's canisters full on its mounts,
-// the rack's empty in its bays (state.bayYaw: how each lies; state.yaw: the trolley, along the wall's leg either way)
+// the standard start of a round: the crane parked, the cradle up and open; the Miner's canisters full on its mounts,
+// the rack's empty in its bays (state.bayYaw: how each lies; state.yaw: the cradle's turn)
 export function startOf(site, state = {}) {
-  const M = site.mounts, K = site.sockets, B = site.bays, bayYaw = state.bayYaw || B.map(() => 0), y0 = state.yaw || 0;
-  return { x: site.home[0], z: site.home[1], yaw: y0, disc: 0, slide: 0, hoist: site.carry, arms: 0, latch: 0,
+  const M = site.mounts, K = site.sockets, B = site.bays, bayYaw = state.bayYaw || B.map((b) => b.yaw ?? 0);
+  return { x: site.home[0], z: site.home[1], yaw: state.yaw || 0, hoist: site.carry, arms: 0, latch: 0,
     tray: M.map(() => 0), iris: K.map(() => 0), lit: K.map(() => 0),
     cans: [...M.map((m, i) => ({ where: 'mount', i, yaw: m.yaw, fill: 1 })), ...B.map((b, j) => ({ where: 'bay', i: j, yaw: bayYaw[j], fill: 0 }))] };
 }
 
 export function planCycle(site, state = {}, speed = SPEED) {
-  const P = makePlanner(site, startOf(site, state), speed), { S, M, B, cans, phases, ORDER, idx, near0: n0 } = P, nM = M.length;
+  const P = makePlanner(site, startOf(site, state), speed), { S, M, B, phases, ORDER, idx } = P, nM = M.length;
   const { upperFirst, lowerFirst, sockLower, sockUpper, bayNear } = ORDER;
   const order = { unload: [], load: [], clear: [] }, inSocket = new Map(), onMount = new Map(), inBay = new Map();
   P.t = S.rest; phases.push({ name: 'unload', t0: 0 });
@@ -273,24 +281,23 @@ export function planCycle(site, state = {}, speed = SPEED) {
   bayNear.forEach((j, n) => { const i = lowerFirst[n], c = nM + j; P.fromBay(c, j); P.ontoMount(c, i); onMount.set(i, c); order.load.push([j, i]); });
   phases.push({ name: 'clear', t0: P.t });
   sockUpper.forEach((k, n) => { const j = bayNear[n], c = inSocket.get(k); P.outOfSocket(c, k); P.ontoBay(c, j); inBay.set(j, c); order.clear.push([k, j]); });
-  P.finish(idx(nM).map((i) => onMount.get(i)));
-  // who is where when the round ends: the next round's canisters on the mounts and on the rack, and how the rack's lie
-  const next = { onMount: idx(nM).map((i) => onMount.get(i)), inBay: idx(B.length).map((j) => inBay.get(j)), bayYaw: idx(B.length).map((j) => n0(P.yawOf(inBay.get(j)))), yaw: n0(P.T.yaw.last) };
-  return { length: P.t, T: P.T, cans, gates: P.gates, docks: P.docks, phases, order, next, site };
+  P.finish();
+  // who is where when the round ends: the ship's canisters, the rack's, and how the rack's lie
+  const next = { onMount: idx(nM).map((i) => onMount.get(i)), inBay: idx(B.length).map((j) => inBay.get(j)), bayYaw: idx(B.length).map((j) => near0(P.last(inBay.get(j)).yaw)), yaw: near0(P.T.yaw.last) };
+  return { length: P.t, T: P.T, cans: P.cans, gates: P.gates, docks: P.docks, phases, order, next, site };
 }
 
 // THE ROUND TAKEN UP FROM WHEREVER THINGS ARE (after someone has driven the crane by hand, or worked it by the crane
-// job's sums): `from` is a snapshot (stateAt's shape) with the cradle up (site.carry), the carriage home and nothing
-// half done (the arms and the latch open or shut; the trays home; an iris open and a collar holding only where a
-// canister is docked). From there the crane does what the round would: whatever it holds goes where it belongs (ore
-// in it: a free socket; empty: a free mount on the ship, else the rack), then the ship's full canisters to the wall,
-// empties from the rack onto the ship, the drained ones from the wall to the rack; and when every mount holds an empty
-// one and the wall is clear, home, the pause, the refill, as at the end of a round. The next round is planCycle's.
-// What is in the way decides the order, as in the round: a lower mount or socket is only reached with the one above
-// it empty, so a canister in the way is moved first.
+// game's sums): `from` is a snapshot (stateAt's shape) with the cradle up (site.carry) and nothing half done (the arms
+// and the latch open or shut; the trays home; an iris open and a collar holding only where a canister is docked).
+// From there the crane does what the round would: whatever it holds goes where it belongs (ore in it: a free socket;
+// empty: a free mount on the ship, else the rack), then the ship's full canisters to the wall, empties from the rack
+// onto the ship, the drained ones from the wall to the rack; and when every mount holds an empty one and the wall is
+// clear, home: done. What is in the way decides the order, as in the round: a lower mount or socket is only reached
+// with the one above it empty, so a canister in the way is moved first.
 export function planFrom(site, from, speed = SPEED) {
-  const P = makePlanner(site, from, speed), { S, M, K, B, cans, phases, ORDER, near0: n0 } = P;
-  const at = (c) => cans[c].spans[cans[c].spans.length - 1];
+  const P = makePlanner(site, from, speed), { S, M, K, B, cans, phases, ORDER } = P;
+  const at = (c) => P.last(c);
   const fillNow = (c) => { const f = cans[c].fill[cans[c].fill.length - 1]; return P.t >= f.t1 ? f.b : P.t <= f.t0 ? f.a : f.a + (f.b - f.a) * (P.t - f.t0) / (f.t1 - f.t0); };
   const ore = (c) => fillNow(c) > 1e-6;
   // who is where
@@ -375,12 +382,14 @@ export function planFrom(site, from, speed = SPEED) {
     if (ends.length) { P.t = Math.max(P.t, Math.min(...ends) + S.settle); continue; }
     // 4. done: every mount filled, nothing at the wall, no ore anywhere
     if (onMount.every((c) => c >= 0) && !fullOnShip().length) break;
+    // (fewer canisters than mounts, or a canister still full on the rack with the wall full: nothing more can be done)
+    if (inSocket.every((c) => c < 0) && !inBay.some((c) => c >= 0 && !ore(c))) break;
     throw new Error('crane plan: nothing more it can do, and the round is not done (' + JSON.stringify({ onMount, inSocket, inBay }) + ')');
   }
   if (!phases.length) phases.push({ name: 'clear', t0: 0 });
   phases[0].t0 = 0;
-  P.finish(onMount);
-  const next = { onMount: [...onMount], inBay: [...inBay], bayYaw: inBay.map((c) => n0(P.yawOf(c))), yaw: n0(P.T.yaw.last) };
+  P.finish();
+  const next = { onMount: [...onMount], inBay: [...inBay], bayYaw: inBay.map((c) => (c >= 0 ? near0(P.last(c).yaw) : 0)), yaw: near0(P.T.yaw.last) };
   return { length: P.t, T: P.T, cans, gates: P.gates, docks: P.docks, phases, order, next, site, from: true };
 }
 
@@ -388,11 +397,11 @@ export function planFrom(site, from, speed = SPEED) {
 export function canAt(plan, c, t) { return lastAt(plan.cans[c].spans, t); }
 export function fillAt(plan, c, t) { const f = lastAt(plan.cans[c].fill, t); return t >= f.t1 ? f.b : t <= f.t0 ? f.a : f.a + (f.b - f.a) * (t - f.t0) / (f.t1 - f.t0); }
 // EVERYTHING AT TIME t, as plain numbers: the shape kit/crane.js poses from, the crane by hand starts from
-// (kit/crane-drive.js), and planFrom takes up again. A held canister's yaw is the trolley's and its own turn (rel).
+// (kit/crane-drive.js), and planFrom takes up again. A held canister's yaw is the cradle's and its own turn (rel).
 // `into`: an object to fill in again (a frame's worth of nothing new)
 export function stateAt(plan, t, into = null) {
   const T = plan.T, v = (tr) => valueAt(tr, t), S = into || { tray: [], iris: [], lit: [], cans: [] };
-  S.x = v(T.x); S.z = v(T.z); S.yaw = v(T.yaw); S.disc = v(T.disc); S.slide = v(T.slide); S.hoist = v(T.hoist); S.arms = v(T.arms); S.latch = v(T.latch);
+  S.x = v(T.x); S.z = v(T.z); S.yaw = v(T.yaw); S.hoist = v(T.hoist); S.arms = v(T.arms); S.latch = v(T.latch);
   T.tray.forEach((tr, i) => { S.tray[i] = v(tr); }); T.iris.forEach((tr, k) => { S.iris[k] = v(tr); }); T.lit.forEach((tr, k) => { S.lit[k] = v(tr); });
   plan.cans.forEach((_, c) => {
     const a = canAt(plan, c, t), q = S.cans[c] || (S.cans[c] = {});
@@ -401,16 +410,15 @@ export function stateAt(plan, t, into = null) {
   return S;
 }
 // THE NEXT MOMENT NOTHING IS HALF DONE, from t (within `ahead` seconds), or null: the arms and the latch shut on a held
-// canister or open with none, every tray, iris and collar still (out or home, open or shut), the trolley and the
-// turntable square on a leg. Someone taking the controls takes them then.
+// canister or open with none, every tray, iris and collar still (out or home, open or shut). Someone taking the
+// controls takes them then.
 export function cleanAt(plan, t, ahead = 40, step = 0.05) {
   const T = plan.T, still = (tr, u) => { const x = valueAt(tr, u); return Math.abs(x) < 1e-6 || Math.abs(x - 1) < 1e-6; };
-  for (let u = t; u <= Math.min(plan.length, t + ahead); u += step) {
+  for (let u = t; u <= Math.min(plan.length, t + ahead) + 1e-9; u += step) {
     if (!still(T.arms, u) || !still(T.latch, u) || T.tray.some((tr) => !still(tr, u)) || T.iris.some((tr) => !still(tr, u)) || T.lit.some((tr) => !still(tr, u))) continue;
-    if (Math.abs(Math.sin(2 * valueAt(T.yaw, u))) > 1e-6 || Math.abs(Math.sin(2 * valueAt(T.disc, u))) > 1e-6) continue;
     const held = plan.cans.some((_, c) => canAt(plan, c, u).where === 'held'), grip = valueAt(T.arms, u) > 0.5 && valueAt(T.latch, u) > 0.5, open = valueAt(T.arms, u) < 0.5 && valueAt(T.latch, u) < 0.5;
     if (held ? !grip : !open) continue;
-    return u;
+    return Math.min(u, plan.length);
   }
   return null;
 }
@@ -439,7 +447,7 @@ export function steadyAt(plan, t, ahead = 60, step = 5) {
   const now = counts(loadAt(plan, t)), out = {};
   for (const k in now) out[k] = ahead;
   for (let s = step; s <= ahead; s += step) {
-    const then = counts(loadAt(plan, Math.min(plan.length - 1e-3, t + s)));
+    const then = counts(loadAt(plan, Math.min(plan.length, t + s)));
     for (const k in now) if (out[k] === ahead && then[k] !== now[k]) out[k] = s - step;
   }
   return out;

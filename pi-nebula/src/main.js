@@ -76,7 +76,7 @@ async function boot() {
   // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
   const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
   // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
-  const crane = GAME.crane = makeCrane({ W, walls });
+  const crane = GAME.crane = makeCrane({ W, walls, boarding });
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -154,7 +154,7 @@ async function boot() {
     // (a parked ship's ways in come down for the player, never for the station's people, who do not board yet; anyone
     // of them standing on a way's patch is counted, so it waits for them)
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
-    crane.update(dt, { eyes });
+    crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     W.frame(dt, now, eyes);
     GAME.frames++;
   }

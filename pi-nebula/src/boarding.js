@@ -8,6 +8,7 @@
 //   B.ships                                            [{ id, state ('out' | 'loading' | 'in'), ... }]
 //   B.inside(p)                                        the ship whose cabin a point is in (or null)
 //   B.where(p)                                         where aboard: 'explorer/mess' (the ship and its room), or null
+//   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
 //
 // HOW (nothing here knows a coordinate: ships, rooms and doors are found by name in the station file):
 //   - Each ship parked in the station is a room of the station file ('ship-explorer', drawn with its hangar). Its cabin
@@ -355,7 +356,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       // near: in its hangar or the way into it (or in its cabin)
       const near = s.near.has(here) || inShip === s;
       s.away = near ? 0 : s.away + dt;
-      if (near && s.state === 'out') load(s);
+      if (near && s.state === 'out' && !s.held) load(s);
       else if (!near && s.away > LINGER && (s.state === 'in' || s.state === 'loading')) drop(s);
       // the ways in: down for anyone near them while the cabin is in, up otherwise
       s.ways.forEach((D, i) => {
@@ -374,7 +375,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         if (!waits) { ONE[0] = D; updateDoors(ONE, FAR, dt, open ? 'open' : 'shut'); }
         if (D.t >= 1 && s.state === 'in') wayDown(s, D, i);
       });
-      for (const L of s.lifts) liftStep(s, L, dt, eyes, player);
+      if (!s.held) for (const L of s.lifts) liftStep(s, L, dt, eyes, player);
       if (s.step) s.step(s.ways);
       if (s.state !== 'in') continue;
       const c = s.cabin;
@@ -385,7 +386,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         ONE[0] = D; updateDoors(ONE, best, dt, 'auto');
       }
       // drawn with its hangar
-      c.group.visible = s.zone.group.visible || inShip === s;
+      c.group.visible = (s.zone.group.visible || inShip === s) && !s.held;
       c.beams?.update(W.dust ? performance.now() / 1000 : 0);
     }
     const now = performance.now() / 1000, flick = liveTick(now), core = corePulse(now, CORE_LOOK);
@@ -439,5 +440,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   // (where a point is aboard: 'explorer/mess', or null)
   const where = (p) => { const s = inside(p); if (!s) return null; const r = roomOf(s, p); return s.id + '/' + (r ? r.id : '?'); };
 
-  return { ships, update, inside, where, look, spots, stats: () => ships.map((s) => ({ id: s.id, state: s.state, ...(s.stats || {}) })) };
+  // (a ship that is not parked yet, the Miner landing (src/crane.js): its cabin not loaded or drawn, its lift left as it
+  // is, until it is down)
+  function hold(id, on = true) { const s = ships.find((q) => q.id === id); if (s) s.held = !!on; return !!s; }
+  return { ships, update, inside, where, look, spots, hold, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, ...(s.stats || {}) })) };
 }

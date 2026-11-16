@@ -134,7 +134,7 @@ export function buildRoom(room, mats, opts = {}) {
       // (a placement's `hold`: its doors stay at that much open whatever comes near, whatever the mode: a parked ship's
       // folded arms and lowered legs)
       // (a part that glides by itself is kept apart from the doors: nothing that works the doors ever sees it)
-      for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, heavy: !!dr.heavy, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; if (dr.glide) { D.glide = dr.glide; glides.push(D); } else doors.push(D); mine.set(dr.id, D); }
+      for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, variant: pl.variant, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, heavy: !!dr.heavy, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; if (dr.glide) { D.glide = dr.glide; glides.push(D); } else doors.push(D); mine.set(dr.id, D); }
       for (const mv of p.movers) {
         // (a leaf whose door is held never moves: it is posed once and goes into the room's own still geometry, so it
         // is drawn with its room and costs no batch of its own: a parked ship's folded arms, its legs)

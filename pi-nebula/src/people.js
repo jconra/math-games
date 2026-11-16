@@ -8,6 +8,7 @@
 //   people.onWays(out)  pushes anyone standing on a parked ship's way in (it waits for them; people never call a ship's
 //                  way down: they do not board yet)
 //   people.noGo(x, z)   a patch of floor no person goes onto (job spots, ships' ways in, under the crane, the scanner)
+//   people.flee(x, z, r)  anyone within r of a point hurries off (the crane by hand, a load low over them)
 //   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson, onPatch
 //   people.plan()  everyone's spots and ways, for the plan from above (the rigs)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
@@ -352,6 +353,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // the next thing in a person's day
   function next(P) {
+    if (P.fleeing) { P.speed = P.fleeing.was; P.fleeing = null; }   // (run from the crane: back to their own pace)
     release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false;
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
@@ -805,6 +807,30 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     list.push(P); say(list.length);
   }
 
+  // RUNNING FROM THE CRANE (src/crane.js: the crane worked by hand brings a load down low over someone; the game's
+  // maker: "If people are in the way then they should start to run away"): anyone standing or walking within r of
+  // (x, z) drops what they are doing and hurries off to a free spot at least `away` metres from there (the way-finder's
+  // way, keeping off the patches), then goes on with their day. -> the people sent
+  function flee(x, z, r = 2, away = 4.5) {
+    const sent = [];
+    for (const P of list) {
+      if (P.hidden || P.fleeing || !P.act) continue;
+      if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
+      const dx = P.pos.x - x, dz = P.pos.z - z, d = Math.hypot(dx, dz);
+      if (d > r || P.pos.y > 2.4) continue;
+      const a0 = d > 0.05 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
+      let to = null;
+      for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
+        const a = a0 + da, L = away + r, p = walls.snap(x + Math.sin(a) * L, P.pos.y + 0.4, z + Math.cos(a) * L, 0.8);
+        if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body)) { to = p; break; }
+      }
+      if (!to) continue;
+      P.fleeing = { was: P.speed }; P.speed = Math.max(P.speed, 1.2) * 1.9;
+      begin(P, { kind: 'walk', step: { for: [1, 2] }, spot: { pos: to, heading: null }, list: [{ pos: to }], j: 0 });
+      sent.push(P);
+    }
+    return sent;
+  }
   const stats = () => ({ people: list.length, quality, most, walking: list.filter((P) => P.walking).length, shown: list.filter((P) => P.shown).length, planning: planQ.length, steps: walls.steps ? walls.steps() : null });
-  return { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE };
+  return { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee };
 }
