@@ -69,7 +69,7 @@ async function boot() {
   // ── where a person can walk ──────────────────────────────────────────────────────────────────────────────────
   progress(0.84, 'Checking the doors');
   await new Promise((go) => setTimeout(go, 0));
-  const walls = makeWalls(W.built);
+  const walls = makeWalls(W.built, { portals: W.R.portals });
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
   // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
