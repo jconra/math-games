@@ -84,7 +84,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     const s = resolve(W, walls, job.spot);
     if (!s) { missing.push(job.id); continue; }
     let heading = s.heading;
-    if (heading == null && job.face) { const p = W.place(job.face); if (p) heading = Math.atan2(p.x - s.pos.x, p.z - s.pos.z); }
+    // (a job's `face`, a place by name, is the way its spot faces, over any its spot gives: the dock's faces the airlock)
+    if (job.face) { const p = W.place(job.face); if (p) heading = Math.atan2(p.x - s.pos.x, p.z - s.pos.z); }
     if (heading == null && job.spot.place) { const p = W.place(job.spot.place); if (p && Math.hypot(p.x - s.pos.x, p.z - s.pos.z) > 0.2) heading = Math.atan2(p.x - s.pos.x, p.z - s.pos.z); }
     const spot = { job, pos: s.pos.clone(), heading: heading ?? 0 };
     // (a side of a shared area: its ring and sign on its own side)

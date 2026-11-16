@@ -41,3 +41,22 @@
   .dkb-sq { width: 84px; height: 84px; padding: 6px; }
   .dkb-sqs { gap: 12px; }
 }
+
+/* "tap here" on the square to tap next: a ripple in its middle (for a child who can't read yet) */
+.dkb-sq .dkb-tap, .dkb-sq .dkb-tap2 { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.dkb-sq.is-next .dkb-tap { animation: dkb-ripple 1.3s ease-out infinite; }
+.dkb-sq.is-next .dkb-tap2 { opacity: 0.9; animation: dkb-dot 1.3s ease-in-out infinite; }
+@keyframes dkb-ripple { 0% { opacity: 0.95; transform: scale(0.5); } 100% { opacity: 0; transform: scale(2.2); } }
+@keyframes dkb-dot { 0%, 100% { transform: scale(0.8); } 50% { transform: scale(1.15); } }
+
+/* the dock's cards are taller (a picture on each): smaller pictures, and the panel's top stays in view as it scrolls */
+.pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 138px; }
+.pnj[data-job="dock"] .pnj-help .pnj-pic svg { max-height: 150px; }
+.pnj[data-job="dock"] .pnj-top { position: sticky; top: -14px; z-index: 3; margin: -14px -16px 0; padding: 14px 16px 8px; background: rgba(15, 19, 25, 0.97); }
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj[data-job="dock"] .pnj-top { top: -10px; margin: -10px -12px 0; padding: 10px 12px 6px; }
+  .pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 112px; }
+}
+/* no key hints on a touch screen (E, H, Esc mean nothing there) */
+@media (pointer: coarse) { .pnj[data-job="dock"] kbd, .pnj-go[data-job="dock"] kbd { display: none; } }
+.pnj-story.dkb-end b { font-size: 22px; }

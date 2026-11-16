@@ -10,8 +10,10 @@
 //   ring(i)        -> { solid, braces: [Piece per panel], glass (geometry), glow (the hoop's ring of light),
 //                     strips (the deck's lights), outlines: [geometry per panel], targets: [geometry per panel] }
 //                     in the ring's own frame (its near end at z = 0), for the job to stand at DOCK.z0 + i * DOCK.L
-//   collar(), crewModule(), plan()     the port's collar and floodlights; the crew module waiting at the far end; the
+//   collar(), crewModule(), plan()     the port's collar and floodlights; the crew module waiting at the far end (its
+//                     docking ring's lights apart, for the job to colour); the
 //                     bridge's plan, faint (a hoop for every ring and three lines along), to show where it goes
+//   hull(box)      plating over the outside of the station's room round the port (seen from out here)
 //   meshesOf(piece, mats, light)       a piece's parts merged into meshes, one a material, lit by `light(p, n)`
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -136,18 +138,19 @@ export function hull(b) {
 
 // ── the crew module, waiting at the far end (a stand-in: the transport's sealed crew section) ──────────────────────
 export function crewModule() {
-  const p = new Piece(), z = moduleAt(), glow = new Piece();
-  // its docking ring, facing the bridge: charcoal, eight lights round it (red: not docked)
+  const p = new Piece(), z = moduleAt(), glow = new Piece(), lights = new Piece();
+  // its docking ring, facing the bridge: charcoal, eight lights round it (white here: the job colours them, red while
+  // the bridge has not reached it)
   p.add('solid', sweep(circle(0.11, 10), bend([0, DOCK.c, z], DOCK.R + 0.06, [1, 0, 0], [0, 1, 0], 0, 2 * PI, 64), { closed: true }), 'black');
   p.lathe('gun', [[0.001, z - 0.02], [DOCK.R - 0.1, z - 0.02], [DOCK.R + 0.2, z + 0.25], [DOCK.R + 0.2, z + 0.55], [0.001, z + 0.55]], 48, [0, DOCK.c, 0], [PI / 2, 0, 0]);
-  for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * 360, q = at(a, z - 0.08, DOCK.R + 0.06); glow.add('glow', put(bevelBox([0.09, 0.09, 0.03], [0, 0, 0], { r: 0.01 }), q), 'red'); }
+  for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * 360, q = at(a, z - 0.08, DOCK.R + 0.06); lights.add('glow', put(bevelBox([0.09, 0.09, 0.03], [0, 0, 0], { r: 0.01 }), q), [1, 1, 1]); }
   // the drum: a cockpit-and-cabin section lying along the bridge's line, a darker band, a row of lit windows round it
   const D = [[0.001, 0], [1.6, 0], [2.25, 0.3], [2.5, 0.75], [2.5, 4.3], [2.3, 4.9], [1.2, 5.25], [0.001, 5.3]].map(([r, y]) => [r, y + z + 0.55]);
   p.lathe('white', D, 56, [0, DOCK.c, 0], [PI / 2, 0, 0]);
   p.lathe('band', [[2.515, z + 2.0], [2.515, z + 2.7]], 56, [0, DOCK.c, 0], [PI / 2, 0, 0]);
   for (let k = 0; k < 14; k++) { const a = k / 14 * 360 + 6, q = at(a, z + 2.35, 2.53); glow.add('glow', put(bevelBox([0.05, 0.22, 0.42], [0, 0, 0], { r: 0.01 }), q, [0, 0, a * D2R]), 'soft'); }
   for (let k = 0; k < 4; k++) { const a = 45 + k * 90; p.add('solid', put(bevelBox([0.08, 1.4, 2.4], [0, 0, 0], { r: 0.02 }), at(a, z + 3.6, 3.15), [0, 0, (a - 90) * D2R]), 'grey'); }
-  return { solid: p, glow };
+  return { solid: p, glow, lights };
 }
 // the module's lights, for the light (in the bridge's frame)
 export const MODULE_LIGHT = () => ({ at: [0, DOCK.c + 1.6, moduleAt() - 0.4], i: 1.2, color: [1, 0.45, 0.4], reach: 5 });

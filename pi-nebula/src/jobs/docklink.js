@@ -27,7 +27,8 @@ function ensureCss() {
 }
 // how long things take (seconds), and the wobble (metres the far hoop bobs, how fast)
 export const TIMES = { out: 1.0, brace: 0.13, pop: 0.32, lock: 0.75, glass: 0.9, jolt: 0.7, fade: 0.4 };
-export const WOBBLE = { amp: 0.13, hz: 1.25, jolt: 0.22 };
+export const WOBBLE = { amp: 0.3, side: 0.12, hz: 1.1, jolt: 0.3 };
+const SHIP_RED = [1.6, 0.14, 0.1], SHIP_GREEN = [0.25, 2.2, 0.6];
 // the squares a young player braces, as the card shows them: the panels on the camera's side (the near side, the one
 // above it, the top), each with its twin across the tube (kit/dockbridge.js PANELS: 0 the +x side ... 4 the -x side)
 const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
@@ -101,9 +102,11 @@ function make(W, frame) {
     add(root, meshesOf(hull({ x0: lo('x'), x1: hi('x'), y0: lo('y'), y1: hi('y'), z0: lo('z'), z1: Math.min(hi('z'), -0.02) }), mats, light));
   }
   const CM = crewModule(); add(root, [...meshesOf(CM.solid, mats, light), ...meshesOf(CM.glow, mats, light)]);
-  // the plan: faint hoops where the rings will go, three lines along to the ship
+  // (the ship's docking lights: red while the bridge has not reached it; green as the try's end reaches it)
+  const shipLights = mats.glow.clone(); shipLights.color.setRGB(...SHIP_RED); add(root, meshesOf(CM.lights, { glow: shipLights }, light));
+  // the plan: faint hoops where the rings will go (each its own, to light up at the try's end), three lines along
   const planMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.75, 1.3), transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, fog: false });
-  const P = plan(), ghosts = P.hoops.map((g) => new THREE.Mesh(g, planMat));
+  const P = plan(), ghosts = P.hoops.map((g) => new THREE.Mesh(g, planMat.clone()));
   add(root, ghosts); root.add(new THREE.Mesh(P.lines, planMat));
   // the rings
   const outlineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.15, 0.25), transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false, fog: false });
@@ -123,10 +126,12 @@ function make(W, frame) {
     const strips = meshesOf(parts.strips, { glow: stripMat }, lit); add(g, strips);
     const outlines = parts.outlines.map((o) => { const m = new THREE.Mesh(o, outlineMat); m.visible = false; m.renderOrder = 3; g.add(m); return m; });
     const targets = parts.targets.map((t, j) => { const m = new THREE.Mesh(t, hitMat); m.visible = false; m.userData.panel = j; g.add(m); return m; });
+    // (a square's flash as its brace goes in: the panel lit for a moment, so a tap on the card shows on the ring)
+    const flashes = parts.targets.map((t) => { const m = new THREE.Mesh(t, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 2.2, 2.6), transparent: true, opacity: 0, depthWrite: false, toneMapped: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); m.visible = false; m.renderOrder = 4; g.add(m); return m; });
     root.add(g);
-    rings.push({ i, g, braces, glass, glassMat, glow, glowMat, stripMat, outlines, targets });
+    rings.push({ i, g, braces, glass, glassMat, glow, glowMat, stripMat, outlines, targets, flashes });
   }
-  MADE = { root, rings, ghosts, outlineMat, planMat, ms: Math.round(performance.now() - t0) };
+  MADE = { root, rings, ghosts, outlineMat, planMat, shipLights, ms: Math.round(performance.now() - t0) };
   return MADE;
 }
 
@@ -145,11 +150,12 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   // ── the rings' states: off, out (sliding out of the last), wait (asking: wobbling), brace (its braces going in),
   // lock (its glow, glass and lights), done ──────────────────────────────────────────────────────────────────────
   let cur = 0, answered = 0, finished = false, closed = false, clock = 0, order = null, ui = null, endT = -1;
-  const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), jolt: 0, loose: 1, flash: 0 }));
+  const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), fl: new Map(), jolt: 0, loose: 1, flash: 0, pane: false }));
   function reset() {
     cur = 0; answered = 0; finished = false;
-    S.forEach((s, i) => { Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, flash: 0 }); s.braced.clear(); s.pop.clear(); const R = M.rings[i]; R.g.visible = false; R.braces.forEach((b) => { b.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08); });
-    M.ghosts.forEach((g) => { g.visible = true; });
+    S.forEach((s, i) => { Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, flash: 0, pane: false }); s.braced.clear(); s.pop.clear(); s.fl.clear(); const R = M.rings[i]; R.g.visible = false; R.braces.forEach((b) => { b.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.flashes.forEach((f) => { f.visible = false; }); R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08); });
+    M.ghosts.forEach((g) => { g.visible = true; g.material.color.copy(M.planMat.color); g.material.opacity = M.planMat.opacity; });
+    M.shipLights.color.setRGB(...SHIP_RED);
     slideOut(0);
   }
   function slideOut(i) { if (i >= S.length || i >= TRY.rings) return; const s = S[i]; s.state = 'out'; s.t = 0; s.ext = 0; M.rings[i].g.visible = true; M.ghosts[i].visible = false; }
@@ -159,7 +165,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   function brace(k) {
     const s = S[cur]; if (!s || s.state !== 'wait' || !isBrace() || order.played) return false;
     const j = SQUARES[k]; if (j == null || s.braced.has(j)) return false;
-    for (const p of [j, TWIN[j]]) if (p != null && !s.braced.has(p)) { s.braced.add(p); s.pop.set(p, 0); }
+    for (const p of [j, TWIN[j]]) if (p != null && !s.braced.has(p)) { s.braced.add(p); s.pop.set(p, 0); s.fl.set(p, 0); }
     const done = SQUARES.every((x) => s.braced.has(x));
     if (ui) {
       const b = ui.answers.querySelector(`.dkb-sq[data-k="${k}"]`); if (b) { b.classList.add('is-braced'); b.setAttribute('aria-pressed', 'true'); b.disabled = true; }
@@ -202,6 +208,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   function right() {
     const s = S[cur]; if (!s || s.state !== 'wait') return;
     s.state = 'brace'; s.t = 0; s.next = 0.1; s.last = -1;
+    s.pane = !!(order && /^(fit|area)/.test(order.key || ''));   // (a question about the glass: the glass goes in brightly)
     answered++;
     if (answered >= TRY.rings) finished = true;
   }
@@ -231,8 +238,8 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     if (!finished) return null;
     return {
       html: `${head().replace(`Ring ${TRY.rings} of ${TRY.rings}`, 'The try')}
-        <p class="pnj-story dkb-end"><b>That's the try!</b> ${TRY.rings} rings braced and locked.</p>
-        <p class="pnj-story dkb-end2">The whole bridge is ${DOCK.rings} rings, all the way to the ship. Then the docking port opens.</p>`,
+        <p class="pnj-story dkb-end"><b>Three rings built!</b></p>
+        <p class="pnj-story dkb-end2">That's the try. The whole bridge is ${DOCK.rings} rings, out to the ship, and then the docking port opens.</p>`,
       buttons: [{ label: 'Build it again', again: () => reset() }, { label: 'Done' }],
     };
   }
@@ -263,7 +270,9 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
         const f = Math.exp(-4 * s.t) * 9 + 0.9 * ease(k);
         R.glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f);
         R.stripMat.color.setRGB(0.08 + 0.92 * ease(k), 0.08 + 0.92 * ease(k), 0.08 + 0.92 * ease(k));
-        R.glass.visible = true; R.glassMat.opacity = R.glassMat.userData.full * ease(clamp01(s.t / TIMES.glass));
+        // (after a question about the glass, the glass goes in bright and settles; else it fades in)
+        const full = R.glassMat.userData.full, gk = clamp01(s.t / TIMES.glass);
+        R.glass.visible = true; R.glassMat.opacity = s.pane ? full + (0.55 - full) * Math.sin(Math.PI * Math.min(1, gk * 1.15)) : full * ease(gk);
         if (s.t >= Math.max(TIMES.lock, TIMES.glass)) { s.state = 'done'; s.t = 0; cur = i + 1; slideOut(i + 1); }
       }
       // the braces popping in (the ones braced, each from nothing to a little past full and back)
@@ -273,22 +282,28 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
         const k = t >= TIMES.pop ? 1 : back(clamp01(t / TIMES.pop)), mid = b.userData.mid;
         b.scale.setScalar(Math.max(0.001, k)); b.position.copy(mid).multiplyScalar(1 - k);
       });
+      // a square just braced flashes on the ring (the card's tap shown where it builds)
+      R.flashes.forEach((f, j) => { const t = s.fl.get(j); if (t == null) { f.visible = false; return; } const u = t + dt; s.fl.set(j, u); f.visible = u < 0.55; f.material.opacity = 0.75 * Math.max(0, 1 - u / 0.55); if (u >= 0.55) s.fl.delete(j); });
       // the squares still to brace marked (a young player's), pulsing
       R.outlines.forEach((o, j) => { o.visible = s.state === 'wait' && isBrace() && SQUARES.includes(j) && !s.braced.has(j); });
       // the wobble: the far hoop bobbing up and down (the squares folding), less as it is braced; a jolt for a wrong answer
       s.jolt = Math.max(0, s.jolt - dt / TIMES.jolt);
-      const amp = WOBBLE.amp * s.loose + WOBBLE.jolt * s.jolt * s.jolt, k = amp * Math.sin(clock * WOBBLE.hz * 2 * Math.PI + i) + (s.jolt > 0 ? WOBBLE.jolt * s.jolt * Math.sin(clock * 19) : 0);
-      _sh.set(1, 0, 0, 0, 0, 1, k / DOCK.L, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      const ph = clock * WOBBLE.hz * 2 * Math.PI + i, amp = WOBBLE.amp * s.loose, k = amp * Math.sin(ph) + (s.jolt > 0 ? WOBBLE.jolt * s.jolt * Math.sin(clock * 19) : 0), kx = WOBBLE.side * s.loose * Math.sin(ph * 0.5 + 1);
+      _sh.set(1, 0, kx / DOCK.L, 0, 0, 1, k / DOCK.L, 0, 0, 0, 1, 0, 0, 0, 0, 1);
       _sc.makeScale(1, 1, Math.max(0.02, s.ext));
       R.g.matrix.makeTranslation(0, 0, DOCK.z0 + i * DOCK.L).multiply(_sh).multiply(_sc); R.g.matrixWorldNeedsUpdate = true;
     });
     M.outlineMat.opacity = 0.55 + 0.4 * Math.sin(clock * 5);
     // the try done (its last ring locked): the rings' hoops light up one after another, out along the bridge, again
     // and again, while the end card is up
+    // and on along the plan's hoops to the ship, whose docking lights turn green as it gets there (the way to come)
     if (finished && S.every((s, i) => i >= TRY.rings || s.state === 'done')) {
       if (endT < 0) endT = clock;
-      const t = (clock - endT) * 2.2 % (TRY.rings + 2.5);
-      for (let i = 0; i < TRY.rings; i++) { const f = 0.9 + 5 * Math.max(0, 1 - Math.abs(t - i - 0.5) * 1.4); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
+      const n = DOCK.rings, t = (clock - endT) * 4 % (n + 6), near = (i) => Math.max(0, 1 - Math.abs(t - i - 0.5) * 0.9);
+      for (let i = 0; i < TRY.rings; i++) { const f = 0.9 + 5 * near(i); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
+      for (let i = TRY.rings; i < n; i++) { const g = M.ghosts[i].material, f = near(i); g.opacity = 0.4 + 0.6 * f; g.color.setRGB(0.25 + 1.6 * f, 0.75 + 1.6 * f, 1.3 + 1.4 * f); }
+      const at = t >= n && t < n + 3;
+      M.shipLights.color.setRGB(...(at && Math.floor((t - n) * 3) % 2 === 0 ? SHIP_GREEN : SHIP_RED));
     } else endT = -1;
   }
 

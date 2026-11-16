@@ -44,6 +44,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
   ensureCss();
   const el = document.createElement('div');
   el.className = 'pnj';
+  el.dataset.job = job.id;   // (a job's own styles: the dock's, src/jobs/dock.css)
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', job.name);
   el.innerHTML = `<section class="pnj-panel">
@@ -325,7 +326,9 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     helpOn = !!on && !!q;   // (no question, the try's end card: nothing to help with)
     helpEl.hidden = !helpOn; el.classList.toggle('is-help', helpOn);
     helpBtn.setAttribute('aria-pressed', String(helpOn));
-    if (helpOn) { helped = true; helpBtn.classList.remove('is-nudge'); fillHelp(); } else closeSheet();
+    // (help opens under the answers: on a tall card, the dock's with its picture, below the panel's fold, so it is
+    // brought into view)
+    if (helpOn) { helped = true; helpBtn.classList.remove('is-nudge'); fillHelp(); requestAnimationFrame(() => { if (helpOn) helpEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }); } else closeSheet();
     return helpOn;
   }
   helpBtn.addEventListener('click', () => help());

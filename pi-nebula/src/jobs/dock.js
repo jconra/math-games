@@ -82,6 +82,8 @@ export function squareSvg(i = 0) {
     + `<g class="dkb-tris">${poly(t1, 'rgba(169,209,238,.9)')}${poly(t2, 'rgba(169,209,238,.5)')}</g>`
     + `<g class="dkb-frame">${frame([p0, p1, p2, p3], 7, '#d3dbe4', '#f1f4f7')}</g>`
     + `<line class="dkb-brace" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" stroke="${BRACE}" stroke-width="8" stroke-linecap="round" pathLength="1"/>`
+    // (a ripple in the middle, shown on the square to tap next: "tap here", for a child who can't read yet)
+    + '<circle class="dkb-tap" cx="50" cy="50" r="16" fill="none" stroke="#ffd29e" stroke-width="5"/><circle class="dkb-tap2" cx="50" cy="50" r="7" fill="#ffd29e"/>'
     + '</svg>';
 }
 
@@ -145,7 +147,7 @@ function countPicture(n, { numbered = false } = {}) {
   for (let i = 0; i < n; i++) o += seg([x0 + i * s, y1], [x0 + (i + 1) * s, y1]) + seg([x0 + i * s, y0], [x0 + (i + 1) * s, y0]);
   for (let i = 0; i <= n; i++) o += seg([x0 + i * s, y1], [x0 + i * s, y0]);
   o += numbered ? text(W / 2, y1 + 28, 'Count on by 2s: 2, 4, ...', { size: 15 })
-    : text(W / 2 - 16, y1 + 28, `${n} squares, each braced:`, { size: 15 }) + text(W / 2 + 100, y1 + 29, '?', { size: 20, fill: ASK }) + text(W / 2 + 144, y1 + 28, 'triangles', { size: 15 });
+    : text(W / 2 + 34, y1 + 28, `${n} squares, each braced:`, { size: 15, anchor: 'end' }) + text(W / 2 + 50, y1 + 30, '?', { size: 20, fill: ASK }) + text(W / 2 + 64, y1 + 28, 'triangles', { size: 15, anchor: 'start' });
   return svg(150, o);
 }
 // ── kinds of angles: two struts meeting at a joint (Mathwood's numbers) ────────────────────────────────────────────
@@ -176,8 +178,15 @@ function cornerPicture(a, flip, { other = '?', otherFill = ASK } = {}) {
   const x0 = (W - w) / 2, y1 = 138, P = flip ? [[x0 + w, y1], [x0, y1], [x0, y1 - h], [x0 + w, y1 - h]] : [[x0, y1], [x0 + w, y1], [x0 + w, y1 - h], [x0, y1 - h]];
   let s = frame(P) + seg(P[0], P[2], BRACE, 6);
   s += arc(P[0], P[1], P[2], 42) + arc(P[0], P[2], P[3], 30, 'rgba(181,82,58,.22)');
-  s += text(...mid(P[0], P[1], P[2], 60), `${a}°`, { size: 16 }) + text(...mid(P[0], P[2], P[3], 48), other, { size: 18, fill: otherFill });
+  s += angleLabel(P[0], P[1], P[2], 60, `${a}°`, { size: 16 }) + angleLabel(P[0], P[2], P[3], 48, other, { size: 18, fill: otherFill });
   return svg(156, s);
+}
+// an angle's label along its middle, out from V: further out for a narrow angle, so it clears the struts either side
+function angleLabel(V, A, B, r, s, o) {
+  const a0 = Math.atan2(A[1] - V[1], A[0] - V[0]), a1 = Math.atan2(B[1] - V[1], B[0] - V[0]);
+  let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  const rl = Math.min(105, Math.max(r, r * 0.42 / Math.max(0.08, Math.sin(Math.abs(d) / 2)))), m = a0 + d / 2;
+  return text(V[0] + Math.cos(m) * rl, V[1] + Math.sin(m) * rl + 5, s, o);
 }
 
 // ── 4. a triangle pane's glass ─────────────────────────────────────────────────────────────────────────────────
@@ -199,15 +208,20 @@ function areaPicture(b, h, at, { box = false } = {}) {
 function triPicture(pts, labels, ask, { fillAsk = ASK } = {}) {
   // pts: Mathwood's triangle (math frame, y up), fitted to the card
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const s = Math.min(220 / Math.max(1e-6, x1 - x0), 100 / Math.max(1e-6, y1 - y0)), ox = (W - (x1 - x0) * s) / 2, oy = 126;
+  const s = Math.min(250 / Math.max(1e-6, x1 - x0), 112 / Math.max(1e-6, y1 - y0)), ox = (W - (x1 - x0) * s) / 2, oy = 146;
   const P = pts.map((p) => [ox + (p.x - x0) * s, oy - (p.y - y0) * s]);
   let o = poly(P, 'rgba(169,209,238,.8)') + frame(P, 5);
+  const unit = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
   for (let i = 0; i < 3; i++) {
     const V = P[i], A = P[(i + 1) % 3], B = P[(i + 2) % 3];
-    o += arc(V, A, B, 24, i === ask ? 'rgba(181,82,58,.22)' : 'rgba(232,146,42,.28)');
-    o += text(...mid(V, A, B, 44), labels[i], { size: i === ask ? 18 : 15, fill: i === ask ? fillAsk : INK });
+    o += arc(V, A, B, 22, i === ask ? 'rgba(181,82,58,.22)' : 'rgba(232,146,42,.28)');
+    // (its label inside the corner when there is room, else just outside it, past the corner's point)
+    const u = unit([A[0] - V[0] + (B[0] - V[0]) * Math.hypot(A[0] - V[0], A[1] - V[1]) / Math.hypot(B[0] - V[0], B[1] - V[1]), A[1] - V[1] + (B[1] - V[1]) * Math.hypot(A[0] - V[0], A[1] - V[1]) / Math.hypot(B[0] - V[0], B[1] - V[1])]);
+    const ang = Math.acos(Math.max(-1, Math.min(1, ((A[0] - V[0]) * (B[0] - V[0]) + (A[1] - V[1]) * (B[1] - V[1])) / (Math.hypot(A[0] - V[0], A[1] - V[1]) * Math.hypot(B[0] - V[0], B[1] - V[1]))))) * 180 / Math.PI;
+    const at = ang >= 50 ? [V[0] + u[0] * 42, V[1] + u[1] * 42 + 5] : [V[0] - u[0] * 24, V[1] - u[1] * 24 + 6];
+    o += text(at[0], at[1], labels[i], { size: i === ask ? 18 : 15, fill: i === ask ? fillAsk : INK });
   }
-  return svg(150, o);
+  return svg(166, o);
 }
 
 // ── 6. a brace's length across a panel ─────────────────────────────────────────────────────────────────────────
@@ -221,9 +235,10 @@ function diagPicture(w, h, ask) {
 }
 function squaresPicture(a, b, c, ask) {
   const sq = (v) => n0(v * v);
-  const l1 = ask === 'd' ? `${a} × ${a} + ${b} × ${b} = ${sq(a)} + ${sq(b)} = ${sq(c)}` : `${c} × ${c} − ${a} × ${a} = ${sq(c)} − ${sq(a)} = ${sq(b)}`;
-  const l2 = ask === 'd' ? `? × ? = ${sq(c)}` : `? × ? = ${sq(b)}`;
-  return svg(84, text(W / 2, 32, l1, { size: 16 }) + text(W / 2, 64, l2, { size: 17, fill: ASK }));
+  const l1 = ask === 'd' ? `${a} × ${a} + ${b} × ${b}` : `${c} × ${c} − ${a} × ${a}`;
+  const l2 = ask === 'd' ? `= ${sq(a)} + ${sq(b)} = ${sq(c)}` : `= ${sq(c)} − ${sq(a)} = ${sq(b)}`;
+  const l3 = ask === 'd' ? `? × ? = ${sq(c)}` : `? × ? = ${sq(b)}`;
+  return svg(110, text(W / 2, 28, l1, { size: 16 }) + text(W / 2, 56, l2, { size: 16 }) + text(W / 2, 90, l3, { size: 17, fill: ASK }));
 }
 
 // ── the makers ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -241,9 +256,9 @@ export const MAKERS = {
     strand: 'geo', at: () => 4,
     make(step, { rand = Math.random } = {}) {
       const o = ownOrder({
-        key: 'brace', story: 'The new ring wobbles. Its squares can fold flat.', ask: 'Tap each wobbly square to put a brace across it.',
+        key: 'brace', story: 'This new ring is wobbly.', ask: 'Tap each square to brace it.',
         right: { v: 'braced', big: 'Braced', small: '', label: 'Every square braced' }, slips: [],
-        rightWhy: 'Every square is two triangles now. The ring is stiff!',
+        rightWhy: 'Two triangles in every square: the ring is stiff!',
         help: { title: 'Squares fold, triangles don\'t', svg: foldPicture(), line: 'Push on a square\'s corner and it leans over and folds flat. A brace across it, corner to corner, makes two triangles, and a triangle can\'t change its shape.',
           steps: ['Tap a square that wobbles.', 'A brace goes across it, corner to corner: two triangles.', 'Brace every square, and the ring is stiff.'] },
         own: { strand: 'geo', at: 4 }, facts: { squares: TRY.squares },
@@ -446,7 +461,7 @@ export const PLACE = {
 // was on the inner door's step, in its doorway, where no way could reach: the walk there stopped short)
 export const JOB = {
   id: 'dock', name: 'The docking bridge', short: 'Dock', open: true,
-  spot: { place: 'airlock', toward: { place: 'galley' }, out: 5 },
+  spot: { place: 'airlock', toward: { place: 'galley' }, out: 5 }, face: 'airlock',
   sign: 'Docking bridge', hint: 'Build the bridge to the ship: a try',
   place: PLACE, setting: null, makers: MAKERS, card: 'blueprint',
   // the bridge outside the port, the camera on it and the squares to tap: src/jobs/docklink.js (index.js makes it)
