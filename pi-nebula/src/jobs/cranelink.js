@@ -125,7 +125,7 @@ export function craneLink({ crane, W, walls }) {
     if (ghostT > 0) { ghostT -= dt; const a = Math.max(0, Math.min(1, ghostT / 1.2)); dashMat.opacity = 0.85 * a; boxMat.opacity = 0.32 * a; if (tag) tag.material.opacity = a; if (ghostT <= 0) clearGhost(); }
     clock += dt; if (D && D.notes.some((n) => n.key === 'people')) peopleT = clock;
     // (while a card waits for the crane, the moves it makes by itself go twice as quick: the asked ones never)
-    if (D) D.hurry = clock - waitT < 0.4 ? HURRY : 1;
+    if (D) { D.hurry = clock - waitT < 0.4 ? HURRY : 1; D.byHand = false; }   // (no stick: no settling onto places between moves)
   }
   // the view: following the load, kept clear of the panel (left of it on a wide screen, above it on a phone)
   function aim(camera, dt) {
@@ -136,7 +136,7 @@ export function craneLink({ crane, W, walls }) {
   function close() {
     if (closed) return;
     closed = true; clearGhost(); W.scene.remove(ghost); chip.remove();
-    if (crane.drive) crane.drive.hurry = 1;
+    if (crane.drive) { crane.drive.hurry = 1; crane.drive.byHand = true; }
     crane.give();
   }
   const peek = () => (crane.live ? Q.peek() : null), ahead = () => (crane.live ? Q.ahead() : []);

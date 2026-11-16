@@ -306,3 +306,17 @@ test('hurry: the moves the crane makes by itself go quicker while a card waits; 
   assert.ok(plain > 2 && quick < plain * 0.6, JSON.stringify({ plain, quick }));
   assert.ok(Math.abs(askedQuick - plain) < 1e-6, JSON.stringify({ plain, askedQuick }));
 });
+
+test('by hand it settles onto a place nearby as it comes to rest; run by the job (no stick) it stays where its moves leave it', () => {
+  const offBy = (byHand) => {
+    const { S, D } = fresh(); D.byHand = byHand;
+    toShipAndBack(D, S, 0, 0);
+    const x0 = sockets[0].at[0];
+    D.go([{ axis: 'along', to: x0 + 0.5 }]); assert.ok(until(D, () => !D.busy) != null && !D.failed, JSON.stringify(D.failed));
+    run(D, 3);
+    return S.x - x0;
+  };
+  const hand = offBy(true), job = offBy(false);
+  assert.ok(hand < 0.2, 'by hand: settled back toward the socket ' + hand);
+  assert.ok(Math.abs(job - 0.5) < 1e-6, 'run by the job: left where it was ' + job);
+});

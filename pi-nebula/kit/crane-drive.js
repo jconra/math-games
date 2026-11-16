@@ -81,7 +81,9 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   const trail = [];             // where it has been since it was last up and home, for the way back if all else fails
   // (hurry: the crane operator job's moves the crane makes by itself, while the next card waits, are made this many
   // times as quick; never the part of a move a card asked about)
-  const D = { state: S, notes: [], place: null, failed: null, pulling: false, hurry: 1,
+  // (byHand: worked by the stick, so coming to rest it settles onto a place nearby; the crane operator job runs it with
+  // no stick, and it stays exactly where its moves leave it)
+  const D = { state: S, notes: [], place: null, failed: null, pulling: false, hurry: 1, byHand: true,
     get held() { return held; }, get busy() { return auto.length > 0 || !!action; }, get moving() { return auto.length > 0 || !!action || Math.abs(vel.along) + Math.abs(vel.slide) + Math.abs(vel.hoist) > 1e-3; }, get left() { return left; }, get leaving() { return leaving; }, get action() { return action && action.kind; }, get steps() { return auto.length; } };
   const note = (key, text) => { if (!D.notes.some((n) => n.key === key)) D.notes.push({ key, text }); };
 
@@ -485,7 +487,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     // (the last of a set-down, slowly)
     const fl = floorAt(lineup(S, held >= 0, 0.03), held >= 0, true);
     if (fl != null && wantHoist < 0 && S.hoist - fl < 0.35) wantHoist = Math.max(wantHoist, -sp.set.v);
-    const g = lining(push);
+    const g = D.byHand ? lining(push) : ((D.place = lineup(S, held >= 0, DRIVE.capture)), { along: 0, slide: 0, hoist: 0 });
     const tA = clamp(wantAlong + g.along, -sp.travel.v, sp.travel.v), tS = clamp(wantSlide + g.slide, -sp.slide.v, sp.slide.v), tH = clamp(wantHoist + g.hoist, -sp.hoist.v, sp.hoist.v);
     // (speeding up gently, as the round's moves do; braking firmly when the stick is let go or turned back)
     const ease = (v, to, a, brake) => approach(v, to, (to * v < 0 || Math.abs(to) < Math.abs(v) ? brake : a) * dt);
@@ -494,7 +496,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     vel.hoist = ease(vel.hoist, inMouth ? 0 : tH, sp.hoist.a * 2, DRIVE.brake.hoist);
     // (coming to rest near the turntable, it stops on it)
     const off = turnAlong(leg()) - alongOf();
-    if (Math.abs(wantAlong) < 0.05 && Math.abs(off) < 0.25 && Math.abs(vel.along) < 0.5) vel.along = clamp(off * 3, -0.4, 0.4);
+    if (D.byHand && Math.abs(wantAlong) < 0.05 && Math.abs(off) < 0.25 && Math.abs(vel.along) < 0.5) vel.along = clamp(off * 3, -0.4, 0.4);
     for (const ax of ['along', 'slide', 'hoist']) {
       if (Math.abs(vel[ax]) < 1e-6) { vel[ax] = 0; continue; }
       let dv = vel[ax] * dt;
