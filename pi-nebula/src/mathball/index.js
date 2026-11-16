@@ -99,9 +99,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     </header>
     <div class="mbl-tools"><button type="button" class="mbl-help" data-askhelp>Help<kbd>H</kbd></button><button type="button" class="mbl-done">Leave<kbd>Esc</kbd></button></div>
     <div class="mbl-bottom">
-      <div class="mbl-goals" hidden></div>
       <p class="mbl-hint" aria-live="polite"></p>
     </div>
+    <div class="mbl-goals" hidden></div>
     <section class="mbl-card mbl-pick" hidden></section>
     <section class="mbl-card mbl-end" hidden></section>
     <aside class="mbl-helpbox" hidden><header><b>The goals' rules</b><button type="button" class="mbl-hx" aria-label="Close the help (Esc)">&#10005;</button></header><ul></ul><p class="mbl-hhow"></p></aside>`;
