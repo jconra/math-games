@@ -656,12 +656,13 @@ function sealedHatch(acc) {
 //     it stays behind the skin where the skin turns in at the head's fore corner)
 //   - closed all round: the cheeks (the fore one closes the notch under the block when the door is shut, dark as the
 //     lower hull there), the far end, the foot
-// Shut, the walk is a stepped back wall to the pocket, seen from the airlock: nothing of it comes further into the
-// cabin than the old panel's steps did.
-// It is two leaves of one door. The OUTSIDE (the skin, its handle and lamp, and the cheeks) is a `still` leaf: lit with
-// the ship as it stands shut and painted with the ship's own material (kit/layout.js), so the shut door's skin cannot
-// be told from the hull's beside it. The STEPS (the walk, the stringers, the far end, the foot) are an ordinary leaf,
-// lit as a thing that moves, and are what a person walks on.
+// Shut, the walk is a stepped back wall to the pocket, seen from the airlock. Near its foot the shut door stands inside
+// the cabin's wall line, as the old panel did (the hinge line is 15 cm inside it): the landing in the cabin's own
+// doorway, up to 18 cm over the deck; the stringers in the casings each side of that doorway.
+// It is two leaves of one door. The OUTSIDE (the skin, its handle and lamp, the cheeks and the seam's stops) is a
+// `still` leaf: lit with the ship as it stands shut and painted with the ship's own material (kit/layout.js), so the
+// shut door's skin cannot be told from the hull's beside it. The STEPS (the walk, the stringers, the far end, the
+// foot) are an ordinary leaf, lit as a thing that moves, and are what a person walks on.
 export const STAIR = (() => {
   const clear = 0.06, treads = 4, curb = 0.12, inset = 0.06, lane = [1.005, 2.245], P = skinCorners('port');
   // (the open door: how far off the ground its skin's lowest corner is, swung by t)
