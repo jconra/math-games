@@ -14,8 +14,11 @@
 //   mbCanopy     'glass'     the canopy: the panes his picture has (a windscreen, a roof pane, three down each side) in
 //                            smoked glass, one black spar part along every border and round the outline
 //   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps
-//   mbCanister   (8)         an ore canister on its mount: a kit door leaf (door 'canister': slid out off its cradle,
-//                            the station's crane's first move; then up by the lug on its top, CANISTERS.lift)
+//   mbCanister   (8)         an ore canister on its mount: kit door leaves (door 'canister': the canister, the lit
+//                            strip in its level windows and the ring lights round its ends) and the tray it rides out
+//                            on (door 'tray': two flat bars under it, in two stages). Both slide out sideways off the
+//                            mount by CANISTERS.out, the ship's own first move of the swap; the station's crane
+//                            (kit/crane.js) takes the canister from there by the lug on its top (CANISTERS.lift)
 //   mbArm        'port' / 'starboard'   a mining arm: its mount on the cheek, and the upper arm, forearm and its tool as
 //                            leaves of one door ('arm': 0 STOWED against the hull, 1 reaching). One arm's tool is a
 //                            CLAW (ARMS.claw's side; one of CLAWS: its wrist, palm and hinged fingers), the other's
@@ -263,19 +266,83 @@ function strap(acc, z, R) {
     for (const [zz, sz] of [[z - w / 2, -1], [z + w / 2, 1]]) acc.poly([P(i, zz, R - 0.02), P(i + 1, zz, R - 0.02), P(i + 1, zz, r1), P(i, zz, r1)], V3(0, 0, sz), PAL.yellow, 'solid', 99);
   }
 }
+// HOW FULL IT IS, the game's maker's picks from the canister looks (2026-11-15: "I like the level windows. The ring
+// lights are cool for the canisters regardless"): a LEVEL WINDOW down each side (a dark housing between the straps, a
+// lit strip in it as long as the canister is full: the smelter's crane makes it shorter as the ore drains), and a RING
+// LIGHT round each end (amber full, blue empty). The housing is part of the canister; the strip and the rings are
+// leaves of their own (they change), 'full' or 'empty' as they stand before anything changes them.
+//   MARKS.win: the window's half length along the canister and half height; glow: the lit colours (linear)
+export const MARKS_CAN = { win: { half: 0.56, h: 0.085, out: 0.03 }, ring: { r: 0.385, tube: 0.026, z: CANISTER_AT.half - 0.06, n: 16, m: 4 },
+  glow: { ore: [1.9, 0.5, 0.04], off: [0.03, 0.034, 0.04], amber: [2.0, 0.72, 0.04], blue: [0.1, 0.55, 2.2] } };
+const WIN_DARK = s('#0e1013', 0.2, 0.3, 0), I3 = (v) => v;
 function canisterLeaf(lp) {
-  const acc = new Acc(), R = CANISTER_AT.R;
+  const acc = new Acc(), R = CANISTER_AT.R, W = MARKS_CAN.win;
   drawKinds(acc, kindFaces(CANISTER), (F) => CAN_PAINT[F.kind], (v) => v);
   for (const z of STRAPS.at) strap(acc, z, R);
   // (the lug the crane hooks: a dark block with a yellow eye on the canister's top, at its middle)
   C.boxAt(acc, V3(0, R + 0.04, 0), AX, [0.09, 0.05, 0.16], PAL.dark, ['v-'], (v) => v);
   C.boxAt(acc, V3(0, R + 0.13, 0), AX, [0.025, 0.05, 0.09], PAL.yellow, ['v-'], (v) => v);
+  // (the level windows' housings, one each side: a dark frame standing a little out of the body, a darker pane in it)
+  for (const sx of [1, -1]) {
+    C.boxAt(acc, V3(sx * (R - 0.02), 0, 0), AX, [W.out + 0.02, W.h + 0.05, W.half + 0.06], PAL.dark, [sx > 0 ? 'u-' : 'u+'], I3);
+    const x = sx * (R + W.out + 0.005);
+    acc.poly([V3(x, -W.h, -W.half * sx), V3(x, -W.h, W.half * sx), V3(x, W.h, W.half * sx), V3(x, W.h, -W.half * sx)], V3(sx, 0, 0), WIN_DARK, 'solid', 99);
+  }
   acc.flush(lp);
 }
+// (the lit strip in each window, from one end of it to the other: a leaf of its own, so it can be made shorter)
+const levelLeaf = (col) => (lp) => {
+  const acc = new Acc(), R = CANISTER_AT.R, W = MARKS_CAN.win;
+  for (const sx of [1, -1]) { const x = sx * (R + W.out + 0.014); acc.poly([V3(x, -W.h, -W.half * sx), V3(x, -W.h, W.half * sx), V3(x, W.h, W.half * sx), V3(x, W.h, -W.half * sx)], V3(sx, 0, 0), col, 'glow', 99); }
+  acc.flush(lp);
+};
+// (the ring light round each end: a slim ring standing just off the end's slope)
+const ringsLeaf = (col) => (lp) => {
+  const acc = new Acc(), G = MARKS_CAN.ring, n = G.n, m = G.m;
+  for (const sz of [1, -1]) for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+    const P = (a, b) => { const t = (a / n) * PI * 2, u = (b / m) * PI * 2, r = G.r + Math.cos(u) * G.tube; return V3(Math.cos(t) * r, Math.sin(t) * r, sz * (G.z + Math.sin(u) * G.tube)); };
+    const t = ((i + 0.5) / n) * PI * 2, u = ((j + 0.5) / m) * PI * 2;
+    acc.poly([P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)], V3(Math.cos(t) * Math.cos(u), Math.sin(t) * Math.cos(u), sz * Math.sin(u)), col, 'glow', 99);
+  }
+  acc.flush(lp);
+};
+// A canister's leaves, for any piece that carries one (the ship's mounts here; the smelter's rack of empties,
+// kit/smelter.js): the canister itself, its level strips and its ring lights, all on the door `door`. look: 'full' or
+// 'empty' (how its strips and rings stand before the crane's cycle changes them).
+export function canisterLeaves(p, { at, rot = [0, 0, 0], slide = [0, 0, 0], door = 'canister', look = 'full' } = {}) {
+  const G = MARKS_CAN.glow, full = look !== 'empty', o = { at, rot, slide, door };
+  p.leaf('mb:canister', canisterLeaf, o);
+  p.leaf(full ? 'mb:canlevel' : 'mb:canlevel:empty', levelLeaf(full ? G.ore : G.off), o);
+  p.leaf(full ? 'mb:canrings' : 'mb:canrings:empty', ringsLeaf(full ? G.amber : G.blue), o);
+}
+// THE TRAY each canister rides out on: the ship's own part of the swap. A canister cannot be lifted straight off its
+// mount (the row above stands over it), and nothing reaching down from a crane can get round it there, so the mount
+// hands it out: two flat bars under it between its saddles, in two stages, slide out sideways by CANISTERS.out with
+// the canister on them (door 'tray', heavy: slowly, gently at both ends), the crane takes it from there, and the bars
+// slide home. Drawn in the mount's frame turned so +x is away from the hull; the canister's middle at the origin.
+export const TRAY = { z: 0.3, w: 0.09, half: 0.45, y0: -CANISTER_AT.R - 0.065, y1: -CANISTER_AT.R - 0.008, first: 0.45, secs: 5 };
+const trayLeaf = (stage) => (lp) => {
+  const acc = new Acc(), T = TRAY;
+  for (const sz of [1, -1]) {
+    if (stage === 1) C.boxAt(acc, V3(0, T.y0 - 0.02, sz * T.z), AX, [T.half, 0.02, T.w / 2 + 0.03], PAL.metal, [], I3);                // (the outer bar: a flat channel)
+    else {
+      C.boxAt(acc, V3(0, (T.y0 + T.y1) / 2, sz * T.z), AX, [T.half, (T.y1 - T.y0) / 2, T.w / 2], PAL.dark, [], I3);                   // (the inner bar the canister sits on)
+      for (const sx of [1, -1]) C.boxAt(acc, V3(sx * 0.3, T.y1 + 0.03, sz * T.z), AX, [0.045, 0.03, T.w / 2], PAL.rubber, ['v-'], I3);   // (its pads, either side of the canister's lowest line)
+      C.boxAt(acc, V3(T.half - 0.03, (T.y0 + T.y1) / 2, sz * T.z), AX, [0.03, (T.y1 - T.y0) / 2 + 0.004, T.w / 2 + 0.004], PAL.yellow, [], I3);   // (a yellow tip)
+    }
+  }
+  if (stage === 2) C.boxAt(acc, V3(-TRAY.half + 0.05, (T.y0 + T.y1) / 2, 0), AX, [0.04, (T.y1 - T.y0) / 2 - 0.006, T.z], PAL.dark, [], I3);   // (a tie between the two bars, at the hull's end)
+  acc.flush(lp);
+};
 function mbCanister(p, name) {
-  const S = CANISTERS.spots.find((q) => q.name === name), c = dk(V3(...S.at));
-  p.leaf('mb:canister', canisterLeaf, { at: c.toArray(), rot: [0, S.turn ? PI : 0, 0], slide: [Math.sign(S.at[0]) * CANISTERS.out, 0, 0], door: 'canister' });
-  p.door('canister', c.toArray(), 0, 0.5);
+  const S = CANISTERS.spots.find((q) => q.name === name), c = dk(V3(...S.at)), out = Math.sign(S.at[0]);
+  canisterLeaves(p, { at: c.toArray(), rot: [0, S.turn ? PI : 0, 0], slide: [out * CANISTERS.out, 0, 0], door: 'canister' });
+  p.door('canister', c.toArray(), 0, 1 / TRAY.secs, true);
+  // (the tray under it: its outer bars come out part of the way, its inner bars all the way)
+  const o = { at: c.toArray(), rot: [0, out > 0 ? 0 : PI, 0], door: 'tray' };
+  p.leaf('mb:tray1', trayLeaf(1), { ...o, slide: [out * TRAY.first, 0, 0] });
+  p.leaf('mb:tray2', trayLeaf(2), { ...o, slide: [out * CANISTERS.out, 0, 0] });
+  p.door('tray', c.toArray(), 0, 1 / TRAY.secs, true);
   return p;
 }
 

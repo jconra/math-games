@@ -221,7 +221,7 @@ export function buildRoom(room, mats, opts = {}) {
     for (const part of lp.parts) (byMat[part.mat] ||= []).push(part.geo.clone());
     const geos = {}; for (const [k, gs] of Object.entries(byMat)) geos[k] = mergeGeometries(gs, false);
     const self = Object.entries(geos).filter(([k]) => BAKED.has(k)).map(([, g]) => g);
-    bake(self, self, [], { voxel: 0.02, reach: 0.25, strength: 0.6 });
+    if (self.length) bake(self, self, [], { voxel: 0.02, reach: 0.25, strength: 0.6 });   // (a leaf may be only light: a lamp, a display's strokes)
     const meshes = [];
     for (const [k, g] of Object.entries(geos)) {
       const im = new THREE.InstancedMesh(g, mats[k + 'Inst'] || mats[k], G.list.length); im.name = key + ':' + k; im.frustumCulled = false; im.castShadow = k !== 'glass'; im.receiveShadow = true;
