@@ -1,12 +1,13 @@
 // THE HELP PICTURES for a job's question. Mathwood Valley's own drawings for its makers' questions (src/ui/counterpics.js
 // counterPicture, which falls back to src/ui/storepics.js: equal groups, sharing out, the ratio table, the ratio bar,
 // the things to count), and this game's few for its own makers (the recipe's batches of cups, the drip bag hour by
-// hour, an hour of drops; the smelter's canisters to count, a load cut into equal parts, tonne by tonne at a price,
-// down the pay slip), drawn the same way: on a light card, the numbers given, the answer always a "?". A job's own
+// hour, an hour of drops; the smelter's canisters to count, a load cut into equal parts, canisters of ore each cut
+// into parts of a tonne, tonne by tonne at a price, down the pay slip), drawn the same way: on a light card, the numbers given, the answer always a "?". A job's own
 // order can also name one of Mathwood's pictures (order.pic) and give it its own title and line (order.help).
 //   helpPicture(order) -> { svg, title, line }
 import { counterPicture } from '../../../mathwood-valley/src/ui/counterpics.js';
 import { fracText } from '../../../mathwood-valley/src/levels/kit.js';
+import { partsWord } from '../../../mathwood-valley/labs/fishing/frac.js';
 
 const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', ASK = '#b5523a', BLUE = '#6fa8d6', W = 360;
 const AMBER = '#e8922a', DARK = '#3a3f46', STEEL = '#c3c7cc', COOL = '#4d8fd6';
@@ -116,6 +117,25 @@ Object.assign(DRAW, {
     s += text(W / 2, 104, `${n}/${d} = the ${n === 1 ? 'shaded part' : `${n} shaded parts`}: ?`, { size: 14, fill: ASK, weight: 800 });
     return { svg: svg(114, s), line: '' };
   },
+  // canisters of ore (a whole number of canisters times a fraction of a tonne): each canister drawn with its body cut
+  // across in d equal parts, its a parts of ore shaded amber; up to four to a row. Under them: how many parts make a
+  // tonne, and so many lots of a/d of a tonne, the answer a "?"
+  orecans({ n, a, d, what = 'ore' }) {
+    const cols = Math.min(4, n), rows = Math.ceil(n / cols), cw = 72, ch = 28, dx = 84, dy = 40, x0 = W / 2 - dx * (cols - 1) / 2, y0 = 40;
+    let s = text(W / 2, 16, `in each canister: ${a}/${d} of a tonne of ${what}`, { size: 12.5, fill: SOFT });
+    for (let i = 0; i < n; i++) {
+      const cx = x0 + (i % cols) * dx, cy = y0 + Math.floor(i / cols) * dy, x = cx - cw / 2, y = cy - ch / 2, pw = (cw - 14) / d;
+      s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw}" height="${ch}" rx="9" fill="${STEEL}" stroke="${INK}" stroke-width="1.3"/>`
+        + `<rect x="${(x + 3).toFixed(1)}" y="${y.toFixed(1)}" width="3" height="${ch}" fill="${AMBER}"/><rect x="${(x + cw - 6).toFixed(1)}" y="${y.toFixed(1)}" width="3" height="${ch}" fill="${AMBER}"/>`;
+      for (let k = 0; k < d; k++) {
+        s += `<rect x="${(x + 7 + k * pw).toFixed(1)}" y="${(y + 4).toFixed(1)}" width="${(pw - 1.4).toFixed(1)}" height="${ch - 8}" rx="1.5" fill="${k < a ? AMBER : '#fff'}" stroke="${INK}" stroke-width="0.8"/>`;
+      }
+    }
+    const yb = y0 + (rows - 1) * dy + ch / 2 + 22;
+    s += text(W / 2, yb, `${d} ${partsWord(d)} make one tonne`, { size: 12.5, fill: SOFT });
+    s += text(W / 2, yb + 22, `${n} lots of ${a}/${d} of a tonne = ? tonnes`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(yb + 32, s), line: '' };
+  },
   // tonnes at a price: a box for every whole tonne with what it pays, a shorter one for the part of a tonne
   paybars({ w, price }) {
     const whole = Math.floor(w / 10), part = w % 10, shown = Math.min(whole, 4), more = whole - shown, bw = 62, mw = 78, pw = part ? 34 + 3 * part : 0;
@@ -129,11 +149,12 @@ Object.assign(DRAW, {
     return { svg: svg(118, s), line: '' };
   },
   // down the pay slip: the ore, the part of it that is metal, what that pays; each a "?" until it is worked out
-  payslip({ n, w, pct, metal, price }) {
+  // (each: what one canister holds as written on the slip, "3/4" for a haul's ore; else w, in tenths of a tonne)
+  payslip({ n, w, each = null, pct, metal, price }) {
     const bx = [10, 128, 246], bw = 104, t1 = (x) => String(x / 10);
     const box = (i, top, mid, bot) => `<rect x="${bx[i]}" y="20" width="${bw}" height="62" rx="5" fill="${i === 2 ? FILL2 : '#fff'}" stroke="${i === 2 ? ASK : INK}" stroke-width="1.3"/>`
       + text(bx[i] + bw / 2, 37, top, { size: 11, fill: SOFT }) + text(bx[i] + bw / 2, 57, mid, { size: 13.5, weight: 800 }) + text(bx[i] + bw / 2, 75, bot, { size: 12, fill: ASK, weight: 800 });
-    let s = box(0, '1. the ore', `${n} × ${t1(w)}`, '= ? tonnes') + box(1, `2. the ${metal}`, `${pct}% of it`, '= ? tonnes') + box(2, '3. the pay', `× ${price}`, '= ? credits');
+    let s = box(0, '1. the ore', `${n} × ${each || t1(w)}`, '= ? tonnes') + box(1, `2. the ${metal}`, `${pct}% of it`, '= ? tonnes') + box(2, '3. the pay', `× ${price}`, '= ? credits');
     for (const x of [116, 234]) s += `<path d="M${x} 51h8m-4 -4l4 4l-4 4" fill="none" stroke="${SOFT}" stroke-width="1.6"/>`;
     return { svg: svg(92, s), line: '' };
   },

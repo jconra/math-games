@@ -125,9 +125,10 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       return `<header class="pnj-cardtop is-order"><span class="pnj-icon is-hook" aria-hidden="true"></span><b>Work order</b><small>${now ? 'The crane, right now' : 'From the log'}</small></header>`;
     }
     if (job.card === 'payslip') {
-      // (a count taken from the hangar as the slip was made says so; any other slip is someone's load from the log)
-      const now = !!(o.facts && o.facts.live);
-      return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>${now ? 'The hangar, right now' : who ? `${esc(who.name)}'s load` : 'From the log'}</small></header>`;
+      // (a count taken from the hangar as the slip was made says so; a slip may say what it is about, "This haul"; any
+      // other slip is someone's load from the log)
+      const now = !!(o.facts && o.facts.live), from = o.facts && o.facts.from;
+      return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>${from ? esc(from) : now ? 'The hangar, right now' : who ? `${esc(who.name)}'s load` : 'From the log'}</small></header>`;
     }
     return `<header class="pnj-cardtop is-recipe"><span class="pnj-icon is-pot" aria-hidden="true"></span><b>Galley order</b><small>${who ? `from ${esc(who.name)}` : 'Recipe card'}</small></header>`;
   }
