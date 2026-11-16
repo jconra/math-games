@@ -269,13 +269,17 @@ function headOf(c, P) {
   // throat; a soft chin: 12 mm lower). The chin's foremost point: within 25 mm above that; its underside: the lowest
   // height where the front is still within 12 mm of that foremost point. Read from the top down, so a nod, which
   // swings the throat about under the head, changes nothing. (Checked against the Tripo heads' own Chin bones.)
+  // (2026-11-16: every one of those lengths is the head's own, so a head worn sized (kit/crew.js THE HEAD'S PLACE: size)
+  // is read by them sized alike, k: at 1.12 the step back under t6's lower lip had grown past 15 mm in 6 and was taken
+  // for the chin, 5 cm too high. A head as made: k 1, every length as it was)
+  const k = c.place && +c.place.size > 0 ? +c.place.size : 1, mm = (v) => Math.round(v * k);
   let nose = nb - 1; for (let b = 0; b < nb; b++) if (zf[b] > zf[nose]) nose = b;
   let cliff = -1;
-  for (const drop of [6, 12]) { for (let b = nose - 30; b > Math.max(drop + 1, nose - 115) && cliff < 0; b--) if (zf[b] > -Infinity && zf[b - drop] > -Infinity && zf[b] - zf[b - drop] > 0.015) cliff = b; if (cliff >= 0) break; }
+  for (const drop0 of [6, 12]) { const drop = mm(drop0); for (let b = nose - mm(30); b > Math.max(drop + 1, nose - mm(115)) && cliff < 0; b--) if (zf[b] > -Infinity && zf[b - drop] > -Infinity && zf[b] - zf[b - drop] > 0.015 * k) cliff = b; if (cliff >= 0) break; }
   let chin = null;
   if (cliff >= 0) {
-    let bp = cliff; for (let b = cliff; b <= Math.min(nose - 15, cliff + 25); b++) if (zf[b] > zf[bp]) bp = b;
-    let bm = bp; for (let b = bp; b >= Math.max(0, cliff - 14); b--) { if (zf[b] >= zf[bp] - 0.012) bm = b; else break; }
+    let bp = cliff; for (let b = cliff; b <= Math.min(nose - mm(15), cliff + mm(25)); b++) if (zf[b] > zf[bp]) bp = b;
+    let bm = bp; for (let b = bp; b >= Math.max(0, cliff - mm(14)); b--) { if (zf[b] >= zf[bp] - 0.012 * k) bm = b; else break; }
     chin = [xc, y0 + bm * 0.001, zf[bm]];
   }
   const chinBone = c.bones.Chin ? c.bones.Chin.getWorldPosition(new THREE.Vector3()).applyMatrix4(HF).toArray() : null;
