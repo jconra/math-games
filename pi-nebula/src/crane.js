@@ -278,9 +278,11 @@ export function makeCrane({ W, walls, boarding = null }) {
   function scare(D, people) {
     const S = D.state, c = D.cfg();
     if (D.underside(c) > DRIVE.low) return;
-    const who = D.under(c, D.held >= 0, RULES.scare);
-    if (!who) return;
-    const sent = people.flee(S.x, S.z, 2.2 + (D.held >= 0 ? 1.0 : 0));
+    // (anyone, standing or walking, on the patch under the load: the canister's length along it, its width across)
+    const held = D.held >= 0, yaw = held ? S.yaw + (S.cans[D.held].rel || 0) : S.yaw, ex = (held ? site.can.half : site.dims.grip.half) + RULES.scare, ac = 0.6 + RULES.scare;
+    const under = people.list.some((P) => !P.hidden && P.pos.y < RULES.head && Math.abs((P.pos.x - S.x) * Math.sin(yaw) + (P.pos.z - S.z) * Math.cos(yaw)) < ex && Math.abs((P.pos.x - S.x) * Math.cos(yaw) - (P.pos.z - S.z) * Math.sin(yaw)) < ac);
+    if (!under) return;
+    const sent = people.flee(S.x, S.z, ex + 0.4);
     if (sent.length) C.violation = { at: performance.now(), n: sent.length, who: sent.map((P) => P.name || P.id) };
   }
   function goLive() {

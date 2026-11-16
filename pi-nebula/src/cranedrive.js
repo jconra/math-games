@@ -184,7 +184,9 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     const mv = input && input.move;
     if (!(mv && mv.mag)) ahead = null;
     else if (!ahead) ahead = screenAhead(W.camera);
-    crane.command({ move: squarePush(pushFrom(W.camera, mv, ahead)), hoist: (up ? 1 : 0) - (down ? 1 : 0), turn: (cw ? 1 : 0) - (ccw ? 1 : 0) });
+    // (a rig's own hand on the stick: a station-plane command each frame, in place of the keys and the stick)
+    if (api.pilot) crane.command(api.pilot(D) || {});
+    else crane.command({ move: squarePush(pushFrom(W.camera, mv, ahead)), hoist: (up ? 1 : 0) - (down ? 1 : 0), turn: (cw ? 1 : 0) - (ccw ? 1 : 0) });
     crane.places = placeLights(D);
     show(D, D.read());
   }
@@ -200,7 +202,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     for (const k of ['x', 'y', 'h']) { const dd = el.querySelector(`[data-a="${k}"]`), look = (r.aids && r.aids[k]) || 'off', h = dot(look); if (dd.dataset.look !== look) { dd.dataset.look = look; dd.innerHTML = h; } }
     // the joke: a load brought low over someone, and they ran
     const v = crane.violation;
-    if (v && v !== lastViol) { lastViol = v; violations++; noticeT = t; const n = $('.pcd-notice'); n.innerHTML = `<b>Safety violation!</b><span>${v.n === 1 ? `You swung a load over ${esc(v.who[0] || 'someone')}. They ran for it.` : `You swung a load over ${v.n} people. They ran for it.`}</span><small>Violations today: ${violations}</small>`; n.hidden = false; n.classList.remove('is-pop'); void n.offsetWidth; n.classList.add('is-pop'); }
+    if (v && v !== lastViol) { lastViol = v; violations++; noticeT = t; const n = $('.pcd-notice'); n.innerHTML = `<b>Safety violation!</b><span>${v.n === 1 ? `You swung a load over ${esc((v.who[0] || 'someone').replace(/^(A|An|The) /, (m) => m.toLowerCase()))}. They ran for it.` : `You swung a load over ${v.n} people. They ran for it.`}</span><small>Violations today: ${violations}</small>`; n.hidden = false; n.classList.remove('is-pop'); void n.offsetWidth; n.classList.add('is-pop'); }
     if (!$('.pcd-notice').hidden && t - noticeT > 4.5) $('.pcd-notice').hidden = true;
     // the hint: what it would not do just now, else what to do next
     const n = D.notes.find((q) => q.key !== 'people');
@@ -230,7 +232,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   }
   requestAnimationFrame(() => el.classList.add('is-on'));
   showView();
-  return { el, update, aim, close, cam, act, get view() { return VIEWS[view]; }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations }) };
+  const api = { el, update, aim, close, cam, act, pilot: null, get view() { return VIEWS[view]; }, setView(n) { const i = VIEWS.indexOf(n); if (i >= 0) { view = i; cam.fresh(); } }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations }) };
+  return api;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -246,6 +249,7 @@ export function chairFrame(W) {
   }
   return null;
 }
+const CHAIR_R = 1.12, CHAIR_STEP = 0.44;   // (kit/smelter.js CHAIR: the curve of screens' radius, the turn between two)
 export function chairScreen(W, crane, chair = chairFrame(W)) {
   if (!chair) return { update() {} };
   const cv = document.createElement('canvas'); cv.width = 512; cv.height = 336;
@@ -275,9 +279,35 @@ export function chairScreen(W, crane, chair = chairFrame(W)) {
     });
     tex.needsUpdate = true;
   }
+  // THE CAMERAS ON THE CHAIR'S SCREENS (the game's maker: "It would be awesome if those camera views could be on that
+  // display if you were just sitting there"): the screens either side of the middle one show a wall camera and the
+  // crane's own looking down, live: small pictures, one of them drawn again every few frames, and only while the
+  // chair is in view close by (nothing at all otherwise)
+  const views = [-1, 1].map((k, n) => {
+    const rt = new THREE.WebGLRenderTarget(320, 208, { type: THREE.HalfFloatType });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.365), new THREE.MeshBasicMaterial({ map: rt.texture }));
+    const a = k * CHAIR_STEP, R = CHAIR_R;
+    const block = new THREE.Matrix4().makeRotationY(a + Math.PI).setPosition(Math.sin(a) * R, 0, Math.cos(a) * R);
+    const local = new THREE.Matrix4().makeRotationX(-tilt).setPosition(0, 0.83 + 0.024 * Math.sin(tilt) + 0.006 * nx, -0.02 + 0.024 * Math.cos(tilt) + 0.006 * -nz);
+    m.matrixAutoUpdate = false; m.matrix.copy(block).multiply(local); holder.add(m);
+    return { rt, mesh: m, cam: new THREE.PerspectiveCamera(70, 320 / 208, 0.05, 90), name: n ? 'crane' : 'miner-cam-sw' };
+  });
+  let turn = 0, frame = 0;
+  const _cp = new THREE.Vector3();
+  function drawViews() {
+    const C = W.camera; holder.updateMatrixWorld(); _cp.setFromMatrixPosition(holder.matrixWorld);
+    if (!holder.parent || C.position.distanceTo(_cp) > 7 || (C.view && C.view.enabled)) return;
+    if (++frame % 6) return;
+    const v = views[turn = (turn + 1) % views.length], c = crane.cams().find((q) => q.name === v.name); if (!c) return;
+    v.cam.position.copy(c.at); if (c.down) v.cam.up.set(0, 0, -1); else v.cam.up.set(0, 1, 0); v.cam.lookAt(c.look); v.cam.fov = c.fov || 70; v.cam.updateProjectionMatrix();
+    const R2 = W.renderer, was = R2.getRenderTarget(), fog = W.scene.fog;
+    R2.setRenderTarget(v.rt); R2.render(W.scene, v.cam); R2.setRenderTarget(was);
+    W.scene.fog = fog;
+  }
   return {
-    mesh,
+    mesh, views,
     update(dt) {
+      if (crane && crane.on) drawViews();
       wait -= dt; if (wait > 0) return; wait = 0.25;
       if (!crane || !crane.on) return;
       let r;

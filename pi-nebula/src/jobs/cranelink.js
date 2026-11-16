@@ -206,15 +206,18 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const r = freeRect(), F = frameOf(), w = F.x1 - F.x0 + TOP.margin * 2, h = F.y1 - F.y0 + TOP.margin * 2;
     const k = Math.min(r.w / w, r.h / h);
     const [gx, gy] = [(F.x0 + F.x1) / 2, (F.y0 + F.y1) / 2], [X, Z] = fromGrid(site, gx, gy);
-    // (the free part's middle is off the screen's middle: the camera's middle moves the other way)
-    const ox = r.x + r.w / 2 - innerWidth / 2, oy = r.y + r.h / 2 - innerHeight / 2;
-    top.k = k; top.cx = X - ox / k; top.cz = Z - oy / k; top.rect = r; top.on = true;
+    // (the free part's middle is off the screen's middle: the picture is shifted there, the camera itself staying over
+    // the hangar, so the station still knows the hangar is the room being looked at)
+    const ox = Math.round(r.x + r.w / 2 - innerWidth / 2), oy = Math.round(r.y + r.h / 2 - innerHeight / 2);
+    top.k = k; top.cx = X; top.cz = Z; top.ox = ox; top.oy = oy; top.rect = r; top.on = true;
     const fov = 2 * Math.atan(innerHeight / k / 2 / TOP.height) * 180 / Math.PI;
     camera.up.set(0, 0, -1); camera.position.set(top.cx, TOP.height, top.cz); camera.lookAt(top.cx, 0, top.cz); camera.up.set(0, 1, 0);
+    const vo = camera.view;
+    if (!vo || !vo.enabled || vo.offsetX !== -ox || vo.offsetY !== -oy || vo.fullWidth !== innerWidth || vo.fullHeight !== innerHeight) camera.setViewOffset(innerWidth, innerHeight, -ox, -oy, innerWidth, innerHeight);
     if (Math.abs(camera.fov - fov) > 1e-6 || camera.near !== TOP.height - TOP.over) { camera.fov = fov; camera.near = TOP.height - TOP.over; camera.far = TOP.height + 2; camera.updateProjectionMatrix(); }
     crane.view = 'top';
   }
-  const SX = (X) => innerWidth / 2 + (X - top.cx) * top.k, SY = (Z) => innerHeight / 2 + (Z - top.cz) * top.k;
+  const SX = (X) => innerWidth / 2 + top.ox + (X - top.cx) * top.k, SY = (Z) => innerHeight / 2 + top.oy + (Z - top.cz) * top.k;
   const gsx = (gx) => SX(fromGrid(site, gx, 0)[0]), gsy = (gy) => SY(fromGrid(site, 0, gy)[1]);
   function drawGrid() {
     const dpr = Math.min(2, devicePixelRatio || 1), w = innerWidth, h = innerHeight;
@@ -327,6 +330,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const busy = D && D.busy;
     if (v === 'grid' && !busy && !moving && crane.mode !== 'landing') { aimTop(camera); return; }
     top.on = false; crane.view = null;
+    if (camera.view && camera.view.enabled) camera.clearViewOffset();
     if (camera.near !== 0.03 || camera.far !== 120) { camera.near = 0.03; camera.far = 120; camera.updateProjectionMatrix(); }
     const shift = innerHeight > innerWidth * 1.05 || innerWidth <= 640 ? [0, -0.22] : [0.18, 0];
     if (v === 'grid' && film) { filmCam(camera, S, dt, shift); return; }
@@ -376,6 +380,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     closed = true; removeEventListener('keydown', onKey, true);
     strip.remove(); cv.remove();
     crane.target = null; crane.places = []; crane.view = null;
+    if (W.camera.view && W.camera.view.enabled) W.camera.clearViewOffset();
     W.camera.near = 0.03; W.camera.far = 120; W.camera.updateProjectionMatrix();
     if (crane.drive) { crane.drive.hurry = 1; crane.drive.byHand = true; crane.drive.rules.people = false; crane.drive.aimAt = null; if (!keep) crane.drive.stop(); }
     if (!keep) crane.give();
