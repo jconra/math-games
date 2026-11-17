@@ -16,6 +16,8 @@
 .pnj button, .pnj-prompt button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 .pnj :focus-visible, .pnj-prompt :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .pnj kbd, .pnj-prompt kbd { font: 700 10px/1 inherit; font-family: inherit; letter-spacing: 0.06em; padding: 3px 5px; margin-left: 8px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); color: var(--dim); vertical-align: 2px; }
+/* (no keyboard on a touch screen: its keys' letters left off) */
+@media (hover: none) and (pointer: coarse) { .pnj kbd, .pnj-prompt kbd { display: none; } }
 
 /* ── the panel ─────────────────────────────────────────────────────────────────────────────────────────────── */
 .pnj { position: fixed; inset: 0; z-index: 25; pointer-events: none; }

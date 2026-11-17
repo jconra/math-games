@@ -152,7 +152,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const dots = Array.from({ length: check.of }, (_, i) => `<i class="${i < check.n ? 'is-done' : ''}"></i>`).join('');
     const key = `${check.n}|${ph}|${where}|${check.verified}|${crane.mode}`;
     if (key === stripKey) return; stripKey = key;
-    $('.pcg-check').innerHTML = `<span class="pcg-dots" aria-label="Check ${Math.min(check.n + 1, check.of)} of ${check.of}">${dots}</span><small>${esc(PHASE[ph] || '')}${where ? ': ' + esc(where) : ''}</small>`;
+    // (two lines, two counts: this check's answers as dots, then how far the round's part has got)
+    $('.pcg-check').innerHTML = `<span class="pcg-answers"><em>Check</em><span class="pcg-dots" aria-label="Answer ${Math.min(check.n + 1, check.of)} of ${check.of}">${dots}</span></span><small>${esc(PHASE[ph] || '')}${where ? ': ' + esc(where) : ''}</small>`;
     $('.pcg-fault').textContent = crane.mode === 'landing' ? 'The Miner is landing: stand by' : check.verified ? `Crane operations verified (${check.verified}). Checking again` : 'Fault reported: please verify crane operations';
   }
   function banner(text) { const b = $('.pcg-banner'); b.innerHTML = text; b.hidden = false; b.classList.remove('is-pop'); void b.offsetWidth; b.classList.add('is-pop'); check.bannerT = clock; }
@@ -236,8 +237,10 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     g.strokeStyle = '#ffb35c'; g.lineWidth = 2.5; g.beginPath(); g.arc(cx, cy, 9, 0, Math.PI * 2); g.moveTo(cx - 16, cy); g.lineTo(cx + 16, cy); g.moveTo(cx, cy - 16); g.lineTo(cx, cy + 16); g.stroke();
     // the place it is about: a pulsing ring; the numbers the card gives, by them
     if (card && card.kind === 'over') {
-      const a = card.aim || card.to, tx = gsx(a[0]), ty = gsy(a[1]), p = 10 + 4 * Math.sin(clock * 5);
-      g.strokeStyle = '#ffe14a'; g.lineWidth = 3; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
+      const a = card.aim || card.to, tx = gsx(a[0]), ty = gsy(a[1]), p = 12 + 5 * Math.sin(clock * 5);
+      // (a dark edge under the yellow ring: the hangar's own yellow, the pad's rings and the bridge, would hide it)
+      g.strokeStyle = 'rgba(0, 0, 0, 0.8)'; g.lineWidth = 8; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = '#ffe14a'; g.lineWidth = 3.5; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
       if (!/^(quad|read|pair)/.test(key)) {
         tag(g, cx + 14, cy - 14, card.axis === 'y' ? `y = ${num(card.from[1])}` : card.axis === 'x' ? `x = ${num(card.from[0])}` : `(${num(card.from[0])}, ${num(card.from[1])})`, '#ffb35c');
         tag(g, tx + 14, ty + 20, card.axis === 'y' ? `y = ${num(card.to[1])}` : card.axis === 'x' ? `x = ${num(card.to[0])}` : `(${num(card.to[0])}, ${num(card.to[1])})`, '#ffe14a');
@@ -261,11 +264,15 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     g.fillStyle = 'rgba(8, 14, 20, 0.85)'; g.fillRect(x, y - 11, w, 22); g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(x, y - 11, w, 22);
     g.fillStyle = col; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(text, x + 6, y + 1);
   }
-  // the hoist's scale: 0 to 7 m, the grab where it is, the place's height; a wrong answer's height faintly
+  // the hoist's scale: 0 to 7 m, the grab where it is, the place's height; a wrong answer's height faintly. A gauge of
+  // its own, titled, on the right of the picture in amber: up the screen is y on the grid, so the height is kept apart
+  // from the grid's own numbers
   function scale(g, r, h, R, gh = null) {
-    const x = r.x + 46, y0 = r.y + r.h - 30, y1 = Math.max(r.y + 20, y0 - 300), Y = (v) => y0 - (v / 7) * (y0 - y1);
-    g.fillStyle = 'rgba(8, 14, 20, 0.8)'; g.fillRect(x - 40, y1 - 14, 120, y0 - y1 + 28);
-    g.strokeStyle = 'rgba(170, 230, 255, 0.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke();
+    const x = r.x + r.w - 112, y0 = r.y + r.h - 30, y1 = Math.max(r.y + 46, y0 - 300), Y = (v) => y0 - (v / 7) * (y0 - y1);
+    g.fillStyle = 'rgba(14, 10, 4, 0.88)'; g.fillRect(x - 46, y1 - 40, 150, y0 - y1 + 54);
+    g.strokeStyle = 'rgba(255, 179, 92, 0.85)'; g.lineWidth = 1.5; g.strokeRect(x - 46, y1 - 40, 150, y0 - y1 + 54);
+    g.font = '800 12px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffd29e'; g.fillText('HEIGHT', x + 29, y1 - 24);
+    g.strokeStyle = 'rgba(255, 210, 160, 0.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke();
     g.font = '700 12px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(210, 240, 255, 0.95)';
     for (let v = 0; v <= 7; v++) { g.beginPath(); g.moveTo(x - 6, Y(v)); g.lineTo(x + 6, Y(v)); g.stroke(); g.fillText(`${v} m`, x - 9, Y(v)); }
     if (gh) { g.strokeStyle = '#ff9a4a'; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x + 10, Y(R.from)); g.lineTo(x + 10, Y(Math.max(0, gh.h))); g.stroke(); g.setLineDash([]); tag(g, x + 18, Y(Math.max(0, gh.h)), gh.label, '#ff9a4a'); return; }
@@ -320,33 +327,41 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   }
   // THE FILM of an answered move: from beside its way (the hangar's middle side of it), far enough to see it all,
   // looking at the hook as it goes; for a move up or down, from beside the hook at its middle height
-  // (where the film camera stands: beside the move, toward the hangar's middle, but never where something stands
-  // between it and the move (the Miner's hull, the catwalk): candidate places round the move, each one's line to the
-  // move walked through the crane's own voxels (the station as built), the clear one nearest the first choice taken)
+  // (where the film camera stands: beside the move, toward the hangar's middle, but where it can see the move: candidate
+  // places round it, each one's lines to the move's start, middle and end walked through the crane's own voxels (the
+  // station as built), and none hanging over something (the Miner's hull, the rack: it would fill the picture's
+  // foreground); the best kept, the first choice when they are as good)
   function filmSpot(F, mid, dx, dz, len) {
     const cx = (site.rail.x[0] + site.rail.x[1]) / 2, cz = (site.rail.z[0] + site.rail.z[1]) / 2;
     const V = (() => { try { return crane.voxels(); } catch (e) { return null; } })();
     const inside = (x, z) => x > site.rail.x[0] - 1.2 && x < site.rail.x[1] + 1.2 && z > site.rail.z[0] - 0.6 && z < site.rail.z[1] + 0.6;
     const at = (o) => (len > 0.8 ? [mid[0] + o.px * o.d - dx * 0.15, o.y, mid[2] + o.pz * o.d - dz * 0.15] : [mid[0] + o.px * o.d + o.pz * 2, o.y, mid[2] + o.pz * o.d - o.px * 2]);
-    const look = [F.to[0], Math.max(0.6, Math.min(F.from[1], F.to[1]) - 0.6), F.to[2]];
-    const clear = (p) => {
+    const low = Math.max(0.6, Math.min(F.from[1], F.to[1]) - 0.6);
+    const looks = [[F.to[0], low, F.to[2]], [mid[0], low, mid[2]], [F.from[0], Math.max(0.6, F.from[1] - 0.6), F.from[2]]];
+    // (half a voxel a step: a wall's shell is one voxel thick; the last 1.4 m, the move's own load and place, not walked)
+    const clear = (p, q) => {
       if (!V) return true;
-      const ex = look[0] - p[0], ey = look[1] - p[1], ez = look[2] - p[2], L = Math.hypot(ex, ey, ez), n = Math.floor((L - 1.4) / 0.05);   // (half a voxel a step: a wall's shell is one voxel thick)
+      const ex = q[0] - p[0], ey = q[1] - p[1], ez = q[2] - p[2], L = Math.hypot(ex, ey, ez), n = Math.floor((L - 1.4) / 0.05);
       for (let i = 0; i <= n; i++) { const k = (i * 0.05) / L; if (V.full(p[0] + ex * k, p[1] + ey * k, p[2] + ez * k)) return false; }
       return true;
     };
+    // (anything under the camera, in a column from just under it to near the floor: it hangs over something)
+    const over = (p) => { if (!V) return false; for (let y = p[1] - 0.4; y > 0.4; y -= 0.1) for (const [ox, oz] of [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) if (V.full(p[0] + ox, y, p[2] + oz)) return true; return false; };
     let first, d, y;
     if (len > 0.8) {
       first = Math.atan2(dx / len, -dz / len);   // (the way across the move: px = -dz / len, pz = dx / len)
       if ((cx - mid[0]) * (-dz / len) + (cz - mid[2]) * (dx / len) < 0) first += Math.PI;   // (toward the hangar's middle)
       d = Math.max(7, len * 0.75 + 3); y = Math.max(2.6, Math.min(7.8, Math.max(F.from[1], F.to[1]) - 0.5));
-    } else { first = Math.atan2(cz - mid[2], cx - mid[0]); d = 7; y = Math.max(2.2, mid[1] + 0.8); }
-    const tries = [];
-    for (const turn of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.2, -2.2, Math.PI]) for (const [dd, yy] of [[d, y], [d, y + 1.6], [d * 0.75, y + 1.2]]) {
-      const a = first + turn; tries.push({ px: Math.cos(a), pz: Math.sin(a), d: dd, y: Math.min(7.8, yy), turn: Math.abs(turn) });
+    } else { first = Math.atan2(cz - mid[2], cx - mid[0]); d = 8.5; y = Math.max(2.2, mid[1] + 0.8); }
+    let best = null, bestScore = -Infinity;
+    for (const turn of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.2, -2.2, Math.PI]) for (const [dd, yy] of [[d, y], [d, y + 1.6], [d * 0.75, y + 1.2], [d * 1.3, y + 0.8]]) {
+      const a = first + turn, o = { px: Math.cos(a), pz: Math.sin(a), d: dd, y: Math.min(7.8, yy) }, p = at(o);
+      if (!inside(p[0], p[2]) || (V && V.full(p[0], p[1], p[2]))) continue;
+      const seen = looks.filter((q) => clear(p, q)).length;
+      const score = seen * 10 - (over(p) ? 25 : 0) - Math.abs(turn) * 2 - (dd === d && yy === y ? 0 : 1);
+      if (score > bestScore) { best = o; bestScore = score; }
     }
-    for (const o of tries) { const p = at(o); if (inside(p[0], p[2]) && !(V && V.full(p[0], p[1], p[2])) && clear(p)) return o; }
-    return tries[0];
+    return best || { px: Math.cos(first), pz: Math.sin(first), d, y };
   }
   function filmCam(camera, S, dt, shift) {
     const F = film, mid = [(F.from[0] + F.to[0]) / 2, (F.from[1] + F.to[1]) / 2, (F.from[2] + F.to[2]) / 2];
@@ -372,6 +387,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const D = live();
     if (crane.mode === 'landing') return { ok: false, why: 'The Miner is landing: the crane waits.' };
     if (!D) return { ok: false, why: 'The crane is finishing its move...' };
+    // (the next card comes once the "verified" banner has gone: it covers the grid the card is about)
+    if (!$('.pcg-banner').hidden && clock - check.bannerT < 2.6) return { ok: false, why: 'Crane operations verified!' };
     if (!D.busy && !moving) return true;
     waitT = clock;
     return { ok: false, why: D.notes.some((n) => n.key === 'people') ? 'The crane is waiting: someone is under it.' : moving ? 'The crane is moving...' : 'The crane is getting into place...' };

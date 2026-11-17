@@ -59,7 +59,8 @@ export const AREA = /^(hangar-miner|stub-miner|smelter-|ship-miner)/;
 // THE LANDING: seconds in all; where it comes in from (m out past the bay door, along the ship's nose line); its
 // height over the pad while it comes in and turns (its top under the bay door's lintel and the roof's lamps); when
 // its legs come down; the turn
-export const LANDING = { secs: 19, from: 46, hover: 3.0, turnFrom: 0.36, turnTo: 0.62, legs: 0.62, down: 0.7 };
+// (the turn slower and the way down starting as it ends: a strip of the landing showed a sudden swing, then a long hover)
+export const LANDING = { secs: 17, from: 46, hover: 3.0, turnFrom: 0.34, turnTo: 0.66, legs: 0.6, down: 0.66 };
 // THE SWING: how long a swing takes (a pendulum of about the cables' length), how quickly it dies away, and the most
 // it swings (radians)
 export const SWING = { period: 3.2, damp: 0.55, most: 0.06 };

@@ -142,6 +142,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   const $ = (s) => el.querySelector(s);
   const held = { up: false, down: false, ccw: false, cw: false };
   let closed = false, view = 0, noteText = '', noteT = 0, t = 0, lastViol = null, violations = 0, noticeT = -9;
+  let lastHeld = null, lastPlace = null, done = null;   // (the hint line's memory: a grab or a let-go just now)
   // (a push keeps the way it was given while it is held, though the view swings round: let go and push again)
   let ahead = null;
   const cam = followCam(W, crane.site);
@@ -211,12 +212,36 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     const n = D.notes.find((q) => q.key !== 'people');
     if (n) { noteText = n.text; noteT = t; }
     let hint = '';
-    const P = r.place;
+    const P = r.place, A = r.aids || {}, site = crane.site;
+    // (just after a grab or a let-go, what comes next, until the grab has moved on from there)
+    if (r.held !== lastHeld) {
+      if (lastHeld != null) done = { kind: r.held >= 0 ? 'got' : 'let', t, x: r.x, z: r.z, hook: r.hook, socket: lastPlace && lastPlace.kind === 'socket' ? site.sockets[lastPlace.i].number : null };
+      lastHeld = r.held;
+    }
+    lastPlace = P;
+    if (done && (t - done.t > 8 || Math.hypot(r.x - done.x, r.z - done.z) > 1.5 || Math.abs(r.hook - done.hook) > 1.2)) done = null;
+    // (lined up on a place: the light that is not green yet, by name)
+    const notGreen = (ways) => ways.filter((w) => A[w] !== 'on');
+    const AX = { x: 'X', y: 'Y', h: 'height' };
     if (noteText && t - noteT < 2.2) hint = noteText;
     else if (D.busy && D.action === 'shut') hint = 'Grabbing it...';
     else if (D.busy && D.action === 'open') hint = 'Letting go...';
-    else if (r.held < 0) hint = P ? 'Lower the grab onto the canister: it grabs it by itself.' : 'Bring the grab over a canister (on the ship, the rack or in a socket), then lower it.';
-    else hint = P && P.kind === 'socket' ? `Socket ${crane.site.sockets[P.i].number}: lower it to the socket's height and it docks.` : P ? 'Lower it: it lets go by itself when it is down.' : 'Take it to a socket, a ship\'s tray or the rack.';
+    else if (done && done.kind === 'let') hint = done.socket != null ? `Docked in socket ${done.socket}. Take the grab up and away for the next canister.` : 'Set down. Take the grab up and away for the next canister.';
+    else if (done && done.kind === 'got') hint = 'Got it! Lift it up, then take it to a socket, a ship\'s tray or the rack.';
+    else if (r.held < 0) {
+      const off = P ? notGreen(['x', 'y']) : [];
+      hint = !P ? 'Bring the grab over a canister (on the ship, the rack or in a socket), then lower it.'
+        : off.length ? `Move until the ${off.map((w) => AX[w]).join(' and ')} light${off.length > 1 ? 's are' : ' is'} green over the canister.`
+        : 'Lower the grab onto the canister: it grabs it by itself.';
+    } else if (P && P.kind === 'socket') {
+      const s = site.sockets[P.i], across = Math.abs(s.n[1]) > 0.5 ? 'x' : 'y';
+      hint = A[across] !== 'on' ? `Socket ${s.number}: move until the ${AX[across]} light is green.`
+        : A.h !== 'on' ? `Socket ${s.number}: ${r.hook > s.at[1] ? 'lower' : 'raise'} it until the height light is green.`
+        : `Socket ${s.number}: lined up. It goes in by itself.`;
+    } else if (P) {
+      const off = notGreen(['x', 'y']);
+      hint = off.length ? `Move until the ${off.map((w) => AX[w]).join(' and ')} light${off.length > 1 ? 's are' : ' is'} green.` : 'Lower it: it lets go by itself when it is down.';
+    } else hint = 'Take it to a socket, a ship\'s tray or the rack.';
     const h = $('.pcd-hint'); if (h.textContent !== hint) { h.textContent = hint; h.classList.toggle('is-note', !!noteText && t - noteT < 2.2); }
   }
   function aim(camera, dt) {
