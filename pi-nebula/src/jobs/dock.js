@@ -338,7 +338,8 @@ function quadPicture(kind, A, ask, { answer = false } = {}) {
   });
   P.forEach((V, i) => {
     const A1 = P[(i + 1) % 4], B1 = P[(i + 3) % 4], isAsk = i === ask;
-    o += angleLabel(V, A1, B1, 40, isAsk && !answer ? '?' : `${ang[i]}°`, { size: isAsk ? 18 : 15, fill: isAsk ? (answer ? OK : ASK) : INK });
+    // (a square corner's label close in to its corner, so two of them on one side never read as one)
+    o += angleLabel(V, A1, B1, ang[i] === 90 && !isAsk ? 24 : 40, isAsk && !answer ? '?' : `${ang[i]}°`, { size: isAsk ? 18 : ang[i] === 90 ? 13 : 15, fill: isAsk ? (answer ? OK : ASK) : INK });
   });
   if (kind === 'lean') o += text(W / 2, 148, 'the square it was, before it leaned', { size: 12, fill: SOFT });
   return { svg: svg(154, o), ang };
@@ -593,7 +594,7 @@ export const MAKERS = {
       ]);
       const o = ownOrder({
         key: 'parallel:' + kind, story: `A brace crosses a panel from one long strut to the other. The two struts are parallel: they run the same way. The brace makes ${a}° with the bottom strut.`,
-        ask: 'How big is the angle marked ? at the top strut?',
+        ask: 'How big is the angle with the question mark, at the top strut?',
         right: DEG(ans), slips,
         rightWhy: kind === 'z' ? `A Z between parallel struts: the two angles are the same, ${a}°` : `A C between parallel struts: ${a}° + ${ans}° = 180°`,
         ...(kind === 'c' ? { sum: { op: 'sub', a: 180, b: a, say: 'The two inside angles make 180°: take away the one you know' } } : {}),
@@ -652,7 +653,7 @@ export const MAKERS = {
           ]);
           const o = ownOrder({
             key: 'twostep:outside', story: `A triangle in the bridge's lattice: its bottom strut runs on past a joint, and outside the triangle there it makes ${out}°. Another corner of the triangle is ${A}°.`,
-            ask: 'How big is the corner marked ?',
+            ask: 'How big is the corner at the top, with the question mark?',
             right: DEG(C), slips,
             rightWhy: `Inside the joint: 180° − ${out}° = ${B}°; then ${A}° + ${B}° + ${C}° = 180°`,
             sum: [{ op: 'sub', a: 180, b: out, say: 'First the corner inside the triangle at the joint: a straight strut is 180' }, { op: 'add', a: A, b: B, say: 'Then add the two corners you know' }, { op: 'sub', a: 180, b: A + B, say: 'Then the rest of the triangle\'s 180' }],
