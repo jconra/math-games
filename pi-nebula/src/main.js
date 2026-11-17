@@ -37,6 +37,8 @@ import { startJobs } from './jobs/index.js';
 import { credits } from './jobs/engine.js';
 import { sound } from './sound.js';
 import { soundButton } from './ui/soundbutton.js';
+import { makeGuide } from './guide.js';
+import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
@@ -126,6 +128,10 @@ async function boot() {
   // (the smelter's pay slips count the canisters really in the hangar: the crane's load, as it is when a slip is made)
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) }, crane, lib, people: () => people });
+  // the station's own jobs board beside the captains', and the glowing line on the floor to the job picked on it
+  // (jobsboard.js, guide.js)
+  const guide = GAME.guide = makeGuide({ W, walls });
+  const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking) });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -148,6 +154,9 @@ async function boot() {
     if (GAME.mode === 'title' || !P) drift(now);
     else {
       const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
+      board.update(dt, P, GAME.mode === 'play' && !atJob);
+      guide.update(dt, GAME.mode === 'play' && !atJob ? P : null);
+      if (atJob && guide.active) guide.clear();      // (at a job: there, the line done with)
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
       const move = ctl ? ctl.move : atJob ? null : auto.way ? autoMove() : input.move;
       P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? people.list : [], clip: ctl && ctl.clip, clipSpeed: ctl && ctl.clipSpeed });
@@ -218,6 +227,7 @@ async function boot() {
   function toTitle() {
     if (GAME.mode !== 'play') return;
     GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; jobs.update(0, null, false); jobs.close();
+    board.update(0, null, false); board.stop();
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
   }

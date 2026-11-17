@@ -408,7 +408,10 @@ export function sign(p, v) {
   p.light([0, 0, 0.5], big ? 0.8 : 0.4, [0.5, 0.75, 1], [0, 0, 1], 3);
 }
 // the jobs board: a big screen of captains hiring. 'hang': both faces, hung by two rods from the ceiling (its middle
-// at y = 0: the layout lifts it); 'wall': one face, its back on z = 0; 'menu': the galley's menu board, for a wall
+// at y = 0: the layout lifts it); 'wall': one face, its back on z = 0; 'menu': the galley's menu board, for a wall;
+// 'station': the station's own jobs, hung as 'hang' is, its screens left dark here (the game shows the jobs on them
+// live, a job picked lit up: src/jobsboard.js, which finds it by this variant and lays its picture on JOBS_SCREEN)
+export const JOBS_SCREEN = { w: 4.2, h: 1.68, z: 0.123 };
 export function jobs(p, v) {
   if (v === 'menu') {
     p.slab('black', -0.9, 0.9, -0.42, 0.42, 0, 0.1, { r: 0.02, cell: 0.8 });
@@ -417,13 +420,14 @@ export function jobs(p, v) {
     p.light([0, -0.1, 0.6], 0.8, [1, 0.75, 0.45], [0, -0.3, 1], 4);
     return;
   }
-  const W = 4.2, Hh = 1.68, o = { r: 0.03, cell: 0.8 };
+  const W = JOBS_SCREEN.w, Hh = JOBS_SCREEN.h, o = { r: 0.03, cell: 0.8 };
   const z0 = v === 'wall' ? 0 : -0.12, z1 = v === 'wall' ? 0.2 : 0.12;
   p.slab('black', -W / 2 - 0.12, W / 2 + 0.12, -Hh / 2 - 0.12, Hh / 2 + 0.12, z0, z1, o);
   p.slab('dark', -W / 2 - 0.13, W / 2 + 0.13, -Hh / 2 - 0.2, -Hh / 2 - 0.12, z0 + 0.02, z1 - 0.02, { r: 0.02, cell: 0.8 });
   for (const s of v === 'wall' ? [1] : [1, -1]) {
     const q = new (p.constructor)();
-    q.screen(SCREEN_RECT.jobs, W, Hh, [0, 0, 0.122], null, 1.15);
+    if (v === 'station') q.slab({ c: '#0f2a3d', r: 0.3, m: 0.1, w: 0.2 }, -W / 2, W / 2, -Hh / 2, Hh / 2, 0.112, 0.122, { r: 0.002, cell: 9 });
+    else q.screen(SCREEN_RECT.jobs, W, Hh, [0, 0, 0.122], null, 1.15);
     q.glowSlab('blue', -W / 2 - 0.1, W / 2 + 0.1, -Hh / 2 - 0.16, -Hh / 2 - 0.15, 0.1, 0.105);
     for (const x of [-1.4, 0, 1.4]) q.light([x, 0, 0.8], 1.4, [0.35, 0.65, 1], [0, -0.2, 1], 7);
     for (const part of q.parts) { if (v === 'wall') put(part.geo, [0, 0, 0.08]); else if (s < 0) put(part.geo, [0, 0, 0], [0, PI, 0]); p.parts.push(part); }

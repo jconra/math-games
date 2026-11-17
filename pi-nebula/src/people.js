@@ -98,7 +98,7 @@ const ease = (t) => t * t * (3 - 2 * t);
 
 // ── where a spot is, by name ───────────────────────────────────────────────────────────────────────────────────
 // every placed piece in the station, once: { piece, variant, room (id), M (its world placement) }
-function piecesOf(R) {
+export function piecesOf(R) {
   const out = [], m = new THREE.Matrix4();
   for (const zd of zonesOf(R)) for (const pl of expand(zd.pieces || [])) {
     const def = PIECES[pl.piece]; if (!def) continue;

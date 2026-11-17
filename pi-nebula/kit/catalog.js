@@ -62,7 +62,7 @@ export const PIECES = {
   pot: { name: 'Pot of soup', group: 'Furniture', at: 'free', variants: ['tomato', 'pea'], foot: [0.4, 0.4, 0.5], build: pot },
   booth: { name: "Captain's booth", group: 'Furniture', at: 'free', variants: ['medic', 'mining', 'explore', 'security'], foot: [2, 1.8, 2], build: booth },
   planter: { name: 'Planter', group: 'Furniture', at: 'free', variants: ['long', 'tall'], foot: [1.7, 2.2, 0.7], build: planter },
-  jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu'], foot: [4.5, 2, 0.3], build: jobs },
+  jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu', 'station'], foot: [4.5, 2, 0.3], build: jobs },
   divider: { name: 'Bed divider', group: 'Medical', at: 'free', variants: ['bed', 'bed b'], foot: [2, 1.8, 0.45], build: divider },
   curtain: { name: 'Bay curtain', group: 'Medical', at: 'free', variants: ['3.1', '3.35'], foot: [3.1, 2.8, 0.1], build: curtain },
   // the hangar

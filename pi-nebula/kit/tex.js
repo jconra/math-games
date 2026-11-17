@@ -242,7 +242,7 @@ function bigScreens(g) {
     g.fillStyle = '#cfeaff'; g.font = F(13, false); g.fillText(capt, 46, y + 12);
     g.fillStyle = '#ffffff'; g.font = F(19); g.fillText(job, 210, y + 1);
     g.textAlign = 'right';
-    if (pay) { g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1); } else { g.fillStyle = '#9fb3c4'; g.font = F(15); g.fillText('SHIP IN REPAIR', 612, y + 1); }
+    if (pay) { g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1); } else { g.fillStyle = '#9fb3c4'; g.font = F(15); g.fillText('IN REPAIR', 612, y + 1); }
   });
   // the galley's menu, and the drinks panel under it
   bg(640, 512, 384, 160, '#3a2a18', '#221810', '#ffb347');
