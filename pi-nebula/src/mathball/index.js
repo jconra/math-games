@@ -50,9 +50,12 @@ const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours
 // THE CAMERA: behind the player and above, looking down the court (a phone held upright sees a narrow strip, so it
 // stands further back and higher, looking more steeply down)
 export const MBCAM = {
-  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62 },
-  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76 },
+  // (holdUp: how much higher it looks with a ball in hand, so the far end's two goal signs come down the screen, clear
+  // of the score at the top)
+  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1 },
+  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2 },
   turn: 0.0052, swing: 1.9, after: 1.1,
+  under: 0.7,                     // m it always stays under the ceiling (above it, nothing is drawn: a black screen)
 };
 
 // ── the arena with nobody playing: the floor's light and the signs (the round's first rules at this crew's level) ──
@@ -117,11 +120,13 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   const press = (word) => (touchy() ? 'Tap' : 'Click') + ' ' + word;
 
   // the level line with its arrows (Mathwood's level tool), on the pick and end cards
-  function levelHtml() {
+  // (after a round, `played` is the level it was played at: the line says what Play again plays, and if that moved)
+  function levelHtml(played = null) {
     const v = E.level(crew, job), i = v ? v.i : 0, n = v ? v.n : LADDER.length;
     const S = LADDER[i] || LADDER[0];
+    const moved = played == null || played === i ? '' : played < i ? ' &middot; up a level' : ' &middot; down a level';
     return `<div class="mbl-level"><button type="button" class="mbl-arrow" data-dir="-1" aria-label="Easier rules"${i <= 0 ? ' disabled' : ''}>&#9664;</button>
-      <span><small>Level ${i + 1} of ${n}</small>${esc(S.name)}</span>
+      <span><small>${played == null ? '' : 'Next round: '}Level ${i + 1} of ${n}${moved}</small>${esc(S.name)}</span>
       <button type="button" class="mbl-arrow" data-dir="1" aria-label="Harder rules"${i >= n - 1 ? ' disabled' : ''}>&#9654;</button></div>`;
   }
   function stepLevel(dir) {
@@ -203,7 +208,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     E2.innerHTML = `<h2>${words}</h2>
       <div class="mbl-final"><span><b>You</b><em>${r.you}</em></span><span class="mbl-dash">to</span><span><em>${r.them}</em><b>${esc(was.name)}</b></span></div>
       <p class="mbl-earned"><i aria-hidden="true"></i>${earned.toLocaleString('en-US')} credits this round</p>
-      ${levelHtml()}
+      ${levelHtml(r.played ?? null)}
       <div class="mbl-endgo"><button type="button" class="mbl-again">Play again<kbd>Enter</kbd></button>
       <button type="button" class="mbl-swap">Against: ${esc(opp.name)} &#9656;</button>
       <button type="button" class="mbl-leave">Leave</button></div>`;
@@ -339,7 +344,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (e.you > e.them) tally.wins = (tally.wins || 0) + 1;
     onSave(); sound.play('end');
     showGoals(false); say('', 0);
-    showEnd({ you: e.you, them: e.them });
+    showEnd({ you: e.you, them: e.them, played: Math.max(0, LADDER.findIndex((s) => s.key === set.key)) });
     if (hiddenPerson) { /* (they stay out of the station's crowd while they are here on the court) */ }
   }
   // (the HUD is written only when something on it changes)
@@ -393,6 +398,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
         }
       }
       if (!manual && w.face != null) { const dh = wrapA(w.face - P.heading); P.heading = wrapA(P.heading + dh * Math.min(1, 12 * dt)); }
+      // (a ball in hand, standing: they turn to the way the camera looks, toward the far goals, so the ball held at
+      // their side is in view, not hidden behind them)
+      else if (!manual && G.you.holding && !w.to) { const dh = wrapA(cam.yaw - P.heading); P.heading = wrapA(P.heading + dh * Math.min(1, 6 * dt)); }
     }
     if (manual) move = input.move;
     // throwing: the arm's swing (the crew's reach, quick)
@@ -416,7 +424,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (w.face != null) { want = w.face; rate *= 1.5; }
       else if (G.you.holding) {
         // (a ball in hand: toward the court's far end from the player, so its two goals are in view while they choose)
-        want = Math.atan2(-youNow.x * 0.35, farSouth() ? 6 : -6); rate *= 0.9;
+        want = Math.atan2(-youNow.x * 0.35, farSouth() ? 6 : -6); rate *= 1.8;
       }
       else if (Math.hypot(youNow.x, youNow.z) > 2.2) { want = Math.atan2(-youNow.x * 0.55, -youNow.z); rate *= 0.6; }
       else if (sp > 0.8) { want = Math.atan2(youNow.vx, youNow.vz); rate *= Math.min(1, sp / 3); }
@@ -428,9 +436,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     // (kept inside the court: a camera against a wall rises instead)
     const [cx, cz] = clampIn(ax - MID[0], az - MID[2], 0.4);
     const pushed = Math.hypot(cx + MID[0] - ax, cz + MID[2] - az);
-    ax = cx + MID[0]; az = cz + MID[2]; ay += pushed * 0.5;
+    ax = cx + MID[0]; az = cz + MID[2]; ay = Math.min(ay + pushed * 0.5, COURT.height - MBCAM.under);
     _w.set(ax, ay, az);
-    const lookAt = new THREE.Vector3(feet.x + fx * C.ahead, C.lookY, feet.z + fz * C.ahead);
+    const lookAt = new THREE.Vector3(feet.x + fx * C.ahead, C.lookY + (G.you.holding ? C.holdUp : 0), feet.z + fz * C.ahead);
     if (cam.fresh) { cam.at.copy(camera.position); cam.look.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(4)); cam.fresh = false; }
     const k = 1 - Math.exp(-6 * dt);
     cam.at.lerp(_w, k); cam.look.lerp(lookAt, k);

@@ -60,7 +60,7 @@
 /* ── the cards: who to play, and the score at the end ───────────────────────────────────────────────────────── */
 .mbl-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 28px)); max-height: calc(100% - 120px); overflow-y: auto;
   padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 12px; pointer-events: auto;
-  background: var(--glass); box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 18px; animation: mbl-in 0.25s ease; }
+  background: rgba(9, 12, 17, 0.95); box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 18px; animation: mbl-in 0.25s ease; }
 @keyframes mbl-in { from { opacity: 0; transform: translate(-50%, -46%); } }
 .mbl-card h2 { margin: 0; font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; }
 .mbl-lede { margin: 0; color: var(--dim); font-size: 15px; }
@@ -103,6 +103,13 @@
 .mbl-helpbox li span { font-size: 14px; }
 .mbl-helpbox li small { font-size: 14px; color: var(--dim); }
 .mbl-hhow { margin: 12px 0 0; font-size: 13px; color: var(--dim); }
+
+/* (a screen too narrow for the words in the middle beside the goal buttons: the words keep left of them) */
+@media (min-width: 641px) and (max-width: 1240px) {
+  .mbl-bottom { left: max(12px, env(safe-area-inset-left)); transform: none; width: calc(100% - min(320px, 46vw) - 40px); }
+}
+/* (a touch screen has no keys: no key names on the buttons) */
+@media (hover: none) and (pointer: coarse) { .mbl kbd { display: none; } }
 
 /* ── a phone held upright ───────────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {

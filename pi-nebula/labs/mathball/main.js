@@ -96,7 +96,7 @@ const line = () => `export const ORDER = [${S.order.map((k) => `'${k}'`).join(',
 // ── moving them ────────────────────────────────────────────────────────────────────────────────────────────────────
 // the whole list as one run, the divider in it: moving is splicing that run
 const run = () => [...S.order, '|', ...S.out];
-function setRun(r) { const i = r.indexOf('|'); S.order = r.slice(0, i); S.out = r.slice(i + 1); keep(); render(); note(''); }
+function setRun(r) { const i = r.indexOf('|'); if (i < 1) { note('Keep at least one set in the game.'); return; } S.order = r.slice(0, i); S.out = r.slice(i + 1); keep(); render(); note(''); }
 list.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-move]'); if (!b) return;
   const key = b.closest('li').dataset.key, r = run(), i = r.indexOf(key), j = i + +b.dataset.move;
@@ -112,18 +112,32 @@ list.addEventListener('pointerdown', (e) => {
   li.classList.add('is-drag'); e.preventDefault();
   try { h.setPointerCapture(e.pointerId); } catch (err) { /* (a pointer already gone: the moves still come to the list) */ }
 });
+// the set under the pointer; above the whole list it is the first, below it the last (the page may have scrolled
+// the list away from under a finger held near the top or bottom); in a gap between two sets, none
+const setAt = (x, y) => {
+  const el = document.elementFromPoint(x, y), li = el && el.closest('#sets > li'); if (li) return li;
+  const all = [...list.querySelectorAll('#sets > li')]; if (!all.length) return null;
+  if (y < all[0].getBoundingClientRect().top) return all[0];
+  if (y > all[all.length - 1].getBoundingClientRect().bottom) return all[all.length - 1];
+  return null;
+};
+const mark = (li) => {
+  for (const x of list.querySelectorAll('.is-over')) x.classList.remove('is-over');
+  drag.over = li.dataset.key !== drag.key ? li : null; if (drag.over) drag.over.classList.add('is-over');
+};
 list.addEventListener('pointermove', (e) => {
   if (!drag) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY), li = el && el.closest('#sets > li');
-  for (const x of list.querySelectorAll('.is-over')) x.classList.remove('is-over');
-  drag.over = li && li.dataset.key !== drag.key ? li : null; if (drag.over) drag.over.classList.add('is-over');
+  const li = setAt(e.clientX, e.clientY); if (li) mark(li);
   // (near the window's edge, it scrolls)
   if (e.clientY < 60) scrollBy(0, -12); else if (e.clientY > innerHeight - 60) scrollBy(0, 12);
 });
-const endDrag = () => {
-  if (!drag) return; const { key, over } = drag; drag = null;
+const endDrag = (e) => {
+  if (!drag) return;
+  if (e && e.type === 'pointerup') { const li = setAt(e.clientX, e.clientY); if (li) mark(li); }
+  const { key, over } = drag; drag = null;
   for (const x of list.querySelectorAll('.is-drag, .is-over')) x.classList.remove('is-drag', 'is-over');
-  if (over) { const r = run().filter((k) => k !== key); r.splice(r.indexOf(over.dataset.key), 0, key); setRun(r); }
+  // (it takes the marked set's place: dragged down, it goes after it; dragged up, before it)
+  if (over) { const r = run(), j = r.indexOf(over.dataset.key); r.splice(r.indexOf(key), 1); r.splice(j, 0, key); setRun(r); }
 };
 list.addEventListener('pointerup', endDrag); list.addEventListener('pointercancel', endDrag);
 

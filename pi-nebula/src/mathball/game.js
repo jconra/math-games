@@ -186,7 +186,7 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
   function change(gi) {
     const live = onCourt().filter((b) => b.mode !== 'fly' && b.mode !== 'held');
     const held = [G.you.holding, G.other.holding].filter(Boolean).map((b) => b.num);
-    const ch = pickChange(rules(), gi, set.pool, live.map((b) => b.num), { held, rand, spares });
+    const ch = pickChange(rules(), gi, set.pool, live.map((b) => b.num), { held, rand, spares, theme: set.goals });
     if (!ch) { emit('change', { goal: gi, from: G.goals[gi].rule, to: G.goals[gi].rule, strand: [] }); return; }
     const from = G.goals[gi].rule;
     G.goals[gi].was = from; G.goals[gi].rule = ch.rule; G.goals[gi].flash = 1; G.changes++;

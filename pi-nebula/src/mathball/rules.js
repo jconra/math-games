@@ -151,9 +151,11 @@ export const dealable = (rules, pool) => pool.filter((b) => { const n = goalsFor
 //   - the pool must still be able to deal balls for every goal (so new balls can come for the new rule).
 // The best change keeps all of that. If none can (the goal holds the only rule some balls fit), the change that leaves
 // the fewest balls with nowhere to go is made, and those balls are swapped out (they fade, new ones come in): `strand`.
+// Among good changes, the rung's own four rules (`theme`) come back first when one is free, so the round stays on its
+// subject (on the first rung, even and odd move from goal to goal rather than leaving the court for good).
 //   -> { rule (its name), rules (the goals after), strand: [balls that fit no goal or every goal], safe }  or null
-export function pickChange(rules, at, pool, balls, { held = [], rand = Math.random, spares = [] } = {}) {
-  const now = rules.map((r) => ruleOf(r).id);
+export function pickChange(rules, at, pool, balls, { held = [], rand = Math.random, spares = [], theme = [] } = {}) {
+  const now = rules.map((r) => ruleOf(r).id), home = theme.map((r) => ruleOf(r).id);
   const tryAll = (cands) => {
     let best = null;
     for (const id of cands) {
@@ -165,7 +167,7 @@ export function pickChange(rules, at, pool, balls, { held = [], rand = Math.rand
       if (dead) continue;                                              // (the pool could never feed some goal)
       const empty = next.filter((r) => !keep.some((b) => fits(r, b))).length;   // (goals no ball on the court fits now)
       const choice = keep.filter((b) => goalsFor(next, b).length >= 2).length;
-      const score = strand.length * 10 + empty * 3 - choice * 0.5 + rand() * 0.9;
+      const score = strand.length * 10 + empty * 3 - choice * 0.5 - (home.includes(id) ? 2 : 0) + rand() * 0.9;
       if (!best || score < best.score) best = { rule: id, rules: next, strand, safe: !strand.length, score };
     }
     return best;
