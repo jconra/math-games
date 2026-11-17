@@ -101,6 +101,7 @@ export const WORK = {
   count: 0.4,                    // a thing counted on a picture card (1.5 at least)
   tap: 1,                        // a square braced on a card answered by doing
   think: [2, 0.06],              // a step with no sum to work: 2, and 0.06 more for each point of the school guide
+  older: [1.25, 0.7, 160],       // an older card's sums: times 1.25 less the card's point / 160, from 1 (to fourth grade) to 0.7
 };
 const TABLE = { 0: 1.5, 1: 1.5, 2: 2, 5: 2, 10: 2, 11: 2.5, 3: 3, 4: 3, 9: 3, 6: 4, 7: 4, 8: 4, 12: 4 };
 const factSecs = (a, b) => Math.min(TABLE[a] ?? 4, TABLE[b] ?? 4);
@@ -118,7 +119,11 @@ export function stepSecs(s) {
   const dp = Math.max(placesOf(a), placesOf(b)), dot = dp ? 1.5 : 0;
   if (dp) { const k = 10 ** dp; a = Math.round(a * k); b = Math.round(b * k); }
   if (op === 'add' || op === 'sub') {
+    // (round numbers worked as their tens: 110 + 90 is 11 + 9 tens)
+    const k = Math.min(bare(a)[1], bare(b)[1]);
+    if (k && a && b) { a /= 10 ** k; b /= 10 ** k; }
     if (op === 'add' ? a + b <= 10 : a <= 10) return 1.5 + dot;
+    if (op === 'add' ? a + b <= 20 && Math.max(a, b) < 10 : a <= 20 && b < 10) return 3 + dot;
     // a column at a time, and each carry or borrow
     const cols = Math.max(digitsOf(a), digitsOf(b));
     let carries = 0, A = a, B = b, c = 0;
@@ -177,8 +182,11 @@ export function workOf(o, L = null) {
     const things = Math.min(20, sums.reduce((t, s) => Math.max(t, s.op === 'add' ? s.a + s.b : s.op === 'mul' ? s.a * s.b : s.a), 0));
     parts.count = Math.max(1.5, things * WORK.count);
   } else if (sums.length) {
+    // (each sum's time is a child's at the school year it is taught; an older card's sums, three-digit sums on an
+    // eighth-grade card, go quicker: WORK.older)
     steps = sums.length;
-    parts.sums = sums.reduce((t, s) => t + stepSecs(s), 0);
+    const quick = Math.max(WORK.older[1], Math.min(1, WORK.older[0] - g / WORK.older[2]));
+    parts.sums = sums.reduce((t, s) => t + stepSecs(s), 0) * quick;
     if (words > 12) parts.story = WORK.story;
   } else {
     steps = Math.max(1, Math.min(3, o.size || 1));
