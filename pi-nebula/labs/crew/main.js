@@ -869,15 +869,18 @@ function tuckSlider(v, shown) {
 }
 // ── BUZZ: each haircut's own buzz (kit/crew.js THE PAINT FIELD): the short hair a barber leaves outside the cut ──────
 // Shown and changed for the hair worn: its sideburns (how far below the top of the ear, or none; how wide; stopping in
-// front of the ear or carried on over it and down behind it: width, around, 2026-11-15), its nape taper (how
+// front of the ear or carried on over it and down behind it: width, around, 2026-11-15; their front edge swept forward
+// to the hairline at the temple: temple, 2026-11-17), its nape taper (how
 // far below the hair's edge at the back, 0 none) and its front (the hairline along the forehead, how far below the
 // hair's front edge, 0 none), on every head. Kept in this browser as they're made (lib.buzzes over crew.json's own,
 // null: none) and worn at once; Save fits and Copy fits carry them. The view: the stubble and the scalp's shade under the
 // hair each on or off, and the ears found (tinted: no paint ever goes there).
 const BUZZ_KEY = 'crewlab.buzz.v1';
-const BUZZ_STEP = { sideburns: [2, 0.5], nape: [2, 0.5], front: [1, 0.5], width: [2, 0.5] }, BUZZ_SB0 = 10;
+const BUZZ_STEP = { sideburns: [2, 0.5], nape: [2, 0.5], front: [1, 0.5], width: [2, 0.5], temple: [2, 0.5] }, BUZZ_SB0 = 10;
 // (the sideburns' width, mm, when a buzz gives none: kit/crew.js SIDEBURN.width degrees; and the knob's range)
 const BUZZ_W0 = 17, BUZZ_W = [5, 40];
+// (the temple's sweep, mm: how far forward the sideburn's front edge has gone by the hair's edge; the knob's range)
+const BUZZ_T = [0, 60];
 const buzzSt = { view: { buzz: true, under: true, ears: false } };
 // (a buzz with nothing in it left out: no sideburns (null), a nape of 0; numbers rounded; null when nothing is left)
 function tidyBuzz(b) {
@@ -886,6 +889,7 @@ function tidyBuzz(b) {
   if (b.sideburns != null && Number.isFinite(+b.sideburns)) o.sideburns = +(+b.sideburns).toFixed(1);
   if (o.sideburns != null && +b.width > 0) o.width = +(+b.width).toFixed(1);
   if (o.sideburns != null && b.around === 'over') o.around = 'over';
+  if (o.sideburns != null && +b.temple > 0) o.temple = +(+b.temple).toFixed(1);
   if (+b.nape > 0) o.nape = +(+b.nape).toFixed(1);
   if (+b.front > 0) o.front = +(+b.front).toFixed(1);
   if (b.look && Object.keys(b.look).length) o.look = b.look;
@@ -913,7 +917,7 @@ function buzzWords(P, b) {
   const h = hairPaints(P), w = [];
   if (h.cut) w.push('the cut itself');
   if (h.marks) w.push('its bust\'s own fade');
-  if (b && b.sideburns != null) w.push((b.sideburns === 0 ? 'sideburns to the ear\'s top' : `sideburns ${Math.abs(b.sideburns)} mm ${b.sideburns > 0 ? 'below' : 'above'} the ear's top`) + (b.width > 0 ? `, ${b.width} mm wide` : '') + (b.around === 'over' ? ', on over the ear' : ''));
+  if (b && b.sideburns != null) w.push((b.sideburns === 0 ? 'sideburns to the ear\'s top' : `sideburns ${Math.abs(b.sideburns)} mm ${b.sideburns > 0 ? 'below' : 'above'} the ear's top`) + (b.width > 0 ? `, ${b.width} mm wide` : '') + (b.around === 'over' ? ', on over the ear' : '') + (b.temple > 0 ? `, swept ${b.temple} mm forward at the temple` : ''));
   if (b && b.nape > 0) w.push(`nape taper ${b.nape} mm`);
   if (b && b.front > 0) w.push(`hairline ${b.front} mm along the forehead`);
   return w.length ? w.join(', ') : 'none: skin outside the hair';
@@ -934,6 +938,7 @@ function buzzBits() {
     row(chip(sb ? 'Sideburns on' : 'Sideburns: none', sb, () => buzzEdit((t) => { t.sideburns = t.sideburns != null ? null : BUZZ_SB0; }), true, 'Sideburns in front of each ear, or none'),
       sb ? knob('Sideburns', (b.sideburns > 0 ? '' : b.sideburns < 0 ? '−' : '') + Math.abs(b.sideburns) + ' mm', ['▲', () => buzzEdit((t) => { t.sideburns -= fineB('sideburns'); })], ['▼', () => buzzEdit((t) => { t.sideburns += fineB('sideburns'); })], 'Shorter (their foot higher)', 'Longer (their foot lower)', 'How far below the top of the ear they reach (− above it)') : null,
       sb ? knob('Width', (b.width > 0 ? b.width : BUZZ_W0) + ' mm', ['−', () => buzzEdit((t) => { t.width = Math.max(BUZZ_W[0], (+t.width || BUZZ_W0) - fineB('width')); })], ['+', () => buzzEdit((t) => { t.width = Math.min(BUZZ_W[1], (+t.width || BUZZ_W0) + fineB('width')); })], 'Narrower sideburns', 'Wider sideburns', 'How wide the sideburns are, front to back') : null,
+      sb ? knob('Temple', (b.temple > 0 ? b.temple : 0) + ' mm', ['−', () => buzzEdit((t) => { t.temple = Math.max(BUZZ_T[0], (+t.temple || 0) - fineB('temple')); })], ['+', () => buzzEdit((t) => { t.temple = Math.min(BUZZ_T[1], (+t.temple || 0) + fineB('temple')); })], 'Less sweep (0: a straight front edge)', 'The sideburn\'s front edge sweeps further forward toward the hairline', 'How far forward the sideburn\'s front edge has curved by the time it reaches the hair\'s edge at the temple') : null,
       sb ? chip(b.around === 'over' ? 'Round the ear: over' : 'Round the ear: none', b.around === 'over', () => buzzEdit((t) => { t.around = t.around === 'over' ? null : 'over'; }), true, 'Over: the sideburns carry on up over the ear and down behind it; none: they stop in front of the ear') : null,
       knob('Nape', (b && b.nape > 0 ? b.nape : 0) + ' mm', ['−', () => buzzEdit((t) => { t.nape = Math.max(0, (+t.nape || 0) - fineB('nape')); })], ['+', () => buzzEdit((t) => { t.nape = (+t.nape || 0) + fineB('nape'); })], 'A shorter taper at the back (0: none)', 'A longer taper at the back', 'How far below the hair\'s edge at the back the taper reaches'),
       knob('Front', (b && b.front > 0 ? b.front : 0) + ' mm', ['−', () => buzzEdit((t) => { t.front = Math.max(0, (+t.front || 0) - fineB('front')); })], ['+', () => buzzEdit((t) => { t.front = (+t.front || 0) + fineB('front'); })], 'A narrower hairline along the forehead (0: none)', 'A wider hairline along the forehead', 'How far below the hair\'s front edge the short hair reaches, thinning out'),

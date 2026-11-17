@@ -1426,6 +1426,11 @@ function lineSamples(T) { return Array.from({ length: LINE_N }, (_, i) => new TH
 //                   'over': the sideburn carries on round the ear, up over its top (OVER.up of the width above it, or
 //                   to under the hair's edge if that's higher) and down behind it (OVER.behind of the width past the
 //                   ear's back), its foot as the sideburns' all the way; left out: stops in front of the ear, as before
+//        temple     (2026-11-17; the game's maker, a line drawn on three heads: "a control to get the sideburns to curve
+//                   forward like this") how far forward, mm, the sideburn's front edge has swept by the time it reaches
+//                   the hair's edge: straight for the lowest TEMPLE.from of its height, then leaning forward in one
+//                   smooth curve to meet the hairline at the temple (above the sideburn's own top, straight up at its
+//                   furthest forward to in under the hair's edge there). Left out or 0: a straight front edge, as before
 //        nape       a taper at the back: from in under the hair's edge (scalp.edge) down `nape` mm below it, fading out downward, round to
 //                   behind the ears (full from NAPE.full degrees round from the face, none nearer it than NAPE.from).
 //        front      a hairline along the forehead (2026-11-10; the game's maker, of Ren's crop: "needs to be sunk into
@@ -1439,7 +1444,7 @@ function lineSamples(T) { return Array.from({ length: LINE_N }, (_, i) => new TH
 //      for a head without its own: every head's together). Every paint is taken off there: the buzz, the shade, the buzz
 //      cut, a hair's marks.
 // A millimetre on the head is taken as on the standard skull (MM_DEG millimetres a degree).
-export const SIDEBURN = { width: 11, soft: 1.5, under: 5 }, OVER = { up: 0.8, behind: 0.7 }, NAPE = { from: 112, full: 140 }, FRONT = { full: 55, to: 80 }, UNDER_SOFT = 2.0, EAR_SOFT = 1.5;
+export const SIDEBURN = { width: 11, soft: 1.5, under: 5 }, TEMPLE = { from: 0.3 }, OVER = { up: 0.8, behind: 0.7 }, NAPE = { from: 112, full: 140 }, FRONT = { full: 55, to: 80 }, UNDER_SOFT = 2.0, EAR_SOFT = 1.5;
 const MM_DEG = 0.09 * Math.PI / 180 * 1000, FW = 360, FH = 180;
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // (an ear's table [[azimuth, bottom, top], ...] each 2 degrees (azimuths their side's own, 0 to 180), grown by the margin:
@@ -1459,12 +1464,17 @@ export function paintField(HE, buzz, ears, data) {
   const sSoft = over || +B.width > 0 ? Math.max(SIDEBURN.soft, sbW / 3) : SIDEBURN.soft;
   // (each side's ear: its own front and top; the sideburn's strip in front of it)
   const side = { L: ears && ears.L, R: ears && ears.R };
+  // (the temple's sweep, degrees forward at the hair's edge; and on each side the height it is measured against: the
+  // sideburn's own top, in under the hair's edge at the ear's front)
+  const tmp = sb != null && +B.temple > 0 ? +B.temple / MM_DEG : 0;
+  const topOf = (S, sign) => (tmp && edge && S && S.front != null ? lineAt(edge, sign * (S.tab && S.tab.length ? S.tab[0][0] + 1 : S.front)) + SIDEBURN.under : null);
+  const tTop = { L: topOf(side.L, 1), R: topOf(side.R, -1) };
   for (let j = 0; j < FW; j++) {
     const az = -180 + j + 0.5, S = az >= 0 ? side.L : side.R, sa = Math.abs(az);
     const uLine = under ? lineAt(under, az) : 999, eLine = edge ? lineAt(edge, az) : 999;
     // (the sideburn's strip: how much of it at this azimuth, and its foot; its back at the front of the ear's clear margin,
     // its top SIDEBURN.under degrees in under the hair's edge)
-    let sw = 0, foot = 999, sTop = eLine + SIDEBURN.under;
+    let sw = 0, foot = 999, sTop = eLine + SIDEBURN.under, tFront = null, tBack = 0, tH = 0;
     const ear = S && S.tab ? earAt(S.tab, sa) : null;
     if (sb != null && S && S.front != null) {
       const back = S.tab && S.tab.length ? S.tab[0][0] + 1 : S.front, front = back - sbW;
@@ -1473,13 +1483,17 @@ export function paintField(HE, buzz, ears, data) {
       sw = sstep(front, front + sSoft, sa) * (1 - sstep(end - sSoft, end, sa));
       foot = S.top - sb / MM_DEG;
       if (over) sTop = Math.max(sTop, (ear ? ear[1] : S.top) + sbW * OVER.up);
+      // (the temple: in the columns its sweep can reach, the strip's front edge is worked out at each height, below)
+      const tt = az >= 0 ? tTop.L : tTop.R;
+      if (tmp && tt != null && tt > foot && sa > front - tmp - sSoft && sa < front + sSoft) { tFront = front; tBack = 1 - sstep(end - sSoft, end, sa); tH = tt - foot; }
     }
     const nw = nape ? sstep(NAPE.from, NAPE.full, sa) : 0, nFoot = eLine - nape / MM_DEG;
     const fw = fr ? 1 - sstep(FRONT.full, FRONT.to, sa) : 0, fFoot = eLine - fr / MM_DEG;
     for (let i = 0; i < FH; i++) {
       const el = 90 - i - 0.5, o = (i * FW + j) * 4;
-      let r = 0;
-      if (sw > 0) r = Math.max(r, sw * sstep(foot - sSoft / 2, foot + sSoft / 2, el) * (1 - sstep(sTop - 2, sTop, el)));
+      let r = 0, s = sw;
+      if (tFront != null) { const f = tFront - tmp * sstep(TEMPLE.from, 1, (el - foot) / tH); s = sstep(f, f + sSoft, sa) * tBack; }
+      if (s > 0) r = Math.max(r, s * sstep(foot - sSoft / 2, foot + sSoft / 2, el) * (1 - sstep(sTop - 2, sTop, el)));
       if (nw > 0 && eLine < 90) r = Math.max(r, nw * (el >= eLine ? 1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el) : Math.min(1, Math.max(0, (el - nFoot) / Math.max(eLine - nFoot, 1e-3)))));
       if (fw > 0 && eLine < 90) r = Math.max(r, fw * (el >= eLine ? 1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el) : Math.min(1, Math.max(0, (el - fFoot) / Math.max(eLine - fFoot, 1e-3))) ** 1.5));
       const g = sstep(uLine, uLine + UNDER_SOFT, el);
@@ -1562,7 +1576,19 @@ vec3 crPaint(vec3 skin) {
   // glTF's layout, no flip: the image's top at v 0. The upper half's painted lines are not drawn (2026-11-08: a haircut's
   // paint is its stubble only; the marks no longer carry any))
   float mv = clamp((90.0 - el) / 180.0, 0.002, 0.998) * 0.5, mu = az / 360.0 + 0.5;
-  mB = max(mB, texture2D(crMarkMap, vec2(mu, 0.5 + mv)).a);
+  // (NO LINE DOWN THE BACK, 2026-11-17; the game's maker: "a line right down the middle that flickers". The azimuth jumps
+  // from 180 to -180 down the back of the head, and across that jump the lookup's own slope is huge, so the picture's
+  // smallest copy was read there: a thin line of its average. The slope is taken from the same place counted the other
+  // way round instead (mw: its jump is at the face), whichever of the two has no jump here)
+  float mw = fract(mu + 0.5) - 0.5;
+  vec2 mA = vec2(mu, 0.5 + mv), mW = vec2(mw, 0.5 + mv);
+  vec2 mAx = dFdx(mA), mAy = dFdy(mA), mWx = dFdx(mW), mWy = dFdy(mW);
+  bool mBack = abs(mAx.x) + abs(mAy.x) > abs(mWx.x) + abs(mWy.x);
+#if __VERSION__ >= 300
+  mB = max(mB, textureGrad(crMarkMap, mA, mBack ? mWx : mAx, mBack ? mWy : mAy).a);
+#else
+  mB = max(mB, texture2D(crMarkMap, mBack ? mW : mA).a);
+#endif
 #endif
   // (never on the ears; each layer shown unless the lab's view takes it off)
   mB *= clear * crPaintShow.x;
