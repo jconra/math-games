@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LADDER, SETS, ORDER, RANGES, rangeOf, startGoals } from '../src/mathball/ladder.js';
-import { ruleOf, fits, goalsFor, checkSet, dealable, pickChange, crowded } from '../src/mathball/rules.js';
+import { ruleOf, fits, goalsFor, checkSet, dealable, pickChange, crowded, wholeNote } from '../src/mathball/rules.js';
 import { makeBalls, facing, PHYS, qrand, flightPath, lobTime } from '../src/mathball/physics.js';
 import { makeRound, OTHER, ROUND, holdPoint, throwFrom } from '../src/mathball/game.js';
 import { simPlayer, playRound } from '../src/mathball/sim.js';
@@ -48,11 +48,20 @@ test('the ladder: the game\'s maker\'s sets in his order, each level taking its 
   for (let i = 1; i < LADDER.length; i++) assert.ok(LADDER[i].grade >= LADDER[i - 1].grade, LADDER[i].key);
 });
 
-test('a fraction or a decimal ball goes in the fraction and decimal goals, never a whole-number one (4/4 is 1, but written as a fraction)', () => {
-  for (const r of ['odd', 'even', 'square', 'cube', 'prime', 'fact:48', 'fact:60', 'mult:1', 'mult:2']) for (const b of ['4/4', '2/2', '3/3', '6/3', '0.5', '3/4']) assert.equal(fits(r, b), false, `${b} in ${r}`);
+test('a fraction or a decimal that comes to a whole number goes in whole-number goals too (3/3 is 1, a factor of 36); one that does not, never', () => {
+  // (the game's maker, 2026-11-17: "Whole-number goals take it too"; before, only a ball written as a whole number did)
+  for (const [r, b] of [['fact:36', '3/3'], ['fact:48', '4/4'], ['odd', '2/2'], ['square', '4/4'], ['cube', '3/3'], ['prime', '6/3'], ['even', '6/3'], ['mult:1', '3/3'], ['mult:2', '6/3'], ['fact:60', '6/3']]) assert.equal(fits(r, b), true, `${b} in ${r}`);
+  for (const r of ['odd', 'even', 'square', 'cube', 'prime', 'fact:48', 'fact:60', 'mult:1', 'mult:2']) for (const b of ['0.5', '3/4', '1/2', '2.5']) assert.equal(fits(r, b), false, `${b} in ${r}`);
+  for (const [r, b] of [['even', '3/3'], ['prime', '4/4'], ['mult:2', '3/3'], ['fact:48', '10/2']]) assert.equal(fits(r, b), false, `${b} in ${r}`);
   for (const b of ['4/4', '2/2', '1']) assert.equal(fits('eq:1', b), true, b);
   assert.equal(fits('fact:48', '1'), true); assert.equal(fits('eq:1/2', '0.5'), true); assert.equal(fits('eq:1/2', '2/4'), true);
-  assert.match(ruleOf('fact:48').why('4/4'), /written as a fraction/);
+  // its line says the number it comes to first, then the reason in that number's own words
+  assert.equal(ruleOf('fact:36').why('3/3'), '3/3 is 1. 1 is a factor of 36: 1 × 36 = 36.');
+  assert.equal(ruleOf('even').why('3/3'), '3/3 is 1. 1 is odd: it ends in 1.');
+  assert.equal(ruleOf('fact:48').why('3/4'), '3/4 is not a whole number, so it is not a factor of 48.');
+  // Help says so at a whole-number goal, but only on a court that has a fraction or a decimal ball
+  assert.match(wholeNote('fact:36', [4, '3/3', 9]), /3\/3 is 1/);
+  assert.equal(wholeNote('fact:36', [4, 9, 12]), ''); assert.equal(wholeNote('eq:1', [4, '3/3']), ''); assert.equal(wholeNote('more:1/2', ['0.5', 3]), '');
 });
 
 test('the reasons for fraction and decimal goals are in plain words: "is more than", never "against" or "wholes"', () => {

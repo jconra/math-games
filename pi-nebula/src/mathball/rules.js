@@ -32,10 +32,16 @@ export function value(ball) {
 }
 const cmp = (a, b) => a.n * b.d - b.n * a.d;
 const isWhole = (v) => v.d === 1;
-// a ball WRITTEN as a whole number: the whole-number rules (odd and even, multiples, factors, squares, primes, cubes)
-// take only these. 4/4 is 1, but a child sees a fraction: it goes in "equal to 1", not in "factors of 48"
-const wholeBall = (v) => isWhole(v) && v.w !== 'frac' && v.w !== 'dec';
-const notWhole = (v, b, tail) => (isWhole(v) ? `${b} is ${v.n} written as a ${v.w === 'dec' ? 'decimal' : 'fraction'}, and this goal takes whole numbers.` : `${b} is not a whole number, so ${tail}.`);
+// a ball that COMES TO a whole number, however it is written: the whole-number rules (odd and even, multiples, factors,
+// squares, primes, cubes) take it. The game's maker (2026-11-17, asked whether a fraction that makes a whole number
+// should go into whole-number goals): "Whole-number goals take it too". So 3/3 thrown at "factors of 36" goes in: 3/3 is
+// 1, and 1 is a factor of 36 (the line it gets says so: ruleOf's why, below). Before, only a ball WRITTEN as a whole
+// number did, and 3/3 went in "equal to 1" alone.
+const wholeBall = isWhole;
+const writtenAsPart = (v) => v.w === 'frac' || v.w === 'dec';
+const notWhole = (v, b, tail) => `${b} is not a whole number, so ${tail}.`;
+// the rules about whole numbers (a fraction or a decimal that comes to a whole number is read as that number by them)
+const WHOLE_KINDS = new Set(['even', 'odd', 'cube', 'mult', 'fact', 'square', 'prime', 'tens', 'ones']);
 const isPrime = (n) => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
 const isSquare = (n) => n >= 1 && Number.isInteger(Math.sqrt(n));
 const label = (ball) => String(ball);
@@ -258,11 +264,21 @@ export function ruleOf(name) {
   if (['less', 'more', 'mult', 'fact', 'tens', 'ones', 'eq', 'round'].includes(kind) && x == null) throw new Error('Mathball: the rule ' + name + ' needs a number');
   if (kind === 'between' && (x == null || y == null)) throw new Error('Mathball: the rule ' + name + ' needs two numbers');
   for (const a of [x, y]) if (a != null) value(a);   // (a number the balls' check can't read: a mistake in the ladder)
-  const r = K(x, y), rule = { id: String(name), kind, arg: x, arg2: y, ...r, why: (ball) => r.why(value(ball), label(ball)) };
+  // (a ball written as a fraction or a decimal that comes to a whole number, at a whole-number rule: its line says the
+  // number it comes to first, then the reason in that number's own words: "3/3 is 1. 1 is a factor of 36: 1 × 36 = 36.")
+  const why = (ball) => {
+    const v = value(ball), b = label(ball);
+    return WHOLE_KINDS.has(kind) && isWhole(v) && writtenAsPart(v) ? `${b} is ${v.n}. ${r.why({ n: v.n, d: 1 }, String(v.n))}` : r.why(v, b);
+  };
+  const r = K(x, y), rule = { id: String(name), kind, arg: x, arg2: y, ...r, why };
   CACHE.set(name, rule);
   return rule;
 }
 export const fits = (rule, ball) => ruleOf(rule).test(value(ball));
+// Help's extra line for a whole-number goal on a court with fraction or decimal balls: such a ball counts as the whole
+// number it comes to ('' when the rule is not about whole numbers, or no ball on the court is written as a part)
+export const wholeNote = (rule, balls) => (WHOLE_KINDS.has(ruleOf(rule).kind) && balls.some((x) => /[/.]/.test(String(x)))
+  ? 'A fraction that makes a whole number counts as that number: 3/3 is 1, and 6/3 is 2.' : '');
 // the goals a ball fits (their indexes)
 export const goalsFor = (rules, ball) => rules.map((r, i) => (fits(r, ball) ? i : -1)).filter((i) => i >= 0);
 // a ball's number as it is written on the ball

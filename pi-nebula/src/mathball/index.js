@@ -34,7 +34,7 @@ import { facing, flightPath, lobTime, PHYS } from './physics.js';
 import { makeView } from './view.js';
 import { COURT, GOALS, GOAL_CSS, WALLS, clampIn, inside } from './court.js';
 import { LADDER } from './ladder.js';
-import { ruleOf, value as valueOf } from './rules.js';
+import { ruleOf, value as valueOf, wholeNote } from './rules.js';
 import { makeCrew } from '../../kit/crew.js';
 import { ROSTER } from '../life.js';
 import { shine } from '../player.js';
@@ -236,7 +236,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   // ── Help: the four rules explained (never opens by itself; X and Esc close it; the round holds still) ───────────
   function toggleHelp(on = helpBox.hidden) {
     if (on) {
-      helpBox.querySelector('ul').innerHTML = G.goals.map((g, i) => { const R = ruleOf(g.rule); return `<li style="--c:${GOAL_CSS[GOALS[i].colour]}"><b>The ${GOALS[i].colour} goal: ${esc(R.say)}</b><span>${esc(R.help)}</span><small>${esc(R.list)}</small></li>`; }).join('');
+      helpBox.querySelector('ul').innerHTML = G.goals.map((g, i) => { const R = ruleOf(g.rule), note = wholeNote(g.rule, G.balls.filter((x) => x.mode !== 'gone').map((x) => x.num)); return `<li style="--c:${GOAL_CSS[GOALS[i].colour]}"><b>The ${GOALS[i].colour} goal: ${esc(R.say)}</b><span>${esc(R.help)}${note ? ' ' + esc(note) : ''}</span><small>${esc(R.list)}</small></li>`; }).join('');
       helpBox.querySelector('.mbl-hhow').textContent = `${press('a ball')} to run to it and pick it up, then ${touchy() ? 'tap' : 'click'} a goal its number fits (or one of the goal buttons). The dotted arc shows where a throw will go, and turns the goal's colour when it goes into that goal${touchy() ? ' (to aim it, hold a finger on the court and drag; lifting the finger throws)' : ' (it follows the mouse)'}. A ball can fit more than one goal. The bar of light going round the room over the goals (and along the top of the screen) changes a goal's rule when it gets to that goal; back where it started, the round ends.`;
     }
     helpBox.hidden = !on; paused = on && phase === 'play';
