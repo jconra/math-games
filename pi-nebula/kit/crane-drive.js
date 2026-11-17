@@ -516,13 +516,16 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     if (s.wait != null) { s.t = (s.t || 0) + dt; if (s.t >= s.wait) auto.shift(); return; }
     if (s.grab) {
       if (!s.started) {
+        // (to take a canister with the arms already shut round nothing, they open first, then shut on it)
+        if (s.grab === 'shut' && held < 0 && S.arms > 0.999 && S.latch > 0.999) { startGrab('open'); return; }
         s.started = true;
         const already = s.grab === 'open' ? S.arms < 1e-3 && S.latch < 1e-3 : S.arms > 0.999 && S.latch > 0.999;
         if (!startGrab(s.grab) && !already) { D.failed = { ...s, why: D.notes.map((n) => n.text).join(' ') }; auto.length = 0; }
       } else if (!action) auto.shift();
       return;
     }
-    if (s.until) { if (s.until(D)) auto.shift(); return; }
+    // (a wait for something to happen: given patience, it gives up after so long, and says so, as a move that is stuck does)
+    if (s.until) { if (s.until(D)) auto.shift(); else if (s.patience != null && (s.waited = (s.waited || 0) + dt) > s.patience) { D.failed = { ...s, why: 'It waited too long.' }; auto.length = 0; } return; }
     if (!s.to) { auto.shift(); return; }
     // the parts to their values together: each planned as the round plans a move (its speed, speeding up and slowing
     // down), and followed as far as nothing is in the way (and where something is, it waits there: people walk on)

@@ -98,6 +98,18 @@ test('by hand: an empty off the rack: taken, and lifted clear of the saddles it 
   assert.ok(S.hoist >= b.at[1] - 1e-3, 'set back down on the rack, not through it: ' + S.hoist.toFixed(3));
 });
 
+test('the autopilot: told to take a canister with its arms already shut round nothing, it opens them first and takes it; a wait gives up in time', () => {
+  const { S, D } = fresh(), m = mounts[0], o = [m.at[0] + m.out[0], m.at[2] + m.out[1]];
+  D.byHand = false;
+  D.go([{ grab: 'shut' }]); until(D, () => !D.busy, 10);
+  assert.ok(S.arms > 0.999 && D.held < 0, 'shut round nothing');
+  D.go([{ to: { x: o[0], z: o[1], yaw: m.yaw } }, { until: (d) => d.state.tray[0] > 0.999 }, { to: { hoist: m.at[1] + site.can.lift } }, { grab: 'shut' }, { until: (d) => d.held === 0, patience: 12 }]);
+  assert.ok(until(D, () => D.held === 0 || !!D.failed, 60) != null && D.held === 0, 'taken: ' + JSON.stringify(D.failed && D.failed.why));
+  // (waiting for something that never comes: it gives up after its patience, and says so)
+  D.go([{ until: () => false, patience: 2 }]);
+  assert.ok(until(D, () => !!D.failed, 5) != null && !D.busy, 'gave up: ' + JSON.stringify(D.failed && D.failed.why));
+});
+
 test('nothing driven through anything: the floor, the wall, a canister in the way', () => {
   const { S, D } = fresh();
   run(D, 20, toward(S, 33, -17.0));
