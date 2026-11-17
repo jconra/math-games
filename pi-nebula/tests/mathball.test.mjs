@@ -48,6 +48,13 @@ test('the ladder: the game\'s maker\'s sets in his order, each level taking its 
   for (let i = 1; i < LADDER.length; i++) assert.ok(LADDER[i].grade >= LADDER[i - 1].grade, LADDER[i].key);
 });
 
+test('a fraction or a decimal ball goes in the fraction and decimal goals, never a whole-number one (4/4 is 1, but written as a fraction)', () => {
+  for (const r of ['odd', 'even', 'square', 'cube', 'prime', 'fact:48', 'fact:60', 'mult:1', 'mult:2']) for (const b of ['4/4', '2/2', '3/3', '6/3', '0.5', '3/4']) assert.equal(fits(r, b), false, `${b} in ${r}`);
+  for (const b of ['4/4', '2/2', '1']) assert.equal(fits('eq:1', b), true, b);
+  assert.equal(fits('fact:48', '1'), true); assert.equal(fits('eq:1/2', '0.5'), true); assert.equal(fits('eq:1/2', '2/4'), true);
+  assert.match(ruleOf('fact:48').why('4/4'), /written as a fraction/);
+});
+
 test('every level starts its rounds with four goals that pass the ball check, drawn from all its sets', () => {
   const rand = seeded(5);
   for (const L of LADDER) {

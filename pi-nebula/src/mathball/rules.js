@@ -23,13 +23,18 @@ const frac = (n, d = 1) => { const g = gcd(n, d), s = d < 0 ? -1 : 1; return { n
 export function value(ball) {
   if (typeof ball === 'number') { if (!Number.isInteger(ball)) throw new Error('write decimals as strings: ' + ball); return frac(ball); }
   const s = String(ball).trim();
-  let m = s.match(/^(\d+)\/(\d+)$/); if (m) return frac(+m[1], +m[2]);
-  m = s.match(/^(\d*)\.(\d+)$/); if (m) return frac(+(m[1] || 0) * 10 ** m[2].length + +m[2], 10 ** m[2].length);
+  // (how it is written goes with it: a fraction or a decimal that comes to a whole number, 4/4, is still written as one)
+  let m = s.match(/^(\d+)\/(\d+)$/); if (m) return { ...frac(+m[1], +m[2]), w: 'frac' };
+  m = s.match(/^(\d*)\.(\d+)$/); if (m) return { ...frac(+(m[1] || 0) * 10 ** m[2].length + +m[2], 10 ** m[2].length), w: 'dec' };
   m = s.match(/^\d+$/); if (m) return frac(+s);
   throw new Error('cannot read the ball ' + s);
 }
 const cmp = (a, b) => a.n * b.d - b.n * a.d;
 const isWhole = (v) => v.d === 1;
+// a ball WRITTEN as a whole number: the whole-number rules (odd and even, multiples, factors, squares, primes, cubes)
+// take only these. 4/4 is 1, but a child sees a fraction: it goes in "equal to 1", not in "factors of 48"
+const wholeBall = (v) => isWhole(v) && v.w !== 'frac' && v.w !== 'dec';
+const notWhole = (v, b, tail) => (isWhole(v) ? `${b} is ${v.n} written as a ${v.w === 'dec' ? 'decimal' : 'fraction'}, and this goal takes whole numbers.` : `${b} is not a whole number, so ${tail}.`);
 const isPrime = (n) => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
 const isSquare = (n) => n >= 1 && Number.isInteger(Math.sqrt(n));
 const label = (ball) => String(ball);
@@ -89,14 +94,14 @@ const isCube = (n) => n >= 1 && Math.round(Math.cbrt(n)) ** 3 === n;
 // each: sign (the board), say (plain words), test(v), help (Help's line), why(v, ball) -> a plain line, right or wrong
 const KINDS = {
   even: () => ({
-    sign: ['even numbers'], say: 'even numbers', test: (v) => isWhole(v) && v.n % 2 === 0,
+    sign: ['even numbers'], say: 'even numbers', test: (v) => wholeBall(v) && v.n % 2 === 0,
     help: 'Even numbers end in 0, 2, 4, 6 or 8: they split into two equal halves.', list: list([2, 4, 6, 8, 10, 12, 14, 16, 18, 20]),
-    why: (v, b) => (!isWhole(v) ? `${b} is not a whole number: only whole numbers are even or odd.` : v.n % 2 === 0 ? `${b} is even: it ends in ${v.n % 10}.` : `${b} is odd: it ends in ${v.n % 10}.`),
+    why: (v, b) => (!wholeBall(v) ? notWhole(v, b, 'it is not even or odd: only whole numbers are') : v.n % 2 === 0 ? `${b} is even: it ends in ${v.n % 10}.` : `${b} is odd: it ends in ${v.n % 10}.`),
   }),
   odd: () => ({
-    sign: ['odd numbers'], say: 'odd numbers', test: (v) => isWhole(v) && v.n % 2 === 1,
+    sign: ['odd numbers'], say: 'odd numbers', test: (v) => wholeBall(v) && v.n % 2 === 1,
     help: 'Odd numbers end in 1, 3, 5, 7 or 9: one is always left over when they are split in two.', list: list([1, 3, 5, 7, 9, 11, 13, 15, 17, 19]),
-    why: (v, b) => (!isWhole(v) ? `${b} is not a whole number: only whole numbers are odd or even.` : v.n % 2 === 1 ? `${b} is odd: it ends in ${v.n % 10}.` : `${b} is even: it ends in ${v.n % 10}.`),
+    why: (v, b) => (!wholeBall(v) ? notWhole(v, b, 'it is not odd or even: only whole numbers are') : v.n % 2 === 1 ? `${b} is odd: it ends in ${v.n % 10}.` : `${b} is even: it ends in ${v.n % 10}.`),
   }),
   // (less and more than a whole number; or, for fraction and decimal balls, than a fraction or a decimal: 'more:1/2')
   less: (x) => ({
@@ -161,10 +166,10 @@ const KINDS = {
     },
   }),
   cube: () => ({
-    sign: ['cube numbers'], say: 'cube numbers', test: (v) => isWhole(v) && isCube(v.n),
+    sign: ['cube numbers'], say: 'cube numbers', test: (v) => wholeBall(v) && isCube(v.n),
     help: 'A cube number is a number times itself, and times itself again: 2 × 2 × 2 = 8, 3 × 3 × 3 = 27.', list: list([1, 8, 27, 64, 125], false),
     why: (v, b) => {
-      if (!isWhole(v)) return `${b} is not a whole number, so it is not a cube number.`;
+      if (!wholeBall(v)) return notWhole(v, b, 'it is not a cube number');
       const r = Math.round(Math.cbrt(v.n));
       if (r ** 3 === v.n) return `${b} is a cube number: ${r} × ${r} × ${r} = ${b}.`;
       const lo = Math.floor(Math.cbrt(v.n) + 1e-9);
@@ -172,10 +177,10 @@ const KINDS = {
     },
   }),
   mult: (k) => ({
-    sign: ['multiples of', String(k)], say: `multiples of ${k}`, test: (v) => isWhole(v) && v.n > 0 && v.n % k === 0,
+    sign: ['multiples of', String(k)], say: `multiples of ${k}`, test: (v) => wholeBall(v) && v.n > 0 && v.n % k === 0,
     help: `Multiples of ${k} are the ${k} times table: ${k} × 1, ${k} × 2, ${k} × 3 and on.`, list: list(range(1, 10).map((i) => i * k)),
     why: (v, b) => {
-      if (!isWhole(v) || v.n <= 0) return `${b} is not a whole number, so it is not a multiple of ${k}.`;
+      if (!wholeBall(v) || v.n <= 0) return notWhole(v, b, `it is not a multiple of ${k}`);
       const q = Math.floor(v.n / k);
       if (v.n % k === 0) return `${b} is a multiple of ${k}: ${k} × ${q} = ${b}.`;
       if (q === 0) return `${b} is not a multiple of ${k}: the first one is ${k} × 1 = ${k}.`;
@@ -183,10 +188,10 @@ const KINDS = {
     },
   }),
   fact: (k) => ({
-    sign: ['factors of', String(k)], say: `factors of ${k}`, test: (v) => isWhole(v) && v.n > 0 && k % v.n === 0,
+    sign: ['factors of', String(k)], say: `factors of ${k}`, test: (v) => wholeBall(v) && v.n > 0 && k % v.n === 0,
     help: `Factors of ${k} divide ${k} exactly, with nothing left over.`, list: list(range(1, k).filter((i) => k % i === 0), false),
     why: (v, b) => {
-      if (!isWhole(v) || v.n <= 0) return `${b} is not a whole number, so it is not a factor of ${k}.`;
+      if (!wholeBall(v) || v.n <= 0) return notWhole(v, b, `it is not a factor of ${k}`);
       if (k % v.n === 0) return `${b} is a factor of ${k}: ${b} × ${k / v.n} = ${k}.`;
       if (v.n > k) return `${b} is bigger than ${k}, so it can't be a factor of ${k}.`;
       const q = Math.floor(k / v.n);
@@ -194,19 +199,19 @@ const KINDS = {
     },
   }),
   square: () => ({
-    sign: ['square numbers'], say: 'square numbers', test: (v) => isWhole(v) && isSquare(v.n),
+    sign: ['square numbers'], say: 'square numbers', test: (v) => wholeBall(v) && isSquare(v.n),
     help: 'A square number is a number times itself: 1 × 1, 2 × 2, 3 × 3 and on.', list: list(range(1, 10).map((i) => i * i)),
     why: (v, b) => {
-      if (!isWhole(v)) return `${b} is not a whole number, so it is not a square number.`;
+      if (!wholeBall(v)) return notWhole(v, b, 'it is not a square number');
       const r = Math.floor(Math.sqrt(v.n));
       return r * r === v.n ? `${b} is a square number: ${r} × ${r} = ${b}.` : `${b} is not a square number: ${r} × ${r} = ${r * r} and ${r + 1} × ${r + 1} = ${(r + 1) * (r + 1)}.`;
     },
   }),
   prime: () => ({
-    sign: ['prime numbers'], say: 'prime numbers', test: (v) => isWhole(v) && isPrime(v.n),
+    sign: ['prime numbers'], say: 'prime numbers', test: (v) => wholeBall(v) && isPrime(v.n),
     help: 'A prime number has only two factors: 1 and itself. 1 is not a prime number.', list: list([2, 3, 5, 7, 11, 13, 17, 19, 23, 29]),
     why: (v, b) => {
-      if (!isWhole(v)) return `${b} is not a whole number, so it is not prime.`;
+      if (!wholeBall(v)) return notWhole(v, b, 'it is not prime');
       if (v.n === 1) return '1 is not a prime number: a prime has exactly two factors.';
       if (isPrime(v.n)) return `${b} is prime: only 1 and ${b} divide it.`;
       let f = 2; while (v.n % f) f++;
@@ -214,12 +219,12 @@ const KINDS = {
     },
   }),
   tens: (k) => ({
-    sign: [`${k} tens`], say: `${k} tens (${k}0 to ${k}9)`, test: (v) => isWhole(v) && Math.floor(v.n / 10) === k && v.n < 100,
+    sign: [`${k} tens`], say: `${k} tens (${k}0 to ${k}9)`, test: (v) => wholeBall(v) && Math.floor(v.n / 10) === k && v.n < 100,
     help: `${k} tens: the numbers from ${k}0 to ${k}9.`, list: list(range(k * 10, k * 10 + 9), false),
     why: (v, b) => (Math.floor(v.n / 10) === k ? `${b} has ${k} tens.` : `${b} has ${Math.floor(v.n / 10)} tens, not ${k}.`),
   }),
   ones: (k) => ({
-    sign: [`${k} ones`], say: `${k} ones (ends in ${k})`, test: (v) => isWhole(v) && v.n % 10 === k,
+    sign: [`${k} ones`], say: `${k} ones (ends in ${k})`, test: (v) => wholeBall(v) && v.n % 10 === k,
     help: `${k} ones: the numbers that end in ${k}.`, list: list(range(0, 9).map((i) => i * 10 + k).filter((x) => x > 0)),
     why: (v, b) => (v.n % 10 === k ? `${b} ends in ${k}.` : `${b} ends in ${v.n % 10}, not ${k}.`),
   }),
