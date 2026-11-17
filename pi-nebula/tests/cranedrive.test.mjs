@@ -14,7 +14,8 @@ import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 
 const Q = Math.PI / 2, deg = Math.PI / 180;
 const mounts = [];
-for (const [z, o] of [[-7.208, -1], [-2.792, 1]]) for (const y of [3.644, 2.252]) for (const [x, yaw] of [[40.578, Q], [38.142, -Q]]) mounts.push({ at: [x, y, z], yaw, out: [0, o], upper: y > 3 });
+// (the mounts' heights: the parked Miner on its longer legs, 12 cm higher than before 2026-11-16, as tests/crane.test.mjs)
+for (const [z, o] of [[-7.208, -1], [-2.792, 1]]) for (const y of [3.764, 2.372]) for (const [x, yaw] of [[40.578, Q], [38.142, -Q]]) mounts.push({ at: [x, y, z], yaw, out: [0, o], upper: y > 3 });
 const sockets = []; for (const x of [29, 31.5, 34, 36.5]) for (const y of [0.75, 2.2]) sockets.push({ at: [x, y, -18.16], n: [0, 1], upper: y > 1.5 });
 const bays = []; for (let j = 0; j < 8; j++) bays.push({ at: [46 + j * 1.15, 0.65, -16.8] });
 const ARMS = [-1, 1].flatMap((end) => [1, -1].map((s) => ({ z: end * (0.55 + s * 0.036), way: end * s })));
