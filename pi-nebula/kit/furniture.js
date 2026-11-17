@@ -16,6 +16,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
 import { GLOW } from './materials.js';
 import { shape, solid, add } from './bevel.js';
+import { segText } from './shipparts/cabin/segtext.js';
 
 const PI = Math.PI;
 const FABRIC = { c: '#b8693a', r: 0.92, m: 0, w: 0.25 }, FABRIC2 = { c: '#8c4a28', r: 0.95, m: 0, w: 0.25 }, LINEN = { c: '#c9ccc9', r: 0.9, m: 0, w: 0.2 };
@@ -315,22 +316,26 @@ export function sign(p, v) {
 // think it is more intuitive to think you can interact with something that is at your own level. I think it's fine to
 // have the big boards, but we should put smaller ones on the first floor"): the station's jobs over the captains
 // hiring, each under a quarter of the big board's size, its back on z = 0 and its middle at y = 0 (the layout lifts it
-// to about 1.45 m: the lower screen at a person's chest, the upper at their eyes; it is 11 cm deep, so on a plain wall
-// panel it takes in the panel's middle upright, which stands 9 cm out). They are the big boards' own
-// pictures: the captains' from the kit's screen sheet, the station's the game's one live picture, laid on its dark
-// screen here as on the big board's (JOBS_PAIR: each screen's size, their face, how far over and under the middle).
+// to about 1.4 m: the lower screen at a person's chest, the upper at their eyes; it is 11 cm deep, so on a plain wall
+// panel it takes in the panel's middle upright, which stands 9 cm out). Over the screens, lit words say what it is
+// for, PICK ONE (the big board's own words), beside a small orange lamp: a first fresh pair of eyes took it for a
+// notice to read, a small copy of the screens overhead, with nothing on it to say it could be used. They are the big
+// boards' own pictures: the captains' from the kit's screen sheet, the station's the game's one live picture, laid on
+// its dark screen here as on the big board's (JOBS_PAIR: each screen's size, their face, how far over and under the
+// middle).
 export const JOBS_SCREEN = { w: 4.2, h: 1.68, z: 0.123 };
 export const JOBS_PAIR = { w: 1.0, h: 0.4, z: 0.114, up: 0.23 };
 export function jobs(p, v) {
   if (v === 'pair') {
-    const { w, h, z, up } = JOBS_PAIR, fw = w + 0.13, fh = 2 * up + h + 0.13, flat = (skip) => ({ r: 0, cell: 9, loops: [], skip });
-    add(p, 'black', solid(shape(fw, fh, 0.05), 0.11, { edge: 0.014, back: false }), [0, 0, 0]);
+    const { w, h, z, up } = JOBS_PAIR, fw = w + 0.13, fh = 2 * up + h + 0.13, head = 0.085, flat = (skip) => ({ r: 0, cell: 9, loops: [], skip });
+    add(p, 'black', solid(shape(fw, fh + head, 0.05, 0, head / 2), 0.11, { edge: 0.014, back: false }), [0, 0, 0]);
+    segText(p, 'PICK ONE', { h: 0.046, t: 0.008, align: 'left', at: [-w / 2 + 0.05, up + h / 2 + 0.062, 0.1112], look: [3.6, 1.5, 0.4], mat: 'glow' });
     p.slab({ c: '#0f2a3d', r: 0.3, m: 0.1, w: 0.2 }, -w / 2, w / 2, up - h / 2, up + h / 2, 0.11, z - 0.001, flat(['-z']));
     p.screen(SCREEN_RECT.jobs, w, h, [0, -up, z], null, 1.15);
-    // (a sill under it with a blue line of light, as under the big boards; a small orange lamp by the screen to press)
+    // (a sill under it with a blue line of light, as under the big boards)
     p.slab('dark', -fw / 2 + 0.06, fw / 2 - 0.06, -fh / 2 - 0.05, -fh / 2, 0.02, 0.095, flat(['+y']));
     p.glowSlab('blue', -fw / 2 + 0.09, fw / 2 - 0.09, -fh / 2 - 0.034, -fh / 2 - 0.022, 0.095, 0.099, { r: 0, loops: [] });
-    p.glowSlab('orange', fw / 2 - 0.05, fw / 2 - 0.026, up - 0.05, up + 0.05, 0.11, 0.113, { r: 0, loops: [] });
+    p.glowSlab('orange', -w / 2, -w / 2 + 0.03, up + h / 2 + 0.04, up + h / 2 + 0.084, 0.11, 0.113, { r: 0, loops: [] });
     p.light([0, 0, 0.55], 0.5, [0.35, 0.65, 1], [0, -0.2, 1], 3.2);
     return;
   }

@@ -80,7 +80,7 @@ test('the ward: a table on one side of every bed and a machine on the other, no 
     assert.ok(tables.length >= 1 && machines.length >= 1, 'bay ' + (i + 1) + ' has a table and a machine');
     assert.ok(tables.every((t) => tableOk(t.variant) && tableThings(t.variant).length >= 1), 'with get-well things on its table');
     assert.ok(tables.some((t) => machines.some((m) => m.side === -t.side)), 'a machine on the other side from a table');
-    // (clear of the bed, which with its rails is 0.51 m either side of its middle; and by its head, within a metre and a
+    // (clear of the bed, which with its rails is 0.57 m either side of its middle; and by its head, within a metre and a
     // half of the wall, so the way in beside the bed from the walkway stays open)
     for (const t of bay) assert.ok(t.off > 0.6 && t.x < 33.22 + 1.5, t.piece + ' in bay ' + (i + 1) + ' stands by the head, off the bed');
   });
@@ -88,10 +88,10 @@ test('the ward: a table on one side of every bed and a machine on the other, no 
   assert.equal(new Set(kinds).size, kinds.length, 'no two bays are dressed alike: ' + kinds.join(' | '));
   assert.ok(things.some((t) => t.piece === 'ivstand') && things.some((t) => t.piece === 'vitals'));
   // the ways in beside the beds: between a bed's side and the curtain (or the wall) next to it, more than a person's
-  // width (0.56 m) with something to spare
+  // width (0.56 m) with something to spare (a bed with its leaning rails: 0.57 m either side of its middle)
   const sides = W.filter((p) => p.piece === 'curtain' && curtainOf(p.variant).where === 'side').map((p) => at(p).z);
   const edges = [75.22, ...sides, 84.78].sort((a, b) => a - b);
-  for (const b of beds) for (const e of edges) if (Math.abs(e - b.z) < 2.2) assert.ok(Math.abs(e - b.z) - 0.51 > 0.85, 'beside bed ' + b.ward);
+  for (const b of beds) for (const e of edges) if (Math.abs(e - b.z) < 2.2) assert.ok(Math.abs(e - b.z) - 0.57 > 0.85, 'beside bed ' + b.ward);
 });
 
 test('the small boards: both, at a person\'s own height, in the terminal, by the junction and by the quarters', () => {
@@ -111,15 +111,16 @@ test('the small boards: both, at a person\'s own height, in the terminal, by the
   assert.ok(Math.abs(w / h - bigW / bigH) < 1e-6, 'the same shape'); assert.ok(w <= bigW / 4 && w >= 0.9, 'small, but a row can still be read');
 });
 
-test('the scanner\'s own floor: between the rails, flat on the room\'s, under the whole of its patient\'s way', () => {
+test('the scanner\'s own floor: between the rails, a centimetre thick, under the whole of its patient\'s way', () => {
   const k = read('../kit/bigscanner.js'), deck = /deck:\s*\{([^}]*)\}/.exec(k);
   assert.ok(deck, 'the scanner has a deck');
   const x = numbers(deck[1], 'x'), [z0, z1] = numbers(deck[1], 'z', 2), top = numbers(deck[1], 'top'), [g0, g1] = numbers(deck[1], 'grip', 2), [gz0, gz1] = numbers(deck[1], 'gripZ', 2);
   const rail = numbers(k, 'rail'), bedW = numbers(k, 'bed: \\{ w');
   // from rail to rail (inside the rails' own foot plates, 0.15 m either side of each), wider than the bed
   assert.ok(x > bedW / 2 + 0.4 && x < rail - 0.15 + 1e-9, String(x));
-  // flat: a few millimetres, so it is no step (the way the patient gets on and off is untouched: src/onbed.js)
-  assert.ok(top > 0 && top <= 0.006, String(top));
+  // a centimetre thick at the most, so it is no step: the patient's way and moves are lifted by what the floor itself
+  // says is under their feet (src/people.js), and the moves on and off the bed are untouched (src/onbed.js)
+  assert.ok(top > 0 && top <= 0.012, String(top));
   // the patient's way along the bed (src/life.js SCAN_BED, after the spot they wait at) and where they stand to get
   // on: on the deck, on its grip tape; from the wall to past the bed's foot
   const way = [...SCAN_BED.path.slice(1), SCAN_BED.stand];

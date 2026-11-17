@@ -35,7 +35,7 @@ export const STATION_JOBS = [
 // small for a finger: a tap on the board opens the list instead. A small copy on a wall: its prompt comes up
 // `nearSmall` from the spot in front of it (`stand` out from the wall); a row too small on the screen for the mouse's
 // pointer (`pointer`, px) opens the list too.
-export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 9 };
+export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 6 };
 
 const CSS = `
 .pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
