@@ -90,7 +90,7 @@ function rangesHtml(levels) {
   }).join('');
   const legend = S.order.map((k, j) => `<li><b>${j + 1}</b> ${esc(SETS[k].short)}</li>`).join('');
   return `<h2 class="r-title">The levels and the sets they use</h2>
-    <p class="r-lede">Each level takes its goals' rules from a range of the sets: level 1 from set 1, level 2 from sets 1 and 2, level 3 from 2 and 3, level 4 from 2 to 4, level 5 from 3 to 5, level 6 from 3 to 6, and on the same way (level ${n} from ${rangeOf(n)[0]} to ${rangeOf(n)[1]}). A filled dot is the level's own set: one or two of a round's four goals come from it, the rest from all its sets, the newer more often.</p>
+    <p class="r-lede">Each level takes its goals' rules from a range of the sets: level 1 from set 1, level 2 from sets 1 and 2, level 3 from 2 and 3, level 4 from 2 to 4, level 5 from 3 to 5, level 6 from 3 to 6, and on the same way (level ${n} from ${rangeOf(n)[0]} to ${rangeOf(n)[1]}). A filled dot is the level's own set: one to three of a round's four goals come from it (most often two), the rest from all its sets, the newer more often.</p>
     <div class="r-wrap"><table class="ranges">${head}${rows}</table></div><ol class="r-legend">${legend}</ol>`;
 }
 
