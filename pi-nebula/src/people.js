@@ -921,7 +921,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
           const s = Math.min(d - FRIENDLY.near, 1.0 * dt), ux = (pl.pos.x - P.pos.x) / d, uz = (pl.pos.z - P.pos.z) / d;
           _ap.copy(P.pos); walls.move(_ap, ux * s, uz * s, 0.26);
           if (_ap.distanceTo(P.pos) > s * 0.5 && !onPatch(_ap.x, _ap.z) && !someoneAt(_ap, P, LIFE.body * 0.9, true)) {
-            P.pos.copy(_ap); if (!K.walking) { K.walking = true; play(P, CLIPS.walk, { speed: 0.7 }); } return;
+            P.pos.copy(_ap); if (!K.walking) { K.walking = true; play(P, CLIPS.walk, { speed: Math.max(0.6, Math.min(1.5, 1.0 / P.c.stride.Walk)) }); } return;
           }
         } else if (K.walking) return;
       }
