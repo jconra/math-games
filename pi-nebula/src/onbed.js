@@ -48,8 +48,8 @@
 // a bounce on landing, the hands to the belly as the legs slide out, the hands on the bed's edge until steady.)
 //
 // THE MOVES, with their seconds (people.js plays them in turn):
-export const MOVES_ON = [['back', 0.9], ['hop', 1.5], ['swing', 2.1], ['down', 1.8], ['stretch', 1.1]];
-export const MOVES_OFF = [['bend', 1.0], ['up', 1.8], ['swingout', 2.1], ['hopdown', 1.15]];
+export const MOVES_ON = [['back', 0.9], ['hop', 1.5], ['swing', 2.1], ['down', 1.6], ['stretch', 1.1]];
+export const MOVES_OFF = [['bend', 1.0], ['up', 1.6], ['swingout', 2.1], ['hopdown', 1.15]];
 export const SECS = Object.fromEntries([...MOVES_ON, ...MOVES_OFF]);
 // (the knees' bend kept all through the swing, at least, degrees: the game's maker's "no straight-leg swing")
 export const KNEE_MIN = 45;
@@ -63,7 +63,7 @@ export const KNEE_MIN = 45;
 // rounded forward at most (rad); getting off, the part of the turn (0 at its end) over which the legs are let down; in
 // the turn, when each hand (left, right) is lifted and put down again, twice; the look round at the bed before the
 // hop: the head's turn and the chest's (rad, to their left))
-export const ON = { perch: 0.13, lean: 0.36, knee: 90, hand: [0.235, 0.11], hop: [0.06, 0.24], clear: 0.05, foot: 0.013, point: 0.22, tip: 0.55, heel: 0.06, relax: [0.28, 0.34], curl: 0.6,
+export const ON = { perch: 0.13, lean: 0.36, knee: 90, hand: [0.235, 0.11], hop: [0.06, 0.24], clear: 0.05, foot: 0.013, point: 0.22, tip: 0.55, heel: 0.06, relax: [0.28, 0.34], curl: 0.8,
   drop: [0.06, 0.44], steps: [[[0.3, 0.42], [0.7, 0.82]], [[0.16, 0.28], [0.56, 0.68]]], glance: [0.95, 0.35] };
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -242,9 +242,9 @@ function poseOf(move, t, bed, who) {
     // bounce: perched there, the hands lifted and put down again behind the hips. (They slid on back to the bed's
     // middle here once, sitting still: now that is part of the turn.)
     const x = track([[0, S[0]], [0.3, S[0] - 0.035], [0.5, bed.edge + 0.14], [0.565, bed.edge + 0.09], [0.64, bed.edge + 0.025], [0.715, bed.edge - 0.04], [0.79, bed.edge - 0.095], [0.85, PX + 0.01], [0.92, PX + 0.002], [1, PX]], u);
-    const y = track([[0, S[1]], [0.3, S[1] - 0.09], [0.5, S[1] + 0.065], [0.565, sitY + 0.012], [0.64, sitY + 0.04], [0.715, sitY + 0.028], [0.79, sitY + 0.004], [0.85, sitY - 0.006], [0.92, sitY + 0.005], [1, sitY]], u);
+    const y = track([[0, S[1]], [0.3, S[1] - 0.07], [0.5, S[1] + 0.065], [0.565, sitY + 0.012], [0.64, sitY + 0.04], [0.715, sitY + 0.028], [0.79, sitY + 0.004], [0.85, sitY - 0.006], [0.92, sitY + 0.005], [1, sitY]], u);
     out.hips = [x, y, bed.z]; out.heading = H;
-    out.lean = track([[0, 0], [0.3, -0.2], [0.5, -0.06], [0.64, 0.08], [0.82, 0.16], [0.92, 0.1], [1, L0]], u);
+    out.lean = track([[0, 0], [0.3, -0.14], [0.5, -0.05], [0.64, 0.08], [0.82, 0.16], [0.92, 0.1], [1, L0]], u);
     // (the heels up as the push ends; off the floor from 0.5, the feet carried from where they left it to hanging
     // under the knees, quickly at first)
     const r = ON.heel * ease(seg(u, 0.38, 0.5)), floor = floorFeet(S, who).map((p) => add(p, UP, r));
@@ -256,9 +256,9 @@ function poseOf(move, t, bed, who) {
     out.pole = poleOf(H, 1, 0.15);
     // (the hands near the bed's edge, beside the hips, the elbows bent ready to push and straight at the top of it; once
     // landed, lifted and put down again behind the hips, one then the other, as they will be for the turn)
-    out.armsLR = [ease(seg(u, 0.06, 0.24)), ease(seg(u, 0.12, 0.3))]; out.arms = Math.max(out.armsLR[0], out.armsLR[1]);
+    out.armsLR = [ease(seg(u, 0.04, 0.26)), ease(seg(u, 0.1, 0.32))]; out.arms = Math.max(out.armsLR[0], out.armsLR[1]);
     const push = pushAt(bed), after = handsAt(bed, [PX, sitY, bed.z], H);
-    out.hands = push.map((p, i) => { const s = seg(u, i ? 0.82 : 0.74, i ? 0.98 : 0.9); return add(mix(p, after[i], ease(s)), UP, 0.02 * Math.sin(Math.PI * s) + 0.1 * Math.sin(Math.PI * out.armsLR[i])); });
+    out.hands = push.map((p, i) => { const s = seg(u, i ? 0.82 : 0.74, i ? 0.98 : 0.9); return add(mix(p, after[i], ease(s)), UP, 0.02 * Math.sin(Math.PI * s) + 0.05 * Math.sin(Math.PI * out.armsLR[i])); });
     out.fingers = fingersAt(H); out.elbows = elbowsAt(H, 0.3);
     const g = 1 - ease(seg(u, 0.14, 0.32));
     out.look = u < 0.3 ? glanceAt(bed) : null; out.turn = ON.glance[0] * g; out.twist = ON.glance[1] * g;
@@ -270,9 +270,9 @@ function poseOf(move, t, bed, who) {
     // off: the legs reach down, the toes pointed, and touch first, then the heels, the knees giving as the weight
     // lands; the hands stay on the bed's edge behind them until they are steady, and come away as they straighten up
     const x = track([[0, PX], [0.08, PX + 0.012], [0.3, bed.edge + 0.08], [0.4, bed.edge + 0.15], [0.54, S[0] - 0.01], [1, S[0]]], u);
-    const y = track([[0, sitY], [0.08, sitY + 0.004], [0.3, sitY - 0.005], [0.4, S[1] + 0.055], [0.54, S[1] - 0.06], [0.8, S[1] - 0.01], [1, S[1]]], u);
+    const y = track([[0, sitY], [0.08, sitY + 0.004], [0.3, sitY - 0.005], [0.4, S[1] + 0.03], [0.54, S[1] - 0.05], [0.8, S[1] - 0.01], [1, S[1]]], u);
     out.hips = [x, y, bed.z]; out.heading = H;
-    out.lean = track([[0, L0], [0.1, -0.08], [0.3, -0.22], [0.48, -0.32], [0.78, -0.1], [1, 0]], u);
+    out.lean = track([[0, L0], [0.1, -0.08], [0.3, -0.18], [0.48, -0.24], [0.78, -0.08], [1, 0]], u);
     // (touching at 0.4 up on the toes, the heels down by 0.54)
     const r = ON.heel * (1 - ease(seg(u, 0.4, 0.54))), floor = floorFeet(S, who).map((p) => add(p, UP, r));
     const [fa, fu] = hang(who), hung = feetAt(out.hips, H, who.w, fa, fu, 0.03);
@@ -284,7 +284,7 @@ function poseOf(move, t, bed, who) {
     const before = handsAt(bed, [PX, sitY, bed.z], H), rim = [1, -1].map((s) => [bed.edge - 0.03, bed.top + 0.03, bed.z - s * 0.26]);
     out.hands = before.map((p, i) => { const s = seg(u, i ? 0.1 : 0.06, i ? 0.24 : 0.2); return add(mix(p, rim[i], ease(s)), UP, 0.02 * Math.sin(Math.PI * s)); });
     out.fingers = fingersAt(H); out.elbows = elbowsAt(H, 0.3);
-    out.arms = 1 - ease(seg(u, 0.62, 0.86));
+    out.arms = 1 - ease(seg(u, 0.52, 0.76));
     out.clip = u < 0.34 ? 'sit' : 'stand';
     return out;
   }
@@ -339,7 +339,10 @@ function poseOf(move, t, bed, who) {
     const F = mix(up[0], upLie[0], k), U = mix(up[1], upLie[1], k);
     out.feet = feetAt(out.hips, 0, who.w, F, U, -0.015); out.flat = 1;
     out.pole = poleOf(0, 1, 1.2);
-    const slide = 0.15 * ease(seg(out.lean, 0.9, 1.5));
+    // (down onto the elbows: the hands drawn a little back toward the head as the elbows come down onto the pad under
+    // the shoulders, the forearms along it; they slide out toward the feet only as the shoulders reach the bed. Kept
+    // beside the hips all the way, the arms folded down along the sides and held nothing up)
+    const slide = -0.08 * ease(seg(out.lean, 0.6, 0.95)) * (1 - ease(seg(out.lean, 1.2, 1.5))) + 0.15 * ease(seg(out.lean, 1.25, 1.55));
     out.hands = handsAt(bed, out.hips, 0).map((p) => add(p, [0, 0, 1], slide)); out.arms = 1;
     const e = ease(seg(out.lean, LJ, 1.0));
     out.fingers = fingersAt(0); out.elbows = elbowsAt(0).map((q, i) => norm(mix(q, lowerElbows(out.lean)[i], e)));
