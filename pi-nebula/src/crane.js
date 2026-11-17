@@ -72,9 +72,9 @@ export const AREA = /^(hangar-miner|stub-miner|smelter-|ship-miner)/;
 // (the turn slower and the way down starting as it ends: strips of the landing showed a sudden swing, then a long slow sink)
 // (the turn a spin, once and a half round, "a really cool pilot": it starts once the ship is all the way in through the
 // bay door (by then it is 7.7 m out from the pad), so its ends never swing through the door's frame; 17 s in all)
-// (lower once it is in, 2.4 m: the blind critic of the first films found the spin's top half off the top of the
-// picture from the way in, the ship over the camera)
-export const LANDING = { secs: 17, from: 46, hover: 3.0, low: 2.4, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
+// (lower once it is in, 2 m: the blind critic of the first films found the spin's top half off the top of the
+// picture from the way in, the ship over the camera; its belly then still 3.4 m up, over anyone and the rack)
+export const LANDING = { secs: 17, from: 46, hover: 3.0, low: 2.0, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
 // THE LANDING'S THRUSTERS (kit/ships/flight.js): how far the pods may turn here (a little further down than the ship
 // lab's swing, so the jets blow down at the floor), the pods' jets' length against the lab's, the main engine idling,
 // how long its nozzle takes to cool after it is down (s), how long the dust takes to settle (s)
@@ -283,7 +283,7 @@ export function makeCrane({ W, walls, boarding = null }) {
         if (flightFx()) {
           const m = motionAt(k);
           flight.update(dt, { acc: m.acc, spin: m.spin, hold: m.hold, engine: FLIGHT.idle, heat: 1 });
-          air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold * (0.35 + 0.65 * m.down), spread: 0.65 + 0.55 * m.down });
+          air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold * (0.35 + 0.65 * m.down), spread: 0.85 + 0.4 * m.down });
         }
         if (k >= 1) landed();
         return;

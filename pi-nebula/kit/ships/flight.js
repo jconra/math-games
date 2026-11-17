@@ -140,14 +140,15 @@ const DUST_FRAG = `
   float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
   void main() {
-    // (no pow of a number that rounding can take below zero, no angle of the very middle: either is not a number on
-    // some graphics cards, and the glow's blur spreads one such pixel into a black block)
-    float r = length(vP), a = atan(vP.y, vP.x + 1e-4);
+    // (no pow of a number that rounding can take below zero: it is not a number on some graphics cards, and the glow's
+    // blur spreads one such pixel into a black block; the pattern goes by the way out from the middle, not by an angle,
+    // which jumps along one line and showed as a seam across the pad)
+    float r = length(vP); vec2 w = vP / max(r, 1e-3);
     // gusts running out from under it: rings broken into arcs by streaks that run out along the floor, over a haze of
     // dust thickest under the ship and thinning to its edge
-    float rings = pow(max(0.0, 0.5 + 0.5 * sin((r * 0.95 - time * 2.8) * 2.8 + noise(vec2(a * 3.0, time * 0.7)) * 2.5)), 3.0);
-    float streak = noise(vec2(a * 4.0 + r * 0.25 + sin(time * 0.3) * 2.0, r * 0.45 - time * 1.9)) * 0.7 + noise(vec2(a * 2.0 - time * 0.2, r * 0.9 - time * 2.6)) * 0.3;
-    float grain = noise(vec2(a * 5.0 + r * 0.5, r * 1.4 - time * 3.4)) * 0.6 + noise(vec2(a * 14.0, r * 3.0 - time * 5.5)) * 0.4;
+    float rings = pow(max(0.0, 0.5 + 0.5 * sin((r * 0.95 - time * 2.8) * 2.8 + noise(w * 1.6 + vec2(time * 0.7, 0.0)) * 2.5)), 3.0);
+    float streak = noise(w * 2.6 + vec2(r * 0.25 + sin(time * 0.3) * 2.0, r * 0.45 - time * 1.9)) * 0.7 + noise(w * 1.3 + vec2(-time * 0.2, r * 0.9 - time * 2.6)) * 0.3;
+    float grain = noise(w * 3.2 + vec2(r * 0.5, r * 1.4 - time * 3.4)) * 0.6 + noise(w * 9.0 + vec2(0.0, r * 3.0 - time * 5.5)) * 0.4;
     float fall = smoothstep(spread, spread * 0.2, r) * smoothstep(0.0, 1.0, r);
     float haze = smoothstep(spread * 0.55, 0.0, r) * 0.22;
     float alpha = strength * fall * (haze + (0.08 + 0.5 * rings) * smoothstep(0.25, 0.75, streak)) * (0.35 + 0.9 * grain);
@@ -158,16 +159,16 @@ const MOTE_VERT = `
   void main() {
     float life = fract(seed.z + time * (0.22 + 0.3 * seed.y));
     float r = mix(1.2, spread, life), a = seed.x * 6.2831853 + life * (1.4 + seed.y);
-    vec3 p = vec3(cos(a) * r, 0.04 + seed.w * 2.4 * sin(life * 3.14159), sin(a) * r);
+    vec3 p = vec3(cos(a) * r, 0.04 + seed.w * seed.w * 2.2 * sin(life * 3.14159), sin(a) * r);
     vA = strength * sin(life * 3.14159) * (0.45 + 0.55 * seed.y);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_PointSize = size * (0.5 + seed.w) / max(0.5, -mv.z);
     gl_Position = projectionMatrix * mv;
   }`;
-const MOTE_FRAG = `varying float vA; void main() { float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, d) * vA; gl_FragColor = vec4(0.74, 0.71, 0.65, a * 0.6); }`;
+const MOTE_FRAG = `varying float vA; void main() { float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.15, d) * vA; gl_FragColor = vec4(0.6, 0.56, 0.48, a * 0.5); }`;
 
 export function makeDownwash({ parent, quality = 'medium', spread = AIR.spread } = {}) {
-  const uni = { time: { value: 0 }, strength: { value: 0 }, spread: { value: spread }, size: { value: 95 } };
+  const uni = { time: { value: 0 }, strength: { value: 0 }, spread: { value: spread }, size: { value: 55 } };
   const disc = new THREE.Mesh(new THREE.PlaneGeometry(spread * 2.7, spread * 2.7, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false }));
   disc.name = 'downwash'; disc.renderOrder = 4; disc.frustumCulled = false; disc.visible = false;
   parent.add(disc);
