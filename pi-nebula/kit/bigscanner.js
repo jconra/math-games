@@ -8,8 +8,8 @@
 //
 // What stands still (part of its room, lit and walked round like any furniture): the bed (a board and its keel on a
 // stand at the wall and a pedestal at its foot, so the hoop can pass along between them), the two rails with a line
-// of light each and a yellow stop at each end, the cable trough beside one rail, the line painted on the floor round
-// it all.
+// of light each and a yellow stop at each end, the machine's own floor between them (a white deck plate with grip
+// tape and a warning edge), the cable trough beside one rail, the line painted on the floor round it all.
 // What moves (kit/piece.js glide: nobody works it, it goes by the kit's clock, and only while its room is drawn):
 //   - the hoop on its carriage, from rest by the wall SCAN.travel metres toward the way in and back;
 //   - the cable chain's loop beside the rail, which rolls along at half the carriage's speed, as a real one does.
@@ -33,6 +33,9 @@ export const SCAN = {
   rail: 1.12, railZ: [0.12, 3.36],          // the rails: how far either side of the bed's middle, and their two ends
   bed: { w: 0.6, top: 0.85, z: [0.1, 4.02], foot: [3.36, 3.98] },   // the board (its top, its ends), the pedestal at its foot
   keep: { x: 1.62, z: 4.25 },               // the line painted on the floor round it
+  // the machine's own floor, between the rails: how far either side of the bed's middle, its two ends, how far its top
+  // is over the room's floor; its warning edge's width; the grip tape's two lanes (from, to, either side of the bed)
+  deck: { x: 0.955, z: [0.03, 4.1], top: 0.004, edge: 0.07, grip: [0.37, 0.87], gripZ: [0.42, 3.24], seams: [1.38, 2.74] },
 };
 // (the picked sketch's own colours: a clean white shell, pale grey machinery, a blue pad; teal and blue light. The
 // running gear is pale too, and its stops yellow: dark gear on the room's dark floor could not be made out)
@@ -127,9 +130,53 @@ function carriage(q) {
   chainRun(q, CH.up, TOW, TOW + CH.tail, 0.004);
 }
 
+// ── the machine's own floor ──────────────────────────────────────────────────────────────────────────────────────
+// (the game's maker, 2026-11-17: "it also seems like a machine like this would have it's own bottom. I think a
+// textured (with grip tape and maybe a warning boundary) white floor between the rails would look nice there"): a
+// white deck plate from rail to rail and from the wall out past the bed's foot, in three plates (two dark seams across
+// it); a yellow and black warning edge down both its sides and across its front; a lane of dark grip tape either side
+// of the bed, where its patient walks and stands to get on. It lies flat on the room's floor, SCAN.deck.top proud of
+// it: the patient's feet stay at the room's floor height (src/people.js walks them along it), so nothing of how they
+// get on and off changes, and their soles are that little way into it, which does not show.
+const TAPE = { c: '#25272a', r: 0.96, m: 0, w: 0.9 }, UNDER = { c: '#1b1c1f', r: 0.7, m: 0, w: 0.3 };
+// slanted stripes lying flat at height y, along a band `wide` across: from a to b along the band (the band's own way
+// along is `dir` [x, z], its way across `side` [x, z], from the point `at` [x, z]); each stripe `w` wide, `pitch` apart.
+// One geometry of painted quads (no print, so no draw of its own).
+function slantStripes(at, dir, side, a, b, wide, y, w = 0.034, pitch = 0.07) {
+  const pos = [], nrm = [], uv = [], ix = [];
+  for (let u = a; u + w + wide <= b + 1e-6; u += pitch) {
+    const k = pos.length / 3;
+    for (const [al, ac] of [[u, 0], [u + w, 0], [u + w + wide, wide], [u + wide, wide]]) { pos.push(at[0] + dir[0] * al + side[0] * ac, y, at[1] + dir[1] * al + side[1] * ac); nrm.push(0, 1, 0); uv.push(al, ac); }
+    ix.push(k, k + 2, k + 1, k, k + 3, k + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(ix); return g;
+}
+function deck(p) {
+  const D = SCAN.deck, [z0, z1] = D.z, y = D.top, paint = { r: 0, cell: 9, loops: [], skip: ['-y', '-x', '+x', '-z', '+z'] };
+  p.slab(SHELL, -D.x, D.x, 0, y, z0, z1, { r: 0, cell: 0.3, loops: [], skip: ['-y'] });
+  for (const z of D.seams) p.slab('dark', -D.x, D.x, y, y + 0.0015, z - 0.004, z + 0.004, paint);
+  // the warning edge: a black band down each side from near the wall and across the front, yellow stripes slanted on it
+  const e = D.edge, x1 = D.x - 0.012, x0 = x1 - e, zf = z1 - 0.012, za = z0 + 0.05;
+  for (const s of [-1, 1]) {
+    p.slab(UNDER, Math.min(s * x0, s * x1), Math.max(s * x0, s * x1), y, y + 0.0015, za, zf, paint);
+    p.add('solid', slantStripes([s * x1, za], [0, 1], [-s, 0], 0, zf - za, e, y + 0.003), 'yellow');
+  }
+  p.slab(UNDER, -x0, x0, y, y + 0.0015, zf - e, zf, paint);
+  p.add('solid', slantStripes([-x0, zf], [1, 0], [0, -1], 0, 2 * x0, e, y + 0.003), 'yellow');
+  // the grip tape: thin dark strips across each lane (none on a seam)
+  const [g0, g1] = D.grip, [gz0, gz1] = D.gripZ, pitch = 0.095, bar = 0.034;
+  for (const s of [-1, 1]) for (let z = gz0; z + bar <= gz1 + 1e-6; z += pitch) {
+    if (D.seams.some((q) => q > z - 0.02 && q < z + bar + 0.02)) continue;
+    p.slab(TAPE, Math.min(s * g0, s * g1), Math.max(s * g0, s * g1), y, y + 0.0015, z, z + bar, paint);
+  }
+}
+
 // ── the whole thing ──────────────────────────────────────────────────────────────────────────────────────────────
 export function bigScanner(p) {
   const { rail, railZ: [r0, r1], bed: B, keep } = SCAN, HEAD = SCAN.home + SCAN.deep / 2 + 0.08;   // (where the head rest starts)
+  deck(p);
   // the rails: a grey foot plate, a bright rail, a line of blue light along its inner side between its two stops; each
   // stop a yellow block with a dark pad toward the carriage, which comes to rest a hand's width short of it
   for (const s of [-1, 1]) {

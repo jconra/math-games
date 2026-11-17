@@ -352,10 +352,16 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const scanA = (groups.scanApproach || []).find(Boolean), scanS = (groups.scanScreen || []).find(Boolean);
   const SCAN = scanPc && scanA && scanS ? (() => {
     const M = scanPc.M, q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(M));
-    const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(M);
+    // (THE SCANNER'S OWN FLOOR, between its rails, lies a few millimetres over the room's (kit/bigscanner.js: a deck
+    // plate, grip tape on it). How far, asked of the floor itself where the patient stands to get on; their way along
+    // the bed and every move on and off it is lifted by that much (`up`), so their feet stand on it as on any floor.
+    // The moves themselves, src/onbed.js, are as they were.)
+    const s0 = new THREE.Vector3(SCAN_BED.stand[0], 0, SCAN_BED.stand[1]).applyMatrix4(M), f0 = walls.floorAt(s0.x, s0.z, s0.y + 0.2, 0.4);
+    const lift = f0 == null ? 0 : Math.max(0, Math.min(0.05, f0 - s0.y)), up = new THREE.Matrix4().makeTranslation(0, lift, 0).multiply(M);
+    const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(up);
     const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
     return {
-      M, q, busy: null, path: [scanA.pos.clone(), ...SCAN_BED.path.slice(1).map(([x, z]) => at(x, z))], panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
+      M, up, lift, q, busy: null, path: [scanA.pos.clone(), ...SCAN_BED.path.slice(1).map(([x, z]) => at(x, z))], panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
       // (the bed, in its own frame, for src/onbed.js; where its patient stands with their back to it, and the way that
       // faces (out across it))
       bed: { top: SCAN_BED.top, edge: SCAN_BED.edge, pad: SCAN_BED.pad, z: SCAN_BED.z, stand: SCAN_BED.stand, hipUp: SCAN_BED.hipUp, rest: SCAN_BED.rest },
@@ -1041,7 +1047,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // hip joints (moves.js measures it each frame), and the legs', the feet's and the hands' places for moves.js)
   function bedPoseOf(P, move, t) {
     const who = P.moves.body, p = onBedPose(move, t, SCAN.bed, who);
-    const W = (v, out) => out.set(v[0], v[1], v[2]).applyMatrix4(SCAN.M), D3 = (v, out) => out.set(v[0], v[1], v[2]).applyQuaternion(SCAN.q);
+    const W = (v, out) => out.set(v[0], v[1], v[2]).applyMatrix4(SCAN.up), D3 = (v, out) => out.set(v[0], v[1], v[2]).applyQuaternion(SCAN.q);
     const D = P.bed || (P.bed = { hips: new THREE.Vector3(), feet: [new THREE.Vector3(), new THREE.Vector3()], pole: new THREE.Vector3(), ahead: new THREE.Vector3(), hands: [new THREE.Vector3(), new THREE.Vector3()], legs: 0, flat: 0, arms: 0, chin: 0 });
     W(p.hips, D.hips); W(p.feet[0], D.feet[0]); W(p.feet[1], D.feet[1]); D3(p.pole, D.pole);
     D3([Math.sin(p.heading), 0, Math.cos(p.heading)], D.ahead);
