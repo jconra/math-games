@@ -76,6 +76,10 @@ test('every level starts its rounds with four goals that pass the ball check, dr
   // a court of fractions and whole numbers never has a catch-all ("more than 1/2" takes every whole number)
   const C = crowded(['more:1/2', 'eq:1/2', 'mult:7', 'prime'], [...SETS.tables3.pool, ...SETS.fractions.pool]);
   assert.deepEqual(C.broad, ['more:1/2']);
+  // (and a decimal rule that takes the whole numbers: "more than 2.5" beside "factors of 36")
+  const D = LADDER.find((L) => L.key === 'decimals');
+  assert.ok(crowded(['more:2.5', 'less:1.5', 'fact:36', 'round:4'], D.pool).broad.includes('more:2.5'));
+  assert.deepEqual(crowded(['round:3', 'less:1.5', 'fact:36', 'between:0:1'], D.pool).broad, []);
   assert.deepEqual(crowded(['even', 'mult:2', 'less:5', 'more:10'], SETS.tables1.pool).alike, [['even', 'mult:2']]);
 });
 

@@ -265,10 +265,17 @@ export const dealable = (rules, pool) => pool.filter((b) => { const n = goalsFor
 // NO CATCH-ALL GOAL, NO TWO GOALS ALIKE: what is wrong with four goals over the balls a pool would deal them: the goals
 // that take more than BROAD of those balls (on a court of fractions and whole numbers, "more than 1/2" takes every whole
 // number: no choice is left), and the pairs that take exactly the same balls ("even numbers" and "multiples of 2")
-export const BROAD = 0.75;
+// A rule for fraction and decimal balls (equal to, between, rounds to, more or less than a fraction or a decimal) that
+// takes most of the whole-number balls is a catch-all too: "more than 2.5" beside "factors of 36" takes nearly every
+// whole number
+export const BROAD = 0.75, BROAD_WHOLE = 0.5;
+const forFractions = (r) => { const R = ruleOf(r); return ['eq', 'between', 'round'].includes(R.kind) || (['less', 'more'].includes(R.kind) && !isWhole(value(R.arg))); };
 export function crowded(rules, pool) {
   const deal = dealable(rules, pool), fit = rules.map((r) => deal.map((b) => fits(r, b)));
-  const broad = rules.filter((r, i) => deal.length >= 4 && fit[i].filter(Boolean).length > BROAD * deal.length).map((r) => ruleOf(r).id);
+  const wholes = deal.map((b) => /^\d+$/.test(String(b)));
+  const nWhole = wholes.filter(Boolean).length;
+  const broad = rules.filter((r, i) => (deal.length >= 4 && fit[i].filter(Boolean).length > BROAD * deal.length)
+    || (nWhole >= 4 && forFractions(r) && fit[i].filter((x, k) => x && wholes[k]).length > BROAD_WHOLE * nWhole)).map((r) => ruleOf(r).id);
   const alike = [];
   for (let i = 0; i < rules.length; i++) for (let j = i + 1; j < rules.length; j++) if (deal.length && fit[i].every((x, k) => x === fit[j][k])) alike.push([ruleOf(rules[i]).id, ruleOf(rules[j]).id]);
   return { broad, alike, deal };
