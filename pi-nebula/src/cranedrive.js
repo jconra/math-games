@@ -304,7 +304,11 @@ export function chairScreen(W, crane, chair = chairFrame(W)) {
     const v = views[turn = (turn + 1) % views.length], c = crane.cams().find((q) => q.name === v.name); if (!c) return;
     v.cam.position.copy(c.at); if (c.down) v.cam.up.set(0, 0, -1); else v.cam.up.set(0, 1, 0); v.cam.lookAt(c.look); v.cam.fov = c.fov || 70; v.cam.updateProjectionMatrix();
     const R2 = W.renderer, was = R2.getRenderTarget(), fog = W.scene.fog;
+    // (the screens themselves hidden while a picture is drawn: a wall camera can see them through the window, and a
+    // screen drawn into its own picture is a feedback loop the GPU refuses)
+    for (const q of views) q.mesh.visible = false;
     R2.setRenderTarget(v.rt); R2.render(W.scene, v.cam); R2.setRenderTarget(was);
+    for (const q of views) q.mesh.visible = true;
     W.scene.fog = fog;
   }
   return {
