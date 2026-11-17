@@ -34,18 +34,20 @@ function deal(set, rand) {
   return out;
 }
 function courtSvg(set, balls, rand) {
-  const s = 11, pad = 12, top = 30, W = (COURT.hx * 2) * s + pad * 2, H = (COURT.hz * 2) * s + top * 2;
+  const s = 11, pad = 12, top = 38, W = (COURT.hx * 2) * s + pad * 2, H = (COURT.hz * 2) * s + top * 2;
   const X = (x) => (x + COURT.hx) * s + pad, Y = (z) => (z + COURT.hz) * s + top;
   let svg = `<svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="An example court: ${esc(set.goals.map((r) => ruleOf(r).say).join(', '))}">`;
   svg += `<polygon points="${CORNERS.map(([x, z]) => `${X(x).toFixed(1)},${Y(z).toFixed(1)}`).join(' ')}" fill="#0b1119" stroke="#4fb6ff" stroke-width="2"/>`;
   svg += `<circle cx="${X(0)}" cy="${Y(0)}" r="${1.2 * s}" fill="none" stroke="#c9d3de" stroke-width="1.2" opacity="0.7"/>`;
   // the goals: a bar on each slanted wall in its colour, its rule outside the court in that corner (west goals' words
-  // from the left edge, east goals' to the right edge; north ones over the court, south ones under it)
+  // from the left edge, east goals' to the right edge; north ones over the court, south ones under it, the two at an
+  // end on rows of their own, so long rules never run into each other)
   GOALS.forEach((g, i) => {
     const c = GOAL_CSS[g.colour], ux = g.u[0] * 1.2, uz = g.u[1] * 1.2, R = ruleOf(set.goals[i]);
     svg += `<line x1="${X(g.mid[0] - ux)}" y1="${Y(g.mid[1] - uz)}" x2="${X(g.mid[0] + ux)}" y2="${Y(g.mid[1] + uz)}" stroke="${c}" stroke-width="6" stroke-linecap="round"/>`;
     const east = g.mid[0] > 0, north = g.mid[1] < 0, words = R.sign.length === 2 ? `${R.sign[0]} ${R.sign[1]}` : R.sign[0];
-    svg += `<text x="${east ? W - 4 : 4}" y="${north ? 13 : H - 9}" fill="${c}" font-size="12" font-weight="700" text-anchor="${east ? 'end' : 'start'}">${esc(words)}</text>`;
+    const y = north ? (east ? 30 : 14) : (east ? H - 22 : H - 6);
+    svg += `<text x="${east ? W - 4 : 4}" y="${y}" fill="${c}" font-size="11.5" font-weight="700" text-anchor="${east ? 'end' : 'start'}">${esc(words)}</text>`;
   });
   // the balls: spread over the court, never on top of each other or the goals' words
   const spots = [];
@@ -81,7 +83,7 @@ function card(key, i, out) {
       <p class="meta">${out ? '<b>Left out of the game.</b> ' : `<b>Level ${i + 1} of ${S.order.length}.</b> `}On Mathwood's school guide: ${esc(STRANDS[set.strand] || set.strand)}, about ${gradeWords(set.grade)} (${set.grade}). ${all.length} balls it can deal; ${c.choice} of them fit two goals or more.</p>
       <div class="goals">${goals}</div>
       <table class="fits"><thead><tr><th>Ball</th>${GOALS.map((g) => `<th style="color:${GOAL_CSS[g.colour]}">${g.colour}</th>`).join('')}<th>goals</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="spares">As the light bar reaches a goal, its rule can change to: ${esc([...set.goals, ...set.spares].map((r) => ruleOf(r).say).join(', '))} (one the balls on the court still suit).</p></div>`;
+      <p class="spares">As the light bar reaches a goal, its rule can change to: ${esc([...set.goals, ...set.spares].map((r) => ruleOf(r).say).join(', '))} (one the balls on the court still suit; the set's own four first, when one of them is free).</p></div>`;
   return li;
 }
 function render() {
