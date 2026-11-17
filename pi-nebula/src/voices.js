@@ -10,7 +10,8 @@
 // TO ADD A CLIP: make it with the same voice (ElevenLabs, the voice's name below), run it through make.sh, and list it
 // here; a voice's `hellos` are the clips its people say when they first greet the player.
 export const VOICES = {
-  vega: { name: 'Pi Nebula Vega', who: 'Captain Vega: a warm, bright woman in her thirties, clear and calm, a smile in it', hellos: ['vega-hello'] },
+  // (Vega is a man, the game's maker's "his ship": ElevenLabs' built-in voice Eric, the account's own voices being full)
+  vega: { name: 'Eric (ElevenLabs built-in, id cjVigY5qzO86Huf0OWal)', who: 'Captain Vega: a smooth, warm man\'s voice, calm and trustworthy', hellos: ['vega-hello'] },
   ruiz: { name: 'Pi Nebula Ruiz', who: 'Captain Ruiz: a hearty, friendly man in his early thirties, warm and a little gravelly', hellos: ['ruiz-hello'] },
   hale: { name: 'Pi Nebula Hale', who: 'Captain Hale: a kind, gentle woman in her late sixties, calm and reassuring', hellos: ['hale-hello'] },
   yw: { name: 'Pi Nebula Crew Young Woman', who: 'a cheerful young woman in her early twenties, bright and friendly', hellos: ['yw-hi', 'yw-hello', 'yw-going', 'yw-hiya'] },

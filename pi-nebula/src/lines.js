@@ -27,7 +27,7 @@ export const AGAIN = ['Hello again!', 'Hi again!', 'Hey!', 'Back again?', 'Oh, h
 export const NUDGES = ['So, what do you say?', 'Take your time!', 'No rush. Think it over!', 'It will be fun, I promise!'];
 
 export const CAPTAINS = {
-  vega: { ship: 'Explorer', mission: 'exploring', what: 'Join her crew for a trip to new worlds?',
+  vega: { ship: 'Explorer', mission: 'exploring', what: 'Join his crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
     no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!' },
   ruiz: { ship: 'Miner', mission: 'mining', what: 'Join his crew for a mining run?',
@@ -71,7 +71,7 @@ export const TALKS = [
   { id: 'smelter-hot', about: ['smelter'], lines: ["Is it just me, or is it warm today?", "The smelter's running hot. Ivo's pouring titanium."] },
   { id: 'helmet', lines: ["I think I left my helmet in the hangar again.", "Again? That's the third time this week!"] },
   { id: 'view', lines: ["The view from these windows never gets old.", "You can see the tail of the nebula from here."] },
-  { id: 'vega-sleep', about: ['vega'], lines: ["Captain Vega never seems to sleep.", "She's an android. She doesn't need to!", "Lucky. I need nine hours."] },
+  { id: 'vega-sleep', about: ['vega'], lines: ["Captain Vega never seems to sleep.", "He's an android. He doesn't need to!", "Lucky. I need nine hours."] },
   { id: 'cat', lines: ["Has anyone seen the station cat?", "She was asleep on the warm crane rails this morning.", "Of course she was."] },
   { id: 'scanner', about: ['medic'], lines: ["The big scanner's so quiet today.", "Ana says it only moves when someone's on the bed."] },
   { id: 'flying', lines: ["I'm learning to fly the Explorer.", "How's it going?", "I can land it. Mostly."] },
@@ -83,7 +83,7 @@ export const TALKS = [
   { id: 'mathball-play', lines: ["Want to play Mathball later?", "Only if I'm on your team.", "Deal!"] },
   { id: 'crane-dream', lines: ["I dreamt I was a canister on the crane last night.", "Did you get smelted?", "I woke up just in time."] },
   { id: 'tooth', about: ['medic'], lines: ["Ana fixed my wobbly tooth today.", "Did it hurt?", "Not a bit. She's the best medic on the station."] },
-  { id: 'stars', about: ['vega'], lines: ["How many stars can you see from here?", "Too many to count.", "Captain Vega counted them once. It took her all night."] },
+  { id: 'stars', about: ['vega'], lines: ["How many stars can you see from here?", "Too many to count.", "Captain Vega counted them once. It took him all night."] },
   { id: 'cups', lines: ["Who keeps putting the cups back upside down?", "That's how they do it on Mars."] },
   { id: 'new-crew', lines: ["Have you met the new crew member yet?", "Yes! Very friendly. Knows their times tables, too."] },
   { id: 'ship-buy', lines: ["One day I'm going to buy my own ship.", "What would you call it?", "The Pi. Because it goes on forever."] },
