@@ -219,7 +219,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
       lastHeld = r.held;
     }
     lastPlace = P;
-    if (done && (t - done.t > 8 || Math.hypot(r.x - done.x, r.z - done.z) > 1.5 || Math.abs(r.hook - done.hook) > 1.2)) done = null;
+    // (a let-go is remembered until the grab has gone from over it, a grab until the load is lifted well clear)
+    if (done && (t - done.t > 12 || Math.hypot(r.x - done.x, r.z - done.z) > 1.5 || (done.kind === 'got' && Math.abs(r.hook - done.hook) > 1.2))) done = null;
     // (lined up on a place: the light that is not green yet, by name)
     const notGreen = (ways) => ways.filter((w) => A[w] !== 'on');
     const AX = { x: 'X', y: 'Y', h: 'height' };
@@ -228,7 +229,10 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     else if (D.busy && D.action === 'open') hint = 'Letting go...';
     else if (done && done.kind === 'let') hint = done.socket != null ? `Docked in socket ${done.socket}. Take the grab up and away for the next canister.` : 'Set down. Take the grab up and away for the next canister.';
     else if (done && done.kind === 'got') hint = 'Got it! Lift it up, then take it to a socket, a ship\'s tray or the rack.';
-    else if (r.held < 0) {
+    else if (r.held < 0 && P && P.kind === 'socket' && P.c >= 0 && D.state.cans[P.c] && D.state.cans[P.c].fill > 0.01) {
+      // (over a canister that is still draining into the smelter: it may be taken back out, but that is not the job)
+      hint = `Socket ${site.sockets[P.i].number}'s canister is draining into the smelter. Bring the next one from the ship.`;
+    } else if (r.held < 0) {
       const off = P ? notGreen(['x', 'y']) : [];
       hint = !P ? 'Bring the grab over a canister (on the ship, the rack or in a socket), then lower it.'
         : off.length ? `Move until the ${off.map((w) => AX[w]).join(' and ')} light${off.length > 1 ? 's are' : ' is'} green over the canister.`
