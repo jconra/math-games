@@ -320,7 +320,11 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     if (D) {
       D.byHand = false; D.rules.people = true;
       // (a move that could not be made: the trip planned again from where the crane is)
-      if (D.failed && !D.busy) { console.info('crane game: a move could not be made (' + (D.failed.why || '') + '); planning again from here'); D.failed = null; Q.restart(); go(Q.rest()); card = null; }
+      if (D.failed && !D.busy) {
+        const F2 = D.failed, S2 = D.state, what = F2.until ? 'a wait' : F2.grab ? 'the grab (' + F2.grab + ')' : 'a move to ' + JSON.stringify(F2.to);
+        console.info(`crane game: ${what} could not be made (${F2.why || ''}; holding ${D.held}, arms ${S2.arms.toFixed(2)}, at ${S2.x.toFixed(2)}, ${S2.z.toFixed(2)}, ${S2.hoist.toFixed(2)} m); planning again from here`);
+        D.failed = null; Q.restart(); go(Q.rest()); card = null;
+      }
       // (while a card waits for the crane, the moves it makes by itself go quicker: an asked one never)
       D.hurry = clock - waitT < 0.4 ? 2 : 1;
       if (lastBusy && !D.busy) {
