@@ -19,7 +19,8 @@
 // top bar and closed by its X; everything inside a window wraps.
 //   Looks    the three ready-made looks; Copy settings, Paste settings, Reset; the look as text
 //   Colours  the two greys, the trim, how much one plate differs from the next, the window light
-//   Plates   width, height, how far each row laps over the next, the bevel, the seam's gap, the rows' shift, uneven widths
+//   Plates   width, height, how far each row laps over the next, the bevel, the cut corners, the seam's gap, the rows' shift, uneven widths
+//            and heights
 //   Finish   for the middle band, the tiers and the trim, each its own: plain, brushed, tempered, cross-hatched,
 //            mottled, with that finish's own sliders; shine and roughness
 //   Wear     five layers, each its own amount: scratches, worn edges, dark streaks, meteoroid pits, grime
@@ -69,12 +70,13 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 if (!renderer.capabilities.isWebGL2) throw new Error('This lab needs WebGL2');
 // (as sharp as the game draws: its medium setting on a phone, its high one on a desktop)
 renderer.setPixelRatio(RIG ? 1 : Math.min(devicePixelRatio || 1, TOUCH ? 1.5 : 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+// (as bright as the game draws: its own exposure, which its sky is made for)
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.74;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.info.autoReset = false;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, 0.15, 6000);
 const stage = new THREE.Group(); scene.add(stage);
 // the sun (the game's, where its sky has it until it is turned), the planet's shine, a soft light from all round
-const sun = new THREE.DirectionalLight(0xfff0dc, 3.3), shine = new THREE.DirectionalLight(0x9fdcd3, 0.38), fill = new THREE.HemisphereLight(0xa9b8d6, 0x2a3038, 1.05);
+const sun = new THREE.DirectionalLight(0xfff0dc, 3.3), shine = new THREE.DirectionalLight(0xb9cfd8, 0.3), fill = new THREE.HemisphereLight(0xa9b8d6, 0x2a3038, 1.05);
 shine.position.copy(DIR.planet).multiplyScalar(600);
 sun.target.position.set(-10, 4, -8); sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.06;
 Object.assign(sun.shadow.camera, { left: -44, right: 44, top: 44, bottom: -44, near: 100, far: 700 });
@@ -84,13 +86,18 @@ scene.add(sun, sun.target, shine, fill);
 // this copy of the sky; the game's stays where it is)
 const sky = createSky(renderer, { quality: TOUCH ? 'medium' : 'high' }); scene.add(sky.object);
 const sunDir = DIR.sun.clone();
-{ const dome = sky.object.getObjectByName('sky:dome'), u = dome && dome.material && dome.material.uniforms; if (u && u.uSun) u.uSun.value = sunDir; }
+const skyU = (() => { const dome = sky.object.getObjectByName('sky:dome'); return (dome && dome.material && dome.material.uniforms) || {}; })();
+if (skyU.uSun) skyU.uSun.value = sunDir;
 // what the metal mirrors: the sky itself, pictured from the middle of the piece (again when the sun has moved)
 const pmrem = new THREE.PMREMGenerator(renderer); let mirror = null, mirrorT = 0;
 function mirrorSky() {
   const rt = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(1, 6000, rt);
+  // (the sun's own disc is left out of what the metal mirrors: the sun's light already gives the metal its glint, and
+  // mirrored as well it would glint twice over and turn dark plates pale)
+  const disc = skyU.uSunR ? skyU.uSunR.value : 0; if (skyU.uSunR) skyU.uSunR.value = 1e-5;
   stage.visible = false; scene.environment = null;
   cc.update(renderer, scene);
+  if (skyU.uSunR) skyU.uSunR.value = disc;
   const t = pmrem.fromCubemap(rt.texture); if (mirror) mirror.dispose(); mirror = t; scene.environment = t.texture;
   stage.visible = true; rt.dispose(); clearTimeout(mirrorT);
 }
@@ -201,6 +208,9 @@ function slide(s, value, show, onInput) {
   const r = el('input'); r.type = 'range'; r.min = s.min; r.max = s.max; r.step = s.step; r.value = value; r.setAttribute('aria-label', s.label);
   const v = el('span', 'kl-val', show(value)), w = el('div', 'cw-slider');
   r.oninput = () => { const x = +r.value; v.textContent = show(x); onInput(x); };
+  // (on a small screen the window is over the hull: while a slider is held, the window fades so the change shows)
+  const hold = (on) => { const win = w.closest('.cw'); if (!win || !(TOUCH || innerWidth < 720)) return; win.classList.toggle('hl-held', on); w.classList.toggle('hl-live', on); };
+  r.addEventListener('pointerdown', () => hold(true)); for (const e of ['pointerup', 'pointercancel', 'blur']) r.addEventListener(e, () => hold(false));
   if (s.title) w.title = s.title;
   w.append(lab(s.label), r, v); return w;
 }
@@ -227,8 +237,8 @@ const WINDOWS = [
   { id: 'cost', label: 'Cost', title: 'What this look costs to draw, in plain numbers' },
 ];
 let M = null;
-const st = { group: 'band', said: '', saidOk: true };
-const LOOK_SAYS = { 'dark armour': 'Dark greys, darker trim, a soft brushed sheen, light wear', 'pale plates, dark seams': 'Pale painted plates between dark seams, closer to the station\'s insides', 'old and worn': 'Lapped, heat-stained, pitted and streaked: the older station' };
+const st = { group: 'band', said: '', saidOk: true, textOpen: false };
+const LOOK_SAYS = { 'dark armour': 'Dark greys, heavy bevelled plates with cut corners, dark seams, a soft brushed sheen', 'pale plates, dark seams': 'Pale painted plates between dark seams, closer to the station\'s insides', 'old and worn': 'Lapped, heat-stained, pitted and streaked: the older station' };
 const FINISH_SAYS = { plain: 'Bare plate with only a fine grain.', brushed: 'Fine strokes all one way, lighter and darker, shinier and duller. At 0° they run along the hull, at 90° up and down.', tempered: 'The colours steel takes when it is heated: straw, bronze, purple, blue, in patches and toward the edges.',
   hatched: 'Two sets of cut lines at right angles. The angle turns them both.', mottled: 'Soft blotches, like the hangar\'s floor.' };
 const FINISH_LABELS = { brushed: { Angle: 'Direction' }, hatched: { Angle: 'Angle' }, tempered: { Strength: 'Heat colour' } };
@@ -244,12 +254,16 @@ function looksWin() {
   // (text typed or pasted into the box is taken up as soon as it reads as a look)
   box.oninput = () => { if (isLookText(box.value)) { const kept = box.value; look = readLook(kept); dirtyLook = dirtyPlates = true; saveSoon(); say('Read from the box.', true); for (const id of M.ids()) if (id !== 'looks') paint(id); } else say('That text is not a look yet.', false); };
   const said = el('div', 'cw-note ' + (st.saidOk ? 'hl-ok' : 'hl-bad'), st.said); said.id = 'said';
+  // (the text itself is folded away until it is wanted: Copy and Paste open it only when the browser will not do it for them)
+  const fold = el('details', 'hl-fold'); fold.id = 'lookfold'; fold.open = st.textOpen; fold.ontoggle = () => { st.textOpen = fold.open; if (fold.open && M && !(M.state().size.looks || [])[2]) M.refit('looks'); };
+  fold.append(el('summary', null, 'The look as text'), box, note('The whole look as text: copy from it, or paste a look into it.'));
   return [sec('Ready-made looks', list),
     sec('Your settings', row(chip('Copy settings', false, copyLook, false, 'Copy the whole look as text, to paste to someone'), chip('Paste settings', false, pasteLook, false, 'Take a look from text you have copied'),
-      chip('Reset', false, () => { say('Back to dark armour.', true); take(HULL_LOOKS[DEFAULT_LOOK]); }, true, 'Back to the first ready-made look, dark armour')), said, box,
-    note('Your changes are kept in this browser between visits. The box holds the whole look as text: copy from it, or paste a look into it.'))];
+      chip('Reset', false, () => { say('Back to dark armour.', true); take(HULL_LOOKS[DEFAULT_LOOK]); }, true, 'Back to the first ready-made look, dark armour')), said,
+    note('Your changes are kept in this browser between visits.'), fold)];
 }
 function say(text, ok = true) { st.said = text; st.saidOk = ok; const s = $('#said'); if (s) { s.textContent = text; s.className = 'cw-note ' + (ok ? 'hl-ok' : 'hl-bad'); } }
+function showText() { const f = $('#lookfold'); if (f && !f.open) f.open = true; }
 // (the box shows the look as it is now, unless he is typing in it)
 function syncText() { const b = $('#looktext'); if (b && document.activeElement !== b) b.value = writeLook(look); }
 async function copyLook() {
@@ -257,7 +271,7 @@ async function copyLook() {
   try { await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]); ok = true; } catch (_) { ok = false; }
   const b = $('#looktext');
   if (ok) say('Copied: the whole look, ' + SETTINGS.length + ' settings.', true);
-  else { say('This browser would not copy for you: the text is picked out in the box, copy it from there.', false); if (b) { b.value = text; b.focus(); b.select(); } }
+  else { say('This browser would not copy for you: the text is picked out in the box, copy it from there.', false); showText(); if (b) { b.value = text; b.focus(); b.select(); } }
 }
 async function pasteLook() {
   let text = null;
@@ -265,7 +279,7 @@ async function pasteLook() {
   if (text != null && isLookText(text)) { say('Pasted.', true); take(text); return; }
   const b = $('#looktext');
   say(text == null ? 'This browser would not paste for you: paste the text into the box.' : 'What you copied is not a look: paste a look\'s text into the box.', false);
-  if (b) { b.focus(); b.select(); }
+  showText(); if (b) { b.focus(); b.select(); }
 }
 function coloursWin() {
   return [sec('The plates', row(colour('grey'), colour('grey2')), setting('vary')), sec('The trim', row(colour('trim'))),
@@ -273,22 +287,29 @@ function coloursWin() {
 }
 function platesWin() {
   const n = hull ? hull.stats.plates : null;
-  return [sec('Size', setting('plateW'), setting('plateH')), sec('How they meet', setting('lap'), setting('bevel'), setting('gap')), sec('How they are laid', setting('shift'), setting('uneven')),
+  return [sec('Size', setting('plateW'), setting('plateH')), sec('How they meet', setting('lap'), setting('bevel'), setting('cut'), setting('gap')), sec('How they are laid', setting('shift'), setting('uneven'), setting('unevenRows')),
     el('div', 'cw-sum', n ? `${n.all} plates on this piece: ${n.band} on the middle band, ${n.tiers} on the tiers, ${n.trim} of trim.` : '')];
 }
 function finishWin() {
   const g = st.group, kind = look[g + 'Finish'], labels = FINISH_LABELS[kind] || {};
-  return [sec('Which plates', row(GROUPS.map((k) => chip(GROUP_NAMES[k], k === g, () => { st.group = k; paint('finish', true); }, false, k === 'trim' ? 'Frames, lips and window surrounds' : k === 'band' ? 'The wide middle band the hangars are in' : 'The stepped tiers above and below')))),
+  return [sec('Which plates', row(GROUPS.map((k) => chip(GROUP_NAMES[k], k === g, () => { st.group = k; flash(k); paint('finish', true); }, false, k === 'trim' ? 'Frames, lips and window surrounds' : k === 'band' ? 'The wide middle band the hangars are in' : 'The stepped tiers above and below')))),
     sec('Finish', row(FINISHES.map((k) => chip(FINISH_NAMES[k], k === kind, () => { look[g + 'Finish'] = k; changed(g + 'Finish'); paint('finish', true); }, true, FINISH_SAYS[k]))), note(FINISH_SAYS[kind]),
       FINISH_USES[kind].map((k) => setting(g + k, labels[k]))),
     sec('How it shines', setting(g + 'Shine'), setting(g + 'Rough'))];
+}
+// the plates of a group lit up on the hull for a moment, so it is plain which plates the group is
+const FLASH = new THREE.MeshBasicMaterial({ color: 0xffb347 }); let flashT = 0;
+function flash(g) {
+  const m = hull && hull.group.getObjectByName('hull:' + g); if (!m) return;
+  clearTimeout(flashT); for (const k of GROUPS) { const o = hull.group.getObjectByName('hull:' + k); if (o) o.material = mats[k]; }
+  m.material = FLASH; flashT = setTimeout(() => { const o = hull && hull.group.getObjectByName('hull:' + g); if (o) o.material = mats[g]; }, 420);
 }
 function wearWin() {
   return [sec('Layers, each its own amount', setting('scratches'), setting('edgeWear'), setting('streaks'), setting('pits'), setting('grime')),
     note('The layers stack: each is added over the ones above it.')];
 }
 function edgesWin() {
-  return [sec('Edge darkness', setting('edgeDark'), setting('edgeWide')), note('Along every seam and plate edge; three times as wide in the inside corners where one tier meets the next.')];
+  return [sec('Edge darkness', setting('edgeDark'), setting('edgeWide')), note('A dark line in every seam, and each plate\'s flat shaded in from its edge so its middle stands out; three times as wide in the inside corners where one tier meets the next.')];
 }
 function lightWin() {
   const deg = (x) => Math.round(x) + '°';
@@ -307,11 +328,11 @@ const N = (x) => Math.round(x).toLocaleString('en-US'), MB = (b) => (b / 1048576
 function costWin() {
   if (!hull) return [];
   const s = hull.stats, f = frame;
-  return [sum(`The hull alone: ${N(s.triangles.all)} triangles in ${s.draws} draws.`,
-    `Plates: ${s.plates.band} middle band, ${s.plates.tiers} tiers, ${s.plates.trim} trim; ${s.panes} window panes.`,
-    `Pictures: ${mats.pictures} (each ${512} pixels square), ${MB(mats.bytes)}. The plates' own numbers: ${MB(s.meshBytes)}.`),
+  return [sum(`The hull alone: ${N(s.triangles.all)} triangles in ${s.draws} draws (a draw is one batch of triangles handed to the graphics card).`,
+    `Plates: ${s.plates.band} middle band, ${s.plates.tiers} tiers, ${s.plates.trim} trim; ${s.windows} windows.`,
+    `Memory: ${mats.pictures} pictures (each ${512} pixels square), ${MB(mats.bytes)}; the plates' shapes, ${MB(s.meshBytes)}.`),
     sum(`The whole view now, with the sky, the hangar's inside and the markers: ${N(f.tris)} triangles in ${f.calls} draws${view.shadows ? ' (the sun\'s shadows draw the hull a second time)' : ''}.`,
-      `A frame: ${f.ms.toFixed(1)} ms` + (f.gpu != null ? `; the drawing itself: ${f.gpu.toFixed(2)} ms.` : '.'),
+      `A frame: ${f.ms.toFixed(1)} ms (${Math.round(1000 / f.ms)} a second)` + (f.gpu != null ? `; the drawing itself: ${f.gpu.toFixed(2)} ms.` : '.'),
       `Plates rebuilt in ${buildMs.toFixed(0)} ms; pictures and settings applied in ${paintMs.toFixed(0)} ms.`),
     note('The hull is ' + s.draws + ' draws however big it is: one for each group of plates, one for the windows, one for the shields.')];
 }
@@ -340,7 +361,7 @@ function timeEnd() {
 function numbers() {
   if (!hull) return;
   const s = hull.stats;
-  hud.textContent = `${N(s.triangles.all)} triangles · ${s.draws} draws · pictures ${MB(mats.bytes)} · ${frame.ms.toFixed(1)} ms a frame`;
+  hud.textContent = `${N(s.triangles.all)} triangles · ${s.draws} draws · pictures' memory ${MB(mats.bytes)} · ${frame.ms.toFixed(1)} ms a frame`;
   hud.title = 'The hull alone: its triangles, its draws, its pictures\' memory; and how long a whole frame takes. More in Cost.';
   if (M && M.isOpen('cost')) paint('cost');
 }
