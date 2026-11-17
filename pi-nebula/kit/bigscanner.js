@@ -33,9 +33,10 @@ export const SCAN = {
   rail: 1.12, railZ: [0.12, 3.36],          // the rails: how far either side of the bed's middle, and their two ends
   bed: { w: 0.6, top: 0.85, z: [0.1, 4.02], foot: [3.36, 3.98] },   // the board (its top, its ends), the pedestal at its foot
   keep: { x: 1.62, z: 4.25 },               // the line painted on the floor round it
-  // the machine's own floor, between the rails: how far either side of the bed's middle, its two ends, how far its top
-  // is over the room's floor; its warning edge's width; the grip tape's two lanes (from, to, either side of the bed)
-  deck: { x: 0.955, z: [0.03, 4.1], top: 0.004, edge: 0.07, grip: [0.37, 0.87], gripZ: [0.42, 3.24], seams: [1.38, 2.74] },
+  // the machine's own floor, between the rails: how far either side of the bed's middle, its two ends, how thick it is
+  // (its top over the room's floor); its warning edge's width; the grip tape's two lanes (from, to, either side of
+  // the bed), from where to where along the bed; the seams between its three plates
+  deck: { x: 0.955, z: [0.03, 4.1], top: 0.01, edge: 0.07, grip: [0.38, 0.82], gripZ: [0.42, 3.26], seams: [1.38, 2.74] },
 };
 // (the picked sketch's own colours: a clean white shell, pale grey machinery, a blue pad; teal and blue light. The
 // running gear is pale too, and its stops yellow: dark gear on the room's dark floor could not be made out)
@@ -133,20 +134,25 @@ function carriage(q) {
 // ── the machine's own floor ──────────────────────────────────────────────────────────────────────────────────────
 // (the game's maker, 2026-11-17: "it also seems like a machine like this would have it's own bottom. I think a
 // textured (with grip tape and maybe a warning boundary) white floor between the rails would look nice there"): a
-// white deck plate from rail to rail and from the wall out past the bed's foot, in three plates (two dark seams across
-// it); a yellow and black warning edge down both its sides and across its front; a lane of dark grip tape either side
-// of the bed, where its patient walks and stands to get on. It lies flat on the room's floor, SCAN.deck.top proud of
-// it: the patient's feet stay at the room's floor height (src/people.js walks them along it), so nothing of how they
-// get on and off changes, and their soles are that little way into it, which does not show.
-const TAPE = { c: '#25272a', r: 0.96, m: 0, w: 0.9 }, UNDER = { c: '#1b1c1f', r: 0.7, m: 0, w: 0.3 };
+// white deck plate from rail to rail and from the wall out past the bed's foot, a centimetre thick (SCAN.deck.top),
+// its edge rounded, on a dark rim that shows all round it; in three plates (two dark seams across it); a yellow and
+// black warning edge down both its sides and across its front, round the corners; a lane of grip tape either side of
+// the bed, where its patient walks and stands to get on: dark grey strips, clear of the warning edge. (A first fresh
+// pair of eyes saw the first one, flat on the floor with black strips right up to its stripes, as a sticker with a
+// zebra crossing on it.) A centimetre is no step: src/people.js asks the floor how high it is where the patient
+// stands and lifts their way along the bed and their moves on and off it by that much, so their feet stand on it as
+// on any floor; the moves themselves are as they were.
+const TAPE = { c: '#4d5157', r: 0.96, m: 0, w: 0.9 }, UNDER = { c: '#1b1c1f', r: 0.7, m: 0, w: 0.3 };
 // slanted stripes lying flat at height y, along a band `wide` across: from a to b along the band (the band's own way
-// along is `dir` [x, z], its way across `side` [x, z], from the point `at` [x, z]); each stripe `w` wide, `pitch` apart.
-// One geometry of painted quads (no print, so no draw of its own).
+// along is `dir` [x, z], its way across `side` [x, z], from the point `at` [x, z]); each stripe `w` wide, `pitch`
+// apart, cut off square at the band's two ends. One geometry of painted quads (no print, so no draw of its own).
 function slantStripes(at, dir, side, a, b, wide, y, w = 0.034, pitch = 0.07) {
-  const pos = [], nrm = [], uv = [], ix = [];
-  for (let u = a; u + w + wide <= b + 1e-6; u += pitch) {
+  const pos = [], nrm = [], uv = [], ix = [], cut = (u) => Math.max(a, Math.min(b, u));
+  for (let u = a - wide; u < b; u += pitch) {
+    const q = [[cut(u), 0], [cut(u + w), 0], [cut(u + w + wide), wide], [cut(u + wide), wide]];
+    if (q[1][0] - q[0][0] < 1e-6 && q[2][0] - q[3][0] < 1e-6) continue;
     const k = pos.length / 3;
-    for (const [al, ac] of [[u, 0], [u + w, 0], [u + w + wide, wide], [u + wide, wide]]) { pos.push(at[0] + dir[0] * al + side[0] * ac, y, at[1] + dir[1] * al + side[1] * ac); nrm.push(0, 1, 0); uv.push(al, ac); }
+    for (const [al, ac] of q) { pos.push(at[0] + dir[0] * al + side[0] * ac, y, at[1] + dir[1] * al + side[1] * ac); nrm.push(0, 1, 0); uv.push(al, ac); }
     ix.push(k, k + 2, k + 1, k, k + 3, k + 2);
   }
   const g = new THREE.BufferGeometry();
@@ -155,18 +161,20 @@ function slantStripes(at, dir, side, a, b, wide, y, w = 0.034, pitch = 0.07) {
 }
 function deck(p) {
   const D = SCAN.deck, [z0, z1] = D.z, y = D.top, paint = { r: 0, cell: 9, loops: [], skip: ['-y', '-x', '+x', '-z', '+z'] };
-  p.slab(SHELL, -D.x, D.x, 0, y, z0, z1, { r: 0, cell: 0.3, loops: [], skip: ['-y'] });
-  for (const z of D.seams) p.slab('dark', -D.x, D.x, y, y + 0.0015, z - 0.004, z + 0.004, paint);
-  // the warning edge: a black band down each side from near the wall and across the front, yellow stripes slanted on it
-  const e = D.edge, x1 = D.x - 0.012, x0 = x1 - e, zf = z1 - 0.012, za = z0 + 0.05;
+  p.slab(UNDER, -D.x - 0.02, D.x + 0.02, 0, 0.004, z0, z1 + 0.02, paint);
+  p.slab(SHELL, -D.x, D.x, 0, y, z0, z1, { r: 0.006, seg: 1, cell: 0.3, loops: [], skip: ['-y'] });
+  for (const z of D.seams) p.slab('dark', -D.x + 0.006, D.x - 0.006, y, y + 0.0015, z - 0.004, z + 0.004, paint);
+  // the warning edge: a black band down each side from near the wall to the front corners, and across the front
+  // between them, yellow stripes slanted on it all the way
+  const e = D.edge, x1 = D.x - 0.006, x0 = x1 - e, zf = z1 - 0.006, za = z0 + 0.05;
   for (const s of [-1, 1]) {
     p.slab(UNDER, Math.min(s * x0, s * x1), Math.max(s * x0, s * x1), y, y + 0.0015, za, zf, paint);
     p.add('solid', slantStripes([s * x1, za], [0, 1], [-s, 0], 0, zf - za, e, y + 0.003), 'yellow');
   }
   p.slab(UNDER, -x0, x0, y, y + 0.0015, zf - e, zf, paint);
   p.add('solid', slantStripes([-x0, zf], [1, 0], [0, -1], 0, 2 * x0, e, y + 0.003), 'yellow');
-  // the grip tape: thin dark strips across each lane (none on a seam)
-  const [g0, g1] = D.grip, [gz0, gz1] = D.gripZ, pitch = 0.095, bar = 0.034;
+  // the grip tape: strips across each lane (none on a seam)
+  const [g0, g1] = D.grip, [gz0, gz1] = D.gripZ, pitch = 0.13, bar = 0.04;
   for (const s of [-1, 1]) for (let z = gz0; z + bar <= gz1 + 1e-6; z += pitch) {
     if (D.seams.some((q) => q > z - 0.02 && q < z + bar + 0.02)) continue;
     p.slab(TAPE, Math.min(s * g0, s * g1), Math.max(s * g0, s * g1), y, y + 0.0015, z, z + bar, paint);
