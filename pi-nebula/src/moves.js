@@ -9,16 +9,30 @@
 //   M.look = point | null          the head turns toward a point in the world (most of the way: the eyes do the rest)
 //   M.talk = null | 'speak' | 'listen'     in a talk: speaking, or listening
 //   M.sitting = true               (sitting: no arms, a smaller lean)
-//   M.straight = 0..1              on a bed: the legs straightened that much, along the body (lying), or toward
-//   M.legsTo = way | null          a way in the world when given (sitting up along the bed: toward its foot)
+//   M.bed = null | { hips, feet: [left, right], pole, ahead, legs, flat, hands: [left, right], arms, chin } (world)
+//                                  ON A BED (the scanner's patient getting on, lying, getting off: src/onbed.js says
+//                                  where, people.js puts it in the world): the person moved so the middle of their hip
+//                                  joints is at `hips`; each leg bent (two bones) so its foot's root is at its place,
+//                                  the knee toward `pole`; each foot flat (`flat`: on what it stands on, toes `ahead`)
+//                                  or following its shin; each hand reaching for its place (`arms` of the way), laid
+//                                  flat, palm down; the chin brought down `chin` (rad); `legs` how much of the legs is
+//                                  worn over the clip's (0: the clip's own legs)
+//   M.body                         the person's own measures, taken once standing: { a thigh, b shin (hip, knee, the
+//                                  foot's root, m), w half the hips' width, hs the hip joints' height, u upper arm, f
+//                                  forearm }
+//   M.hipAt                        where the clips put the hip joints' middle from the root (the world's measure, along
+//                                  the root's own axes), taken each frame a bed pose is laid on: people.js places the
+//                                  root by it
 //
 // HOW: each turn is laid on after the clips have set the bones and before the rest of the crew kit's frame (the feet,
 // the arms out, the eyes: so the eyes aim from where the head has turned), by wrapping the person's clip player's own
 // update. The crew kit's clip player puts these bones back as the clips left them before each update, so nothing builds
 // up from one frame to the next. Every turn is about an axis of the person's own (x their left, y up, z ahead), so it
-// means the same on every outfit's skeleton. Nothing moves the hips, nor the legs (the feet stay planted) but someone's
-// lying on a bed (M.straight).
+// means the same on every outfit's skeleton. Nothing moves the hips, nor the legs (the feet stay planted) but someone
+// getting on or off a bed, or lying on it (M.bed): there the legs and the hands are aimed in the world, each bone turned
+// the shortest way from where the clip has it (hip and knee bending about the leg's own hinge, as the clip's do).
 import * as THREE from 'three';
+import { twoBone, footWay } from './onbed.js';
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion(), _a = new THREE.Vector3(), _p = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -67,33 +81,113 @@ export function addMoves(c) {
   const orig = person.update.bind(person);
   person.update = (dt) => { orig(dt); lay(dt); };
 
-  const still = () => !M.look && !M.talk && !(M.straight > 0) && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
-    && M.arms.L.every((v) => v < 0.002) && M.arms.R.every((v) => v < 0.002);
-  // (lying on a bed: both legs straight along the body, thigh and shin, as someone lies for a scan; the standing clip
-  // has a knee bent, which lying down lifts a foot into the air. Done before the crew kit puts each foot at its shin's
-  // end, so the feet follow)
-  const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _dn = new THREE.Vector3(), _ax = new THREE.Vector3();
-  function straighten(rq, k) {
-    // (toward M.legsTo, a way in the world, when given (sitting up along a bed: its foot); else along the body)
-    if (M.legsTo) _dn.copy(M.legsTo).normalize(); else _dn.set(0, -1, 0).applyQuaternion(rq);
-    for (const s of ['L', 'R']) {
-      const ul = B['UpperLeg' + s], ll = B['LowerLeg' + s]; if (!ul || !ll) continue;
-      // (the thigh: from the hip to the knee)
-      const th = _k.copy(ll.getWorldPosition(_k)).sub(ul.getWorldPosition(_h)).normalize();
-      let ang = Math.acos(Math.max(-1, Math.min(1, th.dot(_dn))));
-      if (ang > 1e-3 && _ax.crossVectors(th, _dn).lengthSq() > 1e-10) turnWorld(ul, _ax.normalize(), ang * k);
-      // (the shin: from the knee to the ankle, as it now lies)
-      const ft = B['Foot' + s];
-      const sh = ft ? _k.copy(ft.getWorldPosition(_k)).sub(ll.getWorldPosition(_h)).normalize() : (ll.updateWorldMatrix(true, false), _k.setFromMatrixColumn(ll.matrixWorld, 1).normalize());
-      ang = Math.acos(Math.max(-1, Math.min(1, sh.dot(_dn))));
-      if (ang > 1e-3 && _ax.crossVectors(sh, _dn).lengthSq() > 1e-10) turnWorld(ll, _ax.normalize(), ang * k);
+  const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+  // the person's own measures, standing as they are made (the crew kit has just put each foot at its shin's end): the
+  // thigh and the shin (the crew kit's foot rule: the foot's root along the shin's own line), the hips' width, the hip
+  // joints' height, the arm's two bones (in the world's measure: a person's size is in them)
+  {
+    c.root.updateMatrixWorld(true);
+    const at = (n, v) => (B[n] ? B[n].getWorldPosition(v) : null), d = (p, q) => (at(p, _v1) && at(q, _v2) ? _v1.distanceTo(_v2) : 0);
+    const hl = at('UpperLegL', new THREE.Vector3()), hr = at('UpperLegR', new THREE.Vector3());
+    M.body = { a: d('UpperLegL', 'LowerLegL') || 0.41, b: d('LowerLegL', 'FootL') || 0.47, w: hl && hr ? hl.distanceTo(hr) / 2 : 0.12,
+      hs: hl && hr ? (hl.y + hr.y) / 2 - c.root.position.y : 0.87, u: d('UpperArmL', 'LowerArmL') || 0.31, f: d('LowerArmL', 'WristL') || 0.27 };
+    M.hipAt = new THREE.Vector3(0, M.body.hs, 0);
+    // (each hand's palm: the wrist's own axis, x or z either way, that points in toward the body standing, as the calm
+    // standing pose holds the palms to the thighs; the fingers run along its +y)
+    M.palm = {};
+    const rq0 = c.root.getWorldQuaternion(new THREE.Quaternion()), wq = new THREE.Quaternion();
+    for (const [s, sg] of [['L', 1], ['R', -1]]) {
+      if (!B['Wrist' + s]) continue;
+      B['Wrist' + s].getWorldQuaternion(wq);
+      const inward = new THREE.Vector3(-sg, 0, 0).applyQuaternion(rq0);
+      let best = null, bd = -2;
+      for (const ax of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) { const d = new THREE.Vector3(...ax).applyQuaternion(wq).dot(inward); if (d > bd) { bd = d; best = ax; } }
+      M.palm[s] = new THREE.Vector3(...best);
     }
   }
+  const still = () => !M.look && !M.talk && !M.bed && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
+    && M.arms.L.every((v) => v < 0.002) && M.arms.R.every((v) => v < 0.002);
+
+  // ── ON A BED (M.bed): the whole person moved so the hip joints' middle is where it is wanted, then the legs, the feet
+  // and (last, after the body above the hips has moved) the hands, each worn over the clip's by its own amount ──
+  const _iq = new THREE.Quaternion(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _m4 = new THREE.Matrix4();
+  const _tx = new THREE.Vector3(), _ty = new THREE.Vector3(), _tz = new THREE.Vector3(), _mid = new THREE.Vector3(), _pole = new THREE.Vector3();
+  // (a bone turned in the world about its own joint, so `from` comes to lie along `to`: k of the way)
+  function aim(bone, from, to, k) {
+    if (!bone || !bone.parent || from.lengthSq() < 1e-12 || to.lengthSq() < 1e-12) return;
+    _qa.setFromUnitVectors(from.normalize(), to.normalize());
+    _qb.identity().slerp(_qa, Math.min(1, k));
+    bone.parent.getWorldQuaternion(_pq);
+    _q.copy(_pq).invert().multiply(_qb).multiply(_pq);
+    bone.quaternion.premultiply(_q);
+  }
+  const arr = (v) => [v.x, v.y, v.z];
+  function onBed(D) {
+    const ul = B.UpperLegL, ur = B.UpperLegR; if (!ul || !ur) return;
+    // (where the clips put the hip joints' middle: measured for people.js, then the whole person moved onto `hips`)
+    _mid.addVectors(ul.getWorldPosition(_v1), ur.getWorldPosition(_v2)).multiplyScalar(0.5);
+    M.hipAt.copy(_mid).sub(c.root.position).applyQuaternion(_iq.copy(_rq).invert());
+    c.root.position.add(_v1.copy(D.hips).sub(_mid)); c.root.updateMatrixWorld(true);
+    if (!(D.legs > 0.001)) return;
+    for (const [i, s] of [[0, 'L'], [1, 'R']]) {
+      const U = B['UpperLeg' + s], L = B['LowerLeg' + s], F = B['Foot' + s]; if (!U || !L) continue;
+      const hip = U.getWorldPosition(_h), knee0 = L.getWorldPosition(_k);
+      const ik = twoBone(arr(hip), arr(D.feet[i]), arr(D.pole), M.body.a, M.body.b);
+      // the thigh, hip to knee, turned onto the knee's place
+      aim(U, _v1.subVectors(knee0, hip), _v2.set(ik.mid[0] - hip.x, ik.mid[1] - hip.y, ik.mid[2] - hip.z), D.legs);
+      U.updateWorldMatrix(false, true);
+      // the shin along its own +y (where the crew kit puts the foot) turned onto the foot's place
+      const kn = L.getWorldPosition(_k);
+      L.updateWorldMatrix(true, false);
+      aim(L, _v1.setFromMatrixColumn(L.matrixWorld, 1), _v2.set(ik.end[0] - kn.x, ik.end[1] - kn.y, ik.end[2] - kn.z), D.legs);
+      L.updateWorldMatrix(false, true);
+      // the foot (the crew's feet hang from the root, not the shins: turned here; the crew kit then puts it at the
+      // shin's end): its own +y to the toes, its +z down out of the sole
+      if (F && F.parent) {
+        const fw = footWay(arr(_v1.setFromMatrixColumn(L.matrixWorld, 1)), arr(D.pole), arr(D.ahead), D.flat);
+        _ty.fromArray(fw.toe); _tz.fromArray(fw.up).negate(); _tx.crossVectors(_ty, _tz);
+        _qa.setFromRotationMatrix(_m4.makeBasis(_tx, _ty, _tz));
+        F.getWorldQuaternion(_qb).slerp(_qa, Math.min(1, D.legs));
+        F.parent.getWorldQuaternion(_pq); F.quaternion.copy(_pq.invert().multiply(_qb));
+      }
+    }
+    c.root.updateMatrixWorld(true);
+  }
+  function handsOn(D) {
+    // each hand onto its place on the bed, the elbow behind and out to its side, as someone leans on their hands
+    c.root.updateMatrixWorld(true);
+    _tx.set(1, 0, 0).applyQuaternion(_rq);      // (their left)
+    for (const [i, s, sg] of [[0, 'L', 1], [1, 'R', -1]]) {
+      const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s]; if (!ua || !la || !wr) continue;
+      const sh = ua.getWorldPosition(_h).clone(), el0 = la.getWorldPosition(_k);
+      _pole.copy(D.ahead).multiplyScalar(-1).addScaledVector(_tx, sg * 0.7).add(_ty.set(0, -0.25, 0));
+      const ik = twoBone(arr(sh), arr(D.hands[i]), arr(_pole), M.body.u, M.body.f);
+      aim(ua, _v1.subVectors(el0, sh), _v2.set(ik.mid[0] - sh.x, ik.mid[1] - sh.y, ik.mid[2] - sh.z), D.arms);
+      ua.updateWorldMatrix(false, true);
+      const el = la.getWorldPosition(_k).clone(), w0 = wr.getWorldPosition(_v1);
+      aim(la, _v2.subVectors(w0, el), _v1.set(ik.end[0] - el.x, ik.end[1] - el.y, ik.end[2] - el.z), D.arms);
+      la.updateWorldMatrix(false, true);
+      // the hand flat on the bed: its palm down, the fingers ahead and a little out (pointed out past a narrow bed's
+      // edge, the fingers curled down over it)
+      const palm = M.palm && M.palm[s]; if (!palm) continue;
+      _hf.copy(D.ahead).addScaledVector(_tx, sg * 0.3).setY(0).normalize();
+      _hd.set(0, -1, 0).addScaledVector(_hf, -_hf.y).normalize();
+      _ma.makeBasis(_ha.set(0, 1, 0), palm, _hb.crossVectors(_ha, palm));
+      _mb.makeBasis(_hf, _hd, _hc.crossVectors(_hf, _hd));
+      _qa.setFromRotationMatrix(_mb.multiply(_ma.transpose()));
+      wr.getWorldQuaternion(_qb).slerp(_qa, Math.min(1, D.arms));
+      wr.parent.getWorldQuaternion(_pq); wr.quaternion.copy(_pq.invert().multiply(_qb));
+      wr.updateWorldMatrix(false, true);
+    }
+  }
+  const _hf = new THREE.Vector3(), _hd = new THREE.Vector3(), _ha = new THREE.Vector3(), _hb = new THREE.Vector3(), _hc = new THREE.Vector3(), _ma = new THREE.Matrix4(), _mb = new THREE.Matrix4();
   function lay(dt) {
     M.t += dt;
     if (still()) { M.yaw = M.pitch = M.sway = 0; M.lastTalk = M.talk; return; }      // (nothing to lay on: costs nothing)
     c.root.updateMatrixWorld(true);
     c.root.getWorldQuaternion(_rq);
+    // (on a bed: the person put where they are, first, the legs bent to their places)
+    if (M.bed) onBed(M.bed);
     // the head toward what it looks at (yaw and a little pitch, in the person's own frame), the neck taking its share
     let wy = 0, wp = 0;
     if (M.look && B.Head) {
@@ -138,10 +232,12 @@ export function addMoves(c) {
     const beat = speaking ? Math.max(0, Math.sin(M.beatT * 7.5)) * MOVES.beat : 0;
     for (const s of ['L', 'R']) for (let i = 0; i < 4; i++) M.arms[s][i] = damp(M.arms[s][i], M.want[s][i], 4.5, dt);
     // ── laid on: top down, so each bone turns from where its parent now is ──
-    if (M.straight > 0) straighten(_rq, Math.min(1, M.straight));
     if (Math.abs(M.sway) > 1e-4) { turn(B.Abdomen, Z, M.sway * 0.5, _rq); turn(B.Chest, Z, M.sway * 0.5, _rq); }
     turn(B.Neck, Y, M.yaw * MOVES.neck, _rq); turn(B.Head, Y, M.yaw * (1 - MOVES.neck), _rq);
-    turn(B.Head, X, M.pitch + nod, _rq);
+    // (on a bed, leaning back: the chin brought down, the neck taking half)
+    const chin = M.bed && M.bed.chin ? M.bed.chin : 0;
+    if (chin) turn(B.Neck, X, chin * 0.5, _rq);
+    turn(B.Head, X, M.pitch + nod + chin * 0.5, _rq);
     for (const [s, sg] of [['L', 1], ['R', -1]]) {
       const [fwd, out, bend, palm] = M.arms[s];
       if (fwd + out + bend + palm < 0.003) continue;
@@ -158,6 +254,8 @@ export function addMoves(c) {
         turnWorld(wr, line, -palm * sg * 0.5);
       }
     }
+    // (on a bed: the hands to their places, last, once everything above the hips is where it goes)
+    if (M.bed && M.bed.hands && M.bed.arms > 0.001) handsOn(M.bed);
     c.root.updateMatrixWorld(true);
   }
   return M;

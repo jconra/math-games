@@ -50,6 +50,7 @@ import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, SCAN_BED } from './life.js';
+import { MOVES_ON, MOVES_OFF, SECS as BED_SECS, pose as onBedPose } from './onbed.js';
 import { STAND, shine } from './player.js';
 import { addMoves } from './moves.js';
 import { makeBubbles } from './bubbles.js';
@@ -352,11 +353,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const SCAN = scanPc && scanA && scanS ? (() => {
     const M = scanPc.M, q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(M));
     const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(M);
+    const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
     return {
-      M, q, busy: null, path: [scanA.pos.clone(), ...SCAN_BED.path.slice(1).map(([x, z]) => at(x, z))], sit: at(SCAN_BED.sit[0], SCAN_BED.sit[1], SCAN_BED.top),
-      hips: at(SCAN_BED.hips[0], SCAN_BED.hips[1], SCAN_BED.top), top: SCAN_BED.top, panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
+      M, q, busy: null, path: [scanA.pos.clone(), ...SCAN_BED.path.slice(1).map(([x, z]) => at(x, z))], panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
+      // (the bed, in its own frame, for src/onbed.js; where its patient stands with their back to it, and the way that
+      // faces (out across it))
+      bed: { top: SCAN_BED.top, edge: SCAN_BED.edge, pad: SCAN_BED.pad, z: SCAN_BED.z, stand: SCAN_BED.stand, hipUp: SCAN_BED.hipUp, rest: SCAN_BED.rest },
+      stand: at(SCAN_BED.stand[0], SCAN_BED.stand[1]), out: Math.atan2(across.x, across.z),
       // (the scanner's own ways in the station: across its bed (its +x), out along the bed (its +z))
-      across: new THREE.Vector3(1, 0, 0).applyQuaternion(q), along: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
+      across, along: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
       round: scanD ? 2 * (scanD.glide.go + scanD.glide.rest) : 24, use: null,
     };
   })() : null;
@@ -685,11 +690,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         P.marker.visible = cx * cx + cz * cz + my * my > MARK.near * MARK.near;
       }
       // (someone speaking up on their own (a captain, the medic) moves their hands as they talk, as two people talking
-      // do (moves.js), never while their hands are at work; a patient lying on the scanner, legs straight)
+      // do (moves.js), never while their hands are at work; the scanner's patient getting on, lying and getting off:
+      // their legs, feet and hands as the move has them (moves.js M.bed, from onbed.js))
       // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
       if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
-      const legs = P.act && P.act.kind === 'scan' && P.pose && P.legs;
-      P.moves.straight = legs ? legs.k : 0; P.moves.legsTo = legs ? legs.to : null;
+      P.moves.bed = P.act && P.act.kind === 'scan' && P.pose && P.bed ? P.bed : null;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
@@ -1020,38 +1025,36 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
 
   // ── SCAN: the patient's turn on the big scanner, and the medic's at its screen ───────────────────────────────
-  // The patient walks from the spot by the bed's foot along its side, sits on its edge, lies back (their head toward
-  // the wall, under the parked ring), and lies still while the ring glides over them, a few times there and back; then
-  // up, and out the way they came. Their body is turned and moved about the hips (where a person turns lying down),
-  // the clips going from walking to sitting to standing straight (lying, it is the calm standing pose, flat on the bed).
-  const HIP = { stand: 0.95, sit: 0.5 };
-  // (seconds for the swing round onto the bed, and for lying back)
-  const LIE = { swing: 1.6, back: 1.3 };
-  const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
-  function bodyQ(out, heading, lie) {
-    // (lie 0: standing, turned to `heading`; lie 1: on their back along the bed, head toward the wall, face up)
-    out.setFromEuler(_e.set(0, heading, 0, 'YXZ'));
-    if (lie > 0) {
-      // (on the back: the body's up along the bed toward the wall (the scanner's -z), its front up)
-      // (their left along the scanner's across, their head toward its wall, their face up: x, y, z of the body, a
-      // proper turn: across x (-along) = up)
-      const L = new THREE.Matrix4().makeBasis(SCAN.across.clone(), SCAN.along.clone().negate(), new THREE.Vector3(0, 1, 0));
-      _q2.setFromRotationMatrix(L);
-      out.slerp(_q2, lie);
-    }
-    return out;
-  }
-  function setPose(P, hips, q, hipH) {
+  // The patient walks from the spot by the bed's foot along its side, turns their back to it and gets on as a person
+  // gets onto a high bed (src/onbed.js: a hop up onto its edge, the legs swung round onto it with the knees bent, lying
+  // back, the legs straightened), lies still with their head on the head rest while the ring glides over them, a few
+  // times there and back; then off the same way backwards, a slide off the edge onto their feet, and out the way they
+  // came. Their body is placed by its hips and turned about them (src/moves.js M.bed bends the legs and puts the hands
+  // down); the clip under it all is the standing one or the sitting one, as the move says (lying: the standing one).
+  const BED_ON = MOVES_ON.map((m) => m[0]), BED_OFF = MOVES_OFF.map((m) => m[0]);
+  const _e = new THREE.Euler();
+  // (a move's pose, from the bed's own frame into the station: the root turned and placed from where the clips put the
+  // hip joints (moves.js measures it each frame), and the legs', the feet's and the hands' places for moves.js)
+  function bedPoseOf(P, move, t) {
+    const who = P.moves.body, p = onBedPose(move, t, SCAN.bed, who);
+    const W = (v, out) => out.set(v[0], v[1], v[2]).applyMatrix4(SCAN.M), D3 = (v, out) => out.set(v[0], v[1], v[2]).applyQuaternion(SCAN.q);
+    const D = P.bed || (P.bed = { hips: new THREE.Vector3(), feet: [new THREE.Vector3(), new THREE.Vector3()], pole: new THREE.Vector3(), ahead: new THREE.Vector3(), hands: [new THREE.Vector3(), new THREE.Vector3()], legs: 0, flat: 0, arms: 0, chin: 0 });
+    W(p.hips, D.hips); W(p.feet[0], D.feet[0]); W(p.feet[1], D.feet[1]); D3(p.pole, D.pole);
+    D3([Math.sin(p.heading), 0, Math.cos(p.heading)], D.ahead);
+    if (p.hands) { W(p.hands[0], D.hands[0]); W(p.hands[1], D.hands[1]); }
+    D.legs = p.legs; D.flat = p.flat; D.arms = p.hands ? p.arms : 0; D.chin = p.chin || 0;
     const pose = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
-    pose.q.copy(q);
-    pose.root.set(0, hipH * (P.c.size || 1), 0).applyQuaternion(q).negate().add(hips);
-    P.pos.set(hips.x, 0, hips.z);
+    const h = Math.atan2(D.ahead.x, D.ahead.z);
+    pose.q.setFromEuler(_e.set(-p.lean, h, 0, 'YXZ'));
+    pose.root.copy(P.moves.hipAt).applyQuaternion(pose.q).negate().add(D.hips);
+    P.pos.set(D.hips.x, SCAN.stand.y, D.hips.z); P.heading = h;
+    play(P, p.clip === 'sit' ? CLIPS.sit : STAND, { fade: 0.45 });
+    return p;
   }
   function scanPatient(P, a, dt) {
     if (!SCAN || !SCAN.busy || SCAN.busy.patient !== P) { next(P); return; }
     const M = SCAN.busy.medic, ready = M && M.act && M.act.kind === 'scanMedic' && M.act.phase === 'do';
     const along = (from, to, k) => _v.lerpVectors(from, to, k);
-    const sitH = Math.atan2(SCAN.across.x, SCAN.across.z);        // (sitting on the bed's west edge: facing out, across)
     if (a.phase === 'ready') {
       // (at the bed's foot: on once the medic at the screen has said hello and they have answered)
       play(P, STAND); idle(P, a, dt, 0.1);
@@ -1068,10 +1071,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (a.phase === 'walkin' || a.phase === 'walkout') {
-      // (along the bed's side, at an easy pace, inside the rails: the ring is parked)
-      const path = a.phase === 'walkin' ? SCAN.path : [...SCAN.path].reverse();
+      // (along the bed's side, at an easy pace, inside the rails: the ring is parked; out, from where they stood to get
+      // on, back past the bed's foot)
+      const path = a.phase === 'walkin' ? SCAN.path : [SCAN.stand, ...SCAN.path.slice(1).reverse(), SCAN.path[0]];
       const A = path[a.leg], B = path[a.leg + 1];
-      if (!B) { if (a.phase === 'walkin') { a.phase = 'sit'; a.t = 0; } else { P.scripted = false; P.pos.copy(path[path.length - 1]); a.phase = 'bye'; a.t = 0; } return; }
+      if (!B) {
+        if (a.phase === 'walkin') { a.phase = 'back'; a.t = 0; a.from = P.pos.clone(); a.fromH = P.heading; }
+        else { P.scripted = false; P.pos.copy(path[path.length - 1]); a.phase = 'bye'; a.t = 0; }
+        return;
+      }
       const L = A.distanceTo(B), k = Math.min(1, a.t * 0.75 / Math.max(L, 0.01));
       P.pos.copy(along(A, B, k)); P.pose = null;
       const want = Math.atan2(B.x - A.x, B.z - A.z), diff = wrap(want - P.heading);
@@ -1080,42 +1088,24 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (k >= 1) { a.leg++; a.t = 0; }
       return;
     }
-    if (a.phase === 'sit' || a.phase === 'unsit') {
-      // (turned to face out across the bed's side, then down onto its edge; or up off it again)
-      P.legs = null;
-      const k = ease(Math.min(1, a.t / 1.1)), u = a.phase === 'sit' ? k : 1 - k;
-      const stand = SCAN.path[SCAN.path.length - 1];
-      const hips = _w.set(stand.x, stand.y + HIP.stand, stand.z).lerp(_v.copy(SCAN.sit).setY(SCAN.sit.y + 0.08), u);
-      const h = wrap(P.heading + wrap(sitH - P.heading) * Math.min(1, a.t * 3));
-      P.heading = h;
-      setPose(P, hips, bodyQ(_q1, h, 0), HIP.stand + (HIP.sit - HIP.stand) * u);
-      play(P, u > 0.4 ? CLIPS.sit : STAND, { fade: 0.5 });
-      if (a.t > 1.1) { a.t = 0; a.phase = a.phase === 'sit' ? 'lie' : 'walkout'; a.leg = 0; if (a.phase === 'walkout') P.pose = null; }
+    if (a.phase === 'back') {
+      // (turned round to put their back to the bed's side, and a step back to it: standing, the clip's own legs)
+      const k = ease(Math.min(1, a.t / BED_SECS.back));
+      P.pose = null; P.pos.lerpVectors(a.from, SCAN.stand, k); P.heading = wrap(a.fromH + wrap(SCAN.out - a.fromH) * k);
+      play(P, STAND);
+      if (a.t >= BED_SECS.back) { a.phase = 'hop'; a.t = 0; }
       return;
     }
-    if (a.phase === 'lie' || a.phase === 'unlie') {
-      // (onto the bed and down in two moves, as someone gets onto a bed: first a swing round to sit along it, facing
-      // its foot, the legs lifted onto it and straightened, the hips slid in to its middle; then down onto the back,
-      // turned about the hips, head to the wall, the legs staying along the bed. Getting up: the same, backwards)
-      const T = LIE.swing + LIE.back, t = a.phase === 'lie' ? Math.min(a.t, T) : T - Math.min(a.t, T);
-      const alongH = Math.atan2(SCAN.along.x, SCAN.along.z);
-      const L = P.legs || (P.legs = { k: 0, to: new THREE.Vector3() });
-      if (t < LIE.swing) {
-        const k = ease(t / LIE.swing), h = wrap(sitH + wrap(alongH - sitH) * k);
-        const hips = _w.copy(SCAN.sit).setY(SCAN.top + 0.08).lerp(_v.copy(SCAN.hips).setY(SCAN.top + 0.08), k);
-        setPose(P, hips, bodyQ(_q1, h, 0), HIP.sit);
-        play(P, CLIPS.sit, { fade: 0.5 });
-        // (the legs straightened as they come round, done before they are over the bed)
-        L.k = ease(Math.max(0, Math.min(1, (k - 0.3) / 0.55))); L.to.set(Math.sin(h), 0, Math.cos(h));
-      } else {
-        const k = ease((t - LIE.swing) / LIE.back);
-        play(P, k > 0.25 ? STAND : CLIPS.sit, { fade: 0.5 });
-        // (the hips' height in the clips as they are blended this moment, so the hips stay where they are)
-        const sw = P.c.person.actions[STAND] ? P.c.person.actions[STAND].getEffectiveWeight() : (k > 0.25 ? 1 : 0);
-        setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.08 + 0.03 * k), bodyQ(_q1, alongH, k), HIP.sit + (HIP.stand - HIP.sit) * Math.max(0, Math.min(1, sw)));
-        L.k = 1; L.to.copy(SCAN.along);
+    const on = BED_ON.indexOf(a.phase), off = BED_OFF.indexOf(a.phase);
+    if (on > 0 || off >= 0) {
+      // (getting on, a move at a time, or off; each move's end is the next one's start)
+      const p = bedPoseOf(P, a.phase, a.t);
+      if (p.done) {
+        a.t = 0;
+        if (on > 0) { a.phase = BED_ON[on + 1] || 'lying'; if (a.phase === 'lying') a.rounds = Math.round(rnd(SCAN_BED.rounds[0], SCAN_BED.rounds[1])); }
+        else if (BED_OFF[off + 1]) a.phase = BED_OFF[off + 1];
+        else { P.pose = null; P.bed = null; P.pos.copy(SCAN.stand); P.heading = SCAN.out; a.phase = 'walkout'; a.leg = 0; play(P, STAND, { fade: 0.3 }); }
       }
-      if (a.t > T) { a.t = 0; a.phase = a.phase === 'lie' ? 'lying' : 'unsit'; if (a.phase === 'lying') a.rounds = Math.round(rnd(SCAN_BED.rounds[0], SCAN_BED.rounds[1])); else P.legs = null; }
       return;
     }
     if (a.phase === 'lying') {
@@ -1123,16 +1113,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // once the medic has started it at the screen (on its own after a while if they never do); at the end, the
       // medic's word, then up)
       P.scripted = true;
-      setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.11), bodyQ(_q1, sitH, 1), HIP.stand);
-      play(P, STAND, { fade: 0.4 });
-      const L = P.legs || (P.legs = { k: 1, to: new THREE.Vector3() }); L.k = 1; L.to.copy(SCAN.along);
+      bedPoseOf(P, 'lying', 0);
       const S = SCAN.busy;
       if (a.placed && !S.started) S.started = clock;
       if (!SCAN.use && !S.over && (S.started || a.t > 9)) SCAN.use = { from: clock, end: null };
       const U = SCAN.use;
       if (U && U.end == null && clock - U.from > (a.rounds || 2) * SCAN.round - 0.01) U.end = U.from + Math.ceil((clock - U.from) / SCAN.round) * SCAN.round;
       if (U && U.end != null && clock >= U.end && !S.over) S.over = clock;
-      if (S.over && clock - S.over > 1.5) { SCAN.use = null; a.phase = 'unlie'; a.t = 0; }
+      if (S.over && clock - S.over > 1.5) { SCAN.use = null; a.phase = BED_OFF[0]; a.t = 0; }
       return;
     }
   }
@@ -1188,7 +1176,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (the patient or the medic gone off before it was done: the patient off the bed at once, where nobody can see
     // (people.js never leaves anyone lying), the scanner parked)
     const S = SCAN.busy; SCAN.busy = null; SCAN.use = null;
-    const pt = S.patient; if (pt) pt.legs = null;
+    const pt = S.patient; if (pt) pt.bed = null;
     if (pt && pt !== P && pt.act && pt.act.kind === 'scan') { pt.pose = null; pt.scripted = false; if (!['go', 'ready', 'turn', 'bye'].includes(pt.act.phase)) pt.pos.copy(SCAN.path[0]); pt.act = { kind: 'wait', until: rnd(1, 3), t: 0 }; }
     if (pt === P) { P.pose = null; P.scripted = false; if (P.act && P.act.kind === 'scan' && !['go', 'ready', 'turn', 'bye'].includes(P.act.phase)) P.pos.copy(SCAN.path[0]); }
     const md = S.medic; if (md && md !== P && md.act && md.act.kind === 'scanMedic') md.act = { kind: 'wait', until: rnd(1, 3), t: 0 };

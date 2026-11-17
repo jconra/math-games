@@ -99,13 +99,14 @@ export const SPOTS = {
   guard: [{ place: 'airlock', toward: { place: 'galley' }, out: 7.6 }],
 };
 
-// THE BIG SCANNER'S BED, in the scanner's own frame (kit/bigscanner.js: x across, z out from the wall, its bed's top
-// 0.92 m up): the way its patient goes from the spot by its foot along the bed's west side (nearer the bed than its
-// rail), where they sit on its edge,
-// and where their hips are once lying on it (on their back, their head toward the wall, under the parked ring); the
-// pedestal's top edge, over its screen, that the medic works and looks at ([across, up, along]); how many times the
-// ring goes there and back
-export const SCAN_BED = { path: [[1.25, 4.55], [0.66, 3.3], [0.66, 1.6]], sit: [0.43, 1.45], hips: [0, 1.35], top: 0.92, panel: [0, 0.8, 3.95], rounds: [2, 3] };
+// THE BIG SCANNER'S BED, in the scanner's own frame (kit/bigscanner.js: x across, z out from the wall; its pad's top
+// 0.915 m up, its board's edge 0.3 m out from its middle, the pad 0.26; the head rest from z 1.12 to 1.44): the way
+// its patient goes from the spot by its foot along the bed's west side (nearer the bed than its rail), where they stand
+// with their back to its side to get on ([across, along]), and how far along it their hips are, sitting on its edge and
+// then lying on it (on their back, their head on the head rest, just in front of the parked ring: src/onbed.js gets
+// them on and off, as a person does); the hip joints over the pad, sitting; the pedestal's top edge, over its screen,
+// that the medic works and looks at ([across, up, along]); how many times the ring goes there and back
+export const SCAN_BED = { path: [[1.25, 4.55], [0.66, 3.3], [0.6, 2.4]], stand: [0.45, 2.05], z: 2.05, top: 0.915, edge: 0.3, pad: 0.26, rest: [1.12, 1.44], hipUp: 0.095, panel: [0, 0.8, 3.95], rounds: [2, 3] };
 
 // THE TALKING SPOTS: two people face to face (each spot's two places, `apart` metres, along the way it faces)
 export const TALKS = {
