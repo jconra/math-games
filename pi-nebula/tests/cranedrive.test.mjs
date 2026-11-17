@@ -85,6 +85,19 @@ test('by hand: it holds on in mid-air (it lets go only where a canister can rest
   assert.ok(S.z > z0 + 0.5 && S.lit[4] < 0.01, 'drawn back out of the collar, the dogs open: ' + (S.z - z0).toFixed(2) + ' ' + S.lit[4]);
 });
 
+test('by hand: an empty off the rack: taken, and lifted clear of the saddles it lies on (they are where it rests, not in the way)', () => {
+  // (the rack's saddles as the station's voxels have them: a little into the canister's underside, as a 6 cm voxel does)
+  const saddles = (x, y, z) => solid(x, y, z) || bays.some((b) => Math.abs(x - b.at[0]) < 0.42 && y > 0.1 && y < b.at[1] - 0.47 + 0.035 && [-0.6, 0.6].some((o) => Math.abs(z - (b.at[2] + o)) < 0.12));
+  const S = startOf(site), D = makeDrive(site, S, { solid: saddles, eyes: [] }), b = bays[0];
+  run(D, 20, toward(S, b.at[0], b.at[2]));
+  const c = S.cans.findIndex((q) => q.where === 'bay' && q.i === 0);
+  assert.ok(until(D, () => D.held === c, 15, { hoist: -1 }) != null, 'lowered onto it, it takes it: hook at ' + S.hoist.toFixed(2));
+  assert.ok(until(D, () => S.hoist > 3, 10, { hoist: 1 }) != null, 'and lifts it off the rack: ' + JSON.stringify(D.notes));
+  // (and the way back down onto the rack stops on the saddles, not in them)
+  run(D, 3, { hoist: -1 }); run(D, 6, { hoist: -1 });
+  assert.ok(S.hoist >= b.at[1] - 1e-3, 'set back down on the rack, not through it: ' + S.hoist.toFixed(3));
+});
+
 test('nothing driven through anything: the floor, the wall, a canister in the way', () => {
   const { S, D } = fresh();
   run(D, 20, toward(S, 33, -17.0));

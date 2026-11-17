@@ -234,6 +234,14 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     S.cans.forEach((q, k) => { if (k === held || k === target || q.where === 'held') return; const m = middleOf(k); if (m && Math.hypot(m[0] - hx, m[2] - hz) < half + 2.6) nearCans.push(k); });
     // (an empty tray that is out, but not the one under the held canister it is lined up with: that one is its rest)
     const outTrays = M.map((m, i) => i).filter((i) => S.tray[i] > 0.01 && whoAt('mount', i) < 0 && !(carrying && L && L.kind === 'mount' && L.i === i));
+    // (lined up on a rack bay: the saddles a canister lies on there, and the arms closed round it under it, are where
+    // it rests, so the rack's own voxels under it are not in the way; the floor check above keeps it out of the rack)
+    const onBay = L && L.kind === 'bay' && L.d <= 0.03 ? L : null;
+    const restsOnBay = (x, y, z, part) => {
+      if (!onBay || (part !== 'can' && part !== 'arm') || y > onBay.at[1] - 0.2) return false;
+      const dx = x - onBay.at[0], dz = z - onBay.at[2], yb = onBay.axis ?? 0;
+      return Math.abs(dx * Math.sin(yb) + dz * Math.cos(yb)) < half + 0.2 && Math.abs(dx * Math.cos(yb) - dz * Math.sin(yb)) < R + 0.25;
+    };
     let hit = null;
     eachPoint(c, carrying, rel, (x, y, z, part) => {
       if (y < 0.02) { hit = { what: 'floor', at: [x, y, z] }; return true; }
@@ -245,7 +253,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
       }
       // (an empty tray that is out: its bars just under where a canister would sit on it)
       if (part === 'can') for (const i of outTrays) { const o = outPos(i); if (Math.abs(x - o[0]) < 0.48 && Math.abs(z - o[2]) < 0.48 && y < o[1] - R + 0.005 && y > o[1] - R - 0.08) { hit = { what: 'tray', at: [x, y, z] }; return true; } }
-      if (world.solid && world.solid(x, y, z)) { hit = { what: 'solid', part, at: [x, y, z] }; return true; }
+      if (world.solid && !restsOnBay(x, y, z, part) && world.solid(x, y, z)) { hit = { what: 'solid', part, at: [x, y, z] }; return true; }
       return false;
     });
     return hit;

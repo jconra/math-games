@@ -171,7 +171,7 @@ function movesOf(site, S, trip) {
       out.push({ grab: 'shut' }, { until: 'held', c });
     }
     out.push({ to: { hoist: carry } });
-  }
+  } else if (S.hoist < carry - 0.01) out.push({ to: { hoist: carry } });   // (in the cradle already, but low: up first)
   const D = placeOf(site, trip.to.kind, trip.to.i);
   // (the canister's own turn in the cradle when it was taken: 0 or a half turn; the cradle turns it to lie the place's way)
   const relNow = trip.from ? near0(S.cans[c].yaw - yaw) : rel, yawD = alongNear(D.axis - relNow, yaw);
