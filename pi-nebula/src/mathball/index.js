@@ -668,7 +668,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       next: G.next(), body: !!otherBody,
       // (the aiming arc now: what it aims at, where it ends; and the last throw's, as it was made)
       aim: aimT ? { goal: aimT.goal ?? null, ball: aimT.ball ?? null, hit: aimT.goal != null ? 'goal' : aimT.hit || null, ahead: !!aimT.ahead, wait: !!aimT.wait, end: arcEnd(aimT),
-        off: +((offFront(aimT.goal != null ? GOALS[aimT.goal].aim : aimT.at)) * 180 / Math.PI).toFixed(1) } : null,
+        off: aimT.goal != null || aimT.at ? +((offFront(aimT.goal != null ? GOALS[aimT.goal].aim : aimT.at)) * 180 / Math.PI).toFixed(1) : null } : null,
       pending, turnTo, camYaw: +cam.yaw.toFixed(3),
       lastArc: lastArc ? { goal: lastArc.goal, hit: lastArc.hit, end: lastArc.end.map((v) => +v.toFixed(2)) } : null,
     }),
