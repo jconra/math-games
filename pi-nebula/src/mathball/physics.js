@@ -21,7 +21,11 @@
 //   world.launch(port, ball, rand)  out of a port (court.js PORTS), across the court
 //   world.step(dt, { eye, sees(ball), people: [{ x, z, vx, vz }] })   eye: the camera's point (where the balls face);
 //                                sees(ball): is it in view; people: cylinders that knock the balls
-//   world.throwTo(ball, from, to, T)   a lob from `from` reaching `to` T seconds later (a ball in the hand)
+//   world.throwTo(ball, from, to, T)   a lob from `from` reaching `to` T seconds later (a ball in the hand, into a goal)
+//   world.tossTo(ball, from, to, T)    the same lob at a spot that is no goal: a loose ball from the hand on (it lands,
+//                                bounces and rolls as any other)
+//   flightPath(from, to, T, { free })  the way a throw will go, worked out with the same steps as the flight itself (the
+//                                aiming arc: what the player sees is the throw they get)
 //   facing(ball, eye) -> { angle, tilt }   degrees between the side facing the eye and the eye; how far off upright
 import { COURT, WALLS } from './court.js';
 
@@ -126,8 +130,14 @@ export function makeBalls({ rand = Math.random } = {}) {
     // a lob from the hand reaching `to` T seconds later (through the goal's mouth)
     throwTo(b, from, to, T) {
       b.p = [...from]; b.mode = 'fly'; b.fly = { from: [...from], to: [...to], T, t: 0 };
-      b.v = [(to[0] - from[0]) / T, (to[1] - from[1] + 0.5 * PHYS.g * T * T) / T, (to[2] - from[2]) / T];
+      b.v = lobVelocity(from, to, T);
       const h = norm([b.v[0], 0, b.v[2]]); b.w = [h[2] * -9, 0, -h[0] * -9];   // (a backspin, as a thrown ball has)
+    },
+    // the same lob at a spot on the floor or a wall: from the hand it is a loose ball (gravity, bounces, the walls)
+    tossTo(b, from, to, T) {
+      b.p = [...from]; b.mode = 'air'; b.fly = null; b.settleT = 0; b.still = 0;
+      b.v = lobVelocity(from, to, T);
+      const h = norm([b.v[0], 0, b.v[2]]); b.w = [h[2] * -9, 0, -h[0] * -9];
     },
     step(dt, ctx = {}) {
       const n = Math.max(1, Math.ceil(dt * PHYS.hz)), h = dt / n;
@@ -274,3 +284,29 @@ export function makeBalls({ rand = Math.random } = {}) {
 
 // where a thrown ball should go to fly into a goal: a lob whose time grows with the distance
 export function lobTime(from, to) { const d = Math.hypot(to[0] - from[0], to[2] - from[2]); return Math.max(0.55, Math.min(1.5, 0.42 + d * 0.085)); }
+// the speed a lob leaves the hand at to reach `to` from `from` T seconds later
+export const lobVelocity = (from, to, T) => [(to[0] - from[0]) / T, (to[1] - from[1] + 0.5 * PHYS.g * T * T) / T, (to[2] - from[2]) / T];
+
+// THE AIMING ARC (the game's maker: "when you grab a ball ... there is a targeting arc to show your projected throw"):
+// the throw worked out before it is made, by the very steps the ball will fly by (makeBalls' stepOnce, at PHYS.hz):
+//   - into a goal (`free` false): the lob's own flight, T seconds, ending in the goal's mouth;
+//   - anywhere else (`free`): a loose ball's flight, until it first touches the floor or a wall.
+//   -> { pts: [[x, y, z] ...] (every few steps), end: [x, y, z] (the ball's middle there), hit: 'goal' | 'floor' |
+//        'wall', n: the surface's way out ([x, y, z]; the floor's is up), t (s) }
+export function flightPath(from, to, T, { free = false, every = 3 } = {}) {
+  const h = 1 / PHYS.hz, p = [...from], v = lobVelocity(from, to, T), pts = [[...p]];
+  let t = 0, hit = free ? null : 'goal', n = null;
+  for (let k = 1; k <= PHYS.hz * 4; k++) {
+    t += h; v[1] -= PHYS.g * h;
+    for (let i = 0; i < 3; i++) p[i] += v[i] * h;
+    if (!free) { if (t >= T) break; }
+    else {
+      if (p[1] < R && v[1] < 0) { p[1] = R; hit = 'floor'; n = [0, 1, 0]; break; }
+      for (const Wl of WALLS) if (Wl.n[0] * (p[0] - Wl.A[0]) + Wl.n[1] * (p[2] - Wl.A[1]) - R < 0) { hit = 'wall'; n = [Wl.n[0], 0, Wl.n[1]]; break; }
+      if (hit) break;
+    }
+    if (k % every === 0) pts.push([...p]);
+  }
+  pts.push([...p]);
+  return { pts, end: [...p], hit: hit || 'floor', n: n || [0, 1, 0], t };
+}

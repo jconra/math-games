@@ -4,8 +4,13 @@
 // HOW IT PLAYS (the game's maker's picks, 2026-11-16; ~/pw/space-math/MATHBALL.md):
 //   - pick who to play: three of the station's crew, easier to harder (CH-10: "you could pick an opponent who you know
 //     is easier or more difficult"); one tap starts the round;
-//   - click or tap a ball: you run to it and pick it up. Then click or tap a goal (or one of the goal buttons that come
-//     up while you hold a ball): you turn and throw. A ball its goal's rule fits goes in (a strike of light runs across
+//   - click or tap a ball: you run to it and pick it up, and hold it up in front of you. Then click or tap a goal (or one
+//     of the goal buttons that come up while you hold a ball): you turn and throw. While you hold it, an arc of light
+//     shows where a throw would go (the game's maker: "a targeting arc to show your projected throw"): it follows the
+//     mouse, or a finger held down and dragged on the court (lifting the finger throws), or a goal button pressed; it
+//     takes a goal's colour, and the goal's housing lights up, when the throw goes into that goal. A click on the floor
+//     throws the ball there (a quick tap on a phone doesn't: a finger aims first). A ball its goal's rule fits goes in
+//     (a strike of light runs across
 //     the floor from where you stood to the goal, credits for it); a ball it doesn't fit bounces back out, with one plain
 //     line why. The keys or the thumb stick still walk you about; dragging the view turns the camera;
 //   - the light bar runs round the room: as it reaches each goal (every 30 seconds) that goal's rule changes. Back over
@@ -17,13 +22,14 @@
 //     M.control(dt, P)       -> { move, run, yaw, clip } for the player this frame (main.js hands it to P.update)
 //     M.aim(camera, dt)      the game's camera
 //     M.close()  M.state()   (for the rigs: the round's numbers)  M.pickBall(id), M.throwAt(goal), M.choose(i)
+//     M.aimAt(x, y)          (for the rigs: what a point on the page aims at, as the mouse would)
 //   mathballIdle(W, crew)    the arena with nobody playing: its floor's light and its signs, while someone is in it
 import * as THREE from 'three';
 import * as E from '../jobs/engine.js';
-import { makeRound, OTHER } from './game.js';
-import { facing } from './physics.js';
+import { makeRound, OTHER, throwFrom } from './game.js';
+import { facing, flightPath, lobTime, PHYS } from './physics.js';
 import { makeView } from './view.js';
-import { COURT, GOALS, GOAL_CSS, clampIn } from './court.js';
+import { COURT, GOALS, GOAL_CSS, WALLS, clampIn, inside } from './court.js';
 import { LADDER } from './ladder.js';
 import { ruleOf, value as valueOf } from './rules.js';
 import { makeCrew } from '../../kit/crew.js';
@@ -219,7 +225,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function toggleHelp(on = helpBox.hidden) {
     if (on) {
       helpBox.querySelector('ul').innerHTML = G.goals.map((g, i) => { const R = ruleOf(g.rule); return `<li style="--c:${GOAL_CSS[GOALS[i].colour]}"><b>The ${GOALS[i].colour} goal: ${esc(R.say)}</b><span>${esc(R.help)}</span><small>${esc(R.list)}</small></li>`; }).join('');
-      helpBox.querySelector('.mbl-hhow').textContent = `${press('a ball')} to run to it and pick it up, then ${touchy() ? 'tap' : 'click'} a goal its number fits (or one of the goal buttons). A ball can fit more than one goal. The bar of light going round the room over the goals (and along the top of the screen) changes a goal's rule when it gets to that goal; back where it started, the round ends.`;
+      helpBox.querySelector('.mbl-hhow').textContent = `${press('a ball')} to run to it and pick it up, then ${touchy() ? 'tap' : 'click'} a goal its number fits (or one of the goal buttons). The dotted arc shows where a throw will go, and turns the goal's colour when it goes into that goal${touchy() ? ' (to aim it, hold a finger on the court and drag; lifting the finger throws)' : ' (it follows the mouse)'}. A ball can fit more than one goal. The bar of light going round the room over the goals (and along the top of the screen) changes a goal's rule when it gets to that goal; back where it started, the round ends.`;
     }
     helpBox.hidden = !on; paused = on && phase === 'play';
     $('.mbl-help').classList.remove('is-nudge');
@@ -227,12 +233,106 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
 
   // ── the player's clicks and taps ───────────────────────────────────────────────────────────────────────────────
   const offPick = input.onPick((p) => {
-    if (closed || phase !== 'play' || paused || !p.hit) return;
+    if (closed || phase !== 'play' || paused) return;
     sound.wake();
-    const d = p.hit.object.userData;
-    if (d.ball != null) pickBall(d.ball);
-    else if (d.goal != null) throwAt(d.goal);
+    const d = p.hit ? p.hit.object.userData : {}, held = G.you.holding;
+    if (d.goal != null) throwAt(d.goal);
+    else if (d.ball != null && (!held || d.ball !== held.id)) pickBall(d.ball);
+    // (a click on the court with a ball in hand throws it where the arc shows; a quick tap on a phone doesn't: a finger
+    // aims by holding or dragging, so a stray tap never throws the ball away)
+    else if (held && !p.touch) commitAim(targetAt(p.x, p.y));
   });
+
+  // -- AIMING: the arc shows where a throw would go: at what the mouse is over, or a finger held down on the court, or
+  // a goal button pressed (or hovered); else straight ahead, the way the camera looks (never snapped to a goal: the
+  // arc points no goal out by itself)
+  const canvas = W.renderer.domElement;
+  const aimUI = { mouse: null, touch: null, button: null };
+  let aimT = null;
+  const onAimMove = (e) => {
+    if (e.pointerType === 'mouse') aimUI.mouse = { x: e.clientX, y: e.clientY };
+    else if (aimUI.touch && e.pointerId === aimUI.touch.id) { const T = aimUI.touch; T.x = e.clientX; T.y = e.clientY; if (Math.hypot(T.x - T.x0, T.y - T.y0) > 6) T.moved = true; }
+  };
+  const onAimLeave = (e) => { if (e.pointerType === 'mouse') aimUI.mouse = null; };
+  const onAimDown = (e) => {
+    if (e.pointerType === 'mouse' || closed || phase !== 'play' || paused || !G.you.holding) return;
+    if (e.clientX < innerWidth * 0.42) return;   // (a thumb on the left part of the screen is the walking stick's)
+    aimUI.touch = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
+  };
+  const onAimUp = (e) => {
+    const T = aimUI.touch; if (!T || e.pointerId !== T.id) return;
+    aimUI.touch = null;
+    // (a finger that aimed, dragged or held a moment, throws as it lifts; a quick tap is a pick, above)
+    if (e.type === 'pointerup' && (T.moved || performance.now() - T.t0 > 450) && !closed && phase === 'play' && !paused && G.you.holding) commitAim(targetAt(T.x, T.y));
+  };
+  canvas.addEventListener('pointermove', onAimMove); canvas.addEventListener('pointerleave', onAimLeave); canvas.addEventListener('pointerdown', onAimDown);
+  addEventListener('pointerup', onAimUp); addEventListener('pointercancel', onAimUp);
+  const onButtonOver = (e) => { const b = e.target.closest('button[data-goal]'); if (b) aimUI.button = +b.dataset.goal; };
+  const onButtonOut = (e) => { const b = e.target.closest('button[data-goal]'); if (b && !b.contains(e.relatedTarget)) aimUI.button = null; };
+  goalsEl.addEventListener('pointerover', onButtonOver); goalsEl.addEventListener('pointerout', onButtonOut);
+
+  const aimRay = new THREE.Raycaster(), aimNdc = new THREE.Vector2();
+  // what a point on the page aims at: { goal } (its box, or the floor just in front of its mouth), { at, hit } (a spot on
+  // the floor, or on a wall at a height a throw reaches), { ball } (another ball: a click there picks it), or null
+  function targetAt(x, y) {
+    const hit = input.pickAt(x, y), d = hit && hit.data, held = G.you.holding;
+    if (d && d.goal != null) return { goal: d.goal };
+    if (d && d.ball != null && (!held || d.ball !== held.id)) return { ball: d.ball };
+    const r = canvas.getBoundingClientRect();
+    aimNdc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    aimRay.setFromCamera(aimNdc, W.camera);
+    const o = aimRay.ray.origin, dir = aimRay.ray.direction, ox = o.x - MID[0], oz = o.z - MID[2];
+    if (dir.y < -1e-4) {
+      const t = -o.y / dir.y, px = ox + dir.x * t, pz = oz + dir.z * t;
+      if (inside(px, pz) > PHYS.r) {
+        // (the floor in front of a goal's mouth counts as the goal: an aim a little short still goes in)
+        for (const G2 of GOALS) {
+          const dx = px - G2.mid[0], dz = pz - G2.mid[1], front = dx * G2.n[0] + dz * G2.n[1], across = dx * G2.u[0] + dz * G2.u[1];
+          if (front > 0 && front < 1.3 && Math.abs(across) < COURT.goal.w / 2 + 0.25) return { goal: G2.i };
+        }
+        return { at: [px, PHYS.r, pz], hit: 'floor' };
+      }
+    }
+    // (a wall: the nearest one the ray meets inside the court, the spot held to what a throw reaches)
+    let best = null;
+    for (const Wl of WALLS) {
+      const den = Wl.n[0] * dir.x + Wl.n[1] * dir.z; if (den >= -1e-6) continue;
+      const t = -(Wl.n[0] * (ox - Wl.A[0]) + Wl.n[1] * (oz - Wl.A[1])) / den; if (t <= 0 || (best && t >= best.t)) continue;
+      const px = ox + dir.x * t, pz = oz + dir.z * t, along = (px - Wl.A[0]) * Wl.u[0] + (pz - Wl.A[1]) * Wl.u[1];
+      if (along < -0.05 || along > Wl.len + 0.05) continue;
+      best = { t, px, pz, py: o.y + dir.y * t, n: Wl.n };
+    }
+    if (best) return { at: [best.px + best.n[0] * PHYS.r, Math.max(0.45, Math.min(3.0, best.py)), best.pz + best.n[1] * PHYS.r], hit: 'wall' };
+    return null;
+  }
+  // straight ahead: where a throw the way the camera looks would land
+  function aheadAim() {
+    const h = cam.yaw, [x, z] = clampIn(G.you.x + Math.sin(h) * 4.5, G.you.z + Math.cos(h) * 4.5, 0.7);
+    return { at: [x, PHYS.r, z], hit: 'floor', ahead: true };
+  }
+  function aimNow() {
+    const Y = G.you; if (phase !== 'play' || !Y.holding) return null;
+    if (Y.aim != null) return { goal: Y.aim };
+    if (Y.toss) return { at: Y.toss, hit: 'floor' };
+    if (aimUI.button != null && goalsShown) return { goal: aimUI.button };
+    const pt = aimUI.touch || aimUI.mouse;
+    return (pt && targetAt(pt.x, pt.y)) || aheadAim();
+  }
+  // the throw at an aim: physics.js flightPath from where the ball leaves the hand (game.js throwFrom: the throw's own)
+  function pathFor(T) {
+    if (!T || T.ball != null) return null;
+    const to = T.goal != null ? GOALS[T.goal].aim : T.at, from = throwFrom(G.you.x, G.you.z, to);
+    const p = flightPath(from, to, lobTime(from, to), { free: T.goal == null });
+    p.goal = T.goal != null ? T.goal : -1;
+    return p;
+  }
+  let lastArc = null;
+  function commitAim(T) {
+    if (!T || T.ball != null || !G.you.holding) return false;
+    lastArc = pathFor(T);
+    if (T.goal != null) { throwAt(T.goal); return true; }
+    return G.tossAt(T.at);
+  }
   const ballTargets = new Map();
   function syncTargets() {
     // (every ball on the court is something a click can pick; the goals' boxes always are)
@@ -250,6 +350,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function throwAt(gi) {
     if (phase !== 'play' || paused) return;
     if (!G.you.holding) { say(press('a ball first, then a goal'), 2.5); return; }
+    if (!lastArc || lastArc.goal !== gi || G.you.aim == null) lastArc = pathFor({ goal: gi });
     G.throwAt(gi);
   }
 
@@ -261,7 +362,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function update(dt, P) {
     if (closed) return;
     // the drags turn the game's camera (taken before the station's camera sees them)
-    const look = input.takeLook(); if (look.dx || look.dy) { cam.yaw = wrapA(cam.yaw - look.dx * MBCAM.turn); cam.lift = Math.max(-1, Math.min(1.6, cam.lift + look.dy * 0.006)); cam.idle = 0; } else cam.idle += dt;
+    // (a finger aiming a throw isn't turning the view)
+    const look = input.takeLook(); if (!aimUI.touch && (look.dx || look.dy)) { cam.yaw = wrapA(cam.yaw - look.dx * MBCAM.turn); cam.lift = Math.max(-1, Math.min(1.6, cam.lift + look.dy * 0.006)); cam.idle = 0; } else cam.idle += dt;
     input.takeZoom();
     if (P && !P.lifted) { lift(P.c); P.lifted = true; liftedP = P; }
     // the player's feet in the court's frame
@@ -279,6 +381,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (!G.you.holding && goalsShown) showGoals(false);
     } else if (phase === 'end') G.step(dt, { eye, sees: (b) => view.sees(b) });
     if (G.you.holding) view.facing(G.you.holding, W.camera);
+    // the aiming arc, while a ball is in hand
+    aimT = aimNow(); view.aim(pathFor(aimT));
     syncTargets();
     view.update(dt, W.camera);
     otherBodyStep(dt);
@@ -300,7 +404,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     return north ? ['NW', 'NE', 'SW', 'SE'].map(key) : ['SE', 'SW', 'NE', 'NW'].map(key);
   }
   function showGoals(on) {
-    goalsShown = on; goalsEl.hidden = !on; if (!on) return;
+    goalsShown = on; goalsEl.hidden = !on; if (!on) { aimUI.button = null; return; }
     goalsEl.innerHTML = goalOrder().map((i) => { const R = ruleOf(G.goals[i].rule), w = R.sign.length === 2 ? `<small>${esc(R.sign[0])}</small><b>${esc(R.sign[1])}</b>` : `<b class="is-words">${esc(R.sign[0])}</b>`; return `<button type="button" data-goal="${i}" style="--c:${GOAL_CSS[GOALS[i].colour]}" aria-label="Throw at the ${GOALS[i].colour} goal: ${esc(R.say)}">${w}</button>`; }).join('');
   }
   // (the other player's goals, on a small line of their own under the score, for a few seconds)
@@ -313,6 +417,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (e.type === 'launch') { view.flashPort(e.port); sound.play('launch', { gain: 0.7, pan: panOf(ball && ball.p) }); }
     else if (e.type === 'got') sound.play('grab', { gain: e.who === 'you' ? 1 : 0.5 });
     else if (e.type === 'throw') { sound.play('throw', { gain: e.who === 'you' ? 1 : 0.6 }); if (e.who === 'you') { throwT = 0; if (/^Now /.test(hint.textContent)) say('', 0); } }
+    // (a ball thrown at the floor or a wall: no goal, no score; it lands and is anyone's again)
+    else if (e.type === 'toss') { sound.play('throw', { gain: 0.8 }); throwT = 0; if (/^Now /.test(hint.textContent)) say('', 0); }
     else if (e.type === 'score') {
       view.strike(e.from, e.goal, 1);
       if (e.who === 'you') {
@@ -398,9 +504,12 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
         }
       }
       if (!manual && w.face != null) { const dh = wrapA(w.face - P.heading); P.heading = wrapA(P.heading + dh * Math.min(1, 12 * dt)); }
-      // (a ball in hand, standing: they turn to the way the camera looks, toward the far goals, so the ball held at
-      // their side is in view, not hidden behind them)
-      else if (!manual && G.you.holding && !w.to) { const dh = wrapA(cam.yaw - P.heading); P.heading = wrapA(P.heading + dh * Math.min(1, 6 * dt)); }
+      // (a ball in hand, standing: they turn to where they aim, the ball held up in front of them, the arc starting at
+      // it: the camera behind them sees both)
+      else if (!manual && G.you.holding && !w.to && aimT && aimT.ball == null) {
+        const to = aimT.goal != null ? GOALS[aimT.goal].aim : aimT.at, dh = wrapA(Math.atan2(to[0] - G.you.x, to[2] - G.you.z) - P.heading);
+        P.heading = wrapA(P.heading + dh * Math.min(1, 8 * dt));
+      }
     }
     if (manual) move = input.move;
     // throwing: the arm's swing (the crew's reach, quick)
@@ -467,6 +576,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     for (const [m, v] of lifted) m.envMapIntensity = v; lifted.clear(); if (liftedP) liftedP.lifted = false;
     removeEventListener('keydown', onKey, true);
     offPick(); for (const f of goalOff) f(); for (const [, T] of ballTargets) T.off(); ballTargets.clear();
+    canvas.removeEventListener('pointermove', onAimMove); canvas.removeEventListener('pointerleave', onAimLeave); canvas.removeEventListener('pointerdown', onAimDown);
+    removeEventListener('pointerup', onAimUp); removeEventListener('pointercancel', onAimUp);
     if (keepShut) W.keepShut.delete(keepShut);
     if (hiddenPerson) { hiddenPerson.hidden = false; hiddenPerson = null; }
     for (const [, p] of looks) p.then((c) => { W.scene.remove(c.root); c.dispose(); }).catch(() => {});
@@ -484,10 +595,12 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   addEventListener('keydown', onKey, true);
 
+  const arcEnd = (T) => { const p = pathFor(T); return p ? p.end.map((v) => +v.toFixed(2)) : null; };
   showPick();
   const M = {
     update, control, aim, close,
     pickBall, throwAt, choose: (i) => { choice = i; startRound(); },
+    aimAt: (x, y) => targetAt(x, y),
     get phase() { return phase; },
     state: () => ({
       phase, paused, t: +G.t.toFixed(2), set: set && set.key, level: level && level.id, score: { ...G.score }, tries: { ...G.tries }, earned, other: other && other.name, otherMode: G.other.mode,
@@ -496,6 +609,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       balls: G.balls.filter((b) => b.mode !== 'gone').map((b) => { const f = facing(b, [lastCam.x - MID[0], lastCam.y, lastCam.z - MID[2]]); return { id: b.id, num: b.num, mode: b.mode, p: b.p.map((v) => +v.toFixed(2)), fits: G.goals.map((g) => ruleOf(g.rule).test(valueOf(b.num))), seen: !!b.seen, passed: b.passed, angle: +f.angle.toFixed(1), tilt: +f.tilt.toFixed(1), rest: b.restAt ? +b.restAt.angle.toFixed(1) : null }; }),
       you: { x: +youNow.x.toFixed(2), z: +youNow.z.toFixed(2) }, them: { x: +G.other.x.toFixed(2), z: +G.other.z.toFixed(2), holding: !!G.other.holding }, changes: G.changes, hint: hint.textContent,
       next: G.next(), body: !!otherBody,
+      // (the aiming arc now: what it aims at, where it ends; and the last throw's, as it was made)
+      aim: aimT ? { goal: aimT.goal ?? null, ball: aimT.ball ?? null, hit: aimT.goal != null ? 'goal' : aimT.hit || null, ahead: !!aimT.ahead, end: arcEnd(aimT) } : null,
+      lastArc: lastArc ? { goal: lastArc.goal, hit: lastArc.hit, end: lastArc.end.map((v) => +v.toFixed(2)) } : null,
     }),
     // (for the rigs: where a ball or a goal is on the screen, in page pixels)
     screenOf(kind, id) {

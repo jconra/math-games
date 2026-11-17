@@ -25,8 +25,12 @@
 //   const G = makeRound({ set, rand, other: { level }, youRate })
 //   G.step(dt, { eye, sees, you: { x, z, vx, vz, heading } })   eye/sees: physics.js's; you: the player's feet now
 //   G.pick(id) / G.throwAt(goal) / G.drop()                      the player's moves (a click on a ball, on a goal)
+//   G.tossAt([x, y, z])    a throw at a spot that is no goal (the floor, a wall): the ball lands there as a loose ball
+//   holdPoint(x, z, heading) / throwFrom(x, z, to)   where a held ball is; where a throw at `to` leaves the hand (the
+//                          aiming arc starts there: index.js)
 //   G.you.want -> { to: [x, z] | null, face: heading | null, run }   where the player should go (the page walks them)
-//   G.take() -> [events]   'launch' {ball, port}, 'got' {who, ball}, 'throw' {who, ball, goal}, 'score' {who, ball,
+//   G.take() -> [events]   'launch' {ball, port}, 'got' {who, ball}, 'throw' {who, ball, goal}, 'toss' {who, ball},
+//                          'score' {who, ball,
 //                          goal, from}, 'bounce' {who, ball, goal, why}, 'change' {goal, from, to, strand}, 'fade'
 //                          {ball}, 'taken' {ball} (the player's ball was taken), 'end' {you, them}
 //   G.barS() / G.next()    the light bar: metres along its track; the next goal it reaches and the share of the way
@@ -41,7 +45,10 @@ export const ROUND = {
   reach: 0.75,                     // m: near enough to pick a ball up
   wind: 0.22,                      // s the throw takes from facing the goal to the ball leaving the hand
   facing: 0.5,                     // rad: facing the goal this nearly, the throw goes
-  hold: [0.48, 1.08, 0.18],        // where a held ball is: out to the side, up, forward of the feet (m)
+  // where a held ball is (m: to the right, up, forward of the feet): up in front, ready to throw, a little to the right,
+  // so the camera behind and above the player sees it over their shoulder, its number turned to it (the game's maker:
+  // "when you grab a ball you can see it in front of you")
+  hold: [0.3, 1.5, 0.62],
   fade: 0.8,                       // s a swapped-out ball takes to fade
 };
 // THE OTHER PLAYER'S LEVELS: easier, a match, harder (the player picks one to start a round)
@@ -61,6 +68,14 @@ export const OTHER = {
 
 const pick = (a, rand) => a[Math.floor(rand() * a.length)];
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// where a ball held by someone standing at x, z and facing `heading` is
+export function holdPoint(x, z, heading) {
+  const [s, y, f] = ROUND.hold, fx = Math.sin(heading), fz = Math.cos(heading), rx = -fz, rz = fx;
+  return [x + rx * s + fx * f, y, z + rz * s + fz * f];
+}
+// where a throw at `to` leaves the hand: held up in front of a thrower turned square to it (every throw is made from
+// there, so the aiming arc, worked out from the same point, is the throw)
+export const throwFrom = (x, z, to) => holdPoint(x, z, Math.atan2(to[0] - x, to[2] - z));
 const free = (b) => b.mode === 'air' || b.mode === 'roll' || b.mode === 'rest' || b.mode === 'turn';
 const COLOURS = 6;
 
@@ -72,7 +87,7 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     set, t: 0, phase: 'play', world, balls: world.list, events: [],
     goals: GOALS.map((g, i) => ({ i, rule: set.goals[i], flash: 0, was: null })),
     score: { you: 0, them: 0 }, tries: { you: 0, them: 0 }, changes: 0, stranded: 0,
-    you: { x: SPOTS.player[0], z: SPOTS.player[1], vx: 0, vz: 0, heading: Math.PI, holding: null, target: null, aim: null, wind: 0, want: { to: null, face: null, run: true } },
+    you: { x: SPOTS.player[0], z: SPOTS.player[1], vx: 0, vz: 0, heading: Math.PI, holding: null, target: null, aim: null, toss: null, wind: 0, want: { to: null, face: null, run: true } },
     other: { x: SPOTS.other[0], z: SPOTS.other[1], vx: 0, vz: 0, heading: 0, mode: 'roam', holding: null, target: null, aim: null, t: 0, roamTo: null, roamT: 0, nextAt: 2.5, anim: null, level: lv.key, last: null },
     youRate, lv,
   };
@@ -126,36 +141,44 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     if (G.you.holding) G.drop();
     // (every other ball in view on the court a while: passed over once more)
     for (const o of onCourt()) if (o !== b && free(o) && o.seen && G.t - o.born > 3) o.passed++;
-    G.you.target = b; G.you.aim = null; G.you.wind = 0;
+    G.you.target = b; G.you.aim = null; G.you.toss = null; G.you.wind = 0;
     return true;
   };
   G.throwAt = (gi) => {
     if (G.phase !== 'play' || !G.you.holding || !GOALS[gi]) return false;
-    G.you.aim = gi; G.you.wind = 0; G.you.target = null; return true;
+    G.you.aim = gi; G.you.toss = null; G.you.wind = 0; G.you.target = null; return true;
+  };
+  G.tossAt = (to) => {
+    if (G.phase !== 'play' || !G.you.holding || !to) return false;
+    G.you.toss = [to[0], Math.max(PHYS.r, to[1]), to[2]]; G.you.aim = null; G.you.wind = 0; G.you.target = null; return true;
   };
   G.drop = () => {
     const b = G.you.holding; if (!b) return;
-    G.you.holding = null; G.you.aim = null;
+    G.you.holding = null; G.you.aim = null; G.you.toss = null;
     b.mode = 'air'; b.v = [Math.sin(G.you.heading) * 0.8, 0.5, Math.cos(G.you.heading) * 0.8]; b.settleT = 0;
   };
 
-  // where a ball held by someone is: out to their side, at hip height
-  function carry(P, b) {
-    const [s, y, f] = ROUND.hold, h = P.heading, fx = Math.sin(h), fz = Math.cos(h), rx = -fz, rz = fx;
-    b.p = [P.x + rx * s + fx * f, y, P.z + rz * s + fz * f]; b.v = [P.vx || 0, 0, P.vz || 0];
-  }
+  // where a ball held by someone is: up in front of them (ROUND.hold)
+  function carry(P, b) { b.p = holdPoint(P.x, P.z, P.heading); b.v = [P.vx || 0, 0, P.vz || 0]; }
   function grab(P, who, b) {
     b.mode = 'held'; b.owner = who; b.w = [0, 0, 0]; P.holding = b; P.target = null; P.grabT = G.t;
     emit('got', { who, ball: b.id });
     if (who === 'them' && G.you.target === b) { G.you.target = null; emit('taken', { ball: b.id }); }
   }
   function release(P, who, gi) {
-    const b = P.holding, g = GOALS[gi], from = [...b.p];
-    P.holding = null; P.aim = null;
+    const b = P.holding, g = GOALS[gi], from = throwFrom(P.x, P.z, g.aim);
+    P.holding = null; P.aim = null; P.toss = null;
     b.owner = who; world.throwTo(b, from, g.aim, lobTime(from, g.aim));
     b.fly.goal = gi; b.fly.rule = G.goals[gi].rule; b.fly.who = who; b.fly.at = [P.x, P.z];
     G.tries[who]++;
     emit('throw', { who, ball: b.id, goal: gi });
+  }
+  // the player's throw at a spot that is no goal: from the hand on, a loose ball (no try, nobody scores)
+  function toss(P, who, to) {
+    const b = P.holding, from = throwFrom(P.x, P.z, to);
+    P.holding = null; P.aim = null; P.toss = null;
+    b.owner = null; world.tossTo(b, from, to, lobTime(from, to));
+    emit('toss', { who, ball: b.id });
   }
   // a thrown ball arriving at its goal: in (its rule at the moment of the throw) or back out
   function arrive(b) {
@@ -306,10 +329,11 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     Y.want = { to: null, face: null, run: true };
     if (Y.holding) {
       carry(Y, Y.holding);
-      if (Y.aim != null) {
-        const g = GOALS[Y.aim], h = Math.atan2(g.mid[0] - Y.x, g.mid[1] - Y.z);
+      if (Y.aim != null || Y.toss) {
+        // (turned to the goal, or the spot, the ball goes: from up in front of them, as the aiming arc showed)
+        const to = Y.aim != null ? GOALS[Y.aim].aim : Y.toss, h = Math.atan2(to[0] - Y.x, to[2] - Y.z);
         Y.want.face = h;
-        if (Math.abs(wrapA(h - Y.heading)) < ROUND.facing) { Y.wind += dt; if (Y.wind >= ROUND.wind) release(Y, 'you', Y.aim); }
+        if (Math.abs(wrapA(h - Y.heading)) < ROUND.facing) { Y.wind += dt; if (Y.wind >= ROUND.wind) { if (Y.aim != null) release(Y, 'you', Y.aim); else toss(Y, 'you', Y.toss); } }
       }
       return;
     }

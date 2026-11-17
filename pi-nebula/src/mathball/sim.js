@@ -29,7 +29,7 @@ export function simPlayer({ speed = 4.6, think = [1, 3], aim = [0.6, 2], acc = 0
         else S.wait = 0.4;
       }
       // holding: after a moment's thought, a goal (a right one, mostly)
-      if (Y.holding && Y.aim == null && S.choose <= 0) {
+      if (Y.holding && Y.aim == null && !Y.toss && S.choose <= 0) {
         const right = goalsFor(G.goals.map((g) => g.rule), Y.holding.num), wrong = GOALS.map((g, i) => i).filter((i) => !right.includes(i));
         const gi = rand() < acc || !wrong.length ? right[Math.floor(rand() * right.length)] : wrong[Math.floor(rand() * wrong.length)];
         G.throwAt(gi);

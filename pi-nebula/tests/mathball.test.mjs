@@ -6,10 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LADDER, SETS, ORDER } from '../src/mathball/ladder.js';
 import { ruleOf, fits, goalsFor, checkSet, dealable, pickChange } from '../src/mathball/rules.js';
-import { makeBalls, facing, PHYS, qrand } from '../src/mathball/physics.js';
-import { makeRound, OTHER, ROUND } from '../src/mathball/game.js';
+import { makeBalls, facing, PHYS, qrand, flightPath, lobTime } from '../src/mathball/physics.js';
+import { makeRound, OTHER, ROUND, holdPoint, throwFrom } from '../src/mathball/game.js';
 import { simPlayer, playRound } from '../src/mathball/sim.js';
-import { COURT, GOALS, PORTS, STATIONS, TRACK, barAt, inside, WALLS } from '../src/mathball/court.js';
+import { COURT, GOALS, PORTS, STATIONS, TRACK, barAt, inside, WALLS, clampIn } from '../src/mathball/court.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 
 const valid = (rules, ball) => { const n = goalsFor(rules, ball).length; return n >= 1 && n < rules.length; };
@@ -220,4 +220,91 @@ test('the court: every wall faces in, the goals sit across the corners, the port
   assert.ok(Math.abs(COURT.hz * 2 - 17.52) < 0.01 && Math.abs(COURT.hx * 2 - 9.6) < 1e-9);
   for (const p of PORTS) assert.ok(Math.abs(Math.abs(p.at[0]) - COURT.hx) < 1e-9);
   assert.ok(ROUND.start >= 6 && ROUND.most >= ROUND.start);
+});
+
+// ── the aiming arc ─────────────────────────────────────────────────────────────────────────────────────────────────
+// (the game's maker: "a targeting arc to show your projected throw"): what the arc shows is the throw the player gets
+// (the arc's point at a moment of the flight: its points are every third step of 1/120 s, the first at the hand)
+// (the last point is where it ends, at path.t: off that grid)
+const arcAt = (path, t) => {
+  const last = path.pts.length - 1, at = (j) => (j === last ? path.t : j * 3 / PHYS.hz);
+  let j0 = Math.min(last - 1, Math.floor(t * PHYS.hz / 3)); while (j0 > 0 && at(j0) > t) j0--;
+  const j1 = j0 + 1, f = Math.max(0, Math.min(1, (t - at(j0)) / Math.max(1e-9, at(j1) - at(j0))));
+  return [0, 1, 2].map((a) => path.pts[j0][a] + (path.pts[j1][a] - path.pts[j0][a]) * f);
+};
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+test('the aiming arc is the throw: into a goal, the ball flies along the arc and ends where it does', () => {
+  const rand = seeded(11);
+  for (let k = 0; k < 40; k++) {
+    const g = GOALS[k % 4], at = clampIn((rand() - 0.5) * 9, (rand() - 0.5) * 17, 0.5);
+    const from = throwFrom(at[0], at[1], g.aim), T = lobTime(from, g.aim), path = flightPath(from, g.aim, T);
+    assert.equal(path.hit, 'goal');
+    // (the arc ends in the goal's mouth: past its face, inside its width and height)
+    const e = [path.end[0] - g.mid[0], path.end[2] - g.mid[1]], front = e[0] * g.n[0] + e[1] * g.n[1], across = e[0] * g.u[0] + e[1] * g.u[1];
+    assert.ok(front < 0.05 && Math.abs(across) < COURT.goal.w / 2 - PHYS.r && path.end[1] > PHYS.r && path.end[1] < COURT.goal.h - PHYS.r, `the arc ends in the mouth (${front.toFixed(2)}, ${across.toFixed(2)}, ${path.end[1].toFixed(2)})`);
+    // the real throw, stepped as a round steps it (frames of 1/60 s)
+    const W = makeBalls({ rand }), b = W.add({ id: 1, num: 4 });
+    W.throwTo(b, from, g.aim, T);
+    let worst = 0;
+    for (let i = 0; i < 400 && b.fly.t < T; i++) { W.step(1 / 60, {}); if (b.fly.t < T) worst = Math.max(worst, dist(b.p, arcAt(path, b.fly.t))); }
+    assert.ok(worst < 0.01, `the ball strayed ${worst.toFixed(3)} m from the arc`);
+    assert.ok(dist(b.p, path.end) < 0.2, 'it arrives where the arc ends');
+  }
+});
+
+test('the aiming arc is the throw: thrown at the floor or a wall, the ball first lands where the arc ends', () => {
+  const rand = seeded(12);
+  let floors = 0, walls = 0;
+  for (let k = 0; k < 60; k++) {
+    const at = clampIn((rand() - 0.5) * 9, (rand() - 0.5) * 17, 0.5);
+    // a spot on the floor, or a point up a wall (as the page aims them)
+    let to;
+    if (k % 2) { const [x, z] = clampIn((rand() - 0.5) * 9, (rand() - 0.5) * 17, 0.6); to = [x, PHYS.r, z]; }
+    else { const Wl = WALLS[k % 8], f = 0.1 + rand() * 0.8, y = 0.45 + rand() * 2.5; to = [Wl.A[0] + (Wl.B[0] - Wl.A[0]) * f + Wl.n[0] * PHYS.r, y, Wl.A[1] + (Wl.B[1] - Wl.A[1]) * f + Wl.n[1] * PHYS.r]; }
+    const from = throwFrom(at[0], at[1], to), T = lobTime(from, to), path = flightPath(from, to, T, { free: true });
+    assert.ok(path.hit === 'floor' || path.hit === 'wall');
+    if (path.hit === 'floor') floors++; else walls++;
+    // the real toss: a loose ball from the hand; where it first touches the floor or a wall
+    const W = makeBalls({ rand }), b = W.add({ id: 1, num: 4 });
+    W.tossTo(b, from, to, T);
+    let first = null;
+    for (let i = 0; i < 600 && !first; i++) {
+      const v0 = [...b.v];
+      W.step(1 / 120, {});
+      const floorHit = v0[1] < 0 && b.v[1] >= 0, wallHit = WALLS.some((Wl) => v0[0] * Wl.n[0] + v0[2] * Wl.n[1] < -1e-6 && b.v[0] * Wl.n[0] + b.v[2] * Wl.n[1] > 1e-6);
+      if (floorHit || wallHit) first = [...b.p];
+    }
+    assert.ok(first, 'it lands');
+    const off = dist(first, path.end);
+    assert.ok(off < 0.1, `it first landed ${off.toFixed(3)} m from the arc's end (${path.hit})`);
+  }
+  assert.ok(floors > 10 && walls > 5, `${floors} on the floor, ${walls} on a wall`);
+});
+
+test('a held ball is up in front of the player, and every throw leaves along its arc', () => {
+  for (const h of [0, 1, 2, 3, -2]) {
+    const p = holdPoint(0, 0, h), fwd = p[0] * Math.sin(h) + p[2] * Math.cos(h);
+    assert.ok(fwd > 0.4 && p[1] > 1.2, 'in front, up');
+  }
+  const rand = seeded(13);
+  const G = makeRound({ set: SETS.oddeven, rand, other: { level: 1 } }), P = simPlayer({ rand, think: [0.3, 0.6], aim: [0.2, 0.4] });
+  let checked = 0, tossed = 0;
+  for (let t = 0; t < 90 && G.phase !== 'end'; t += 1 / 30) {
+    const you = P.step(G, 1 / 30);
+    // now and then a throw at the floor instead of a goal
+    if (G.you.holding && G.you.aim == null && !G.you.toss && rand() < 0.05) G.tossAt([G.you.x * 0.5, PHYS.r, G.you.z * 0.5 + 1]);
+    const aim = G.you.aim, toss = G.you.toss, held = G.you.holding;
+    G.step(1 / 30, { eye: [you.x, 2.6, you.z + 3], sees: () => true, you });
+    for (const e of G.take()) {
+      if ((e.type !== 'throw' && e.type !== 'toss') || e.who !== 'you') continue;
+      const b = G.balls.find((x) => x.id === e.ball), to = e.type === 'throw' ? GOALS[aim].aim : toss;
+      const from = throwFrom(you.x, you.z, to), path = flightPath(from, to, lobTime(from, to), { free: e.type === 'toss' });
+      assert.ok(b && held && b.id === held.id);
+      // (released in this frame, it has flown the frame's last 1/30 s: on the arc there)
+      assert.ok(dist(b.p, arcAt(path, 1 / 30)) < 0.03, `it left ${dist(b.p, arcAt(path, 1 / 30)).toFixed(3)} m off its arc`);
+      checked++; if (e.type === 'toss') tossed++;
+    }
+  }
+  assert.ok(checked >= 5 && tossed >= 1, `${checked} throws checked, ${tossed} at the floor`);
 });

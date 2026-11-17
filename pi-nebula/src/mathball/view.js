@@ -15,12 +15,19 @@
 // THE LIGHT BAR (AR3-3: "a light bar that traveled around the room above the goals and that represented the timer"):
 // a bright run of light along the rail round the room, in the colour of the goal it is going to; it lights that goal's
 // sign up as it arrives.
+// THE AIMING ARC (the game's maker: "when you grab a ball you can see it in front of you and there is a targeting arc
+// to show your projected throw"): small lights along the way the throw will go, drifting toward its end (the path is
+// physics.js flightPath's: the throw's own steps), and a ring where it ends: on the floor or a wall in the court's
+// cyan; aimed into a goal, the arc and a bigger ring in the goal's colour, and the goal's housing lit up round its
+// mouth. It shows only where the ball will go, never whether its number fits that goal.
 //
 //   const V = makeView({ W, G })      W: the station (station.js), G: the round (game.js)
 //   V.update(dt, camera)              each frame, after the round has stepped
 //   V.sees(ball)                      is a ball in the camera's view (physics.js's balls face it when it is not)
 //   V.ballMesh(id) / V.targets()      for clicks: the balls' meshes and the goals' click boxes
 //   V.strike(fromXZ, goal, who)       start a strike
+//   V.aim(path | null)                the aiming arc: physics.js flightPath's { pts, end, hit, n } and goal (its index,
+//                                     or -1), or null for none
 //   V.dispose()
 import * as THREE from 'three';
 import { COURT, GOALS, PORTS, TRACK, CORNERS, WALLS, STATIONS, BALL_COLOURS, toStation } from './court.js';
@@ -250,12 +257,54 @@ function makePortRings() {
   });
 }
 
+// ── THE AIMING ARC ─────────────────────────────────────────────────────────────────────────────────────────────────
+const ARC_MAX = 180, ARC_GAP = 0.2, ARC_CYAN = [0.75, 1.55, 2.3];
+const ARC_VS = `
+attribute float aS;
+uniform float uScale, uSize;
+varying float vS;
+void main() { vS = aS; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = uSize * uScale / max(0.2, -mv.z); gl_Position = projectionMatrix * mv; }`;
+const ARC_FS = `
+uniform vec3 uCol; uniform float uTime, uLen, uOn;
+varying float vS;
+void main() {
+  float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard;
+  float core = 1.0 - smoothstep(0.35, 1.0, r);
+  // (lights drifting along toward the end; faded in clear of the ball in the hand, and out just short of the ring)
+  float run = 0.55 + 0.45 * smoothstep(0.6, 1.0, fract(vS * 0.7 - uTime * 1.5));
+  float a = core * run * smoothstep(0.3, 0.75, vS) * (1.0 - smoothstep(uLen - 0.4, uLen - 0.1, vS)) * uOn;
+  gl_FragColor = vec4(uCol * a, 1.0);
+}`;
+function makeAim() {
+  const pos = new Float32Array(ARC_MAX * 3), sAt = new Float32Array(ARC_MAX), g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aS', new THREE.BufferAttribute(sAt, 1).setUsage(THREE.DynamicDrawUsage));
+  g.setDrawRange(0, 0);
+  const U = { uCol: { value: new THREE.Vector3(...ARC_CYAN) }, uTime: { value: 0 }, uLen: { value: 1 }, uOn: { value: 0 }, uScale: { value: 600 }, uSize: { value: 0.1 } };
+  const points = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: ARC_VS, fragmentShader: ARC_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  points.frustumCulled = false; points.renderOrder = 5; points.name = 'mathball aim arc';
+  // the ring where it ends (laid on the floor, or flat to a wall, or in a goal's mouth, bigger)
+  const ringGeo = new THREE.RingGeometry(0.17, 0.25, 48), ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...ARC_CYAN), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const marker = new THREE.Mesh(ringGeo, ringMat); marker.renderOrder = 5; marker.name = 'mathball aim ring'; marker.visible = false;
+  // each goal's housing lit up round its mouth (a frame on its face, open at the floor), while a throw is aimed in
+  const { w, h, cheek, brow, out } = COURT.goal, hw = w / 2, x0 = hw + cheek - 0.06, x1 = hw + 0.015, y1 = h + 0.015, y2 = h + brow - 0.06;
+  const frameGeo = new THREE.ShapeGeometry(new THREE.Shape([[-x0, 0.03], [-x1, 0.03], [-x1, y1], [x1, y1], [x1, 0.03], [x0, 0.03], [x0, y2], [-x0, y2]].map(([x, y]) => new THREE.Vector2(x, y))));
+  const frames = GOALS.map((G) => {
+    const f = new THREE.Mesh(frameGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(...G.glow).multiplyScalar(0.8), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    f.position.set(MID[0] + G.mid[0] + G.n[0] * (out + 0.025), 0, MID[2] + G.mid[1] + G.n[1] * (out + 0.025));
+    f.rotation.y = Math.atan2(G.n[0], G.n[1]);
+    f.renderOrder = 4; f.name = 'mathball aim frame ' + G.key; f.k = 0; f.visible = false;
+    return f;
+  });
+  return { points, marker, frames, U, pos, sAt, g, ringGeo, ringMat, frameGeo, path: null, size: new THREE.Vector2() };
+}
+
 // ── all of it ──────────────────────────────────────────────────────────────────────────────────────────────────────
 export function makeView({ W, G: G0 }) {
   let G = G0;
   const group = new THREE.Group(); group.name = 'mathball'; W.scene.add(group);
-  const floor = makeFloor(), bar = makeBar(), ports = makePortRings();
-  group.add(floor.mesh, bar.mesh, ...ports);
+  const floor = makeFloor(), bar = makeBar(), ports = makePortRings(), aimV = makeAim();
+  group.add(floor.mesh, bar.mesh, ...ports, aimV.points, aimV.marker, ...aimV.frames);
   const signs = GOALS.map((g) => { const s = makeSign(g); group.add(s.mesh); return s; });
   // the goals' click boxes: the mouth and its board (never drawn)
   const hitMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -328,6 +377,32 @@ export function makeView({ W, G: G0 }) {
     },
     // the rule a goal is changing to: the sign flickers and settles on it
     change(gi, rule) { const S = signs[gi]; S.next = rule; S.swapT = 0; },
+    // the aiming arc: the throw's path (physics.js flightPath) and the goal it goes into (-1: none), or null
+    aim(path) {
+      aimV.path = path;
+      if (!path || !path.pts || path.pts.length < 2) return;
+      // (lights an even ARC_GAP apart along the path, in the station's frame)
+      let n = 0, s = 0, next = 0; const P = path.pts;
+      for (let i = 1; i < P.length && n < ARC_MAX; i++) {
+        const a = P[i - 1], b = P[i], L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        while (next <= s + L && n < ARC_MAX) {
+          const f = L > 1e-9 ? (next - s) / L : 0;
+          aimV.pos[n * 3] = MID[0] + a[0] + (b[0] - a[0]) * f; aimV.pos[n * 3 + 1] = a[1] + (b[1] - a[1]) * f; aimV.pos[n * 3 + 2] = MID[2] + a[2] + (b[2] - a[2]) * f;
+          aimV.sAt[n] = next; n++; next += ARC_GAP;
+        }
+        s += L;
+      }
+      aimV.g.setDrawRange(0, n); aimV.g.attributes.position.needsUpdate = true; aimV.g.attributes.aS.needsUpdate = true;
+      aimV.U.uLen.value = s;
+      const gi = path.goal ?? -1, col = gi >= 0 ? GOALS[gi].glow : null, m = col ? Math.max(...col) : 1;
+      if (col) aimV.U.uCol.value.set(col[0] / m * 2.1, col[1] / m * 2.1, col[2] / m * 2.1); else aimV.U.uCol.value.set(...ARC_CYAN);
+      aimV.ringMat.color.setRGB(aimV.U.uCol.value.x, aimV.U.uCol.value.y, aimV.U.uCol.value.z);
+      // the ring: in the goal's mouth, flat on the floor, or flat to the wall
+      const mk = aimV.marker, E = path.end, N = path.n || [0, 1, 0];
+      if (gi >= 0) { const G2 = GOALS[gi]; mk.position.set(MID[0] + G2.mid[0] + G2.n[0] * 0.06, COURT.goal.h / 2, MID[2] + G2.mid[1] + G2.n[1] * 0.06); mk.lookAt(mk.position.x + G2.n[0], mk.position.y, mk.position.z + G2.n[1]); mk.userData.big = 2.3; }
+      else if (path.hit === 'wall') { mk.position.set(MID[0] + E[0] - N[0] * (COURT.ball.r - 0.025), E[1], MID[2] + E[2] - N[2] * (COURT.ball.r - 0.025)); mk.lookAt(mk.position.x + N[0], mk.position.y, mk.position.z + N[2]); mk.userData.big = 1.2; }
+      else { mk.position.set(MID[0] + E[0], 0.02, MID[2] + E[2]); mk.lookAt(mk.position.x, 1, mk.position.z); mk.userData.big = 1.2; }
+    },
     update(dt, camera) {
       t += dt;
       camera.updateMatrixWorld(); pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(pv);
@@ -357,6 +432,18 @@ export function makeView({ W, G: G0 }) {
       }
       // the ports
       for (const p of ports) { p.k *= Math.exp(-5 * dt); p.material.opacity = Math.min(1, p.k); p.visible = p.k > 0.01; }
+      // the aiming arc: fading in and out; its lights the same size on the screen whatever it is drawn at
+      {
+        const A = aimV.path, on = !!(A && A.pts && A.pts.length > 1), gi = on ? (A.goal ?? -1) : -1;
+        aimV.U.uTime.value = t; aimV.U.uOn.value += ((on ? 1 : 0) - aimV.U.uOn.value) * Math.min(1, dt * 14);
+        W.renderer.getDrawingBufferSize(aimV.size);
+        aimV.U.uScale.value = aimV.size.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+        aimV.points.visible = aimV.U.uOn.value > 0.01;
+        const mk = aimV.marker, big = mk.userData.big || 1;
+        mk.visible = aimV.points.visible; mk.material.opacity = aimV.U.uOn.value * 0.9;
+        mk.scale.setScalar(big * (1 + 0.07 * Math.sin(t * 7)));
+        for (let i = 0; i < 4; i++) { const f = aimV.frames[i]; f.k += ((gi === i ? 1 : 0) - f.k) * Math.min(1, dt * 12); f.material.opacity = f.k * (0.85 + 0.15 * Math.sin(t * 9)); f.visible = f.k > 0.01; }
+      }
       // the balls
       const seen = new Set();
       for (const b of G.balls) {
@@ -392,6 +479,7 @@ export function makeView({ W, G: G0 }) {
       for (const S of signs) { S.tex.dispose(); S.mesh.material.dispose(); S.mesh.geometry.dispose(); }
       for (const p of ports) p.material.dispose();
       shutter.geometry.dispose(); shutter.material.dispose();
+      aimV.g.dispose(); aimV.points.material.dispose(); aimV.ringGeo.dispose(); aimV.ringMat.dispose(); aimV.frameGeo.dispose(); for (const f of aimV.frames) f.material.dispose();
       hitMat.dispose(); for (const h of hits) h.geometry.dispose(); ringGeo.dispose(); youRing.material.dispose(); themRing.material.dispose();
       if (ports[0]) ports[0].geometry.dispose();   // (the ports' rings share one shape; the balls' shape is kept for the next round)
     },
