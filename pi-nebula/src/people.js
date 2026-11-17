@@ -1026,7 +1026,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // the clips going from walking to sitting to standing straight (lying, it is the calm standing pose, flat on the bed).
   const HIP = { stand: 0.95, sit: 0.5 };
   // (seconds for the swing round onto the bed, and for lying back)
-  const LIE = { swing: 1.3, back: 1.2 };
+  const LIE = { swing: 1.6, back: 1.3 };
   const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
   function bodyQ(out, heading, lie) {
     // (lie 0: standing, turned to `heading`; lie 1: on their back along the bed, head toward the wall, face up)
@@ -1106,7 +1106,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         setPose(P, hips, bodyQ(_q1, h, 0), HIP.sit);
         play(P, CLIPS.sit, { fade: 0.5 });
         // (the legs straightened as they come round, done before they are over the bed)
-        L.k = ease(Math.max(0, Math.min(1, (k - 0.15) / 0.55))); L.to.set(Math.sin(h), 0, Math.cos(h));
+        L.k = ease(Math.max(0, Math.min(1, (k - 0.3) / 0.55))); L.to.set(Math.sin(h), 0, Math.cos(h));
       } else {
         const k = ease((t - LIE.swing) / LIE.back);
         play(P, k > 0.25 ? STAND : CLIPS.sit, { fade: 0.5 });

@@ -19,7 +19,7 @@ export const VOICES = {
 };
 export const CLIPS = {
   'vega-hello': { voice: 'vega', words: 'Hello there!' },
-  'vega-pitch': { voice: 'vega', words: 'Hi! I\'m Captain Vega of the Explorer. I\'m putting a crew together to go exploring. Interested?' },
+  'vega-pitch': { voice: 'vega', words: 'Hi! I\'m Captain Vega of the starship Explorer. I\'m putting a crew together to visit new worlds. Interested?' },
   'vega-ready': { voice: 'vega', words: 'Wonderful! Come and find me when you\'re ready.' },
   'ruiz-hello': { voice: 'ruiz', words: 'Hey there!' },
   'ruiz-pitch': { voice: 'ruiz', words: 'Hey! I\'m Captain Ruiz of the Miner. I need crew for a mining run. Interested?' },

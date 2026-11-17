@@ -86,7 +86,8 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
       else { v.x = P.pos.x; v.z = P.pos.z; v.y = (P.drawnY ?? P.pos.y) + 2.05; }
       const far = Math.hypot(v.x - camera.position.x, v.y - camera.position.y, v.z - camera.position.z);
       let seen = !!P.shown && !P.byCam && far < (FAR[b.kind] || 12);
-      if (seen && (frame + (P.order || 0)) % 6 === 0) b.view = clearView(v.x, v.y, v.z);
+      // (looked along every sixth frame, and at once for a new bubble: one began over someone out of sight)
+      if (seen && (b.view === undefined || (frame + (P.order || 0)) % 6 === 0)) b.view = clearView(v.x, v.y, v.z);
       if (b.view === false) seen = false;
       let sx = 0, sy = 0;
       if (seen) {

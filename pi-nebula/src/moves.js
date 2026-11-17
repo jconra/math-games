@@ -26,7 +26,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 // THE SIZES (radians): the head's turn toward what it looks at, at most, and how much of it the neck takes; the lean;
 // a nod; the arms' gestures (the upper arm forward and out, the elbow bent, the palm turned up); a beat
-export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.045, nod: 0.13, beat: 0.07, rate: 5 };
+export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.045, nod: 0.17, beat: 0.07, rate: 5 };
 // (a speaker's gestures: [upper arm forward, upper arm out, elbow bent, palm up] for the left and the right arm)
 const GESTURES = [
   { L: [0, 0, 0, 0], R: [0.22, 0.05, 1.15, 1.1], w: 3 },          // the right hand explains
@@ -91,7 +91,7 @@ export function addMoves(c) {
   }
   function lay(dt) {
     M.t += dt;
-    if (still()) { M.yaw = M.pitch = M.sway = 0; return; }      // (nothing to lay on: costs nothing)
+    if (still()) { M.yaw = M.pitch = M.sway = 0; M.lastTalk = M.talk; return; }      // (nothing to lay on: costs nothing)
     c.root.updateMatrixWorld(true);
     c.root.getWorldQuaternion(_rq);
     // the head toward what it looks at (yaw and a little pitch, in the person's own frame), the neck taking its share
@@ -119,6 +119,13 @@ export function addMoves(c) {
     // the speaker's hands: a new gesture every second or so, eased into, small beats while in it; the listener's now and
     // then a small one (a hand up a little, the hands together), back down after a moment
     const speaking = M.talk === 'speak' && !M.sitting, listening = M.talk === 'listen' && !M.sitting;
+    // (the turn passing: a new speaker's hands start at once; a new listener's go down at once, a small move later.
+    // Held over, a speaker's last gesture went on through the other's line and their own line began with hands down)
+    if (M.talk !== M.lastTalk) {
+      M.lastTalk = M.talk;
+      if (speaking) M.nextGesture = M.t;
+      else { M.want.L = GESTURES[4].L; M.want.R = GESTURES[4].R; M.listenG = false; M.nextGesture = M.t + rnd(1.5, 4); }
+    }
     if (speaking) { if (M.t > M.nextGesture) { const g = pickGesture(); M.want.L = g.L; M.want.R = g.R; M.nextGesture = M.t + rnd(0.9, 2.0); } }
     else if (listening) {
       if (M.t > M.nextGesture) {
