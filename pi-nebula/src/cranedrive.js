@@ -153,7 +153,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   el.className = 'pcd';
   el.innerHTML = `
     <header class="pcd-top">
-      <div class="pcd-title"><b>Free control</b><small>The crane by hand: just for fun</small></div>
+      <div class="pcd-title"><b>Free control</b><small>The crane by hand: ${FREE.dock} credits for each canister docked</small></div>
       ${onGame ? '<button type="button" class="pcd-swap" aria-label="Back to the crane game">Crane game</button>' : ''}
       <button type="button" class="pcd-done" aria-label="Done (Esc)">Done<kbd>Esc</kbd></button>
     </header>
