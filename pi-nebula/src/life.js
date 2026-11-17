@@ -88,10 +88,10 @@ export const SPOTS = {
   // the big scanner (its own frame: x across, its bed running out along +z from the wall): where its patient stands to
   // get on (by the bed's foot, on its west side, the side away from the cable trough) and where the medic works its
   // screen (on the front of the bed's pedestal, right in front of it, just outside the line painted round it all)
-  // (the approach beside the pedestal, past the rail's end, facing the medic at the screen, out of the way of a medic
-  // coming in from the doorway on the same side: waiting in front of the pedestal, a patient blocked her)
-  // (a second place to fall back on if the station has no room for the first: in front of the pedestal's west corner)
-  scanApproach: [{ piece: 'bigscanner', local: [1.35, 0, 4.12], face: [-1, 0.6] }, { piece: 'bigscanner', local: [0.8, 0, 4.4], face: [-1, 0.2] }],
+  // (in front of the pedestal's west corner, turned toward the medic; the patient sets off for it once the medic is at
+  // the screen (people.js): both come in by the doorway on that side, and a patient waiting there first stood in her
+  // way; nearer the bed the ring's patch is kept off)
+  scanApproach: [{ piece: 'bigscanner', local: [0.8, 0, 4.4], face: [-1, 0.2] }],
   scanScreen: [{ piece: 'bigscanner', local: [0, 0, 4.42], face: [0, -1] }],
   // a patrol: the terminal, the hangar corridor, the junction, the spine north, the loop, the quarters' corridor, the corridor
   patrol: [{ room: 'terminal', at: [0.6, 0.15] }, { room: 'c2', at: [0.5, 0.5] }, { room: 'junction', at: [0.5, 0.5] }, { room: 'spine-n', at: [0.5, 0.6] }, { room: 'spine-n', at: [0.5, 0.25] }, { room: 'loop', at: [0.5, 0.5] }, { room: 'qc', at: [0.6, 0.5] }, { room: 'c1', at: [0.5, 0.5] }],
@@ -104,7 +104,7 @@ export const SPOTS = {
 // and where their hips are once lying on it (on their back, their head toward the wall, under the parked ring); the
 // pedestal's top edge, over its screen, that the medic works and looks at ([across, up, along]); how many times the
 // ring goes there and back
-export const SCAN_BED = { path: [[1.35, 4.12], [0.66, 3.3], [0.66, 1.6]], sit: [0.43, 1.45], hips: [0, 1.35], top: 0.92, panel: [0, 0.8, 3.95], rounds: [2, 3] };
+export const SCAN_BED = { path: [[0.8, 4.4], [0.66, 3.3], [0.66, 1.6]], sit: [0.43, 1.45], hips: [0, 1.35], top: 0.92, panel: [0, 0.8, 3.95], rounds: [2, 3] };
 
 // THE TALKING SPOTS: two people face to face (each spot's two places, `apart` metres, along the way it faces)
 export const TALKS = {

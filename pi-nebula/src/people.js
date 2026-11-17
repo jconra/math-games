@@ -788,7 +788,16 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (P.walking) { walk(P, dt); return; }
-    if (a.phase === 'go') { if (a.delay > 0) { a.delay -= dt; play(P, STAND); return; } route(P, a.spot.pos); return; }
+    if (a.phase === 'go') {
+      if (a.delay > 0) { a.delay -= dt; play(P, STAND); return; }
+      // (the scanner's patient sets off once the medic is at its screen (up to half a minute): coming in by the same
+      // doorway, a patient waiting at the bed's foot first stood in her way)
+      if (a.kind === 'scan' && !a.placed && a.t < 30 && SCAN && SCAN.busy && SCAN.busy.patient === P) {
+        const M = SCAN.busy.medic;
+        if (M && M.act && M.act.kind === 'scanMedic' && M.act.phase !== 'do') { play(P, STAND); idle(P, a, dt, 0.3); return; }
+      }
+      route(P, a.spot.pos); return;
+    }
     // turning to the spot's way, then at it
     if (a.phase === 'turn') {
       const want = a.spot.heading ?? P.heading, diff = wrap(want - P.heading);
