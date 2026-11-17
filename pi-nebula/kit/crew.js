@@ -2865,6 +2865,49 @@ function neckFit(m, C, rideOn = true) {
   for (const k of ['mostMm', 'meanMm', 'pastMm', 'wideMm', 'coverMm']) st[k] = Math.round(st[k] * 10) / 10;
   return { P, SI, SW, depth, moved, start, stats: st };
 }
+// ARM THICKNESS in the outfit's own points (2026-11-17): an outfit's own geometry with its sleeves drawn in toward their
+// arm's line at rest (the skeleton's own space as bound: the upper arm's line from its joint to the elbow, the forearm's
+// from the elbow to the wrist; a point on both, a mix of the two by their weights), each point by as much as the arms
+// move it: its distance off the line times 1 - (its upper arm's and forearm's weights) x (1 - k). The hands, the
+// wrists' weights, never; the body never. Only the positions its own, the rest (the triangles too, so the far copy finds
+// its own) shared with the part's. The normals as made: a sleeve drawn in evenly keeps its surface's way.
+const ARM_OWN = ['position'];
+function armGeometry(mesh, k) {
+  const src = mesh.geometry, sk = mesh.skeleton, P0 = src.attributes.position, SI = src.attributes.skinIndex, SW = src.attributes.skinWeight;
+  if (!sk || !SI || !SW) return null;
+  const idx = (n) => sk.bones.findIndex((b) => b.name === n);
+  const joint = (i) => new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[i]).invert());
+  const sides = [];
+  for (const s of ['L', 'R']) {
+    const iu = idx('UpperArm' + s), il = idx('LowerArm' + s), iw = idx('Wrist' + s); if (iu < 0 || il < 0 || iw < 0) continue;
+    const sh = joint(iu), el = joint(il), wr = joint(iw);
+    sides.push({ iu, il, sh, du: el.clone().sub(sh).normalize(), el, dl: wr.clone().sub(el).normalize() });
+  }
+  if (!sides.length) return null;
+  const n = P0.count, P = new Float32Array(n * 3), q = new THREE.Vector3(), cu = new THREE.Vector3(), cl = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    q.fromBufferAttribute(P0, i);
+    for (const S of sides) {
+      let wu = 0, wl = 0;
+      for (let j = 0; j < 4; j++) { const b = SI.getComponent(i, j), w = SW.getComponent(i, j); if (b === S.iu) wu += w; else if (b === S.il) wl += w; }
+      if (wu + wl < 1e-4) continue;
+      q.applyMatrix4(mesh.bindMatrix);
+      cu.copy(S.du).multiplyScalar(_a.copy(q).sub(S.sh).dot(S.du)).add(S.sh);
+      cl.copy(S.dl).multiplyScalar(_a.copy(q).sub(S.el).dot(S.dl)).add(S.el);
+      c.copy(cu).multiplyScalar(wu).addScaledVector(cl, wl).divideScalar(wu + wl);
+      q.sub(c).multiplyScalar(1 - Math.min(1, wu + wl) * (1 - k)).add(c).applyMatrix4(mesh.bindMatrixInverse);
+      break;
+    }
+    q.toArray(P, i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.name = (src.name || 'suit') + ' (arm thickness)';
+  g.setIndex(src.index);
+  for (const [key, a] of Object.entries(src.attributes)) g.setAttribute(key, key === 'position' ? new THREE.BufferAttribute(P, 3) : a);
+  for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  g.userData.fitShared = Object.keys(src.attributes).filter((key) => !ARM_OWN.includes(key));
+  if (src.boundingSphere) g.boundingSphere = src.boundingSphere.clone();
+  return g;
+}
 // (a head's own geometry for the collar fit: its positions, normals and skin weights its own, the rest shared with the
 // part's; the normals turned as the fit turned the surface under them)
 const COLLAR_OWN = ['position', 'normal', 'skinIndex', 'skinWeight'];
@@ -3108,6 +3151,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   made.dispose();
   // (the collar fit on the person's head: its own positions where any point moved)
   const collarGeo = lib.collarFit !== false && neck && (neck.stats.moved || neck.stats.rides) && meshes.head ? collarGeometry(meshes.head.geometry, neck.P, neck.SI, neck.SW) : null;
+  let armGeo = null;             // (the outfit's own points with its sleeves thinned: ARM THICKNESS, below)
   if (collarGeo) meshes.head.geometry = collarGeo;
   if (neck) neck.stats.applied = !!collarGeo;
   const bones = {}; person.root.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -3128,19 +3172,14 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   // (face bones, at rest before the clips' first frame)
   const faceR = faceRig(bones);
   // ARM THICKNESS (crew.json suit entry `arms`, 2026-11-15; the game's maker, of Ivy in the grey uniform: "The arm also
-  // seems really big compared with the rest of her body"): the bones are a normal length, the sleeves are thick, so each
-  // upper arm's bone is scaled thinner across its own length (the two axes square to the line to its elbow; never
-  // shorter), the forearm thinner with it (a child takes its parent's scale), and each wrist scaled back by as much, so
-  // the hands and fingers stay their own size. 1 as made (every outfit unless set), ARMS_LIMITS; lib.armsOf
+  // seems really big compared with the rest of her body"): the bones are a normal length, the sleeves are thick, so the
+  // sleeves are drawn in toward their arm's line, in the person's own copy of the outfit's points (armGeometry, below).
+  // 1 as made (every outfit unless set), ARMS_LIMITS; lib.armsOf. (Until 2026-11-17 each upper arm's bone was scaled
+  // thinner instead, the forearm taking its scale as a child does; once the elbow bent, that scale lay across the
+  // forearm's own length and the forearm shrank. The points thinned at rest bend as made.)
   const armK = lib.armsOf(R.suit);
-  if (armK !== 1) for (const s of ['L', 'R']) {
-    const ua = bones['UpperArm' + s], la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!ua || !la || !wr) continue;
-    // (the bone's length runs along the axis its child sits on: most often y)
-    const along = (b, kid) => { const p = kid.position, a = [Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)]; return a.indexOf(Math.max(...a)); };
-    const k3 = (i, k) => [0, 1, 2].map((j) => (j === i ? 1 : k));
-    ua.scale.fromArray(k3(along(ua, la), armK));
-    wr.scale.fromArray(k3(along(la, wr), 1 / armK));
-  }
+  armGeo = armK !== 1 && meshes.suit ? armGeometry(meshes.suit, armK) : null;
+  if (armGeo) meshes.suit.geometry = armGeo;
   // ARMS OUT (crew.json suit entry `armsOut`, degrees, 2026-11-07): bulky trousers or a coat's skirts that the hands would
   // sink into in the standing clips: each upper arm turned out that far from the body, as much as it hangs down (none
   // when it's raised or reaching forward), on top of the clip and taken off again before the next frame's clip
@@ -3268,6 +3307,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       if (painted) painted.field.dispose();
       for (const [m, g0] of hairFit) if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; }
       if (collarGeo) disposeOwn(collarGeo);
+      if (armGeo) disposeOwn(armGeo);
       person.mixer.stopAllAction(); person.root.removeFromParent();
     },
   };
