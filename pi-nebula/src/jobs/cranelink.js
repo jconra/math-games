@@ -345,7 +345,19 @@ export function craneLink({ crane, W, walls, onFree = null }) {
       for (let i = 0; i <= n; i++) { const k = (i * 0.05) / L; if (V.full(p[0] + ex * k, p[1] + ey * k, p[2] + ez * k)) return false; }
       return true;
     };
-    // (anything under the camera, in a column from just under it to near the floor: it hangs over something)
+    // (how much of the picture round the move it sees: lines to each look point and to points round it, across and up
+    // and down as the picture shows them; something big just in front of the camera blocks many of them)
+    const OFF = [[0, 0], [1.6, 0], [-1.6, 0], [0, 1.1], [0, -1.1], [1.1, 0.8], [-1.1, 0.8], [1.1, -0.8], [-1.1, -0.8]];
+    const sees = (p) => {
+      let n = 0;
+      for (const q of looks) {
+        const fx = q[0] - p[0], fz = q[2] - p[2], fl = Math.hypot(fx, fz) || 1, rx = -fz / fl, rz = fx / fl;
+        for (const [ox, oy] of OFF) if (clear(p, [q[0] + rx * ox, q[1] + oy, q[2] + rz * ox])) n++;
+      }
+      return n;
+    };
+    // (nothing within arm's reach of the camera, and nothing under it: the Miner's hull, the rack, the catwalk)
+    const near = (p) => { if (!V) return false; for (const [dx2, dy2, dz2] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0], [0.7, -0.7, 0], [-0.7, -0.7, 0], [0, -0.7, 0.7], [0, -0.7, -0.7]]) for (const r2 of [0.6, 1.2, 1.8]) if (V.full(p[0] + dx2 * r2, p[1] + dy2 * r2, p[2] + dz2 * r2)) return true; return false; };
     const over = (p) => { if (!V) return false; for (let y = p[1] - 0.4; y > 0.4; y -= 0.1) for (const [ox, oz] of [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) if (V.full(p[0] + ox, y, p[2] + oz)) return true; return false; };
     let first, d, y;
     if (len > 0.8) {
@@ -357,8 +369,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     for (const turn of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.2, -2.2, Math.PI]) for (const [dd, yy] of [[d, y], [d, y + 1.6], [d * 0.75, y + 1.2], [d * 1.3, y + 0.8]]) {
       const a = first + turn, o = { px: Math.cos(a), pz: Math.sin(a), d: dd, y: Math.min(7.8, yy) }, p = at(o);
       if (!inside(p[0], p[2]) || (V && V.full(p[0], p[1], p[2]))) continue;
-      const seen = looks.filter((q) => clear(p, q)).length;
-      const score = seen * 10 - (over(p) ? 25 : 0) - Math.abs(turn) * 2 - (dd === d && yy === y ? 0 : 1);
+      const score = sees(p) * 2 - (near(p) ? 20 : 0) - (over(p) ? 12 : 0) - Math.abs(turn) * 1.5 - (dd === d && yy === y ? 0 : 1);
       if (score > bestScore) { best = o; bestScore = score; }
     }
     return best || { px: Math.cos(first), pz: Math.sin(first), d, y };
