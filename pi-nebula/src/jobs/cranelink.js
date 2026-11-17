@@ -268,7 +268,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   // its own, titled, on the right of the picture in amber: up the screen is y on the grid, so the height is kept apart
   // from the grid's own numbers
   function scale(g, r, h, R, gh = null) {
-    const x = r.x + r.w - 112, y0 = r.y + r.h - 30, y1 = Math.max(r.y + 46, y0 - 300), Y = (v) => y0 - (v / 7) * (y0 - y1);
+    // (its foot clear of the grid's x numbers along the bottom)
+    const x = r.x + r.w - 112, y0 = r.y + r.h - 52, y1 = Math.max(r.y + 46, y0 - 300), Y = (v) => y0 - (v / 7) * (y0 - y1);
     g.fillStyle = 'rgba(14, 10, 4, 0.88)'; g.fillRect(x - 46, y1 - 40, 150, y0 - y1 + 54);
     g.strokeStyle = 'rgba(255, 179, 92, 0.85)'; g.lineWidth = 1.5; g.strokeRect(x - 46, y1 - 40, 150, y0 - y1 + 54);
     g.font = '800 12px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffd29e'; g.fillText('HEIGHT', x + 29, y1 - 24);
