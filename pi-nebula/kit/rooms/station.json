@@ -1609,6 +1609,7 @@
       "probe": [38,3,-5],
       "coarse": true,
       "sky": {"i":0.55,"top":11},
+      "craneGrid": {"origin":[19,-19],"x":[0,1],"y":[1,0],"size":[28,40]},
       "pieces": [
         {"piece":"floor","cell":[10,-9],"turn":2,"variant":"tread"},
         {"piece":"ceilbig","cell":[10,-9],"turn":1,"variant":"deck","deck":1},
@@ -2758,7 +2759,7 @@
         {"piece":"craneRunway","cell":[29,4],"turn":2,"variant":"stop","off":[-0.5,8.52,-0.32]},
         {"piece":"craneMarks","cell":[9.5,-9],"turn":0,"variant":"x 40","off":[0,8.52,-0.32]},
         {"piece":"craneMarks","cell":[29.5,4],"turn":2,"variant":"x 40 back","off":[0,8.52,-0.32]},
-        {"piece":"crane","cell":[11,-2.5],"turn":0,"variant":"bridge 26.64 y 14 -1","off":[-0.5,8.52,0]},
+        {"piece":"crane","cell":[11,-2.5],"turn":0,"variant":"bridge 26.64 x 14 1","off":[-0.5,8.52,0]},
         {"piece":"catwalk","cell":[11,-9],"turn":0,"variant":"run"},
         {"piece":"catwalk","cell":[12,-9],"turn":0,"variant":"end"},
         {"piece":"stairs","cell":[12,-7],"turn":0,"variant":"flight"},

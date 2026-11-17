@@ -22,8 +22,10 @@
 // turns a canister itself: no turntable. The cradle is the first pick's: a frame that sits on the canister's crown, a
 // latch for its lug, two pairs of curved arms that slide round it from above until their tips meet under it (nothing
 // swings out sideways, so it takes a canister from between its neighbours on the rack or beside a docked one).
-// Every axis has its numbers: metre marks along the runways (x, counted from the hangar's west wall) and along both
-// sides of the girder (y, counted from the south wall), and a screen on the trolley (src/crane.js) with all three.
+// Every axis has its numbers: metre marks along the runways and along both sides of the girder, and a screen on the
+// trolley (src/crane.js) with all three. In the Miner hangar (the game's maker, 2026-11-17: "you enter into the hanger
+// at y = 0 and the big hanger door is y = 40 ... x to your sides") the runways count the grid's y, from the back wall
+// you come in by to the bay door, and the girder its x, across from the wall on your left (src/jobs/crane.js gridOf).
 // Docking aids (the game's maker: "Close enough on the x-axis? A light on that beam turns green. Close enough on the
 // y-axis? a light on the crane turns green"): a light strip along each side of the girder (x), a ring of light round
 // the trolley (y), the cradle's own lamps (the height); kit/crane.js tints them.
@@ -34,7 +36,8 @@
 //   craneMarks   a FREE piece: 'x <metres>' a runway's metre marks along +x from the origin (the count's 0), on the
 //                beam's +z face (the side the hangar is on); 'x <metres> back' counting down from <metres>
 //   crane        a POINT piece, its point on the runways' rail tops, midway between them: the bridge (girder along z, its
-//                span in the variant: 'bridge <span> y <mark at the middle> <+1 or -1 a metre along +z>') and all it
+//                span in the variant: 'bridge <span> x <mark at the middle> <+1 or -1 a metre along +z>', the girder's
+//                marks counting the grid's x across the hangar; 'y' in place of 'x' is read the same) and all it
 //                carries, as leaves (door 'crane'): 'crane:bridge', 'crane:xlight', 'crane:trolley', 'crane:ylight',
 //                'crane:beacon', four 'crane:cable', 'crane:block', 'crane:cradle', four 'crane:arc', 'crane:lamp'. As
 //                placed it is parked: cradle up, arms open, the trolley at the bridge's middle
@@ -151,10 +154,10 @@ export function craneMarks(p, v) {
 }
 
 // ── THE CRANE: the bridge, the trolley, cables, block, cradle, arms ─────────────────────────────────────────────────
-const BRIDGE_RE = /^bridge \d+(\.\d+)? y -?\d+(\.\d+)? -?1$/;
+const BRIDGE_RE = /^bridge \d+(\.\d+)? [xy] -?\d+(\.\d+)? -?1$/;
 // (the parts' sizes as the variant gives them: the span between the runways' middle lines, and the girder's marks)
 export function craneSpan(v) {
-  const m = /^bridge (\d+(?:\.\d+)?)(?: y (-?\d+(?:\.\d+)?) (-?1))?$/.exec(v || '');
+  const m = /^bridge (\d+(?:\.\d+)?)(?: [xy] (-?\d+(?:\.\d+)?) (-?1))?$/.exec(v || '');
   const span = m ? parseFloat(m[1]) : 26.64;
   return { span, mid: m && m[2] != null ? parseFloat(m[2]) : null, way: m && m[3] ? parseInt(m[3], 10) : -1 };
 }
@@ -176,7 +179,7 @@ function bridgeLeaf(span, mid, way) {
     lp.slab('yellow', -G.w, G.w, G.y0 + G.ft, G.y1, -ze, ze, { r: 0.025, cell: 3, loops: [] });
     for (const s of [-1, 1]) lp.slab('black', s * (G.w + 0.002) - 0.004, s * (G.w + 0.002) + 0.004, G.y1 - 0.07, G.y1 - 0.01, -ze, ze, { r: 0, cell: 3, loops: [] });
     lp.slab('gun', -G.flange, G.flange, G.y0, G.y0 + G.ft, -ze, ze, { r: 0.008, cell: 3, loops: [] });
-    // the metre marks along both its sides (the y axis: the number at z is mid + way * z), every half metre a tick,
+    // the metre marks along both its sides (the grid's x across the hangar: the number at z is mid + way * z), every half metre a tick,
     // every metre its number, read the right way from each side
     if (mid != null) {
       const D = { ...MARKS, h: 0.3, w: 0.15, t: 0.035, pitch: 0.2 }, yb = G.y0 + G.ft + 0.04;

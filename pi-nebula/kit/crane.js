@@ -6,7 +6,8 @@
 // pieces are; the runways' ends and middle lines, where the crane parks and the grid the questions read are the
 // station file's (its place 'crane', handed in as opts.rail).
 //
-//   const L = makeOreLine(built, { rail })   null if the station has no crane (or not all of its parts)
+//   const L = makeOreLine(built, { rail, grid })   null if the station has no crane (or not all of its parts); grid: the
+//                                       grid the questions read ({ origin, x, y, size }: src/jobs/crane.js gridOf)
 //   L.pose(t)                           everything as it is at time t of the round (0 .. L.length)
 //   L.poseState(S)                      everything as a state says (crane-plan.js stateAt's shape)
 //   L.state(t), L.clean(t)              the round's state at t; the next moment nothing is half done
@@ -96,7 +97,7 @@ export function makeOreLine(built, opts = {}) {
     mounts: mounts.map((m) => ({ at: m.at.toArray(), yaw: m.yaw, out: [m.out.x, m.out.z], upper: m.at.y > midY })),
     sockets: sockets.map((q) => ({ at: q.at.toArray(), n: [q.n.x, q.n.z], upper: q.at.y > sockY, number: q.number })),
     bays: bays.map((b) => ({ at: b.at.toArray(), yaw: b.yaw })), can: { half, seat: SOCKET.seat, clear: SOCKET.clear, rise: SOCKET.rise, lift: TRAY_LIFT.h },
-    grid: railPlace && railPlace.grid ? { ...railPlace.grid } : { origin: [Math.min(...runX), Math.max(...runZ)] },
+    grid: opts.grid ? { ...opts.grid } : railPlace && railPlace.grid ? { ...railPlace.grid } : { origin: [Math.min(...runX), Math.max(...runZ)] },
     dims: { R: CANISTER_AT.R, grip: { ...CRANE.grip }, arc: { ...CRANE.arc }, arms: ARMS.map((a) => ({ ...a })), cable: { x: CRANE.cable.x, z: CRANE.cable.z }, cableTop: Tr.y0, hookTop: CRANE.hookTop,
       trolley: { ...Tr }, girder: { ...Gd }, block: { ...CRANE.block },
       sock: { deep: SOCKET.deep, bore: SOCKET.bore, mouth: SOCKET.mouth, out: SOCKET.out }, trayShare: TRAY_LIFT.share } };

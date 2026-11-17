@@ -1,8 +1,9 @@
-// FREE CONTROL: the smelter's bridge crane by hand, from the operator's chair, for fun, no credits, never needed. It is
-// the "Free control" switch on the crane operator's screen (src/jobs/crane.js: the crane game is the screen's own
-// default). The game's maker, 2026-11-16: "I think it would be more fun if you could do whatever you wanted with it.
-// If people are in the way then they should start to run away and it should post a notice saying you committed a
-// safety violation (as a joke) ... let the crane do whatever and make it entertaining."
+// FREE CONTROL: the smelter's bridge crane by hand, from the operator's chair, for fun, never needed. It is the "Free
+// control" switch on the crane operator's screen (src/jobs/crane.js: the crane game is the screen's own default). The
+// game's maker, 2026-11-16: "I think it would be more fun if you could do whatever you wanted with it. If people are in
+// the way then they should start to run away and it should post a notice saying you committed a safety violation (as a
+// joke) ... let the crane do whatever and make it entertaining." 2026-11-17 (CR2-3): docking a canister by hand pays
+// "a little for each canister docked" (FREE below), and the notice threatens you too (CR2-2, THREATS below).
 //
 //   THE CONTROLS (the same on a computer and a phone):
 //     move        the stick (a phone: wherever the left thumb lands) or WASD / the arrows: the load goes the way you
@@ -16,9 +17,9 @@
 //   tray, a rack bay) it lets go; in front of a free socket at its height it pushes the canister in. Near a place it
 //   lines itself up and turns to it; the three lights (on the crane, and here) go green when each way is right.
 //
-//   const D = openDrive(root, { crane, input, W, walls, onClose, onGame })   D.update(dt) (before the camera),
+//   const D = openDrive(root, { crane, input, W, walls, onClose, onGame, onDock })   D.update(dt) (before the camera),
 //                                     D.aim(camera, dt), D.close(), D.state() (for rigs); onGame: the screen's switch
-//                                     back to the crane game
+//                                     back to the crane game; onDock(c, socket) -> the credits it paid (src/jobs/index.js)
 //   followCam(W, site) -> { aim(camera, S, dt, opts), orbit, zoom }     the view that follows the load
 //   viewCam(crane, name) / VIEWS                                        the crane's cameras by name
 //   readout(r, crane) -> { x, y, h, load }                              the readouts as words
@@ -35,6 +36,40 @@ export function ensureCss() {
 }
 const m1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 
+// THE PAY BY HAND (the game's maker, CR2-3, "A little for each canister docked"): a canister of ore docked in a socket
+// by hand pays FREE.dock, once for each canister in a haul (taking it out and docking it again pays nothing more). 20
+// credits, a tenth or less of a crane game answer (50 to 190): a docking by hand takes a minute or so of driving, where
+// an answer takes a few seconds of sums, so the math stays the way to earn and free control stays the fun extra; a
+// whole haul by hand (8 canisters) pays 160, about one answer's worth.
+export const FREE = { dock: 20 };
+// THE JOKE NOTICE'S SECOND LINE (the game's maker, CR2-2: "it might be funny if it threatened you in some way too. Like
+// 'Any more violations and your rations will be limited to broccoli.' or 'Any more violations and Nickelback will be
+// playing in your quarters 24/7'"): his two and more in the same spirit, a different one each time (all of them before
+// any comes round again)
+export const THREATS = [
+  'Any more violations and your rations will be limited to broccoli.',
+  'Any more violations and Nickelback will be playing in your quarters 24/7.',
+  'Any more violations and you will count every rivet in this hangar. Twice.',
+  'Any more violations and you will teach the next safety class. In a chicken suit.',
+  'Any more violations and all your socks will be one size too small.',
+  'Any more violations and you will sing the safety song at breakfast. All twelve verses.',
+  'Any more violations and the cleaning robot will follow you everywhere, beeping.',
+  'Any more violations and your hot chocolate comes without marshmallows. For a week.',
+];
+let threatDeck = [], threatLast = null;
+export function nextThreat(rand = Math.random) {
+  if (!threatDeck.length) {
+    threatDeck = THREATS.slice();
+    for (let i = threatDeck.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [threatDeck[i], threatDeck[j]] = [threatDeck[j], threatDeck[i]]; }
+    // (never the same one twice running, from one deck to the next)
+    if (threatDeck[threatDeck.length - 1] === threatLast) [threatDeck[0], threatDeck[threatDeck.length - 1]] = [threatDeck[threatDeck.length - 1], threatDeck[0]];
+  }
+  threatLast = threatDeck.pop();
+  return threatLast;
+}
+// (the grid's name for each of the drive's docking lights: the drive's x is the bridge's, along the station's X, the
+// grid's y in the Miner hangar; its y the trolley's)
+const gridNames = (crane) => { const [ax] = crane.grid(1, 0), [ox] = crane.grid(0, 0), bridge = Math.abs(ax - ox) > 0.5 ? 'x' : 'y'; return { x: bridge, y: bridge === 'x' ? 'y' : 'x', h: 'h' }; };
 // ── the readouts in words: where the crane is as the grid counts it ────────────────────────────────────────────────
 export function readout(r, crane) {
   const [gx, gy] = crane.grid(r.x, r.z);
@@ -110,8 +145,10 @@ export function squarePush(push) {
 const dot = (look) => `<i class="pcd-dot is-${look}" aria-hidden="true"></i>`;
 
 // ── the HUD ─────────────────────────────────────────────────────────────────────────────────────────────────────
-export function openDrive(root, { crane, input, W, walls, onClose = () => {}, onGame = null } = {}) {
+export function openDrive(root, { crane, input, W, walls, onClose = () => {}, onGame = null, onDock = null } = {}) {
   ensureCss();
+  // (the grid's axes as the drive's lights: aidOf.x is the light for the grid's x row)
+  const named = gridNames(crane), aidOf = { [named.x]: 'x', [named.y]: 'y', h: 'h' }, gridOfAid = named;
   const el = document.createElement('div');
   el.className = 'pcd';
   el.innerHTML = `
@@ -137,12 +174,14 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     </div>
     <p class="pcd-stickhint">${'ontouchstart' in window || (input && input.touch) ? 'Drag on the left to move the crane' : 'WASD or the arrows move the crane'}</p>
     <div class="pcd-wait" hidden>The crane is finishing its move&hellip;</div>
-    <div class="pcd-notice" hidden role="alert"></div>`;
+    <div class="pcd-notice" hidden role="alert"></div>
+    <div class="pcd-paid" hidden aria-live="polite"></div>`;
   root.appendChild(el);
   const $ = (s) => el.querySelector(s);
   const held = { up: false, down: false, ccw: false, cw: false };
   let closed = false, view = 0, noteText = '', noteT = 0, t = 0, lastViol = null, violations = 0, noticeT = -9;
   let lastHeld = null, lastPlace = null, done = null;   // (the hint line's memory: a grab or a let-go just now)
+  let paidT = -9, earned = 0;                            // (the credits a docking by hand just paid, and in all this time)
   // (a push keeps the way it was given while it is held, though the view swings round: let go and push again)
   let ahead = null;
   const cam = followCam(W, crane.site);
@@ -203,11 +242,11 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   function show(D, r) {
     const w = readout(r, crane);
     for (const k of ['x', 'y', 'h', 'load']) { const dd = el.querySelector(`[data-r="${k}"]`); if (dd.textContent !== w[k]) dd.textContent = w[k]; }
-    for (const k of ['x', 'y', 'h']) { const dd = el.querySelector(`[data-a="${k}"]`), look = (r.aids && r.aids[k]) || 'off', h = dot(look); if (dd.dataset.look !== look) { dd.dataset.look = look; dd.innerHTML = h; } }
+    for (const k of ['x', 'y', 'h']) { const dd = el.querySelector(`[data-a="${k}"]`), look = (r.aids && r.aids[aidOf[k]]) || 'off', h = dot(look); if (dd.dataset.look !== look) { dd.dataset.look = look; dd.innerHTML = h; } }
     // the joke: a load brought low over someone, and they ran
     const v = crane.violation;
-    if (v && v !== lastViol) { lastViol = v; violations++; noticeT = t; const n = $('.pcd-notice'); n.innerHTML = `<b>Safety violation!</b><span>${v.n === 1 ? `You swung a load over ${esc((v.who[0] || 'someone').replace(/^(A|An|The) /, (m) => m.toLowerCase()))}. They ran for it.` : `You swung a load over ${v.n} people. They ran for it.`}</span><small>Violations today: ${violations}</small>`; n.hidden = false; n.classList.remove('is-pop'); void n.offsetWidth; n.classList.add('is-pop'); }
-    if (!$('.pcd-notice').hidden && t - noticeT > 4.5) $('.pcd-notice').hidden = true;
+    if (v && v !== lastViol) { lastViol = v; violations++; noticeT = t; const n = $('.pcd-notice'); n.innerHTML = `<b>Safety violation!</b><span>${v.n === 1 ? `You swung a load over ${esc((v.who[0] || 'someone').replace(/^(A|An|The) /, (m) => m.toLowerCase()))}. They ran for it.` : `You swung a load over ${v.n} people. They ran for it.`}</span><em>${esc(nextThreat())}</em><small>Violations today: ${violations}</small>`; n.hidden = false; n.classList.remove('is-pop'); void n.offsetWidth; n.classList.add('is-pop'); }
+    if (!$('.pcd-notice').hidden && t - noticeT > 6.5) $('.pcd-notice').hidden = true;
     // the hint: what it would not do just now, else what to do next
     const n = D.notes.find((q) => q.key !== 'people');
     if (n) { noteText = n.text; noteT = t; }
@@ -215,19 +254,27 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     const P = r.place, A = r.aids || {}, site = crane.site;
     // (just after a grab or a let-go, what comes next, until the grab has moved on from there)
     if (r.held !== lastHeld) {
-      if (lastHeld != null) done = { kind: r.held >= 0 ? 'got' : 'let', t, x: r.x, z: r.z, hook: r.hook, socket: lastPlace && lastPlace.kind === 'socket' ? site.sockets[lastPlace.i].number : null };
+      if (lastHeld != null) done = { kind: r.held >= 0 ? 'got' : 'let', t, x: r.x, z: r.z, hook: r.hook, socket: lastPlace && lastPlace.kind === 'socket' ? site.sockets[lastPlace.i].number : null, paid: 0 };
+      // (a canister of ore let go in a socket: docked by hand, and paid for, once a haul: onDock says how much)
+      const was = lastHeld != null && lastHeld >= 0 ? D.state.cans[lastHeld] : null;
+      if (done && done.kind === 'let' && was && was.where === 'socket' && was.fill > 0.5 && onDock) {
+        let pay = 0; try { pay = onDock(lastHeld, done.socket) || 0; } catch (e) { console.warn('Pi Nebula: free control could not pay', e); }
+        if (pay > 0) { done.paid = pay; earned += pay; paidT = t; const c = $('.pcd-paid'); c.textContent = `+${pay} credits`; c.hidden = false; c.classList.remove('is-pop'); void c.offsetWidth; c.classList.add('is-pop'); }
+      }
       lastHeld = r.held;
     }
+    if (!$('.pcd-paid').hidden && t - paidT > 2.4) $('.pcd-paid').hidden = true;
     lastPlace = P;
     // (a let-go is remembered until the grab has gone from over it, a grab until the load is lifted well clear)
     if (done && (t - done.t > 12 || Math.hypot(r.x - done.x, r.z - done.z) > 1.5 || (done.kind === 'got' && Math.abs(r.hook - done.hook) > 1.2))) done = null;
     // (lined up on a place: the light that is not green yet, by name)
     const notGreen = (ways) => ways.filter((w) => A[w] !== 'on');
-    const AX = { x: 'X', y: 'Y', h: 'height' };
+    // (the lights by the grid's names: the readouts' X and Y rows)
+    const AX = { x: gridOfAid.x.toUpperCase(), y: gridOfAid.y.toUpperCase(), h: 'height' };
     if (noteText && t - noteT < 2.2) hint = noteText;
     else if (D.busy && D.action === 'shut') hint = 'Grabbing it...';
     else if (D.busy && D.action === 'open') hint = 'Letting go...';
-    else if (done && done.kind === 'let') hint = done.socket != null ? `Docked in socket ${done.socket}. Take the grab up and away for the next canister.` : 'Set down. Take the grab up and away for the next canister.';
+    else if (done && done.kind === 'let') hint = done.socket != null ? `Docked in socket ${done.socket}${done.paid ? `: +${done.paid} credits` : ''}. Take the grab up and away for the next canister.` : 'Set down. Take the grab up and away for the next canister.';
     else if (done && done.kind === 'got') hint = 'Got it! Lift it up, then take it to a socket, a ship\'s tray or the rack.';
     else if (r.held < 0 && P && P.kind === 'socket' && P.c >= 0 && D.state.cans[P.c] && D.state.cans[P.c].fill > 0.01) {
       // (over a canister that is still draining into the smelter: it may be taken back out, but that is not the job)
@@ -264,7 +311,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   }
   requestAnimationFrame(() => el.classList.add('is-on'));
   showView();
-  const api = { el, update, aim, close, cam, act, pilot: null, get view() { return VIEWS[view]; }, setView(n) { const i = VIEWS.indexOf(n); if (i >= 0) { view = i; cam.fresh(); } }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations }) };
+  const api = { el, update, aim, close, cam, act, pilot: null, get view() { return VIEWS[view]; }, setView(n) { const i = VIEWS.indexOf(n); if (i >= 0) { view = i; cam.fresh(); } }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), dots: [...el.querySelectorAll('[data-a]')].map((d) => d.dataset.look || 'off'), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations, earned }) };
   return api;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

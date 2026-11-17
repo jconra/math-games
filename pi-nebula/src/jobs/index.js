@@ -24,13 +24,13 @@
 import * as THREE from 'three';
 import { resolve } from '../people.js';
 import { openPanel, ensureCss } from './panel.js';
-import { credits } from './engine.js';
+import { credits, jobTally } from './engine.js';
 import { JOB as galley } from './galley.js';
 import { JOB as medical } from './medical.js';
 import { JOB as smelter } from './smelter.js';
 import { JOB as crane } from './crane.js';
 import { craneLink } from './cranelink.js';
-import { openDrive, chairScreen } from '../cranedrive.js';
+import { openDrive, chairScreen, FREE } from '../cranedrive.js';
 import { JOB as arena } from './arena.js';
 import { openMathball, mathballIdle } from '../mathball/index.js';
 import { JOB as dock } from './dock.js';
@@ -53,7 +53,7 @@ function signOf(job) {
   g.font = '700 46px "Segoe UI", system-ui, sans-serif';
   g.fillText(job.sign.toUpperCase(), 256, 72, 470);
   g.font = '600 32px "Segoe UI", system-ui, sans-serif'; g.fillStyle = open ? '#ffb46b' : '#8d98a4';
-  g.fillText(!open ? 'Coming soon' : job.signSub || 'Station job', 256, 122, 470);   // (free control: no credits, so not a job)
+  g.fillText(!open ? 'Coming soon' : job.signSub || 'Station job', 256, 122, 470);   // (free control is the crane seat's switch, not a spot of its own)
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
   sp.scale.set(1.15, 0.36, 1);
@@ -148,11 +148,26 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   }
   // the crane's seat: the game, or free control; each one's switch swaps to the other in place (the crane stays live)
   let craneDone = null;
+  // FREE CONTROL PAYS A LITTLE (the game's maker, CR2-3: "A little for each canister docked"): each canister of ore
+  // docked by hand pays FREE.dock (src/cranedrive.js says why so little), once for each canister in a haul, into the
+  // crew member's credits and the crane job's tally as the jobs' own pay goes (engine.js answer), saved at once. No
+  // question was answered, so the level and the kinds of math are left as they are.
+  const paidDocks = new Set();
+  function payDock(c) {
+    const crewNow = crew(); if (!crewNow || !crane) return 0;
+    const key = (crane.round ?? 0) + ':' + c;
+    if (paidDocks.has(key)) return 0;
+    paidDocks.add(key);
+    crewNow.credits = credits(crewNow) + FREE.dock;
+    jobTally(crewNow, 'crane').earned += FREE.dock;
+    save(crewNow); showWallet();
+    return FREE.dock;
+  }
   function openCrane(s, c, done, how) {
     craneDone = done;
     if (how === 'free') {
       if (input) input.enabled = true;
-      panel = openDrive(document.body, { crane, input, W, walls, onClose: done, onGame: () => swapCrane(s, c, done, 'game') });
+      panel = openDrive(document.body, { crane, input, W, walls, onClose: done, onGame: () => swapCrane(s, c, done, 'game'), onDock: payDock });
     } else {
       if (input) input.enabled = false;
       link = craneLink({ crane, W, walls, onFree: () => swapCrane(s, c, done, 'free') });

@@ -6,8 +6,10 @@
 //   - THE SCREEN: a strip over the top of the view, the crane system's own: the fault, which check this is (five answers
 //     each), what the round is at, and two switches: Free control (the crane by hand: src/cranedrive.js) and View.
 //   - THE VIEW FROM ABOVE: while a card waits for its answer, the camera looks straight down on the hangar (from very
-//     high, with a narrow lens, so it is as flat as a plan) and the GRID is laid over it: the metres from the hangar's
-//     south-west corner, the quadrants, the crane and the place it is going to, the numbers the card asks about.
+//     high, with a narrow lens, so it is as flat as a plan) with the bay door at the top (the game's maker: "I want
+//     'up' to be towards the hanger door"), and the GRID is laid over it: the metres from the back corner on the left
+//     as you come in (src/jobs/crane.js gridOf), the quadrants, the crane and the place it is going to, the numbers
+//     the card asks about, a finding card's four marks.
 //   - THE FILM: a right answer and the crane makes that move, and the camera follows it there; then back to the grid.
 //   - A WRONG ANSWER shows on the grid where it would have taken the crane, faintly, for a few seconds.
 //   - THE MAGIC (the game's maker: "maybe some of the canisters should magically appear in the sockets during the
@@ -19,7 +21,7 @@
 //   makers, link.right(q, coin), link.wrong(q, coin), link.ready(), link.update(dt), link.aim(camera, dt),
 //   link.mount(el), link.close(keep); link.state() (rigs)
 import * as THREE from 'three';
-import { makeGame, toGrid, fromGrid, gridOf, quadrantOf, placeOf, magicMoves, GAME, SPEEDS } from './crane.js';
+import { makeGame, toGrid, fromGrid, gridOf, placeOf, magicMoves, GAME } from './crane.js';
 import { followCam, viewCam, ensureCss, VIEWS as DRIVE_VIEWS, VIEW_NAMES } from '../cranedrive.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -40,7 +42,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   const live = () => crane.live;
   const Q = makeGame(site, { state: () => crane.live.state });
   const cam = followCam(W, site);
-  let closed = false, clock = 0, view = 0, card = null, moving = false, lastBusy = false, ghost = null, waitT = -9;
+  let closed = false, clock = 0, view = 0, card = null, moving = false, lastBusy = false, ghost = null, waitT = -9, blink = null;
   let check = { n: 0, of: GAME.questions, phase: null, done: false, bannerT: -9, verified: 0 }, magicDue = 0, trip = null, film = null;
   const filmAt = new THREE.Vector3(), filmLook = new THREE.Vector3(), _w = new THREE.Vector3(), _l = new THREE.Vector3();
 
@@ -54,8 +56,9 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     card = r; trip = Q.trip;
     if (!check.phase) check.phase = trip && trip.phase;
     go(Q.before());
-    // (the canister it is about blinks; or the socket it goes to)
-    crane.target = r.what === 'pick' ? { can: r.c } : r.place && r.place.kind === 'socket' ? { socket: r.place.i } : { can: r.c };
+    // (the canister it is about blinks; or the socket it goes to; never for a card that asks where it is: update())
+    blink = r.what === 'pick' ? { can: r.c } : r.place && r.place.kind === 'socket' ? { socket: r.place.i } : { can: r.c };
+    crane.target = blink;
     crane.places = r.what === 'drop' && r.place && r.place.kind !== 'socket' ? [{ kind: r.place.kind, i: r.place.i, look: 'near' }] : [];
     return r;
   }
@@ -64,11 +67,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const f = (q && q.order && q.order.facts) || {};
     ghost = null;
     let steps;
-    if (f.step != null && Q.reserved && Q.reserved.id === f.step) {
-      // (an answer of a time: the move at that speed, steady, so it takes just that long)
-      const v = f.straight ? straightV(Q.reserved) : f.both ? { x: SPEEDS.x, z: SPEEDS.y } : f.even ? (f.speed === SPEEDS.h && Q.reserved.kind === 'lower' ? { hoist: SPEEDS.h } : f.axis === 'y' ? { z: SPEEDS.y } : { x: SPEEDS.x }) : null;
-      steps = Q.right(null, { even: !!(f.even || f.both || f.straight), v });
-    } else steps = Q.skip();
+    if (f.step != null && Q.reserved && Q.reserved.id === f.step) steps = Q.right(null);
+    else steps = Q.skip();
     // (the trip's last asked move: the rest of it too, the crane then still while the next card is worked out)
     if (Q.left() === 0) steps = steps.concat(Q.rest());
     go(steps);
@@ -79,8 +79,6 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     check.n++; magicDue++;
     if (check.n >= check.of) { check.done = true; }
   }
-  // (straight across: both parts at speeds in step, so the canister goes in a straight line at the bridge's speed)
-  function straightV(R) { const dx = Math.abs(R.to[0] - R.from[0]), dy = Math.abs(R.to[1] - R.from[1]), d = Math.hypot(dx, dy) || 1, T = d / SPEEDS.x; return { x: Math.max(0.05, dx / T), z: Math.max(0.05, dy / T) }; }
   // a wrong answer: where it would have taken the crane, on the grid
   function wrong(q, coin) {
     const f = (q && q.order && q.order.facts) || {}, R = card;
@@ -88,18 +86,20 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const v = f.offset ? coin.v - f.offset : coin.v, said = `${coin.big}${coin.small ? ' ' + coin.small : ''}`;
     if (R.kind === 'over') {
       let to = null;
-      if (f.quad) { const c = [[0.75, 0.75], [0.25, 0.75], [0.25, 0.25], [0.75, 0.25]][v - 1]; if (c) to = [G.size[0] * c[0], G.size[1] * c[1]]; }
-      else if (f.axis === 'both' && Array.isArray(f.to)) to = [Math.floor(v / 100), v % 100];
-      else if (f.axis === 'x' || f.axis === 'y') {
-        const i = f.axis === 'x' ? 0 : 1, dir = Math.sign(R.to[i] - R.from[i]) || 1, at = [...R.from];
-        at[i] = q.order.key === 'read' ? v : f.T != null ? R.from[i] + dir * v * (i ? SPEEDS.y : SPEEDS.x) : R.from[i] + dir * v;
-        to = at;
-      }
+      const i = f.axis === 'y' ? 1 : 0, dir = Math.sign(R.to[i] - R.from[i]) || 1, along = (d) => { const at = [...R.from]; at[i] = R.from[i] + dir * d; return at; };
+      if (f.mode === 'quad') { const c = [[0.75, 0.75], [0.25, 0.75], [0.25, 0.25], [0.75, 0.25]][v - 1]; if (c) to = [G.size[0] * c[0], G.size[1] * c[1]]; }
+      else if (f.mode === 'pair') to = [Math.floor(v / 100), v % 100];
+      else if (f.mode === 'find') { const m = (f.marks || [])[v - 1]; if (m) to = m.at; }
+      else if (f.mode === 'both') { const sx = Math.sign(R.to[0] - R.from[0]) || 1, sy = Math.sign(R.to[1] - R.from[1]) || 1; to = [R.from[0] + sx * Math.floor(v / 100), R.from[1] + sy * (v % 100)]; }
+      else if (f.mode === 'read') { to = [...R.from]; to[i] = v; }
+      else if (f.mode === 'signed') { to = [...R.from]; to[i] = R.from[i] + v; }
+      else if (f.mode === 'legs') to = along(v - (f.leg1 || 0));
+      else if (f.mode === 'along') to = along(v);
       if (to) ghost = { kind: 'over', from: R.from, to, label: said, t: clock };
     } else if (R.kind === 'lower') {
-      const h = f.change != null ? R.from + v : f.T != null ? R.from - v * SPEEDS.h : R.from - v;
+      const h = f.mode === 'change' ? R.from + v : R.from - v;
       ghost = { kind: 'lower', h, label: said, t: clock };
-    } else ghost = { kind: 'turn', label: said, t: clock };
+    }
   }
 
   // ── the magic: some of the round's other canisters take their places as the check goes on ──────────────────────
@@ -174,7 +174,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const all = { x0: 0, x1: G.size[0], y0: 0, y1: G.size[1] };
     if (!card || card.kind !== 'over') return all;
     const key = cardKey();
-    if (/^(quad|pair|read)/.test(key)) return all;
+    if (/^(quad|pair|read|find|where)/.test(key)) return all;
     const r = freeRect(); if (r.w / G.size[0] > 14) return all;   // (wide enough to show it all)
     const a = card.from, b = card.aim || card.to, m = 3;
     let x0 = Math.min(a[0], b[0]) - m, x1 = Math.max(a[0], b[0]) + m, y0 = Math.min(a[1], b[1]) - m, y1 = Math.max(a[1], b[1]) + m;
@@ -190,16 +190,17 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     // (the free part's middle is off the screen's middle: the picture is shifted there, the camera itself staying over
     // the hangar, so the station still knows the hangar is the room being looked at)
     const ox = Math.round(r.x + r.w / 2 - innerWidth / 2), oy = Math.round(r.y + r.h / 2 - innerHeight / 2);
-    top.k = k; top.cx = X; top.cz = Z; top.ox = ox; top.oy = oy; top.rect = r; top.on = true;
+    top.k = k; top.cx = X; top.cz = Z; top.gx = gx; top.gy = gy; top.ox = ox; top.oy = oy; top.rect = r; top.on = true;
     const fov = 2 * Math.atan(innerHeight / k / 2 / TOP.height) * 180 / Math.PI;
-    camera.up.set(0, 0, -1); camera.position.set(top.cx, TOP.height, top.cz); camera.lookAt(top.cx, 0, top.cz); camera.up.set(0, 1, 0);
+    // (the screen's up is the grid's y, toward the bay door; its right is then the grid's x)
+    camera.up.set(G.y[0], 0, G.y[1]); camera.position.set(top.cx, TOP.height, top.cz); camera.lookAt(top.cx, 0, top.cz); camera.up.set(0, 1, 0);
     const vo = camera.view;
     if (!vo || !vo.enabled || vo.offsetX !== -ox || vo.offsetY !== -oy || vo.fullWidth !== innerWidth || vo.fullHeight !== innerHeight) camera.setViewOffset(innerWidth, innerHeight, -ox, -oy, innerWidth, innerHeight);
     if (Math.abs(camera.fov - fov) > 1e-6 || camera.near !== TOP.height - TOP.over) { camera.fov = fov; camera.near = TOP.height - TOP.over; camera.far = TOP.height + 2; camera.updateProjectionMatrix(); }
     crane.view = 'top';
   }
-  const SX = (X) => innerWidth / 2 + top.ox + (X - top.cx) * top.k, SY = (Z) => innerHeight / 2 + top.oy + (Z - top.cz) * top.k;
-  const gsx = (gx) => SX(fromGrid(site, gx, 0)[0]), gsy = (gy) => SY(fromGrid(site, 0, gy)[1]);
+  // where a grid point lands on the screen: x to the right, y up, from the grid point over the picture's middle
+  const gsx = (gx) => innerWidth / 2 + top.ox + (gx - top.gx) * top.k, gsy = (gy) => innerHeight / 2 + top.oy - (gy - top.gy) * top.k;
   function drawGrid() {
     const dpr = Math.min(2, devicePixelRatio || 1), w = innerWidth, h = innerHeight;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
@@ -232,21 +233,39 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     g.textAlign = 'right'; g.textBaseline = 'middle';
     for (let y = 0; y <= Y; y += label) { const sy = gsy(y); if (sy > r.y + 10 && sy < r.y + r.h - 10) g.fillText(String(y), lx + 8, sy); }
     g.textAlign = 'left'; g.fillStyle = '#ffd29e'; g.fillText('x →', Math.min(r.x + r.w - 40, gsx(X) - 30), bx - 18); g.fillText('y ↑', lx - 6, Math.max(r.y + 12, gsy(Y) + 12));
+    // (which way is which in the hangar: the bay door at the top, the way in at the foot)
+    g.font = '700 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.fillStyle = 'rgba(255, 210, 158, 0.85)';
+    if (gsy(Y) - 8 > r.y + 4) g.fillText('BAY DOOR', gsx(X / 2), gsy(Y) - 8);
+    if (gsy(0) - 10 < r.y + r.h - 4) g.fillText('WAY IN', gsx(X / 2), gsy(0) - 10);
     g.shadowBlur = 0;
     // the crane: a crosshair on the hook, and its numbers
     const cx = gsx(here[0]), cy = gsy(here[1]);
     g.strokeStyle = '#ffb35c'; g.lineWidth = 2.5; g.beginPath(); g.arc(cx, cy, 9, 0, Math.PI * 2); g.moveTo(cx - 16, cy); g.lineTo(cx + 16, cy); g.moveTo(cx, cy - 16); g.lineTo(cx, cy + 16); g.stroke();
-    // the place it is about: a pulsing ring; the numbers the card gives, by them
+    // the place it is about: a pulsing ring (not for a card that asks where it is, nor one with marks to choose from);
+    // the numbers the card gives, by them
     if (card && card.kind === 'over') {
-      const a = card.aim || card.to, tx = gsx(a[0]), ty = gsy(a[1]), p = 12 + 5 * Math.sin(clock * 5);
-      // (a dark edge under the yellow ring: the hangar's own yellow, the pad's rings and the bridge, would hide it)
-      g.strokeStyle = 'rgba(0, 0, 0, 0.8)'; g.lineWidth = 8; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
-      g.strokeStyle = '#ffe14a'; g.lineWidth = 3.5; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
-      if (!/^(quad|read|pair)/.test(key)) {
-        tag(g, cx + 14, cy - 14, card.axis === 'y' ? `y = ${num(card.from[1])}` : card.axis === 'x' ? `x = ${num(card.from[0])}` : `(${num(card.from[0])}, ${num(card.from[1])})`, '#ffb35c');
-        tag(g, tx + 14, ty + 20, card.axis === 'y' ? `y = ${num(card.to[1])}` : card.axis === 'x' ? `x = ${num(card.to[0])}` : `(${num(card.to[0])}, ${num(card.to[1])})`, '#ffe14a');
+      // (a card about a place rings the place itself; one about a move, the spot the crane stops at: in front of a socket)
+      const a = /^(quad|read|pair|find)/.test(key) ? card.aim || card.to : card.to, tx = gsx(a[0]), ty = gsy(a[1]), p = 12 + 5 * Math.sin(clock * 5), hide = /^(where|find)/.test(key);
+      if (!hide) {
+        // (a dark edge under the yellow ring: the hangar's own yellow, the pad's rings and the bridge, would hide it)
+        g.strokeStyle = 'rgba(0, 0, 0, 0.8)'; g.lineWidth = 8; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
+        g.strokeStyle = '#ffe14a'; g.lineWidth = 3.5; g.beginPath(); g.arc(tx, ty, p, 0, Math.PI * 2); g.stroke();
       }
-      if (/^(both|straight)/.test(key)) { g.setLineDash([6, 5]); g.strokeStyle = 'rgba(255, 225, 74, 0.8)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(gsx(card.to[0]), gsy(card.to[1])); g.stroke(); g.setLineDash([]); }
+      // (a finding card's four marks, lettered)
+      if (/^find/.test(key) && card.marks) for (const m of card.marks) {
+        const mx = gsx(m.at[0]), my = gsy(m.at[1]);
+        g.fillStyle = 'rgba(8, 14, 20, 0.85)'; g.beginPath(); g.arc(mx, my, 13, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#9fe8ff'; g.lineWidth = 2.5; g.stroke();
+        g.font = '800 15px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#eaf8ff'; g.fillText(m.letter, mx, my + 1);
+      }
+      const P2 = (q) => `(${num(q[0])}, ${num(q[1])})`;
+      if (/^(where)/.test(key)) tag(g, cx + 14, cy - 14, P2(card.from), '#ffb35c');
+      else if (!/^(quad|read|pair|find)/.test(key)) {
+        tag(g, cx + 14, cy - 14, card.axis === 'y' ? `y = ${num(card.from[1])}` : card.axis === 'x' ? `x = ${num(card.from[0])}` : P2(card.from), '#ffb35c');
+        tag(g, tx + 14, ty + 20, card.axis === 'y' ? `y = ${num(card.to[1])}` : card.axis === 'x' ? `x = ${num(card.to[0])}` : P2(card.to), '#ffe14a');
+      }
+      // (how far along x and along y: the two ways to go, one after the other)
+      if (/^both/.test(key)) { g.setLineDash([6, 5]); g.strokeStyle = 'rgba(255, 225, 74, 0.85)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(cx, cy); g.lineTo(gsx(card.to[0]), cy); g.lineTo(gsx(card.to[0]), gsy(card.to[1])); g.stroke(); g.setLineDash([]); }
     }
     // the hoist's scale: on the left of the free part, for a card about the height
     if (card && card.kind === 'lower') scale(g, r, S.hoist, card);
@@ -316,6 +335,9 @@ export function craneLink({ crane, W, walls, onFree = null }) {
       }
       lastBusy = D.busy;
       L_aid(D);
+      // (the canister or socket the card is about blinks, but not for a card that asks where it is: that is the sum)
+      const want = /^where/.test(cardKey()) ? null : blink;
+      if (crane.target !== want) crane.target = want;
     }
     if (!$('.pcg-banner').hidden && clock - check.bannerT > 3) $('.pcg-banner').hidden = true;
     showStrip();
@@ -403,7 +425,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   }
 
   // ── the panel's side of it ──────────────────────────────────────────────────────────────────────────────────
-  const now = () => ({ ask, peek: () => (live() ? Q.peek() : null), pass: () => { const D = live(); if (D) go(Q.skip()); }, site });
+  const now = () => ({ ask, peek: () => (live() ? Q.peek() : null), pass: () => { const D = live(); if (D) go(Q.skip()); }, only: (kinds) => Q.only(kinds), preview: () => (live() ? Q.preview() : null), leg1: () => Q.leg1(), site });
   // (a card can be answered once the crane is where it starts: until then the panel dims its answers and says so)
   function ready() {
     const D = live();

@@ -28,13 +28,14 @@
 //     load, so it never swings into anything.
 //   - THE CAMERAS (the crane's View button, and the chair's screens): the station file's views on the hangar's walls
 //     (miner-cam-*), one on the trolley looking straight down, and the plan from above for the grid (src/jobs/crane.js).
-//   - THE SCREENS on the trolley: the crane's x, y and height, as the grid counts them (place 'crane' grid).
+//   - THE SCREENS on the trolley: the crane's x, y and height, as the grid counts them (src/jobs/crane.js gridOf: the
+//     hangar's `craneGrid` in the station file, from the back corner on your left as you come in, y toward the bay door).
 //
 //   const crane = makeCrane({ W, walls, boarding })
 //   crane.update(dt, { eyes, player, people })   once a frame, before the picture
 //   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away')
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
-//   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (metres from the hangar's south-west)
+//   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (src/jobs/crane.js toGrid)
 //   crane.cams()                   the cameras: [{ name, at, look, fov }]
 //   crane.t, crane.round, crane.waiting, crane.seek(t), crane.skip(seconds), crane.pose(), crane.land(), crane.away()   (rigs)
 import { makeOreLine } from '../kit/crane.js';
@@ -44,6 +45,7 @@ import { updateDoors, setDoors } from '../kit/layout.js';
 import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
 import { LOADS } from './jobs/smelter.js';
+import { toGrid } from './jobs/crane.js';
 
 export const RULES = {
   margin: 0.9,      // how far beyond the canister's own patch of floor a person stops it (metres)
@@ -67,7 +69,9 @@ export const SWING = { period: 3.2, damp: 0.55, most: 0.06 };
 export const REACH = { voxel: 0.06, pad: 0.5 };
 
 export function makeCrane({ W, walls, boarding = null }) {
-  const L = makeOreLine(W.built, { rail: W.R?.places?.crane || null });
+  // (the grid the crane's numbers count on: the hangar's own, beside its pieces in the station file; else the place's)
+  const hangarDef = (W.R?.rooms || []).find((z) => z.craneGrid) || null;
+  const L = makeOreLine(W.built, { rail: W.R?.places?.crane || null, grid: hangarDef ? hangarDef.craneGrid : null });
   if (!L) { console.info('crane: the station has no ore line'); return { on: false, mode: 'none', update() {}, load: () => null, pose() {}, take: () => false, give() {}, command() {}, cams: () => [], grid: (x, z) => [x, z] }; }
   // its room (the hangar the crane's own piece is in), and the rooms that look into it through a window (an opening
   // between two rooms that does not reach the floor)
@@ -78,8 +82,8 @@ export function makeCrane({ W, walls, boarding = null }) {
   // the way for good (the rack's canisters: a bay is never somewhere to stand), a part overhead is no door at all
   for (const D of L.doors) { W.driven.add(D); W.keepShut.delete(D); }
   for (let i = walls.doors.length - 1; i >= 0; i--) { const d = walls.doors[i]; if (!L.doors.includes(d.D)) continue; if (d.box.min.y > 1.75) walls.doors.splice(i, 1); else d.locked = true; }
-  const site = L.site, grid0 = site.grid.origin;
-  const grid = (x, z) => [x - grid0[0], grid0[1] - z];
+  const site = L.site;
+  const grid = (x, z) => toGrid(site, x, z);
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
   const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; } };

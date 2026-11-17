@@ -20,8 +20,9 @@ const ids = (job) => job.place.levels.map((L) => L.id);
 
 test('a crew member\'s starting difficulty: Easy at each job\'s first level; Medium and Hard higher (Hard near the top)', () => {
   for (const J of JOBS) E.register(J);
-  // (the crane game's ladder, src/jobs/crane.js: Medium at coordinates, Hard at hundredths of a metre)
-  const want = { galley: ['bigger', 'table'], medical: ['dose', 'table'], smelter: ['part', 'tonnes'], crane: ['pair', 'hundredths'] };
+  // (the crane game's ladder, src/jobs/crane.js: Medium at where it will be (adding and taking away on the grid), Hard at
+  // hundredths of a metre)
+  const want = { galley: ['bigger', 'table'], medical: ['dose', 'table'], smelter: ['part', 'tonnes'], crane: ['where', 'hundredths'] };
   for (const J of JOBS) {
     const at = (start) => E.deal(crewOf({ start }), J, { rand: seeded(3), now: T0 }).level.id;
     assert.equal(at('easy'), ids(J)[0], `${J.id}: Easy`);
