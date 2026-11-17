@@ -41,7 +41,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shape, solid, plate, add } from './bevel.js';
 import { segText } from './shipparts/cabin/segtext.js';
 import { lines } from './shipparts/cabin/medbay.js';
-import { screen, FLAT } from './shipparts/cabin/bits.js';
+import { FLAT } from './shipparts/cabin/bits.js';
 import { lean } from './shipparts/cabin/galley.js';
 import { SHEET } from './shipparts/cabin/ship.js';
 import { CURTAIN_HOW, curtainOf, clothSpan, tableThings, tableOk } from './ward-names.js';
@@ -50,6 +50,8 @@ const PI = Math.PI;
 // the looks: a bed's pale padded plastic, its blanket and the darker band across it, a pillow; the cloth of a curtain
 // and its hems; a table's top; clear plastic, a bag's label; the small coloured buttons and sockets
 const PAD = { c: '#c3c5c3', r: 0.5, m: 0, w: 0.35 }, HOLE = { c: '#33363b', r: 0.6, m: 0.1, w: 0.3 }, PILLOW = { c: '#d3d6d8', r: 0.92, m: 0, w: 0.15 };
+// (a hand hold sunk in a pale panel: a shade of blue-grey, not black: black patches on white read as stickers, or dice)
+const GRIP = { c: '#7b838c', r: 0.6, m: 0, w: 0.3 }, DARKSCREEN = { c: '#070a12', r: 0.14, m: 0.2, w: 0.02 };
 const BLANKET = { c: '#9aa9b6', r: 0.94, m: 0, w: 0.2 }, BANDED = { c: '#586574', r: 0.94, m: 0, w: 0.2 };
 const CLOTH = { c: '#8ab9b4', r: 0.94, m: 0, w: 0.2 }, TOP = { c: '#c9cac6', r: 0.35, m: 0.05, w: 0.5 }, MEDTEAL = { c: '#3f9f98', r: 0.5, m: 0, w: 0.3 };
 const CLEAR = { c: '#cfdfe6', r: 0.15, m: 0, w: 0.1 }, FLUID = { c: '#a9cbdc', r: 0.2, m: 0, w: 0.1 }, LABEL = { c: '#2f6fb3', r: 0.45, m: 0, w: 0.3 };
@@ -69,17 +71,20 @@ function rod(p, look, r, a, b, seg = 6) {
   return p.add('solid', g, look);
 }
 // A CHUNKY PANEL STANDING ALONG z (a bed's side rail): an eight-sided outline drawn with its width along z and its
-// height up, `thick` through (along x) about x; `holes`: sunk dark patches on both its faces (shapes in the same
-// drawing), which read as its hand holes
-function sidePanel(p, look, s, thick, x, holes = []) {
-  const q = new (p.constructor)(), g = solid(s, thick, { edge: Math.min(0.018, thick * 0.3) });
+// height up, `thick` through (along x) about x, leaning out from its foot by `tilt` (radians; +x leans toward +x);
+// `holes`: sunk patches on both its faces (shapes in the same drawing), which read as its hand holds; `more(q)` draws
+// anything else onto it in its own drawing (x along it, y up, z through it), so it leans with it
+function sidePanel(p, look, s, thick, x, holes = [], tilt = 0, more = null) {
+  const q = new (p.constructor)(), g = solid(s, thick, { edge: Math.min(0.02, thick * 0.3) });
   put(g, [0, 0, -thick / 2]); q.add('solid', g, look);
   for (const h of holes) {
-    q.add('solid', plate(h, thick / 2 + 0.0012), HOLE);
-    const b = plate({ ...h, x: -(h.x || 0) }, thick / 2 + 0.0012); put(b, [0, 0, 0], [0, PI, 0]); q.add('solid', b, HOLE);
+    q.add('solid', plate(h, thick / 2 + 0.0012), GRIP);
+    const b = plate({ ...h, x: -(h.x || 0) }, thick / 2 + 0.0012); put(b, [0, 0, 0], [0, PI, 0]); q.add('solid', b, GRIP);
   }
-  // (the drawing's x runs along z, its depth along x)
-  for (const part of q.parts) { put(part.geo, [x, 0, 0], [0, -PI / 2, 0]); p.parts.push(part); }
+  if (more) more(q);
+  // (the drawing's x runs along z, its depth along x; then the lean, about the line along its foot)
+  const foot = (s.y || 0) - s.h / 2, lean_ = new THREE.Matrix4().makeTranslation(x, foot, 0).multiply(new THREE.Matrix4().makeRotationZ(-tilt)).multiply(new THREE.Matrix4().makeTranslation(-x, -foot, 0));
+  for (const part of q.parts) { put(part.geo, [x, 0, 0], [0, -PI / 2, 0]); part.geo.applyMatrix4(lean_); p.parts.push(part); }
 }
 
 // ── the bed ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -89,13 +94,14 @@ export function wardBed(p, o = {}, pulse = null) {
   p = lean(p);
   const len = o.len ?? 2.1, w = o.w ?? 0.9, gap = o.gap ?? 0.15, top = o.top ?? 0.68, down = o.down ?? 0, num = o.ward === true ? 1 : (o.ward || 1);
   const hw = w / 2, z0 = gap, z1 = gap + len, zm = (z0 + z1) / 2, mt = 0.14, deck = top - mt;
-  // the wheels (ball castors in dark forks), a charcoal frame on them, the pale lift between it and the deck
-  for (const sx of [-1, 1]) for (const z of [z0 + 0.15, z1 - 0.15]) {
-    const x = sx * (hw - 0.09);
-    ball(p, 'rubber', 0.055, [x, 0.055, z], [0.7, 1, 1], [0, 0, 0], 1);
-    p.slab('gun', x - 0.035, x + 0.035, 0.06, 0.17, z - 0.04, z + 0.04, flat(['-y']));
+  // the wheels (dark, each under a pale housing at a corner of the frame, so they show against a dark floor), a grey
+  // frame on them, the pale lift between it and the deck
+  for (const sx of [-1, 1]) for (const z of [z0 + 0.14, z1 - 0.14]) {
+    const x = sx * (hw - 0.05);
+    ball(p, 'rubber', 0.07, [x, 0.07, z], [0.6, 1, 1], [0, 0, 0], 1);
+    p.slab(PAD, x - 0.05, x + 0.05, 0.085, 0.22, z - 0.075, z + 0.075, { r: 0.02, seg: 1, cell: 9, loops: [], skip: ['-y'] });
   }
-  p.slab('black', -hw + 0.06, hw - 0.06, 0.15, 0.22, z0 + 0.06, z1 - 0.06, flat());
+  p.slab('grey', -hw + 0.03, hw - 0.03, 0.15, 0.22, z0 + 0.06, z1 - 0.06, flat());
   add(p, 'white2', solid(shape(0.44, deck - 0.07 - 0.22, 0.03, 0, (deck - 0.07 + 0.22) / 2), 1.1, { edge: 0.012 }), [0, 0, zm - 0.55]);
   p.slab('band', -0.225, 0.225, 0.29, 0.34, zm - 0.555, zm + 0.555, flat(['-y', '+y']));
   // the deck's frame (its corners cut), the mattress, the pillow, the blanket turned down under the pillow's end, a
@@ -106,25 +112,28 @@ export function wardBed(p, o = {}, pulse = null) {
   p.slab(BLANKET, -hw + 0.022, hw - 0.022, deck + 0.03, top + 0.022, z0 + 0.72, z1 - 0.06, { r: 0.022, seg: 1, cell: 1.2, loops: [], skip: ['-y'] });
   p.slab(SHEET, -hw + 0.018, hw - 0.018, top - 0.01, top + 0.034, z0 + 0.64, z0 + 0.76, { r: 0.02, seg: 1, cell: 9, loops: [], skip: ['-y'] });
   p.slab(BANDED, -hw + 0.0195, hw - 0.0195, deck + 0.03, top + 0.0245, z0 + 1.38, z0 + 1.48, { r: 0.0245, seg: 1, cell: 9, loops: [], skip: ['-y'] });
-  // the side rails: by the head a tall one, its top sloping down toward the foot; beside it the longer one, the strip
-  // of buttons on its top; each with two sunk hand holes. (o.down: that side's longer rail folded down beside the deck)
-  const t = 0.058, xr = hw + 0.022;
+  // the side rails, thick and leaning out a little: by the head a tall one, its top sloping down toward the foot;
+  // beside it the longer one, a dark strip of small coloured buttons along its top; each with a hand hold sunk in it.
+  // (o.down: that side's longer rail folded down beside the deck)
+  const t = 0.088, xr = hw + 0.034, TILT = 0.1;
   for (const sx of [-1, 1]) {
-    sidePanel(p, PAD, shape(0.6, 0.48, [0.07, 0.07, 0.18, 0.09], z0 + 0.4, deck + 0.2), t, sx * xr, [shape(0.14, 0.13, 0.04, z0 + 0.27, deck + 0.22), shape(0.13, 0.085, 0.03, z0 + 0.49, deck + 0.16)]);
+    sidePanel(p, PAD, shape(0.6, 0.48, [0.07, 0.07, 0.18, 0.09], z0 + 0.4, deck + 0.2), t, sx * xr, [shape(0.26, 0.055, 0.022, z0 + 0.3, deck + 0.3)], sx * TILT);
     const dy = down === sx ? -0.34 : 0, zc = z0 + 1.16, ry = deck + 0.36 + dy;
-    sidePanel(p, PAD, shape(0.8, 0.4, [0.07, 0.07, 0.11, 0.11], zc, ry - 0.2), t, sx * xr, [shape(0.2, 0.1, 0.035, zc - 0.16, ry - 0.2), shape(0.2, 0.1, 0.035, zc + 0.16, ry - 0.2)]);
-    p.slab(HOLE, sx * xr - 0.0105, sx * xr + 0.0105, ry, ry + 0.0015, zc - 0.21, zc + 0.21, flat(['-y', '-x', '+x', '-z', '+z']));
-    ['orange', 'blue', 'blue', 'white', 'red'].forEach((c, i) => p.slab(DOT[c], sx * xr - 0.0075, sx * xr + 0.0075, ry + 0.0015, ry + 0.006, zc - 0.17 + i * 0.075, zc - 0.135 + i * 0.075, flat(['-y'])));
+    sidePanel(p, PAD, shape(0.8, 0.4, [0.07, 0.07, 0.11, 0.11], zc, ry - 0.2), t, sx * xr, [shape(0.44, 0.055, 0.022, zc, ry - 0.12)], sx * TILT, (q) => {
+      q.slab(HOLE, zc - 0.27, zc + 0.27, ry, ry + 0.0015, -0.019, 0.019, flat(['-y', '-x', '+x', '-z', '+z']));
+      ['orange', 'yellow', 'blue', 'blue', 'white', 'white', 'red'].forEach((c, i) => q.slab(DOT[c], zc - 0.235 + i * 0.07, zc - 0.185 + i * 0.07, ry + 0.0015, ry + 0.007, -0.014, 0.014, flat(['-y'])));
+    });
   }
   // the head board, and the thick foot board: its top corners cut, a hand hold sunk in each, a sunk panel in its
-  // outer face with the pulse line (the medical mark, kept on the beds) and the bed's number over it
+  // outer face with the pulse line (the medical mark, kept on the beds) and the bed's tag over it
   add(p, PAD, solid(shape(w + 0.06, 0.6, [0.04, 0.04, 0.1, 0.1], 0, deck + 0.14), 0.06, { edge: 0.016 }), [0, 0, z0 - 0.05]);
   const fy = deck + 0.06, fz = z1 - 0.005, ft = 0.085, fw = w + 0.12;
   add(p, PAD, solid(shape(fw, 0.58, [0.08, 0.08, 0.13, 0.13], 0, fy), ft, { edge: 0.022 }), [0, 0, fz]);
-  for (const sx of [-1, 1]) for (const [z, ry] of [[fz + ft + 0.0012, 0], [fz - 0.0012, PI]]) add(p, HOLE, plate(shape(0.2, 0.065, 0.028, sx * (fw / 2 - 0.2) * (ry ? -1 : 1), fy + 0.2)), [0, 0, z], [0, ry, 0]);
+  for (const sx of [-1, 1]) for (const [z, ry] of [[fz + ft + 0.0012, 0], [fz - 0.0012, PI]]) add(p, GRIP, plate(shape(0.2, 0.065, 0.028, sx * (fw / 2 - 0.2) * (ry ? -1 : 1), fy + 0.2)), [0, 0, z], [0, ry, 0]);
   add(p, 'grey2', plate(shape(0.5, 0.2, 0.03, 0, fy - 0.07)), [0, 0, fz + ft + 0.0012]);
   if (pulse) pulse(p, -0.21, 0.21, fy - 0.07, fz + ft + 0.003, 0.055);
-  segText(p, 'BED ' + num, { h: 0.046, t: 0.008, at: [0, fy + 0.09, fz + ft + 0.0015], look: HOLE });
+  // (W for ward and its number: the kit's bar lettering has no clear B or D, and BED read as 3E3 from the walkway)
+  segText(p, 'W-' + num, { h: 0.055, t: 0.009, at: [0, fy + 0.09, fz + ft + 0.0015], look: HOLE });
   return p;
 }
 
@@ -133,19 +142,19 @@ export function wardBed(p, o = {}, pulse = null) {
 const VITALS = { 1: ['72', '98', '16'], 2: ['64', '97', '14'], 3: ['81', '99', '18'], 4: ['68', '96', '15'] };
 export function bedHead(p, v) {
   p = lean(p);
-  const n = parseInt(v, 10) || 1, W = 1.5, y0 = 0.94, y1 = 2.02, d = 0.035, f = d + 0.0012;
+  const n = parseInt(v, 10) || 1, W = 1.5, y0 = 0.94, y1 = 2.02, d = 0.1;   // (10 cm deep: it takes in a plain wall panel's middle upright, which stands 9 cm out)
   add(p, 'white2', solid(shape(W, y1 - y0, 0.07, 0, (y0 + y1) / 2), d, { edge: 0.012, back: false }), [0, 0, 0]);
   p.slab('dark', -W / 2 + 0.05, W / 2 - 0.05, 1.335, 1.343, d, d + 0.002, flat(['-z', '-y', '+y', '-x', '+x']));
-  // the plate with the bed's number
+  // the plate with the bed's tag
   add(p, 'white', solid(shape(0.6, 0.36, 0.035, -0.4, 1.76), 0.012, { edge: 0.005, back: false }), [0, 0, d]);
-  segText(p, 'BED ' + n, { h: 0.105, t: 0.016, at: [-0.4, 1.8, d + 0.0135], look: HOLE });
-  segText(p, 'WARD', { h: 0.04, at: [-0.4, 1.675, d + 0.0135], look: HOLE });
-  p.slab(MEDTEAL, -0.63, -0.17, 1.626, 1.636, d + 0.012, d + 0.014, flat(['-z', '-y', '+y', '-x', '+x']));
+  segText(p, 'W-' + n, { h: 0.15, t: 0.022, at: [-0.4, 1.78, d + 0.0135], look: HOLE });
+  p.slab(MEDTEAL, -0.63, -0.17, 1.645, 1.657, d + 0.012, d + 0.014, flat(['-z', '-y', '+y', '-x', '+x']));
   // the screen of vital signs: two traces across its left (the heart's, the breathing's), three numbers down its right
   const sx = 0.4, sy = 1.74, sw = 0.5, sh = 0.32;
   add(p, 'white', solid(shape(sw + 0.1, sh + 0.1, 0.04, sx, sy), 0.02, { edge: 0.007, back: false }), [0, 0, d]);
-  screen(p, { w: sw, h: sh, rect: 'status', gain: 0.07, bezel: 0.012, depth: 0.008, oct: 0.012 }, [sx, sy, d + 0.02]);
-  const tz = d + 0.02 + 0.0052 + 0.002, tw = sw * 0.6, tx0 = -sw / 2 + 0.025, L = (pts, c) => lines(p, pts, 0.0045, c, tz, [sx, sy, 0]);
+  add(p, 'black', solid(shape(sw + 0.024, sh + 0.024, 0.02, sx, sy), 0.008, { edge: 0.004, back: false }), [0, 0, d + 0.02]);
+  add(p, DARKSCREEN, plate(shape(sw, sh, 0.012, sx, sy)), [0, 0, d + 0.0285]);
+  const tz = d + 0.0305, tw = sw * 0.6, tx0 = -sw / 2 + 0.025, L = (pts, c) => lines(p, pts, 0.0045, c, tz, [sx, sy, 0]);
   const beat = []; for (let b = 0; b < 3; b++) { const bx = tx0 + b * tw / 3; beat.push([bx, 0], [bx + 0.028, 0], [bx + 0.036, 0.008], [bx + 0.044, 0], [bx + 0.052, -0.01], [bx + 0.06, 0.042], [bx + 0.068, -0.016], [bx + 0.076, 0], [bx + 0.09, 0.01], [bx + 0.098, 0]); }
   beat.push([tx0 + tw, 0]); L(beat.map(([a, b]) => [a, b + sh * 0.2]), TRACE.green);
   const air = []; for (let k = 0; k <= 16; k++) { const u = k / 16; air.push([tx0 + u * tw, Math.sin(u * PI * 5 + n) * 0.02 - sh * 0.2]); } L(air, TRACE.cyan);
@@ -156,7 +165,8 @@ export function bedHead(p, v) {
   // the light strip under them, in a dark slot: the bay's own light, on the pillow
   p.slab('dark', -0.47, 0.47, 1.375, 1.455, d, d + 0.008, flat(['-z']));
   p.glowSlab('strip', -0.44, 0.44, 1.393, 1.437, d + 0.008, d + 0.012);
-  p.light([0, 1.38, 0.3], 1.1, [1, 0.97, 0.92], [0, -0.78, 0.62], 3.4); p.light([-0.3, 1.4, 0.2], 0.35, [1, 0.97, 0.92], [0, 0, 1], 2.6); p.light([0.3, 1.4, 0.2], 0.35, [1, 0.97, 0.92], [0, 0, 1], 2.6);
+  // (a pool of light on the pillow, the bed and the floor beside it: three lights along the strip, aimed down and out)
+  for (const x of [-0.3, 0, 0.3]) p.light([x, 1.4, d + 0.12], 1.3, [1, 0.97, 0.92], [0, -0.74, 0.67], 4.4);
   // two rows of small sockets, a few of them coloured (and a dark slot in each)
   const row = (y, xs, cols) => xs.forEach((x, i) => {
     p.slab(cols[i] ? DOT[cols[i]] : 'white', x - 0.033, x + 0.033, y - 0.048, y + 0.048, d, d + 0.01, flat(['-z']));
@@ -174,7 +184,7 @@ export function bedHead(p, v) {
 // where it hangs from its runners and fuller toward the hem, no two folds quite alike; a stiff band along its top and a
 // hem along its foot, a shade darker. Each fold's hollow is painted a little darker than its crest (the saved light is
 // too coarse to see into a fold), which is what makes it read as cloth and not as a board.
-export const CURTAIN = { track: 2.42, hem: 0.3, ceil: 3.0, top: 2.395 };
+export const CURTAIN = { track: 2.42, hem: 0.3, ceil: 3.0, top: 2.385 };
 function clothSheet(p, x0, x1, { pitch = 0.17, deep = 0.045, seed = 1 } = {}) {
   const cols = Math.max(6, Math.ceil((x1 - x0) / pitch * 6)), T = CURTAIN.top, H = CURTAIN.hem, K = PI * 2 / pitch;
   // (the rows, top to hem: [height, how full the folds are there, the paint's shade]; a band's edge is two rows at one height)
@@ -186,10 +196,13 @@ function clothSheet(p, x0, x1, { pitch = 0.17, deep = 0.045, seed = 1 } = {}) {
   const pos = [], nrm = [], uv = [], shade = [], ix = [];
   for (const face of [1, -1]) {
     const base = pos.length / 3;
-    rows.forEach(([y, full, tone]) => {
+    rows.forEach(([y, full, tone], ri) => {
       for (let c = 0; c <= cols; c++) {
-        const x = x0 + (x1 - x0) * c / cols, [w, dw] = wave(x), slope = dw * deep * full, l = Math.hypot(1, slope);
-        pos.push(x, y, w * deep * full); nrm.push(-slope / l * face, 0, face / l); uv.push(x, y);
+        // (a fold drifts a little sideways on its way down, each its own way, and the hem dips where a fold stands out:
+        // a first fresh pair of eyes saw every fold "dead straight and even from rail to hem, like a pressed sheet")
+        const x = x0 + (x1 - x0) * c / cols, down = (T - y) / (T - H), xs = x + 0.045 * Math.sin(x * 3.3 + s3) * down * down;
+        const [w, dw] = wave(xs), slope = dw * deep * full, l = Math.hypot(1, slope), dip = ri === rows.length - 1 ? 0.014 * w : 0;
+        pos.push(x, y - dip, w * deep * full); nrm.push(-slope / l * face, 0, face / l); uv.push(x, y);
         shade.push(tone * (0.87 + 0.13 * Math.max(-1, Math.min(1, w)) * face));
       }
     });
@@ -225,6 +238,8 @@ export function curtain(p, v) {
   // the cloth (where along the track it hangs: kit/ward-names.js clothSpan): drawn, in easy folds; half drawn, fuller;
   // gathered in a bunch, its folds tight and deep
   const span = clothSpan(v);
+  // (its runners on the track, a small dark block every hand's width or so along the cloth)
+  if (span) for (let n = Math.max(2, Math.round((span[1] - span[0]) / (how === 'drawn' ? 0.17 : 0.1))), i = 0; i < n; i++) { const x = span[0] + (span[1] - span[0]) * (i + 0.5) / n; p.slab('black', x - 0.011, x + 0.011, Y - 0.036, Y, -0.009, 0.009, flat(['+y'])); }
   if (span) clothSheet(p, span[0], span[1], how === 'drawn' ? { pitch: 0.17, deep: 0.045, seed } : how === 'half' ? { pitch: 0.12, deep: 0.062, seed } : { pitch: 0.085, deep: 0.075, seed });
 }
 
@@ -361,8 +376,9 @@ export function vitalsPole(p) {
   // trace: the breathing's wave, not the heartbeat mark), a row of buttons under the screen
   const q = new (p.constructor)(), W = 0.36, Hh = 0.29;
   add(q, 'white2', solid(shape(W, Hh, 0.04, 0, 0), 0.075, { edge: 0.014 }), [0, 0, -0.04]);
-  screen(q, { w: 0.25, h: 0.17, rect: 'status', gain: 0.07, bezel: 0.012, depth: 0.008, oct: 0.01 }, [-0.025, 0.03, 0.035]);
-  const tz = 0.035 + 0.0052 + 0.002;
+  add(q, 'black', solid(shape(0.274, 0.194, 0.018, -0.025, 0.03), 0.008, { edge: 0.004, back: false }), [0, 0, 0.035]);
+  add(q, DARKSCREEN, plate(shape(0.25, 0.17, 0.01, -0.025, 0.03)), [0, 0, 0.0435]);
+  const tz = 0.0455;
   segText(q, '118/76', { h: 0.036, at: [-0.05, 0.075, tz], look: TRACE.white, mat: 'glow', t: 0.006, gap: 0.008 });
   segText(q, '72', { h: 0.044, at: [-0.095, 0.012, tz], look: TRACE.green, mat: 'glow', t: 0.007 });
   segText(q, '98', { h: 0.044, at: [0.035, 0.012, tz], look: TRACE.cyan, mat: 'glow', t: 0.007 });
@@ -400,10 +416,10 @@ export function medCart(p) {
 
 // ── a round stool on five wheeled legs ──────────────────────────────────────────────────────────────────────────────
 export function medStool(p) {
-  rollBase(p, 0.24, 'gun');
+  rollBase(p, 0.24, 'rail');
   p.cyl('chrome', 0.02, 0.36, [0, 0.115 + 0.18, 0], null, 8);
   p.lathe('black', [[0.001, 0.47], [0.15, 0.47], [0.16, 0.485], [0.001, 0.485]], 12);
-  p.lathe({ c: '#2d3036', r: 0.85, m: 0, w: 0.3 }, [[0.001, 0.485], [0.165, 0.485], [0.172, 0.52], [0.14, 0.545], [0.001, 0.55]], 12);
+  p.lathe({ c: '#56616f', r: 0.85, m: 0, w: 0.3 }, [[0.001, 0.485], [0.165, 0.485], [0.172, 0.52], [0.14, 0.545], [0.001, 0.55]], 12);
 }
 
 const wardPiece = (name, variants, foot, build, more = {}) => ({ name, group: 'Medical', at: 'free', variants, foot, build, ...more });
