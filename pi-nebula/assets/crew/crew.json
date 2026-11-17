@@ -20,7 +20,7 @@
       { "id": "captainOld", "name": "Captain's coat (older)", "file": "suit_captainOld.glb", "skeleton": "m", "armsOut": 16, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "headFit": { "side": 0.01 } },
       { "id": "captainWoman", "name": "Captain's uniform (women's)", "file": "suit_captainWoman.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 0, "Run_Back": 3 }, "headFit": { "forward": 0.026 }, "shoulders": 0.02 },
       { "id": "atlantis1", "name": "Atlantis 1 (crew uniform)", "file": "suit_atlantis1.glb", "skeleton": "m", "armsOut": 13, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "collarRide": false, "headFit": { "seat": 0.022, "forward": -0.018, "size": 1.08 } },
-      { "id": "atlantis2", "name": "Atlantis 2 (crew uniform)", "file": "suit_atlantis2.glb", "skeleton": "f", "armsOut": 12, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "arms": 0.75, "shoulders": 0.035, "headFit": { "seat": 0.05, "forward": -0.04 }, "collarRide": false },
+      { "id": "atlantis2", "name": "Atlantis 2 (crew uniform)", "file": "suit_atlantis2.glb", "skeleton": "f", "armsOut": 12, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "arms": 0.75, "shoulders": 0.035, "headFit": { "seat": 0.02, "forward": -0.04 }, "collarRide": false },
       { "id": "crew1", "name": "Crew 1's suit", "file": "suit_crew1.glb", "skeleton": "m", "armsOut": 13, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "headFit": { "seat": 0.006 } }
     ],
     "head": [

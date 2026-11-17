@@ -3022,6 +3022,12 @@ function assemble(suit, others) {
 // man's height. Each is sized at its own level, THIS HEAD, EVERY OUTFIT: t6 and t8 112%, crew1 110%, t1 108%, t4 105%,
 // t2 103%; the men now stand 7.7 to 7.9 heads tall. The women's heads and t10 (a boy of about 16) as made.
 // ~/pw/space-math/PROPORTIONS_2.md)
+// (2026-11-17: the head places are the game's maker's own now, set by eye in the Crew Lab: atlantis2 every head 4 cm
+// back, to stand by the collar's back. He also raised that collar's back in Blender (its top edge 3.4 cm higher
+// behind, 0.85 cm in front), so the seats that hid the neck from behind in the old collar put the hair on the new one
+// and the chin in it: atlantis2's own seat is 50 > 20 mm, every head 3 cm less deep. From behind the neck is what he
+// tuned on the old collar (never longer); in front the chin clears the collar by a person's least and over (it sat on
+// it). His forward, and each head's own seat, forward and size on it, are as he set them. ~/pw/space-math/CREW_3B.md)
 // Done on the bind, not the points (placeHead): each outfit bone the head and hair are skinned to carries them by the
 // move at rest (its inverse bind led by it), and the part's own bones (eyes, face) are moved, turned and sized the same,
 // so every point moves alike whatever its weights, the head's neck as made (never cut, never stretched), its eyes, face
