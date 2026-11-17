@@ -445,10 +445,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     } else if (e.type === 'taken') say(`${name.replace(/^(Captain|Pilot) /, '')} got that one first`, 2.2, 'them');
     else if (e.type === 'end') endRound(e);
   }
-  // a ball the player threw: an answer at the round's level (engine.js: the level, the kinds of math, the pay)
+  // a ball the player threw: an answer at the round's level (engine.js: the level, the kinds of math, the pay: a ball
+  // pays its level's own amount, kind 'ball', as before: the game's maker kept Mathball's pay, "Fine as it is")
   function answer(right) {
     if (!level) return null;
-    const q = { order: { coins: [{ good: right }], own: { strand: level.strand, at: level.grade }, credit: [], size: 1 }, level, misses: 0, picked: new Set(), done: false };
+    const q = { order: { kind: 'ball', coins: [{ good: right }], own: { strand: level.strand, at: level.grade }, credit: [], size: 1 }, level, misses: 0, picked: new Set(), done: false };
     const r = E.answer(crew, job, q, 0, {});
     if (r && r.pay) { earned += r.pay; onCredits(); }
     onSave();

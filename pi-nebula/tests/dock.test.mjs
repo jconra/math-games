@@ -103,6 +103,7 @@ test('the squares answer: once all are braced the one coin pays, as any right fi
   setLevelAt(crew, 'dock', 'brace');
   const q = E.deal(crew, dock, { rand: seeded(3) });
   const r = E.answer(crew, dock, q, 0);
-  assert.equal(r.right, true); assert.equal(r.first, true); assert.equal(r.pay, E.payFor(q.level));
+  assert.equal(r.right, true); assert.equal(r.first, true); assert.equal(r.pay, q.worth.pay);
+  assert.ok(r.pay >= 100 && r.pay <= 150, 'an easy card for the youngest: ' + r.pay);
   assert.equal(crew.jobs.dock.n, 1);
 });

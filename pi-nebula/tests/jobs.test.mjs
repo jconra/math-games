@@ -336,31 +336,32 @@ test('an answer: the first pick counts, a right one pays, a miss pays nothing, t
   const a = E.answer(crew, galley, q, wrong);
   assert.equal(a.right, false); assert.equal(a.pay, 0); assert.equal(E.credits(crew), 0);
   const b = E.answer(crew, galley, q, right);
-  assert.equal(b.right, true); assert.equal(b.first, false); assert.equal(b.pay, E.PAY.after);
+  // (a right pick after a miss: half the card's pay, in tens)
+  assert.equal(b.right, true); assert.equal(b.first, false); assert.equal(b.pay, Math.round(q.worth.pay * E.PAY.half / 10) * 10);
   assert.equal(E.answer(crew, galley, q, right), null, 'a finished question takes no more picks');
-  // right first time, again and again: credits at the level's pay, and the level climbs
+  // right first time, again and again: credits at each card's own pay, and the level climbs
   const start = E.level(crew, galley).i;
   let paid = 0;
   for (let k = 0; k < 8; k++) {
     const q2 = E.deal(crew, galley, { rand: seeded(10 + k) });
     const r = E.answer(crew, galley, q2, q2.order.coins.findIndex((c) => c.good));
-    assert.equal(r.pay, E.payFor(q2.level)); paid += r.pay;
+    assert.equal(r.pay, q2.worth.pay); assert.equal(r.worth, q2.worth.pay); paid += r.pay;
   }
-  assert.equal(E.credits(crew), E.PAY.after + paid);
+  assert.equal(E.credits(crew), b.pay + paid);
   assert.ok(E.level(crew, galley).i > start, 'the level climbed');
   assert.equal(crew.jobs.galley.n, 9);
 });
 
-test('the pay: about 50 credits at the easiest level, about 100 in the middle, 200 at the top, in tens, for every job', () => {
-  assert.equal(E.payFor({ grade: 0 }), 50);
-  assert.equal(E.payFor({ grade: 80 }), 200);
-  assert.equal(E.payFor({ grade: 100 }), 200, 'no more above the top');
-  assert.ok(E.payFor({ grade: 30 }) >= 90 && E.payFor({ grade: 30 }) <= 110, String(E.payFor({ grade: 30 })));
+test('a level\'s own amount (Mathball\'s balls): 50 at the easiest, about 100 in the middle, 200 at the top, in tens', () => {
+  assert.equal(E.levelPay({ grade: 0 }), 50);
+  assert.equal(E.levelPay({ grade: 80 }), 200);
+  assert.equal(E.levelPay({ grade: 100 }), 200, 'no more above the top');
+  assert.ok(E.levelPay({ grade: 30 }) >= 90 && E.levelPay({ grade: 30 }) <= 110, String(E.levelPay({ grade: 30 })));
+  assert.equal(E.payFor, E.levelPay, 'its old name still works');
   for (const J of OPEN) {
     E.register(J);
-    for (const L of J.place.levels) { const p = E.payFor(L); assert.ok(p >= 50 && p <= 200 && p % 10 === 0, `${J.id}/${L.id}: ${p}`); }
+    for (const L of J.place.levels) { const p = E.levelPay(L); assert.ok(p >= 50 && p <= 200 && p % 10 === 0, `${J.id}/${L.id}: ${p}`); }
   }
-  assert.ok(E.PAY.after > 0 && E.PAY.after < E.payFor({ grade: 0 }), 'a right pick after a miss pays a little');
   assert.equal(E.SHIP, 50000);
 });
 
