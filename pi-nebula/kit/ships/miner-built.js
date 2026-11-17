@@ -48,12 +48,14 @@ export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
 const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 export const DECK = DECK0;   // the cabin's deck, metres off the hull's own ground line
-// THE SHIP STANDS 12 CM HIGHER ON LONGER LEGS (the game's maker, MR-4: "I feel like raising the ship up 12 cm on longer
-// legs makes the most sense"; a man walking onto the lift had his head in the belly beside it): every piece of the
-// Miner is placed STAND higher than the station file or a lab's layout puts it (the catalog's `raise`, kit/layout.js),
-// its legs reach STAND further down to the floor and its lift comes down STAND further. Its deck is DECK + STAND (1.94 m)
-// off the floor; the hull's own frame (DECK, the hull file's numbers) is as it was.
-export const STAND = 0.12;
+// THE SHIP STANDS 13 CM HIGHER ON LONGER LEGS (the game's maker, MR-4: "I feel like raising the ship up 12 cm on longer
+// legs makes the most sense"; a man walking onto the lift had his head in the belly beside it; then HE-11, after the
+// men's heads grew: "just move the miner up a little bit", one more centimetre so the tallest hair clears the belly at
+// every step): every piece of the Miner is placed STAND higher than the station file or a lab's layout puts it (the
+// catalog's `raise`, kit/layout.js), its legs reach STAND further down to the floor and its lift comes down STAND
+// further. Its deck is DECK + STAND (1.95 m) off the floor; the hull's own frame (DECK, the hull file's numbers) is as
+// it was.
+export const STAND = 0.13;
 const dk = C.deckOf(DECK), { bytes, at, tnorm } = C, mesh = (d) => C.decodeMesh(d, Q);
 const polyTo = (acc, pts, n, surf, mat = 'solid') => C.polyTo(acc, pts, n, surf, mat, dk);
 const boxAt = (acc, c, axes, halves, surf, skip = []) => C.boxAt(acc, c, axes, halves, surf, skip, dk);
