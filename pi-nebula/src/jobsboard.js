@@ -84,7 +84,8 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   // the board in the station: the 'station' jobs board piece (its first), and the room it hangs in
   const pc = piecesOf(W.R).find((x) => x.piece === 'jobs' && x.variant === 'station');
   const spotOf = (id) => (jobs && jobs.spots || []).find((s) => s.job.id === id);
-  const rows = STATION_JOBS.filter((r) => spotOf(r.id));
+  // (each job's name is its own, as its sign in the station says it: the jobs' data, src/jobs/*.js)
+  const rows = STATION_JOBS.filter((r) => spotOf(r.id)).map((r) => ({ ...r, name: spotOf(r.id).job.sign || r.name }));
   let picked = null, near = false, open = false;
   const api = { rows, get picked() { return picked; }, get near() { return near; }, get isOpen() { return open; }, at: null, open: () => openList(), close: () => closeList(), pick: (id) => pick(id), stop: () => stop() };
   if (!pc) { console.info('jobs board: the station has no station jobs board'); return Object.assign(api, { update() {} }); }
