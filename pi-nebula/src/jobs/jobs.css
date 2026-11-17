@@ -111,7 +111,9 @@
 @keyframes pnj-pop { 50% { transform: scale(1.06); } }
 .pnj-answers.is-wide .pnj-coin b { font-size: 19px; }
 
-.pnj-line { min-height: 1.4em; margin: 0; font-size: 15px; color: var(--dim); }
+/* (never squeezed: its min-height let a full panel shrink it to one line, and a second line of why ran on under the
+   foot's Levels and Help; now the panel scrolls instead) */
+.pnj-line { min-height: 1.4em; margin: 0; font-size: 15px; color: var(--dim); flex-shrink: 0; }
 .pnj-line.is-right { color: var(--good); }
 .pnj-line.is-wrong { color: #ffc2b8; }
 .pnj-foot { display: flex; justify-content: flex-end; margin-top: auto; }

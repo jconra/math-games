@@ -58,9 +58,9 @@
 .pnj[data-job="dock"] .pnj-top { position: sticky; top: -14px; z-index: 3; margin: -14px -16px 0; padding: 14px 16px 8px; background: rgba(15, 19, 25, 0.97); }
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
   .pnj[data-job="dock"] .pnj-top { top: -10px; margin: -10px -12px 0; padding: 10px 12px 6px; }
-  .pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 100px; }
-  .pnj[data-job="dock"] .pnj-answers.is-pics .pnj-coin { min-height: 62px; padding: 4px; }
-  .pnj[data-job="dock"] .pnj-coinpic svg { max-height: 54px; }
+  .pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 88px; }
+  .pnj[data-job="dock"] .pnj-answers.is-pics .pnj-coin { min-height: 56px; padding: 4px; }
+  .pnj[data-job="dock"] .pnj-coinpic svg { max-height: 48px; }
 }
 /* the card's top: a dot for each ring of the try, lit when built, amber the one being built */
 .dkb-rings { display: inline-flex; gap: 6px; align-items: center; }
