@@ -55,6 +55,23 @@ test('a fraction or a decimal ball goes in the fraction and decimal goals, never
   assert.match(ruleOf('fact:48').why('4/4'), /written as a fraction/);
 });
 
+test('the reasons for fraction and decimal goals are in plain words: "is more than", never "against" or "wholes"', () => {
+  // (a blind look at a round read "21 wholes against 1": lost on a nine-year-old)
+  for (const L of LADDER) for (const r of L.rules) for (const b of L.pool) {
+    const w = ruleOf(r).why(b);
+    assert.ok(!/ against |\bwholes\b/.test(w), `${r} with ${b}: ${w}`);
+  }
+  const why = (r, b) => ruleOf(r).why(b);
+  assert.equal(why('less:1.5', 21), '21 is not less than 1.5: 1.5 is less than 2.');
+  assert.equal(why('less:1.5', '2/4'), '2/4 is less than 1.5: 2/4 is 0.5, less than 1.');
+  assert.equal(why('less:1.5', 1), '1 is less than 1.5: 1.5 is 1 and 5 tenths.');
+  assert.equal(why('more:2.5', '2.7'), '2.7 is more than 2.5: 7 tenths is more than 5 tenths.');
+  assert.equal(why('more:2.5', '2.5'), '2.5 is 2.5 itself, not more than 2.5.');
+  assert.equal(why('more:1/2', '0.6'), '0.6 is more than 1/2: 1/2 is 0.5, and 6 tenths is more than 5 tenths.');
+  assert.equal(why('less:1/4', '3/4'), '3/4 is not less than 1/4: 3 quarters is more than 1 quarter.');
+  assert.equal(why('eq:1', '3/4'), '3/4 is not equal to 1: the top number, 3, is less than the bottom one, 4: less than one whole.');
+});
+
 test('every level starts its rounds with four goals that pass the ball check, drawn from all its sets', () => {
   const rand = seeded(5);
   for (const L of LADDER) {

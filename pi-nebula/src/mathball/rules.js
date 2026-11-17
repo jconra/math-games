@@ -54,7 +54,8 @@ const DECS = ['0.25', '0.3', '0.5', '0.6', '0.75', '0.8', '1.2', '1.4', '1.6', '
 const NAMES = { '1/4': 'one quarter', '3/4': 'three quarters', '1/3': 'one third', '2/3': 'two thirds' };
 const PARTS = { 2: ['half', 'halves'], 3: ['third', 'thirds'], 4: ['quarter', 'quarters'], 5: ['fifth', 'fifths'], 6: ['sixth', 'sixths'], 8: ['eighth', 'eighths'], 10: ['tenth', 'tenths'], 12: ['twelfth', 'twelfths'] };
 const examplesOf = (test, kinds, n = 6) => { const a = kinds.flat().filter((b) => test(value(b))); return list(a.slice(0, n), a.length > n); };
-// why a ball b (value v) is more than, less than or the same as x: one short reason, in the ball's own kind of number
+// why a ball b (value v) is more than, less than or the same as x: one short reason, in the ball's own kind of number,
+// in plain words a nine-year-old reads ("1.5 is less than 2", "7 tenths is more than 5 tenths")
 function against(v, b, x) {
   const X = value(x), c = cmp(v, X), word = c === 0 ? 'the same as' : c > 0 ? 'more than' : 'less than', so = c === 0 ? 'the same' : c > 0 ? 'more' : 'less';
   if (isFrac(b) && X.n * 2 === X.d) {
@@ -62,27 +63,39 @@ function against(v, b, x) {
     const [n, d] = String(b).split('/').map(Number), h = d / 2;
     return c === 0 ? `${n} is half of ${d}` : `half of ${d} is ${h}, and ${n} is ${so}`;
   }
+  if (isFrac(b) && String(x) === '1' && c !== 0) {
+    // (against one whole: the top number against the bottom one)
+    const [n, d] = String(b).split('/').map(Number);
+    return `the top number, ${n}, is ${so} than the bottom one, ${d}: ${so} than one whole`;
+  }
   if (isFrac(b) && isFrac(x)) {
     // (the same size of parts: the bottom numbers made the same)
     const [n, d] = String(b).split('/').map(Number), [p, q] = String(x).split('/').map(Number), D = lcm(d, q);
-    if (d === q && PARTS[d]) return `${n} ${PARTS[d][n === 1 ? 0 : 1]} against ${p} ${PARTS[d][p === 1 ? 0 : 1]}`;
-    if (d === q) return `${n} parts against ${p}, the parts the same size`;
+    if (d === q && PARTS[d]) return `${n} ${PARTS[d][n === 1 ? 0 : 1]} is ${word} ${p} ${PARTS[d][p === 1 ? 0 : 1]}`;
+    if (d === q) return `${n} parts is ${word} ${p} parts of the same size`;
     if (d === D) return `${x} is ${p * D / q}/${D}, and ${b} is ${so}`;
     if (q === D) return `${b} is ${n * D / d}/${D}, ${word} ${x}`;
     return `${b} is ${n * D / d}/${D} and ${x} is ${p * D / q}/${D}`;
   }
-  // (decimals: the wholes first, then the tenths, then the hundredths)
-  const asDec = (t, w) => (isDec(t) || /^\d+$/.test(String(t)) ? String(t) : decOf(w));
-  const bd = asDec(b, v), xd = asDec(x, X);
-  if (bd && xd && (isDec(b) || isDec(x))) {
-    const [bw, bf = ''] = bd.split('.'), [xw, xf = ''] = xd.split('.');
-    const why = (() => {
-      if (+bw !== +xw) return `${+bw} ${+bw === 1 ? 'whole' : 'wholes'} against ${+xw}`;
-      const L = Math.max(bf.length, xf.length), B = bf.padEnd(L, '0'), Y = xf.padEnd(L, '0'), PL = ['tenths', 'hundredths', 'thousandths'];
-      for (let i = 0; i < L; i++) if (B[i] !== Y[i]) return `${i ? 'the same tenths, then ' : ''}${B[i]} ${PL[i]} against ${Y[i]} ${PL[i]}`;
-      return 'the same';
-    })();
-    return isFrac(x) ? `${x} is ${xd} (${why})` : isFrac(b) ? `${b} is ${bd} (${why})` : why;
+  // (a decimal on either side: the whole numbers first, then the tenths, then the hundredths)
+  if (isDec(b) || isDec(x)) {
+    const asDec = (t, w) => (isDec(t) || /^\d+$/.test(String(t)) ? String(t) : decOf(w));
+    const bd = asDec(b, v), xd = asDec(x, X), bw = Math.floor(v.n / v.d), xw = Math.floor(X.n / X.d), PL = ['tenths', 'hundredths', 'thousandths'];
+    // (a fraction said as its decimal first, when it has a short one: 2/4 is 0.5)
+    const Bs = isFrac(b) && bd ? `${b} is ${bd}` : String(b), Xs = isFrac(x) && xd ? `${x} is ${xd}` : String(x);
+    const is = (s, t) => (s !== String(t) ? `${s},` : `${s} is`);
+    // the whole numbers differ, and that decides it (0.4 and 1.5: 0.4 is less than 1; 21 and 1.5: 1.5 is less than 2)
+    if (bw < xw) return `${is(Bs, b)} less than ${xw}`;
+    if (bw > xw) return `${is(Xs, x)} less than ${xw + 1}`;
+    if (!bd || !xd) return `${b} is ${word} ${x}`;
+    const bf = bd.split('.')[1] || '', xf = xd.split('.')[1] || '', L = Math.max(bf.length, xf.length);
+    const lead = isFrac(b) ? Bs + ', and ' : isFrac(x) ? Xs + ', and ' : '';
+    // (the same whole number, one of them with no tenths: the other said as its whole and its tenths: 1.5 is 1 and 5
+    // tenths)
+    if (!bf || !xf) { const [s, f] = bf ? [bd, bf] : [xd, xf]; return `${lead}${s} is ${bw} and ${+f} ${PL[f.length - 1]}`; }
+    const P = bf.padEnd(L, '0'), Q = xf.padEnd(L, '0');
+    for (let i = 0; i < L; i++) if (P[i] !== Q[i]) return `${lead}${i ? 'the same tenths, then ' : ''}${P[i]} ${PL[i]} is ${P[i] > Q[i] ? 'more' : 'less'} than ${Q[i]} ${PL[i]}`;
+    return lead ? lead.slice(0, -', and '.length) : 'the same';
   }
   if (isWhole(v) && !isWhole(X)) return `${b} is a whole number, ${word} ${x}`;
   return `${b} is ${word} ${x}`;
@@ -113,6 +126,7 @@ const KINDS = {
         : `Less than ${x}: smaller than ${x}, and not ${x} itself.`,
     list: !isWhole(value(x)) ? examplesOf((v) => cmp(v, value(x)) < 0, isDec(x) ? [DECS, FRACS] : [FRACS, DECS]) : list(range(1, Math.min(+x - 1, 10)), +x - 1 > 10),
     why: (v, b) => {
+      if (cmp(v, value(x)) === 0 && String(b) === String(x)) return `${b} is ${x} itself, not less than ${x}.`;
       if (!isWhole(v) || !isWhole(value(x))) return cmp(v, value(x)) < 0 ? `${b} is less than ${x}: ${against(v, b, x)}.` : `${b} is not less than ${x}: ${against(v, b, x)}.`;
       return cmp(v, value(x)) < 0 ? `${b} is less than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not less than ${x}.` : `${b} is more than ${x}, not less.`;
     },
@@ -124,6 +138,7 @@ const KINDS = {
         : `More than ${x}: bigger than ${x}, and not ${x} itself.`,
     list: !isWhole(value(x)) ? examplesOf((v) => cmp(v, value(x)) > 0 && v.n / v.d < 5, isDec(x) ? [DECS, FRACS] : [FRACS, DECS]) : list(range(+x + 1, +x + 8)),
     why: (v, b) => {
+      if (cmp(v, value(x)) === 0 && String(b) === String(x)) return `${b} is ${x} itself, not more than ${x}.`;
       if (!isWhole(v) || !isWhole(value(x))) return cmp(v, value(x)) > 0 ? `${b} is more than ${x}: ${against(v, b, x)}.` : `${b} is not more than ${x}: ${against(v, b, x)}.`;
       return cmp(v, value(x)) > 0 ? `${b} is more than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not more than ${x}.` : `${b} is less than ${x}, not more.`;
     },
