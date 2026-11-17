@@ -229,8 +229,10 @@ function bigScreens(g) {
   g.textBaseline = 'middle';
   // the jobs board: captains hiring, one row each (the colour of the crew, the job, the captain, the pay)
   bg(0, 512, 640, 256, '#163f5a', '#0d2638');
-  g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('JOBS BOARD', 26, 548);
-  g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CAPTAINS HIRING TODAY', 614, 550);
+  // (CAPTAINS HIRING: beside it hangs the station's own STATION JOBS board, and two boards called nearly the same read
+  // as one)
+  g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('CAPTAINS HIRING', 26, 548);
+  g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CREW FOR THEIR SHIPS', 614, 550);
   g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(22, 572, 596, 2);
   // (a job whose ship is down for now says so where its pay would be: Captain Adair's)
   const rows = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', null]];

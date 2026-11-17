@@ -8,6 +8,8 @@
 //   chase.near                    how far the camera is from the player's head (m): the game hides the body when close
 //   chase.yaw                     where the camera looks (radians, as a heading): "forward" for the keys and stick
 //   chase.eye                     the head's height over the feet it follows (m; CAM.eye times the person's size)
+//   chase.lift                    a tilt added to the player's own (radians, down): the game's, eased in and out (a
+//                                 line on the floor to follow), never touched by a drag or a snap
 //
 // NEVER THROUGH A WALL: each frame five lines go from the player's head toward where the camera wants to be (the
 // middle one, one either side and one above and below); the camera stops short of the first wall any of them meets,
@@ -30,7 +32,8 @@ const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeChase(camera, walls) {
-  const C = { yaw: 0, pitch: CAM.pitch, zoom: 1, reach: CAM.dist, idle: 99, near: CAM.dist, eye: CAM.eye };
+  const C = { yaw: 0, pitch: CAM.pitch, lift: 0, zoom: 1, reach: CAM.dist, idle: 99, near: CAM.dist, eye: CAM.eye };
+  const tilt = () => Math.min(CAM.pitchMax, C.pitch + C.lift);
   const focus = new THREE.Vector3(), dir = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(), o = new THREE.Vector3();
 
   function dirOf(yaw, pitch) { return dir.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)).normalize(); }
@@ -47,7 +50,7 @@ export function makeChase(camera, walls) {
     return t;
   }
   function place() {
-    camera.position.copy(focus).addScaledVector(dirOf(C.yaw, C.pitch), C.reach);
+    camera.position.copy(focus).addScaledVector(dirOf(C.yaw, tilt()), C.reach);
     camera.lookAt(focus);
     C.near = C.reach;
   }
@@ -58,11 +61,11 @@ export function makeChase(camera, walls) {
     // straight behind, or the nearest clear way round to it
     let best = heading, bestT = -1;
     for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.1, -2.1, Math.PI]) {
-      dirOf(heading + off, C.pitch); const t = clearFor(CAM.dist);
+      dirOf(heading + off, tilt()); const t = clearFor(CAM.dist);
       if (t > bestT + 0.25) { best = heading + off; bestT = t; }
       if (t >= CAM.dist - 0.01) break;
     }
-    C.yaw = wrap(best); dirOf(C.yaw, C.pitch);
+    C.yaw = wrap(best); dirOf(C.yaw, tilt());
     C.reach = Math.max(0.15, Math.min(CAM.dist, clearFor(CAM.dist) - CAM.margin));
     place();
   };
@@ -83,7 +86,7 @@ export function makeChase(camera, walls) {
       C.yaw = wrap(C.yaw + Math.sign(diff) * Math.min(Math.abs(diff), rate));
     }
     const want = CAM.dist * C.zoom;
-    dirOf(C.yaw, C.pitch);
+    dirOf(C.yaw, tilt());
     const t = Math.max(0.15, Math.min(want, clearFor(want + CAM.margin) - CAM.margin));
     C.reach = t < C.reach ? t : damp(C.reach, t, 2.5, dt);
     place();

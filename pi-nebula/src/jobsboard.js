@@ -29,11 +29,11 @@ export const STATION_JOBS = [
 export const BOARD = { near: 6.5, facing: 0.25 };
 
 const CSS = `
-.pjb-prompt, .pjb { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
+.pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
   --oct: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
   font: 400 16px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: var(--ink); -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
-.pjb-prompt *, .pjb * { box-sizing: border-box; }
-.pjb-prompt button, .pjb button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.pjb-prompt *, .pjb *, .pjb-chip * { box-sizing: border-box; }
+.pjb-prompt button, .pjb button, .pjb-chip button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 .pjb-prompt { position: fixed; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 12px;
   padding: 8px 8px 8px 18px; background: rgba(15, 19, 25, 0.9); box-shadow: inset 0 0 0 1.5px rgba(89, 195, 255, 0.55); clip-path: var(--oct); max-width: calc(100vw - 32px); }
 .pjb-prompt[hidden], .pjb[hidden] { display: none; }
@@ -59,11 +59,18 @@ const CSS = `
 .pjb-row small { font-size: 14px; color: #cfeaff; }
 .pjb-row em { font-style: normal; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffe3a0; text-align: right; }
 .pjb-row.is-on { background: rgba(89, 195, 255, 0.32) !important; box-shadow: inset 0 0 0 2px var(--cyan); }
-.pjb-row.is-on em::after { content: ' \\25B8 line on'; color: #8ff0ff; }
+.pjb-row.is-on em::before { content: '\\25B8 '; color: #fff; }
 .pjb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: #9fd8ff; }
 .pjb-stop { height: 36px; padding: 0 14px; font-size: 13px !important; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #cfeaff !important; background: rgba(255, 255, 255, 0.07) !important; clip-path: var(--oct); --cut: 8px; }
 .pjb-stop[hidden] { display: none; }
-@media (max-width: 640px) { .pjb { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 12px 12px 10px; } .pjb-head b { font-size: 20px; } .pjb-row { min-height: 52px; } .pjb-row small { font-size: 13px; } }
+@media (max-width: 640px) { .pjb { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 12px 12px 10px; } .pjb-head b { font-size: 20px; } .pjb-row { min-height: 52px; } .pjb-row small { font-size: 13px; }
+  .pjb-prompt { width: calc(100vw - 24px); } .pjb-prompt .pjb-pw { flex: 1; } }
+.pjb-chip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 14; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px;
+  background: rgba(15, 19, 25, 0.88); box-shadow: inset 0 0 0 1.5px var(--chip, #59c3ff); clip-path: var(--oct); --cut: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.pjb-chip[hidden] { display: none; }
+.pjb-chip i { width: 10px; height: 10px; background: var(--chip, #59c3ff); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.pjb-chip button { width: 30px; height: 30px; font-size: 18px !important; line-height: 1; color: #cfeaff !important; background: rgba(255, 255, 255, 0.07) !important; clip-path: var(--oct); --cut: 7px; }
+@media (max-width: 640px) { .pjb-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); } }
 `;
 
 export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = () => false }) {
@@ -93,12 +100,12 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(30, TOP - 2, CW - 60, 3);
     rows.forEach((r, i) => {
       const y = TOP + 6 + i * ROW, on = picked === r.id;
-      g.fillStyle = on ? 'rgba(89,195,255,0.38)' : i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(30, y, CW - 60, ROW - 4);
-      if (on) { g.strokeStyle = '#8ff0ff'; g.lineWidth = 4; g.strokeRect(32, y + 2, CW - 64, ROW - 8); }
-      g.fillStyle = r.colour; g.fillRect(38, y + 6, 12, ROW - 16);
+      g.fillStyle = on ? 'rgba(89,195,255,0.34)' : i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(30, y, CW - 60, ROW - 4);
+      if (on) { g.fillStyle = '#ffffff'; g.fillRect(30, y, 5, ROW - 4); g.fillRect(CW - 35, y, 5, ROW - 4); }
+      g.fillStyle = r.colour; g.fillRect(42, y + 6, 12, ROW - 16);
       g.textAlign = 'left'; g.fillStyle = r.colour; g.font = F(26); g.fillText(r.name.toUpperCase(), 64, y + ROW * 0.31);
-      g.fillStyle = '#cfeaff'; g.font = F(19, false); g.fillText(r.line, 64, y + ROW * 0.73);
-      g.textAlign = 'right'; g.fillStyle = on ? '#8ff0ff' : '#ffe3a0'; g.font = F(23); g.fillText(on ? '\u25B8 FOLLOW THE LINE' : r.place.toUpperCase(), CW - 44, y + ROW * 0.5);
+      g.fillStyle = '#cfeaff'; g.font = F(21, false); g.fillText(r.line, 64, y + ROW * 0.74);
+      g.textAlign = 'right'; g.fillStyle = on ? '#ffffff' : '#ffe3a0'; g.font = F(23); g.fillText((on ? '\u25B8 ' : '') + r.place.toUpperCase(), CW - 48, y + ROW * 0.5);
     });
     tex.needsUpdate = true;
   }
@@ -146,6 +153,12 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     + '<div class="pjb-foot"><span>Pick a job: a glowing line on the floor leads you to it.</span><button type="button" class="pjb-stop" hidden>No line</button></div>';
   document.body.appendChild(panel);
   const list = panel.querySelector('.pjb-rows');
+  // (following a line: a small chip at the top says to which job, in its colour, with an X to take the line away)
+  const chip = document.createElement('div');
+  chip.className = 'pjb-chip'; chip.hidden = true;
+  chip.innerHTML = '<i></i><span></span><button type="button" aria-label="Stop following the line">&times;</button>';
+  document.body.appendChild(chip);
+  chip.querySelector('button').addEventListener('click', () => stop());
   rows.forEach((r, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pjb-row'; b.dataset.job = r.id;
     b.innerHTML = `<i style="background:${r.colour}"></i><span><b style="color:${r.colour}">${r.name}</b><small>${r.line}</small></span><em>${r.place}<kbd>${i + 1}</kbd></em>`;
@@ -157,6 +170,8 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   function mark() {
     for (const b of list.children) b.classList.toggle('is-on', b.dataset.job === picked);
     panel.querySelector('.pjb-stop').hidden = !picked;
+    const r = rows.find((x) => x.id === picked);
+    if (r) { chip.querySelector('span').textContent = r.name; chip.style.setProperty('--chip', r.colour); }
     draw();
   }
   let wasInput = true;
@@ -177,7 +192,7 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     const s = spotOf(id); if (!s) return false;
     if (picked === id) { stop(); return true; }
     picked = id; mark();
-    guide.to(s.pos, { near: (s.job.near ?? 1.7) - 0.1, label: id }, player ? player.pos : null);
+    guide.to(s.pos, { near: (s.job.near ?? 1.7) - 0.1, label: id, colour: (rows.find((r) => r.id === id) || {}).colour }, player ? player.pos : null);
     return true;
   }
   function stop() { picked = null; guide.clear(); mark(); }
@@ -195,9 +210,10 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   const _d = new THREE.Vector3();
   api.update = (dt, P, isPlaying = true) => {
     playing = isPlaying && !!P; player = P;
-    if (!playing) { if (open) closeList(); prompt.hidden = true; near = false; return; }
+    if (!playing) { if (open) closeList(); prompt.hidden = true; chip.hidden = true; near = false; return; }
     // (the line done with: the board's pick let go when the line is gone, as they got there)
     if (picked && !guide.active) { picked = null; mark(); }
+    chip.hidden = !picked || open;
     // near the board, looking its way, no job's own prompt up, no panel open: the prompt
     const dx = under.x - P.pos.x, dz = under.z - P.pos.z, d = Math.hypot(dx, dz);
     W.camera.getWorldDirection(_d); _d.y = 0; _d.normalize();

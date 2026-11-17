@@ -143,7 +143,8 @@ async function boot() {
   const soundSw = soundButton(document.getElementById('hud-root'), sound);
   // (a job shift that paid becomes the station's news: the people may talk about it, news.js 'player')
   const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab', craneFree: 'crane cab', arena: 'Mathball arena', dock: 'dock' };
-  let shift = null;
+  let shift = null, turnCam = null;
+  const CAM_LIFT = 0.1;     // (radians: about 6 degrees more, while a line is followed)
 
   // ── the clock ─────────────────────────────────────────────────────────────────────────────────────────────────
   let now = 0;
@@ -157,6 +158,13 @@ async function boot() {
       board.update(dt, P, GAME.mode === 'play' && !atJob);
       guide.update(dt, GAME.mode === 'play' && !atJob ? P : null);
       if (atJob && guide.active) guide.clear();      // (at a job: there, the line done with)
+      // (a job just picked on the board: the camera turned, over most of a second, to look along the way the line sets
+      // off, so the line is in view and "forward" follows it)
+      if (guide.turnTo != null) { turnCam = { to: guide.turnTo, t: 0 }; guide.turnTo = null; }
+      if (turnCam) { turnCam.t += dt; const d = Math.atan2(Math.sin(turnCam.to - chase.yaw), Math.cos(turnCam.to - chase.yaw)); chase.yaw += d * Math.min(1, dt * 5); chase.idle = 0; if (turnCam.t > 0.9 || Math.abs(d) < 0.01) turnCam = null; }
+      // (following a line: the camera a little higher, looking down a little more, so the line ahead shows over the
+      // player's head rather than running up behind their back; eased off again as the line ends)
+      chase.lift += ((guide.active ? CAM_LIFT : 0) - chase.lift) * Math.min(1, dt * 2);
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
       const move = ctl ? ctl.move : atJob ? null : auto.way ? autoMove() : input.move;
       P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? people.list : [], clip: ctl && ctl.clip, clipSpeed: ctl && ctl.clipSpeed });
