@@ -448,7 +448,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   function showGoals(on) {
     goalsShown = on; goalsEl.hidden = !on; if (!on) { aimUI.button = null; return; }
-    goalsEl.innerHTML = goalOrder().map((i) => { const R = ruleOf(G.goals[i].rule), w = R.sign.length === 2 ? `<small>${esc(R.sign[0])}</small><b>${esc(R.sign[1])}</b>` : `<b class="is-words">${esc(R.sign[0])}</b>`; return `<button type="button" data-goal="${i}" style="--c:${GOAL_CSS[GOALS[i].colour]}" aria-label="Throw at the ${GOALS[i].colour} goal: ${esc(R.say)}">${w}</button>`; }).join('');
+    goalsEl.innerHTML = goalOrder().map((i) => { const R = ruleOf(G.goals[i].rule), w = R.sign.length === 2 ? `<small>${esc(R.sign[0])}</small><b${R.sign[1].length > 5 ? ' class="is-long"' : ''}>${esc(R.sign[1])}</b>` : `<b class="is-words">${esc(R.sign[0])}</b>`; return `<button type="button" data-goal="${i}" style="--c:${GOAL_CSS[GOALS[i].colour]}" aria-label="Throw at the ${GOALS[i].colour} goal: ${esc(R.say)}">${w}</button>`; }).join('');
   }
   // (the other player's goals, on a small line of their own under the score, for a few seconds)
   let theirsUntil = 0;

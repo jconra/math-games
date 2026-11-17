@@ -106,8 +106,8 @@ test('every rule change keeps the balls on the court passing (or swaps out the f
         const C = crowded(ch.rules, L.pool); if (C.broad.length || C.alike.length) crowd++;
       }
     }
-    assert.ok(safe / tries > 0.6, `${L.key}: only ${safe} of ${tries} changes keep every ball`);
-    assert.ok(kept / tries < 0.08, `${L.key}: ${kept} of ${tries} changes had to wait for the ball in a hand`);
+    assert.ok(safe / (tries - kept) > 0.6, `${L.key}: only ${safe} of ${tries - kept} changes keep every ball`);
+    assert.ok(kept / tries < 0.1, `${L.key}: ${kept} of ${tries} changes had to wait for the ball in a hand`);
     assert.ok(crowd / tries < 0.06, `${L.key}: ${crowd} of ${tries} changes made a catch-all goal or two alike`);
   }
 });

@@ -52,6 +52,8 @@
 .mbl-goals button small { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: color-mix(in srgb, var(--c) 70%, white); }
 .mbl-goals button b { font-size: 24px; font-weight: 800; color: color-mix(in srgb, var(--c) 55%, white); }
 .mbl-goals button b.is-words { font-size: 17px; }
+/* (a longer number on a button, "1/2 and 1": one line, a size smaller) */
+.mbl-goals button b.is-long { font-size: 18px; white-space: nowrap; }
 .mbl-goals button:hover { background: color-mix(in srgb, var(--c) 22%, rgba(10, 12, 16, 0.9)) !important; }
 .mbl-hint { min-height: 1.4em; margin: 0; padding: 4px 14px; font-size: 16px; font-weight: 600; text-align: center; text-shadow: 0 1px 3px #000, 0 0 8px #000; }
 .mbl-hint:empty { visibility: hidden; }
@@ -128,6 +130,7 @@
   .mbl-goals button small { font-size: 11px; }
   .mbl-goals button b { font-size: 20px; }
   .mbl-goals button b.is-words { font-size: 14px; }
+  .mbl-goals button b.is-long { font-size: 14px; }
   /* (the words go up under the score: the bottom is the thumb stick's and the goal buttons') */
   .mbl-bottom { top: 142px; bottom: auto; left: max(10px, env(safe-area-inset-left)); transform: none; width: calc(100% - 20px); align-items: flex-start; }
   .mbl-hint { text-align: left; padding: 2px 4px; }

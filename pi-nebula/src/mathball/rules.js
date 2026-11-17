@@ -137,7 +137,7 @@ const KINDS = {
     why: (v, b) => {
       const X = value(x);
       if (cmp(v, X) === 0) {
-        if (String(b) === String(x)) return `${b} is ${x}.`;
+        if (String(b) === String(x)) return `${b} is equal to ${x}.`;
         if (String(x) === '1' && isFrac(b)) return `${b} is equal to 1: the top and the bottom are the same.`;
         if (isFrac(b) && X.n * 2 === X.d) return `${b} is equal to 1/2: ${against(v, b, x)}.`;
         if (isFrac(b)) { const [n, d] = String(b).split('/').map(Number), k = n / X.n; return `${b} is equal to ${x}: ${n} ÷ ${k} = ${X.n} and ${d} ÷ ${k} = ${X.d}.`; }
@@ -320,6 +320,9 @@ export function pickChange(rules, at, pool, balls, { held = [], rand = Math.rand
   // of one of its factors, or the factors of a number it divides. A fraction or a decimal: more or less than a half, a
   // whole number or a round half)
   let best = tryAll(own);
+  // (a fraction or a decimal in a hand that no rule of the level could keep: the change waits for the throw, rather
+  // than a rule from outside the level's sets)
+  if (!best && wait && held.some((b) => /[/.]/.test(String(b)))) return null;
   if (!best && held.length) {
     const V = held.map(value), vs = V.map((v) => v.n / v.d), lo = Math.min(...vs), hi = Math.max(...vs), gen = [];
     if (V.every((v) => v.d === 1)) {
