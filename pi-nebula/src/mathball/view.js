@@ -232,8 +232,10 @@ function ballTextures(num, colour) {
   const g = cv.getContext('2d'), e = em.getContext('2d'), text = String(num);
   g.fillStyle = colour; g.fillRect(0, 0, S * 2, S); e.fillStyle = '#000'; e.fillRect(0, 0, S * 2, S);
   const font = (px) => `800 ${Math.round(px)}px "DejaVu Sans", "Segoe UI", system-ui, sans-serif`;
-  // (a FRACTION stacked, as it is written in a book: the top number over a line over the bottom one, each as big as
-  // the face allows; a part that reads as another upside down has its own line under it)
+  // (a FRACTION stacked, as it is written in a book: the top number over a line over the bottom one, a little wider
+  // than tall, the three kept close to the middle of the face: a ball looked at from higher or lower than when it came
+  // to rest still shows both numbers, never only the top one, which read as a whole number; a part that reads as
+  // another upside down has its own line under it)
   const frac = /^(\d+)\/(\d+)$/.exec(text);
   // digits as tall as they can be: one digit 0.62 of the face, narrower for two and three (as a pool ball's); a decimal
   // squeezed to fit across the face
@@ -243,16 +245,18 @@ function ballTextures(num, colour) {
     for (const k of [0, 1]) {
       ctx.save(); ctx.translate(S * (k + 0.5), S * 0.5);
       if (frac) {
-        const ph = S * 0.36, parts = [frac[1], frac[2]];
+        // (ph: the numbers' size; off: each number's middle from the line, 28 degrees round the ball; a whole number's
+        // digits reach 40 degrees from the middle, the fraction's 48)
+        const ph = S * 0.3, off = S * 0.158, parts = [frac[1], frac[2]];
         ctx.font = font(ph);
-        const ws = parts.map((p) => ctx.measureText(p).width), sq = Math.min(1, (S * 0.56) / Math.max(...ws)), bw = Math.max(...ws) * sq + S * 0.08;
+        const ws = parts.map((p) => ctx.measureText(p).width), sq = Math.min(1.18, (S * 0.56) / Math.max(...ws)), bw = Math.max(...ws) * sq + S * 0.06;
         parts.forEach((p, i) => {
-          const y = (i ? 1 : -1) * ph * 0.62;
+          const y = (i ? 1 : -1) * off;
           ctx.save(); ctx.translate(0, y + ph * 0.04); ctx.scale(sq, 1); ctx.fillText(p, 0, 0);
           if (needsBar(p)) { const w = ctx.measureText(p).width; ctx.fillRect(-w / 2, ph * 0.43, w, ph * 0.07); }
           ctx.restore();
         });
-        ctx.fillRect(-bw / 2, -S * 0.022, bw, S * 0.044);
+        ctx.fillRect(-bw / 2, -S * 0.018, bw, S * 0.036);
       } else {
         ctx.font = font(h);
         const w = ctx.measureText(text).width, squeeze = text.includes('.') ? Math.min(1, (S * 0.8) / w) : text.length >= 3 ? 0.62 : text.length === 2 ? 0.84 : 1;
