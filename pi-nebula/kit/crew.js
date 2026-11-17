@@ -718,8 +718,11 @@ function calmStand(clips, scene, C = CALM, moves = null, rig = null) {
 //     turned as the clip has it.
 // The thighs, the forearms and the hands are taken from the outfit and the hand part as made, each point riding the bone
 // that carries most of it. lib.seat and lib.drive (as SEAT, DRIVE) try other values, set before an outfit's clips are
-// first fitted.
-export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.12, along: 0.45, side: 0.05 };
+// first fitted. The lift is SEAT.most at most (25 cm: the women's clip hangs the hand down from the wrist, and moved onto
+// a thick thigh (the dock worker's, the women's spacesuit's, security's, the cook's apron) its fingers went 12 to 14 cm
+// down into it; at 12 cm, the first try, those hands stayed inside, checked on the person as drawn: rigs/crew-3/
+// sitcheck.js).
+export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05 };
 export const DRIVE = { clip: 'Drive', up: 0.15, apart: 0.34, forward: 0.08 };
 const SEAT_LEG = /^UpperLeg[LR]$/, SEAT_ARM = /^(LowerArm)([LR])$/, SEAT_HAND = /^(Wrist|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)([LR])$/;
 // (a part's points, each in the frame of the bone that carries most of it, at rest: { bone names, points (x, y, z each) };
