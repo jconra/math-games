@@ -253,10 +253,10 @@ export function craneLink({ crane, W, walls, onFree = null }) {
       }
       // (a finding card's four marks, lettered)
       if (/^find/.test(key) && card.marks) for (const m of card.marks) {
-        const mx = gsx(m.at[0]), my = gsy(m.at[1]);
-        g.fillStyle = 'rgba(8, 14, 20, 0.85)'; g.beginPath(); g.arc(mx, my, 13, 0, Math.PI * 2); g.fill();
+        const mx = gsx(m.at[0]), my = gsy(m.at[1]), mr = Math.max(9, Math.min(13, top.k * 1.2));
+        g.fillStyle = 'rgba(8, 14, 20, 0.85)'; g.beginPath(); g.arc(mx, my, mr, 0, Math.PI * 2); g.fill();
         g.strokeStyle = '#9fe8ff'; g.lineWidth = 2.5; g.stroke();
-        g.font = '800 15px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#eaf8ff'; g.fillText(m.letter, mx, my + 1);
+        g.font = `800 ${Math.round(mr * 1.15)}px "Segoe UI", system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#eaf8ff'; g.fillText(m.letter, mx, my + 1);
       }
       const P2 = (q) => `(${num(q[0])}, ${num(q[1])})`;
       if (/^(where)/.test(key)) tag(g, cx + 14, cy - 14, P2(card.from), '#ffb35c');

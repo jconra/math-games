@@ -368,6 +368,12 @@ const facts = (s, extra = {}) => ({ kind: s ? s.kind : null, step: s && !s.made 
 const gridPic = (s, live, opts) => ({ kind: 'grid', size: sizeFor(live), crane: s.from, target: s.aim || s.to, ...opts });
 // a reading as a count on from the grid's numbered line under it: 23 is 20 and 3 more (no sum for 3, or for 20)
 const countOn = (v, say) => { const tens = Math.floor(v / 10) * 10, ones = r2(v - tens); return tens && ones ? { op: 'add', a: tens, b: ones, say } : null; };
+// two sums that do not hang together (x's and y's): Work it out would take a number of the second that happens to be
+// the first one's answer for one carried from it, so they go the other way round, or the first alone; the help's steps
+// say both, as they are
+const ans = (q) => (q.op === 'add' ? q.a + q.b : q.a - q.b);
+const apart = (list) => { const L = list.filter(Boolean); if (L.length < 2) return L[0] || null; const ok = (a) => !(Math.abs(ans(a[0]) - a[1].a) < 1e-9 || Math.abs(ans(a[0]) - a[1].b) < 1e-9); return ok(L) ? L : ok([L[1], L[0]]) ? [L[1], L[0]] : L[0]; };
+const stepWords = (list) => list.filter(Boolean).map((q) => `${q.say}: ${t2(q.a)} ${q.op === 'add' ? '+' : '−'} ${t2(q.b)}`);
 // a point as a button: x and y in one number (x × 100 + y), the pair big
 const P = (a, b) => ({ v: a * 100 + b, big: `(${a}, ${b})`, small: '', label: `x ${a}, y ${b}` });
 const okPair = (a, b, size) => a >= 0 && b >= 0 && a <= size[0] && b <= size[1];
@@ -441,8 +447,10 @@ export const MAKERS = {
       for (let k = near.length - 1; k > 0; k--) { const j = Math.floor(rand() * (k + 1)); [near[k], near[j]] = [near[j], near[k]]; }
       const cands = t.chance(0.7) ? [[y, x], ...near] : near;
       const marks = [[x, y]];
-      for (const c of cands) { if (marks.length >= 4) break; if (!okPair(c[0], c[1], size) || c[0] < 1 || c[1] < 1) continue; if (marks.some((m) => Math.hypot(m[0] - c[0], m[1] - c[1]) < 2.9)) continue; marks.push(c); }
-      while (marks.length < 4) { const c = [t.int(1, size[0] - 1), t.int(1, size[1] - 1)]; if (!marks.some((m) => Math.hypot(m[0] - c[0], m[1] - c[1]) < 2.9)) marks.push(c); }
+      // (each mark clear of the others and of the grid's edges, where the numbers and the labels are)
+      const fits = (c) => c[0] >= 1 && c[1] >= 2 && c[0] <= size[0] - 1 && c[1] <= size[1] - 2 && !marks.some((m) => Math.hypot(m[0] - c[0], m[1] - c[1]) < 3.4);
+      for (const c of cands) { if (marks.length >= 4) break; if (fits(c)) marks.push(c); }
+      for (let n = 0; marks.length < 4 && n < 400; n++) { const c = [t.int(1, size[0] - 1), t.int(2, size[1] - 2)]; if (fits(c)) marks.push(c); }
       // (lettered A to D from the left of the grid, then up: the buttons in that order too)
       const order = marks.map((m, k) => ({ m, k })).sort((a, b) => a.m[0] - b.m[0] || a.m[1] - b.m[1]);
       const LET = ['A', 'B', 'C', 'D'], lettered = order.map((o, n) => ({ letter: LET[n], at: o.m, right: o.k === 0 }));
@@ -473,8 +481,8 @@ export const MAKERS = {
         key: 'pair', story: `${targetWords(s)} is ${s.what === 'drop' ? 'where the canister goes' : 'the next one to move'}. On the grid, x goes across the hangar, along the bottom, and y goes up the screen, toward the bay door.`, ask: 'What are its coordinates (x, y)?',
         right: P(x, y), slips,
         rightWhy: `(${x}, ${y}): ${x} across, ${y} up`,
-        ...(steps.length ? { sum: steps.length > 1 ? steps : steps[0] } : {}),
-        help: { title: 'Coordinates', svg: picture(gridPic(s, live, { numbers: true, guide: 'both' })), line: 'Across first, then up: read x along the bottom, then y up the side.' },
+        ...(steps.length ? { sum: apart(steps) } : {}),
+        help: { title: 'Coordinates', svg: picture(gridPic(s, live, { numbers: true, guide: 'both' })), line: 'Across first, then up: read x along the bottom, then y up the side.', ...(steps.length ? { steps: stepWords(steps) } : {}) },
         own: { strand: 'number', at: 18 }, facts: facts(s, { to: [x, y], axis: 'both', mode: 'pair' }),
       }, rand);
     },
@@ -580,8 +588,8 @@ export const MAKERS = {
         key: 'where', story: `The crane is at (${sx}, ${sy}). ${it} is ${moves} from there.`, ask: 'What are its coordinates (x, y)?',
         right: P(tx, ty), slips,
         rightWhy: `(${sx} ${dx >= 0 ? '+' : '−'} ${Math.abs(dx)}, ${sy} ${dy >= 0 ? '+' : '−'} ${Math.abs(dy)}) = (${tx}, ${ty})`,
-        sum: sum.length > 1 ? sum : sum[0],
-        help: { title: 'Where it will be', svg: picture({ kind: 'grid', size, crane: [sx, sy], arrows: [dx, dy], ask: '?', numbers: true }), line: 'x first: to the right is adding, to the left is taking away. Then y: up the grid is adding, down is taking away.' },
+        sum: apart(sum),
+        help: { title: 'Where it will be', svg: picture({ kind: 'grid', size, crane: [sx, sy], arrows: [dx, dy], ask: '?', numbers: true }), line: 'x first: to the right is adding, to the left is taking away. Then y: up the grid is adding, down is taking away.', steps: stepWords(sum) },
         own: { strand: 'add', at: 29 }, credit: [{ strand: 'sub', at: 24, weight: 0.5 }], facts: facts(s, { to: [tx, ty], axis: 'both', mode: 'pair', hide: true }),
       }, rand);
     },
@@ -598,8 +606,8 @@ export const MAKERS = {
         key: 'both', story: `The crane is at (${sx}, ${sy}). ${targetWords(s, true)} is at (${tx}, ${ty}).`, ask: 'How far must the crane go along x, and how far along y?',
         right: B(dx, dy), slips,
         rightWhy: `${Math.max(tx, sx)} − ${Math.min(tx, sx)} = ${dx} along x; ${Math.max(ty, sy)} − ${Math.min(ty, sy)} = ${dy} along y`,
-        sum: [{ op: 'sub', a: Math.max(tx, sx), b: Math.min(tx, sx), say: 'Along x' }, { op: 'sub', a: Math.max(ty, sy), b: Math.min(ty, sy), say: 'Along y' }],
-        help: { title: 'Along x, along y', svg: picture({ kind: 'grid', size: sizeFor(live), crane: [sx, sy], target: [tx, ty], path: true, numbers: true }), line: 'Each way on its own: the bigger x take away the smaller, then the bigger y take away the smaller.' },
+        sum: apart([{ op: 'sub', a: Math.max(tx, sx), b: Math.min(tx, sx), say: 'Along x' }, { op: 'sub', a: Math.max(ty, sy), b: Math.min(ty, sy), say: 'Along y' }]),
+        help: { title: 'Along x, along y', svg: picture({ kind: 'grid', size: sizeFor(live), crane: [sx, sy], target: [tx, ty], path: true, numbers: true }), line: 'Each way on its own: the bigger x take away the smaller, then the bigger y take away the smaller.', steps: stepWords([{ op: 'sub', a: Math.max(tx, sx), b: Math.min(tx, sx), say: 'Along x' }, { op: 'sub', a: Math.max(ty, sy), b: Math.min(ty, sy), say: 'Along y' }]) },
         own: { strand: 'sub', at: 32 }, facts: facts(s, { axis: 'both', mode: 'both', d: [dx, dy] }),
       }, rand);
     },
