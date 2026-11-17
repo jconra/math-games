@@ -143,7 +143,9 @@ export function crewModule() {
   // the bridge has not reached it)
   p.add('solid', sweep(circle(0.11, 10), bend([0, DOCK.c, z], DOCK.R + 0.06, [1, 0, 0], [0, 1, 0], 0, 2 * PI, 64), { closed: true }), 'black');
   p.lathe('gun', [[0.001, z - 0.02], [DOCK.R - 0.1, z - 0.02], [DOCK.R + 0.2, z + 0.25], [DOCK.R + 0.2, z + 0.55], [0.001, z + 0.55]], 48, [0, DOCK.c, 0], [PI / 2, 0, 0]);
-  for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * 360, q = at(a, z - 0.08, DOCK.R + 0.06); lights.add('glow', put(bevelBox([0.09, 0.09, 0.03], [0, 0, 0], { r: 0.01 }), q), [1, 1, 1]); }
+  // (on the ring's face toward the bridge, in front of its rod (0.11 thick round), and big enough to read from the far
+  // end of the bridge: the end of the try turns them green)
+  for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * 360, q = at(a, z - 0.15, DOCK.R + 0.06); lights.add('glow', put(bevelBox([0.17, 0.17, 0.04], [0, 0, 0], { r: 0.015 }), q), [1, 1, 1]); }
   // the drum: a cockpit-and-cabin section lying along the bridge's line, a darker band, a row of lit windows round it
   const D = [[0.001, 0], [1.6, 0], [2.25, 0.3], [2.5, 0.75], [2.5, 4.3], [2.3, 4.9], [1.2, 5.25], [0.001, 5.3]].map(([r, y]) => [r, y + z + 0.55]);
   p.lathe('white', D, 56, [0, DOCK.c, 0], [PI / 2, 0, 0]);

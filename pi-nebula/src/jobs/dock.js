@@ -178,27 +178,36 @@ function cornerPicture(a, flip, { other = '?', otherFill = ASK } = {}) {
   const x0 = (W - w) / 2, y1 = 138, P = flip ? [[x0 + w, y1], [x0, y1], [x0, y1 - h], [x0 + w, y1 - h]] : [[x0, y1], [x0 + w, y1], [x0 + w, y1 - h], [x0, y1 - h]];
   let s = frame(P) + seg(P[0], P[2], BRACE, 6);
   s += arc(P[0], P[1], P[2], 42) + arc(P[0], P[2], P[3], 30, 'rgba(181,82,58,.22)');
-  s += angleLabel(P[0], P[1], P[2], 60, `${a}°`, { size: 16 }) + angleLabel(P[0], P[2], P[3], 48, other, { size: 18, fill: otherFill });
+  // (the given part's label along its middle; a narrow panel has no room for it there, so beside the panel's far side)
+  let g = angleAt(P[0], P[1], P[2], 60);
+  const far = flip ? x0 : x0 + w;
+  if (Math.abs(g[0] - far) < 24) g = [far + (flip ? -26 : 26), g[1]];
+  s += text(g[0], g[1], `${a}°`, { size: 16 }) + angleLabel(P[0], P[2], P[3], 48, other, { size: 18, fill: otherFill });
   return svg(156, s);
 }
 // an angle's label along its middle, out from V: further out for a narrow angle, so it clears the struts either side
-function angleLabel(V, A, B, r, s, o) {
+function angleAt(V, A, B, r) {
   const a0 = Math.atan2(A[1] - V[1], A[0] - V[0]), a1 = Math.atan2(B[1] - V[1], B[0] - V[0]);
   let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
   const rl = Math.min(105, Math.max(r, r * 0.42 / Math.max(0.08, Math.sin(Math.abs(d) / 2)))), m = a0 + d / 2;
-  return text(V[0] + Math.cos(m) * rl, V[1] + Math.sin(m) * rl + 5, s, o);
+  return [V[0] + Math.cos(m) * rl, V[1] + Math.sin(m) * rl + 5];
 }
+function angleLabel(V, A, B, r, s, o) { const p = angleAt(V, A, B, r); return text(p[0], p[1], s, o); }
 
 // ── 4. a triangle pane's glass ─────────────────────────────────────────────────────────────────────────────────
 function areaPicture(b, h, at, { box = false } = {}) {
-  // base b and height h (cm) drawn to fit; the top corner `at` of the way along the base
-  const sc = Math.min(200 / b, 110 / h), bw = b * sc, hh = h * sc, x0 = (W - bw) / 2 - 18, y1 = 132, top = [x0 + bw * at, y1 - hh];
+  // base b and height h (cm) drawn to fit; the top corner `at` of the way along the base. The height's number is on a
+  // measuring line of its own right of the pane, level with its top corner (a narrow pane has no room for it inside)
+  const sc = Math.min(200 / b, 110 / h), bw = b * sc, hh = h * sc, x0 = (W - bw - 76) / 2, y1 = 128, top = [x0 + bw * at, y1 - hh];
   let s = '';
   if (box) s += poly([[x0, y1], [x0 + bw, y1], [x0 + bw, y1 - hh], [x0, y1 - hh]], 'rgba(232,146,42,.08)', BRACE, 2, ' stroke-dasharray="6 5"');
   s += poly([[x0, y1], [x0 + bw, y1], top], 'rgba(169,209,238,.8)') + frame([[x0, y1], [x0 + bw, y1], top], 5);
   s += seg(top, [top[0], y1], INK, 2, ' stroke-dasharray="5 4"') + squareMark([top[0], y1], [x0 + bw, y1], top, 10);
-  s += text(x0 + bw / 2, y1 + 20, `${b} cm`, { size: 15 }) + text(top[0] + (at > 0.5 ? -30 : 30), y1 - hh / 2 + 5, `${h} cm`, { size: 15 });
-  // (the glass asked about: a "?" in the pane, on the other side of the height from its label)
+  const xd = x0 + bw + 18;
+  s += seg([top[0] + 7, top[1]], [xd - 7, top[1]], SOFT, 1.5, ' stroke-dasharray="2 4"') + seg([xd, y1], [xd, top[1]], INK, 2)
+    + seg([xd - 6, y1], [xd + 6, y1], INK, 2) + seg([xd - 6, top[1]], [xd + 6, top[1]], INK, 2);
+  s += text(x0 + bw / 2, y1 + 19, `${b} cm`, { size: 15 }) + text(xd + 10, y1 - hh / 2 + 5, `${h} cm`, { size: 15, anchor: 'start' });
+  // (the glass asked about: a "?" in the pane, beside the height)
   const side = at > 0.5 ? 1 : -1, room = (side > 0 ? x0 + bw - top[0] : top[0] - x0) * 2 / 3;
   s += text(top[0] + side * Math.min(26, room * 0.55), y1 - hh / 3 + 7, '?', { size: 20, fill: ASK });
   return svg(150, s);
@@ -212,15 +221,21 @@ function triPicture(pts, labels, ask, { fillAsk = ASK } = {}) {
   const P = pts.map((p) => [ox + (p.x - x0) * s, oy - (p.y - y0) * s]);
   let o = poly(P, 'rgba(169,209,238,.8)') + frame(P, 5);
   const unit = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
-  for (let i = 0; i < 3; i++) {
-    const V = P[i], A = P[(i + 1) % 3], B = P[(i + 2) % 3];
+  const mx = (P[0][0] + P[1][0] + P[2][0]) / 3;
+  const spot = P.map((V, i) => {
+    const A = P[(i + 1) % 3], B = P[(i + 2) % 3];
     o += arc(V, A, B, 22, i === ask ? 'rgba(181,82,58,.22)' : 'rgba(232,146,42,.28)');
     // (its label inside the corner when there is room, else just outside it, past the corner's point)
     const u = unit([A[0] - V[0] + (B[0] - V[0]) * Math.hypot(A[0] - V[0], A[1] - V[1]) / Math.hypot(B[0] - V[0], B[1] - V[1]), A[1] - V[1] + (B[1] - V[1]) * Math.hypot(A[0] - V[0], A[1] - V[1]) / Math.hypot(B[0] - V[0], B[1] - V[1])]);
     const ang = Math.acos(Math.max(-1, Math.min(1, ((A[0] - V[0]) * (B[0] - V[0]) + (A[1] - V[1]) * (B[1] - V[1])) / (Math.hypot(A[0] - V[0], A[1] - V[1]) * Math.hypot(B[0] - V[0], B[1] - V[1]))))) * 180 / Math.PI;
-    const at = ang >= 50 ? [V[0] + u[0] * 42, V[1] + u[1] * 42 + 5] : [V[0] - u[0] * 24, V[1] - u[1] * 24 + 6];
-    o += text(at[0], at[1], labels[i], { size: i === ask ? 18 : 15, fill: i === ask ? fillAsk : INK });
+    return { inside: ang >= 50, at: ang >= 50 ? [V[0] + u[0] * 42, V[1] + u[1] * 42 + 5] : [V[0] - u[0] * 24, V[1] - u[1] * 24 + 6], beside: [V[0] + (V[0] < mx ? -30 : 30), V[1] + 5] };
+  });
+  // (a tall, narrow triangle: two labels inside would meet in the middle; those two go beside their corners instead)
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
+    const a = spot[i], b = spot[j];
+    if (a.inside && b.inside && Math.abs(a.at[0] - b.at[0]) < 40 && Math.abs(a.at[1] - b.at[1]) < 20) { a.at = a.beside; b.at = b.beside; }
   }
+  spot.forEach((p, i) => { o += text(p.at[0], p.at[1], labels[i], { size: i === ask ? 18 : 15, fill: i === ask ? fillAsk : INK }); });
   return svg(166, o);
 }
 
