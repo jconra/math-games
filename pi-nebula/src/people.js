@@ -1042,6 +1042,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     W(p.hips, D.hips); W(p.feet[0], D.feet[0]); W(p.feet[1], D.feet[1]); D3(p.pole, D.pole);
     D3([Math.sin(p.heading), 0, Math.cos(p.heading)], D.ahead);
     if (p.hands) { W(p.hands[0], D.hands[0]); W(p.hands[1], D.hands[1]); }
+    D.fingers = p.fingers ? p.fingers.map((f, i) => D3(f, (D.fingersV || (D.fingersV = [new THREE.Vector3(), new THREE.Vector3()]))[i])) : null;
+    D.elbows = p.elbows ? p.elbows.map((f, i) => D3(f, (D.elbowsV || (D.elbowsV = [new THREE.Vector3(), new THREE.Vector3()]))[i])) : null;
     D.legs = p.legs; D.flat = p.flat; D.arms = p.hands ? p.arms : 0; D.chin = p.chin || 0;
     const pose = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
     const h = Math.atan2(D.ahead.x, D.ahead.z);
@@ -1071,9 +1073,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (a.phase === 'walkin' || a.phase === 'walkout') {
-      // (along the bed's side, at an easy pace, inside the rails: the ring is parked; out, from where they stood to get
-      // on, back past the bed's foot)
-      const path = a.phase === 'walkin' ? SCAN.path : [SCAN.stand, ...SCAN.path.slice(1).reverse(), SCAN.path[0]];
+      // (along the bed's side, at an easy pace, inside the rails: the ring is parked; the way ends where they stand to
+      // get on, and out it is the same way back past the bed's foot)
+      const path = a.phase === 'walkin' ? SCAN.path : [...SCAN.path].reverse();
       const A = path[a.leg], B = path[a.leg + 1];
       if (!B) {
         if (a.phase === 'walkin') { a.phase = 'back'; a.t = 0; a.from = P.pos.clone(); a.fromH = P.heading; }
@@ -1089,7 +1091,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (a.phase === 'back') {
-      // (turned round to put their back to the bed's side, and a step back to it: standing, the clip's own legs)
+      // (turned round where they stand, to put their back to the bed's side: standing, the clip's own legs)
       const k = ease(Math.min(1, a.t / BED_SECS.back));
       P.pose = null; P.pos.lerpVectors(a.from, SCAN.stand, k); P.heading = wrap(a.fromH + wrap(SCAN.out - a.fromH) * k);
       play(P, STAND);

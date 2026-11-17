@@ -9,14 +9,16 @@
 //   M.look = point | null          the head turns toward a point in the world (most of the way: the eyes do the rest)
 //   M.talk = null | 'speak' | 'listen'     in a talk: speaking, or listening
 //   M.sitting = true               (sitting: no arms, a smaller lean)
-//   M.bed = null | { hips, feet: [left, right], pole, ahead, legs, flat, hands: [left, right], arms, chin } (world)
+//   M.bed = null | { hips, feet, pole, ahead, legs, flat, hands, fingers, elbows, arms, chin } (the world's; each of
+//                                  feet, hands, fingers, elbows a [left, right])
 //                                  ON A BED (the scanner's patient getting on, lying, getting off: src/onbed.js says
 //                                  where, people.js puts it in the world): the person moved so the middle of their hip
 //                                  joints is at `hips`; each leg bent (two bones) so its foot's root is at its place,
 //                                  the knee toward `pole`; each foot flat (`flat`: on what it stands on, toes `ahead`)
-//                                  or following its shin; each hand reaching for its place (`arms` of the way), laid
-//                                  flat, palm down; the chin brought down `chin` (rad); `legs` how much of the legs is
-//                                  worn over the clip's (0: the clip's own legs)
+//                                  or following its shin; each hand reaching for its place (`arms` of the way), its
+//                                  elbow toward `elbows`, laid flat, palm down, its fingers along `fingers`; the chin
+//                                  brought down `chin` (rad); `legs` how much of the legs is worn over the clip's (0: the
+//                                  clip's own legs)
 //   M.body                         the person's own measures, taken once standing: { a thigh, b shin (hip, knee, the
 //                                  foot's root, m), w half the hips' width, hs the hip joints' height, u upper arm, f
 //                                  forearm }
@@ -160,7 +162,7 @@ export function addMoves(c) {
     for (const [i, s, sg] of [[0, 'L', 1], [1, 'R', -1]]) {
       const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s]; if (!ua || !la || !wr) continue;
       const sh = ua.getWorldPosition(_h).clone(), el0 = la.getWorldPosition(_k);
-      _pole.copy(D.ahead).multiplyScalar(-1).addScaledVector(_tx, sg * 0.7).add(_ty.set(0, -0.25, 0));
+      if (D.elbows) _pole.copy(D.elbows[i]); else _pole.copy(D.ahead).multiplyScalar(-1).addScaledVector(_tx, sg * 0.7).add(_ty.set(0, -0.25, 0));
       const ik = twoBone(arr(sh), arr(D.hands[i]), arr(_pole), M.body.u, M.body.f);
       aim(ua, _v1.subVectors(el0, sh), _v2.set(ik.mid[0] - sh.x, ik.mid[1] - sh.y, ik.mid[2] - sh.z), D.arms);
       ua.updateWorldMatrix(false, true);
@@ -170,7 +172,7 @@ export function addMoves(c) {
       // the hand flat on the bed: its palm down, the fingers ahead and a little out (pointed out past a narrow bed's
       // edge, the fingers curled down over it)
       const palm = M.palm && M.palm[s]; if (!palm) continue;
-      _hf.copy(D.ahead).addScaledVector(_tx, sg * 0.3).setY(0).normalize();
+      if (D.fingers) _hf.copy(D.fingers[i]).setY(0).normalize(); else _hf.copy(D.ahead).addScaledVector(_tx, sg * 0.3).setY(0).normalize();
       _hd.set(0, -1, 0).addScaledVector(_hf, -_hf.y).normalize();
       _ma.makeBasis(_ha.set(0, 1, 0), palm, _hb.crossVectors(_ha, palm));
       _mb.makeBasis(_hf, _hd, _hc.crossVectors(_hf, _hd));

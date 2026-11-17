@@ -106,7 +106,7 @@ export const SPOTS = {
 // then lying on it (on their back, their head on the head rest, just in front of the parked ring: src/onbed.js gets
 // them on and off, as a person does); the hip joints over the pad, sitting; the pedestal's top edge, over its screen,
 // that the medic works and looks at ([across, up, along]); how many times the ring goes there and back
-export const SCAN_BED = { path: [[1.25, 4.55], [0.66, 3.3], [0.6, 2.4]], stand: [0.45, 2.05], z: 2.05, top: 0.915, edge: 0.3, pad: 0.26, rest: [1.12, 1.44], hipUp: 0.095, panel: [0, 0.8, 3.95], rounds: [2, 3] };
+export const SCAN_BED = { path: [[1.25, 4.55], [0.66, 3.3], [0.6, 2.4], [0.5, 2.05]], stand: [0.5, 2.05], z: 2.05, top: 0.915, edge: 0.3, pad: 0.26, rest: [1.12, 1.44], hipUp: 0.095, panel: [0, 0.8, 3.95], rounds: [2, 3] };
 
 // THE TALKING SPOTS: two people face to face (each spot's two places, `apart` metres, along the way it faces)
 export const TALKS = {

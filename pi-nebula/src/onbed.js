@@ -19,7 +19,8 @@
 //   -> { hips [x,y,z] (the middle of the two hip joints), heading (the way they face: 0 along +z, pi/2 along +x), lean
 //        (leaning back, radians: pi/2 lying on the back), feet [[x,y,z] left, right] (each foot's root), pole [x,y,z]
 //        (the way the knees bend toward), legs 0..1 (how much these legs are worn over the clip's), flat 0..1 (the feet
-//        flat on what they stand on, or else following the shin), hands [[x,y,z] left, right] (each wrist), arms 0..1,
+//        flat on what they stand on, or else following the shin), hands [[x,y,z] left, right] (each wrist), fingers
+//        and elbows [[x,y,z], [x,y,z]] (the ways each hand's fingers and each elbow point), arms 0..1,
 //        clip 'stand' | 'sit' (the crew kit's clip under it all: the body above the hips), chin (the head brought
 //        down, rad), done (the move is over) }
 //   twoBone(root, end, pole, a, b) -> { mid, end, reach }   a leg (or an arm): where the knee (elbow) goes so the foot
@@ -121,7 +122,7 @@ function straightOut(bed, who, hipsY) {
   return [Math.sqrt(Math.max(0.01, L * L - dy * dy)), -dy];
 }
 // the hands flat on the bed beside and a little behind the hips (wrists a few centimetres up), kept on the pad and
-// off the head rest's end of the bed
+// off the head rest's end of the bed; the fingers ahead and a little out; the elbows behind and out
 function handsAt(bed, hips, h) {
   const f = ahead(h), l = leftOf(h);
   return [1, -1].map((s) => {
@@ -129,6 +130,14 @@ function handsAt(bed, hips, h) {
     return [clamp(p[0], -bed.pad + 0.07, bed.pad - 0.07), bed.top + 0.03, Math.max(p[2], (bed.rest ? bed.rest[1] : 0) + 0.05)];
   });
 }
+const fingersAt = (h) => [1, -1].map((s) => norm(add(ahead(h), leftOf(h), s * 0.3)));
+const elbowsAt = (h) => [1, -1].map((s) => norm(add(add(ahead(h).map((v) => -v), leftOf(h), s * 0.7), UP, -0.25)));
+// lying for the scan: the hands resting on the belly, the fingers in toward each other, the elbows out at the sides on
+// the bed (a narrow scanner's bed has no room for arms beside the body; and it is how a patient lies for a scan)
+const BELLY = { x: [0.07, -0.06], up: 0.12, z: [0.18, 0.25] };
+const bellyAt = (bed, lieY) => [0, 1].map((i) => [BELLY.x[i], lieY + BELLY.up, bed.z - BELLY.z[i]]);
+const bellyFingers = () => [[-1, 0, -0.25], [1, 0, -0.25]].map(norm);
+const bellyElbows = () => [[1, -0.45, 0.25], [-1, -0.45, 0.25]].map(norm);
 
 // (the chin brought down as they lean back, so they look ahead to their knees rather than up at the ceiling; lying,
 // a little, the head on its rest)
@@ -144,11 +153,11 @@ function poseOf(move, t, bed, who) {
   const S = standAt(bed, who), E = edgeAt(bed, who), H = Math.PI / 2;
   const sitY = bed.top + bed.hipUp, lieY = bed.top + 0.11, mid = [0, sitY, bed.z];
   const up = kneesUp(bed, who, sitY), upLie = kneesUp(bed, who, lieY);
-  const out = { hips: null, heading: 0, lean: 0, feet: null, pole: null, legs: 1, flat: 0, hands: null, arms: 0, clip: 'sit', done };
+  const out = { hips: null, heading: 0, lean: 0, feet: null, pole: null, legs: 1, flat: 0, hands: null, fingers: null, elbows: null, arms: 0, clip: 'sit', done };
   const poleOf = (h, f, v) => norm(add(ahead(h).map((x) => x * f), UP, v));
 
   if (move === 'back') {
-    // turned round to put their back to the bed, a step back toward it: standing (the standing clip's legs)
+    // turned round where they stand, their back to the bed: standing (the standing clip's legs)
     out.hips = S; out.heading = H; out.legs = 0; out.clip = 'stand'; out.flat = 1;
     out.feet = feetAt(S, H, who.w * 0.95, 0.02, -who.hs + 0.015); out.pole = poleOf(H, 1, 0);
     return out;
@@ -181,7 +190,7 @@ function poseOf(move, t, bed, who) {
     const planted = [1, -1].map((s) => [bed.edge - ON.hop[0], bed.top + 0.03, bed.z - s * ON.hop[1]]);
     const after = handsAt(bed, [E[0], sitY, bed.z], H);
     const kh = on ? ease(seg(u, 0.62, 1)) : 1 - ease(seg(u, 0, 0.3));
-    out.hands = planted.map((p, i) => mix(p, after[i], kh));
+    out.hands = planted.map((p, i) => mix(p, after[i], kh)); out.fingers = fingersAt(H); out.elbows = elbowsAt(H);
     out.arms = on ? ease(seg(u, 0.02, 0.3)) : 1 - ease(seg(u, 0.42, 0.7));
     out.clip = on ? (u < 0.42 ? 'stand' : 'sit') : (u < 0.42 ? 'sit' : 'stand');
     return out;
@@ -199,7 +208,7 @@ function poseOf(move, t, bed, who) {
     out.feet = feetAt(hips, h, who.w, F, U, 0.01);
     out.pole = poleOf(h, 1, track([[0, 0.15], [0.3, 0.8], [1, 1.2]], v));
     out.flat = ease(seg(v, 0.82, 1));
-    out.hands = handsAt(bed, hips, h); out.arms = 1;
+    out.hands = handsAt(bed, hips, h); out.fingers = fingersAt(h); out.elbows = elbowsAt(h); out.arms = 1;
     return out;
   }
   if (move === 'down' || move === 'up') {
@@ -209,7 +218,10 @@ function poseOf(move, t, bed, who) {
     const F = mix(up[0], upLie[0], k), U = mix(up[1], upLie[1], k);
     out.feet = feetAt(out.hips, 0, who.w, F, U, 0.01); out.flat = 1;
     out.pole = poleOf(0, 1, 1.2);
-    out.hands = handsAt(bed, out.hips, 0); out.arms = 1 - ease(seg(v, 0.25, 0.75));
+    // (the hands from the bed beside the hips onto the belly, as they go down; the arms held all the way)
+    const kb = ease(seg(v, 0.3, 0.9)), bed0 = handsAt(bed, out.hips, 0), belly = bellyAt(bed, lieY);
+    out.hands = bed0.map((p, i) => mix(p, belly[i], kb)); out.arms = 1;
+    out.fingers = fingersAt(0).map((f, i) => norm(mix(f, bellyFingers()[i], kb))); out.elbows = elbowsAt(0).map((e, i) => norm(mix(e, bellyElbows()[i], kb)));
     out.clip = v < 0.5 ? 'sit' : 'stand';
     return out;
   }
@@ -220,7 +232,7 @@ function poseOf(move, t, bed, who) {
     const st = straightOut(bed, who, lieY);
     out.feet = feetAt(out.hips, 0, who.w, mix(upLie[0], st[0], k), mix(upLie[1], st[1], k), 0.01);
     out.flat = 1 - ease(seg(v, 0.3, 0.9)); out.pole = poleOf(0, 0.6, 1);
-    out.arms = 0; out.clip = 'stand';
+    out.hands = bellyAt(bed, lieY); out.fingers = bellyFingers(); out.elbows = bellyElbows(); out.arms = 1; out.clip = 'stand';
     return out;
   }
   throw new Error('onbed: no move ' + move);
