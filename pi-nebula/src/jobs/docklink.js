@@ -43,8 +43,9 @@ const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
 export const VIEW = {
   wide: { from: [-6.2, 3.6, -2.0], on: [-0.68, -0.1], fov: 50 },
   tall: { from: [-4.6, 6.4, -2.0], on: [0, 0.46], fov: 62 },
-  // (the end: aimed further out, at the plan's fifth ring, a little wider, so the rings built and the ship both show)
-  end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.35, -0.1], fov: 60, ring: 4 }, tall: { from: [-5.4, 7.6, -2.6], on: [0, 0.48], fov: 64, ring: 1 } },
+  // (the end: aimed further out, at the plan's fifth ring, so the rings built and the ship both show: on a wide screen
+  // a little wider; on a phone up and back, the bridge's line running up the band to the ship)
+  end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.35, -0.1], fov: 60, ring: 4 }, tall: { from: [-6.0, 12.0, -7.0], on: [0, 0.5], fov: 64, ring: 4 } },
   // (never further back toward the station than this, metres from the port's face: past it the camera would be in the
   // station's rooms, the terminal behind the airlock)
   back: -4.5,
@@ -298,15 +299,16 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     });
     M.outlineMat.opacity = 0.55 + 0.4 * Math.sin(clock * 5);
     // the try done (its last ring locked): the rings' hoops light up one after another, out along the bridge, again
-    // and again, while the end card is up
-    // and on along the plan's hoops to the ship, whose docking lights turn green as it gets there (the way to come)
+    // and again, while the end card is up, and on along the plan's hoops to the ship (the way to come), whose docking
+    // lights turn from red to green when the first wave gets there and stay green, brighter as each wave arrives
     if (finished && S.every((s, i) => i >= TRY.rings || s.state === 'done')) {
       if (endT < 0) endT = clock;
       const n = DOCK.rings, t = (clock - endT) * 4 % (n + 6), near = (i) => Math.max(0, 1 - Math.abs(t - i - 0.5) * 0.9);
       for (let i = 0; i < TRY.rings; i++) { const f = 0.9 + 5 * near(i); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
       for (let i = TRY.rings; i < n; i++) { const g = M.ghosts[i].material, f = near(i); g.opacity = 0.4 + 0.6 * f; g.color.setRGB(0.25 + 1.6 * f, 0.75 + 1.6 * f, 1.3 + 1.4 * f); }
-      const at = t >= n && t < n + 3;
-      M.shipLights.color.setRGB(...(at && Math.floor((t - n) * 3) % 2 === 0 ? SHIP_GREEN : SHIP_RED));
+      const reached = (clock - endT) * 4 >= n, glow = 1 + (t >= n ? Math.max(0, 1 - (t - n) / 2.5) : 0);
+      if (reached) M.shipLights.color.setRGB(SHIP_GREEN[0] * glow, SHIP_GREEN[1] * glow, SHIP_GREEN[2] * glow);
+      else M.shipLights.color.setRGB(...SHIP_RED);
     } else endT = -1;
   }
 
