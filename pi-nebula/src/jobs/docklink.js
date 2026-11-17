@@ -28,7 +28,9 @@ function ensureCss() {
 // (loaded with the jobs, not when the job opens: its Start prompt's look on a phone is in it too)
 if (typeof document !== 'undefined') ensureCss();
 // how long things take (seconds), and the wobble (metres the far hoop bobs, how fast)
-export const TIMES = { out: 1.0, brace: 0.13, pop: 0.32, lock: 0.75, glass: 0.9, jolt: 0.7, fade: 0.4 };
+export const TIMES = { out: 1.0, brace: 0.13, pop: 0.32, lock: 0.75, glass: 0.9, jolt: 0.7, fade: 0.4, intro: 1.0 };
+// the bridge's glass: a pale blue sheen to see against space (full: once on; flash: going in after a question about it)
+export const GLASS = { color: 0x9ccff5, full: 0.2, flash: 0.55 };
 export const WOBBLE = { amp: 0.3, side: 0.12, hz: 1.1, jolt: 0.3 };
 const SHIP_RED = [1.6, 0.14, 0.1], SHIP_GREEN = [0.25, 2.2, 0.6];
 // the squares a young player braces, as the card shows them: the panels on the camera's side (the near side, the one
@@ -37,11 +39,11 @@ const SQUARES = [4, 3, 2], TWIN = { 4: 0, 3: 1 };
 // THE VIEW: the camera stands `from` the middle of the ring being built (metres, in the bridge's frame: to its side,
 // above it, back toward the station), looking out along the bridge to the ship, and turns so that ring lands at the
 // screen point `on` (-1..1 across, -1..1 up): on a wide screen left of the panel, on a phone in the band above it,
-// whatever the screen's shape. It moves on with each ring. The end of the try: back a little, wider.
-// (Not far back behind the port: the airlock module would stand between the camera and the first ring. From here the
-// ship is ahead, left of the panel at 1280.)
+// whatever the screen's shape. It moves on with each ring. The end of the try: back a little, wider; and the job opens
+// on the end's view for a moment (aim). (On a wide screen the camera stands just out from the port's face: from behind
+// it the airlock module hid half of the first ring, which a young player taps.)
 export const VIEW = {
-  wide: { from: [-6.2, 3.6, -2.0], on: [-0.68, -0.1], fov: 50 },
+  wide: { from: [-6.2, 3.6, -0.6], on: [-0.68, -0.1], fov: 54 },
   tall: { from: [-4.6, 6.4, -2.0], on: [0, 0.46], fov: 62 },
   // (the end: aimed further out, at the plan's fifth ring, so the rings built and the ship both show: on a wide screen
   // a little wider; on a phone up and back, the bridge's line running up the band to the ship)
@@ -76,7 +78,7 @@ export function portFrame(W, from) {
 let MADE = null;
 function make(W, frame) {
   const t0 = performance.now(), mats = makeMaterials();
-  // (outside: no haze; the glass faint)
+  // (outside: no haze)
   for (const m of Object.values(mats)) { m.fog = false; }
   // the light: the sun and the planet's glow (their world directions into the bridge's frame), the floodlights
   const inv = new THREE.Matrix4().copy(frame).invert(), sun = SKY.sun.clone().transformDirection(inv), shine = SKY.planet.clone().transformDirection(inv);
@@ -122,7 +124,10 @@ function make(W, frame) {
     const z = DOCK.z0 + i * DOCK.L, lit = (p, n) => light(p.clone().setZ(p.z + z), n);
     add(g, meshesOf(parts.solid, mats, lit));
     const braces = parts.braces.map((b) => { const m = meshesOf(b, mats, lit)[0]; m.geometry.computeBoundingSphere(); m.userData.mid = m.geometry.boundingSphere.center.clone(); m.visible = false; g.add(m); return m; });
-    const glassMat = mats.glass.clone(); glassMat.userData.full = mats.glass.opacity; glassMat.opacity = 0; glassMat.fog = false;
+    // (its own glass, not the kit's: the kit's window glass is dark, made for looking out of a lit room, and out here
+    // against space it could not be seen at all)
+    const glassMat = new THREE.MeshBasicMaterial({ color: GLASS.color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    glassMat.userData.full = GLASS.full;
     const glass = new THREE.Mesh(parts.glass, glassMat); glass.visible = false; g.add(glass);
     const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), toneMapped: false, fog: false });
     const glow = new THREE.Mesh(parts.glow, glowMat); g.add(glow);
@@ -198,7 +203,8 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   }
   W.renderer.domElement.addEventListener('pointerdown', onTap);
   // (on a keyboard, keys 1 to 3 brace the squares, as they pick the answers at the other levels)
-  function onKey(e) { if (closed || !isBrace() || !/^[1-9]$/.test(e.key)) return; brace(+e.key - 1); }
+  // (not while a sheet is over the panel, as the panel's own keys: the levels sheet, ui/levels.js, or the worked sheet)
+  function onKey(e) { if (closed || !isBrace() || !/^[1-9]$/.test(e.key) || document.querySelector('.pnl, .bml:not(.is-out)')) return; brace(+e.key - 1); }
   addEventListener('keydown', onKey);
 
   // ── the panel's live ──────────────────────────────────────────────────────────────────────────────────────────
@@ -213,15 +219,21 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     const s = S[cur]; if (!s || s.state !== 'wait') return;
     s.state = 'brace'; s.t = 0; s.next = 0.1; s.last = -1;
     s.pane = !!(order && /^(fit|area)/.test(order.key || ''));   // (a question about the glass: the glass goes in brightly)
+    // (the card's picture answered too: "which pane fits" shows the pane in its gap, no "?" left)
+    const lead = order && order.leadDone && ui && ui.card ? ui.card.querySelector('.pnj-pic.is-lead') : null;
+    if (lead) lead.innerHTML = order.leadDone;
     answered++;
     if (answered >= TRY.rings) finished = true;
   }
   function wrong() { const s = S[cur]; if (s && s.state === 'wait') s.jolt = 1; }
-  // the card's top: the bridge's plan, which ring
+  // the card's top: the bridge's plan, and a dot for each ring of the try (lit when built, amber the one being built:
+  // dots, not a second "n of m" beside the panel's level)
   const ICON = '<svg class="dkb-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 6.5 L15.5 13.5 M4.5 13.5 L15.5 6.5 M10 2.8 V17.2" stroke="currentColor" stroke-width="1.6"/></svg>';
-  function head() {
+  function head(o, end = false) {
     const n = Math.min(cur + 1, TRY.rings);
-    return `<header class="pnj-cardtop is-plan">${ICON}<b>Bridge plan</b><small>Ring ${n} of ${TRY.rings}</small></header>`;
+    const dots = Array.from({ length: TRY.rings }, (x, i) => `<i class="${i < cur || end ? 'is-built' : i === cur ? 'is-now' : ''}"></i>`).join('');
+    const said = end ? `All ${TRY.rings} rings built` : `Ring ${n} of ${TRY.rings}`;
+    return `<header class="pnj-cardtop is-plan">${ICON}<b>Bridge plan</b><small class="dkb-rings" role="img" aria-label="${said}" title="${said}">${dots}</small></header>`;
   }
   // the squares to tap, in place of the answers (the order's one coin is "every square braced")
   function play(o, u) {
@@ -241,7 +253,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   function over() {
     if (!finished) return null;
     return {
-      html: `${head().replace(`Ring ${TRY.rings} of ${TRY.rings}`, 'The try')}
+      html: `${head(null, true)}
         <p class="pnj-story dkb-end"><b>Three rings built!</b></p>
         <p class="pnj-story dkb-end2">That's the try. The whole bridge is ${DOCK.rings} rings, out to the ship, and then the docking port opens.</p>`,
       buttons: [{ label: 'Build it again', again: () => reset() }, { label: 'Done' }],
@@ -276,7 +288,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
         R.stripMat.color.setRGB(0.08 + 0.92 * ease(k), 0.08 + 0.92 * ease(k), 0.08 + 0.92 * ease(k));
         // (after a question about the glass, the glass goes in bright and settles; else it fades in)
         const full = R.glassMat.userData.full, gk = clamp01(s.t / TIMES.glass);
-        R.glass.visible = true; R.glassMat.opacity = s.pane ? full + (0.55 - full) * Math.sin(Math.PI * Math.min(1, gk * 1.15)) : full * ease(gk);
+        R.glass.visible = true; R.glassMat.opacity = s.pane ? full + (GLASS.flash - full) * Math.sin(Math.PI * Math.min(1, gk * 1.15)) : full * ease(gk);
         if (s.t >= Math.max(TIMES.lock, TIMES.glass)) { s.state = 'done'; s.t = 0; cur = i + 1; slideOut(i + 1); }
       }
       // the braces popping in (the ones braced, each from nothing to a little past full and back)
@@ -315,7 +327,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   // ── the camera: outside, beside the port ──────────────────────────────────────────────────────────────────────
   const want = new THREE.Vector3(), ringAt = new THREE.Vector3(), probe = new THREE.PerspectiveCamera();
   const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion();   // (the view's own, eased: the walking camera has it each frame first)
-  let fresh = true, forced = null;   // (forced: a ring to look at, for the rigs)
+  let fresh = true, forced = null, intro = TIMES.intro;   // (forced: a ring to look at, for the rigs; intro: see aim)
   // where the camera wants to be, and which way it wants to face, for ring i (into `want` and probe.quaternion)
   function poseFor(V, i, aspect) {
     ringAt.set(0, DOCK.c, DOCK.z0 + (i + 0.5) * DOCK.L).applyMatrix4(frame);
@@ -328,13 +340,17 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   function aim(camera, dt = 1 / 60) {
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     const end = finished && S.every((s, i) => i >= TRY.rings || s.state === 'done');
-    const V = end ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
-    poseFor(V, forced != null ? forced : end ? V.ring : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
-    if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); fresh = false; }
+    // (the first moment: the end's view, along the bridge's plan to the ship waiting at the far end, then over to the
+    // ring being built: where it is all going first)
+    const first = intro > 0 && forced == null; intro -= dt;
+    const V = end || first ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
+    poseFor(V, forced != null ? forced : end || first ? V.ring : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
+    if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); camera.fov = V.fov; camera.updateProjectionMatrix(); fresh = false; }
     const k = 1 - Math.exp(-2.5 * dt);
     camPos.lerp(want, k); camQ.slerp(probe.quaternion, k);
     camera.position.copy(camPos); camera.quaternion.copy(camQ);
-    if (camera.fov !== V.fov) { camera.fov = V.fov; camera.updateProjectionMatrix(); }
+    // (the lens eased too, from one view's to the other's)
+    if (Math.abs(camera.fov - V.fov) > 0.01) { camera.fov += (V.fov - camera.fov) * k; camera.updateProjectionMatrix(); }
   }
   // (a short fade from black as the view goes outside, and again as it comes back in)
   function fade() {

@@ -127,7 +127,7 @@ function gapPicture(a, b, half, flip, { answer = false } = {}) {
   if (!answer) { const c = [(gap[0][0] + gap[1][0] + gap[2][0]) / 3, (gap[0][1] + gap[1][1] + gap[2][1]) / 3]; s += text(c[0], c[1] + 8, '?', { size: 26, fill: ASK }); }
   const tx = Math.max(x0, x1) + 30, ty = (y0 + y1) / 2;
   s += answer ? text(tx, ty - 8, 'It fits:', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 14, 'the same shape', { size: 15, fill: SOFT, anchor: 'start' })
-    : text(tx, ty - 8, 'The gap:', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 14, 'which pane', { size: 15, fill: SOFT, anchor: 'start' }) + text(tx, ty + 34, 'is its shape?', { size: 15, fill: SOFT, anchor: 'start' });
+    : text(tx, ty + 6, 'The gap', { size: 16, fill: SOFT, anchor: 'start' });
   return svg(h, s);
 }
 const paneCoin = (pts) => svg(100, paneOf(pts([70, 50])), 140);
@@ -293,7 +293,7 @@ export const MAKERS = {
       const coin = (kind) => { const P = PIECES[kind](a, b, turn); return { v: kind, big: '', small: '', label: NAMES[kind], svg: paneCoin(P.pts), slip: kind, why: P.why }; };
       const right = coin('right');
       const o = ownOrder({
-        key: `fit:${a}x${b}`, story: 'The new ring needs its glass. One pane of a panel is missing.', ask: 'Which pane is the same shape as the gap?',
+        key: `fit:${a}x${b}`, story: 'One pane of glass is missing.', ask: 'Which pane fits the gap?',
         right, slips: wrongs.map(coin),
         rightWhy: 'The same shape: it fits, even turned round.',
         help: { title: 'The same shape', svg: gapPicture(a, b, half, flip, { answer: true }), line: 'The pane must be the same shape as the gap: 3 corners, one of them square, and its long and short sides like the gap\'s. Turned round is fine.',
@@ -303,6 +303,7 @@ export const MAKERS = {
       // (the panel shows each pane's picture on its button: ownOrder keeps only the plain fields, so put them back)
       for (const c of o.coins) { const k = c.good ? right : coin(c.v); c.svg = k.svg; }
       o.lead = gapPicture(a, b, half, flip);
+      o.leadDone = gapPicture(a, b, half, flip, { answer: true });   // (the card's picture once it is answered: the gap filled)
       return o;
     },
   },
@@ -477,7 +478,7 @@ export const PLACE = {
 export const JOB = {
   id: 'dock', name: 'The docking bridge', short: 'Dock', open: true,
   spot: { place: 'airlock', toward: { place: 'galley' }, out: 5 }, face: 'airlock',
-  sign: 'Docking bridge', hint: 'Build the bridge to the ship: a try',
+  sign: 'Docking bridge', hint: 'Build the bridge out to the ship',
   place: PLACE, setting: null, makers: MAKERS, card: 'blueprint',
   // the bridge outside the port, the camera on it and the squares to tap: src/jobs/docklink.js (index.js makes it)
   link: 'dock',

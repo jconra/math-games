@@ -49,14 +49,24 @@
 @keyframes dkb-ripple { 0% { opacity: 0.95; transform: scale(0.5); } 100% { opacity: 0; transform: scale(2.2); } }
 @keyframes dkb-dot { 0%, 100% { transform: scale(0.8); } 50% { transform: scale(1.15); } }
 
-/* the dock's cards are taller (a picture on each): smaller pictures, and the panel's top stays in view as it scrolls */
-.pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 138px; }
+/* the dock's cards are taller (a picture on each, and on each answer): smaller pictures, so a card with its answers, the
+   line under them and Help fits a 720-high screen; the panel's top stays in view if it scrolls even so */
+.pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 120px; }
+.pnj[data-job="dock"] .pnj-answers.is-pics .pnj-coin { min-height: 74px; padding: 5px; }
+.pnj[data-job="dock"] .pnj-coinpic svg { max-height: 64px; }
 .pnj[data-job="dock"] .pnj-help .pnj-pic svg { max-height: 150px; }
 .pnj[data-job="dock"] .pnj-top { position: sticky; top: -14px; z-index: 3; margin: -14px -16px 0; padding: 14px 16px 8px; background: rgba(15, 19, 25, 0.97); }
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
   .pnj[data-job="dock"] .pnj-top { top: -10px; margin: -10px -12px 0; padding: 10px 12px 6px; }
-  .pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 112px; }
+  .pnj[data-job="dock"] .pnj-pic.is-lead svg { max-height: 100px; }
+  .pnj[data-job="dock"] .pnj-answers.is-pics .pnj-coin { min-height: 62px; padding: 4px; }
+  .pnj[data-job="dock"] .pnj-coinpic svg { max-height: 54px; }
 }
+/* the card's top: a dot for each ring of the try, lit when built, amber the one being built */
+.dkb-rings { display: inline-flex; gap: 6px; align-items: center; }
+.dkb-rings i { width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(160, 180, 200, 0.45); }
+.dkb-rings i.is-now { box-shadow: inset 0 0 0 2px #ffab4a, 0 0 6px rgba(255, 171, 74, 0.6); }
+.dkb-rings i.is-built { background: #8fdcff; box-shadow: 0 0 6px rgba(143, 220, 255, 0.7); }
 /* no key hints on a touch screen (E, H, Esc mean nothing there) */
 @media (pointer: coarse) { .pnj[data-job="dock"] kbd, .pnj-go[data-job="dock"] kbd { display: none; } }
 .pnj-story.dkb-end b { font-size: 22px; }
