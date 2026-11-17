@@ -167,10 +167,10 @@
         {"piece":"rib","cell":[1.5,2.5],"turn":3,"variant":"strip"},
         {"piece":"beam","cell":[0,2.5],"turn":0},
         {"piece":"beam","cell":[1,2.5],"turn":0},
-        {"piece":"sign","cell":[-0.5,2],"turn":1,"variant":"QUARTERS","off":[0,1.95,-0.05]},
-        {"piece":"screen","cell":[-0.5,2],"turn":1,"variant":"math","off":[0,1.3,-0.05]},
+        {"piece":"sign","cell":[-0.5,2],"turn":1,"variant":"QUARTERS","off":[0,2.2,0]},
+        {"piece":"jobs","cell":[-0.5,2],"turn":1,"variant":"pair","off":[0,1.45,0.17]},
         {"piece":"extinguisher","cell":[1.5,3],"turn":3,"variant":"red","off":[-0.5,0.85,0]},
-        {"piece":"breaker","cell":[1.5,3],"turn":3,"variant":"switches","off":[0.5,1.15,0]}
+        {"piece":"screen","cell":[1.5,3],"turn":3,"variant":"math","off":[0.45,1.3,0]}
       ]
     },
     {
@@ -744,6 +744,7 @@
         {"piece":"sign","cell":[5,10.5],"turn":0,"variant":"DECK 2","off":[0,5.6,0]},
         {"piece":"jobs","cell":[0.5,12.5],"turn":0,"variant":"hang","off":[0,4.3,0]},
         {"piece":"jobs","cell":[-2,12.5],"turn":0,"variant":"station","off":[0,4.3,0]},
+        {"piece":"jobs","cell":[-2,10.5],"turn":0,"variant":"pair","off":[-0.3,1.45,0.22]},
         {"piece":"counter","cell":[5,14],"turn":3,"variant":"plain","off":[0,0,1]},
         {"piece":"pot","cell":[5,14],"turn":3,"variant":"tomato","off":[0.15,0.94,1.08]},
         {"piece":"pot","cell":[5,14],"turn":3,"variant":"pea","off":[0.75,0.94,0.88]},
@@ -982,6 +983,7 @@
         {"piece":"trim","cell":[6,13.5],"turn":2,"variant":"cornice"},
         {"piece":"label","cell":[6,11.5],"turn":0,"variant":"HANGAR","off":[0.1,2.02,-0.048]},
         {"piece":"board","cell":[6,11.5],"turn":0,"variant":"explore","off":[0.1,1.4,-0.05]},
+        {"piece":"jobs","cell":[6,13.5],"turn":2,"variant":"pair","off":[0,1.45,0.22]},
         {"piece":"mark","cell":[6,12.5],"turn":1,"variant":"arrow"}
       ]
     },

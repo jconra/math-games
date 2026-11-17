@@ -2,6 +2,11 @@
 // maker (2026-11-17): "We do have other jobs. Maybe we need another jobs board that lists local station jobs? I think we
 // need the ability to click on them and get the glowing lines in the floor or colored lights to follow or something that
 // can take us to the job we selected."
+// AND ITS SMALL COPIES at a person's own height (kit/furniture.js jobs 'pair': the upper screen of each; the game's
+// maker, of the big boards hung high: "It doesn't really seem like something that would be clickable ... it is more
+// intuitive to think you can interact with something that is at your own level"). Every copy works as the big one
+// does and shows the same picture: ONE canvas, one texture, one material for them all; the screens of one room are one
+// mesh, so the copies cost a draw for each room that has one, while that room is drawn, and two triangles a screen.
 // The board lists the station's own jobs, each with a line on what it is and where; the one picked is lit on it. Pick
 // one by tapping or clicking its row on the board itself, or walk up to the board (a prompt comes up: E, or its button)
 // and pick from the list that opens on the screen; a glowing line on the floor then leads from the player to that job
@@ -11,9 +16,10 @@
 //   board.update(dt, P, playing)   each frame: the prompt near the board, the board's picture when the pick changes
 //   board.open() / board.close() / board.pick(id) / board.stop()     (the rigs: GAME.board)
 //   board.rows, board.picked, board.near, board.isOpen
+//   board.at (the spot under the big board), board.boards ([{ at, small, room }]: every board's spot, for the rigs)
 import * as THREE from 'three';
 import { piecesOf } from './people.js';
-import { JOBS_SCREEN } from '../kit/furniture.js';
+import { JOBS_SCREEN, JOBS_PAIR } from '../kit/furniture.js';
 
 // THE JOBS LISTED, in the board's order (the station's own: src/jobs/), each its colour, what it is and where it is
 export const STATION_JOBS = [
@@ -26,8 +32,10 @@ export const STATION_JOBS = [
 ];
 // near the board: how far from the spot under it the prompt comes up (m), and how much the view must be turned toward
 // it (the dot of the camera's way and the way to the board, level); a row shorter than this on the screen (px) is too
-// small for a finger: a tap on the board opens the list instead
-export const BOARD = { near: 6.5, facing: 0.25, finger: 36 };
+// small for a finger: a tap on the board opens the list instead. A small copy on a wall: its prompt comes up
+// `nearSmall` from the spot in front of it (`stand` out from the wall); a row too small on the screen for the mouse's
+// pointer (`pointer`, px) opens the list too.
+export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 9 };
 
 const CSS = `
 .pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
@@ -81,8 +89,10 @@ const CSS = `
 
 export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = () => false }) {
   if (!document.getElementById('pjb-css')) { const st = document.createElement('style'); st.id = 'pjb-css'; st.textContent = CSS; document.head.appendChild(st); }
-  // the board in the station: the 'station' jobs board piece (its first), and the room it hangs in
-  const pc = piecesOf(W.R).find((x) => x.piece === 'jobs' && x.variant === 'station');
+  // the boards in the station: the big one (the 'station' jobs board piece, its first: both its faces) and its small
+  // copies (each 'pair' piece: its upper screen), and the room each hangs in
+  const found = piecesOf(W.R).filter((x) => x.piece === 'jobs' && (x.variant === 'station' || x.variant === 'pair'));
+  const pc = found.find((x) => x.variant === 'station') || found[0];
   const spotOf = (id) => (jobs && jobs.spots || []).find((s) => s.job.id === id);
   // (each job's name is its own, as its sign in the station says it: the jobs' data, src/jobs/*.js)
   const rows = STATION_JOBS.filter((r) => spotOf(r.id)).map((r) => ({ ...r, name: spotOf(r.id).job.sign || r.name }));
@@ -117,42 +127,75 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     tex.needsUpdate = true;
   }
   draw();
-  // (the picture on both faces, just over the piece's dark screens; in the room's own group, drawn with it)
-  const zone = W.zoneAt(new THREE.Vector3().setFromMatrixPosition(pc.M)) || (W.room && W.room(pc.room));
-  const holder = zone ? zone.group : W.scene;
+  // (the picture on every screen, just over the pieces' dark screens: one material; each room's screens one mesh in
+  // that room's own group, drawn with it. Each screen also leaves a marker of its own, placed and turned as the screen
+  // is and named for the rigs to find: the big board's 'station jobs board', a small copy's 'station jobs board, small')
   const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(0.86, 0.86, 0.86) });
-  const faces = [];
-  for (const s of [1, -1]) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(JOBS_SCREEN.w, JOBS_SCREEN.h), mat);
-    const local = new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, 0, s * JOBS_SCREEN.z);
-    const world = pc.M.clone().multiply(local);
-    holder.updateMatrixWorld(true);
-    m.matrixAutoUpdate = false; m.matrix.copy(new THREE.Matrix4().copy(holder.matrixWorld).invert().multiply(world)); m.matrixWorldNeedsUpdate = true;
-    m.userData.face = s; m.name = 'station jobs board';
-    holder.add(m); faces.push(m);
-    if (input && input.addTarget) input.addTarget(m, { jobsBoard: true });
+  const boards = [], faces = [], byZone = new Map();
+  for (const B of [pc, ...found.filter((x) => x !== pc && x.variant === 'pair')]) {
+    const small = B.variant === 'pair', S = small ? JOBS_PAIR : JOBS_SCREEN;
+    const zone = (W.room && W.room(B.room)) || W.zoneAt(new THREE.Vector3().setFromMatrixPosition(B.M)), holder = zone ? zone.group : W.scene;
+    const mid = new THREE.Vector3().setFromMatrixPosition(B.M), out = new THREE.Vector3(0, 0, 1).transformDirection(B.M);
+    // (the spot to stand: on the floor under the big board's middle; in front of a small copy, out from its wall)
+    const at = small ? walls.snap(mid.x + out.x * BOARD.stand, 0.4, mid.z + out.z * BOARD.stand, 1.2) : walls.snap(mid.x, 0.4, mid.z, 3);
+    const board = { small, room: B.room, at: at || new THREE.Vector3(mid.x, 0, mid.z), near: small ? BOARD.nearSmall : BOARD.near, zone };
+    boards.push(board);
+    for (const s of small ? [1] : [1, -1]) {
+      const local = new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, small ? S.up : 0, s * S.z + (small ? 0.0015 : 0));
+      const F = { board, w: S.w, h: S.h, world: B.M.clone().multiply(local), holder };
+      F.inv = F.world.clone().invert();
+      faces.push(F); if (!byZone.has(holder)) byZone.set(holder, []); byZone.get(holder).push(F);
+    }
   }
-  // (the spot on the floor under the board's middle, for "near")
-  const mid = new THREE.Vector3().setFromMatrixPosition(pc.M), under = walls.snap(mid.x, 0.4, mid.z, 3) || new THREE.Vector3(mid.x, 0, mid.z);
-  api.at = under;
-  // a click or a tap on the board: its row picked (the title: the list opened)
-  const rowAt = (point) => {
-    const inv = pc.M.clone().invert(), p = point.clone().applyMatrix4(inv);
-    const v = (JOBS_SCREEN.h / 2 - p.y) / JOBS_SCREEN.h * CH;   // (canvas pixels from the top; the same on both faces)
+  for (const [holder, list] of byZone) {
+    holder.updateMatrixWorld(true);
+    const toHolder = new THREE.Matrix4().copy(holder.matrixWorld).invert(), pos = [], uv = [], ix = [], v = new THREE.Vector3();
+    for (const F of list) {
+      const k = pos.length / 3, m = new THREE.Matrix4().multiplyMatrices(toHolder, F.world);
+      for (const [a, b] of [[0, 0], [1, 0], [1, 1], [0, 1]]) { v.set((a - 0.5) * F.w, (b - 0.5) * F.h, 0).applyMatrix4(m); pos.push(v.x, v.y, v.z); uv.push(a, b); }
+      ix.push(k, k + 1, k + 2, k, k + 2, k + 3);
+      const mark = new THREE.Object3D(); mark.name = 'station jobs board' + (F.board.small ? ', small' : ''); mark.userData.size = [F.w, F.h];
+      mark.matrixAutoUpdate = false; mark.matrix.copy(m); mark.matrixWorldNeedsUpdate = true; holder.add(mark);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(ix);
+    g.computeBoundingSphere(); g.computeBoundingBox();
+    const mesh = new THREE.Mesh(g, mat); mesh.name = 'station jobs boards'; mesh.matrixAutoUpdate = false; mesh.userData.faces = list;
+    holder.add(mesh);
+    if (input && input.addTarget) input.addTarget(mesh, { jobsBoard: true, faces: list });
+  }
+  const under = boards[0].at;
+  api.at = under; api.boards = boards; api.faces = faces;
+  // a click or a tap on a board: the screen it landed on (none: only near one), its row there (the title: -1)
+  const _p = new THREE.Vector3(), _dir = new THREE.Vector3();
+  const faceAt = (hit) => (hit.near ? null : (hit.data.faces || []).find((F) => { _p.copy(hit.point).applyMatrix4(F.inv); return Math.abs(_p.z) < 0.03 && Math.abs(_p.x) <= F.w / 2 + 0.01 && Math.abs(_p.y) <= F.h / 2 + 0.01; }) || null);
+  const rowAt = (F, point) => {
+    _p.copy(point).applyMatrix4(F.inv);
+    const v = (F.h / 2 - _p.y) / F.h * CH;   // (canvas pixels from the top; the same on every screen)
     const i = Math.floor((v - TOP - 6) / ROW);
     return v < TOP ? -1 : i >= 0 && i < rows.length ? i : null;
   };
   // (how tall a row is on the screen where it was hit, in the page's pixels)
   const _up = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
-  const rowPx = (point) => {
-    _up.setFromMatrixColumn(pc.M, 1).normalize().multiplyScalar(JOBS_SCREEN.h * ROW / CH / 2);
+  const rowPx = (F, point) => {
+    _up.setFromMatrixColumn(F.world, 1).normalize().multiplyScalar(F.h * ROW / CH / 2);
     _a.copy(point).add(_up).project(W.camera); _b.copy(point).sub(_up).project(W.camera);
     return Math.abs(_a.y - _b.y) / 2 * innerHeight;
   };
+  // (a screen that can be seen from the camera: its room drawn, and no wall between the camera and the point)
+  const inSight = (F, point) => {
+    if (F.holder.visible === false) return false;
+    const d = _dir.copy(point).sub(W.camera.position).length(); if (d < 0.05) return true;
+    return walls.reach(W.camera.position, _dir.multiplyScalar(1 / d), d) >= d - 0.35;
+  };
   if (input && input.onPick) input.onPick((pk) => {
     if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open) return;
-    const i = rowAt(pk.hit.point);
-    if (i === -1 || (pk.touch && i != null && rowPx(pk.hit.point) < BOARD.finger)) openList(); else if (i != null) pick(rows[i].id);
+    const F = faceAt(pk.hit);
+    // (beside a screen, not on it: the list, when the player is at a board; never a row guessed at)
+    if (!F) { if (near) openList(); return; }
+    if (!inSight(F, pk.hit.point)) return;
+    const i = rowAt(F, pk.hit.point);
+    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openList(); else if (i != null) pick(rows[i].id);
   });
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
@@ -232,11 +275,14 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     // (the line done with: the board's pick let go when the line is gone, as they got there)
     if (picked && !guide.active) { picked = null; mark(); }
     chip.hidden = !picked || open;
-    // near the board, looking its way, no job's own prompt up, no panel open: the prompt
-    const dx = under.x - P.pos.x, dz = under.z - P.pos.z, d = Math.hypot(dx, dz);
+    // near a board (the big one, or a small copy), looking its way, no job's own prompt up, no panel open: the prompt
     W.camera.getWorldDirection(_d); _d.y = 0; _d.normalize();
-    const facing = d < 1.5 || (_d.x * dx + _d.z * dz) / (d || 1) > BOARD.facing;
-    near = d < BOARD.near && Math.abs(P.pos.y - under.y) < 1.5 && facing && !(jobs && (jobs.near || jobs.panel));
+    near = false;
+    if (!(jobs && (jobs.near || jobs.panel))) for (const B of boards) {
+      const dx = B.at.x - P.pos.x, dz = B.at.z - P.pos.z, d = Math.hypot(dx, dz);
+      if (d >= B.near || Math.abs(P.pos.y - B.at.y) >= 1.5) continue;
+      if (d < 1.5 || (_d.x * dx + _d.z * dz) / (d || 1) > BOARD.facing) { near = true; break; }
+    }
     // (one prompt at a time: a captain's question up, the board's waits)
     prompt.hidden = !near || open || !!asking();
     // (a job picked: the prompt says which, and that another can be picked)
