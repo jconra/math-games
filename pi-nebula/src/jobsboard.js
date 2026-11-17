@@ -17,16 +17,17 @@ import { JOBS_SCREEN } from '../kit/furniture.js';
 
 // THE JOBS LISTED, in the board's order (the station's own: src/jobs/), each its colour, what it is and where it is
 export const STATION_JOBS = [
-  { id: 'galley', name: 'Galley kitchen', line: 'Cook up the diners\' orders', place: 'Terminal', colour: '#ffb347' },
-  { id: 'medical', name: 'Triage desk', line: 'Help the patients who come in', place: 'Medical', colour: '#ff6a5a' },
-  { id: 'smelter', name: 'Smelter controls', line: 'Work out what a haul of ore pays', place: 'Smelter', colour: '#ff8a3a' },
-  { id: 'crane', name: 'Crane operator', line: 'Check the crane\'s moves', place: 'Control room', colour: '#ffd35a' },
-  { id: 'dock', name: 'Docking bridge', line: 'Build the bridge out to a ship', place: 'Dock', colour: '#59c3ff' },
-  { id: 'arena', name: 'Mathball', line: 'Throw number balls into the right goals', place: 'Arena', colour: '#b98cff' },
+  { id: 'galley', name: 'Galley kitchen', line: 'Cook up the diners\' orders', place: 'Terminal', colour: '#ffb347', hue: 'gold' },
+  { id: 'medical', name: 'Triage desk', line: 'Help the patients who come in', place: 'Medical', colour: '#ff6a5a', hue: 'red' },
+  { id: 'smelter', name: 'Smelter controls', line: 'Work out what a haul of ore pays', place: 'Smelter', colour: '#ff8a3a', hue: 'orange' },
+  { id: 'crane', name: 'Crane operator', line: 'Check the crane\'s moves', place: 'Control room', colour: '#ffd35a', hue: 'yellow' },
+  { id: 'dock', name: 'Docking bridge', line: 'Build the bridge out to a ship', place: 'Dock', colour: '#59c3ff', hue: 'blue' },
+  { id: 'arena', name: 'Mathball', line: 'Throw number balls into the right goals', place: 'Arena', colour: '#b98cff', hue: 'purple' },
 ];
 // near the board: how far from the spot under it the prompt comes up (m), and how much the view must be turned toward
-// it (the dot of the camera's way and the way to the board, level)
-export const BOARD = { near: 6.5, facing: 0.25 };
+// it (the dot of the camera's way and the way to the board, level); a row shorter than this on the screen (px) is too
+// small for a finger: a tap on the board opens the list instead
+export const BOARD = { near: 6.5, facing: 0.25, finger: 36 };
 
 const CSS = `
 .pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
@@ -37,28 +38,31 @@ const CSS = `
 .pjb-prompt { position: fixed; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 12px;
   padding: 8px 8px 8px 18px; background: rgba(15, 19, 25, 0.9); box-shadow: inset 0 0 0 1.5px rgba(89, 195, 255, 0.55); clip-path: var(--oct); max-width: calc(100vw - 32px); }
 .pjb-prompt[hidden], .pjb[hidden] { display: none; }
+.pjb:focus { outline: none; }
 .pjb-prompt .pjb-pw { display: flex; flex-direction: column; min-width: 0; }
 .pjb-prompt .pjb-pw b { font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: #bfe6ff; }
 .pjb-prompt .pjb-pw small { font-size: 13px; color: var(--dim); }
 .pjb-open { flex: none; height: 44px; padding: 0 18px; font-size: 15px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #06202e !important; background: var(--cyan) !important; clip-path: var(--oct); --cut: 9px; }
 .pjb kbd, .pjb-prompt kbd { font: 700 10px/1 inherit; font-family: inherit; padding: 3px 5px; margin-left: 8px; border-radius: 3px; background: rgba(0, 0, 0, 0.18); vertical-align: 2px; }
 @media (hover: none) and (pointer: coarse) { .pjb kbd, .pjb-prompt kbd { display: none; } }
-.pjb { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
-  padding: 16px 16px 14px; background: linear-gradient(#163f5a, #0d2638); box-shadow: inset 0 0 0 3px var(--cyan); clip-path: var(--oct); }
+.pjb { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(580px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
+  padding: 16px 16px 14px; background: linear-gradient(#10314a, #0d2638); box-shadow: inset 0 0 0 3px var(--cyan); clip-path: var(--oct); }
 .pjb-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 10px; padding-bottom: 8px; border-bottom: 2px solid rgba(89, 195, 255, 0.5); }
 .pjb-head b { font-size: 24px; font-weight: 800; letter-spacing: 0.04em; color: #fff; }
 .pjb-head small { flex: 1; font-size: 13px; color: #9fd8ff; letter-spacing: 0.06em; text-transform: uppercase; }
 .pjb-x { flex: none; width: 40px; height: 40px; margin: -6px -6px 0 0; font-size: 22px !important; line-height: 1; color: #cfeaff !important; background: rgba(255, 255, 255, 0.06) !important; clip-path: var(--oct); --cut: 8px; }
-.pjb-row { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; column-gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px 8px 10px; margin-top: 6px; text-align: left;
+.pjb-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pjb-key { flex: none; width: 24px; margin: 0 !important; text-align: center; vertical-align: 0 !important; padding: 5px 0 !important; font-size: 12px !important; color: #cfeaff; background: rgba(89, 195, 255, 0.14) !important; }
+.pjb-row { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; column-gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px 8px 10px; text-align: left;
   background: rgba(89, 195, 255, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(89, 195, 255, 0.18); clip-path: var(--oct); --cut: 8px; }
-.pjb-row:nth-child(even) { background: rgba(89, 195, 255, 0.05) !important; }
+.pjb-line:nth-child(even) .pjb-row { background: rgba(89, 195, 255, 0.05) !important; }
 .pjb-row:hover, .pjb-row:focus-visible { background: rgba(89, 195, 255, 0.22) !important; outline: none; }
 .pjb-row i { width: 12px; align-self: stretch; clip-path: polygon(0 0, 100% 3px, 100% calc(100% - 3px), 0 100%); }
 .pjb-row span { display: flex; flex-direction: column; min-width: 0; }
 .pjb-row b { font-size: 16px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
 .pjb-row small { font-size: 14px; color: #cfeaff; }
 .pjb-row em { font-style: normal; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffe3a0; text-align: right; }
-.pjb-row.is-on { background: rgba(89, 195, 255, 0.32) !important; box-shadow: inset 0 0 0 2px var(--cyan); }
+.pjb-line .pjb-row.is-on { background: rgba(89, 195, 255, 0.3) !important; box-shadow: inset 0 0 0 3px var(--job, var(--cyan)); }
 .pjb-row.is-on em::before { content: '\\25B8 '; color: #fff; }
 .pjb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: #9fd8ff; }
 .pjb-stop { height: 36px; padding: 0 14px; font-size: 13px !important; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #cfeaff !important; background: rgba(255, 255, 255, 0.07) !important; clip-path: var(--oct); --cut: 8px; }
@@ -66,7 +70,9 @@ const CSS = `
 @media (max-width: 640px) { .pjb { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 12px 12px 10px; } .pjb-head b { font-size: 20px; } .pjb-row { min-height: 52px; } .pjb-row small { font-size: 13px; }
   .pjb-prompt { width: calc(100vw - 24px); } .pjb-prompt .pjb-pw { flex: 1; } }
 .pjb-chip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 14; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px;
-  background: rgba(15, 19, 25, 0.88); box-shadow: inset 0 0 0 1.5px var(--chip, #59c3ff); clip-path: var(--oct); --cut: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  background: rgba(15, 19, 25, 0.88); box-shadow: inset 0 0 0 1.5px var(--chip, #59c3ff); clip-path: var(--oct); --cut: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap; width: max-content; max-width: calc(100vw - 24px); }
+.pjb-chip span { overflow: hidden; text-overflow: ellipsis; }
 .pjb-chip[hidden] { display: none; }
 .pjb-chip i { width: 10px; height: 10px; background: var(--chip, #59c3ff); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .pjb-chip button { width: 30px; height: 30px; font-size: 18px !important; line-height: 1; color: #cfeaff !important; background: rgba(255, 255, 255, 0.07) !important; clip-path: var(--oct); --cut: 7px; }
@@ -100,8 +106,8 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(30, TOP - 2, CW - 60, 3);
     rows.forEach((r, i) => {
       const y = TOP + 6 + i * ROW, on = picked === r.id;
-      g.fillStyle = on ? 'rgba(89,195,255,0.34)' : i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(30, y, CW - 60, ROW - 4);
-      if (on) { g.fillStyle = '#ffffff'; g.fillRect(30, y, 5, ROW - 4); g.fillRect(CW - 35, y, 5, ROW - 4); }
+      g.fillStyle = on ? r.colour + '3a' : i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(30, y, CW - 60, ROW - 4);
+      if (on) { g.strokeStyle = r.colour; g.lineWidth = 3; g.strokeRect(28.5, y - 2, CW - 57, ROW); }
       g.fillStyle = r.colour; g.fillRect(42, y + 6, 12, ROW - 16);
       g.textAlign = 'left'; g.fillStyle = r.colour; g.font = F(26); g.fillText(r.name.toUpperCase(), 64, y + ROW * 0.31);
       g.fillStyle = '#cfeaff'; g.font = F(21, false); g.fillText(r.line, 64, y + ROW * 0.74);
@@ -135,10 +141,17 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     const i = Math.floor((v - TOP - 6) / ROW);
     return v < TOP ? -1 : i >= 0 && i < rows.length ? i : null;
   };
+  // (how tall a row is on the screen where it was hit, in the page's pixels)
+  const _up = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+  const rowPx = (point) => {
+    _up.setFromMatrixColumn(pc.M, 1).normalize().multiplyScalar(JOBS_SCREEN.h * ROW / CH / 2);
+    _a.copy(point).add(_up).project(W.camera); _b.copy(point).sub(_up).project(W.camera);
+    return Math.abs(_a.y - _b.y) / 2 * innerHeight;
+  };
   if (input && input.onPick) input.onPick((pk) => {
     if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open) return;
     const i = rowAt(pk.hit.point);
-    if (i === -1) openList(); else if (i != null) pick(rows[i].id);
+    if (i === -1 || (pk.touch && i != null && rowPx(pk.hit.point) < BOARD.finger)) openList(); else if (i != null) pick(rows[i].id);
   });
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
@@ -148,7 +161,7 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   document.body.appendChild(prompt);
   prompt.querySelector('.pjb-open').addEventListener('click', () => openList());
   const panel = document.createElement('div');
-  panel.className = 'pjb'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Station jobs');
+  panel.className = 'pjb'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Station jobs'); panel.tabIndex = -1;
   panel.innerHTML = '<div class="pjb-head"><b>STATION JOBS</b><small>Work aboard the station</small><button type="button" class="pjb-x" aria-label="Close (Esc)">&times;</button></div><div class="pjb-rows"></div>'
     + '<div class="pjb-foot"><span>Pick a job: a glowing line on the floor leads you to it.</span><button type="button" class="pjb-stop" hidden>No line</button></div>';
   document.body.appendChild(panel);
@@ -160,15 +173,18 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   document.body.appendChild(chip);
   chip.querySelector('button').addEventListener('click', () => stop());
   rows.forEach((r, i) => {
+    const line = document.createElement('div'); line.className = 'pjb-line';
+    line.innerHTML = `<kbd class="pjb-key">${i + 1}</kbd>`;
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pjb-row'; b.dataset.job = r.id;
-    b.innerHTML = `<i style="background:${r.colour}"></i><span><b style="color:${r.colour}">${r.name}</b><small>${r.line}</small></span><em>${r.place}<kbd>${i + 1}</kbd></em>`;
+    b.style.setProperty('--job', r.colour);
+    b.innerHTML = `<i style="background:${r.colour}"></i><span><b style="color:${r.colour}">${r.name}</b><small>${r.line}</small></span><em>${r.place}</em>`;
     b.addEventListener('click', () => { pick(r.id); closeList(); });
-    list.appendChild(b);
+    line.appendChild(b); list.appendChild(line);
   });
   panel.querySelector('.pjb-x').addEventListener('click', () => closeList());
   panel.querySelector('.pjb-stop').addEventListener('click', () => { stop(); closeList(); });
   function mark() {
-    for (const b of list.children) b.classList.toggle('is-on', b.dataset.job === picked);
+    for (const b of list.querySelectorAll('.pjb-row')) b.classList.toggle('is-on', b.dataset.job === picked);
     panel.querySelector('.pjb-stop').hidden = !picked;
     const r = rows.find((x) => x.id === picked);
     if (r) { chip.querySelector('span').textContent = r.name; chip.style.setProperty('--chip', r.colour); }
@@ -179,7 +195,8 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     if (open || !playing) return;
     open = true; panel.hidden = false; prompt.hidden = true; mark();
     if (input) { wasInput = input.enabled; input.enabled = false; }
-    const first = list.querySelector('.is-on') || list.firstChild; if (first && !matchMedia('(pointer: coarse)').matches) first.focus({ preventScroll: true });
+    // (the keyboard's focus on the panel, not a row: a row lit by it read as a job already picked)
+    if (!matchMedia('(pointer: coarse)').matches) (list.querySelector('.is-on') || panel).focus({ preventScroll: true });
   }
   function closeList() {
     if (!open) return;
@@ -222,8 +239,12 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     // (one prompt at a time: a captain's question up, the board's waits)
     prompt.hidden = !near || open || !!asking();
     // (a job picked: the prompt says which, and that another can be picked)
-    const sub = picked ? 'Following the line to ' + (rows.find((r) => r.id === picked) || {}).name + '. Pick another?' : 'Pick one, and a line on the floor leads you there';
-    if (prompt.dataset.sub !== sub) { prompt.dataset.sub = sub; prompt.querySelector('small').textContent = sub; }
+    const pr = picked && rows.find((r) => r.id === picked);
+    const sub = pr ? 'Follow the ' + (pr.hue ? pr.hue + ' ' : '') + 'line to ' + pr.name + '.' : 'Pick one, and a line on the floor leads you there';
+    if (prompt.dataset.sub !== sub) {
+      prompt.dataset.sub = sub; prompt.querySelector('small').textContent = sub;
+      prompt.querySelector('.pjb-open').firstChild.textContent = pr ? 'Change' : 'Pick';
+    }
   };
   return api;
 }
