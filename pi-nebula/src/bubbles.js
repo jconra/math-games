@@ -80,10 +80,11 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
       if (b.t > b.secs) { if (b.on) { b.on = false; b.el.classList.remove('is-on'); } if (b.t > b.secs + 0.3) drop(b); continue; }
       const P = b.P, head = P.c && P.c.bones && P.c.bones.Head;
       // (over the head as it is now: standing or sitting)
-      if (head && P.inScene) { head.getWorldPosition(hp); v.x = hp.x; v.y = hp.y + 0.42; v.z = hp.z; }
+      // (a captain's over their marker: P.bubbleUp)
+      if (head && P.inScene) { head.getWorldPosition(hp); v.x = hp.x; v.y = hp.y + 0.42 + (P.bubbleUp || 0); v.z = hp.z; }
       else { v.x = P.pos.x; v.z = P.pos.z; v.y = (P.drawnY ?? P.pos.y) + 2.05; }
       const far = Math.hypot(v.x - camera.position.x, v.y - camera.position.y, v.z - camera.position.z);
-      let seen = !!P.shown && far < (FAR[b.kind] || 12);
+      let seen = !!P.shown && !P.byCam && far < (FAR[b.kind] || 12);
       if (seen && (frame + (P.order || 0)) % 6 === 0) b.view = clearView(v.x, v.y, v.z);
       if (b.view === false) seen = false;
       let sx = 0, sy = 0;

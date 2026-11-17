@@ -19,19 +19,32 @@ export const HELLOS = ['Hi!', 'Hello!', 'Hey there!', 'Hey!', 'Oh, hi!', 'Hiya!'
 export const AGAIN = ['Hello again!', 'Hi again!', 'Hey!', 'Back again?', 'Oh, hello!', 'Hi there!'];
 
 // THE CAPTAINS, looking for crew (life.js: a roster entry with `captain`): what they say when the player comes near.
-//   offer: who they are and what they want crew for, ending with the question (its clip speaks it);
+//   what: the question's small words at the bottom of the screen; offer: who they are and what they want crew for,
+//   ending with the question (its clip speaks it);
 //   yes / no: their answer to Interested / Not now; again: when they have asked before; waiting: after a yes, until
 //   missions are ready (missions.js)
 export const CAPTAINS = {
-  vega: { ship: 'Explorer', mission: 'exploring', what: 'Crew for an exploring trip on the Explorer',
+  vega: { ship: 'Explorer', mission: 'exploring', what: 'Join her crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
     no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!' },
-  ruiz: { ship: 'Miner', mission: 'mining', what: 'Crew for a mining run on the Miner',
+  ruiz: { ship: 'Miner', mission: 'mining', what: 'Join his crew for a mining run?',
     offer: { clip: 'ruiz-pitch' }, yes: { clip: 'ruiz-ready' }, hello: { clip: 'ruiz-hello' },
     no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!' },
-  hale: { ship: 'Medic', mission: 'rescue', what: 'Crew for a rescue mission on the Medic',
+  hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
     no: 'That\'s all right, dear. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
+};
+
+// THE SCAN (people.js): what the medic and the patient say at the big scanner, in bubbles, one of each at its moment:
+// the medic's hello as the patient comes up to the bed's foot and the patient's answer; the medic's word as they lie
+// down, and one while the ring goes; the end; the patient's thanks as they go. {patient} and {medic}: their names
+export const SCAN_TALK = {
+  hello: ["Hi {patient}! Hop up on the bed for me.", "Hello, {patient}! Up on the bed, please.", "Ready for your scan, {patient}? Up you get."],
+  answer: ["Okay!", "Sure thing.", "Here I go."],
+  still: ["Lie nice and still now.", "Here we go. Keep still for me.", "Relax. This won't take long."],
+  during: ["Looking good.", "Almost done.", "Nice and still. Well done."],
+  done: ["All done! You're in great shape.", "All finished. Everything looks fine!", "That's it! All clear."],
+  thanks: ["Thanks, {medic}!", "Thank you!", "Thanks! See you soon."],
 };
 
 export const TALKS = [

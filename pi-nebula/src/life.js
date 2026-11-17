@@ -55,9 +55,8 @@ export const SPOTS = {
   counter: [{ piece: 'counter', variant: 'serve', local: [0, 0, 0.95], face: [0, -1] }],
   drinks: [{ piece: 'dispenser', variant: 'drinks', local: [0, 0, 0.95], face: [0, -1] }],
   // by the terminal's big windows, looking out over the planters at space (its south side: the far end of its box)
-  // (the westmost a little in from the west wall's screen, so nobody stands at the window and the screen shoulder to
-  // shoulder)
-  windows: [{ room: 'terminal', at: [0.094, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.259, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.645, 0.87], face: [-0.1, 1] }, { room: 'terminal', at: [0.915, 0.87], face: [0.1, 1] }],
+  // (none in the west corner, by the dock screen and its pillar: there a captain seemed to stare at the wall)
+  windows: [{ room: 'terminal', at: [0.259, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.645, 0.87], face: [-0.1, 1] }, { room: 'terminal', at: [0.915, 0.87], face: [0.1, 1] }],
   // the terminal's open west side, where the captains' booths stood: by the crew screen, and out on the floor
   terminalFloor: [{ room: 'terminal', at: [0.17, 0.12], face: [0.3, -1] }, { room: 'terminal', at: [0.25, 0.33], face: [1, 0.2] }, { room: 'terminal', at: [0.16, 0.45], face: [1, -0.3] }],
   // reading the terminal's screens, on its walls (standing in the open with nothing to look at reads as someone waiting)
@@ -86,22 +85,26 @@ export const SPOTS = {
   medicalFloor: [{ room: 'medical', at: [0.7, 0.22], face: [-1, 0.3] }],
   // the big scanner (its own frame: x across, its bed running out along +z from the wall): where its patient stands to
   // get on (by the bed's foot, on its west side, the side away from the cable trough) and where the medic works its
-  // screen (on the bed's pedestal, facing the way in)
+  // screen (on the front of the bed's pedestal, right in front of it, just outside the line painted round it all)
   scanApproach: [{ piece: 'bigscanner', local: [0.8, 0, 4.4], face: [0, -1] }],
-  scanScreen: [{ piece: 'bigscanner', local: [-0.4, 0, 4.55], face: [0, -1] }],
+  scanScreen: [{ piece: 'bigscanner', local: [0, 0, 4.42], face: [0, -1] }],
   // a patrol: the terminal, the hangar corridor, the junction, the spine north, the loop, the quarters' corridor, the corridor
   patrol: [{ room: 'terminal', at: [0.6, 0.15] }, { room: 'c2', at: [0.5, 0.5] }, { room: 'junction', at: [0.5, 0.5] }, { room: 'spine-n', at: [0.5, 0.6] }, { room: 'spine-n', at: [0.5, 0.25] }, { room: 'loop', at: [0.5, 0.5] }, { room: 'qc', at: [0.6, 0.5] }, { room: 'c1', at: [0.5, 0.5] }],
   guard: [{ place: 'airlock', toward: { place: 'galley' }, out: 7.6 }],
 };
 
 // THE BIG SCANNER'S BED, in the scanner's own frame (kit/bigscanner.js: x across, z out from the wall, its bed's top
-// 0.92 m up): the way its patient goes from the spot by its foot along the bed's west side, where they sit on its edge,
-// and where their hips are once lying on it (on their back, their head toward the wall, under the parked ring)
-export const SCAN_BED = { path: [[0.8, 4.4], [0.72, 3.3], [0.72, 1.6]], sit: [0.43, 1.45], hips: [0, 1.35], top: 0.92, rounds: [2, 3] };
+// 0.92 m up): the way its patient goes from the spot by its foot along the bed's west side (nearer the bed than its
+// rail), where they sit on its edge,
+// and where their hips are once lying on it (on their back, their head toward the wall, under the parked ring); the
+// pedestal's top edge, over its screen, that the medic works and looks at ([across, up, along]); how many times the
+// ring goes there and back
+export const SCAN_BED = { path: [[0.8, 4.4], [0.66, 3.3], [0.66, 1.6]], sit: [0.43, 1.45], hips: [0, 1.35], top: 0.92, panel: [0, 0.8, 3.95], rounds: [2, 3] };
 
 // THE TALKING SPOTS: two people face to face (each spot's two places, `apart` metres, along the way it faces)
 export const TALKS = {
-  terminal: [{ room: 'terminal', at: [0.18, 0.83], face: [1, 0] }, { room: 'terminal', at: [0.66, 0.24], face: [1, 0] }, { room: 'terminal', at: [0.22, 0.6], face: [1, 0] }, { room: 'terminal', at: [0.2, 0.25], face: [0, 1] }],
+  // (well back from the window spots: someone standing at a window just behind a pair seemed to listen in)
+  terminal: [{ room: 'terminal', at: [0.25, 0.72], face: [1, 0] }, { room: 'terminal', at: [0.66, 0.24], face: [1, 0] }, { room: 'terminal', at: [0.22, 0.52], face: [1, 0] }, { room: 'terminal', at: [0.2, 0.25], face: [0, 1] }],
   spine: [{ room: 'spine-n', at: [0.3, 0.45], face: [0, 1] }, { room: 'spine-s', at: [0.3, 0.5], face: [0, 1] }],
   hangar: [{ piece: 'crate', variant: 'stack', room: 'hangar', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-miner', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-medic', local: [2.5, 0, -3.5], face: [1, 0] }],
   lobby: [{ room: 'smelter-lobby', at: [0.55, 0.5], face: [0, 1] }],

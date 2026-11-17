@@ -4,8 +4,8 @@
 //   pickTalk(A, B, { sitting, player, now }) -> { id, lines: [{ who: 0 | 1, words }] } | null
 //       A, B: the two people ({ id, name } from the roster); sitting: at a table; player: the player's name (or null);
 //       now: the game's clock, seconds
-// MEMORY: a conversation is not heard again for MEMORY.again seconds anywhere on the station, and a piece of news is
-// talked over at most MEMORY.perNews times (then it is old news).
+// MEMORY: a conversation is not heard again for MEMORY.again seconds anywhere on the station; a piece of news is talked
+// over at most MEMORY.perNews times (then it is old news), and never again by anyone who has talked it over already.
 import { TALKS } from './lines.js';
 import { news } from './news.js';
 
@@ -28,6 +28,8 @@ export function pickTalk(A, B, { sitting = false, player = null, now = 0 } = {})
   const cands = [];
   for (const N of news.fresh()) {
     if ((told.get(N.id) || 0) >= MEMORY.perNews) continue;
+    // (nobody tells, or is told, a piece of news they have already talked over)
+    if ((A.knows && A.knows.has(N.id)) || (B.knows && B.knows.has(N.id))) continue;
     if (N.kind === 'player' && !player) continue;
     const facts = { ...N, player: N.player || player };
     if (Object.values(facts).some((v) => typeof v === 'string' && names.has(v))) continue;
@@ -47,6 +49,6 @@ export function pickTalk(A, B, { sitting = false, player = null, now = 0 } = {})
   const lines = T.lines.map((s, i) => { const w = fill(s, F); return { who: i % 2, words: w.charAt(0).toUpperCase() + w.slice(1) }; });
   if (lines.some((l) => /\{\w+\}/.test(l.words))) return null;
   heard.set(T.id, now);
-  if (N) told.set(N.id, (told.get(N.id) || 0) + 1);
+  if (N) { told.set(N.id, (told.get(N.id) || 0) + 1); for (const X of [A, B]) (X.knows || (X.knows = new Set())).add(N.id); }
   return { id: T.id, lines };
 }

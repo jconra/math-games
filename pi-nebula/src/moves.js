@@ -9,12 +9,14 @@
 //   M.look = point | null          the head turns toward a point in the world (most of the way: the eyes do the rest)
 //   M.talk = null | 'speak' | 'listen'     in a talk: speaking, or listening
 //   M.sitting = true               (sitting: no arms, a smaller lean)
+//   M.straight = 0..1              lying on a bed: the legs straightened along the body that much (the scanner's patient)
 //
 // HOW: each turn is laid on after the clips have set the bones and before the rest of the crew kit's frame (the feet,
 // the arms out, the eyes: so the eyes aim from where the head has turned), by wrapping the person's clip player's own
 // update. The crew kit's clip player puts these bones back as the clips left them before each update, so nothing builds
 // up from one frame to the next. Every turn is about an axis of the person's own (x their left, y up, z ahead), so it
-// means the same on every outfit's skeleton. Nothing moves the hips or the legs (the feet stay planted).
+// means the same on every outfit's skeleton. Nothing moves the hips, nor the legs (the feet stay planted) but someone's
+// lying on a bed (M.straight).
 import * as THREE from 'three';
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
@@ -33,6 +35,12 @@ const GESTURES = [
   { L: [0, 0, 0, 0], R: [0, 0, 0, 0], w: 2 },                     // hands down a moment
 ];
 const pickGesture = () => { const s = GESTURES.reduce((a, g) => a + g.w, 0); let r = Math.random() * s; for (const g of GESTURES) { r -= g.w; if (r <= 0) return g; } return GESTURES[0]; };
+// (a listener's: smaller, now and then)
+const LISTEN = [
+  { L: [0.05, 0, 0.55, 0.25], R: [0, 0, 0, 0] },                  // a hand up a little
+  { L: [0, 0, 0, 0], R: [0.06, 0, 0.6, 0.3] },
+  { L: [0.12, 0.02, 0.95, 0.05], R: [0.12, 0.02, 0.95, 0.05] },   // the hands together in front
+];
 
 // a turn of a bone about an axis of the person's own frame (rq: the person's own turn in the world)
 function turn(bone, axis, angle, rq) {
@@ -58,8 +66,27 @@ export function addMoves(c) {
   const orig = person.update.bind(person);
   person.update = (dt) => { orig(dt); lay(dt); };
 
-  const still = () => !M.look && !M.talk && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
+  const still = () => !M.look && !M.talk && !(M.straight > 0) && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
     && M.arms.L.every((v) => v < 0.002) && M.arms.R.every((v) => v < 0.002);
+  // (lying on a bed: both legs straight along the body, thigh and shin, as someone lies for a scan; the standing clip
+  // has a knee bent, which lying down lifts a foot into the air. Done before the crew kit puts each foot at its shin's
+  // end, so the feet follow)
+  const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _dn = new THREE.Vector3(), _ax = new THREE.Vector3();
+  function straighten(rq, k) {
+    _dn.set(0, -1, 0).applyQuaternion(rq);
+    for (const s of ['L', 'R']) {
+      const ul = B['UpperLeg' + s], ll = B['LowerLeg' + s]; if (!ul || !ll) continue;
+      // (the thigh: from the hip to the knee)
+      const th = _k.copy(ll.getWorldPosition(_k)).sub(ul.getWorldPosition(_h)).normalize();
+      let ang = Math.acos(Math.max(-1, Math.min(1, th.dot(_dn))));
+      if (ang > 1e-3) turnWorld(ul, _ax.crossVectors(th, _dn).normalize(), ang * k);
+      // (the shin: from the knee to the ankle, as it now lies)
+      const ft = B['Foot' + s];
+      const sh = ft ? _k.copy(ft.getWorldPosition(_k)).sub(ll.getWorldPosition(_h)).normalize() : (ll.updateWorldMatrix(true, false), _k.setFromMatrixColumn(ll.matrixWorld, 1).normalize());
+      ang = Math.acos(Math.max(-1, Math.min(1, sh.dot(_dn))));
+      if (ang > 1e-3) turnWorld(ll, _ax.crossVectors(sh, _dn).normalize(), ang * k);
+    }
+  }
   function lay(dt) {
     M.t += dt;
     if (still()) { M.yaw = M.pitch = M.sway = 0; return; }      // (nothing to lay on: costs nothing)
@@ -87,14 +114,22 @@ export function addMoves(c) {
     if (talking && M.nodT <= 0) { M.nodLeft = 0.55; M.nodT = M.talk === 'listen' ? rnd(1.4, 3.6) : rnd(1.8, 4.5); M.nodSize = M.talk === 'listen' ? rnd(0.7, 1) : rnd(0.35, 0.6); }
     let nod = 0;
     if (M.nodLeft > 0) { M.nodLeft -= dt; const u = 1 - Math.max(0, M.nodLeft) / 0.55; nod = Math.sin(u * Math.PI) * MOVES.nod * (M.nodSize || 1); }
-    // the speaker's hands: a new gesture every second or so, eased into, small beats while in it
-    const speaking = M.talk === 'speak' && !M.sitting;
+    // the speaker's hands: a new gesture every second or so, eased into, small beats while in it; the listener's now and
+    // then a small one (a hand up a little, the hands together), back down after a moment
+    const speaking = M.talk === 'speak' && !M.sitting, listening = M.talk === 'listen' && !M.sitting;
     if (speaking) { if (M.t > M.nextGesture) { const g = pickGesture(); M.want.L = g.L; M.want.R = g.R; M.nextGesture = M.t + rnd(0.9, 2.0); } }
-    else { M.want.L = GESTURES[4].L; M.want.R = GESTURES[4].R; }
+    else if (listening) {
+      if (M.t > M.nextGesture) {
+        const g = M.listenG ? null : LISTEN[Math.floor(Math.random() * LISTEN.length)];
+        M.listenG = !!g; M.want.L = g ? g.L : GESTURES[4].L; M.want.R = g ? g.R : GESTURES[4].R;
+        M.nextGesture = M.t + (g ? rnd(1.4, 2.6) : rnd(3, 7));
+      }
+    } else { M.want.L = GESTURES[4].L; M.want.R = GESTURES[4].R; M.listenG = false; }
     M.beatT += dt;
     const beat = speaking ? Math.max(0, Math.sin(M.beatT * 7.5)) * MOVES.beat : 0;
     for (const s of ['L', 'R']) for (let i = 0; i < 4; i++) M.arms[s][i] = damp(M.arms[s][i], M.want[s][i], 4.5, dt);
     // ── laid on: top down, so each bone turns from where its parent now is ──
+    if (M.straight > 0) straighten(_rq, Math.min(1, M.straight));
     if (Math.abs(M.sway) > 1e-4) { turn(B.Abdomen, Z, M.sway * 0.5, _rq); turn(B.Chest, Z, M.sway * 0.5, _rq); }
     turn(B.Neck, Y, M.yaw * MOVES.neck, _rq); turn(B.Head, Y, M.yaw * (1 - MOVES.neck), _rq);
     turn(B.Head, X, M.pitch + nod, _rq);

@@ -54,7 +54,7 @@ import { STAND, shine } from './player.js';
 import { addMoves } from './moves.js';
 import { makeBubbles } from './bubbles.js';
 import { pickTalk } from './chatter.js';
-import { HELLOS, AGAIN, CAPTAINS } from './lines.js';
+import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK } from './lines.js';
 import { VOICES, CLIPS as VOICE_CLIPS, clipUrl } from './voices.js';
 import { sound } from './sound.js';
 import { missions } from './missions.js';
@@ -72,6 +72,7 @@ export const LIFE = {
   eyes: 7,              // m from the camera beyond which the eyes are not drawn
   far: { low: 0, medium: 5, high: 7 },        // m from the camera beyond which a person is drawn with the far copy (?far=N)
   stuck: 3,             // s with a way to go and nothing gained: a loud alarm (counted)
+  camClear: 0.65,       // m: someone this near the camera (across the floor, and not well below it) is not drawn
 };
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
@@ -171,7 +172,9 @@ export function shadeUnder(root) { const m = new THREE.Mesh(SHADE.geo, SHADE.mat
 // THE CAPTAINS' MARKER (the game's maker: "I'd be fine with them having a yellow marker above them (a captain symbol or
 // something) to easily tell that they are a captain looking for help"): a yellow four-pointed star in a ring, as on the
 // captains' own uniforms, floating over the head and bobbing gently; hidden by walls like anything else
-const MARK = { size: 0.3, over: 0.55, bob: 0.03 };
+// (its size, how far over the head, its bob, metres; how near the camera it may come before it is hidden (m); a
+// captain's bubble sits over it, `bubble` higher than anyone else's)
+const MARK = { size: 0.3, over: 0.55, bob: 0.03, near: 2.4, bubble: 0.5 };
 const MARKER = (() => {
   const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
   const g = cv.getContext('2d'), c = s / 2;
@@ -345,7 +348,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(M);
     return {
       M, q, busy: null, path: SCAN_BED.path.map(([x, z]) => at(x, z)), sit: at(SCAN_BED.sit[0], SCAN_BED.sit[1], SCAN_BED.top),
-      hips: at(SCAN_BED.hips[0], SCAN_BED.hips[1], SCAN_BED.top), top: SCAN_BED.top,
+      hips: at(SCAN_BED.hips[0], SCAN_BED.hips[1], SCAN_BED.top), top: SCAN_BED.top, panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
       // (the scanner's own ways in the station: across its bed (its +x), out along the bed (its +z))
       across: new THREE.Vector3(1, 0, 0).applyQuaternion(q), along: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
       round: scanD ? 2 * (scanD.glide.go + scanD.glide.rest) : 24, use: null,
@@ -369,7 +372,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (a captain: the marker over the head, the captain's own lines)
     if (def.captain && CAPTAINS[def.id]) {
       const m = new THREE.Sprite(MARKER); m.renderOrder = 6; m.scale.setScalar(MARK.size / (c.size || 1));
-      c.root.add(m); P.marker = m; P.cap = { ...CAPTAINS[def.id], id: def.id, name: def.name, state: 'idle', t: 0, cool: 0 };
+      c.root.add(m); P.marker = m; P.cap = { ...CAPTAINS[def.id], id: def.id, name: def.name, state: 'idle', t: 0, cool: 0 }; P.bubbleUp = MARK.bubble;
     }
     c.root.visible = false;     // (in the scene only while drawn: update() adds and takes it away)
     return P;
@@ -589,7 +592,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (P.away === v) return;
     P.away = v; stillV++;
     counts[v ? 'went' : 'came']++;
-    if (v) { bubbles.clear(P); if (P.cap && P.cap.state === 'offer') endOffer(P); }
+    if (v) { bubbles.clear(P); if (P.cap && (P.cap.state === 'offer' || P.cap.state === 'turning')) endOffer(P); }
   }
 
   // ── each frame ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -628,7 +631,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const P of list) {
       if (P.shown === !!P.inScene) continue;
       if (P.shown) { W.scene.add(P.c.root); P.fresh = true; } else W.scene.remove(P.c.root);
-      P.inScene = P.shown; P.c.root.visible = P.shown;
+      P.inScene = P.shown; P.c.root.visible = P.shown; P.byCam = false;
     }
     // (the scanner's glide: from rest while its patient lies on it (and is about), parked otherwise: kit/layout.js
     // updateGlides, which the station's frame calls)
@@ -648,8 +651,22 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (wantFar !== c.far) c.setFar(wantFar);
       const close = far < LIFE.eyes && !c.far;
       if (P.close !== close) { P.close = close; for (const m of [c.meshes.eyes, c.meshes.cornea]) if (m) m.visible = close; }
-      // (the captain's marker, over the head as it is now, bobbing)
-      if (P.marker) { const H = c.bones.Head; P.marker.position.set(0, (H ? H.getWorldPosition(_v).y - c.root.position.y : 1.65 * (c.size || 1)) / (c.size || 1) + (MARK.over + Math.sin(clock * 2.1 + P.order) * MARK.bob) / (c.size || 1), 0); }
+      // (right by the camera (someone going by just behind the player, where the camera is): not drawn, as games do,
+      // rather than a face, or the inside of an outfit, filling the screen)
+      const cx = camera.position.x - P.pos.x, cz = camera.position.z - P.pos.z, cy = camera.position.y - P.drawnY;
+      const byCam = cx * cx + cz * cz < LIFE.camClear * LIFE.camClear && cy > -0.3 && cy < 1.75 * (c.size || 1) + LIFE.camClear;
+      if (byCam !== !!P.byCam) { P.byCam = byCam; c.root.visible = !byCam; }
+      // (the captain's marker, over the head as it is now, bobbing; hidden right by the camera, where it would loom)
+      if (P.marker) {
+        const H = c.bones.Head, hy = (H ? H.getWorldPosition(_v).y - c.root.position.y : 1.65 * (c.size || 1)) / (c.size || 1) + (MARK.over + Math.sin(clock * 2.1 + P.order) * MARK.bob) / (c.size || 1);
+        P.marker.position.set(0, hy, 0);
+        const my = c.root.position.y + hy * (c.size || 1) - camera.position.y;
+        P.marker.visible = cx * cx + cz * cz + my * my > MARK.near * MARK.near;
+      }
+      // (someone speaking up on their own (a captain, the medic) moves their hands as they talk, as two people talking
+      // do (moves.js), never while their hands are at work; a patient lying on the scanner, legs straight)
+      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
+      P.moves.straight = P.act && P.act.kind === 'scan' && P.pose ? scanLie(P.act) : 0;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
@@ -661,12 +678,17 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const ck = P.convo ? (P.convo.A === P ? P.convo.B : P.convo.A) : null;
       const vis = far < 8 && !tk && !ck && P.act && (P.act.kind === 'post' || P.act.kind === 'stand') ? visitor(P) : null;
       const lying = P.act && P.act.kind === 'scan' && P.pose;
+      const scanning = SCAN && SCAN.busy && P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic') ? SCAN.busy : null;
       let look = null;
       if (lying) look = null;
-      else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.state === 'offer' || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
+      // (the medic at the scanner: on the controls while working them, else on the patient; the patient, at the bed's
+      // foot, on the medic)
+      else if (scanning && P.act.kind === 'scanMedic') look = P.act.work > 0 ? near.copy(SCAN.panel) : scanning.patient && scanning.patient.inScene ? headAt(scanning.patient, near) : null;
+      else if (scanning && (P.act.phase === 'ready' || P.act.phase === 'bye') && scanning.medic && scanning.medic.inScene) look = headAt(scanning.medic, near);
+      else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.busy || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
       else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
-      // (the medic at the scanner watches their patient)
-      else if (P.act && P.act.kind === 'scanMedic' && SCAN && SCAN.busy && SCAN.busy.patient && SCAN.busy.patient.inScene) look = headAt(SCAN.busy.patient, near);
+      // (anyone else standing or sitting about: now and then a glance at someone going by, or round the room)
+      else if (!P.walking && !P.convo && far < 12 && !(P.act && P.act.clip && P.act.clip !== STAND)) look = glance(P, near);
       if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
       P.moves.look = look && far < 14 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
       // (a little more smile while the player is near, or just after a hello)
@@ -681,6 +703,26 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     audit(dt);
   }
 
+  // (standing or sitting about with nothing else to look at: now and then, for a moment, a glance at someone going by
+  // in front of them (more often than not, when there is someone), or a look a little to one side; then back)
+  function glance(P, out) {
+    const G = P.glance || (P.glance = { next: clock + rnd(1, 6), until: 0, who: null, at: new THREE.Vector3() });
+    if (clock > G.next) {
+      G.until = clock + rnd(1.2, 2.6); G.next = G.until + rnd(3, 8); G.who = null;
+      let best = null, bd = 6;
+      for (const Q of list) {
+        if (Q === P || Q.away || !Q.walking || !Q.inScene) continue;
+        const dx = Q.pos.x - P.pos.x, dz = Q.pos.z - P.pos.z, d = Math.hypot(dx, dz);
+        if (d < bd && dx * Math.sin(P.heading) + dz * Math.cos(P.heading) > -0.2 * d) { bd = d; best = Q; }
+      }
+      if (best && Math.random() < 0.7) G.who = best;
+      else { const h = P.heading + rnd(-0.9, 0.9); G.at.set(P.pos.x + Math.sin(h) * 3, (P.drawnY ?? P.pos.y) + rnd(1.1, 1.8), P.pos.z + Math.cos(h) * 3); }
+    }
+    if (clock > G.until) return null;
+    return G.who ? (G.who.away || !G.who.inScene ? null : headAt(G.who, out)) : out.copy(G.at);
+  }
+  // (how far a patient is laid down on the scanner's bed: 0 sitting on its edge, 1 flat on it)
+  const scanLie = (a) => (a.phase === 'lying' ? 1 : a.phase === 'lie' ? ease(Math.min(1, a.t / 1.6)) : a.phase === 'unlie' ? 1 - ease(Math.min(1, a.t / 1.6)) : 0);
   // (someone standing still in front of a person at their post, within talking distance: a captain's visitor)
   function visitor(P) {
     let best = null, bd = 2.6;
@@ -706,7 +748,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const base = a.spot.heading ?? P.heading;
     const q = (playerNow && playerNow.pos.distanceTo(P.pos) < 3) ? playerNow : (a.kind === 'post' ? visitor(P) : null);
     let want = L.want;
-    const offering = P.cap && P.cap.state === 'offer' && a.phase !== 'sat';
+    const offering = P.cap && P.cap.busy && a.phase !== 'sat';
     if (q) want = offering ? wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base) : Math.max(-most * 2, Math.min(most * 2, wrap(Math.atan2(q.pos.x - P.pos.x, q.pos.z - P.pos.z) - base)));
     L.off += Math.sign(want - L.off) * Math.min(Math.abs(want - L.off), (offering ? 1.6 : 0.7) * dt);
     P.heading = wrap(base + L.off);
@@ -718,7 +760,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.kind === 'wait') { play(P, STAND); if (a.t > a.until) next(P); return; }
     if (P.req) { if (!P.walking) play(P, STAND); return; }        // (working the way out: as they were)
     // (a captain stopped for the player: standing, turned to them, until the offer is over)
-    if (P.cap && P.cap.state === 'offer' && P.walking && playerNow) {
+    if (P.cap && P.cap.busy && P.walking && playerNow) {
       play(P, STAND);
       const want = Math.atan2(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z), diff = wrap(want - P.heading);
       P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * 0.8 * dt));
@@ -776,7 +818,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (at work with a clip of its own: turned to the work; standing about: a look round now and then, and toward
     // whoever comes up)
     if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
-    if (a.t > a.len && !(P.cap && P.cap.state === 'offer')) next(P);
+    if (a.t > a.len && !(P.cap && P.cap.busy)) next(P);
   }
 
   // ── TALK: two people sharing a conversation from the line bank, in bubbles over their heads ──────────────────
@@ -837,7 +879,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const P of list) {
       if (P.away || !P.shown || P.cap || P.hidden || (P.greeted && clock - P.greeted < FRIENDLY.again)) continue;
       if (P.convo && P.convo.speaking === P) continue;
-      if (P.act && P.act.kind === 'scan' && P.pose) continue;
+      // (at the scanner, patient or medic: busy with each other)
+      if (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic')) continue;
       const dx = pl.pos.x - P.pos.x, dz = pl.pos.z - P.pos.z, d = Math.hypot(dx, dz);
       if (d > bd || Math.abs(pl.pos.y - P.pos.y) > 1.2) continue;
       // (the player in front of them, more or less: someone walking away from the player says nothing)
@@ -859,6 +902,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // A CAPTAIN: near the player, in view, the offer (who, what for, and the question); the answer; left a while after
   function captain(P, dt, pl) {
     const K = P.cap; K.t += dt; K.cool -= dt;
+    if (K.state === 'turning') {
+      // (turned to the player first, then the offer: never spoken with their back to them)
+      const d = pl ? pl.pos.distanceTo(P.pos) : Infinity;
+      if (!pl || d > FRIENDLY.leave || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; return; }
+      const sat = P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase);
+      const diff = Math.abs(wrap(Math.atan2(pl.pos.x - P.pos.x, pl.pos.z - P.pos.z) - P.heading));
+      if (sat || diff < 0.45 || K.t > 1.6) offerNow(P);
+      return;
+    }
     if (K.state === 'offer') {
       const d = pl ? pl.pos.distanceTo(P.pos) : Infinity;
       if (!pl || d > FRIENDLY.leave || K.t > 25 || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; }
@@ -876,16 +928,23 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const Q of list) if (Q !== P && Q.cap && !Q.away && Q.shown && pl.pos.distanceTo(Q.pos) < d) return;
     offer(P);
   }
+  // (the offer begun: the captain stops and turns to the player; offerNow speaks once they face them)
   function offer(P) {
-    const K = P.cap, st = missions.state(K.id);
+    const K = P.cap;
     endTalk(P);
-    K.state = 'offer'; K.t = 0; K.busy = true; P.greeted = clock; P.smileUntil = clock + 8; counts.offers++;
-    if (st === 'interested') { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
-    // (the offer: spoken the first time it can be heard, in a bubble always; the question at the bottom of the screen)
+    K.state = 'turning'; K.t = 0; K.busy = true; P.greeted = clock; P.smileUntil = clock + 9; counts.offers++;
+  }
+  function offerNow(P) {
+    const K = P.cap, st = missions.state(K.id);
+    K.state = 'offer'; K.t = 0;
+    if (st === 'interested') { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
+    // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
+    // question at the bottom of the screen)
     let words = K.again;
     if (!K.offered) { K.voice = speak(P, K.offer.clip, 0.8); if (K.voice) { K.offered = true; words = VOICE_CLIPS[K.offer.clip].words; } else if (st === 'new') words = VOICE_CLIPS[K.offer.clip].words; }
     else K.voice = speak(P, K.hello.clip);
-    bubbles.say(P, words, { kind: 'captain', secs: Math.max(6, READ(words) + 2) });
+    const secs = Math.max(6, READ(words) + 2);
+    bubbles.say(P, words, { kind: 'captain', secs }); P.talkUntil = clock + Math.min(secs - 1, READ(words));
     missions.asked(K.id);
     K.ask = bubbles.ask({ who: K.name, what: K.what, yes: 'Interested', no: 'Not now',
       onYes: () => answer(P, true), onNo: () => answer(P, false) });
@@ -896,7 +955,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     missions.answer({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
     const words = yes ? VOICE_CLIPS[K.yes.clip].words : K.no;
     if (yes) speak(P, K.yes.clip, 0.8);
-    bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) });
+    bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words));
     K.ask = null; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; P.smileUntil = clock + 5;
   }
   function endOffer(P) {
@@ -936,16 +995,25 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const along = (from, to, k) => _v.lerpVectors(from, to, k);
     const sitH = Math.atan2(SCAN.across.x, SCAN.across.z);        // (sitting on the bed's west edge: facing out, across)
     if (a.phase === 'ready') {
+      // (at the bed's foot: on once the medic at the screen has said hello and they have answered)
       play(P, STAND); idle(P, a, dt, 0.1);
-      if (ready || a.placed) { a.phase = 'walkin'; a.t = 0; a.leg = 0; P.scripted = true; }
+      const said = ready && M.act.said;
+      if (a.placed || (said && said.answer && clock - said.answer > 0.9)) { a.phase = 'walkin'; a.t = 0; a.leg = 0; P.scripted = true; }
       else if (a.t > 45) { next(P); }
+      return;
+    }
+    if (a.phase === 'bye') {
+      // (back at the bed's foot: turned to the medic for a word of thanks (scanMedic says it), and off)
+      play(P, STAND);
+      if (M) { const want = Math.atan2(M.pos.x - P.pos.x, M.pos.z - P.pos.z), diff = wrap(want - P.heading); P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt)); }
+      if (a.t > 1.9) scanDone(P);
       return;
     }
     if (a.phase === 'walkin' || a.phase === 'walkout') {
       // (along the bed's side, at an easy pace, inside the rails: the ring is parked)
       const path = a.phase === 'walkin' ? SCAN.path : [...SCAN.path].reverse();
       const A = path[a.leg], B = path[a.leg + 1];
-      if (!B) { if (a.phase === 'walkin') { a.phase = 'sit'; a.t = 0; } else { P.scripted = false; P.pos.copy(path[path.length - 1]); scanDone(P); } return; }
+      if (!B) { if (a.phase === 'walkin') { a.phase = 'sit'; a.t = 0; } else { P.scripted = false; P.pos.copy(path[path.length - 1]); a.phase = 'bye'; a.t = 0; } return; }
       const L = A.distanceTo(B), k = Math.min(1, a.t * 0.75 / Math.max(L, 0.01));
       P.pos.copy(along(A, B, k)); P.pose = null;
       const want = Math.atan2(B.x - A.x, B.z - A.z), diff = wrap(want - P.heading);
@@ -976,27 +1044,57 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (a.phase === 'lying') {
-      // (flat on the bed, still; the ring glides while they are on it: SCAN.use, from rest, a few times there and back)
+      // (flat on the bed, still; the ring glides while they are on it: SCAN.use, from rest, a few times there and back,
+      // once the medic has started it at the screen (on its own after a while if they never do); at the end, the
+      // medic's word, then up)
       P.scripted = true;
       setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.11), bodyQ(_q1, sitH, 1), HIP.stand);
       play(P, STAND, { fade: 0.4 });
-      if (!SCAN.use) SCAN.use = { from: clock, end: null };
+      const S = SCAN.busy;
+      if (a.placed && !S.started) S.started = clock;
+      if (!SCAN.use && !S.over && (S.started || a.t > 9)) SCAN.use = { from: clock, end: null };
       const U = SCAN.use;
-      if (U.end == null && clock - U.from > (a.rounds || 2) * SCAN.round - 0.01) U.end = U.from + Math.ceil((clock - U.from) / SCAN.round) * SCAN.round;
-      if (U.end != null && clock >= U.end) { SCAN.use = null; a.phase = 'unlie'; a.t = 0; }
+      if (U && U.end == null && clock - U.from > (a.rounds || 2) * SCAN.round - 0.01) U.end = U.from + Math.ceil((clock - U.from) / SCAN.round) * SCAN.round;
+      if (U && U.end != null && clock >= U.end && !S.over) S.over = clock;
+      if (S.over && clock - S.over > 1.5) { SCAN.use = null; a.phase = 'unlie'; a.t = 0; }
       return;
     }
   }
+  // THE MEDIC at the scanner's screen, on the front of the bed's pedestal: turned to the patient coming up, a hello (and
+  // their answer); turned to the screen while they get on; a word as they lie down and a touch of the controls, which
+  // starts the ring; while it goes, an eye on the patient, a touch of the controls now and then and one word more; the
+  // end said; turned to the patient again for their thanks as they go. The words: lines.js SCAN_TALK.
   function scanMedic(P, a, dt) {
     const S = SCAN && SCAN.busy;
     if (!S || S.medic !== P) { next(P); return; }
-    // (at the scanner's screen: working it now and then while the patient is on the bed)
-    const working = S.patient && S.patient.act && S.patient.act.kind === 'scan' && S.patient.act.phase === 'lying';
+    const pt = S.patient, ph = pt && pt.act && pt.act.kind === 'scan' ? pt.act.phase : null, said = a.said || (a.said = {});
+    const toPt = (ph === 'ready' || ph === 'bye') && pt.pos.distanceTo(P.pos) < 4;
+    const want = toPt ? Math.atan2(pt.pos.x - P.pos.x, pt.pos.z - P.pos.z) : a.spot.heading ?? P.heading, diff = wrap(want - P.heading);
+    P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * 0.6 * dt));
+    if (ph === 'ready' && !said.hello && Math.abs(diff) < 0.7) { said.hello = clock; scanSay(P, 'hello'); }
+    if (said.hello && !said.answer && clock - said.hello > 1.8) { said.answer = clock; scanSay(pt, 'answer'); }
     a.work = (a.work || 0) - dt;
-    if (working && a.work < -rnd(4, 9)) a.work = rnd(2.5, 4);
+    if (ph === 'lying' && !S.started) {
+      if (!said.still) { said.still = clock; scanSay(P, 'still'); }
+      else if (!a.starting && clock - said.still > 1.2) { a.starting = true; a.work = 1.7; }
+      else if (a.starting && a.work <= 0) { a.starting = false; S.started = clock; }
+    }
+    if (ph === 'lying' && SCAN.use && !S.over) {
+      if (a.work < -rnd(5, 9)) a.work = rnd(1.4, 2.4);
+      if (!said.during && clock - SCAN.use.from > SCAN.round * 0.8) { said.during = clock; scanSay(P, 'during'); }
+    }
+    if (S.over && !said.done) { said.done = clock; a.work = Math.min(a.work, 0); scanSay(P, 'done'); }
+    if (ph === 'bye' && !said.thanks) { said.thanks = clock; scanSay(pt, 'thanks'); }
     play(P, a.work > 0 ? CLIPS.reach : STAND);
-    if (a.work <= 0) idle(P, a, dt, 0.25);
     if (a.t > 240) next(P);       // (a scan that never came: on with the day)
+  }
+  // (a word at the scanner, in a bubble: SCAN_TALK; the medic's hands move as they say it)
+  function scanSay(X, kind) {
+    const S = SCAN.busy, first = (Y) => (Y && Y.name ? Y.name.split(' ')[0] : '');
+    const words = pick(SCAN_TALK[kind]).replace('{patient}', first(S && S.patient) || 'there').replace('{medic}', first(S && S.medic) || 'Doc');
+    bubbles.say(X, words, { kind: 'talk' });
+    if (S && X === S.medic) X.talkUntil = clock + Math.min(kind === 'still' ? 1.1 : 2.4, READ(words));
+    counts.scanWords = (counts.scanWords || 0) + 1;
   }
   function scanDone(P) {
     const S = SCAN && SCAN.busy; if (!S) { next(P); return; }
@@ -1009,8 +1107,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (people.js never leaves anyone lying), the scanner parked)
     const S = SCAN.busy; SCAN.busy = null; SCAN.use = null;
     const pt = S.patient;
-    if (pt && pt !== P && pt.act && pt.act.kind === 'scan') { pt.pose = null; pt.scripted = false; if (pt.act.phase !== 'go' && pt.act.phase !== 'ready' && pt.act.phase !== 'turn') pt.pos.copy(SCAN.path[0]); pt.act = { kind: 'wait', until: rnd(1, 3), t: 0 }; }
-    if (pt === P) { P.pose = null; P.scripted = false; if (P.act && P.act.kind === 'scan' && !['go', 'ready', 'turn'].includes(P.act.phase)) P.pos.copy(SCAN.path[0]); }
+    if (pt && pt !== P && pt.act && pt.act.kind === 'scan') { pt.pose = null; pt.scripted = false; if (!['go', 'ready', 'turn', 'bye'].includes(pt.act.phase)) pt.pos.copy(SCAN.path[0]); pt.act = { kind: 'wait', until: rnd(1, 3), t: 0 }; }
+    if (pt === P) { P.pose = null; P.scripted = false; if (P.act && P.act.kind === 'scan' && !['go', 'ready', 'turn', 'bye'].includes(P.act.phase)) P.pos.copy(SCAN.path[0]); }
     const md = S.medic; if (md && md !== P && md.act && md.act.kind === 'scanMedic') md.act = { kind: 'wait', until: rnd(1, 3), t: 0 };
   }
 
@@ -1179,7 +1277,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // stuck: a way to go, and less than 0.4 m from where they were LIFE.stuck seconds ago (as the crow flies, so someone
       // jiggling back and forth on the spot is stuck too); making way for someone is not being stuck
       const tr = P.trail || (P.trail = []);
-      if (P.walking && !P.yielding && !(P.cap && P.cap.state === 'offer')) {
+      if (P.walking && !P.yielding && !(P.cap && P.cap.busy)) {
         tr.push(P.pos.x, P.pos.z); if (tr.length > 2 * Math.round(LIFE.stuck / 0.25 + 1)) tr.splice(0, 2);
         const full = tr.length >= 2 * Math.round(LIFE.stuck / 0.25 + 1), moved = Math.hypot(P.pos.x - tr[0], P.pos.z - tr[1]);
         // (not getting anywhere for two seconds, walking or not: held, so they stand and work the way out afresh)
