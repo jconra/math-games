@@ -1419,9 +1419,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     release(P); P.away = false; P.req = null; P.walking = false; P.way = null; P.pose = null; P.scripted = false; P.sitY = 0; play(P, STAND, { fade: 0 });
   };
   const stage = {
-    // (here: placed at the talking spot at once, already talking; else they walk there)
-    talk(a, b, group = 'terminal', here = true) {
-      const A = byId(a), B = byId(b), T = (talks[group] || []).find((t) => !t.who[0] && !t.who[1]); if (!A || !B || !T) return false;
+    // (here: placed at the talking spot at once, already talking; else they walk there; at: that one of the group's
+    // talking spots when it is free)
+    talk(a, b, group = 'terminal', here = true, at = null) {
+      const L = talks[group] || [], isFree = (t) => t && !t.who[0] && !t.who[1];
+      const A = byId(a), B = byId(b), T = at != null && isFree(L[at]) ? L[at] : L.find(isFree); if (!A || !B || !T) return false;
       for (const P of [A, B]) reset(P);
       const step = { do: 'talk:' + group, for: [40, 60] }, qa = talkAt(A, T, 0, step), qb = talkAt(B, T, 1, step);
       if (here) { A.pos.copy(T.at[0]); B.pos.copy(T.at[1]); stillV++; }
