@@ -130,7 +130,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     for (const x of pairOf(s)) x.ring.visible = x.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input && !s.job.game) input.enabled = false;
     prompt.hidden = true; wallet.hidden = true;
-    const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; api.crane = null; if (link) { link.close(); link = null; } at = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };
+    const done = () => { for (const x of pairOf(s)) x.ring.visible = x.sign.visible = true; panel = null; api.panel = null; api.crane = null; if (link) { link.close(); link = null; } at = null; near = null; other = null; if (input && playing) input.enabled = true; showWallet(); wallet.hidden = !playing; };   // (near and other forgotten: still standing at the spot, the prompt and its Start come up again at once: on a phone there was no way to start again without walking off and back)
     if (s.job.game) {
       // a job that is a game (the arena's Mathball: src/mathball/): it walks the player and works the camera itself
       panel = openMathball({ W, walls, input, crew: c, lib, job: s.job, people, onSave: () => save(c), onCredits: showWallet, onClose: done });

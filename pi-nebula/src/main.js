@@ -148,7 +148,7 @@ async function boot() {
 
   // ── the clock ─────────────────────────────────────────────────────────────────────────────────────────────────
   let now = 0;
-  const eyes = [], shipEyes = [];
+  const eyes = [], shipEyes = [], _head = new THREE.Vector3();
   function tick(dt) {
     now += dt;
     const P = player && player.P;
@@ -171,7 +171,11 @@ async function boot() {
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
-      P.c.root.visible = chase.near > 0.4 && !(atJob && jobs.inEyes());     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
+      // (how far the camera that is DRAWN is from the head: at a job that is the job's own camera, not the follow camera,
+      // which still runs behind the player and may be pressed against a wall there: the player vanished for about a
+      // second in the arena, standing near its wall with Mathball's camera metres away)
+      const camNear = atJob ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
+      P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes());     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
