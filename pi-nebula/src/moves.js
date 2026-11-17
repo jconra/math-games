@@ -148,11 +148,14 @@ export function addMoves(c) {
       const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s];
       turn(ua, X, -fwd, _rq); turn(ua, Z, out * sg, _rq);
       turn(la, X, -(bend + (s === 'R' ? beat : beat * 0.6) * Math.min(1, bend * 2)), _rq);
-      // (the palm turned up, about the forearm's own line as it now lies)
+      // (the palm turned up, about the forearm's own line as it now lies: the turn shared, half the forearm's along its
+      // length and half the wrist's, as kit/crew.js THE WRISTS A PERSON'S shares a clip's, so a sleeve's cuff, which
+      // rides the forearm and the wrist together, is never twisted the whole way at the wrist (2026-11-17))
       if (la && wr && palm > 0.003) {
         la.updateWorldMatrix(true, false); wr.updateWorldMatrix(false, false);
-        const a = la.getWorldPosition(_p), b = wr.getWorldPosition(_w);
-        turnWorld(wr, b.sub(a).normalize(), -palm * sg);
+        const a = la.getWorldPosition(_p), b = wr.getWorldPosition(_w), line = b.sub(a).normalize();
+        turnWorld(la, line, -palm * sg * 0.5); la.updateWorldMatrix(false, true);
+        turnWorld(wr, line, -palm * sg * 0.5);
       }
     }
     c.root.updateMatrixWorld(true);
