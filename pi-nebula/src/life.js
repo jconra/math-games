@@ -149,8 +149,11 @@ export const ROSTER = [
   // 2026-11-17: "Add Captain Adair walking about too ... You could just say their ship is down for maintenance for now"):
   // the captains' uniform in the security crew's blue, about the terminal and walking the station's rounds)
   { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { uniform: '#2f6db3', skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, voice: 'adair', captain: { ship: 'security' },
-    // (not at the captains' board: her ship is in for repairs, she isn't hiring, and its one free spot is the others')
-    day: [{ do: 'stand:windows', for: T(25, 50) }, { do: 'walk:patrol', p: 0.5 }, { do: 'sit:window', for: T(40, 80), p: 0.5 }, { do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
+    // (security, on her feet: the station's rounds, a look out of the windows, at a screen, over the hangar. Not at the
+    // captains' board (she isn't hiring, and its one free spot is the others') and not on the terminal's seats: with
+    // her on them too, ten minutes on a phone had 16 to 21 jams at them, against main's 5 to 11)
+    day: [{ do: 'stand:windows', for: T(25, 50), p: 0.6 }, { do: 'walk:patrol' }, { do: 'stand:terminal', for: T(15, 30), p: 0.6 }, { do: 'stand:hangar', for: T(30, 60), p: 0.6 }, { do: 'walk:patrol', p: 0.5 },
+      { do: 'stand:terminalFloor', for: T(20, 40), p: 0.6 }] },
   // ── the station's own: at their posts, and their breaks ──
   { id: 'cook', name: 'Bo', look: 'cook', voice: 'om', rate: 1.04, day: [{ do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'post:cook', clip: 'stand', for: T(6, 14) }, { do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'stand:drinks', for: T(6, 12), p: 0.5 }, { do: 'sit:cafe', for: T(120, 200), p: 0.35 }] },
   { id: 'medic', name: 'Ana', look: 'medic', voice: 'yw', rate: 0.94, day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },
