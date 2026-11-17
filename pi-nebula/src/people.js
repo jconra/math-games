@@ -80,8 +80,9 @@ export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
 // FRIENDLY: how near the player someone says hello (m), and not again for `again` seconds; a voice at most once in
 // `voiceGap` seconds anywhere (so a room full of people does not all speak at once), hellos at most one in `gap`; the
 // smile while the player is near (the crew kit's smile slider: worn at 0.67 as made); a captain's offer: how near (m),
-// how far the player goes before it is left (m), how long before it is made again (s)
-export const FRIENDLY = { hello: 3.3, again: 80, gap: 1.1, voiceGap: 1.6, voice: 0.6, look: 4, smile: 1, offer: 3.6, leave: 6, offerAgain: 45, answered: 90 };
+// how near they step up to the player first (m), how far the player goes before it is left (m), how long before it is
+// made again (s)
+export const FRIENDLY = { hello: 3.3, again: 80, gap: 1.1, voiceGap: 1.6, voice: 0.6, look: 4, smile: 1, offer: 3.6, near: 2.1, leave: 6, offerAgain: 45, answered: 90 };
 // the patches nobody stands on or walks across: a job spot's ring (its middle, m), a parked ship's way in (its patch of
 // floor when down, m wider), under the crane's loads (each patch it works over, m wider: its own margin and more), the
 // big scanner's rails (its box, m wider)
@@ -758,6 +759,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function think(P, dt) {
     const a = P.act; if (!a) { next(P); return; }
     a.t += dt;
+    if (P.cap && P.cap.walking) return;      // (a captain stepping up to the player: their offer moves them, captain())
     if (a.kind === 'wait') { play(P, STAND); if (a.t > a.until) next(P); return; }
     if (P.req) { if (!P.walking) play(P, STAND); return; }        // (working the way out: as they were)
     // (a captain stopped for the player: standing, turned to them, until the offer is over)
@@ -861,6 +863,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
 
   // ── FRIENDLY: hellos as the player passes, a captain's offer ─────────────────────────────────────────────────
   let lastHello = -99, lastVoice = -99;
+  const _ap = new THREE.Vector3();
   const headAt = (P, out) => { const H = P.c.bones.Head; if (H && P.inScene) return H.getWorldPosition(out); return out.set(P.pos.x, P.pos.y + 1.6, P.pos.z); };
   const _h = new THREE.Vector3();
   // (a clip in P's voice, from where they stand: -> its handle, or null when it could not play: another voice a moment
@@ -905,11 +908,24 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function captain(P, dt, pl) {
     const K = P.cap; K.t += dt; K.cool -= dt;
     if (K.state === 'turning') {
-      // (turned to the player first, then the offer: never spoken with their back to them)
+      // (turned to the player first, then the offer: never spoken with their back to them; standing a way off, a few
+      // steps nearer first, to an easy talking distance, as someone does who wants a word: never onto a patch kept off,
+      // into anyone or through a wall, and given up after a few seconds)
       const d = pl ? pl.pos.distanceTo(P.pos) : Infinity;
-      if (!pl || d > FRIENDLY.leave || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; return; }
+      if (!pl || d > FRIENDLY.leave || P.away) { K.walking = false; endOffer(P); K.cool = FRIENDLY.offerAgain; return; }
       const sat = P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase);
-      const diff = Math.abs(wrap(Math.atan2(pl.pos.x - P.pos.x, pl.pos.z - P.pos.z) - P.heading));
+      const want = Math.atan2(pl.pos.x - P.pos.x, pl.pos.z - P.pos.z), diff = Math.abs(wrap(want - P.heading));
+      if (!sat && !P.scripted && d > FRIENDLY.near && K.t < 4) {
+        if (K.walking) P.heading = wrap(P.heading + Math.sign(wrap(want - P.heading)) * Math.min(diff, LIFE.turn * dt));
+        if (diff < 0.6) {
+          const s = Math.min(d - FRIENDLY.near, 1.0 * dt), ux = (pl.pos.x - P.pos.x) / d, uz = (pl.pos.z - P.pos.z) / d;
+          _ap.copy(P.pos); walls.move(_ap, ux * s, uz * s, 0.26);
+          if (_ap.distanceTo(P.pos) > s * 0.5 && !onPatch(_ap.x, _ap.z) && !someoneAt(_ap, P, LIFE.body * 0.9, true)) {
+            P.pos.copy(_ap); if (!K.walking) { K.walking = true; play(P, CLIPS.walk, { speed: 0.7 }); } return;
+          }
+        } else if (K.walking) return;
+      }
+      if (K.walking) { K.walking = false; play(P, STAND); }
       if (sat || diff < 0.45 || K.t > 1.6) offerNow(P);
       return;
     }
@@ -962,6 +978,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   function endOffer(P) {
     const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; }
+    if (K.walking) { K.walking = false; play(P, STAND); }
     K.state = 'idle'; K.busy = false; K.t = 0;
   }
 

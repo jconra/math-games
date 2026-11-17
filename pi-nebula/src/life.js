@@ -103,8 +103,9 @@ export const SCAN_BED = { path: [[0.8, 4.4], [0.66, 3.3], [0.66, 1.6]], sit: [0.
 
 // THE TALKING SPOTS: two people face to face (each spot's two places, `apart` metres, along the way it faces)
 export const TALKS = {
-  // (well back from the window spots: someone standing at a window just behind a pair seemed to listen in)
-  terminal: [{ room: 'terminal', at: [0.25, 0.72], face: [1, 0] }, { room: 'terminal', at: [0.66, 0.24], face: [1, 0] }, { room: 'terminal', at: [0.22, 0.52], face: [1, 0] }, { room: 'terminal', at: [0.2, 0.25], face: [0, 1] }],
+  // (the first by the west windows, but 2.5 m from the nearest window place: someone standing at a window just behind a
+  // pair seemed to listen in; and clear of the ramp up to the tables, east of it)
+  terminal: [{ room: 'terminal', at: [0.13, 0.75], face: [1, 0] }, { room: 'terminal', at: [0.66, 0.24], face: [1, 0] }, { room: 'terminal', at: [0.22, 0.52], face: [1, 0] }, { room: 'terminal', at: [0.2, 0.25], face: [0, 1] }],
   spine: [{ room: 'spine-n', at: [0.3, 0.45], face: [0, 1] }, { room: 'spine-s', at: [0.3, 0.5], face: [0, 1] }],
   hangar: [{ piece: 'crate', variant: 'stack', room: 'hangar', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-miner', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-medic', local: [2.5, 0, -3.5], face: [1, 0] }],
   lobby: [{ room: 'smelter-lobby', at: [0.55, 0.5], face: [0, 1] }],
