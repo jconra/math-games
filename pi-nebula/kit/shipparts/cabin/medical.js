@@ -8,6 +8,9 @@
 //     o.len 2.1, o.w 0.9 (the bed's deck), o.gap 0.15 (from the wall line to the head end), o.top 0.68 (the mattress's
 //     top), o.back 0.35 (the raised back section's angle, radians; 0 flat), o.arm 1 (the monitor arm's side, +1 on +x,
 //     -1 on -x, 0 none)
+//     o.ward (a number): a WARD's bed instead, the station's (kit/ward.js wardBed: thick padded side rails, a thick foot
+//     board, wheels, no wall fittings of its own), on the same footprint with its mattress at the same height; the
+//     ship's own beds are drawn as they always were
 //   scanner(p, o)  the triage scanner: a hood hung from the ceiling on four rods over the aisle, a scan band and
 //                  emitters glowing on its underside; a stretcher passes under it
 //     o.len 1.9 (along z, the way the stretcher runs), o.w 1.2, o.clear 1.98 (the hood's underside), o.ceil 2.5
@@ -25,6 +28,7 @@ import { wallScreen } from '../../wallkit.js';
 import { part, placeInto } from '../place.js';
 import { FACE, NAVY, SHEET, WORKTOP, TEAL } from './ship.js';
 import { lean } from './galley.js';
+import { wardBed } from '../../ward.js';
 
 const PI = Math.PI;
 // a thin glowing bar from (ax, ay) to (bx, by) on a face at z, in the colour `col`
@@ -42,6 +46,7 @@ export function pulseLine(p, x0, x1, y, z, h = 0.06, ry = 0, col = TEAL) {
 
 // ── the patient bed ───────────────────────────────────────────────────────────────────────────────────────────────
 export function medBed(p, o = {}) {
+  if (o.ward) return wardBed(p, o, pulseLine);
   p = lean(p);
   const len = o.len ?? 2.1, w = o.w ?? 0.9, gap = o.gap ?? 0.15, top = o.top ?? 0.68, back = o.back ?? 0.35, arm = o.arm ?? 1;
   const hw = w / 2, z0 = gap, z1 = gap + len, zm = (z0 + z1) / 2, deck = top - 0.12;

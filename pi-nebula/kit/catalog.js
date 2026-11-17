@@ -9,7 +9,8 @@ import { LABELS, SIGNS } from './tex.js';
 import { pane, filler } from './windows.js';
 import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTile } from './bigroom.js';
 import { bayDoor, mark, airlock, crate, fuel, gangway } from './hangar.js';
-import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider, curtain, pot } from './furniture.js';
+import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider, pot } from './furniture.js';
+import { WARD_PIECES } from './ward.js';         // (the ward: bed wall panels, curtains, bedside tables, drip stands, carts)
 import { ship } from './ship.js';
 import { OUTSIDE } from './shipparts/outside.cat.js';
 import { COCKPIT } from './shipparts/cockpit.cat.js';
@@ -28,7 +29,7 @@ export const PIECES = {
   rib: { name: 'Rib', group: 'Shell', at: 'point', variants: ['strip', 'plain'], foot: [0.3, 3, 0.7], build: rib },
   beam: { name: 'Ceiling beam', group: 'Shell', at: 'edge', variants: ['plain'], foot: [2, 0.2, 0.3], build: beam, y: 2.9 },
   hatch: { name: 'Bulkhead hatch', group: 'Shell', at: 'point', variants: ['arch', 'wide', 'blind'], foot: [4, 3, 0.6], build: hatch },
-  corner: { name: 'Corner', group: 'Shell', at: 'point', variants: ['inside', 'outside'], foot: [0.6, 3, 0.6], build: corner },
+  corner: { name: 'Corner', group: 'Shell', at: 'point', variants: ['inside', 'outside', 'inside dark'], foot: [0.6, 3, 0.6], build: corner },
   junction: { name: 'Junction', group: 'Shell', at: 'point', variants: ['T', 'X'], foot: [4, 3, 4], prefab: junction },
   trim: { name: 'Trim', group: 'Shell', at: 'edge', variants: ['base', 'glow', 'cornice', 'cornice-grey'], foot: [2, 0.4, 0.6], build: trim },
   breaker: { name: 'Breaker panel', group: 'Wall kit', at: 'wall', variants: ['switches'], foot: [0.45, 0.9, 0.15], build: breaker },
@@ -63,8 +64,8 @@ export const PIECES = {
   booth: { name: "Captain's booth", group: 'Furniture', at: 'free', variants: ['medic', 'mining', 'explore', 'security'], foot: [2, 1.8, 2], build: booth },
   planter: { name: 'Planter', group: 'Furniture', at: 'free', variants: ['long', 'tall'], foot: [1.7, 2.2, 0.7], build: planter },
   jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu', 'station'], foot: [4.5, 2, 0.3], build: jobs },
-  divider: { name: 'Bed divider', group: 'Medical', at: 'free', variants: ['bed', 'bed b'], foot: [2, 1.8, 0.45], build: divider },
-  curtain: { name: 'Bay curtain', group: 'Medical', at: 'free', variants: ['3.1', '3.35'], foot: [3.1, 2.8, 0.1], build: curtain },
+  divider: { name: 'Bed divider', group: 'Medical', at: 'free', variants: ['plain'], foot: [2, 1.8, 0.45], build: divider },
+  ...WARD_PIECES,
   // the hangar
   baydoor: { name: 'Hangar door', group: 'Hangar', at: 'point', variants: ['open'], foot: [16, 7, 5.5], build: bayDoor },
   mark: { name: 'Floor paint', group: 'Hangar', at: 'free', variants: ['ring', 'line', 'hazard', 'box', 'arrow'], foot: [2, 0.1, 2], build: mark },

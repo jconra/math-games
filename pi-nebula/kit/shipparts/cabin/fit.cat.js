@@ -29,7 +29,10 @@ export const PRESETS = {
   cabinToilet: { wall: {} },
   cabinBasin: { '0.5 m': {}, '0.6 m': { w: 0.6 } },
   cabinShower: { stall: {}, '1 m': { w: 1.0, depth: 1.0 } },
-  cabinMedBed: { raised: {}, flat: { back: 0 }, 'arm left': { arm: -1 } },
+  // (the station's ward beds, kit/ward.js: 'ward <its number>', and with one side's longer rail folded down: 'left' is
+  // the left of someone standing at its foot)
+  cabinMedBed: { raised: {}, flat: { back: 0 }, 'arm left': { arm: -1 },
+    ...Object.fromEntries([1, 2, 3].flatMap((n) => [[`ward ${n}`, { ward: n }], [`ward ${n}, left rail down`, { ward: n, down: -1 }], [`ward ${n}, right rail down`, { ward: n, down: 1 }]])) },
   cabinScanner: { hood: {} },
   cabinPharmacy: { '2 m': {}, '1.5 m': { len: 1.5 }, '1 m': { len: 1.0, shelves: 3 } },
   cabinStretcher: { trolley: {}, low: { top: 0.5 } },
