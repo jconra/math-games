@@ -112,6 +112,9 @@ export function makeCrane({ W, walls, boarding = null }) {
     // (not the canisters: they change places between the ship and the rack, and kit/crane.js puts each where it is,
     // riding the ship's own move when it is on a mount (L.ship); the trays are the ship's alone and ride with it)
     const meshes = [...mine].filter((im) => !others.has(im) && !/^mb:can/.test(im.name));
+    // (its thruster pods, live doors so the landing can turn them, drawn with the hangar, as the crane's parts are,
+    // rather than wherever anyone is)
+    for (const D of W.built.doors) if (D.zone === 'ship-miner' && D.piece === 'mbPod') for (const leaf of D.leaves) for (const im of leaf.meshes || []) if (meshes.includes(im)) room.group.add(im);
     const legs = W.built.doors.filter((D) => D.zone === 'ship-miner' && (D.piece === 'mbGear' || D.piece === 'mbGearDoors'));
     const pad = W.place('pads') || null, at = W.R?.places?.pads?.miner ? new THREE.Vector3(...W.R.places.pads.miner) : zone.box.getCenter(new THREE.Vector3()).setY(0);
     const nose = W.R?.places?.ships?.miner?.nose === '-x' ? -1 : 1;
