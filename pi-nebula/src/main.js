@@ -115,7 +115,7 @@ async function boot() {
     const key = p.id + ':' + JSON.stringify(p.look);
     if (building && building.key === key) return building.ready;
     const old = building;
-    const ready = makePlayer({ lib, recipe: recipeOf(p.look), walls, scene: W.scene }).then((P) => { P.c.root.visible = false; return P; });
+    const ready = makePlayer({ lib, recipe: recipeOf(p.look, lib), walls, scene: W.scene }).then((P) => { P.c.root.visible = false; return P; });
     building = { key, ready };
     if (old) old.ready.then((P) => { if (!player || player.P !== P) P.dispose(); }).catch(() => {});
     return ready;

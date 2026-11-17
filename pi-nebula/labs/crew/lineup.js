@@ -36,9 +36,10 @@ export function makeLineup({ lib, makeCrew, scene, renderer, sun, topPx, current
   const _a = new THREE.Vector3(), _b = new THREE.Vector3();
   let tags = null, lastSync = 0, seq = 0, sunShadow = true;
 
-  // (the ids varied, in the grids' order: the hair's starts with none)
+  // (the ids varied, in the grids' order: the hair's starts with none; the heads are the heads to pick, Vega's helmet
+  // left out: kit/crew.js VEGA'S HELMET)
   const ids = () => {
-    const v = KINDS[L.kind].vary, P = lib.list.parts[v === 'suit' ? 'suit' : v];
+    const v = KINDS[L.kind].vary, P = v === 'head' ? lib.headsToPick() : lib.list.parts[v === 'suit' ? 'suit' : v];
     return [...(v === 'hair' ? [{ id: null, name: 'No hair' }] : []), ...P.map((p) => ({ id: p.id, name: p.name }))];
   };
   // the grid: columns and rows for this screen, the page's size
@@ -61,6 +62,13 @@ export function makeLineup({ lib, makeCrew, scene, renderer, sun, topPx, current
     const R = JSON.parse(JSON.stringify(current() || {}));
     R[KINDS[L.kind].vary] = id;
     if (L.kind === 'heads' && !L.hairOn) R.hair = null;
+    // (an outfit with a head of its own, Vega's, wears it in the outfits' line-up: his helmet comes with his body; and
+    // the other outfits never wear it: shown on his, they wear the first head to pick of their own skeleton)
+    if (L.kind === 'outfits') {
+      const own = lib.headWith(id), sk = (lib.entry('suit', id) || {}).skeleton || 'm';
+      if (own) { R.head = own; R.hair = null; }
+      else if ((lib.entry('head', R.head) || {}).with) { R.head = ((lib.headsToPick().find((h) => (h.skeleton || 'm') === sk)) || {}).id || null; R.hair = null; }
+    }
     return R;
   }
   // (what needs the person put together again, and what is worn at once)

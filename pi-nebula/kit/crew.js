@@ -86,8 +86,13 @@
 // bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. The gaze looks at a point or straight ahead, with
 // small darting movements, jumping and settling as eyes do (THE GAZE, below). A part's own bones (bones the suit's
 // skeleton lacks, all under the Head bone) are added to the person's skeleton when it's put together. A head without
-// eyes (the captain's portrait head, captain1; Vega's helmet) is as it was. (The nine older HD mesh heads, h1 to h9,
-// were taken out 2026-11-11.)
+// eyes (Vega's helmet) is as it was. (The nine older HD mesh heads, h1 to h9, were taken out 2026-11-11; the old
+// portrait set's head, outfit and hair, captain1, 2026-11-17: the game's maker, "It should only be the 13 heads". They
+// are kept in ~/pw/space-math/retired/crew-2026-11-17/. The crew.json recipe named captain1 is the Captain herself and
+// stays.)
+// VEGA'S HELMET is his own (crew.json head entry `with`: the outfit it comes with): a head entry with `with` is no head
+// to pick (the Crew Lab's head choices, its line-ups and the measuring sweeps show the 13 human heads only); it comes
+// with that outfit and its look (lib.headsToPick(), lib.headWith(suit id)).
 //
 // FACE BONES (the Tripo heads): small bones under the Head bone (Jaw, Chin, Cheek.L/R, Nose, Bridge, Brow, EyeSocket.L/R,
 // Ear.L/R) with smooth weights over the face, each moved or sized from its rest by the sliders in FACE, -1 to 1, kept to
@@ -122,6 +127,8 @@
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
 //                                               lib.handFor(suit id) -> the hand part a suit wears unless a recipe names one
+//                                               lib.headsToPick() -> the heads a person may wear (Vega's helmet left
+//                                               out); lib.headWith(suit id) -> the head that comes with that outfit, or null
 //                                               lib.buzzOf(hair id) -> the buzz makeCrew gives that hair; lib.buzzes
 //                                               { hair id: buzz | null } (empty: a layer over crew.json's; the Crew Lab's
 //                                               while it's edited); lib.earsOf(head id) -> that head's ears
@@ -281,6 +288,10 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   const parts = new Map(), raws = new Map(), fitted = new Map();
   const lib = { dir, list };
   lib.entry = (kind, id) => (list.parts[kind] || []).find((p) => p.id === id);
+  // (VEGA'S HELMET: the heads to pick from, every head but one that comes with its own outfit (a head entry's `with`);
+  // and the head an outfit comes with, or null)
+  lib.headsToPick = () => (list.parts.head || []).filter((h) => !h.with);
+  lib.headWith = (suit) => ((list.parts.head || []).find((h) => h.with && h.with === suit) || {}).id || null;
   // a skeleton's own clips, as the Mathwood files have them (loaded once, when a suit on that skeleton first comes)
   lib.rawClips = (body) => {
     if (!raws.has(body)) {
@@ -1573,7 +1584,7 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
 //   tuckStart         metres below the hair's top where the tuck is full; above that it fades out over 2 cm (0: full
 //                     all over)
 //   hug               0..1 (0% to 100%; left out: 100% for the crew's own hairs, the ones with a scalp line (built in
-//                     Blender or harvested), 0 for the rest: the Mathwood hairs, the old captain1 hair; lib.hugDefaultOf):
+//                     Blender or harvested), 0 for the rest: the Mathwood hairs; lib.hugDefaultOf):
 //                     THE HUG, after the tuck: the hair's inner layer drawn to its
 //                     hugGap off THIS head's scalp wherever it stands further off, the dragged-down edge tucked under with
 //                     it; 0 is off (the tuck alone, as before 2026-11-08)
@@ -2351,7 +2362,8 @@ function wornScalp(sc, hairFit, field) {
 export const COLLAR_CLEAR = 0.003;            // the hidden neck kept this far inside the collar's inner wall (metres)
 export const COLLAR_BAND = 0.015;             // the fit grows from nothing at the rim to full this far below it
 // (least: nothing nearer the collar's centre than this is a collar a neck goes into (no neck is thinner than about
-// 4.6 cm): an older suit's leftovers inside its collar (captain1's) are passed)
+// 4.6 cm): whatever lies nearer, inside a collar, is passed. Tried at 0 on 2026-11-17: it changes the collar found on
+// most outfits, so it stays)
 // (far: where the look in starts: a wall must be the suit's OUTERMOST cloth along its line out to here, so an inner
 // surface with the suit's own back or a pack beyond it (spaceMan's funnel inside its ring) is never taken for the
 // collar; a wall farther than reach is none (the suit is far off there). jump: the most a collar's outside comes in from

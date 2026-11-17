@@ -45,9 +45,12 @@ export const LOOKS = [
 export const lookById = (id) => LOOKS.find((l) => l.id === id) || LOOKS[0];
 
 // The crew kit's recipe for a saved player's look ({ id, ...anything earned since }): the look's own recipe with the
-// saved extras laid over it (colours are merged, so one earned colour does not wipe the others).
-export function recipeOf(saved) {
+// saved extras laid over it (colours are merged, so one earned colour does not wipe the others). Given the crew kit's
+// library (lib: its entry(kind, id)), a saved extra that names a part the crew no longer has (a retired outfit, head or
+// hair: 2026-11-17, the old captain1 portrait set) is left out, so the look's own part is worn.
+export function recipeOf(saved, lib = null) {
   const base = lookById(saved && saved.id).recipe, extra = { ...(saved || {}) };
   delete extra.id;
+  if (lib && lib.entry) for (const k of ['suit', 'head', 'hair', 'hand']) if (typeof extra[k] === 'string' && !lib.entry(k, extra[k])) delete extra[k];
   return { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...(base.face || {}), ...(extra.face || {}) } };
 }

@@ -208,8 +208,16 @@ async function show(recipe) {
   if (st.ref) setRef(true);
   triCount(); menu();
 }
-// (a part picked from a grid: the recipe with it, the rest kept)
-const wear = (kind, id) => { if (!st.recipe) return; show({ ...st.recipe, [kind]: id || null }); };
+// (a part picked from a grid: the recipe with it, the rest kept. VEGA'S HELMET (kit/crew.js): an outfit with a head of
+// its own (Vega's) puts it on, no hair; going from it to another outfit gives back the head and hair worn before it)
+const wear = (kind, id) => { if (!st.recipe) return; show({ ...st.recipe, [kind]: id || null, ...(kind === 'suit' ? withHead(st.recipe, id) : {}) }); };
+function withHead(R, suit) {
+  const own = lib.headWith(suit), was = lib.entry('head', R.head) || {};
+  if (own) { if (!was.with) st.humanHead = { head: R.head, hair: R.hair }; return { head: own, hair: null }; }
+  if (!was.with) return {};
+  const back = st.humanHead && lib.entry('head', st.humanHead.head) ? st.humanHead : null, sk = (lib.entry('suit', suit) || {}).skeleton || 'm';
+  return back || { head: (lib.headsToPick().find((h) => (h.skeleton || 'm') === sk) || lib.headsToPick()[0] || {}).id || null, hair: null };
+}
 function setPaint(p) {
   st.paint = p;
   for (const c of [st.crew, ...(LU ? LU.slots.map((s) => s.crew) : [])]) if (c) paintOne(c);
@@ -366,7 +374,7 @@ async function shoulderStep(dir) {
 // HEADS: the heads, and how this one sits on this outfit
 function headsWin() {
   const R = st.recipe || {};
-  return [grid('head', lib.list.parts.head, R.head, 'Heads'), ...headBits(R)];
+  return [grid('head', lib.headsToPick(), R.head, 'Heads'), ...headBits(R)];
 }
 // POSE: the clips and their speed
 function poseWin() {
@@ -453,10 +461,22 @@ function savePlaces() {
   try { if (Object.keys(lib.headPlaces.suits).length || Object.keys(lib.headPlaces.heads).length) localStorage.setItem(PLACE_KEY, JSON.stringify(lib.headPlaces)); else localStorage.removeItem(PLACE_KEY); }
   catch (_) { fitSt.note = 'This browser would not keep the head settings: Save fits before you leave.'; }
 }
+// (this browser's settings kept for a part the crew no longer has (a retired outfit, head or hair: 2026-11-17, the old
+// captain1 portrait set) are let go as they are read, so nothing names it: { id: v } keeps the ids crew.json lists, and
+// within a head's place or a hair's fit, the outfits and heads it lists)
+function known(kind, o) {
+  const out = {};
+  for (const [id, v] of Object.entries(o && typeof o === 'object' ? o : {})) {
+    if (!lib.entry(kind, id)) continue;
+    if (v && typeof v === 'object' && (kind === 'head' || kind === 'hair')) { const k = kind === 'head' ? 'suits' : 'heads'; if (v[k] && typeof v[k] === 'object') { out[id] = { ...v, [k]: known(kind === 'head' ? 'suit' : 'head', v[k]) }; continue; } }
+    out[id] = v;
+  }
+  return out;
+}
 // (this browser's, and the seats an older Crew Lab kept (crewlab.seats.v1), brought into this form once)
 try {
   const j = JSON.parse(localStorage.getItem(PLACE_KEY) || '{}');
-  if (j && typeof j === 'object') lib.headPlaces = { suits: j.suits && typeof j.suits === 'object' ? j.suits : {}, heads: j.heads && typeof j.heads === 'object' ? j.heads : {} };
+  if (j && typeof j === 'object') lib.headPlaces = { suits: known('suit', j.suits), heads: known('head', j.heads) };
   const old = JSON.parse(localStorage.getItem(OLD_SEAT_KEY) || 'null');
   if (old && typeof old === 'object') {
     for (const [h, s] of Object.entries(old)) {
@@ -596,7 +616,7 @@ function saveMine() {
 // (hairs renamed to their files' names (2026-11-08): this browser's fits and buzzes kept under the old ids follow them)
 const RENAMED = { pinkside: 'pinkSide', bumpy: 'coil', greybob: 'mediumFull' };
 function renamed(o) { for (const [a, b] of Object.entries(RENAMED)) if (own(o, a)) { if (!own(o, b)) o[b] = o[a]; delete o[a]; } return o; }
-lib.fits = renamed(readMine()); lib.headFits = readMine(HEAD_KEY);
+lib.fits = known('hair', renamed(readMine())); lib.headFits = known('head', readMine(HEAD_KEY));
 const fitSt = { scope: 'all', fine: false, out: null, note: '' };
 // a change to the hair shown: to its fit on every head, to this pair's own adjustment, or to the head's own setting
 async function fitEdit(change, quiet) {
@@ -724,7 +744,7 @@ async function copyFits() {
 // the head or the hair before or after (the hair's list starts with none), wrapping round (the arrow keys)
 async function step(kind, d) {
   if (!st.recipe) return;
-  const ids = [...(kind === 'hair' ? [null] : []), ...lib.list.parts[kind].map((p) => p.id)];
+  const ids = [...(kind === 'hair' ? [null] : []), ...(kind === 'head' ? lib.headsToPick() : lib.list.parts[kind]).map((p) => p.id)];
   const i = Math.max(0, ids.indexOf(st.recipe[kind] || null));
   await show({ ...st.recipe, [kind]: ids[(i + d + ids.length) % ids.length] });
 }
@@ -877,7 +897,7 @@ function saveBuzzes() {
   try { if (Object.keys(lib.buzzes).length) localStorage.setItem(BUZZ_KEY, JSON.stringify(lib.buzzes)); else localStorage.removeItem(BUZZ_KEY); }
   catch (_) { fitSt.note = 'This browser would not keep the buzzes: Save fits before you leave.'; }
 }
-lib.buzzes = renamed(readBuzzes());
+lib.buzzes = known('hair', renamed(readBuzzes()));
 // (what paints a hair has: a painted cut (the buzz cut), its bust's own marks, its scalp's shade)
 const hairPaints = (P) => ({ cut: !!(P && P.paint && !P.file), marks: !!(P && P.paint && P.marks), under: !!(P && P.scalp && P.scalp.line) });
 function buzzEdit(change) {
@@ -963,7 +983,7 @@ function lineupWin() {
   const R = st.recipe || {}, K = LU.kind, n = LU.slots.length, all = LU.pages;
   const held = { heads: `${nameOf('suit', R.suit)}${LU.hairOn ? '' : ', no hair'}`, outfits: nameOf('head', R.head), hairs: nameOf('head', R.head), hairHeads: R.hair ? nameOf('hair', R.hair) : 'No hair' }[K];
   const what = { heads: 'heads on', outfits: 'outfits under', hairs: 'hairs on', hairHeads: 'heads under' }[K];
-  const total = LU.slots.length ? `${{ heads: lib.list.parts.head.length, outfits: lib.list.parts.suit.length, hairs: lib.list.parts.hair.length + 1, hairHeads: lib.list.parts.head.length }[K]}` : '0';
+  const total = LU.slots.length ? `${{ heads: lib.headsToPick().length, outfits: lib.list.parts.suit.length, hairs: lib.list.parts.hair.length + 1, hairHeads: lib.headsToPick().length }[K]}` : '0';
   const out = [sec('Line up', choice(Object.entries(LINEUPS).map(([k, x]) => [k, x.label, x.title]), K, (k) => { LU.open(k); paint('lineup'); }, 'Which line-up')),
     el('div', 'cw-sum', `${total} ${what} ${held}` + (all > 1 ? `: page ${LU.pageNo + 1} of ${all} (${n} here)` : ''))];
   const bits = [];
