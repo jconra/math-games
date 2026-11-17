@@ -127,13 +127,14 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
 
   // the level line with its arrows (Mathwood's level tool), on the pick and end cards
   // (after a round, `played` is the level it was played at: the line says what Play again plays, and if that moved)
+  // (the arrows stay inside the levels chosen for this job on the levels page, Mathwood's range: canDown, canUp)
   function levelHtml(played = null) {
     const v = E.level(crew, job), i = v ? v.i : 0, n = v ? v.n : LADDER.length;
-    const S = LADDER[i] || LADDER[0];
+    const S = LADDER[i] || LADDER[0], down = v ? v.canDown : i > 0, up = v ? v.canUp : i < n - 1;
     const moved = played == null || played === i ? '' : played < i ? ' &middot; up a level' : ' &middot; down a level';
-    return `<div class="mbl-level"><button type="button" class="mbl-arrow" data-dir="-1" aria-label="Easier rules"${i <= 0 ? ' disabled' : ''}>&#9664;</button>
-      <span><small>${played == null ? '' : 'Next round: '}Level ${i + 1} of ${n}${moved}</small>${esc(S.name)}</span>
-      <button type="button" class="mbl-arrow" data-dir="1" aria-label="Harder rules"${i >= n - 1 ? ' disabled' : ''}>&#9654;</button></div>`;
+    return `<div class="mbl-level"><button type="button" class="mbl-arrow" data-dir="-1" aria-label="Easier rules"${down ? '' : ' disabled'}>&#9664;</button>
+      <span><small>${played == null ? '' : 'Next round: '}Level ${i + 1} of ${n}${moved}${v && v.kept ? ' &middot; kept' : ''}</small>${esc(S.name)}</span>
+      <button type="button" class="mbl-arrow" data-dir="1" aria-label="Harder rules"${up ? '' : ' disabled'}>&#9654;</button></div>`;
   }
   function stepLevel(dir) {
     const r = E.step(crew, job, dir); if (r) { onSave(); }
