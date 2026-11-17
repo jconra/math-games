@@ -1445,6 +1445,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       P.act = len ? { kind: 'stand', phase: 'do', t: 0, len, spot: at.pos ? at : { pos: P.pos.clone(), heading: P.heading }, step: { do: 'stand' } } : { kind: 'wait', until: 3, t: 0 };
       stillV++; return true;
     },
+    // (someone sent walking to a point, to stand there `len` seconds: their way worked out as anyone's)
+    go(id, at, heading = 0, len = 20) {
+      const P = byId(id); if (!P) return false;
+      reset(P);
+      begin(P, { kind: 'stand', step: { do: 'stand', for: [len, len] }, spot: { pos: new THREE.Vector3(at.x, at.y || 0, at.z), heading } });
+      return true;
+    },
   };
   const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };
