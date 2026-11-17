@@ -8,7 +8,7 @@
   "parts": {
     "suit": [
       { "id": "captain1", "name": "Captain's jumpsuit", "file": "suit_captain1.glb", "skeleton": "f", "armsOut": 12, "armsOutMove": { "Walk": 1, "Run": 0, "Run_Back": 0 }, "ownHands": true, "shoulders": 0.005 },
-      { "id": "vega", "name": "Captain Vega (android, coat)", "file": "suit_vega.glb", "skeleton": "m", "armsOut": 14, "armsOutMove": { "Walk": 8, "Run": 5, "Run_Back": 4 }, "ownHands": true, "headFit": { "side": 0.004 } },
+      { "id": "vega", "name": "Captain Vega (android, coat)", "file": "suit_vega.glb", "skeleton": "m", "armsOut": 19, "armsOutMove": { "Walk": 8, "Run": 5, "Run_Back": 4 }, "ownHands": true, "headFit": { "side": 0.004 } },
       { "id": "smelter", "name": "Smelter's suit", "file": "suit_smelter.glb", "skeleton": "m", "armsOut": 11, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 } },
       { "id": "medic", "name": "Medic's uniform", "file": "suit_medic.glb", "skeleton": "f", "armsOut": 12, "armsOutMove": { "Walk": 2, "Run": 0, "Run_Back": 0 }, "shoulders": 0.02 },
       { "id": "cook", "name": "Cook's jacket and apron", "file": "suit_cook.glb", "skeleton": "m", "armsOut": 13, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 } },

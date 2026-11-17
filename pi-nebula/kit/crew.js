@@ -2836,7 +2836,11 @@ export async function makeCrew(lib, recipe) {
   // through that clip (the runs sideways are left on the standing one: there a knee comes up to the hand in the clip
   // itself, which no angle clears). (2026-11-16: every value measured again once the elbows were put at a person's
   // place, THE ELBOW at the top: the forearm swings from lower down, and most outfits need less, the walk and the run
-  // most of all; Vega standing one degree more.) What is worn is the clips' own mix: each playing clip's angle by its weight in
+  // most of all; Vega standing one degree more. And again once THE ARMS ONE LENGTH made the arms longer: the same or a
+  // degree or two less, the men's captain and the older captain's coat walking with their arms near their sides; Vega
+  // standing 19, not the 14 his hips and thighs alone would take: his right forearm's box would sink 2.7 cm into his coat
+  // at the belt, and 19 is the least that keeps all of it under 1 cm in (before this, 1.4 cm in).) What is worn is the
+  // clips' own mix: each playing clip's angle by its weight in
   // the mixer, so while one clip fades into another the arms follow that same fade, and nothing steps when someone
   // starts or stops walking. (And never faster than ARMS_RATE: a fade cut short by the next clip makes the mixer's
   // own weights jump (a station person stopping for the player and setting off again within a third of a second), and
