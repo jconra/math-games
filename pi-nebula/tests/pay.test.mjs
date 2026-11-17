@@ -172,10 +172,17 @@ test('a young child and an older one earn about the same in an hour (each card p
   for (const r of [young, older]) assert.ok(50000 / r >= 50 && 60000 / r <= 120, `minutes to the Explorer: ${(50000 / r).toFixed(0)} to ${(60000 / r).toFixed(0)}`);
 });
 
-test('earn: a flat amount for something done that is not a card (free control\'s canisters)', () => {
-  const crew = crewOf();
-  assert.equal(E.earn(crew, 'crane', 30), 30);
-  assert.equal(E.earn(crew, 'crane', 30), 60);
-  assert.equal(crew.jobs.crane.earned, 60);
-  assert.equal(E.credits(crew), 60);
+test('free control (the crane by hand) pays 20 credits a canister, through the pay\'s own credits and tally', async () => {
+  // (src/jobs/index.js payDock: no card, so no work and no level: a flat FREE.dock from src/cranedrive.js, which needs
+  // three.js, so it is read here as text)
+  const { readFileSync } = await import('node:fs');
+  const drive = readFileSync(new URL('../src/cranedrive.js', import.meta.url), 'utf8'), jobs = readFileSync(new URL('../src/jobs/index.js', import.meta.url), 'utf8');
+  assert.match(drive, /export const FREE = \{ dock: 20 \}/);
+  assert.match(jobs, /crewNow\.credits = credits\(crewNow\) \+ FREE\.dock;/);
+  assert.match(jobs, /jobTally\(crewNow, 'crane'\)\.earned \+= FREE\.dock;/);
+  const crew = crewOf(); crew.credits = 130;
+  crew.credits = E.credits(crew) + 20; E.jobTally(crew, 'crane').earned += 20;
+  assert.equal(E.credits(crew), 150); assert.equal(crew.jobs.crane.earned, 20);
+  // (earn: the same flat amount in one call, for anything else done that is not a card)
+  assert.equal(E.earn(crew, 'crane', 20), 170); assert.equal(crew.jobs.crane.earned, 40);
 });
