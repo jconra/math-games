@@ -207,6 +207,11 @@ test('the crane game: the grid counts from the hangar\'s south-west corner, the 
   assert.equal(t1.phase, 'unload'); assert.equal(t1.from.kind, 'mount'); assert.equal(t1.to.kind, 'socket');
 });
 
+test('the crane game is a job of cards, not a game that runs itself (src/jobs/index.js opens Mathball for a job with `game`)', () => {
+  assert.equal(craneJob.game, undefined);
+  assert.equal(craneJob.check.questions, 5);
+  assert.equal(craneJob.card, 'crane');
+});
 test('the crane game pays as every job does: about 50 credits at the first level, 200 at the last', () => {
   E.register(craneJob);
   const pays = PLACE.levels.map((L) => E.payFor(L));

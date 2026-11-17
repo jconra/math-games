@@ -582,5 +582,6 @@ export const JOB = {
   id: 'crane', name: 'Crane system', short: 'Crane', open: true, pickAsk,
   spot: OPERATOR, near: 2.3, seated: true,
   sign: 'Crane operator', hint: 'Verify the crane\'s moves: credits for each right answer',
-  place: PLACE, makers: MAKERS, card: 'crane', game: GAME,
+  // (`check`, not `game`: a job's `game` is a game that runs itself, the arena's Mathball, src/jobs/index.js)
+  place: PLACE, makers: MAKERS, card: 'crane', check: GAME,
 };
