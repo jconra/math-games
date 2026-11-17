@@ -5,8 +5,9 @@
 //   const P = await makePlayer({ lib, recipe, walls, scene })
 //   P.place(feet, heading)          stand them somewhere (a spot walls.snap gave)
 //   P.update(dt, { move, run, yaw, others, clip })   move: { x, y, mag } from the input; yaw: the camera's; others: the
-//                                   people about ({ pos } each), whom the player does not walk through; clip: one to
-//                                   play this frame whatever the legs are doing (a throw in the arena's game), at clipSpeed
+//                                   people ({ pos } each, and `away` or `hidden`: not there), whom the player does not
+//                                   walk through; clip: one to play this frame whatever the legs are doing (a throw in
+//                                   the arena's game), at clipSpeed
 //   P.pos, P.heading, P.speed (the ground really covered, m/s), P.c (the crew kit's character)
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
@@ -65,7 +66,8 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
       // not through another person: walked into, they are slid round (pushed out to MOVE.near from them, where the walls
       // allow; where they do not, the step is not taken)
       for (const o of others) {
-        if (o.hidden || Math.abs(P.pos.y - o.pos.y) > 1.5) continue;
+        // (someone away, out of sight with their day going on out of the way (people.js), is not there for the player)
+        if (o.hidden || o.away || Math.abs(P.pos.y - o.pos.y) > 1.5) continue;
         const dx = P.pos.x - o.pos.x, dz = P.pos.z - o.pos.z, d1 = Math.hypot(dx, dz);
         if (d1 >= MOVE.near) continue;
         const nx = d1 > 1e-4 ? dx / d1 : Math.sin(P.heading + Math.PI / 2), nz = d1 > 1e-4 ? dz / d1 : Math.cos(P.heading + Math.PI / 2);
