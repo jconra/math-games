@@ -81,9 +81,9 @@ export const SPOTS = {
   store: [{ piece: 'crate', variant: 'stack', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }, { piece: 'crate', variant: 'cart', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }],
   lobby: [{ room: 'smelter-lobby', at: [0.3, 0.35], face: [1, 0] }],
   // the medical centre: by its two triage bays, the lab's bench, the pharmacy, the scanner's booth; its floor
-  // (the pharmacy and the scanner's booth by their own pieces, in front of each, facing it: the middle of each small
-  // room had no room round it)
-  medic: [{ place: 'triageBays', n: 0, face: [-1, 0] }, { place: 'triageBays', n: 1, face: [-1, 0] }, { piece: 'cabinLabBench', room: 'med-lab', local: [-0.55, 0, 0.7], face: [0, -1] }, { piece: 'cabinPharmacy', variant: '2 m', room: 'med-pharmacy', local: [0.3, 0, 0.9], face: [0, -1] }, { piece: 'desk', variant: 'screen', room: 'med-booth', local: [-0.55, 0, 0.9], face: [0, -1] }],
+  // (the pharmacy's and the scanner's booth's places: the station finds no room round either, by the room or by their
+  // own pieces, so the medic keeps to the bays, the lab and the floor: a question for the notes)
+  medic: [{ place: 'triageBays', n: 0, face: [-1, 0] }, { place: 'triageBays', n: 1, face: [-1, 0] }, { piece: 'cabinLabBench', room: 'med-lab', local: [-0.55, 0, 0.7], face: [0, -1] }, { room: 'med-pharmacy', at: [0.5, 0.5], face: [1, 0] }, { room: 'med-booth', at: [0.4, 0.5], face: [1, 0] }],
   medicalFloor: [{ room: 'medical', at: [0.7, 0.22], face: [-1, 0.3] }],
   // the big scanner (its own frame: x across, its bed running out along +z from the wall): where its patient stands to
   // get on (by the bed's foot, on its west side, the side away from the cable trough) and where the medic works its
