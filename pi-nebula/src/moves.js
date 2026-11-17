@@ -237,6 +237,9 @@ export function addMoves(c) {
     for (const s of ['L', 'R']) for (let i = 0; i < 4; i++) M.arms[s][i] = damp(M.arms[s][i], M.want[s][i], 4.5, dt);
     // ── laid on: top down, so each bone turns from where its parent now is ──
     if (Math.abs(M.sway) > 1e-4) { turn(B.Abdomen, Z, M.sway * 0.5, _rq); turn(B.Chest, Z, M.sway * 0.5, _rq); }
+    // (on a bed, lying back or sitting up: the upper back rounded forward, more of it in the chest)
+    const curl = M.bed && M.bed.curl ? M.bed.curl : 0;
+    if (curl) { turn(B.Abdomen, X, curl * 0.4, _rq); turn(B.Chest, X, curl * 0.6, _rq); }
     turn(B.Neck, Y, M.yaw * MOVES.neck, _rq); turn(B.Head, Y, M.yaw * (1 - MOVES.neck), _rq);
     // (on a bed, leaning back: the chin brought down, the neck taking half)
     const chin = M.bed && M.bed.chin ? M.bed.chin : 0;

@@ -94,7 +94,7 @@ test('lying, the head is on the head rest and the hips over the pad; sitting on 
     // (the head about 0.77 m from the hip joints along the body, toward the wall)
     const head = L.hips[2] - 0.77;
     assert.ok(head > BED.rest[0] && head < BED.rest[1], 'the head on the head rest: ' + head.toFixed(2));
-    const E = pose('hop', 1.3, BED, who);
+    const E = pose('hop', MOVES_ON.find((m) => m[0] === 'hop')[1], BED, who);   // (the hop's end)
     assert.ok(E.hips[0] + who.a > BED.edge + 0.03, 'the knees past the edge, sitting on it');
   }
 });

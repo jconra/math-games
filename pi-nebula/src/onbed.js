@@ -25,17 +25,19 @@
 //        toes), point (the toes pointed past square to the shin, rad), roll (the feet turned outward, rad), hands
 //        [[x,y,z] left, right] (each wrist), fingers and elbows [[x,y,z], [x,y,z]] (the ways each hand's fingers and each
 //        elbow point), arms 0..1, clip 'stand' | 'sit' (the crew kit's clip under it all: the body above the hips),
-//        chin (the head brought down, rad), done (the move is over) }
+//        chin (the head brought down, rad), curl (the upper back rounded forward, rad), done (the move is over) }
 //   twoBone(root, end, pole, a, b) -> { mid, end, reach }   a leg (or an arm): where the knee (elbow) goes so the foot
 //        (wrist) reaches `end` from `root`, bent toward `pole`; an end out of reach is reached for (the limb straight)
 //
 // (A second pair of fresh eyes, 2026-11-16, on the first flowing version: the hop went straight up, legs locked and feet
 // flat a hand's width off the floor, then slid sideways onto the bed; the turn lifted the feet 13 cm off the pad with the
 // knees up at the chest; sitting up straight between the turn and lying back; the hands off the bed with the back still
-// 20 degrees up; the feet stiffly upright lying. Each is answered below, in its move.)
+// 20 degrees up; the feet stiffly upright lying. Each is answered below, in its move. A third: the back straight as a lid
+// on a hinge lying back and sitting up, the head tipped back lying, the feet in a wide V: the upper back now rounds
+// through the middle of both, the chin is in lying flat, the feet fall out less.)
 //
 // THE MOVES, with their seconds (people.js plays them in turn):
-export const MOVES_ON = [['back', 0.9], ['hop', 1.4], ['swing', 2.1], ['down', 1.8], ['stretch', 1.1]];
+export const MOVES_ON = [['back', 0.9], ['hop', 1.6], ['swing', 2.1], ['down', 1.8], ['stretch', 1.1]];
 export const MOVES_OFF = [['bend', 1.0], ['up', 1.8], ['swingout', 2.1], ['hopdown', 1.4]];
 export const SECS = Object.fromEntries([...MOVES_ON, ...MOVES_OFF]);
 // (the knees' bend kept all through the swing, at least, degrees: the game's maker's "no straight-leg swing")
@@ -46,8 +48,9 @@ export const KNEE_MIN = 45;
 // bed beside and behind the hips (m), and where they are put down for the hop (in from the edge, out from the hips);
 // the feet's lift over the pad as they come round (m); the foot's root over what it stands on (m); a hanging foot's toes
 // pointed down past square to the shin, and pointed as they leave the floor or reach for it (rad); up on the toes, how
-// far the heels lift (m); lying, the feet turned outward and pointed (rad))
-export const ON = { knee0: 0.105, lean: 0.36, knee: 90, hand: [0.235, 0.11], hop: [0.06, 0.24], clear: 0.05, foot: 0.013, point: 0.22, tip: 0.55, heel: 0.06, relax: [0.5, 0.38] };
+// far the heels lift (m); lying, the feet turned outward and pointed (rad); lying back or sitting up, the upper back
+// rounded forward at most (rad, through the middle of the move))
+export const ON = { knee0: 0.105, lean: 0.36, knee: 90, hand: [0.235, 0.11], hop: [0.06, 0.24], clear: 0.05, foot: 0.013, point: 0.22, tip: 0.55, heel: 0.06, relax: [0.28, 0.34], curl: 0.3 };
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const ease = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
@@ -170,13 +173,16 @@ const bellyElbows = () => [[1, -0.45, 0.25], [-1, -0.45, 0.25]].map(norm);
 // (the chin brought toward the chest as they lean back, the head held up off the bed, looking toward their knees,
 // until the very end, when it comes down onto its rest last; sitting up, the head leads, chin in. A first version kept
 // it with the chest, and lying back the head seemed thrown back: the fresh eyes' first point)
-const chinOf = (lean) => track([[0, 0], [0.36, 0.26], [0.8, 0.58], [1.2, 0.78], [1.42, 0.62], [Math.PI / 2, 0.12]], lean);
+// (lying flat, the chin still a little in: the face straight up, not tipped back toward the ring)
+const chinOf = (lean) => track([[0, 0], [0.36, 0.26], [0.8, 0.58], [1.2, 0.78], [1.42, 0.62], [Math.PI / 2, 0.4]], lean);
 
 export function pose(move, t, bed, who) {
   const p = poseOf(move, t, bed, who), u = clamp(t / (SECS[move] || 1));
   // (hopping up or sliding off, the head down a little more, watching the floor; none at either end of the move)
   const watch = move === 'hop' ? ease(seg(u, 0, 0.2)) * (1 - ease(seg(u, 0.75, 1))) : move === 'hopdown' ? ease(seg(u, 0, 0.25)) * (1 - ease(seg(u, 0.7, 1))) : 0;
-  p.chin = 0.14 * watch + (move === 'back' ? 0 : chinOf(p.lean));
+  // (sitting up, the head leads: the chin in before the back comes off the bed)
+  const lead = move === 'up' ? 0.3 * ease(seg(u, 0.02, 0.14)) * (1 - ease(seg(u, 0.3, 0.55))) : 0;
+  p.chin = 0.14 * watch + lead + (move === 'back' ? 0 : chinOf(p.lean));
   return p;
 }
 function poseOf(move, t, bed, who) {
@@ -197,28 +203,29 @@ function poseOf(move, t, bed, who) {
   }
   if (move === 'hop') {
     // the hands put down on the edge beside them; a dip, the knees bending; one push of legs and arms together, up onto
-    // the toes, and off: the hips going up and back in one curve over the edge (they must clear the pad's edge first),
-    // the feet leaving the floor pointed and folding under at once (never hanging straight), landing on the edge, a
-    // little give, and a shuffle back on the hands to sit
-    const x = track([[0, S[0]], [0.22, S[0] - 0.035], [0.44, bed.edge + 0.14], [0.5, bed.edge + 0.1], [0.57, bed.edge - 0.01], [0.68, bed.edge - 0.12], [0.78, bed.edge - 0.15], [1, E[0]]], u);
-    const y = track([[0, S[1]], [0.22, S[1] - 0.06], [0.44, S[1] + 0.065], [0.5, sitY + 0.005], [0.57, sitY + 0.035], [0.68, sitY + 0.01], [0.78, sitY - 0.003], [0.9, sitY + 0.004], [1, sitY]], u);
+    // the toes, and off (0.37): the hips going up and back in one curve over the edge (they must clear the pad's edge
+    // first), at one steady speed backward all the way through the air (a first version went slowly, then 11 cm in a
+    // tenth of a second, then slowly: it read as a cut), the feet leaving the floor pointed and folding under at once
+    // (never hanging straight); the seat down on the edge (0.64), a little give, and a shuffle back on the hands to sit
+    const x = track([[0, S[0]], [0.19, S[0] - 0.035], [0.37, bed.edge + 0.14], [0.43, bed.edge + 0.09], [0.5, bed.edge + 0.025], [0.57, bed.edge - 0.04], [0.64, bed.edge - 0.095], [0.72, bed.edge - 0.125], [1, E[0]]], u);
+    const y = track([[0, S[1]], [0.19, S[1] - 0.06], [0.37, S[1] + 0.065], [0.43, sitY + 0.012], [0.5, sitY + 0.04], [0.57, sitY + 0.028], [0.64, sitY + 0.006], [0.72, sitY - 0.004], [0.84, sitY + 0.004], [1, sitY]], u);
     out.hips = [x, y, bed.z]; out.heading = H;
-    out.lean = track([[0, 0], [0.22, 0.03], [0.44, 0.06], [0.57, 0.14], [0.7, 0.12], [1, 0.05]], u);
-    // (the heels up as the push starts; off the floor from 0.44, the feet carried from where they left it to hanging
+    out.lean = track([[0, 0], [0.19, 0.03], [0.37, 0.06], [0.5, 0.14], [0.64, 0.12], [1, 0.05]], u);
+    // (the heels up as the push ends; off the floor from 0.37, the feet carried from where they left it to hanging
     // under the knees: half way, the knees bent well past a right angle's half)
-    const r = ON.heel * ease(seg(u, 0.3, 0.44)), floor = floorFeet(S, who).map((p) => add(p, UP, r));
+    const r = ON.heel * ease(seg(u, 0.26, 0.37)), floor = floorFeet(S, who).map((p) => add(p, UP, r));
     const [fa, fu] = hang(who), hung = feetAt(out.hips, H, who.w, fa, fu, 0.03);
-    const fold = ease(seg(u, 0.44, 0.66));
+    const fold = ease(seg(u, 0.37, 0.6));
     out.feet = floor.map((p, i) => mix(p, hung[i], fold));
-    out.flat = 1 - ease(seg(u, 0.44, 0.54)); out.pitch = onToes(r);
-    out.point = steps([[0.44, onToes(ON.heel)], [0.54, ON.tip], [0.86, ON.point]], u);
+    out.flat = 1 - ease(seg(u, 0.37, 0.46)); out.pitch = onToes(r);
+    out.point = steps([[0.37, onToes(ON.heel)], [0.46, ON.tip], [0.8, ON.point]], u);
     out.pole = poleOf(H, 1, 0.15);
     // (the hands near the bed's edge, beside the hips, the elbows bent ready to push and straight at the top of it; once
     // landed, walked back beside and a little behind the hips, as they will be for the swing)
     const after = handsAt(bed, [E[0], sitY, bed.z], H);
-    out.hands = pushAt(bed).map((p, i) => mix(p, after[i], ease(seg(u, 0.72, 1)))); out.fingers = fingersAt(H); out.elbows = elbowsAt(H, 0.3);
-    out.arms = ease(seg(u, 0, 0.2));
-    out.clip = u < 0.44 ? 'stand' : 'sit';
+    out.hands = pushAt(bed).map((p, i) => mix(p, after[i], ease(seg(u, 0.68, 1)))); out.fingers = fingersAt(H); out.elbows = elbowsAt(H, 0.3);
+    out.arms = ease(seg(u, 0, 0.18));
+    out.clip = u < 0.37 ? 'stand' : 'sit';
     return out;
   }
   if (move === 'hopdown') {
@@ -283,6 +290,8 @@ function poseOf(move, t, bed, who) {
     const e = ease(seg(out.lean, 0.5, 1.1)), lowered = elbowsAt(0).map((q, i) => norm(mix(q, lowerElbows()[i], e)));
     out.fingers = fingersAt(0).map((f, i) => norm(mix(f, bellyFingers()[i], kb))); out.elbows = lowered.map((q, i) => norm(mix(q, bellyElbows()[i], kb)));
     out.clip = v < 0.5 ? 'sit' : 'stand';
+    // (the upper back rounded through the middle of it, chin in, as a person lowers or lifts themselves: never a board)
+    out.curl = ON.curl * Math.sin(Math.PI * k);
     return out;
   }
   if (move === 'stretch' || move === 'bend' || move === 'lying') {
@@ -290,7 +299,7 @@ function poseOf(move, t, bed, who) {
     const v = move === 'lying' ? 1 : move === 'stretch' ? u : 1 - u, k = ease(v), rest = ease(seg(v, 0.55, 1));
     out.hips = [0, lieY, bed.z]; out.heading = 0; out.lean = Math.PI / 2;
     const st = straightOut(bed, who, lieY);
-    out.feet = feetAt(out.hips, 0, who.w, mix(upLie[0], st[0], k), mix(upLie[1], st[1], k), 0.01);
+    out.feet = feetAt(out.hips, 0, who.w, mix(upLie[0], st[0], k), mix(upLie[1], st[1], k), mix(0.01, -0.035, k));
     out.flat = 1 - ease(seg(v, 0.3, 0.9)); out.pole = poleOf(0, 0.6, 1);
     out.roll = ON.relax[0] * rest; out.point = mix(ON.point, ON.relax[1], rest);
     out.hands = bellyAt(bed, lieY); out.fingers = bellyFingers(); out.elbows = bellyElbows(); out.arms = 1; out.clip = 'stand';
