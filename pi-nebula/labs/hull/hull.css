@@ -1,0 +1,24 @@
+/* The Hull Lab, on the Kit Lab's look (../kit/kit.css) with the Crew Lab's menus (../crew/crew.css: a small master menu
+   and a window a category). Only what this lab adds: longer names beside its sliders, a colour beside its name, the
+   keys' reminder, and no bar along the bottom for the touch controls to stand clear of. */
+body { --bar: 0px; }
+.hl-keys { flex-basis: 100%; color: var(--mute); font-size: 11.5px; }
+.touch .hl-keys { display: none; }
+.kl-top { max-width: min(100%, 640px); }
+/* a slider between its name and its value: the name's column a little wider than the Crew Lab's, wrapping if it must */
+.cw-slider .kl-label { flex: 0 0 122px; line-height: 1.25; }
+.cw input[type=range] { max-width: none; }
+.kl-val { min-width: 58px; text-align: right; }
+/* a colour: its round swatch, its name, its code */
+.hl-colour { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; border: 1px solid rgba(79, 182, 255, .18); border-radius: 17px; }
+.hl-colour .kl-val { min-width: 0; color: var(--ink-2); font-family: ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 12px; }
+/* the three ready-made looks: bigger buttons, each with a line saying what it is */
+.hl-looks { display: flex; flex-direction: column; gap: 5px; }
+.hl-look { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 1px solid #2f3d50; border-radius: 9px; padding: 6px 10px; cursor: pointer;
+  background: linear-gradient(var(--chip-2), var(--chip)); color: var(--ink); }
+.hl-look:hover { border-color: var(--blue); }
+.hl-look b { font-size: 14px; font-weight: 700; }
+.hl-look span { font-size: 12px; color: var(--ink-2); white-space: normal; }
+.hl-look.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
+.hl-ok { color: #8fe3a4; } .hl-bad { color: var(--amber); }
+@media (max-width: 520px) { .cw-slider .kl-label { flex-basis: 96px; } }

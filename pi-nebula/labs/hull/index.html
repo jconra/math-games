@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hull Lab</title>
+<meta name="description" content="A space station lab: the outside of the station's hull. Try metal finishes, wear, dark edges and armour plates on a real-size piece of it, under the game's own sky and sun.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../mathwood-valley/oops.js"></script>
+<link rel="stylesheet" href="../kit/kit.css?v=1">
+<!-- (the menu and its windows are the Crew Lab's own: its window code and its styles, used as they are) -->
+<link rel="stylesheet" href="../crew/crew.css?v=8">
+<link rel="stylesheet" href="hull.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="A piece of the station's hull in 3D"></canvas>
+<div class="kl-top" id="top">
+  <h1>Hull Lab</h1><a href="../">All labs</a>
+  <span class="kl-hud" id="hud" aria-live="off"></span>
+  <span class="hl-keys" id="keys">W A S D move · Space up · C down · Shift faster · drag to look</span>
+</div>
+<!-- the touch controls: a stick to fly, buttons up and down (only on touch screens) -->
+<div class="kl-stick" id="stick" aria-hidden="true"><div class="kl-knob" id="knob"></div></div>
+<div class="kl-updown" id="updown" aria-hidden="true"><button id="up" aria-label="Up">▲</button><button id="down" aria-label="Down">▼</button></div>
+<!-- THE MENUS: the master menu and each category's window are made by the Crew Lab's windows.js, once the hull is in -->
+<div class="kl-loading" id="loading">Rolling the plates…</div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>
