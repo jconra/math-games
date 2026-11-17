@@ -222,22 +222,44 @@ const BALL_GEO = (() => {
   g.computeBoundingSphere();
   return g;
 })();
-// a number that reads as another upside down gets a line under it (6, 9, 16, 86 ...)
-const FLIP = { 0: '0', 1: '1', 6: '9', 8: '8', 9: '6' };
-export const needsBar = (s) => { const t = String(s); return t.length > 0 && [...t].every((c) => c in FLIP) && [...t].reverse().map((c) => FLIP[c]).join('') !== t; };
+// a number that reads as another upside down gets a line under it (6, 9, 16, 86 ...; a decimal's point turns with it:
+// 0.6 upside down reads 9.0)
+const FLIP = { 0: '0', 1: '1', 6: '9', 8: '8', 9: '6', '.': '.' };
+export const needsBar = (s) => { const t = String(s); return /\d/.test(t) && [...t].every((c) => c in FLIP) && [...t].reverse().map((c) => FLIP[c]).join('') !== t; };
 function ballTextures(num, colour) {
   const S = 256, cv = document.createElement('canvas'); cv.width = S * 2; cv.height = S;
   const em = document.createElement('canvas'); em.width = S * 2; em.height = S;
   const g = cv.getContext('2d'), e = em.getContext('2d'), text = String(num);
   g.fillStyle = colour; g.fillRect(0, 0, S * 2, S); e.fillStyle = '#000'; e.fillRect(0, 0, S * 2, S);
-  // digits as tall as they can be: one digit 0.62 of the face, narrower for two and three (as a pool ball's)
-  const h = S * 0.6, squeeze = text.length >= 3 ? 0.62 : text.length === 2 ? 0.84 : 1;
+  const font = (px) => `800 ${Math.round(px)}px "DejaVu Sans", "Segoe UI", system-ui, sans-serif`;
+  // (a FRACTION stacked, as it is written in a book: the top number over a line over the bottom one, each as big as
+  // the face allows; a part that reads as another upside down has its own line under it)
+  const frac = /^(\d+)\/(\d+)$/.exec(text);
+  // digits as tall as they can be: one digit 0.62 of the face, narrower for two and three (as a pool ball's); a decimal
+  // squeezed to fit across the face
+  const h = S * 0.6;
   for (const [ctx, ink] of [[g, '#ffffff'], [e, '#ffffff']]) {
-    ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `800 ${Math.round(h)}px "DejaVu Sans", "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const k of [0, 1]) {
-      ctx.save(); ctx.translate(S * (k + 0.5), S * 0.5 + h * 0.04); ctx.scale(squeeze, 1);
-      ctx.fillText(text, 0, 0);
-      if (needsBar(text)) { const w = ctx.measureText(text).width; ctx.fillRect(-w / 2, h * 0.44, w, h * 0.075); }
+      ctx.save(); ctx.translate(S * (k + 0.5), S * 0.5);
+      if (frac) {
+        const ph = S * 0.36, parts = [frac[1], frac[2]];
+        ctx.font = font(ph);
+        const ws = parts.map((p) => ctx.measureText(p).width), sq = Math.min(1, (S * 0.56) / Math.max(...ws)), bw = Math.max(...ws) * sq + S * 0.08;
+        parts.forEach((p, i) => {
+          const y = (i ? 1 : -1) * ph * 0.62;
+          ctx.save(); ctx.translate(0, y + ph * 0.04); ctx.scale(sq, 1); ctx.fillText(p, 0, 0);
+          if (needsBar(p)) { const w = ctx.measureText(p).width; ctx.fillRect(-w / 2, ph * 0.43, w, ph * 0.07); }
+          ctx.restore();
+        });
+        ctx.fillRect(-bw / 2, -S * 0.022, bw, S * 0.044);
+      } else {
+        ctx.font = font(h);
+        const w = ctx.measureText(text).width, squeeze = text.includes('.') ? Math.min(1, (S * 0.8) / w) : text.length >= 3 ? 0.62 : text.length === 2 ? 0.84 : 1;
+        ctx.translate(0, h * 0.04); ctx.scale(squeeze, 1);
+        ctx.fillText(text, 0, 0);
+        if (needsBar(text)) ctx.fillRect(-w / 2, h * 0.44, w, h * 0.075);
+      }
       ctx.restore();
     }
   }

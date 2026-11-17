@@ -46,3 +46,21 @@ table.fits td.no { color: #3a4654; }
   .info { grid-column: 1 / -1; }
   .goals { grid-template-columns: 1fr 1fr; }
 }
+/* the levels against the sets: a grid, lit where a level takes its rules from a set (the filled dot its own set) */
+.ranges-box { margin: 18px 0 0; padding: 12px; background: var(--card); border: 1px solid var(--edge); border-radius: 10px; }
+.r-title { margin: 0 0 4px; font-size: 19px; }
+.r-lede { margin: 0 0 10px; color: var(--dim); font-size: 14px; max-width: 860px; }
+.r-wrap { overflow-x: auto; }
+table.ranges { border-collapse: collapse; font-size: 14px; }
+table.ranges th, table.ranges td { width: 30px; height: 26px; text-align: center; padding: 0 2px; border: 1px solid rgba(255, 255, 255, 0.07); }
+table.ranges th { color: var(--dim); font-weight: 700; }
+table.ranges td.is-on { background: rgba(79, 182, 255, 0.18); color: var(--blue-hi); }
+table.ranges td.is-own { background: rgba(255, 143, 46, 0.3); color: #ffd2a8; }
+table.ranges .r-words { width: auto; text-align: left; padding: 0 8px; color: var(--dim); white-space: nowrap; }
+.r-legend { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--dim); }
+.r-legend b { color: var(--blue-hi); }
+.info .own { font-size: 13px; color: var(--dim); margin: 0 0 8px; }
+@media (max-width: 760px) {
+  table.ranges th, table.ranges td { width: 24px; height: 24px; font-size: 12px; }
+  table.ranges .r-words { font-size: 12px; padding: 0 4px; }
+}

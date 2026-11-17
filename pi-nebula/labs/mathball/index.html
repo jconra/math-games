@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mathball Lab: the rule sets</title>
-<meta name="description" content="Mathball's rule sets, easiest first, each with an example court: drag them into the order you want and copy the order.">
+<title>Mathball Lab: the levels and rule sets</title>
+<meta name="description" content="Mathball's levels and the range of rule sets each one uses, easiest first, each with an example court: drag the sets into the order you want and copy the order.">
 <meta name="theme-color" content="#070a0f">
 <link rel="icon" href="data:,">
 <script src="../../../shared/oops.js"></script>
-<link rel="stylesheet" href="lab.css?v=1">
+<link rel="stylesheet" href="lab.css?v=2">
 </head>
 <body>
 <main>
   <header class="top">
     <h1>Mathball Lab</h1>
-    <p class="lede">The arena game's rule sets, in the order the game climbs them: a crew member starts at the first that suits them and moves up as they get balls right. Each shows an example court from above: the four goals' rules at the start of a round, eight balls the ports could shoot out, and which goals each ball fits. Drag a set (or use its arrows) to change the order, then press <b>Copy the order</b> and paste the line it gives over the <code>ORDER</code> line in <code>pi-nebula/src/mathball/ladder.js</code>. A set dragged below the line marked <i>Left out</i> is left out of the game.</p>
+    <p class="lede">The arena game's rule sets, in the order the game climbs them, and the levels built from them: each level takes its goals' rules from a range of the sets (the grid below), and a crew member starts at the level that suits them and moves up as they get balls right. Each set shows its level's example court from above: four goals a round there could start with, eight balls the ports could shoot out, and which goals each ball fits. Drag a set (or use its arrows) to change the order, then press <b>Copy the order</b> and paste the line it gives over the <code>ORDER</code> line in <code>pi-nebula/src/mathball/ladder.js</code>. A set dragged below the line marked <i>Left out</i> is left out of the game.</p>
     <div class="tools">
       <button type="button" id="copy">Copy the order</button>
       <button type="button" id="reset">Back to the game's order</button>
@@ -23,8 +23,9 @@
     <p class="note" id="note" aria-live="polite"></p>
     <textarea id="out" rows="2" readonly spellcheck="false" aria-label="The order, as a line for ladder.js"></textarea>
   </header>
+  <section id="ranges" class="ranges-box" aria-label="The levels and the sets they use"></section>
   <ol id="sets" class="sets"></ol>
 </main>
-<script type="module" src="main.js?v=4"></script>
+<script type="module" src="main.js?v=5"></script>
 </body>
 </html>

@@ -36,6 +36,7 @@
 //   G.barS() / G.next()    the light bar: metres along its track; the next goal it reaches and the share of the way
 import { COURT, GOALS, PORTS, STATIONS, SPOTS, barAt, clampIn } from './court.js';
 import { ruleOf, fits, goalsFor, dealable, pickChange } from './rules.js';
+import { startGoals } from './ladder.js';
 import { makeBalls, lobTime, PHYS } from './physics.js';
 
 export const ROUND = {
@@ -79,19 +80,26 @@ export const throwFrom = (x, z, to) => holdPoint(x, z, Math.atan2(to[0] - x, to[
 const free = (b) => b.mode === 'air' || b.mode === 'roll' || b.mode === 'rest' || b.mode === 'turn';
 const COLOURS = 6;
 
-export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER.youRate } = {}) {
+// set: a level of the ladder (ladder.js LADDER: its rules from a range of rule sets; the round's first four goals are
+// drawn from them, startGoals) or a single rule set (SETS: its starts, or its first four rules); goals: four to start
+// with instead
+export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER.youRate, goals = null } = {}) {
   const lv = OTHER.levels[Math.max(0, Math.min(2, other.level ?? 1))];
   const world = makeBalls({ rand });
-  const spares = [...new Set([...set.goals, ...set.spares])];
+  const level = set.sets ? set : null;
+  const first = goals || (level ? startGoals(level, rand) : set.goals || set.starts || set.rules.slice(0, 4));
+  const spares = [...new Set([...first, ...(set.rules || []), ...(set.spares || [])])];
+  const theme = level ? level.theme : set.theme || set.goals || first, plain = level ? level.plain : true;
   const G = {
     set, t: 0, phase: 'play', world, balls: world.list, events: [],
-    goals: GOALS.map((g, i) => ({ i, rule: set.goals[i], flash: 0, was: null })),
+    goals: GOALS.map((g, i) => ({ i, rule: first[i], flash: 0, was: null })),
     score: { you: 0, them: 0 }, tries: { you: 0, them: 0 }, changes: 0, stranded: 0,
     you: { x: SPOTS.player[0], z: SPOTS.player[1], vx: 0, vz: 0, heading: Math.PI, holding: null, target: null, aim: null, toss: null, wind: 0, want: { to: null, face: null, run: true } },
     other: { x: SPOTS.other[0], z: SPOTS.other[1], vx: 0, vz: 0, heading: 0, mode: 'roam', holding: null, target: null, aim: null, t: 0, roamTo: null, roamT: 0, nextAt: 2.5, anim: null, level: lv.key, last: null },
     youRate, lv,
   };
   let nextId = 1, dealQ = [], changed = new Set(), recent = [];
+  const waitT = new Map();
   const emit = (type, o = {}) => G.events.push({ type, t: G.t, ...o });
   G.take = () => { const e = G.events; G.events = []; return e; };
   const rules = () => G.goals.map((g) => g.rule);
@@ -206,17 +214,21 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
   }
 
   // ── the rules changing as the bar reaches each goal ─────────────────────────────────────────────────────────────
-  function change(gi) {
+  // (-> false when it has to wait: a ball in someone's hand that only this goal takes and no other rule of the level
+  // could, a prime held as the prime goal comes up: it changes a moment later, once that ball is thrown or dropped)
+  function change(gi, last = false) {
     const live = onCourt().filter((b) => b.mode !== 'fly' && b.mode !== 'held');
     const held = [G.you.holding, G.other.holding].filter(Boolean).map((b) => b.num);
-    const ch = pickChange(rules(), gi, set.pool, live.map((b) => b.num), { held, rand, spares, theme: set.goals });
-    if (!ch) { emit('change', { goal: gi, from: G.goals[gi].rule, to: G.goals[gi].rule, strand: [] }); return; }
+    const ch = pickChange(rules(), gi, set.pool, live.map((b) => b.num), { held, rand, spares, theme, plain, wait: !last });
+    if (!ch && held.length && !last) return false;
+    if (!ch) { emit('change', { goal: gi, from: G.goals[gi].rule, to: G.goals[gi].rule, strand: [] }); return true; }
     const from = G.goals[gi].rule;
     G.goals[gi].was = from; G.goals[gi].rule = ch.rule; G.goals[gi].flash = 1; G.changes++;
     const strand = live.filter((b) => ch.strand.includes(b.num));
     for (const b of strand) { b.fading = G.t; emit('fade', { ball: b.id }); deal(G.t + ROUND.fade + 0.4 + rand() * 0.8); }
     G.stranded += strand.length;
     emit('change', { goal: gi, from, to: ch.rule, strand: strand.map((b) => b.num) });
+    return true;
   }
 
   // ── the other player ────────────────────────────────────────────────────────────────────────────────────────────
@@ -354,7 +366,10 @@ export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER
     while (dealQ.length && dealQ[0] <= G.t) { dealQ.shift(); if (onCourt().length < ROUND.most) launchOne(); }
     if (onCourt().length < ROUND.least && !dealQ.length && G.t < COURT.bar.lap - 4) deal(G.t + 0.5);
     // the bar reaching a goal: its rule changes
-    for (const st of STATIONS) if (G.t >= st.t && !changed.has(st.goal)) { changed.add(st.goal); change(st.goal); }
+    // (a change that waits for a held ball is tried again every quarter second, and made by the round's end whatever)
+    for (const st of STATIONS) if (G.t >= st.t && !changed.has(st.goal) && G.t >= (waitT.get(st.goal) || 0)) {
+      if (change(st.goal, G.t > COURT.bar.lap - 3)) changed.add(st.goal); else waitT.set(st.goal, G.t + 0.25);
+    }
     youStep(dt, you);
     otherStep(dt);
     // the balls (seen: in view now, for the passed-over count)

@@ -4,8 +4,8 @@
 //   node --test pi-nebula/tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LADDER, SETS, ORDER } from '../src/mathball/ladder.js';
-import { ruleOf, fits, goalsFor, checkSet, dealable, pickChange } from '../src/mathball/rules.js';
+import { LADDER, SETS, ORDER, RANGES, rangeOf, startGoals } from '../src/mathball/ladder.js';
+import { ruleOf, fits, goalsFor, checkSet, dealable, pickChange, crowded } from '../src/mathball/rules.js';
 import { makeBalls, facing, PHYS, qrand, flightPath, lobTime } from '../src/mathball/physics.js';
 import { makeRound, OTHER, ROUND, holdPoint, throwFrom } from '../src/mathball/game.js';
 import { simPlayer, playRound } from '../src/mathball/sim.js';
@@ -15,60 +15,93 @@ import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 const valid = (rules, ball) => { const n = goalsFor(rules, ball).length; return n >= 1 && n < rules.length; };
 const onCourt = (G) => G.balls.filter((b) => ['air', 'roll', 'rest', 'turn', 'held'].includes(b.mode) && !b.fading);
 
-// ── the rule sets ──────────────────────────────────────────────────────────────────────────────────────────────────
-test('the ladder: every rule set in ORDER exists, has four goals and rules that read', () => {
-  assert.ok(LADDER.length >= 5);
-  assert.deepEqual(LADDER.map((s) => s.key), ORDER.filter((k) => SETS[k]));
-  for (const S of LADDER) {
-    assert.equal(S.goals.length, 4, S.key);
-    assert.equal(new Set(S.goals).size, 4, `${S.key}: two goals alike`);
-    for (const r of [...S.goals, ...S.spares]) {
-      const R = ruleOf(r);
-      assert.ok(R.say && R.help && R.list && R.sign.length >= 1, r);
-      assert.ok(!/NaN|undefined/.test(`${R.say} ${R.help} ${R.list} ${R.why(12)}`), r);
-    }
+// ── the rule sets and the levels ───────────────────────────────────────────────────────────────────────────────────
+test('the ladder: the game\'s maker\'s sets in his order, each level taking its rules from his range of the sets', () => {
+  // his table (MB-2: "1: 1 / 2: 1, 2 / 3: 2, 3 / 4: 2, 3, 4 / 5: 3, 4, 5 / 6: 3, 4, 5, 6"), and his pattern on after it
+  assert.deepEqual(RANGES.slice(0, 6), [[1, 1], [1, 2], [2, 3], [2, 4], [3, 5], [3, 6]]);
+  for (let n = 1; n <= 12; n++) assert.deepEqual(rangeOf(n), [Math.ceil(n / 2), n], 'level ' + n);
+  const keys = ORDER.filter((k) => SETS[k]);
+  assert.deepEqual(LADDER.map((L) => L.key), keys);
+  LADDER.forEach((L, i) => { const [lo, hi] = rangeOf(i + 1); assert.deepEqual(L.sets, keys.slice(lo - 1, hi), L.key); });
+  assert.deepEqual(LADDER[0].sets, ['oddeven'], 'level 1: the first set only');
+  for (const L of LADDER.slice(1)) assert.ok(L.sets.length >= 2, `${L.key}: a range`);
+  // the sets: his easy ones, then multiples 2, 3, 5, 10; 4, 6, 9, 11; 7, 8, 12; squares; the sixth only hard rules
+  for (const r of ['even', 'odd', 'less:5', 'more:10']) assert.ok(SETS.oddeven.rules.includes(r));
+  assert.deepEqual(SETS.tables1.rules, ['mult:2', 'mult:3', 'mult:5', 'mult:10']);
+  assert.deepEqual(SETS.tables2.rules, ['mult:4', 'mult:6', 'mult:9', 'mult:11']);
+  for (const k of [7, 8, 12]) assert.ok(SETS.tables3.rules.includes('mult:' + k));
+  assert.ok(SETS.squares.rules.includes('square'));
+  const sixth = SETS[keys[5]];
+  assert.ok(sixth.rules.includes('prime') && sixth.rules.includes('square'));
+  for (const r of sixth.rules) assert.ok(!/^(even|odd|less|more)/.test(r), 'the sixth set has only hard rules: ' + r);
+  // after them: fractions, decimals, and the two together (balls written '3/4', '0.75')
+  assert.deepEqual(keys.slice(6), ['fractions', 'decimals', 'sameamount']);
+  assert.ok(SETS.fractions.pool.every((b) => /^\d+\/\d+$/.test(b)));
+  assert.ok(SETS.decimals.pool.every((b) => /^\d*\.\d+$/.test(b)));
+  // every rule reads, with a whole ball, a fraction and a decimal
+  for (const L of LADDER) for (const r of L.rules) {
+    const R = ruleOf(r);
+    assert.ok(R.say && R.help && R.list && R.sign.length >= 1, r);
+    for (const b of [12, '3/4', '2/4', '0.7', '2.6']) assert.ok(!/NaN|undefined|Infinity/.test(`${R.say} ${R.help} ${R.list} ${R.why(b)}`), `${r} with ${b}: ${R.why(b)}`);
   }
-  // the game's maker's own: easy (even, odd, less than 5, more than 10), then multiples 2, 3, 5, 10; 4, 6, 9, 11; 7, 8, 12
-  assert.deepEqual(SETS.oddeven.goals, ['even', 'odd', 'less:5', 'more:10']);
-  assert.deepEqual(SETS.tables1.goals, ['mult:2', 'mult:3', 'mult:5', 'mult:10']);
-  assert.deepEqual(SETS.tables2.goals, ['mult:4', 'mult:6', 'mult:9', 'mult:11']);
-  for (const k of [7, 8, 12]) assert.ok(SETS.tables3.goals.includes('mult:' + k));
-  assert.ok(SETS.squares.goals.includes('square'));
+  // the levels climb the school guide
+  for (let i = 1; i < LADDER.length; i++) assert.ok(LADDER[i].grade >= LADDER[i - 1].grade, LADDER[i].key);
 });
 
-test('every rule set passes the ball check: each ball dealt fits a goal and never all four; every goal takes some', () => {
-  for (const S of LADDER) {
-    const deal = dealable(S.goals, S.pool), c = checkSet(S.goals, deal);
-    assert.ok(deal.length >= 12, `${S.key}: only ${deal.length} balls to deal`);
-    assert.ok(c.ok, `${S.key}: ${JSON.stringify({ none: c.none, every: c.every, dead: c.dead })}`);
-    assert.ok(c.choice >= 4, `${S.key}: only ${c.choice} balls fit more than one goal`);
-    // (and every goal can take a ball that fits it alone, so each goal is worth knowing)
-    for (let g = 0; g < 4; g++) assert.ok(deal.some((b) => goalsFor(S.goals, b).length === 1 && fits(S.goals[g], b)) || deal.filter((b) => fits(S.goals[g], b)).length >= 2, `${S.key}: goal ${S.goals[g]}`);
+test('every level starts its rounds with four goals that pass the ball check, drawn from all its sets', () => {
+  const rand = seeded(5);
+  for (const L of LADDER) {
+    const seen = new Set();
+    for (let k = 0; k < 60; k++) {
+      const g = startGoals(L, rand), deal = dealable(g, L.pool), c = checkSet(g, deal), C = crowded(g, L.pool);
+      assert.equal(new Set(g).size, 4, `${L.key}: two goals alike`);
+      assert.ok(deal.length >= 12, `${L.key}: only ${deal.length} balls to deal with ${g}`);
+      assert.ok(c.ok, `${L.key} ${g}: ${JSON.stringify({ none: c.none, every: c.every, dead: c.dead })}`);
+      assert.ok(c.choice >= 2, `${L.key} ${g}: only ${c.choice} balls fit more than one goal`);
+      assert.deepEqual([C.broad, C.alike], [[], []], `${L.key} ${g}: a catch-all goal or two alike`);
+      assert.ok(g.some((r) => SETS[L.own].rules.includes(r)), `${L.key} ${g}: nothing of its own set`);
+      for (const r of g) seen.add(L.sets.find((s) => SETS[s].rules.includes(r)));
+    }
+    assert.deepEqual([...seen].sort(), [...L.sets].sort(), `${L.key}: every set of its range comes up`);
   }
+  // the idle court's goals (and the levels page's example) are a level's own too
+  for (const L of LADDER) assert.ok(L.goals.length === 4 && L.goals.every((r) => L.rules.includes(r)), L.key);
+  // a court of fractions and whole numbers never has a catch-all ("more than 1/2" takes every whole number)
+  const C = crowded(['more:1/2', 'eq:1/2', 'mult:7', 'prime'], [...SETS.tables3.pool, ...SETS.fractions.pool]);
+  assert.deepEqual(C.broad, ['more:1/2']);
+  assert.deepEqual(crowded(['even', 'mult:2', 'less:5', 'more:10'], SETS.tables1.pool).alike, [['even', 'mult:2']]);
 });
 
 test('every rule change keeps the balls on the court passing (or swaps out the few it cannot), never the ones in a hand', () => {
   const rand = seeded(41);
-  for (const S of LADDER) {
-    const deal = dealable(S.goals, S.pool), spares = [...S.goals, ...S.spares];
-    let safe = 0, tries = 0;
-    for (let k = 0; k < 150; k++) {
+  for (const L of LADDER) {
+    let safe = 0, tries = 0, crowd = 0, kept = 0;
+    for (let k = 0; k < 120; k++) {
+      const goals = startGoals(L, rand), deal = dealable(goals, L.pool);
       const balls = []; while (balls.length < 8) { const b = deal[Math.floor(rand() * deal.length)]; if (!balls.includes(b)) balls.push(b); }
       const held = [balls[0]];
       for (let at = 0; at < 4; at++) {
-        const ch = pickChange(S.goals, at, S.pool, balls.slice(1), { held, rand, spares }); tries++;
-        assert.ok(ch, `${S.key}: no change at all for goal ${at}`);
-        assert.notEqual(ch.rule, S.goals[at]);
-        assert.ok(valid(ch.rules, held[0]), `${S.key}: the ball in a hand (${held[0]}) lost its goal`);
+        const ch = pickChange(goals, at, L.pool, balls.slice(1), { held, rand, spares: L.rules, theme: L.theme, plain: L.plain, wait: true }); tries++;
+        // (no change yet only for a ball in a hand that this goal alone takes and nothing else of the level could take
+        // without a catch-all goal: the change waits for the throw, never made under a player's feet)
+        if (!ch) { kept++; continue; }
+        assert.notEqual(ch.rule, goals[at]);
+        assert.ok(valid(ch.rules, held[0]), `${L.key}: the ball in a hand (${held[0]}) lost its goal`);
         // the balls left on the court all pass; the ones swapped out are exactly the ones that would not
-        for (const b of balls.slice(1)) assert.equal(valid(ch.rules, b), !ch.strand.includes(b), `${S.key}: ${b}`);
+        for (const b of balls.slice(1)) assert.equal(valid(ch.rules, b), !ch.strand.includes(b), `${L.key}: ${b}`);
         if (ch.safe) safe++;
         // the pool can still feed every goal after the change
-        const d2 = dealable(ch.rules, S.pool);
-        for (const r of ch.rules) assert.ok(d2.some((b) => fits(r, b)), `${S.key}: nothing could ever go in ${r}`);
+        const d2 = dealable(ch.rules, L.pool);
+        for (const r of ch.rules) assert.ok(d2.some((b) => fits(r, b)), `${L.key}: nothing could ever go in ${r}`);
+        // (past the first levels a change never brings in a plainer rule: no more than or less than a whole number, but
+        // 1: a fraction less than one)
+        if (!L.plain) assert.ok(!/^(even|odd)$|^(less|more):(?!1$)\d+$/.test(ch.rule) || L.rules.includes(ch.rule), `${L.key}: ${ch.rule}`);
+        const C = crowded(ch.rules, L.pool); if (C.broad.length || C.alike.length) crowd++;
       }
     }
-    assert.ok(safe / tries > 0.6, `${S.key}: only ${safe} of ${tries} changes keep every ball`);
+    assert.ok(safe / tries > 0.6, `${L.key}: only ${safe} of ${tries} changes keep every ball`);
+    assert.ok(kept / tries < 0.08, `${L.key}: ${kept} of ${tries} changes had to wait for the ball in a hand`);
+    assert.ok(crowd / tries < 0.06, `${L.key}: ${crowd} of ${tries} changes made a catch-all goal or two alike`);
   }
 });
 

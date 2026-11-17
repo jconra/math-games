@@ -6,7 +6,9 @@
 //   ruleOf('mult:3')          one rule from its short name (the ladder writes rules this way): { id, sign: [words,
 //                             number?] (the board: the words small over the number big), say (plain words), test(v),
 //                             help (one plain line for Help), list (examples), why(ball) (why a ball fits or doesn't) }
-//                             names: even, odd, less:N, more:N, mult:N, fact:N, square, prime, tens:N, ones:N
+//                             names: even, odd, less:N, more:N, mult:N, fact:N, square, prime, cube, tens:N, ones:N,
+//                             and for fraction and decimal balls eq:N (equal to), between:A:B, round:N (rounds to N);
+//                             N may be a fraction or a decimal: 'more:1/2', 'eq:3/4', 'less:1.5'
 //   value(ball)               a ball's number as an exact fraction { n, d } (a ball is a whole number, or '3/4', '0.5')
 //   fits(rule, ball)          does this ball go in this goal?
 //   checkSet(rules, balls)    THE BALL CHECK (ARENA.md): every ball fits at least one goal and never every goal; every
@@ -34,28 +36,140 @@ const label = (ball) => String(ball);
 const list = (a, more = true) => a.join(', ') + (more ? ' ...' : '');
 const range = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; };
 
+// ── fractions and decimals (balls written '3/4', '0.75') ───────────────────────────────────────────────────────────
+const isFrac = (s) => /^\d+\/\d+$/.test(String(s));
+const isDec = (s) => /^\d*\.\d+$/.test(String(s));
+const lcm = (a, b) => a / gcd(a, b) * b;
+// a value as a decimal, when it is a short one (1/2 is 0.5, 3/4 is 0.75), else null
+const decOf = (v) => { const x = v.n / v.d, s = String(Math.round(x * 1000) / 1000); return Math.abs(+s - x) < 1e-9 && s.length <= 5 ? s : null; };
+// the examples Help shows for a rule about fractions or decimals (its own kind of ball first)
+const FRACS = ['1/2', '2/4', '3/6', '5/10', '1/3', '1/4', '1/5', '1/8', '2/3', '3/4', '2/5', '3/5', '4/5', '3/8', '5/8', '7/8', '2/8', '6/8', '4/4', '3/3'];
+const DECS = ['0.25', '0.3', '0.5', '0.6', '0.75', '0.8', '1.2', '1.4', '1.6', '1.8', '2.2', '2.4', '2.6', '2.7', '2.8', '3.1', '3.2', '3.4', '3.6', '3.8', '4.2'];
+const NAMES = { '1/4': 'one quarter', '3/4': 'three quarters', '1/3': 'one third', '2/3': 'two thirds' };
+const PARTS = { 2: ['half', 'halves'], 3: ['third', 'thirds'], 4: ['quarter', 'quarters'], 5: ['fifth', 'fifths'], 6: ['sixth', 'sixths'], 8: ['eighth', 'eighths'], 10: ['tenth', 'tenths'], 12: ['twelfth', 'twelfths'] };
+const examplesOf = (test, kinds, n = 6) => { const a = kinds.flat().filter((b) => test(value(b))); return list(a.slice(0, n), a.length > n); };
+// why a ball b (value v) is more than, less than or the same as x: one short reason, in the ball's own kind of number
+function against(v, b, x) {
+  const X = value(x), c = cmp(v, X), word = c === 0 ? 'the same as' : c > 0 ? 'more than' : 'less than', so = c === 0 ? 'the same' : c > 0 ? 'more' : 'less';
+  if (isFrac(b) && X.n * 2 === X.d) {
+    // (against one half: the top number against half the bottom one)
+    const [n, d] = String(b).split('/').map(Number), h = d / 2;
+    return c === 0 ? `${n} is half of ${d}` : `half of ${d} is ${h}, and ${n} is ${so}`;
+  }
+  if (isFrac(b) && isFrac(x)) {
+    // (the same size of parts: the bottom numbers made the same)
+    const [n, d] = String(b).split('/').map(Number), [p, q] = String(x).split('/').map(Number), D = lcm(d, q);
+    if (d === q && PARTS[d]) return `${n} ${PARTS[d][n === 1 ? 0 : 1]} against ${p} ${PARTS[d][p === 1 ? 0 : 1]}`;
+    if (d === q) return `${n} parts against ${p}, the parts the same size`;
+    if (d === D) return `${x} is ${p * D / q}/${D}, and ${b} is ${so}`;
+    if (q === D) return `${b} is ${n * D / d}/${D}, ${word} ${x}`;
+    return `${b} is ${n * D / d}/${D} and ${x} is ${p * D / q}/${D}`;
+  }
+  // (decimals: the wholes first, then the tenths, then the hundredths)
+  const asDec = (t, w) => (isDec(t) || /^\d+$/.test(String(t)) ? String(t) : decOf(w));
+  const bd = asDec(b, v), xd = asDec(x, X);
+  if (bd && xd && (isDec(b) || isDec(x))) {
+    const [bw, bf = ''] = bd.split('.'), [xw, xf = ''] = xd.split('.');
+    const why = (() => {
+      if (+bw !== +xw) return `${+bw} ${+bw === 1 ? 'whole' : 'wholes'} against ${+xw}`;
+      const L = Math.max(bf.length, xf.length), B = bf.padEnd(L, '0'), Y = xf.padEnd(L, '0'), PL = ['tenths', 'hundredths', 'thousandths'];
+      for (let i = 0; i < L; i++) if (B[i] !== Y[i]) return `${i ? 'the same tenths, then ' : ''}${B[i]} ${PL[i]} against ${Y[i]} ${PL[i]}`;
+      return 'the same';
+    })();
+    return isFrac(x) ? `${x} is ${xd} (${why})` : isFrac(b) ? `${b} is ${bd} (${why})` : why;
+  }
+  if (isWhole(v) && !isWhole(X)) return `${b} is a whole number, ${word} ${x}`;
+  return `${b} is ${word} ${x}`;
+}
+// the nearest whole number (a half rounds up)
+const nearest = (v) => Math.floor((2 * v.n + v.d) / (2 * v.d));
+const isCube = (n) => n >= 1 && Math.round(Math.cbrt(n)) ** 3 === n;
+
 // ── the kinds of rule ──────────────────────────────────────────────────────────────────────────────────────────────
 // each: sign (the board), say (plain words), test(v), help (Help's line), why(v, ball) -> a plain line, right or wrong
 const KINDS = {
   even: () => ({
     sign: ['even numbers'], say: 'even numbers', test: (v) => isWhole(v) && v.n % 2 === 0,
     help: 'Even numbers end in 0, 2, 4, 6 or 8: they split into two equal halves.', list: list([2, 4, 6, 8, 10, 12, 14, 16, 18, 20]),
-    why: (v, b) => (isWhole(v) && v.n % 2 === 0 ? `${b} is even: it ends in ${v.n % 10}.` : `${b} is odd: it ends in ${v.n % 10}.`),
+    why: (v, b) => (!isWhole(v) ? `${b} is not a whole number: only whole numbers are even or odd.` : v.n % 2 === 0 ? `${b} is even: it ends in ${v.n % 10}.` : `${b} is odd: it ends in ${v.n % 10}.`),
   }),
   odd: () => ({
     sign: ['odd numbers'], say: 'odd numbers', test: (v) => isWhole(v) && v.n % 2 === 1,
     help: 'Odd numbers end in 1, 3, 5, 7 or 9: one is always left over when they are split in two.', list: list([1, 3, 5, 7, 9, 11, 13, 15, 17, 19]),
-    why: (v, b) => (isWhole(v) && v.n % 2 === 1 ? `${b} is odd: it ends in ${v.n % 10}.` : `${b} is even: it ends in ${v.n % 10}.`),
+    why: (v, b) => (!isWhole(v) ? `${b} is not a whole number: only whole numbers are odd or even.` : v.n % 2 === 1 ? `${b} is odd: it ends in ${v.n % 10}.` : `${b} is even: it ends in ${v.n % 10}.`),
   }),
+  // (less and more than a whole number; or, for fraction and decimal balls, than a fraction or a decimal: 'more:1/2')
   less: (x) => ({
     sign: ['less than', String(x)], say: `less than ${x}`, test: (v) => cmp(v, value(x)) < 0,
-    help: `Less than ${x}: smaller than ${x}, and not ${x} itself.`, list: list(range(1, Math.min(+x - 1, 10)), +x - 1 > 10),
-    why: (v, b) => (cmp(v, value(x)) < 0 ? `${b} is less than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not less than ${x}.` : `${b} is more than ${x}, not less.`),
+    help: isFrac(x) && value(x).n * 2 === value(x).d ? 'Less than 1/2: the top number is less than half the bottom number (1/3: half of 3 is 1 and a half, and 1 is less).'
+      : isFrac(x) && value(x).n === 1 ? `Less than ${x}: a smaller part than ${x}. 1/${value(x).d + 1} and 1/${value(x).d * 2} are smaller: the more parts a whole is cut into, the smaller each part.`
+      : !isWhole(value(x)) ? `Less than ${x}: smaller than ${x}, and not ${x} itself.${isFrac(x) && decOf(value(x)) ? ` (${x} is ${decOf(value(x))}.)` : ''}`
+        : `Less than ${x}: smaller than ${x}, and not ${x} itself.`,
+    list: !isWhole(value(x)) ? examplesOf((v) => cmp(v, value(x)) < 0, isDec(x) ? [DECS, FRACS] : [FRACS, DECS]) : list(range(1, Math.min(+x - 1, 10)), +x - 1 > 10),
+    why: (v, b) => {
+      if (!isWhole(v) || !isWhole(value(x))) return cmp(v, value(x)) < 0 ? `${b} is less than ${x}: ${against(v, b, x)}.` : `${b} is not less than ${x}: ${against(v, b, x)}.`;
+      return cmp(v, value(x)) < 0 ? `${b} is less than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not less than ${x}.` : `${b} is more than ${x}, not less.`;
+    },
   }),
   more: (x) => ({
     sign: ['more than', String(x)], say: `more than ${x}`, test: (v) => cmp(v, value(x)) > 0,
-    help: `More than ${x}: bigger than ${x}, and not ${x} itself.`, list: list(range(+x + 1, +x + 8)),
-    why: (v, b) => (cmp(v, value(x)) > 0 ? `${b} is more than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not more than ${x}.` : `${b} is less than ${x}, not more.`),
+    help: isFrac(x) && value(x).n * 2 === value(x).d ? 'More than 1/2: the top number is more than half the bottom number (3/4: half of 4 is 2, and 3 is more).'
+      : !isWhole(value(x)) ? `More than ${x}: bigger than ${x}, and not ${x} itself.${isFrac(x) && decOf(value(x)) ? ` (${x} is ${decOf(value(x))}.)` : ''}`
+        : `More than ${x}: bigger than ${x}, and not ${x} itself.`,
+    list: !isWhole(value(x)) ? examplesOf((v) => cmp(v, value(x)) > 0 && v.n / v.d < 5, isDec(x) ? [DECS, FRACS] : [FRACS, DECS]) : list(range(+x + 1, +x + 8)),
+    why: (v, b) => {
+      if (!isWhole(v) || !isWhole(value(x))) return cmp(v, value(x)) > 0 ? `${b} is more than ${x}: ${against(v, b, x)}.` : `${b} is not more than ${x}: ${against(v, b, x)}.`;
+      return cmp(v, value(x)) > 0 ? `${b} is more than ${x}.` : cmp(v, value(x)) === 0 ? `${b} is ${x} itself, not more than ${x}.` : `${b} is less than ${x}, not more.`;
+    },
+  }),
+  // EQUAL TO a fraction, a decimal or 1: the same amount, however it is written (2/4, 3/6 and 0.5 are all 1/2)
+  eq: (x) => ({
+    sign: ['equal to', String(x)], say: `equal to ${x}`, test: (v) => cmp(v, value(x)) === 0,
+    help: String(x) === '1' ? 'Equal to 1: one whole. The top number and the bottom number are the same (3/3, 4/4).'
+      : isFrac(x) && value(x).n * 2 === value(x).d ? `Equal to 1/2: one half. The top number is exactly half the bottom number (2/4, 3/6, 5/10), and 0.5 is a half too.`
+        : `Equal to ${x}${NAMES[String(x)] ? `, ${NAMES[String(x)]}` : ''}: the same amount, however it is written (${examplesOf((v) => cmp(v, value(x)) === 0, [FRACS, DECS], 3).replace(' ...', '')}).`,
+    list: examplesOf((v) => cmp(v, value(x)) === 0, [FRACS, DECS]),
+    why: (v, b) => {
+      const X = value(x);
+      if (cmp(v, X) === 0) {
+        if (String(b) === String(x)) return `${b} is ${x}.`;
+        if (String(x) === '1' && isFrac(b)) return `${b} is equal to 1: the top and the bottom are the same.`;
+        if (isFrac(b) && X.n * 2 === X.d) return `${b} is equal to 1/2: ${against(v, b, x)}.`;
+        if (isFrac(b)) { const [n, d] = String(b).split('/').map(Number), k = n / X.n; return `${b} is equal to ${x}: ${n} ÷ ${k} = ${X.n} and ${d} ÷ ${k} = ${X.d}.`; }
+        return `${b} is equal to ${x}: ${decOf(X) && !isDec(x) ? `${x} is ${decOf(X)}` : `${b} is ${x} written another way`}.`;
+      }
+      return `${b} is not equal to ${x}: ${against(v, b, x)}.`;
+    },
+  }),
+  // BETWEEN two numbers (more than the first and less than the second): 'between:0:1' takes 0.3 and 2/3, not 1
+  between: (a, b) => ({
+    sign: ['between', `${a} and ${b}`], say: `between ${a} and ${b}`, test: (v) => cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0,
+    help: `Between ${a} and ${b}: more than ${a} and less than ${b}${String(a) === '0' && String(b) === '1' ? ': a part of one, less than a whole (0.3, 0.75, 2/3)' : ''}.`,
+    list: examplesOf((v) => cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0, isFrac(a) || isFrac(b) ? [FRACS, DECS] : [DECS, FRACS]),
+    why: (v, B) => (cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0 ? `${B} is between ${a} and ${b}: more than ${a}, less than ${b}.`
+      : cmp(v, value(b)) >= 0 ? `${B} is ${cmp(v, value(b)) === 0 ? b + ' itself' : 'more than ' + b}, not between ${a} and ${b}.` : `${B} is ${cmp(v, value(a)) === 0 ? a + ' itself' : 'less than ' + a}, not between ${a} and ${b}.`),
+  }),
+  // ROUNDS TO a whole number: its nearest whole number (the tenths: 5 or more rounds up)
+  round: (k) => ({
+    sign: ['rounds to', String(k)], say: `rounds to ${k}`, test: (v) => nearest(v) === +k,
+    help: `Rounds to ${k}: ${k} is the nearest whole number. Look at the tenths: 5 or more rounds up (${+k - 1}.6 rounds up to ${k}), under 5 rounds down (${k}.3 rounds down to ${k}).`,
+    list: examplesOf((v) => nearest(v) === +k && !isWhole(v) && (2 * v.n) % v.d !== 0, [DECS]),
+    why: (v, b) => {
+      const r = nearest(v), s = String(b), t = isDec(s) ? +s.split('.')[1][0] : null;
+      const how = isWhole(v) ? `${b} is a whole number already` : t != null ? `${t} tenths ${t >= 5 ? 'rounds up' : 'rounds down'}, to ${r}` : `the nearest whole number is ${r}`;
+      return r === +k ? `${b} rounds to ${k}: ${how}.` : `${b} rounds to ${r}, not ${k}: ${how}.`;
+    },
+  }),
+  cube: () => ({
+    sign: ['cube numbers'], say: 'cube numbers', test: (v) => isWhole(v) && isCube(v.n),
+    help: 'A cube number is a number times itself, and times itself again: 2 × 2 × 2 = 8, 3 × 3 × 3 = 27.', list: list([1, 8, 27, 64, 125], false),
+    why: (v, b) => {
+      if (!isWhole(v)) return `${b} is not a whole number, so it is not a cube number.`;
+      const r = Math.round(Math.cbrt(v.n));
+      if (r ** 3 === v.n) return `${b} is a cube number: ${r} × ${r} × ${r} = ${b}.`;
+      const lo = Math.floor(Math.cbrt(v.n) + 1e-9);
+      return `${b} is not a cube number: ${lo} × ${lo} × ${lo} = ${lo ** 3} and ${lo + 1} × ${lo + 1} × ${lo + 1} = ${(lo + 1) ** 3}.`;
+    },
   }),
   mult: (k) => ({
     sign: ['multiples of', String(k)], say: `multiples of ${k}`, test: (v) => isWhole(v) && v.n > 0 && v.n % k === 0,
@@ -115,11 +229,13 @@ const CACHE = new Map();
 export function ruleOf(name) {
   if (name && typeof name === 'object') return name;
   if (CACHE.has(name)) return CACHE.get(name);
-  const [kind, arg] = String(name).split(':'), K = KINDS[kind];
+  const [kind, arg, arg2] = String(name).split(':'), K = KINDS[kind];
   if (!K) throw new Error('Mathball: no rule called ' + name);
-  const x = arg == null ? undefined : /^\d+$/.test(arg) ? +arg : arg;
-  if (['less', 'more', 'mult', 'fact', 'tens', 'ones'].includes(kind) && x == null) throw new Error('Mathball: the rule ' + name + ' needs a number');
-  const r = K(x), rule = { id: String(name), kind, arg: x, ...r, why: (ball) => r.why(value(ball), label(ball)) };
+  const num = (a) => (a == null ? undefined : /^\d+$/.test(a) ? +a : a), x = num(arg), y = num(arg2);
+  if (['less', 'more', 'mult', 'fact', 'tens', 'ones', 'eq', 'round'].includes(kind) && x == null) throw new Error('Mathball: the rule ' + name + ' needs a number');
+  if (kind === 'between' && (x == null || y == null)) throw new Error('Mathball: the rule ' + name + ' needs two numbers');
+  for (const a of [x, y]) if (a != null) value(a);   // (a number the balls' check can't read: a mistake in the ladder)
+  const r = K(x, y), rule = { id: String(name), kind, arg: x, arg2: y, ...r, why: (ball) => r.why(value(ball), label(ball)) };
   CACHE.set(name, rule);
   return rule;
 }
@@ -141,6 +257,17 @@ export function checkSet(rules, balls, { per = 2 } = {}) {
 }
 // the balls of a pool that may be dealt with these rules: each fits at least one goal, never every goal
 export const dealable = (rules, pool) => pool.filter((b) => { const n = goalsFor(rules, b).length; return n >= 1 && n < rules.length; });
+// NO CATCH-ALL GOAL, NO TWO GOALS ALIKE: what is wrong with four goals over the balls a pool would deal them: the goals
+// that take more than BROAD of those balls (on a court of fractions and whole numbers, "more than 1/2" takes every whole
+// number: no choice is left), and the pairs that take exactly the same balls ("even numbers" and "multiples of 2")
+export const BROAD = 0.75;
+export function crowded(rules, pool) {
+  const deal = dealable(rules, pool), fit = rules.map((r) => deal.map((b) => fits(r, b)));
+  const broad = rules.filter((r, i) => deal.length >= 4 && fit[i].filter(Boolean).length > BROAD * deal.length).map((r) => ruleOf(r).id);
+  const alike = [];
+  for (let i = 0; i < rules.length; i++) for (let j = i + 1; j < rules.length; j++) if (deal.length && fit[i].every((x, k) => x === fit[j][k])) alike.push([ruleOf(rules[i]).id, ruleOf(rules[j]).id]);
+  return { broad, alike, deal };
+}
 
 // ── A GOAL'S RULE CHANGING ─────────────────────────────────────────────────────────────────────────────────────────
 // The light bar reaches goal `at`: its rule changes to one of the rung's rules not on a goal now. Before it changes,
@@ -151,40 +278,65 @@ export const dealable = (rules, pool) => pool.filter((b) => { const n = goalsFor
 //   - the pool must still be able to deal balls for every goal (so new balls can come for the new rule).
 // The best change keeps all of that. If none can (the goal holds the only rule some balls fit), the change that leaves
 // the fewest balls with nowhere to go is made, and those balls are swapped out (they fade, new ones come in): `strand`.
-// Among good changes, the rung's own four rules (`theme`) come back first when one is free, so the round stays on its
-// subject (on the first rung, even and odd move from goal to goal rather than leaving the court for good).
+// Among good changes, the rung's own rules (`theme`: a level's own rule set) come back first when one is free, so the
+// round stays on its subject (on the first rung, even and odd move from goal to goal rather than leaving the court for
+// good). A change that would make a catch-all goal or two goals alike (crowded, above) is the last resort.
+//   plain: a plainer rule may be made for a held ball nothing else suits (more or less than a round number, odd or
+//   even); false on the levels past those (the game's maker: "Any kind of more than or less than is way easier than
+//   multiples and factors"): there it is a multiple or a factor that takes the ball
 //   -> { rule (its name), rules (the goals after), strand: [balls that fit no goal or every goal], safe }  or null
-export function pickChange(rules, at, pool, balls, { held = [], rand = Math.random, spares = [], theme = [] } = {}) {
+//   wait: true -> null rather than a catch-all goal or two alike made only to keep a ball in a hand (the game tries the
+//   change again once that ball is thrown: game.js change)
+export function pickChange(rules, at, pool, balls, { held = [], rand = Math.random, spares = [], theme = [], plain = true, wait = false } = {}) {
   const now = rules.map((r) => ruleOf(r).id), home = theme.map((r) => ruleOf(r).id);
+  let clean = 0, cleanFree = 0;   // (changes with no catch-all goal: keeping the held ball; and leaving it out)
   const tryAll = (cands) => {
     let best = null;
     for (const id of cands) {
       const next = now.map((r, i) => (i === at ? id : r));
       const bad = (b) => { const n = goalsFor(next, b).length; return n === 0 || n === next.length; };
-      if (held.some(bad)) continue;                                   // (never under a player's feet)
-      const strand = balls.filter(bad), keep = balls.filter((b) => !bad(b));
-      const deal = dealable(next, pool), dead = next.filter((r) => !deal.some((b) => fits(r, b))).length;
+      const C = crowded(next, pool), deal = C.deal, dead = next.filter((r) => !deal.some((b) => fits(r, b))).length;
       if (dead) continue;                                              // (the pool could never feed some goal)
+      const crowd = C.broad.length + C.alike.length; if (!crowd) cleanFree++;
+      if (held.some(bad)) continue;                                   // (never under a player's feet)
+      if (!crowd) clean++;
+      const strand = balls.filter(bad), keep = balls.filter((b) => !bad(b));
       const empty = next.filter((r) => !keep.some((b) => fits(r, b))).length;   // (goals no ball on the court fits now)
       const choice = keep.filter((b) => goalsFor(next, b).length >= 2).length;
-      const score = strand.length * 10 + empty * 3 - choice * 0.5 - (home.includes(id) ? 2 : 0) + rand() * 0.9;
-      if (!best || score < best.score) best = { rule: id, rules: next, strand, safe: !strand.length, score };
+      const score = strand.length * 10 + empty * 3 - choice * 0.5 - (home.includes(id) ? 2 : 0) + crowd * 40 + rand() * 0.9;
+      if (!best || score < best.score) best = { rule: id, rules: next, strand, safe: !strand.length, score, crowd };
     }
     return best;
   };
   const own = [...new Set(spares.map((r) => ruleOf(r).id))].filter((id) => !now.includes(id));
-  // (a ball in someone's hand that every rule of the set would leave with no goal, or with every goal: a plainer rule is
-  // made for the change, by the nearest round numbers either side of it ("more than 20", "less than 30" take it; "less
-  // than 70", "more than 80" leave it out), or odd or even)
+  // (a ball in someone's hand that every rule of the set would leave with no goal, or with every goal: a rule is made for
+  // the change that takes it. A whole number: on the first levels by the nearest round numbers either side of it ("more
+  // than 20", "less than 30" take it; "less than 70", "more than 80" leave it out), or odd or even; past them a multiple
+  // of one of its factors, or the factors of a number it divides. A fraction or a decimal: more or less than a half, a
+  // whole number or a round half)
   let best = tryAll(own);
   if (!best && held.length) {
-    const vs = held.map(value).map((v) => v.n / v.d), lo = Math.min(...vs), hi = Math.max(...vs), gen = ['odd', 'even'];
-    for (const step of [5, 10]) {
-      const below = Math.floor((lo - 0.001) / step) * step, above = Math.ceil((hi + 0.001) / step) * step;
-      if (below > 0) gen.push('more:' + below, 'less:' + below);
-      gen.push('less:' + above, 'more:' + above);
+    const V = held.map(value), vs = V.map((v) => v.n / v.d), lo = Math.min(...vs), hi = Math.max(...vs), gen = [];
+    if (V.every((v) => v.d === 1)) {
+      if (plain) {
+        gen.push('odd', 'even');
+        for (const step of [5, 10]) {
+          const below = Math.floor((lo - 0.001) / step) * step, above = Math.ceil((hi + 0.001) / step) * step;
+          if (below > 0) gen.push('more:' + below, 'less:' + below);
+          gen.push('less:' + above, 'more:' + above);
+        }
+      } else {
+        for (const v of V) {
+          for (let k = 2; k <= 12; k++) if (v.n % k === 0 && v.n > k) gen.push('mult:' + k);
+          for (const m of [12, 24, 30, 36, 40, 48, 60, 72, 84, 90, 96, 100]) if (m % v.n === 0 && m > v.n) gen.push('fact:' + m);
+        }
+      }
+    } else {
+      for (const x of ['1/2', '1', '1.5', '2.5', '3.5']) gen.push('more:' + x, 'less:' + x);
     }
     best = tryAll([...new Set(gen)].filter((id) => !now.includes(id)));
   }
+  // (every change that keeps the held ball makes a catch-all or two goals alike: better to wait for the throw)
+  if (best && best.crowd && !clean && cleanFree && wait && held.length) return null;
   return best;
 }
