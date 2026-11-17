@@ -250,7 +250,7 @@ export const MAKERS = {
           key: `count:${askFull ? 'full' : 'empty'}`, story: 'A full canister has its window lit all the way along. An empty one is dark.', ask: `How many of these canisters are ${askFull ? 'full' : 'empty'}?`,
           right: C(n, CAN),
           slips: [
-            { ...C(other, CAN), slip: 'other', why: `${other} is the ${askFull ? 'empty' : 'full'} ${one(other)}. Count the ones with the window ${askFull ? 'lit' : 'dark'}.` },
+            { ...C(other, CAN), slip: 'other', why: `${other} ${other === 1 ? 'is' : 'are'} the ${askFull ? 'empty' : 'full'} ${one(other)}. Count the ones with the window ${askFull ? 'lit' : 'dark'}.` },
             { ...C(all, CAN), slip: 'all', why: `${all} is all of them, full and empty together.` },
             { ...C(n + 1, CAN), slip: 'off', why: 'One too many. Count again, touching each one once.' },
             { ...C(n - 1, CAN), slip: 'off', why: 'One short. Count again, touching each one once.' },

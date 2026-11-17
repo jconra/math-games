@@ -421,10 +421,11 @@ export function makeDrive(site, state, world = {}, opts = {}) {
     const [hx, hy, hz] = hookAt(S), A2 = DRIVE.aid;
     const look = (e, on, nr) => (e < on ? 'on' : e < nr ? 'near' : 'off');
     let ex = Math.abs(hx - P.at[0]), ez = Math.abs(hz - P.at[2]);
-    // (in front of a socket with a canister: across it must be right; along its line, anywhere from where it waits
-    // to seated is right; the height its middle line's)
+    // (in front of a socket with a canister: across it must be right; along its line, anywhere from seated out to as
+    // far as it pulls itself in from (lineup's reach along it: 1 m past where it waits) is right; the height its middle
+    // line's. Green on all three: it docks by itself from here)
     if (P.kind === 'socket' && held >= 0) {
-      const lat = latOf(P.i, hx, hz), ax = axOf(P.i, hx, hz), out = Math.max(0, ax - (half + clear + 0.15), (half - seat) - ax);
+      const lat = latOf(P.i, hx, hz), ax = axOf(P.i, hx, hz), out = Math.max(0, ax - (half + clear + 1.0), (half - seat) - ax);
       if (Math.abs(K[P.i].n[1]) > 0.5) { ex = lat; ez = out; } else { ex = out; ez = lat; }
     }
     return { x: look(ex, A2.on, A2.near), y: look(ez, A2.on, A2.near), h: look(Math.abs(hy - P.at[1]), A2.hOn, A2.hNear) };

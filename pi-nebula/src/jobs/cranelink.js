@@ -206,7 +206,8 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     const g = g2; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
     if (!top.on) return;
     const [X, Y] = G.size, D = live(), S = D ? D.state : crane.L.state(crane.t), here = toGrid(site, S.x, S.z), key = cardKey();
-    const r = top.rect, every = top.k > 16 ? 1 : 2, label = top.k > 24 ? 1 : top.k > 11 ? 2 : 5;
+    // (a line every metre, as the cards count in whole metres, unless the picture is far too small for them)
+    const r = top.rect, every = top.k > 7 ? 1 : 2, label = top.k > 24 ? 1 : top.k > 11 ? 2 : 5;
     g.save(); g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
     // the lines: every metre (or two), every five stronger
     for (let x = 0; x <= X; x += every) { g.strokeStyle = x % 5 ? 'rgba(140, 220, 255, 0.22)' : 'rgba(170, 230, 255, 0.5)'; g.lineWidth = x % 5 ? 1 : 1.6; g.beginPath(); g.moveTo(gsx(x), gsy(0)); g.lineTo(gsx(x), gsy(Y)); g.stroke(); }
@@ -256,6 +257,15 @@ export function craneLink({ crane, W, walls, onFree = null }) {
       if (ghost.kind === 'over') { const fx = gsx(ghost.from[0]), fy = gsy(ghost.from[1]), qx = gsx(ghost.to[0]), qy = gsy(ghost.to[1]); g.setLineDash([7, 6]); g.strokeStyle = '#ff9a4a'; g.lineWidth = 3; g.beginPath(); g.moveTo(fx, fy); g.lineTo(qx, qy); g.stroke(); g.setLineDash([]); g.beginPath(); g.arc(qx, qy, 11, 0, Math.PI * 2); g.stroke(); tag(g, qx + 14, qy - 14, ghost.label, '#ff9a4a'); }
       else if (ghost.kind === 'lower' && card) scale(g, r, S.hoist, card, ghost);
       g.globalAlpha = 1;
+    }
+    // (after a wrong reading: the way to read it, the grid line from the blinking canister down to the x numbers, or
+    // across to the y numbers, as the wrong answer's words say)
+    if (ghost && card && card.kind === 'over' && /^(read|pair)/.test(key) && clock - ghost.t < 6) {
+      const a = card.aim || card.to, tx = gsx(a[0]), ty = gsy(a[1]), ax = card.axis;
+      g.save(); g.setLineDash([5, 5]); g.strokeStyle = '#9fe8ff'; g.lineWidth = 2.5; g.beginPath();
+      if (ax !== 'y') { g.moveTo(tx, ty + 14); g.lineTo(tx, Math.min(r.y + r.h - 20, gsy(0))); }
+      if (ax !== 'x') { g.moveTo(tx - 14, ty); g.lineTo(Math.max(r.x + 22, gsx(0)), ty); }
+      g.stroke(); g.restore();
     }
   }
   const num = (v) => String(Math.round(v * 100) / 100);
