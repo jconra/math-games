@@ -22,7 +22,7 @@ test('every setting has a name of its own, a plain label, and a start inside its
     assert.equal(SETTING[s.key], s);
   }
   // what the game's maker asked to be able to change: greys and colours, plates, finish for three groups, wear, edges
-  for (const k of ['grey', 'grey2', 'trim', 'windowColour', 'windowBright', 'plateW', 'plateH', 'lap', 'bevel', 'gap', 'scratches', 'edgeWear', 'streaks', 'pits', 'grime', 'edgeDark', 'edgeWide']) assert.ok(SETTING[k], k);
+  for (const k of ['grey', 'grey2', 'trim', 'windowColour', 'windowBright', 'plateW', 'plateH', 'lap', 'bevel', 'cut', 'gap', 'scratches', 'edgeWear', 'streaks', 'pits', 'grime', 'edgeDark', 'edgeWide']) assert.ok(SETTING[k], k);
   assert.deepEqual(GROUPS, ['band', 'tiers', 'trim']);
   assert.deepEqual(FINISHES, ['plain', 'brushed', 'tempered', 'hatched', 'mottled']);
   for (const g of GROUPS) {
@@ -99,8 +99,8 @@ test('a look written as text reads back the same, with words round it or not', (
 
 test('a setting is shown as a plain number with its unit', () => {
   assert.equal(showValue(SETTING.plateW, 6.4), '6.4 m'); assert.equal(showValue(SETTING.plateW, 7), '7 m'); assert.equal(showValue(SETTING.bevel, 0.18), '18 cm'); assert.equal(showValue(SETTING.gap, 0.065), '6.5 cm');
-  assert.equal(showValue(SETTING.pits, 0.15), '15%'); assert.equal(showValue(SETTING.bandAngle, 45), '45°'); assert.equal(showValue(SETTING.windowBright, 1.5), '1.5');
-  assert.deepEqual(plateSizes(DARK), { w: 7, h: 3, lap: 0, bevel: 0.18, gap: 0.06, shift: 0.5, uneven: 0.5 });
+  assert.equal(showValue(SETTING.pits, 0.15), '15%'); assert.equal(showValue(SETTING.bandAngle, 45), '45°'); assert.equal(showValue(SETTING.windowBright, 1.5), '1.5'); assert.equal(showValue(SETTING.cut, 0.45), '45 cm');
+  assert.deepEqual(plateSizes(DARK), { w: 7, h: 3, lap: 0, bevel: 0.35, gap: 0.05, cut: 0.45, shift: 0, uneven: 0.6, unevenRows: 0.6 });
 });
 
 // ── the outline and flat shapes ─────────────────────────────────────────────────────────────────────────────────
@@ -157,6 +157,19 @@ test('every other row is slid along; uneven rows keep their length and no plate 
   }
 });
 
+test('uneven heights: the rows still fill the wall, none a sliver, and rows keep their heights from part to part', () => {
+  for (const unevenRows of [0.3, 0.6, 1]) for (const salt of [1, 7, 40]) {
+    const P = layPlates(WALL, { w: 3, h: 2, lap: 0, shift: 0, uneven: 0, unevenRows }, salt), hs = [0, 1, 2].map((r) => heights(P.find((pl) => pl.row === r)));
+    assert.ok(near(hs[0] + hs[1] + hs[2], 6, 1e-9), 'three rows are still 6 m');
+    assert.ok(Math.min(...hs) > 2 * 0.5 && Math.max(...hs) < 2 * 1.6, 'no row under half or over one and a half times the even height: ' + hs);
+    for (const pl of P) assert.ok(near(heights(pl), hs[pl.row]), 'every plate of a row is the row\'s height');
+    if (unevenRows >= 0.6) assert.ok(Math.max(...hs) - Math.min(...hs) > 0.1, 'the heights differ');
+    // a narrower part of the same wall, given the same row number, has the same rows (so rows carry on past a door)
+    const Q = layPlates({ quad: [[0, 0], [3, 0], [3, 6], [0, 6]], kinds: WALL.kinds }, { w: 3, h: 2, lap: 0, shift: 0, uneven: 0, unevenRows }, salt + 99, salt);
+    assert.deepEqual(Q.map(heights), hs);
+  }
+});
+
 test('a lapped row reaches down over the row below by the lap', () => {
   const P = layPlates(WALL, { w: 3, h: 2, lap: 0.4, shift: 0, uneven: 0 });
   for (const pl of P) {
@@ -209,6 +222,32 @@ test('a bare wall: twelve plates, ten triangles each, each top smaller than its 
   for (let i = 0; i < g.position.length; i += 3) assert.ok(g.position[i] >= -1e-6 && g.position[i] <= 0.2 + 1e-6 && g.position[i + 1] >= -1e-6 && g.position[i + 1] <= 6 + 1e-6 && g.position[i + 2] >= -1e-6 && g.position[i + 2] <= 12 + 1e-6);
 });
 
+test('cut corners: a plate becomes an octagon, 22 triangles, its corners cut back by what was asked', () => {
+  const A = hullArrays(BARE, { ...SIZES, cut: 0.5 }), g = A.groups.band;
+  assert.equal(g.plates, 12); assert.equal(g.triangles, 12 * 22, 'an eight-sided top (6) and eight bevels (16)');
+  // every corner of every plate carries the cut, and none of a plate's own corners is left square: no point of a plate
+  // lies inside the corner triangle that was cut away
+  let seen = 0;
+  for (let v = 0; v < g.position.length / 3; v++) {
+    assert.ok(near(g.cut[v], 0.5, 1e-6));
+    const e = [0, 1, 2, 3].map((k) => g.edge[v * 4 + k]);
+    for (let k = 0; k < 4; k++) assert.ok(e[k] + e[(k + 1) % 4] >= 0.5 - 1e-5, 'a point inside a cut corner: ' + e);
+    if (near(e[0] + e[1], 0.5, 1e-5)) seen++;
+  }
+  assert.ok(seen >= 12 * 2, 'the cuts are there');
+  // the flat top's own corners are cut by a little less (its sides came in by the bevel): 0.5 less 0.2 x (2 - sqrt 2)
+  const topCut = 0.5 - 0.2 * (2 - Math.SQRT2);
+  let tops8 = 0;
+  for (let v = 0; v < g.position.length / 3; v++) if (g.normal[v * 3] > 0.999 && near(g.position[v * 3], 0.2, 1e-6)) {
+    const e = [0, 1, 2, 3].map((k) => g.edge[v * 4 + k] - 0.2).sort((a, b) => a - b);        // (past the bevel, from each side)
+    assert.ok(near(e[0], 0, 1e-5) && near(e[1], topCut, 1e-4), 'a top corner sits on one side and ' + topCut + ' along from the next: ' + e); tops8++;
+  }
+  assert.equal(tops8, 12 * 8);
+  // a cut too big for its plate is brought down to fit; a plate with a slanted end keeps its corners
+  const B = hullArrays(BARE, { ...SIZES, cut: 9 }); assert.equal(B.groups.band.triangles, 12 * 22);
+  for (const c of B.groups.band.cut) assert.ok(c <= 0.3 * 1.9 + 1e-6);
+});
+
 test('a bare wall, lapped: the rows above the first are tilted and stand clear of the row below', () => {
   const A = hullArrays(BARE, { ...SIZES, lap: 0.4 }), g = A.groups.band;
   assert.equal(g.plates, 12);
@@ -234,8 +273,9 @@ test('nothing on a wall faces into it: flush, lapped, or a row of windows', () =
       }
     }
     if (plan === WINDOWS) {
-      // three panes in a 12 m row (one every 4.2 m is fitted to one every 4), each facing out, sunk into its frame but in front of the wall
-      assert.equal(A.stats.panes, 3);
+      // three frames in a 12 m row (one every 4.2 m is fitted to one every 4), the third blank: two windows of two panes
+      // each, facing out, sunk into their frames but in front of the wall
+      assert.equal(A.stats.windows, 2); assert.equal(A.stats.panes, 4);
       const w = A.windows.position; for (let i = 0; i < w.length; i += 3) assert.ok(w[i] > 0.02 && w[i] < 0.3, 'a pane ' + w[i] + ' m off the wall');
       assert.ok(A.groups.trim.plates >= 3 + 2, 'the frames, and a lip above and below');
     }
@@ -274,56 +314,65 @@ test('the lab\'s sample, in each ready-made look: sound lists of numbers, inside
     let tris = 0;
     for (const [k, g] of Object.entries(A.groups)) {
       const verts = g.position.length / 3;
-      assert.ok(verts > 0 && g.normal.length === verts * 3 && g.uv.length === verts * 2 && g.edge.length === verts * 4 && g.kind.length === verts * 4 && g.tone.length === verts * 4, n + ' ' + k);
+      assert.ok(verts > 0 && g.normal.length === verts * 3 && g.uv.length === verts * 2 && g.edge.length === verts * 4 && g.kind.length === verts * 4 && g.tone.length === verts * 4 && g.cut.length === verts, n + ' ' + k);
       assert.equal(g.index.length % 3, 0); assert.equal(g.triangles, g.index.length / 3); tris += g.triangles;
       for (const i of g.index) assert.ok(i < verts);
       for (let i = 0; i < verts; i++) {
         assert.ok(near(Math.hypot(g.normal[i * 3], g.normal[i * 3 + 1], g.normal[i * 3 + 2]), 1, 1e-4), 'unit normals');
         for (let a = 0; a < 3; a++) assert.ok(g.position[i * 3 + a] >= SAMPLE_BOX.min[a] - 0.5 && g.position[i * 3 + a] <= SAMPLE_BOX.max[a] + 0.5, `${n} ${k} corner ${i} inside the piece`);
         for (let a = 0; a < 4; a++) { assert.ok(g.edge[i * 4 + a] >= 0, 'distances to a plate\'s sides are never negative'); assert.ok(g.kind[i * 4 + a] === SEAM || g.kind[i * 4 + a] === INSIDE); }
-        assert.ok(g.tone[i * 4] === 0 || g.tone[i * 4] === 1); assert.ok(Math.abs(g.tone[i * 4 + 1]) <= 1 && g.tone[i * 4 + 2] > 0 && g.tone[i * 4 + 2] <= 1 && g.tone[i * 4 + 3] >= 0 && g.tone[i * 4 + 3] <= 0.5);
+        assert.ok(g.tone[i * 4] === 0 || g.tone[i * 4] === 1); assert.ok(Math.abs(g.tone[i * 4 + 1]) <= 1 && g.tone[i * 4 + 2] > 0 && g.tone[i * 4 + 2] <= 1 && g.tone[i * 4 + 3] >= 0 && g.tone[i * 4 + 3] <= 1 && g.cut[i] >= 0 && g.cut[i] <= 1.2);
       }
     }
     assert.equal(A.stats.triangles.all, tris + A.stats.panes * 2 + A.stats.doors * 2);
     assert.equal(A.stats.plates.all, A.stats.plates.band + A.stats.plates.tiers + A.stats.plates.trim);
     assert.ok(A.stats.plates.band > 40 && A.stats.plates.tiers > 40 && A.stats.plates.trim > 40, n + ': all three groups have plates to look at');
-    assert.ok(A.stats.triangles.all < 8000, n + ': the whole piece is under 8,000 triangles (' + A.stats.triangles.all + ')');
+    assert.ok(A.stats.triangles.all < 10000, n + ': the whole piece is under 10,000 triangles (' + A.stats.triangles.all + ')');
     // the same plan and sizes always give the same numbers
     assert.deepEqual(hullArrays(SAMPLE, plateSizes(HULL_LOOKS[n])).groups.band.position, A.groups.band.position);
   }
 });
 
-test('the lab\'s sample: one door 22 m by 9 m with a shield across it, forty window panes', () => {
+test('the lab\'s sample: one door 22 m by 9 m with a shield across it; windows in twos and threes, two panes each', () => {
   const A = hullArrays(SAMPLE, plateSizes(DARK)), s = A.shields.position;
   assert.equal(A.stats.doors, 1); assert.equal(s.length, 12);
   const zs = [2, 5, 8, 11].map((i) => s[i]), ys = [1, 4, 7, 10].map((i) => s[i]), xs = [0, 3, 6, 9].map((i) => s[i]);
   assert.ok(near(Math.max(...zs) - Math.min(...zs), DOOR.w, 1e-5) && near(Math.max(...ys) - Math.min(...ys), DOOR.h, 1e-5), 'the opening is 22 m by 9 m');
   assert.ok(near(Math.min(...ys), DOOR.sill, 1e-5) && near((Math.max(...zs) + Math.min(...zs)) / 2, DOOR.z, 1e-5), 'over its sill, its middle at z = 0');
   assert.ok(xs.every((x) => x > 0 && x < 0.45), 'the shield is in front of the wall and behind the frame\'s face');
-  // no plate of the middle band covers the opening
-  const g = A.groups.band;
-  for (const [z0, z1, y0, y1] of tops(g)) assert.ok(z0 > 11 - 1e-6 || z1 < -11 + 1e-6 || y1 < DOOR.sill + 1e-6 || y0 > DOOR.sill + DOOR.h - 1e-6, 'a plate in the doorway');
-  // the windows: forty panes, each 2.6 m by 1.05 m, each with a brightness of its own, a few dark
-  const w = A.windows; assert.equal(A.stats.panes, 40); assert.equal(w.position.length, 40 * 12); assert.equal(w.shade.length, 40 * 4);
-  for (let p = 0; p < 40; p++) {
-    const c = [0, 1, 2, 3].map((k) => [w.position[(p * 4 + k) * 3], w.position[(p * 4 + k) * 3 + 1], w.position[(p * 4 + k) * 3 + 2]]);
-    assert.ok(near(Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]), SAMPLE.windows.w, 1e-4) && near(Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1], c[3][2] - c[0][2]), SAMPLE.windows.h, 1e-4));
-    assert.ok(w.shade[p * 4] === w.shade[p * 4 + 1] && w.shade[p * 4 + 2] === w.shade[p * 4 + 3] && w.shade[p * 4] > 0 && w.shade[p * 4] < w.shade[p * 4 + 2] && w.shade[p * 4 + 2] <= 1, 'a pane\'s foot is dimmer than its top');
+  // nothing of the hull stands in the opening: no corner of any plate or backing, in any group
+  for (const g of Object.values(A.groups)) for (let i = 0; i < g.position.length; i += 3) {
+    const [x, y, z] = [g.position[i], g.position[i + 1], g.position[i + 2]];
+    assert.ok(!(x > -0.5 && Math.abs(z) < DOOR.w / 2 - 1e-3 && y > DOOR.sill + 1e-3 && y < DOOR.sill + DOOR.h - 1e-3), `something in the doorway at ${x}, ${y}, ${z}`);
   }
-  const lit = Array.from({ length: 40 }, (_, p) => w.shade[p * 4 + 2]);
-  assert.ok(lit.filter((v) => v > 0.6).length >= 30 && new Set(lit.map((v) => v.toFixed(2))).size > 8, 'most are lit, no two rows alike');
-  // the panes do not change when the plates do
-  assert.equal(hullArrays(SAMPLE, plateSizes(HULL_LOOKS['old and worn'])).stats.panes, 40);
+  // the windows: each two panes side by side with a bar's width between, lit alike, the foot dimmer than the top
+  const w = A.windows, W = SAMPLE.windows, n = A.stats.windows, pw = (W.w - W.bar) / 2;
+  assert.ok(n >= 30 && n <= 46, n + ' windows'); assert.equal(A.stats.panes, n * 2); assert.equal(w.position.length, n * 2 * 12); assert.equal(w.shade.length, n * 2 * 4);
+  const corner = (p, k) => [0, 1, 2].map((d) => w.position[(p * 4 + k) * 3 + d]), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let p = 0; p < n * 2; p++) {
+    assert.ok(near(dist(corner(p, 0), corner(p, 1)), pw, 1e-4) && near(dist(corner(p, 0), corner(p, 3)), W.h, 1e-4), 'a pane is ' + pw + ' by ' + W.h);
+    assert.ok(w.shade[p * 4] === w.shade[p * 4 + 1] && w.shade[p * 4 + 2] === w.shade[p * 4 + 3] && w.shade[p * 4] > 0 && w.shade[p * 4] < w.shade[p * 4 + 2] && w.shade[p * 4 + 2] <= 1, 'a pane\'s foot is dimmer than its top');
+    if (p % 2) { assert.equal(w.shade[p * 4 + 2], w.shade[(p - 1) * 4 + 2], 'a window\'s two panes are lit alike'); assert.ok(near(dist(corner(p - 1, 1), corner(p, 0)), W.bar, 1e-4), 'with a bar\'s width between'); }
+  }
+  const lit = Array.from({ length: n }, (_, k) => w.shade[k * 8 + 2]);
+  assert.ok(lit.filter((v) => v > 0.6).length >= n * 0.7 && new Set(lit.map((v) => v.toFixed(2))).size > 8, 'most are lit, no two rows alike');
+  // on a long row, of every seven frames two are blank (windows in a two and a three)
+  const ROW = { closed: false, path: [[0, 4.2 * 14], [0, 0]], tiers: [{ name: 'wall', profile: [[0, 0], [0, 3]], parts: [{ group: 'trim', kind: 'windows' }] }] };
+  assert.equal(hullArrays(ROW, plateSizes(DARK)).stats.windows, 10);
+  // the windows do not change when the plates do
+  assert.equal(hullArrays(SAMPLE, plateSizes(HULL_LOOKS['old and worn'])).stats.windows, n);
 });
 
 test('smaller plates: more of them, and the triangles keep step (ten a plate)', () => {
-  const big = hullArrays(SAMPLE, { ...plateSizes(DARK), w: 8, h: 4 }), small = hullArrays(SAMPLE, { ...plateSizes(DARK), w: 2, h: 1.2 });
+  const flush = { ...plateSizes(DARK), cut: 0, lap: 0 }, big = hullArrays(SAMPLE, { ...flush, w: 8, h: 4 }), small = hullArrays(SAMPLE, { ...flush, w: 2, h: 1.2 });
   assert.ok(small.stats.plates.band > big.stats.plates.band * 4);
-  for (const A of [big, small]) assert.ok(A.groups.band.triangles <= A.groups.band.plates * 10 && A.groups.band.triangles >= A.groups.band.plates * 10 - 4, 'flush plates are ten triangles each');
+  for (const A of [big, small]) assert.ok(A.groups.band.triangles <= A.groups.band.plates * 10 && A.groups.band.triangles >= A.groups.band.plates * 10 - 4, 'flush plates with square corners are ten triangles each');
+  // with their corners cut: 22 each, but for the ones with a slanted end, which keep their corners (10)
+  const cut = hullArrays(SAMPLE, { ...flush, cut: 0.4 }); assert.ok(cut.groups.band.triangles <= cut.groups.band.plates * 22 && cut.groups.band.triangles > cut.groups.band.plates * 14);
   // the extremes of every plate slider still build
   for (const s of SETTINGS.filter((x) => x.win === 'plates')) for (const v of [s.min, s.max]) {
     const A = hullArrays(SAMPLE, plateSizes({ ...DARK, [s.key]: v }));
-    assert.ok(A.stats.plates.all > 100 && A.stats.triangles.all < 60000, s.key + ' at ' + v + ': ' + A.stats.triangles.all + ' triangles');
+    assert.ok(A.stats.plates.all > 100 && A.stats.triangles.all < 150000, s.key + ' at ' + v + ': ' + A.stats.triangles.all + ' triangles');
     for (const g of Object.values(A.groups)) for (const x of g.position) assert.ok(Number.isFinite(x));
   }
 });

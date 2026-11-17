@@ -4,7 +4,8 @@
 //   a finish   R  lighter and darker (128: neither)        G  shinier and rougher (128: neither)
 //              B  heat (tempered only): 0 none, rising through straw, bronze and purple to blue
 //   the wear   R  scratches and scuffs                     G  slow smudges (grime gathers by them, worn edges break up by them)
-//              B  meteoroid pits: 128 none, darker a pit, lighter its rim; a stronger pit shows at a lower setting
+//              B  meteoroid pits, in clusters: 128 none, darker a pit, lighter its rim (bright on one side, as if
+//                 lit); a stronger pit shows at a lower setting
 //              A  streaks, running down
 // Each finish is drawn the way the thing itself is made: BRUSHED is fine streaks all one way; CROSS-HATCHED
 // is two sets of cut lines at right angles; TEMPERED is patches of heat; MOTTLED is the hangar floor's soft blotches
@@ -82,13 +83,15 @@ export function finishPixels(kind, o = {}) {
     // two sets of cut lines at right angles, HATCH_CELLS squares across the picture each way (the material sizes and
     // turns the picture to the spacing and the angle asked for): each line a dark groove with a pale shoulder; the
     // squares between differ a little
-    const gw = 0.065;                    // (half a groove's width, as a part of a square)
+    const gw = 0.06;                     // (half a groove's width, as a part of a square)
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
       let l = 0.5, r = 0.5;
       for (const ph of [x / size * HATCH_CELLS, y / size * HATCH_CELLS]) {
-        const f = ph - Math.floor(ph), d = Math.min(f, 1 - f);
-        const groove = Math.exp(-(d * d) / (gw * gw)), lip = Math.exp(-((d - 2.2 * gw) * (d - 2.2 * gw)) / (gw * gw));
-        l += -0.42 * groove + 0.16 * lip; r += 0.34 * groove - 0.1 * lip;
+        // (how far this pixel is from the nearest line, to one side of it or the other: the groove's near wall is in
+        // shadow, its far wall catches the light, as a cut does)
+        const f = ph - Math.floor(ph), d = f < 0.5 ? f : f - 1;
+        const dark = Math.exp(-((d + gw * 0.7) * (d + gw * 0.7)) / (gw * gw)), lit = Math.exp(-((d - gw * 0.9) * (d - gw * 0.9)) / (gw * gw * 0.7));
+        l += -0.46 * dark + 0.3 * lit; r += 0.3 * dark - 0.16 * lit;
       }
       const id = Math.floor(x / size * HATCH_CELLS) * 17 + Math.floor(y / size * HATCH_CELLS) * 5 + 3, h = Math.sin(id * 12.9898) * 43758.5453;
       light[y * size + x] = clamp01(l + ((h - Math.floor(h)) - 0.5) * 0.07); rough[y * size + x] = clamp01(r);
@@ -145,15 +148,25 @@ export function wearPixels(o = {}) {
   const scratch = channel(c), smudge = fbm(size, 4, 6, seed, 0.6);
   // streaks: narrow columns, each with its own strength, changing slowly along their length
   const s1 = valueNoise(size, 110, 3, seed + 41), s2 = valueNoise(size, 44, 2, seed + 43);
-  // pits: a dark middle, a bright rim; each has a strength, and the stronger ones show first
-  const pit = new Float32Array(N), P = rng(seed + 61);
-  for (let i = 0; i < 300; i++) {
-    const cx = P() * size, cy = P() * size, r = (0.011 + P() * P() * 0.04) * px, m = 0.12 + 0.88 * P(), reach = Math.ceil(r * 1.9);
+  // pits: a dark middle and a rim, the rim bright on the side the light comes from and faint on the other, so each
+  // reads as a dent. They come in clusters (a spray of small ones round a few larger), with bare plate between; each
+  // has a strength, and the stronger ones show first
+  const pit = new Float32Array(N), P = rng(seed + 61), spots = [];
+  for (let c = 0; c < 26; c++) {
+    const cx = P() * size, cy = P() * size, spread = (0.1 + P() * 0.5) * px, n = 2 + Math.floor(P() * P() * 16);
+    for (let i = 0; i < n; i++) {
+      const a = P() * Math.PI * 2, d = spread * Math.sqrt(-2 * Math.log(1 - P() * 0.98)) * 0.5;
+      spots.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, (i === 0 ? 0.03 + P() * 0.045 : 0.008 + P() * P() * 0.03) * px, i === 0 ? 0.6 + 0.4 * P() : 0.12 + 0.88 * P()]);
+    }
+  }
+  for (const [cx, cy, r, m] of spots) {
+    const reach = Math.ceil(r * 1.9);
     for (let yy = -reach; yy <= reach; yy++) for (let xx = -reach; xx <= reach; xx++) {
-      const X = Math.round(cx) + xx, Y = Math.round(cy) + yy, d = Math.hypot(X - cx, Y - cy);
+      const X = Math.round(cx) + xx, Y = Math.round(cy) + yy, dx = X - cx, dy = Y - cy, d = Math.hypot(dx, dy);
       let v = 0;
       if (d < r) v = -m * (1 - smooth(r * 0.55, r, d) * 0.6);
-      else if (d < r * 1.9) v = m * Math.max(0, 1 - Math.abs(d - r * 1.3) / (r * 0.5));
+      // (the light comes from up and to the left of the picture: the rim is bright on the far side of the pit from it)
+      else if (d < r * 1.9) v = m * Math.max(0, 1 - Math.abs(d - r * 1.3) / (r * 0.5)) * (0.25 + 0.75 * clamp01(0.5 + 0.7 * (dx - dy) / (d * 1.414)));
       const k = (((Y % size) + size) % size) * size + (((X % size) + size) % size);
       if (Math.abs(v) > Math.abs(pit[k])) pit[k] = v;
     }

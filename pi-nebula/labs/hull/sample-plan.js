@@ -19,7 +19,7 @@ export const SAMPLE = {
   ],
   // the hangar's door, in the middle band's wall on the long straight run
   doors: [{ tier: 2, step: 2, run: 0, at: 15.5, w: 22, h: 9, y: 0, sill: 0.8, head: 0.4, jamb: 1.2, proud: 0.45 }],
-  windows: { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, skip: 5 },
+  windows: { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09 },
 };
 // the sample's size (for the camera and the scale markers), and where its door is
 export const SAMPLE_BOX = { min: [-24, -13.6, -31], max: [0.45, 22, 15.5] };

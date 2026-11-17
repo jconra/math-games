@@ -20,14 +20,16 @@
 //            `step` of tier `tier` on the outline's straight run `run`: its middle `at` metres along that run, the
 //            opening w wide and h tall, the frame's foot at height y, a sill under the opening, a head over it, a
 //            jamb each side, the frame standing `proud` of the wall. The opening is left open (a shield goes across)
-//   windows  { w, h, pitch, lip, sink, skip }: a window pane's size, one every `pitch` along a row, the lips' height,
-//            how far the pane is sunk into its frame, every `skip`th left blank
+//   windows  { w, h, pitch, lip, sink, panes, bar }: a window's size, one every `pitch` along a row, the lips' height,
+//            how far its glass is sunk into its frame, how many panes its glass is in and the bar between them. The
+//            windows come in twos and threes: of every seven frames along a row, two are blank
 //
-// THE PLATES' SIZES  { w, h, lap, bevel, gap, shift, uneven }   (kit/hull-look.js plateSizes(look))
+// THE PLATES' SIZES  { w, h, lap, bevel, gap, cut, shift, uneven, unevenRows }   (kit/hull-look.js plateSizes(look))
 //   Each strip is laid in rows `h` tall of plates `w` wide (fitted, so a whole number fills the strip). A plate is a
-//   flat top with a 45-degree bevel all round, `bevel` wide and deep, standing on the dark backing; `gap` is the seam
+//   flat top with a 45-degree bevel all round, `bevel` wide and deep, standing on the dark backing; its four corners
+//   are cut back at 45 degrees by `cut` (the kit's "rectangular octagon"; the trim's plates keep theirs); `gap` is the seam
 //   between neighbours; each row is slid `shift` of a plate along from the row below; `uneven` (0 to 1) makes the
-//   plates of a row differ in width. With `lap`, every row reaches that far down over the row below, tilted like a
+//   plates of a row differ in width, `unevenRows` the rows differ in height. With `lap`, every row reaches that far down over the row below, tilted like a
 //   roof tile, its lower edge standing clear.
 //
 // WHAT COMES OUT  hullArrays(plan, sizes) -> { groups: { band, tiers, trim }, windows, shields, stats }
@@ -35,10 +37,11 @@
 //             seam), edge (each corner's distance to its plate's four sides: foot, right, top, left), kind (how wide
 //             the shading along each of those sides is: SEAM or INSIDE), tone (which grey: 0 main, 1 second; a random
 //             -1..1 for the plate; how dark: 1 a plate, less for the backing and the cut faces; the plate's own
-//             bevel, metres), index
-//   windows   the lit panes: position, shade (how brightly each corner is lit, 0 to 1: a pane's foot dimmer than its top), index
+//             bevel, metres), cut (the plate's corner cut, metres), index
+//   windows   the lit panes: position, shade (how brightly each corner is lit, 0 to 1: a pane's foot dimmer than its top;
+//             the panes of one window are lit alike), index
 //   shields   the doors' openings: position, uv, index
-//   stats     plates and triangles for each group, panes, strips
+//   stats     plates and triangles for each group, windows, panes, strips
 export const SEAM = 1, INSIDE = 3;
 // (how dark, of the trim colour, the backing behind the seams, a window's reveal and the cut faces are)
 const DARK = { back: 0.42, reveal: 0.55, cut: 0.3 };
@@ -140,14 +143,18 @@ export function hullStrips(plan) {
 // the plates of one four-sided part of a strip: rows h tall, plates w wide, fitted. Returns each plate's four corners
 // (before the seam is cut round it), what each of its sides is against, and its row and place in the row.
 //   part   { quad, kinds }: the foot and the top along u; the ends may slant
-//   S      { w, h, lap, shift, uneven }; salt: a number that makes this part's uneven widths its own
-export function layPlates(part, S, salt = 0) {
+//   S      { w, h, lap, shift, uneven, unevenRows }; salt: a number that makes this part's uneven widths its own;
+//          rowSalt: one for its uneven heights (the same for every part that should keep the same rows)
+export function layPlates(part, S, salt = 0, rowSalt = salt) {
   const [p0, p1, p2, p3] = part.quad, v0 = p0[1], v1 = p3[1], H = v1 - v0, out = [];
   if (H < 1e-4) return out;
   const uL = (v) => p0[0] + (p3[0] - p0[0]) * (v - v0) / H, uR = (v) => p1[0] + (p2[0] - p1[0]) * (v - v0) / H;
-  const rows = Math.max(1, Math.round(H / S.h)), hr = H / rows, lap = Math.min(S.lap || 0, hr * 0.6);
+  const rows = Math.max(1, Math.round(H / S.h));
+  // (the rows' heights: all the same, or each its own when the heights are uneven; together they still fill the strip)
+  const share = Array.from({ length: rows }, (_, r) => 1 + (hash(rowSalt, r, 77, 4) - 0.5) * 0.9 * (S.unevenRows || 0)), all = share.reduce((x, y) => x + y, 0), tops = [];
+  share.reduce((sum, x) => { tops.push(v0 + H * (sum + x) / all); return sum + x; }, 0);
   for (let r = 0; r < rows; r++) {
-    const a = v0 + r * hr, b = a + hr, mid = (a + b) / 2, span = uR(mid) - uL(mid);
+    const a = r ? tops[r - 1] : v0, b = r === rows - 1 ? v1 : tops[r], hr = b - a, lap = Math.min(S.lap || 0, hr * 0.6), mid = (a + b) / 2, span = uR(mid) - uL(mid);
     if (span < 1e-4) continue;
     const cols = Math.max(1, Math.round(span / S.w)), wf = span / cols;
     // (the seams inside the row: one every plate's width, slid along on every other row, each nudged a little either
@@ -167,11 +174,14 @@ export function layPlates(part, S, salt = 0) {
   return out;
 }
 
+const FAR = [50, 50, 50, 50], PLAIN = [SEAM, SEAM, SEAM, SEAM];
+
 // ── THE LISTS OF NUMBERS ────────────────────────────────────────────────────────────────────────────────────────
 class Lists {
-  constructor() { this.position = []; this.normal = []; this.uv = []; this.edge = []; this.kind = []; this.tone = []; this.index = []; this.plates = 0; }
+  constructor() { this.position = []; this.normal = []; this.uv = []; this.edge = []; this.kind = []; this.tone = []; this.cut = []; this.index = []; this.plates = 0; }
   get count() { return this.position.length / 3; }
-  // a flat facet: its corners (3 or 4, counter-clockwise seen from outside), each { p: [x, y, z], uv: [u, v], e: [4] }
+  // a flat facet: its corners (3 or more, counter-clockwise seen from outside), each { p: [x, y, z], uv: [u, v], e: [4] };
+  // tone: [which grey, the plate's random, how dark, the plate's bevel, the plate's corner cut]
   facet(c, kind, tone) {
     // (its normal from all its corners, so a facet squeezed to a triangle at one end still has one)
     const n = [0, 0, 0];
@@ -179,7 +189,7 @@ class Lists {
     const l = Math.hypot(n[0], n[1], n[2]);
     if (l < 1e-9) return 0;
     const base = this.count; let made = 0;
-    for (const v of c) { this.position.push(v.p[0], v.p[1], v.p[2]); this.normal.push(n[0] / l, n[1] / l, n[2] / l); this.uv.push(v.uv[0], v.uv[1]); this.edge.push(v.e[0], v.e[1], v.e[2], v.e[3]); this.kind.push(kind[0], kind[1], kind[2], kind[3]); this.tone.push(tone[0], tone[1], tone[2], tone[3] || 0); }
+    for (const v of c) { this.position.push(v.p[0], v.p[1], v.p[2]); this.normal.push(n[0] / l, n[1] / l, n[2] / l); this.uv.push(v.uv[0], v.uv[1]); this.edge.push(v.e[0], v.e[1], v.e[2], v.e[3]); this.kind.push(kind[0], kind[1], kind[2], kind[3]); this.tone.push(tone[0], tone[1], tone[2], tone[3] || 0); this.cut.push(tone[4] || 0); }
     for (let i = 1; i < c.length - 1; i++) {
       const t = cross(sub(c[i].p, c[0].p), sub(c[i + 1].p, c[0].p));
       if (Math.hypot(t[0], t[1], t[2]) > 1e-9) { this.index.push(base, base + i, base + i + 1); made++; }
@@ -188,16 +198,18 @@ class Lists {
   }
   arrays() {
     return { position: new Float32Array(this.position), normal: new Float32Array(this.normal), uv: new Float32Array(this.uv), edge: new Float32Array(this.edge),
-      kind: new Float32Array(this.kind), tone: new Float32Array(this.tone), index: new Uint32Array(this.index), plates: this.plates, triangles: this.index.length / 3 };
+      kind: new Float32Array(this.kind), tone: new Float32Array(this.tone), cut: new Float32Array(this.cut), index: new Uint32Array(this.index), plates: this.plates, triangles: this.index.length / 3 };
   }
 }
-const FAR = [50, 50, 50, 50], PLAIN = [SEAM, SEAM, SEAM, SEAM];
 
 // ONE PLATE on a strip: the seam cut round it, a wall up from the backing where it stands proud or is tilted, the
-// bevel, the flat top (with a sunk window in it, if it has one). Returns the pane's corners, if any.
-//   o   { gap, bevel, proud (how far its foot stands off the backing), rise (how far its lower edge is lifted over its
-//         upper edge: the lap's tilt), tone: [which grey, random, how dark], slide: [du, dv] (the finish slid by this),
-//         window: { w, h, sink } }
+// bevel, the flat top (with a sunk window in it, if it has one). Returns its window's panes (each four corners), if any.
+//   o   { gap, bevel, cut (its four corners cut back at 45 degrees by this much: the kit's "rectangular octagon"),
+//         proud (how far its foot stands off the backing), rise (how far its lower edge is lifted over its upper edge:
+//         the lap's tilt), tone: [which grey, random, how dark], slide: [du, dv] (the finish slid by this),
+//         window: { w, h, sink, panes, bar } }
+const K8 = 2 - Math.SQRT2;              // (a corner cut shrinks by this much of the distance its plate's sides move in)
+const octagon = (r, c) => [[r[0][0] + c, r[0][1]], [r[1][0] - c, r[1][1]], [r[1][0], r[1][1] + c], [r[2][0], r[2][1] - c], [r[2][0] - c, r[2][1]], [r[3][0] + c, r[3][1]], [r[3][0], r[3][1] - c], [r[0][0], r[0][1] + c]];
 function plate(G, st, quad, kinds, o) {
   const g2 = Math.max(0, o.gap / 2), clear = (o.bevel || 0) + g2 + 0.01;
   // (a side in an inside corner stops short of it, so this plate and the other face's do not run into one another)
@@ -205,38 +217,46 @@ function plate(G, st, quad, kinds, o) {
   if (area2(base) < 1e-4) return null;
   const wMid = ((base[1][0] - base[0][0]) + (base[2][0] - base[3][0])) / 2, hMid = base[3][1] - base[0][1];
   if (wMid < 0.02 || hMid < 0.02) return null;
-  const bev = Math.max(0, Math.min(o.bevel || 0, wMid * 0.3, hMid * 0.3)), top = bev > 1e-5 ? insetPoly(base, bev) : base;
+  const bev = Math.max(0, Math.min(o.bevel || 0, wMid * 0.3, hMid * 0.3)), face = bev > 1e-5 ? insetPoly(base, bev) : base;
+  // (only a plate with square ends has its corners cut; one with a slanted end, where two runs meet, keeps them)
+  const square = Math.abs(base[0][0] - base[3][0]) < 1e-6 && Math.abs(base[1][0] - base[2][0]) < 1e-6;
+  const cut = square ? Math.max(0, Math.min(o.cut || 0, wMid * 0.3, hMid * 0.3)) : 0;
+  const rim = cut > 1e-4 ? octagon(base, cut) : base, top = cut > 1e-4 ? octagon(face, Math.max(1e-4, cut - bev * K8)) : face, n = rim.length;
   const vTop = base[3][1], vFoot = base[0][1], rise = o.rise || 0, proud = o.proud || 0;
   const lift = (v) => proud + rise * (vTop - v) / Math.max(1e-6, vTop - vFoot);
+  // (every corner knows how far it is from its plate's four sides, as they were before any corner was cut)
   const at = (q, h) => ({ p: add(add(add(st.O, mul(st.U, q[0])), mul(st.V, q[1])), mul(st.N, h)), uv: [q[0] + o.slide[0], q[1] + o.slide[1]], e: sideDists(base, q).map((d) => Math.max(0, d)) });
-  const ground = base.map((q) => at(q, 0)), shoulder = base.map((q) => at(q, lift(q[1]))), crown = top.map((q) => at(q, lift(q[1]) + bev));
-  const tone = [o.tone[0], o.tone[1], o.tone[2], bev];
-  // (the wall and the bevel are seen edge on: every corner of a side's facet counts as right on that side)
-  for (let k = 0; k < 4; k++) {
-    const j = (k + 1) % 4;
-    if (lift(base[k][1]) > 1e-4 || lift(base[j][1]) > 1e-4) G.facet([ground[k], ground[j], shoulder[j], shoulder[k]], kinds, [o.tone[0], o.tone[1], o.tone[2] * 0.7, bev]);
+  const ground = rim.map((q) => at(q, 0)), shoulder = rim.map((q) => at(q, lift(q[1]))), crown = top.map((q) => at(q, lift(q[1]) + bev));
+  const tone = [o.tone[0], o.tone[1], o.tone[2], bev, cut];
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    if (lift(rim[k][1]) > 1e-4 || lift(rim[j][1]) > 1e-4) G.facet([ground[k], ground[j], shoulder[j], shoulder[k]], kinds, [o.tone[0], o.tone[1], o.tone[2] * 0.7, bev, cut]);
     if (bev > 1e-5) G.facet([shoulder[k], shoulder[j], crown[j], crown[k]], kinds, tone);
   }
   G.plates++;
-  const win = o.window, tw = top[1][0] - top[0][0], th = top[3][1] - top[0][1];
-  const square = Math.abs(top[0][0] - top[3][0]) < 1e-6 && Math.abs(top[1][0] - top[2][0]) < 1e-6;
-  if (!win || !square || tw < win.w + 0.3 || th < win.h + 0.16) { G.facet(crown, kinds, tone); return null; }
-  // a window: the top as a frame round a hole, the hole's sides sloping in to the pane
-  // (the pane is sunk into its frame, never deeper than the frame is thick)
-  const cx = (top[0][0] + top[1][0]) / 2, cy = (top[0][1] + top[3][1]) / 2, sink = Math.min(win.sink, win.w * 0.2, win.h * 0.2, (lift(cy) + bev) * 0.75);
-  const hole = [[cx - win.w / 2 - sink, cy - win.h / 2 - sink], [cx + win.w / 2 + sink, cy - win.h / 2 - sink], [cx + win.w / 2 + sink, cy + win.h / 2 + sink], [cx - win.w / 2 - sink, cy + win.h / 2 + sink]];
-  const pane = [[cx - win.w / 2, cy - win.h / 2], [cx + win.w / 2, cy - win.h / 2], [cx + win.w / 2, cy + win.h / 2], [cx - win.w / 2, cy + win.h / 2]];
-  const rim = hole.map((q) => at(q, lift(q[1]) + bev)), glass = pane.map((q) => at(q, lift(q[1]) + bev - sink));
+  const win = o.window, tw = face[1][0] - face[0][0], th = face[3][1] - face[0][1];
+  if (!win || n !== 4 || !square || tw < win.w + 0.3 || th < win.h + 0.16) { G.facet(crown, kinds, tone); return null; }
+  // a window: the top as a frame round a hole, the hole's sides sloping in to the glass; the glass in panes side by
+  // side with a bar's width between them (the dark behind shows as the bar)
+  // (the glass is sunk into its frame, never deeper than the frame is thick)
+  const cx = (face[0][0] + face[1][0]) / 2, cy = (face[0][1] + face[3][1]) / 2, sink = Math.min(win.sink, win.w * 0.2, win.h * 0.2, (lift(cy) + bev) * 0.75);
+  const x0 = cx - win.w / 2, x1 = cx + win.w / 2, y0 = cy - win.h / 2, y1 = cy + win.h / 2;
+  const hole = [[x0 - sink, y0 - sink], [x1 + sink, y0 - sink], [x1 + sink, y1 + sink], [x0 - sink, y1 + sink]], edge = hole.map((q) => at(q, lift(q[1]) + bev));
+  const glass = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map((q) => at(q, lift(q[1]) + bev - sink));
   for (let k = 0; k < 4; k++) {
     const j = (k + 1) % 4;
-    G.facet([crown[k], crown[j], rim[j], rim[k]], kinds, tone);
-    G.facet([rim[k], rim[j], glass[j], glass[k]], PLAIN, [o.tone[0], o.tone[1], o.tone[2] * DARK.reveal, 0]);
+    G.facet([crown[k], crown[j], edge[j], edge[k]], kinds, tone);
+    G.facet([edge[k], edge[j], glass[j], glass[k]], PLAIN, [o.tone[0], o.tone[1], o.tone[2] * DARK.reveal, 0, 0]);
   }
-  return glass.map((c) => c.p);
+  // (behind the bars, the hole's dark floor)
+  G.facet(glass.map((c) => ({ p: add(c.p, mul(st.N, -0.02)), uv: [0, 0], e: FAR })), PLAIN, [0, 0, DARK.back * 0.6, 0, 0]);
+  const count = Math.max(1, Math.round(win.panes || 1)), bar = count > 1 ? Math.min(win.bar ?? 0.09, win.w * 0.1) : 0, pw = (win.w - bar * (count - 1)) / count, panes = [];
+  for (let i = 0; i < count; i++) { const a = x0 + i * (pw + bar); panes.push([[a, y0], [a + pw, y0], [a + pw, y1], [a, y1]].map((q) => at(q, lift(q[1]) + bev - sink).p)); }
+  return panes;
 }
 // a plain dark face (the backing behind the seams, a cut face): corners in the world, counter-clockwise from outside
 // (every corner reads the same point of the finish's picture and the wear's, so the face stays plain)
-function flat(G, pts, dark) { G.facet(pts.map((p) => ({ p, uv: [0, 0], e: FAR })), PLAIN, [0, 0, dark, 0]); }
+function flat(G, pts, dark) { G.facet(pts.map((p) => ({ p, uv: [0, 0], e: FAR })), PLAIN, [0, 0, dark, 0, 0]); }
 
 // the plan's doors that are in one strip, as that strip's u, v: { u0, u1 (the frame's outside), v0, v1, d (the door) }
 function doorsIn(plan, st) {
@@ -246,34 +266,39 @@ function doorsIn(plan, st) {
   }).sort((a, b) => a.u0 - b.u0);
 }
 
-export const WINDOWS = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, skip: 5 };
+export const WINDOWS = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09 };
 
 // THE WHOLE HULL as lists of numbers
 export function hullArrays(plan, sizes) {
-  const S = { w: Math.max(0.3, sizes.w), h: Math.max(0.3, sizes.h), lap: Math.max(0, sizes.lap || 0), bevel: Math.max(0, sizes.bevel || 0), gap: Math.max(0, sizes.gap || 0), shift: Math.max(0, Math.min(0.5, sizes.shift || 0)), uneven: Math.max(0, Math.min(1, sizes.uneven || 0)) };
+  const S = { w: Math.max(0.3, sizes.w), h: Math.max(0.3, sizes.h), lap: Math.max(0, sizes.lap || 0), bevel: Math.max(0, sizes.bevel || 0), gap: Math.max(0, sizes.gap || 0), shift: Math.max(0, Math.min(0.5, sizes.shift || 0)), uneven: Math.max(0, Math.min(1, sizes.uneven || 0)), unevenRows: Math.max(0, Math.min(1, sizes.unevenRows || 0)), cut: Math.max(0, sizes.cut || 0) };
   const G = { band: new Lists(), tiers: new Lists(), trim: new Lists() }, W = { position: [], shade: [], index: [] }, SH = { position: [], uv: [], index: [] };
   const strips = hullStrips(plan), win = { ...WINDOWS, ...(plan.windows || {}) };
   const world = (st, q, h = 0) => add(add(add(st.O, mul(st.U, q[0])), mul(st.V, q[1])), mul(st.N, h));
   const backing = (st, quad) => flat(G.trim, quad.map((q) => world(st, q)), DARK.back);
   // rows of plates on a part of a strip
   function plates(st, part, group, o = {}) {
-    const P = { ...S, ...(o.sizes || {}) }, salt = st.id * 31 + (o.salt || 0), list = layPlates(part, P, salt), out = [];
+    // (uneven rows go by the tier and its step, not by the strip: a row carries on at one height round every corner)
+    const P = { ...S, ...(o.sizes || {}) }, salt = st.id * 31 + (o.salt || 0), list = layPlates(part, P, salt, st.tier * 131 + st.step * 17 + 5), out = [];
     for (const pl of list) {
       // (a lapped row is tilted: its lower edge lifted clear of the row below's top)
       const rise = pl.lap > 0.005 ? P.bevel * (pl.h + pl.lap) / pl.h + 0.012 : 0;
-      const pane = plate(G[group], st, pl.quad, pl.kinds, { gap: P.gap, bevel: P.bevel, proud: o.proud || 0, rise,
+      const panes = plate(G[group], st, pl.quad, pl.kinds, { gap: P.gap, bevel: P.bevel, cut: o.cut ?? P.cut, proud: o.proud || 0, rise,
         tone: [(pl.row + pl.col) % 2, hash(salt, pl.row, pl.col, 1) * 2 - 1, 1], slide: [hash(salt, pl.row, pl.col, 2) * 8, hash(salt, pl.row, pl.col, 3) * 8],
         window: o.window && o.window(pl) ? win : null });
-      if (pane) out.push(pane);
+      if (panes) out.push(panes);
     }
     return out;
   }
-  // (a pane: lit, each a little brighter or dimmer than the next, about one in nine dark)
-  const pane = (c) => {
-    const b = W.position.length / 3, n = b / 4, lit = hash(n, 7, 3, 5) < 0.11 ? 0.05 : 0.62 + 0.38 * hash(n, 11, 5, 2);
-    // (its corners run foot left, foot right, top right, top left: the foot a little dimmer than the top, as a lit room shows)
-    c.forEach((p, k) => { W.position.push(p[0], p[1], p[2]); W.shade.push(k < 2 ? lit * 0.7 : lit); });
-    W.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  // (a window's panes: lit, each window a little brighter or dimmer than the next, about one in nine dark)
+  let windows = 0;
+  const glaze = (panes) => {
+    const lit = hash(windows, 7, 3, 5) < 0.11 ? 0.05 : 0.62 + 0.38 * hash(windows, 11, 5, 2); windows++;
+    for (const c of panes) {
+      const b = W.position.length / 3;
+      // (its corners run foot left, foot right, top right, top left: the foot a little dimmer than the top, as a lit room shows)
+      c.forEach((p, k) => { W.position.push(p[0], p[1], p[2]); W.shade.push(k < 2 ? lit * 0.7 : lit); });
+      W.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
   };
 
   for (const st of strips) {
@@ -283,12 +308,14 @@ export function hullArrays(plan, sizes) {
       backing(st, st.quad);
       const lip = Math.min(win.lip, H * 0.2), uAt = (a, b, v) => a[0] + (b[0] - a[0]) * v / H;
       const cut = (va, vb) => [[uAt(p0, p3, va), va], [uAt(p1, p2, va), va], [uAt(p1, p2, vb), vb], [uAt(p0, p3, vb), vb]];
-      const bar = { sizes: { w: win.pitch * 2, h: lip, lap: 0, shift: 0, uneven: 0, bevel: Math.min(S.bevel, lip * 0.3), gap: S.gap }, proud: 0.2 };
+      const bar = { sizes: { w: win.pitch * 2, h: lip, lap: 0, shift: 0, uneven: 0, unevenRows: 0, bevel: Math.min(S.bevel, lip * 0.3), gap: S.gap }, proud: 0.2, cut: 0 };
       plates(st, { quad: cut(0, lip), kinds: [K[0], K[1], SEAM, K[3]] }, 'trim', { ...bar, salt: 1 });
       plates(st, { quad: cut(H - lip, H), kinds: [SEAM, K[1], K[2], K[3]] }, 'trim', { ...bar, salt: 2 });
       const panes = plates(st, { quad: cut(lip, H - lip), kinds: [SEAM, K[1], SEAM, K[3]] }, 'trim',
-        { sizes: { w: win.pitch, h: H, lap: 0, shift: 0, uneven: 0, bevel: Math.min(S.bevel, 0.12), gap: S.gap }, proud: 0.1, salt: 3, window: (pl) => (pl.col + st.run * 2 + st.tier) % win.skip !== win.skip - 1 });
-      for (const c of panes) pane(c);
+        { sizes: { w: win.pitch, h: H, lap: 0, shift: 0, uneven: 0, unevenRows: 0, bevel: Math.min(S.bevel, 0.12), gap: S.gap }, proud: 0.1, salt: 3, cut: 0,
+          // (the windows come in twos and threes: of every seven frames along a row, the third and the seventh are blank)
+          window: (pl) => ![2, 6].includes((pl.col + st.run * 3 + st.tier * 2) % 7) });
+      for (const set of panes) glaze(set);
       continue;
     }
     // a plated strip, cut round any doors in it
@@ -310,7 +337,7 @@ export function hullArrays(plan, sizes) {
       bars.forEach(([ua, ub, va, vb], k) => {
         const q = [[ua, va], [ub, va], [ub, vb], [ua, vb]];
         backing(st, q);
-        plates(st, { quad: q, kinds: PLAIN }, 'trim', { sizes: { w: k < 2 ? ub - ua : S.w * 1.5, h: vb - va, lap: 0, shift: 0, uneven: 0, bevel: Math.min(Math.max(S.bevel, 0.08), 0.2), gap: S.gap }, proud: proud - Math.min(Math.max(S.bevel, 0.08), 0.2), salt: 40 + k });
+        plates(st, { quad: q, kinds: PLAIN }, 'trim', { sizes: { w: k < 2 ? ub - ua : S.w * 1.5, h: vb - va, lap: 0, shift: 0, uneven: 0, unevenRows: 0, bevel: Math.min(Math.max(S.bevel, 0.08), 0.2), gap: S.gap }, proud: proud - Math.min(Math.max(S.bevel, 0.08), 0.2), salt: 40 + k, cut: 0 });
       });
       const o0 = [D.u0 + jamb, D.v0 + sill], o1 = [D.u1 - jamb, D.v1 - head], sb = SH.position.length / 3;
       for (const [q, uv] of [[[o0[0], o0[1]], [0, 0]], [[o1[0], o0[1]], [1, 0]], [[o1[0], o1[1]], [1, 1]], [[o0[0], o1[1]], [0, 1]]]) { const p = world(st, q, proud * 0.35); SH.position.push(p[0], p[1], p[2]); SH.uv.push(uv[0], uv[1]); }
@@ -341,7 +368,7 @@ export function hullArrays(plan, sizes) {
   }
 
   const groups = { band: G.band.arrays(), tiers: G.tiers.arrays(), trim: G.trim.arrays() };
-  const stats = { strips: strips.length, panes: W.index.length / 6, doors: SH.index.length / 6, plates: {}, triangles: {} };
+  const stats = { strips: strips.length, windows, panes: W.index.length / 6, doors: SH.index.length / 6, plates: {}, triangles: {} };
   for (const k of Object.keys(groups)) { stats.plates[k] = groups[k].plates; stats.triangles[k] = groups[k].triangles; }
   stats.plates.all = stats.plates.band + stats.plates.tiers + stats.plates.trim;
   stats.triangles.all = stats.triangles.band + stats.triangles.tiers + stats.triangles.trim + stats.panes * 2 + stats.doors * 2;
