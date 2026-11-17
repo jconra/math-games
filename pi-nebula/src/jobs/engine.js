@@ -66,13 +66,18 @@ import { tools } from '../../../mathwood-valley/src/math/counterkit.js';
 // So an easy card for the youngest pays 100 to 150, a picture story about 200, a word problem for an older child 200 to
 // 300, two steps or more 300 to 500, long division and the smelter's whole pay slip more; and as each pays for its time,
 // a young child and an older one earn about the same in an hour (~/pw/space-math/PAY_DOCK_MATHBALL.md has the table).
+// A THIRD MORE (the game's maker, 2026-11-17, asked whether about an hour and a half of jobs was the right time to earn
+// the Explorer: "About an hour: every card pays a third more"): the rate went from 15 to 20 credits a second, and the
+// least and the most a card pays with it (100 to 900 became 130 to 1,200). So the amounts above are a third more now: an
+// easy card for the youngest about 190 to 210, a picture story about 270, an older word problem 270 to 400. The 50 of a
+// rushed run of easy cards is his own figure and stays; Mathball's pay stays too.
 // A right pick after a miss pays PAY.half of the card's pay; Help never costs. A card RUSHED on the easiest levels pays
 // less, down to PAY.floor (rushOf, below). Mathball's balls are paid by their level's own amount (levelPay: the old
 // table, which the game's maker kept for it, "Fine as it is": a good two-minute round makes 1,000 to 2,000).
 export const PAY = {
-  rate: 15,          // credits for each second a card's work fairly takes (about 900 a minute of steady work)
-  min: 100,          // the least a card pays (an easy card for the youngest)...
-  max: 900,          // ...and the most (the longest pay slip)
+  rate: 20,          // credits for each second a card's work fairly takes (about 1,200 a minute of steady work; it was 15)
+  min: 130,          // the least a card pays (an easy card for the youngest; it was 100)...
+  max: 1200,         // ...and the most (the longest pay slip; it was 900)
   step: 10,          // paid in tens
   half: 0.5,         // a right pick after a miss: this share of the card's pay
   // RUSHED (rushOf): only on the easiest levels, and only a run of very quick answers, never one

@@ -2,7 +2,8 @@
 // CR2-7: "if a kindergartener is doing easy questions at a moderate rate then they should be making 100 - 150, or 200 if
 // its a word problem"; more reading, long division or long multiplication pays more; a run of level 1 cards answered
 // "at an incredibly fast rate ... only 50 credits"; "Half the full pay" after a miss), and the young and the older
-// earning about the same in an hour.
+// earning about the same in an hour. Then (2026-11-17, "About an hour: every card pays a third more") every amount a
+// third more: 15 credits a second became 20, so his 100 to 150 is 130 to 200 here and his 200 about 270.
 //   node --test pi-nebula/tests/pay.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,19 +48,19 @@ test('every card of every job pays from PAY.min to PAY.max, in tens, with its fa
   }
 });
 
-test('his anchors: an easy card for the youngest pays 100 to 150, a picture story about 200, an older word problem more', () => {
+test('his anchors, a third more: an easy card for the youngest pays 130 to 200, a picture story about 270, an older word problem more', () => {
   // easy cards for the youngest, no story to work out: bracing the dock's squares, which pane fits, counting canisters
-  for (const p of [...paysAt(dock, 'brace', 4), ...paysAt(dock, 'fit', 8)]) assert.ok(p >= 100 && p <= 150, 'easy: ' + p);
-  for (const p of paysAt(smelter, 'kCount', 20).filter((x, i, a) => a.length)) assert.ok(p >= 100 && p <= 230, 'counting: ' + p);
-  // a picture story for the youngest (a word problem): about 200
-  for (const J of [galley, medical]) { const m = mean(paysAt(J, 'kAll', 30)); assert.ok(m >= 170 && m <= 230, `${J.id} picture stories: ${m}`); }
-  // an older child's one-step word problem: 200 to 300; two steps: more
+  for (const p of [...paysAt(dock, 'brace', 4), ...paysAt(dock, 'fit', 8)]) assert.ok(p >= 130 && p <= 200, 'easy: ' + p);
+  for (const p of paysAt(smelter, 'kCount', 20).filter((x, i, a) => a.length)) assert.ok(p >= 130 && p <= 310, 'counting: ' + p);
+  // a picture story for the youngest (a word problem): about 270 (his 200, a third more)
+  for (const J of [galley, medical]) { const m = mean(paysAt(J, 'kAll', 30)); assert.ok(m >= 230 && m <= 310, `${J.id} picture stories: ${m}`); }
+  // an older child's one-step word problem: 270 to 400 (his 200 to 300, a third more); two steps: more
   const one = paysAt(galley, 'groups', 30), two = paysAt(galley, 'recipe', 30);
-  assert.ok(mean(one) >= 200 && mean(one) <= 300, 'one step: ' + mean(one));
+  assert.ok(mean(one) >= 270 && mean(one) <= 400, 'one step: ' + mean(one));
   assert.ok(mean(two) > mean(one) + 20, `two steps ${mean(two)} against one ${mean(one)}`);
   // the smelter's whole pay slip (three sums and more) pays the most of its ladder
   const slip = paysAt(smelter, 'payslip', 40), share = paysAt(smelter, 'share', 40);
-  assert.ok(Math.max(...slip) >= 600 && mean(slip) > mean(share), `the pay slip ${mean(slip)} against sharing ${mean(share)}`);
+  assert.ok(Math.max(...slip) >= 800 && mean(slip) > mean(share), `the pay slip ${mean(slip)} against sharing ${mean(share)}`);
 });
 
 test('the work: more reading pays more; long division and long multiplication pay more than the same story in the tables', () => {
@@ -168,8 +169,8 @@ test('a young child and an older one earn about the same in an hour (each card p
   const young = rateOf([[galley, ['kAll', 'kLeft', 'kPast', 'kTrays']], [medical, ['kAll', 'kLeft', 'kTrays']], [smelter, ['kCount', 'kFull', 'kRacks']], [dock, ['brace', 'fit', 'count']]]);
   const older = rateOf([[galley, ['recipe', 'table', 'mix', 'prop']], [medical, ['rate', 'table', 'mix', 'prop']], [smelter, ['percent', 'tonnes', 'anyPercent', 'credits']], [dock, ['corner', 'area', 'third']]]);
   assert.ok(Math.abs(young - older) / older < 0.25, `credits a minute: young ${young.toFixed(0)}, older ${older.toFixed(0)}`);
-  // and the Explorer (50,000 to 60,000) takes each of them between one and two hours of play
-  for (const r of [young, older]) assert.ok(50000 / r >= 50 && 60000 / r <= 120, `minutes to the Explorer: ${(50000 / r).toFixed(0)} to ${(60000 / r).toFixed(0)}`);
+  // and the Explorer (50,000 to 60,000) takes each of them about an hour of play (his choice: it was an hour and a half)
+  for (const r of [young, older]) assert.ok(50000 / r >= 45 && 60000 / r <= 80, `minutes to the Explorer: ${(50000 / r).toFixed(0)} to ${(60000 / r).toFixed(0)}`);
 });
 
 test('free control (the crane by hand) pays 20 credits a canister, through the pay\'s own credits and tally', async () => {
