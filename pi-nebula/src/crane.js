@@ -16,8 +16,9 @@
 //     As it lands (the game's maker, 2026-11-17: "It should use the maneuvering thrusters ... They should turn and shoot
 //     out flames. If it was a really cool pilot they could be spinning around as they were traveling in. Also, I'd expect
 //     the main engine to be glowing, even if it is only just idling ... some wind and blasts of air shooting down"): it
-//     spins round once and a half on its way in, its six corner pods turn toward the way they push and fire (to slow it,
-//     to start and stop its spin, to hold it up), its main engine idles and its nozzle stays hot for a while after, and
+//     turns half round as it comes in (CR3-3: "Why does it spin one and a half? It should just be half. When I said it
+//     could come in spinning I just meant that half spin"), its six corner pods turn toward the way they push and fire
+//     (to slow it, to start and stop its turn, to hold it up), its main engine idles and its nozzle stays hot for a while after, and
 //     dust runs out along the floor under it (kit/ships/flight.js).
 //   - DRAWN WITH ITS ROOM. The moving parts are the kit's door leaves, hung on the hangar's own room, so they are drawn
 //     only when it is.
@@ -70,11 +71,13 @@ export const AREA = /^(hangar-miner|stub-miner|smelter-|ship-miner)/;
 // height over the pad while it comes in and turns (its top under the bay door's lintel and the roof's lamps); when
 // its legs come down; the turn
 // (the turn slower and the way down starting as it ends: strips of the landing showed a sudden swing, then a long slow sink)
-// (the turn a spin, once and a half round, "a really cool pilot": it starts once the ship is all the way in through the
-// bay door (by then it is 7.7 m out from the pad), so its ends never swing through the door's frame; 17 s in all)
-// (lower once it is in, 2 m: the blind critic of the first films found the spin's top half off the top of the
+// (the turn is the one half turn, made as it travels in, "a really cool pilot": it starts once the ship is all the way
+// in through the bay door (by then it is 7.7 m out from the pad), so its ends never swing through the door's frame, and
+// ends over the pad about 3 s after it has stopped there; a spin of once and a half was tried and taken back (CR3-3);
+// 12 s in all: 5.1 s in, the turn from 3.0 to 8.1 s, the legs at 7.3 s, down from 7.8 s)
+// (lower once it is in, 2 m: the blind critic of the first films found the turning ship's top off the top of the
 // picture from the way in, the ship over the camera; its belly then still 3.4 m up, over anyone and the rack)
-export const LANDING = { secs: 17, from: 46, hover: 3.0, low: 2.0, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
+export const LANDING = { secs: 12, from: 46, hover: 3.0, low: 2.0, inBy: 0.425, turnFrom: 0.25, turnTo: 0.675, turns: 0.5, legs: 0.61, down: 0.65 };
 // THE LANDING'S THRUSTERS (kit/ships/flight.js): how far the pods may turn here (a little further down than the ship
 // lab's swing, so the jets blow down at the floor), the pods' jets' length against the lab's, the main engine idling,
 // how long its nozzle takes to cool after it is down (s), how long the dust takes to settle (s)
@@ -148,7 +151,7 @@ export function makeCrane({ W, walls, boarding = null }) {
   const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   function poseAt(k) {
     const N = LANDING, S = ship;
-    // (in nose first, slowing; spinning round once and a half on the way in, over the pad; down onto it)
+    // (in nose first, slowing; turning half round as it comes in and stops over the pad; down onto it)
     const kIn = Math.min(1, k / N.inBy), out = (1 - kIn) * (1 - kIn) * N.from;   // (eased in: it slows as it comes)
     const turn = ease((k - N.turnFrom) / (N.turnTo - N.turnFrom)), down = ease((k - N.down) / (1 - N.down));
     const hover = N.hover + (N.low - N.hover) * ease((k - N.turnFrom) / 0.2);
