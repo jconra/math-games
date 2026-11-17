@@ -134,4 +134,7 @@ body.pcg-on .hud-menu { visibility: hidden; }   /* (the crane system's strip is 
   .pcg button { height: 30px; padding: 0 9px; font-size: 11px; }
   .pcg kbd { display: none; }
   .pcg-banner, .pcg-viewname { left: 50%; }
+  .pcg-banner { padding: 10px 16px; max-width: calc(100vw - 48px); }
+  .pcg-banner b { font-size: 15px; }
+  .pcg-banner span { font-size: 13px; }
 }
