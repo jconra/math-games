@@ -77,7 +77,7 @@ uniform vec3 uHeat[ 4 ];
     // tempered: how hot each spot got: the picture's patches, and hotter toward the plate's edges (hottest at the edge);
     // its colour from how hot, as a thin film over the metal (paler metal shows paler colours)
     float hNear = 1.0 - smoothstep( 0.0, 0.25 + 0.75 * uFin.w, hD );
-    float hT = clamp( hFin.b * ( 1.0 - 0.55 * uFin.w ) + hNear * hNear * uFin.w * 1.25 * smoothstep( 0.15, 0.7, hWear.g + 0.12 ), 0.0, 1.0 );
+    float hT = clamp( hFin.b * ( 1.0 - 0.55 * uFin.w ) + hNear * hNear * uFin.w * 1.25 * smoothstep( 0.3, 0.75, hWear.g ), 0.0, 1.0 );
     vec3 hH = mix( uHeat[ 0 ], uHeat[ 1 ], smoothstep( 0.22, 0.42, hT ) );
     hH = mix( hH, uHeat[ 2 ], smoothstep( 0.45, 0.62, hT ) );
     hH = mix( hH, uHeat[ 3 ], smoothstep( 0.66, 0.88, hT ) );
@@ -97,8 +97,13 @@ uniform vec3 uHeat[ 4 ];
   hCol *= 1.0 - 0.78 * hGr;
   // scratches and scuffs, and the paler worn metal along the bevel's ridge (it spreads and joins up as it grows)
   float hSc = hWear.r * uWearAmt.x;
-  float hReach = ( 0.012 + uWearAmt.y * ( 0.04 + vBevel * 0.7 ) ) * ( 0.35 + 1.3 * hWear.g );
-  float hEw = ( 1.0 - smoothstep( hReach * 0.45, hReach + hAA, abs( hD - vBevel ) ) ) * smoothstep( 0.0, 0.2, uWearAmt.y ) * smoothstep( 0.6 - 0.5 * uWearAmt.y, 0.85 - 0.5 * uWearAmt.y, hWear.g ) * step( 0.004, vBevel );
+  // (a thin pale line right on the ridge, fading with distance so far plates are not outlined; and chips where the
+  // metal has worn back from it, wider and more of them as the amount goes up)
+  float hR = abs( hD - vBevel ), hA = uWearAmt.y;
+  float hLine = ( 1.0 - smoothstep( 0.005, 0.013 + hAA, hR ) ) * ( 0.013 / ( 0.013 + hAA ) ) * min( 1.0, hA * 1.8 );
+  float hReach = ( 0.01 + hA * ( 0.03 + vBevel * 0.7 ) ) * smoothstep( 0.62 - 0.6 * hA, 0.95 - 0.6 * hA, hWear.g );
+  float hChip = ( 1.0 - smoothstep( hReach * 0.8, hReach + 0.004 + hAA, hR ) ) * ( hReach / ( hReach + hAA + 0.0001 ) );
+  float hEw = max( hLine, hChip ) * smoothstep( 0.0, 0.12, hA ) * step( 0.004, vBevel );
   hCol = mix( hCol, hBare, clamp( hSc * 0.62 + hEw * 0.85, 0.0, 1.0 ) );
   // meteoroid pits: a dark pit, a bright rim; more of them show as the amount goes up
   float hP = hWear.b * 2.0 - 1.0;

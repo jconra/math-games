@@ -120,7 +120,7 @@ function lookFrom(at, to) {
   cam.yaw = Math.atan2(-d.x, -d.z); cam.pitch = Math.asin(-d.y); applyCam();
 }
 const VIEWS = {
-  whole: { name: 'Whole piece', at: [37, 10, -43], to: [-9, 4, -5] },
+  whole: { name: 'Whole piece', at: [27, 8.6, -35], to: [-9, 4, -5] },
   door: { name: 'The door', at: [35, 6, 7], to: [0, 4.6, -1] },
   plates: { name: 'Plates close up', at: [7.2, 5.4, -28.5], to: [-3.6, 4.4, -22.4] },
   end: { name: 'The bevelled end', at: [18, 13, -62], to: [-10, 4, -24] },
@@ -350,13 +350,14 @@ function layout() {
 addEventListener('resize', layout);
 
 // ── the frame ───────────────────────────────────────────────────────────────────────────────────────────────────
-let last = performance.now(), acc = 0, count = 0, hudT = 0;
+let last = performance.now(), acc = 0, count = 0, hudT = 0, repeat = 1;
 renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); acc += t - last; count++; last = t;
   if (dirtyLook) { const t0 = performance.now(); mats.set(look); paintMs = performance.now() - t0; dirtyLook = false; }
   if (dirtyPlates) { rebuild(); dirtyPlates = false; paint('plates'); }
   fly(dt); U.time.value += dt; sky.update(dt);
-  renderer.info.reset(); timeBegin(); renderer.render(scene, camera); timeEnd();
+  // (for measuring, the frame can be drawn several times over, so the graphics card is kept busy while it is timed)
+  renderer.info.reset(); timeBegin(); for (let i = 0; i < repeat; i++) renderer.render(scene, camera); timeEnd();
   frame.tris = renderer.info.render.triangles; frame.calls = renderer.info.render.calls;
   hudT += dt; if (hudT > 0.5) { frame.ms = acc / count; acc = 0; count = 0; hudT = 0; numbers(); }
 });
@@ -372,7 +373,7 @@ if (q.get('ui') !== '0') {
   M.master.setAttribute('aria-label', 'Hull Lab menu');
   // (a first visit on a wide screen starts with the ready-made looks open)
   if (fresh && innerWidth >= 900) requestAnimationFrame(() => requestAnimationFrame(() => M.open('looks', true)));
-} else { $('#top').hidden = true; $('#stick').hidden = true; $('#updown').hidden = true; }
+} else for (const id of ['#top', '#stick', '#updown']) $(id).style.display = 'none';    // (a picture rig's view: the hull alone)
 loading.hidden = true;
 
 // for the picture rigs and the checks
@@ -383,6 +384,9 @@ window.HULL = {
   view: (name) => setView(name), from: (at, to) => lookFrom(at, to),
   sun(turn, high) { view.turn = turn; if (high != null) view.high = high; placeSun(); clearTimeout(mirrorT); mirrorSky(); paint('light'); },
   shadows(on) { view.shadows = !!on; placeSun(); }, markers(on) { view.markers = !!on; marks.visible = view.markers; },
+  // (for measuring what the look costs: the plates drawn with a plain lit material in place of the hull's own)
+  bare(on) { const plain = this._plain || (this._plain = new THREE.MeshStandardMaterial({ color: 0x4d525a, roughness: 0.55, metalness: 0.4 })); hull.group.traverse((o) => { if (o.isMesh && GROUPS.includes(o.name.slice(5))) o.material = on ? plain : mats[o.name.slice(5)]; }); },
+  size(w, h) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }, retime() { frame.gpu = null; }, repeat(n) { repeat = Math.max(1, n | 0); frame.gpu = null; },
   win: (id, on) => M && M.open(id, on), menus: () => M && M.state(), where: () => ({ at: cam.pos.toArray(), yaw: cam.yaw, pitch: cam.pitch }), name: () => lookName(look),
   stats: () => ({ ...hull.stats, pictures: mats.pictures, pictureBytes: mats.bytes, frame: { ...frame }, buildMs, paintMs, info: { tris: renderer.info.render.triangles, calls: renderer.info.render.calls, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries } }),
 };

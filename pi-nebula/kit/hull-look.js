@@ -44,13 +44,13 @@ export const SETTINGS = [
   colour('windowColour', 'colours', 'Window light', '#cfeeff', 'The colour of the lit windows'),
   num('windowBright', 'colours', 'Window brightness', 1.5, 0, 6, 0.1, '', 'How bright the windows are'),
 
-  num('plateW', 'plates', 'Width', 6.4, 1, 12, 0.1, 'm', 'How wide a plate is'),
-  num('plateH', 'plates', 'Height', 2.6, 0.6, 6, 0.1, 'm', 'How tall a plate is'),
+  num('plateW', 'plates', 'Width', 7, 1, 12, 0.1, 'm', 'How wide a plate is'),
+  num('plateH', 'plates', 'Height', 3, 0.6, 6, 0.1, 'm', 'How tall a plate is'),
   num('lap', 'plates', 'Lap over the next', 0, 0, 1, 0.01, 'cm', 'How far each row laps over the row below (0: the rows sit flush)'),
   num('bevel', 'plates', 'Bevel', 0.18, 0, 0.5, 0.01, 'cm', 'How wide and deep the slope round every plate is'),
   num('gap', 'plates', 'Seam gap', 0.06, 0, 0.3, 0.005, 'cm', 'The gap between neighbouring plates'),
   num('shift', 'plates', 'Row shift', 0.5, 0, 0.5, 0.01, '%', 'How far each row is slid along from the row below (50%: like brickwork)'),
-  num('uneven', 'plates', 'Uneven widths', 0.45, 0, 1, 0.01, '%', 'How much the plates in a row differ in width (0: all the same)'),
+  num('uneven', 'plates', 'Uneven widths', 0.5, 0, 1, 0.01, '%', 'How much the plates in a row differ in width (0: all the same)'),
 
   ...GROUPS.flatMap((g) => [
     choice(g + 'Finish', 'finish', 'Finish', 'plain', FINISHES),
@@ -79,7 +79,7 @@ export const HULL_LOOKS = {
   // like the game's maker's own pictures of the station: dark greys, darker trim, a soft brushed sheen, light wear
   'dark armour': {
     grey: '#4d525a', grey2: '#3e434b', trim: '#1f2227', vary: 0.07, windowColour: '#cfeeff', windowBright: 1.5,
-    plateW: 6.4, plateH: 2.6, lap: 0, bevel: 0.18, gap: 0.06, shift: 0.5, uneven: 0.45,
+    plateW: 7, plateH: 3, lap: 0, bevel: 0.18, gap: 0.06, shift: 0.5, uneven: 0.5,
     ...finish('band', 'brushed', { strength: 0.45, angle: 0, shine: 0.45, rough: 0.5 }),
     ...finish('tiers', 'brushed', { strength: 0.35, angle: 90, shine: 0.4, rough: 0.56 }),
     ...finish('trim', 'hatched', { strength: 0.4, angle: 45, spacing: 0.2, shine: 0.3, rough: 0.6 }),

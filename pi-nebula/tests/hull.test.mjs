@@ -98,9 +98,9 @@ test('a look written as text reads back the same, with words round it or not', (
 });
 
 test('a setting is shown as a plain number with its unit', () => {
-  assert.equal(showValue(SETTING.plateW, 6.4), '6.4 m'); assert.equal(showValue(SETTING.bevel, 0.18), '18 cm'); assert.equal(showValue(SETTING.gap, 0.065), '6.5 cm');
+  assert.equal(showValue(SETTING.plateW, 6.4), '6.4 m'); assert.equal(showValue(SETTING.plateW, 7), '7 m'); assert.equal(showValue(SETTING.bevel, 0.18), '18 cm'); assert.equal(showValue(SETTING.gap, 0.065), '6.5 cm');
   assert.equal(showValue(SETTING.pits, 0.15), '15%'); assert.equal(showValue(SETTING.bandAngle, 45), '45°'); assert.equal(showValue(SETTING.windowBright, 1.5), '1.5');
-  assert.deepEqual(plateSizes(DARK), { w: 6.4, h: 2.6, lap: 0, bevel: 0.18, gap: 0.06, shift: 0.5, uneven: 0.45 });
+  assert.deepEqual(plateSizes(DARK), { w: 7, h: 3, lap: 0, bevel: 0.18, gap: 0.06, shift: 0.5, uneven: 0.5 });
 });
 
 // ── the outline and flat shapes ─────────────────────────────────────────────────────────────────────────────────
@@ -286,9 +286,9 @@ test('the lab\'s sample: one door 22 m by 9 m with a shield across it, forty win
   for (let p = 0; p < 40; p++) {
     const c = [0, 1, 2, 3].map((k) => [w.position[(p * 4 + k) * 3], w.position[(p * 4 + k) * 3 + 1], w.position[(p * 4 + k) * 3 + 2]]);
     assert.ok(near(Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]), SAMPLE.windows.w, 1e-4) && near(Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1], c[3][2] - c[0][2]), SAMPLE.windows.h, 1e-4));
-    assert.ok(w.shade[p * 4] === w.shade[p * 4 + 3] && w.shade[p * 4] > 0 && w.shade[p * 4] <= 1);
+    assert.ok(w.shade[p * 4] === w.shade[p * 4 + 1] && w.shade[p * 4 + 2] === w.shade[p * 4 + 3] && w.shade[p * 4] > 0 && w.shade[p * 4] < w.shade[p * 4 + 2] && w.shade[p * 4 + 2] <= 1, 'a pane\'s foot is dimmer than its top');
   }
-  const lit = Array.from({ length: 40 }, (_, p) => w.shade[p * 4]);
+  const lit = Array.from({ length: 40 }, (_, p) => w.shade[p * 4 + 2]);
   assert.ok(lit.filter((v) => v > 0.6).length >= 30 && new Set(lit.map((v) => v.toFixed(2))).size > 8, 'most are lit, no two rows alike');
   // the panes do not change when the plates do
   assert.equal(hullArrays(SAMPLE, plateSizes(HULL_LOOKS['old and worn'])).stats.panes, 40);

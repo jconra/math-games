@@ -36,7 +36,7 @@
 //             the shading along each of those sides is: SEAM or INSIDE), tone (which grey: 0 main, 1 second; a random
 //             -1..1 for the plate; how dark: 1 a plate, less for the backing and the cut faces; the plate's own
 //             bevel, metres), index
-//   windows   the lit panes: position, shade (how brightly each is lit, 0 to 1), index
+//   windows   the lit panes: position, shade (how brightly each corner is lit, 0 to 1: a pane's foot dimmer than its top), index
 //   shields   the doors' openings: position, uv, index
 //   stats     plates and triangles for each group, panes, strips
 export const SEAM = 1, INSIDE = 3;
@@ -271,7 +271,8 @@ export function hullArrays(plan, sizes) {
   // (a pane: lit, each a little brighter or dimmer than the next, about one in nine dark)
   const pane = (c) => {
     const b = W.position.length / 3, n = b / 4, lit = hash(n, 7, 3, 5) < 0.11 ? 0.05 : 0.62 + 0.38 * hash(n, 11, 5, 2);
-    for (const p of c) { W.position.push(p[0], p[1], p[2]); W.shade.push(lit); }
+    // (its corners run foot left, foot right, top right, top left: the foot a little dimmer than the top, as a lit room shows)
+    c.forEach((p, k) => { W.position.push(p[0], p[1], p[2]); W.shade.push(k < 2 ? lit * 0.7 : lit); });
     W.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
   };
 

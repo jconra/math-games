@@ -34,9 +34,10 @@ function valueNoise(size, cx, cy, seed) {
   }
   return out;
 }
-function fbm(size, base, oct, seed) {
+// (several sizes of it added up: each finer one `gain` as strong as the one before)
+function fbm(size, base, oct, seed, gain = 0.5) {
   const out = new Float32Array(size * size); let amp = 1, tot = 0;
-  for (let o = 0; o < oct; o++) { const n = valueNoise(size, base << o, base << o, seed + o * 101); for (let i = 0; i < n.length; i++) out[i] += n[i] * amp; tot += amp; amp *= 0.5; }
+  for (let o = 0; o < oct; o++) { const n = valueNoise(size, base << o, base << o, seed + o * 101); for (let i = 0; i < n.length; i++) out[i] += n[i] * amp; tot += amp; amp *= gain; }
   for (let i = 0; i < out.length; i++) out[i] /= tot; return out;
 }
 const canvas = (n) => { const c = document.createElement('canvas'); c.width = c.height = n; return c; };
@@ -140,7 +141,8 @@ export function wearPixels(o = {}) {
       wrapped(g, size, x - Math.sin(a) * k * 2.2 + (R() - 0.5) * 6, y + Math.cos(a) * k * 2.2 + (R() - 0.5) * 6, Math.cos(a) * len * (0.6 + R() * 0.6), Math.sin(a) * len * (0.6 + R() * 0.6));
     }
   }
-  const scratch = channel(c), smudge = fbm(size, 4, 4, seed);
+  // (the smudges keep some fine detail, so what is cut out by them (worn chips, grime) has a ragged edge)
+  const scratch = channel(c), smudge = fbm(size, 4, 6, seed, 0.6);
   // streaks: narrow columns, each with its own strength, changing slowly along their length
   const s1 = valueNoise(size, 110, 3, seed + 41), s2 = valueNoise(size, 44, 2, seed + 43);
   // pits: a dark middle, a bright rim; each has a strength, and the stronger ones show first
