@@ -166,10 +166,13 @@ export function addMoves(c) {
       const sh = ua.getWorldPosition(_h).clone(), el0 = la.getWorldPosition(_k);
       if (D.elbows) _pole.copy(D.elbows[i]); else _pole.copy(D.ahead).multiplyScalar(-1).addScaledVector(_tx, sg * 0.7).add(_ty.set(0, -0.25, 0));
       const ik = twoBone(arr(sh), arr(D.hands[i]), arr(_pole), M.body.u, M.body.f);
-      aim(ua, _v1.subVectors(el0, sh), _v2.set(ik.mid[0] - sh.x, ik.mid[1] - sh.y, ik.mid[2] - sh.z), D.arms);
+      // (each arm's own share, when one hand goes to the bed a moment before the other)
+      const share = D.armsLR ? D.armsLR[i] : D.arms;
+      if (!(share > 0.001)) continue;
+      aim(ua, _v1.subVectors(el0, sh), _v2.set(ik.mid[0] - sh.x, ik.mid[1] - sh.y, ik.mid[2] - sh.z), share);
       ua.updateWorldMatrix(false, true);
       const el = la.getWorldPosition(_k).clone(), w0 = wr.getWorldPosition(_v1);
-      aim(la, _v2.subVectors(w0, el), _v1.set(ik.end[0] - el.x, ik.end[1] - el.y, ik.end[2] - el.z), D.arms);
+      aim(la, _v2.subVectors(w0, el), _v1.set(ik.end[0] - el.x, ik.end[1] - el.y, ik.end[2] - el.z), share);
       la.updateWorldMatrix(false, true);
       // the hand flat on the bed: its palm down, the fingers ahead and a little out (pointed out past a narrow bed's
       // edge, the fingers curled down over it)
@@ -179,7 +182,7 @@ export function addMoves(c) {
       _ma.makeBasis(_ha.set(0, 1, 0), palm, _hb.crossVectors(_ha, palm));
       _mb.makeBasis(_hf, _hd, _hc.crossVectors(_hf, _hd));
       _qa.setFromRotationMatrix(_mb.multiply(_ma.transpose()));
-      wr.getWorldQuaternion(_qb).slerp(_qa, Math.min(1, D.arms));
+      wr.getWorldQuaternion(_qb).slerp(_qa, Math.min(1, share));
       wr.parent.getWorldQuaternion(_pq); wr.quaternion.copy(_pq.invert().multiply(_qb));
       wr.updateWorldMatrix(false, true);
     }

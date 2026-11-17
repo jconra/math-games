@@ -708,7 +708,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const lying = P.act && P.act.kind === 'scan' && P.pose;
       const scanning = SCAN && SCAN.busy && P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic') ? SCAN.busy : null;
       let look = null;
-      if (lying) look = null;
+      // (on the bed's moves: only a glance the move itself asks for, at the bed as they back up to it)
+      if (lying) look = P.bed && P.bed.look ? near.copy(P.bed.look) : null;
       // (the medic at the scanner: on the controls while working them, else on the patient; the patient, at the bed's
       // foot, on the medic)
       else if (scanning && P.act.kind === 'scanMedic') look = P.act.work > 0 ? near.copy(SCAN.panel) : scanning.patient && scanning.patient.inScene ? headAt(scanning.patient, near) : null;
@@ -1049,6 +1050,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     D.elbows = p.elbows ? p.elbows.map((f, i) => D3(f, (D.elbowsV || (D.elbowsV = [new THREE.Vector3(), new THREE.Vector3()]))[i])) : null;
     D.legs = p.legs; D.flat = p.flat; D.arms = p.hands ? p.arms : 0; D.chin = p.chin || 0;
     D.point = p.point; D.pitch = p.pitch || 0; D.roll = p.roll || 0; D.curl = p.curl || 0;
+    D.armsLR = p.hands && p.armsLR ? p.armsLR : null;
+    D.look = p.look ? W(p.look, D.lookV || (D.lookV = new THREE.Vector3())) : null;
     const pose = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
     const h = Math.atan2(D.ahead.x, D.ahead.z);
     pose.q.setFromEuler(_e.set(-p.lean, h, 0, 'YXZ'));
