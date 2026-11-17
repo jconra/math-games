@@ -14,6 +14,13 @@
 // outfit's elbow joint where a person's is, the arm from the upper arm's joint (where SHOULDER WIDTH turns it) to the
 // wrist split 1.14 to 1 (rigs/crew-rig/crewkit.py place_elbow), and makes the weights for it there; no point of any
 // outfit moved. The clips, the skeleton's bones' rest turns and Mathwood's own people are as they were.
+//   THE ARMS ONE LENGTH, BOTH SLEEVES ALIKE (2026-11-16; the game's maker: "I meant make every outfits arms the same
+// length as each other", "You can also try to make both sleeves the same too"): the outfit build (rigs/crew-rig/arms.py)
+// brings every outfit's arm, from the upper arm's joint where SHOULDER WIDTH turns it to the wrist, to a person's share
+// of the outfit's height (0.328 a man's, 0.319 a woman's: 59.0 cm every men's outfit, 54.9 every women's), stretching
+// the sleeve where its cloth is plainest, the cuff and the hand moved along whole; and makes each outfit's other sleeve
+// the shape of its better made one, turned over about the body's own middle (its own texture kept). The arms' joints of
+// an outfit whose body stands off the skeleton's middle are mirrored about the body's. Nothing here changed for it.
 //   Two things differ from a Mathwood person, both done here at load and after each update:
 //   - the clips' moves (their position tracks: the body's root, the feet, a shrug; the Blender-made clips carry one
 //     for every bone) were made for the Mathwood bones' lengths, so each is laid on the crew's own rest offset:
