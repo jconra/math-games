@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
-import { JOB as dock, MAKERS, TRY, PLACE } from '../src/jobs/dock.js';
+import { JOB as dock, MAKERS, TRY, BRIDGE, PLACE, bridgeOf, built, nextShip } from '../src/jobs/dock.js';
 import { helpPicture } from '../src/jobs/pics.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
@@ -15,18 +15,60 @@ import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 const num = (c) => Number(String(c.v).replace(/,/g, ''));
 
-test('the dock is open, a try of three rings, and joins Mathwood\'s levels: easiest first, on the geometry strand', () => {
+test('the dock is open, a bridge of nine rings, and joins Mathwood\'s levels: easiest first, on the geometry strand', () => {
   assert.equal(dock.open, true);
-  assert.equal(TRY.rings, 3);
+  assert.equal(BRIDGE.rings, 9); assert.equal(BRIDGE.squares, 3);
   assert.equal(E.register(dock), true);
   assert.deepEqual(PROBLEMS, []);
   assert.ok(PLACES.dock);
   for (let i = 1; i < PLACE.levels.length; i++) assert.ok(PLACE.levels[i].grade > PLACE.levels[i - 1].grade, `${PLACE.levels[i].id} after ${PLACE.levels[i - 1].id}`);
   for (const L of PLACE.levels) assert.equal(L.strand, 'geo', L.id);
-  assert.deepEqual(PLACE.levels.map((L) => L.id), ['brace', 'fit', 'count', 'angle', 'corner', 'area', 'third', 'diag']);
+  assert.deepEqual(PLACE.levels.map((L) => L.id), ['brace', 'fit', 'count', 'angle', 'corner', 'line', 'area', 'parallel', 'third', 'quad', 'twostep', 'diag']);
   // (a new crew member climbs a level for each right answer while their level is found, and the squares can't be
-  // missed: the try's three rings for the youngest stay young, up to counting the triangles)
+  // missed: a young child's first rings stay young, up to counting the triangles)
   assert.ok(PLACE.levels[2].grade < 30, 'the third level is still for the young');
+});
+
+test('fewer right-triangle sides, more angles (the game\'s maker, DT-5): angles in four-sided shapes and two-step angles', () => {
+  // the asks of every level, by their weights: a right triangle's side only at the top level, and a third of it
+  const sides = [], angles = [];
+  for (const L of PLACE.levels) {
+    const tot = L.gen.mix.reduce((t, a) => t + (a.w ?? 1), 0);
+    const side = L.gen.mix.filter((a) => a.maker === 'diag').reduce((t, a) => t + (a.w ?? 1), 0) / tot;
+    if (side) sides.push([L.id, side]);
+    if (L.gen.mix.some((a) => ['angle', 'corner', 'line', 'parallel', 'third', 'quad', 'twostep'].includes(a.maker))) angles.push(L.id);
+  }
+  assert.deepEqual(sides.map((x) => x[0]), ['diag'], 'right-triangle sides at the top level only');
+  assert.ok(sides[0][1] <= 0.34, 'and a third of its cards at most');
+  assert.ok(angles.length >= 8, 'angles at most levels: ' + angles);
+  // the brace's length only, never a side from it; its squares and their sum walked by Work it out; roots a child knows
+  const rand = seeded(9);
+  for (let k = 0; k < 40; k++) {
+    const d = MAKERS.diag.make(1 + (k % 2), { rand });
+    assert.equal(d.facts.ask, 'd');
+    assert.equal(d.sum.chain.length, 3);
+    assert.ok([50, 100, 150].includes(d.facts.d), String(d.facts.d));
+  }
+  // four-sided shapes (a square leaning over, a pane at the collar) and two-step angles both come up
+  const kinds = new Set();
+  for (let k = 0; k < 60; k++) { kinds.add(MAKERS.quad.make(1, { rand }).facts.kind); kinds.add(MAKERS.twostep.make(1, { rand }).facts.kind); kinds.add(MAKERS.parallel.make(1, { rand }).facts.kind); }
+  for (const k of ['lean', 'pane', 'outside', 'panel', 'z', 'c']) assert.ok(kinds.has(k), k);
+});
+
+test('the bridge stays built for the ship at the port; a new ship, a new bridge (DT-6)', () => {
+  const crew = crewOf();
+  assert.deepEqual(bridgeOf(crew), { ship: 1, rings: 0, docked: false });
+  for (let k = 0; k < 4; k++) built(crew);
+  // (kept with the crew member, as the save keeps it: a copy through JSON, as the shared store does)
+  const back = JSON.parse(JSON.stringify(crew));
+  assert.deepEqual(bridgeOf(back), { ship: 1, rings: 4, docked: false });
+  for (let k = 0; k < 9; k++) built(back);
+  assert.deepEqual(bridgeOf(back), { ship: 1, rings: 9, docked: true }, 'no more than the nine rings; the ship docks');
+  assert.deepEqual(nextShip(back), { ship: 2, rings: 0, docked: false });
+  // a bridge saved before (or a broken one) reads as a fresh bridge
+  const odd = { jobs: { dock: { n: 3, bridge: { ship: 'x', rings: 99 } } } };
+  assert.deepEqual(bridgeOf(odd), { ship: 1, rings: 9, docked: true });
+  assert.equal(odd.jobs.dock.n, 3, 'the tally is kept');
 });
 
 test('every level deals good questions: one right answer, words for every wrong one, help with a picture', () => {
@@ -89,7 +131,22 @@ test('the right answers are right', () => {
     const t = MAKERS.third.make(1, { rand }), tr = t.coins.find((x) => x.good);
     assert.equal(t.facts.ang.reduce((s, v) => s + v, 0), 180);
     assert.equal(tr.v, t.facts.ang[t.facts.ask], t.story);
-    // a brace across a panel (and a side from the brace): the squares add up
+    // a straight strut: the two make 180
+    const l = MAKERS.line.make(1, { rand }), lr = l.coins.find((x) => x.good);
+    assert.equal(lr.v + l.facts.a, 180, l.story);
+    // parallel struts: a Z the same, a C 180 together
+    const p = MAKERS.parallel.make(1, { rand }), pr = p.coins.find((x) => x.good);
+    assert.equal(pr.v, p.facts.kind === 'z' ? p.facts.a : 180 - p.facts.a, p.story);
+    // four corners: 360 together; a leaning square's opposite corners equal
+    const q = MAKERS.quad.make(1, { rand }), qr = q.coins.find((x) => x.good), Q = q.facts;
+    assert.equal(Q.ang.reduce((t, v) => t + v, 0), 360); assert.equal(qr.v, Q.ang[Q.ask], q.story);
+    if (Q.kind === 'lean') { assert.equal(Q.ang[0], Q.ang[2]); assert.equal(Q.ang[1], Q.ang[3]); }
+    // two steps: the corner inside from the one outside, then the third; the panel's angle at the top
+    const w = MAKERS.twostep.make(1, { rand }), wr = w.coins.find((x) => x.good), T2 = w.facts;
+    if (T2.kind === 'outside') { assert.equal(T2.B, 180 - T2.out); assert.equal(wr.v, 180 - T2.A - T2.B, w.story); }
+    else assert.equal(wr.v, 90 - T2.a, w.story);
+    for (const o of [l, p, q, w]) { assert.equal(o.coins.length, 4, o.story); for (const x of o.coins) if (!x.good) assert.notEqual(x.v, o.coins.find((y) => y.good).v); }
+    // a brace across a panel: the squares add up
     const d = MAKERS.diag.make(1 + (k % 2), { rand }), dr = num(d.coins.find((x) => x.good)), D = d.facts;
     assert.equal(D.w * D.w + D.h * D.h, D.d * D.d);
     assert.equal(dr, D.ask === 'd' ? D.d : D.ask === 'w' ? D.w : D.h, d.story);

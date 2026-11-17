@@ -1,27 +1,55 @@
-// THE DOCK'S BRIDGE CHALLENGE, a try: three rings of the docking port's telescoping bridge, the lattice tube the game's
-// maker picked (option C of the dock's option sheet: a round glass tube held by a lattice of triangles). The bridge grows
-// one ring at a time and each ring needs one answer; the player never places struts, the lattice is the reward. A right
-// answer and the new ring's braces go in, it locks with a glow, and the tube slides out further toward the ship waiting
-// at the far end. After the third ring, a short "that's the try" (the full job is eight or ten rings, out to the ship,
-// and then the docking port opens).
-// What a ring asks, by level (the one idea the bridge teaches: a square folds, a triangle can't):
+// THE DOCK'S BRIDGE: the docking port's telescoping bridge, the lattice tube the game's maker picked (option C of the
+// dock's option sheet: a round glass tube held by a lattice of triangles), built out to a ship waiting at the far end.
+// The bridge grows one ring at a time and each ring needs one answer; the player never places struts, the lattice is
+// the reward. A right answer and the new ring's braces go in, it locks with a glow, and the tube slides out further.
+// THE RINGS STAY BUILT (the game's maker, DT-6: "Keep them, but build a new bridge for each ship that docks"): a crew
+// member's bridge for the ship at the port now is kept between visits (bridgeOf, built); its ninth ring reaches the
+// ship, the port opens and the ship docks; the next ship to come gets a new bridge (nextShip). One ship waits at a time.
+// What a ring asks, by level (the one idea the bridge teaches: a square folds, a triangle can't; then its angles. The
+// game's maker, DT-5: "lets not ask to many questions about right triangle sides unless we offer a calculator or
+// work-it-out. I like the questions about angles more. We can always have some questions about angles in 4 sided
+// shapes or finding one angle by having to work out another angle (2 step angle problem)"):
 //   1  the youngest TAP the wobbly squares of the new ring: each tap puts a brace across one, two triangles, stiff (the
 //      player builds that much; its twin on the far side of the tube goes in too)
 //   2  which glass pane fits the gap: the gap's shape among other shapes, turned round or not
 //   3  how many triangles: each braced square is two (counting by 2s)
 //   4  kinds of angles: two struts meet, acute, right, obtuse or straight (Mathwood's own maker: labs/windmill)
 //   5  a brace in a square corner: the other part of the 90° (Mathwood's own maker)
-//   6  a triangle pane's glass: half of base × height
-//   7  the third corner of a triangle (Mathwood's own maker)
-//   8  a brace's length across a panel, corner to corner (whole right triangles: 60 cm by 80 cm makes 100 cm)
-// (Levels 3 and 4 keep a young child's try young: a new crew member climbs a level with each right answer while their
-// level is found, and the squares can't be missed.)
-// This file is the math (pure: node tests it, pi-nebula/tests/dock.test.mjs): the ladder, the makers, their pictures.
-// The bridge itself, the camera outside and the squares to tap are src/jobs/docklink.js (the panel's `live`).
+//   6  a straight strut: a brace meets it, the two angles side by side make 180° (Mathwood's own maker)
+//   7  a triangle pane's glass: half of base × height
+//   8  parallel struts: a brace across the panel's two long struts, a Z (equal) or a C (they make 180°)
+//   9  the third corner of a triangle (Mathwood's own maker)
+//  10  four corners: a square leaning over before its brace, a pane at the collar: the four make 360°
+//  11  two steps: the corner inside a triangle from the angle outside it, then its third corner; or a braced panel's
+//      angle at the top, from the brace's at the bottom (the panel's corners are square)
+//  12  a brace's length across a panel, corner to corner (3, 4, 5 made bigger: 60 cm by 80 cm makes 100 cm), a third
+//      of the top level's cards, the rest two-step angles: the only right-triangle side asked, and Work it out walks
+//      through its squares and their sum
+// (Levels 3 and 4 keep a young child's first rings young: a new crew member climbs a level with each right answer
+// while their level is found, and the squares can't be missed.)
+// This file is the math (pure: node tests it, pi-nebula/tests/dock.test.mjs): the ladder, the makers, their pictures,
+// the bridge kept for each ship. The bridge itself, the camera outside and the squares to tap are src/jobs/docklink.js
+// (the panel's `live`).
 import { ownOrder } from './engine.js';
 import { questionOf as windmillQ } from '../../../mathwood-valley/labs/windmill/questions.js';
 
-export const TRY = { rings: 3, squares: 3 };   // the try: three rings, then its end; three squares to brace on a ring
+export const BRIDGE = { rings: 9, squares: 3 };   // the whole bridge: nine rings out to the ship; three squares to brace on a ring
+export const TRY = BRIDGE;   // (its old name, from the three-ring try)
+
+// ── THE BRIDGE KEPT FOR THE SHIP AT THE PORT (DT-6), with the crew member (crew.jobs.dock.bridge, saved with them) ──
+//   bridgeOf(crew) -> { ship: which ship this is (1, 2, ...), rings: rings built for it (0..9), docked: true once all are }
+//   built(crew)    a ring built: -> the bridge
+//   nextShip(crew) the next ship comes to the port: a new bridge for it, from ring 1 -> the bridge
+const tallyOf = (crew) => { if (!crew.jobs || typeof crew.jobs !== 'object') crew.jobs = {}; return (crew.jobs.dock = crew.jobs.dock && typeof crew.jobs.dock === 'object' ? crew.jobs.dock : {}); };
+export function bridgeOf(crew) {
+  const t = tallyOf(crew), b = t.bridge && typeof t.bridge === 'object' ? t.bridge : (t.bridge = {});
+  b.ship = Number.isInteger(b.ship) && b.ship > 0 ? b.ship : 1;
+  b.rings = Number.isInteger(b.rings) ? Math.max(0, Math.min(BRIDGE.rings, b.rings)) : 0;
+  b.docked = b.rings >= BRIDGE.rings;
+  return b;
+}
+export function built(crew) { const b = bridgeOf(crew); b.rings = Math.min(BRIDGE.rings, b.rings + 1); b.docked = b.rings >= BRIDGE.rings; return b; }
+export function nextShip(crew) { const b = bridgeOf(crew); b.ship += 1; b.rings = 0; b.docked = false; return b; }
 
 // ── the pictures: on the panel's light card, as the station's others (src/jobs/pics.js): the numbers given, a "?" for
 // what is asked. The bridge's struts steel grey, its glass pale blue, a brace amber.
@@ -256,14 +284,120 @@ function squaresPicture(a, b, c, ask) {
   return svg(110, text(W / 2, 28, l1, { size: 16 }) + text(W / 2, 56, l2, { size: 16 }) + text(W / 2, 90, l3, { size: 17, fill: ASK }));
 }
 
+// ── 7. a straight strut: a brace meets it, two angles side by side that make 180° ─────────────────────────────
+// (V the joint, the strut level through it; the brace up at `a` from the strut's right-hand part, or mirrored)
+function linePicture(a, flip, { other = '?', otherFill = ASK } = {}) {
+  const V = [W / 2 + (flip ? 34 : -34), 122], L = 112, s = flip ? -1 : 1;
+  const R = [V[0] + s * 150, V[1]], Lf = [V[0] - s * 150, V[1]], B = [V[0] + s * Math.cos(a * Math.PI / 180) * L, V[1] - Math.sin(a * Math.PI / 180) * L];
+  let o = arc(V, R, B, 38) + arc(V, B, Lf, 30, 'rgba(181,82,58,.22)');
+  o += seg(Lf, R) + seg(V, B, BRACE, 6) + `<circle cx="${f1(V[0])}" cy="${f1(V[1])}" r="6" fill="${JOINT}"/>`;
+  o += angleLabel(V, R, B, 58, `${a}°`, { size: 16 }) + angleLabel(V, B, Lf, 50, other, { size: 18, fill: otherFill });
+  o += text(W / 2, 148, 'one straight strut', { size: 13, fill: SOFT });
+  return svg(156, o);
+}
+
+// ── 8. parallel struts: a brace crosses from one to the other (the panel's long sides run along the bridge) ────
+// kind 'z': the angle the brace makes with the top strut on the other side of it (equal: a Z); 'c': on the same side
+// (the two inside angles make 180°: a C). The given angle at the bottom joint, right of the brace.
+function parallelPicture(a, kind, flip, { other = '?', otherFill = ASK } = {}) {
+  const y1 = 128, y0 = 44, dx = (y1 - y0) / Math.tan(a * Math.PI / 180), s = flip ? -1 : 1;
+  const X = (x) => W / 2 + s * (x - W / 2);
+  const P1 = [X(W / 2 - dx / 2), y1], P2 = [X(W / 2 + dx / 2), y0];
+  let o = '';
+  // (the struts run on past the panel, faint, both ways: they are the bridge's long struts)
+  for (const y of [y0, y1]) o += seg([18, y], [W - 18, y], STRUT, 6) + `<path d="M${X(54) - s * 7} ${y - 7} l${s * 8} 7 l${-s * 8} 7" fill="none" stroke="${INK}" stroke-width="2"/>`;
+  o += seg(P1, P2, BRACE, 6);
+  for (const P of [P1, P2]) o += `<circle cx="${f1(P[0])}" cy="${f1(P[1])}" r="5.5" fill="${JOINT}"/>`;
+  const right1 = [X(W / 2 - dx / 2 + 60), y1], left2 = [X(W / 2 + dx / 2 - 60), y0], right2 = [X(W / 2 + dx / 2 + 60), y0];
+  o += arc(P1, right1, P2, 30) + angleLabel(P1, right1, P2, 46, `${a}°`, { size: 16 });
+  const far = kind === 'z' ? left2 : right2;
+  o += arc(P2, P1, far, 26, 'rgba(181,82,58,.22)') + angleLabel(P2, P1, far, 44, other, { size: 18, fill: otherFill });
+  return svg(150, o);
+}
+
+// ── 9. four-sided shapes: a square leaning over (before its brace), a pane where the bridge meets the collar ─────
+// corners in order round the shape: bottom left, bottom right, top right, top left; ask: the one to find
+function quadPicture(kind, A, ask, { answer = false } = {}) {
+  const h = 84, y1 = 128, y0 = y1 - h, t = h / Math.tan(A * Math.PI / 180);
+  let P, ang;
+  if (kind === 'lean') {
+    const w = 150, x0 = W / 2 - (w + t) / 2;
+    P = [[x0, y1], [x0 + w, y1], [x0 + w + t, y0], [x0 + t, y0]]; ang = [A, 180 - A, A, 180 - A];
+  } else {
+    const w = 210, x0 = W / 2 - w / 2;
+    P = [[x0, y1], [x0 + w, y1], [x0 + w, y0], [x0 + t, y0]]; ang = [A, 90, 90, 180 - A];
+  }
+  let o = '';
+  if (kind === 'lean') o += poly([[P[0][0], y1], [P[1][0], y1], [P[1][0], y0], [P[0][0], y0]], 'none', SOFT, 1.5, ' stroke-dasharray="5 5"');
+  else o += poly(P, 'rgba(169,209,238,.8)');
+  o += frame(P, 6);
+  P.forEach((V, i) => {
+    const A1 = P[(i + 1) % 4], B1 = P[(i + 3) % 4], isAsk = i === ask;
+    if (ang[i] === 90 && !isAsk) { o += squareMark(V, A1, B1, 12); return; }
+    o += arc(V, A1, B1, 24, isAsk ? (answer ? 'rgba(63,138,90,.25)' : 'rgba(181,82,58,.22)') : 'rgba(232,146,42,.28)');
+  });
+  P.forEach((V, i) => {
+    const A1 = P[(i + 1) % 4], B1 = P[(i + 3) % 4], isAsk = i === ask;
+    o += angleLabel(V, A1, B1, 40, isAsk && !answer ? '?' : `${ang[i]}°`, { size: isAsk ? 18 : 15, fill: isAsk ? (answer ? OK : ASK) : INK });
+  });
+  if (kind === 'lean') o += text(W / 2, 148, 'the square it was, before it leaned', { size: 12, fill: SOFT });
+  return { svg: svg(154, o), ang };
+}
+
+// ── 10. two steps: an angle found first, then the one asked ───────────────────────────────────────────────────
+// 'outside': a triangle of the lattice whose bottom strut runs on past a joint: the angle outside it given (180° with
+// the corner inside), another corner given, the third asked. 'panel': a braced panel, the brace's angle with the bottom
+// strut given; asked, its angle with the side strut at the top (the panel's corners are square).
+function outsidePicture(A, B, { answer = false } = {}) {
+  // corners: P0 bottom left (A), P1 bottom right (B inside, 180 - B outside), P2 top
+  const ta = Math.tan(A * Math.PI / 180), tb = Math.tan(B * Math.PI / 180), base = 1;
+  // (the top from both ends: x = h / ta from the left, base - h / tb from the right)
+  const hh = base / (1 / ta + 1 / tb), xt = hh / ta;
+  const sc = Math.min(200 / base, 104 / hh), x0 = 50, y1 = 132;
+  const P0 = [x0, y1], P1 = [x0 + base * sc, y1], P2 = [x0 + xt * sc, y1 - hh * sc], E = [Math.min(W - 16, P1[0] + 110), y1];
+  let o = poly([P0, P1, P2], 'rgba(169,209,238,.8)') + frame([P0, P1, P2], 5);
+  o += seg(P1, E, STRUT, 5, ' stroke-dasharray="9 6"') + text(E[0] - 4, y1 + 18, 'the strut runs on', { size: 11, fill: SOFT, anchor: 'end' });
+  o += arc(P0, P1, P2, 26) + angleLabel(P0, P1, P2, 42, `${A}°`, { size: 15 });
+  o += arc(P1, E, P2, 22) + angleLabel(P1, E, P2, 44, `${180 - B}°`, { size: 15 });
+  o += arc(P1, P2, P0, 18, answer ? 'rgba(63,138,90,.22)' : 'rgba(43,34,25,.07)');
+  if (answer) o += angleLabel(P1, P2, P0, 34, `${B}°`, { size: 13, fill: OK });
+  // (the top corner's label: inside it, or above the corner when it is too narrow to hold it)
+  const C = 180 - A - B, lab = answer ? `${C}°` : '?', st = { size: 18, fill: answer ? OK : ASK };
+  o += arc(P2, P0, P1, 20, answer ? 'rgba(63,138,90,.25)' : 'rgba(181,82,58,.22)') + (C < 50 ? text(P2[0] + 14, P2[1] - 4, lab, { ...st, anchor: 'start' }) : angleLabel(P2, P0, P1, 38, lab, st));
+  return svg(156, o);
+}
+function panelPicture(a, flip, { answer = false } = {}) {
+  // the panel A (bottom left) B (bottom right) C (top right) D (top left), its brace A to C at `a` from the bottom strut
+  const t = Math.tan(a * Math.PI / 180), w = a <= 40 ? 5.4 * U : 5.4 * U * 0.62 / t, h = a <= 40 ? 5.4 * U * t : 5.4 * U * 0.62;
+  const x0 = (W - w) / 2, y1 = 136, s = flip ? -1 : 1, X = (x) => W / 2 + s * (x - W / 2);
+  const A = [X(x0), y1], B = [X(x0 + w), y1], C = [X(x0 + w), y1 - h], D = [X(x0), y1 - h];
+  let o = poly([A, B, C], 'rgba(169,209,238,.6)') + frame([A, B, C, D]) + seg(A, C, BRACE, 6);
+  o += squareMark(B, A, C, 11) + squareMark(D, C, A, 11);
+  o += arc(A, B, C, 34) + angleLabel(A, B, C, 52, `${a}°`, { size: 15 });
+  if (answer) o += arc(C, D, A, 22, 'rgba(63,138,90,.18)') + angleLabel(C, D, A, 40, `${a}°`, { size: 12, fill: OK });
+  o += arc(C, A, B, 26, answer ? 'rgba(63,138,90,.25)' : 'rgba(181,82,58,.22)') + angleLabel(C, A, B, 44, answer ? `${90 - a}°` : '?', { size: 18, fill: answer ? OK : ASK });
+  return svg(152, o);
+}
+
 // ── the makers ─────────────────────────────────────────────────────────────────────────────────────────────────
 const pick = (a, rand) => a[Math.floor(rand() * a.length) % a.length];
+const fives = (lo, hi) => { const o = []; for (let v = lo; v <= hi; v += 5) o.push(v); return o; };
+// the right answer and three wrong ones (each a sensible slip, none the right answer, none twice, all 5 to 175)
+function degSlips(ans, wrongs) {
+  const out = [], seen = new Set([ans]);
+  for (const [v, slip, why] of [...wrongs, ...[15, -15, 20, -20, 25].map((d) => [ans + d, 'off', `Not quite: ${ans + d}° is ${Math.abs(d)}° too ${d > 0 ? 'big' : 'small'}. Work it out from the angles you know.`])]) {
+    if (out.length >= 3 || v == null || seen.has(v) || v <= 0 || v >= 180) continue;
+    seen.add(v); out.push({ ...DEG(v), slip, why });
+  }
+  return out;
+}
 const shuffle = (a, rand) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const DEG = (v) => ({ v, big: `${v}°`, small: '', label: `${v} degrees` });
 const CM = (v) => ({ v, big: n0(v), small: 'cm', label: `${n0(v)} centimetres` });
 const CM2 = (v) => ({ v, big: n0(v), small: 'square cm', label: `${n0(v)} square centimetres` });
-// a panel's sides and brace (cm): whole right triangles, the size of the bridge's own panels
-const TRIPLES = [[30, 40, 50], [40, 30, 50], [60, 80, 100], [80, 60, 100], [90, 120, 150], [120, 90, 150], [50, 120, 130], [120, 50, 130]];
+// a panel's sides and brace (cm): whole right triangles, the size of the bridge's own panels (3, 4, 5 made bigger: the
+// brace's root is 50, 100 or 150)
+const TRIPLES = [[30, 40, 50], [40, 30, 50], [60, 80, 100], [80, 60, 100], [90, 120, 150], [120, 90, 150]];
 
 export const MAKERS = {
   // 1: the squares to tap (no answers to pick: the card's own squares, and the new ring's in the view)
@@ -424,11 +558,142 @@ export const MAKERS = {
       return o;
     },
   },
-  // 6: a brace's length, corner to corner (step 2: a side of the panel, from the brace)
-  diag: {
-    strand: 'geo', at: (step) => (step <= 1 ? 86 : 88),
+  // a straight strut: the brace's two angles on it make 180° (Mathwood's own maker: the windmill's missing angle)
+  line: {
+    strand: 'geo', at: () => 60,
     make(step, { rand = Math.random } = {}) {
-      const [w, h, d] = pick(TRIPLES, rand), side = step >= 2 && rand() < 0.6;
+      const q = windmillQ('line', 3, rand), a = q.geo.a, ans = q.answer, flip = !!q.geo.flip;
+      const why = (v) => (v === 90 - a || (a > 90 && v === a - 90) ? `That fills a square corner, 90°. The two angles on a straight strut make 180°.`
+        : v === a ? `${a}° is the angle you know. The other one is on the other side of the brace.`
+          : `${a}° and ${v}° make ${a + v}°. Side by side on one straight strut they make 180°.`);
+      const o = ownOrder({
+        key: 'line', story: `A brace meets a straight strut of the bridge. On one side of it the angle is ${a}°.`, ask: 'How big is the angle on the other side?',
+        right: DEG(ans), slips: q.choices.filter((v) => v !== ans).map((v) => ({ ...DEG(v), slip: 'line', why: why(v) })),
+        rightWhy: `${a}° + ${ans}° = 180°: a straight line`,
+        sum: { op: 'sub', a: 180, b: a, say: 'The straight strut, less the angle you know' },
+        help: { title: 'A straight line is 180°', svg: linePicture(a, flip, { other: `${ans}°`, otherFill: OK }), line: q.rule,
+          steps: [`Together they make a straight line: ${a} + ? = 180.`, `So the other angle is 180 − ${a}.`] },
+        own: { strand: 'geo', at: 60 }, credit: [{ strand: 'sub', at: 30, weight: 0.3 }], facts: { a, ans },
+      }, rand);
+      o.lead = linePicture(a, flip);
+      return o;
+    },
+  },
+  // parallel struts: a brace across them makes a Z (the two angles equal) or a C (the two inside angles make 180°)
+  parallel: {
+    strand: 'geo', at: () => 72,
+    make(step, { rand = Math.random } = {}) {
+      const kind = rand() < 0.6 ? 'z' : 'c', a = pick(fives(35, 145).filter((v) => Math.abs(v - 90) >= 20), rand), flip = rand() < 0.5;
+      const ans = kind === 'z' ? a : 180 - a;
+      const slips = degSlips(ans, [
+        [kind === 'z' ? 180 - a : a, 'other', kind === 'z' ? 'That would be the angle on the other side of the brace. Across the brace, in a Z, the two angles are the same.' : 'That is the angle across the brace, in a Z. On the same side, in a C, the two make 180° together.'],
+        [90 - a > 0 ? 90 - a : a - 90, 'square', 'A square corner is 90°, but the brace does not make one here. Look at the two struts: they run the same way.'],
+        [ans + 10, 'off', `Not quite: the struts are parallel, so the angles match up exactly. ${kind === 'z' ? `It is the same ${a}°.` : `${a}° and ? make 180°.`}`],
+        [ans - 10, 'off', `Not quite: the struts are parallel, so the angles match up exactly. ${kind === 'z' ? `It is the same ${a}°.` : `${a}° and ? make 180°.`}`],
+      ]);
+      const o = ownOrder({
+        key: 'parallel:' + kind, story: `A brace crosses a panel from one long strut to the other. The two struts are parallel: they run the same way. The brace makes ${a}° with the bottom strut.`,
+        ask: 'How big is the angle marked ? at the top strut?',
+        right: DEG(ans), slips,
+        rightWhy: kind === 'z' ? `A Z between parallel struts: the two angles are the same, ${a}°` : `A C between parallel struts: ${a}° + ${ans}° = 180°`,
+        ...(kind === 'c' ? { sum: { op: 'sub', a: 180, b: a, say: 'The two inside angles make 180°: take away the one you know' } } : {}),
+        help: { title: kind === 'z' ? 'A Z between parallel struts' : 'A C between parallel struts', svg: parallelPicture(a, kind, flip, { other: `${ans}°`, otherFill: OK }),
+          line: kind === 'z' ? 'The struts run the same way, so the brace crosses both at the same slant: the angles in the corners of a Z are equal.' : 'The struts run the same way: the two angles inside a C, on the same side of the brace, add up to 180°.',
+          steps: kind === 'z' ? [`Trace the Z: bottom strut, brace, top strut.`, 'The angles in its two corners are equal.', `So it is ${a}°.`] : [`Trace the C: bottom strut, brace, top strut, on one side.`, `The two angles inside it make 180°: ${a} + ? = 180.`, `So it is 180 − ${a}.`] },
+        own: { strand: 'geo', at: 72 }, facts: { kind, a, ans },
+      }, rand);
+      o.lead = parallelPicture(a, kind, flip);
+      return o;
+    },
+  },
+  // four-sided shapes: the four corners make 360° (a square leaning over before its brace; a pane at the collar)
+  quad: {
+    strand: 'geo', at: () => 80,
+    make(step, { rand = Math.random } = {}) {
+      const kind = rand() < 0.5 ? 'lean' : 'pane';
+      const A = kind === 'lean' ? pick(fives(55, 80), rand) : pick([...fives(55, 80), ...fives(100, 125)], rand);
+      const { ang } = quadPicture(kind, A, 0), ask = pick(kind === 'lean' ? [0, 1, 2, 3] : [0, 3], rand), ans = ang[ask], known = ang.filter((v, i) => i !== ask), sumK = known.reduce((s, v) => s + v, 0);
+      const slips = degSlips(ans, [
+        [180 - sumK > 0 ? 180 - sumK : null, 'tri', `The corners of a triangle make 180°. This shape has four corners: they make 360°.`],
+        [180 - ans, 'next', `That is the corner next to it. Add the three you know and take them from 360°.`],
+        [ans + 10, 'off', `${known.join('° + ')}° + ${ans + 10}° = ${sumK + ans + 10}°, not 360°.`],
+        [ans - 10, 'off', `${known.join('° + ')}° + ${ans - 10}° = ${sumK + ans - 10}°, not 360°.`],
+      ].filter((w) => w[0] != null));
+      const words = kind === 'lean' ? 'A square of the new ring leans over before its brace goes in: it has four corners still, but none of them square.' : 'The glass pane where the bridge meets the docking collar has four corners.';
+      const o = ownOrder({
+        key: 'quad:' + kind, story: `${words} Three of them are ${known.slice(0, 2).join('°, ')}° and ${known[2]}°.`, ask: 'How big is the fourth corner?',
+        right: DEG(ans), slips,
+        rightWhy: `${known.join('° + ')}° + ${ans}° = 360°`,
+        sum: [{ op: 'add', a: known[0], b: known[1], say: 'First add two of the corners you know' }, { op: 'add', a: known[0] + known[1], b: known[2], say: 'Then the third' }, { op: 'sub', a: 360, b: sumK, say: 'Then take them from 360' }],
+        help: { title: 'Four corners make 360°', svg: quadPicture(kind, A, ask, { answer: true }).svg,
+          line: `The four corners of any four-sided shape add up to 360°: two triangles' worth.${kind === 'lean' ? ' (A leaning square keeps it: opposite corners stay equal.)' : ''}`,
+          steps: [`Add the three you know: ${known.join(' + ')} = ${sumK}.`, `Take that from 360: 360 − ${sumK}.`] },
+        own: { strand: 'geo', at: 80 }, credit: [{ strand: 'add', at: 30, weight: 0.3 }], facts: { kind, A, ang, ask, ans },
+      }, rand);
+      o.lead = quadPicture(kind, A, ask).svg;
+      return o;
+    },
+  },
+  // two steps: an angle worked out first (inside the triangle, or at the panel's top), then the one asked
+  twostep: {
+    strand: 'geo', at: () => 84,
+    make(step, { rand = Math.random } = {}) {
+      if (rand() < 0.55) {
+        // the outside angle: 180° with the corner inside; then the triangle's three corners make 180°
+        for (let tries = 0; tries < 60; tries++) {
+          const A = pick(fives(30, 80), rand), B = pick(fives(40, 100), rand), C = 180 - A - B;
+          if (C < 25) continue;
+          const out = 180 - B;
+          const slips = degSlips(C, [
+            [B, 'inside', `${B}° is the corner inside the triangle at the joint: the first step. Now the third corner: 180 − ${A} − ${B}.`],
+            [180 - A - out, 'outside', `That uses the ${out}° as if it were inside the triangle. Inside, at that joint, the corner is 180 − ${out}.`],
+            [180 - A, 'one', `That leaves out the corner at the joint. The three corners inside make 180°.`],
+            [C + 10, 'off', `${A}° + ${B}° + ${C + 10}° = ${A + B + C + 10}°, not 180°.`],
+          ]);
+          const o = ownOrder({
+            key: 'twostep:outside', story: `A triangle in the bridge's lattice: its bottom strut runs on past a joint, and outside the triangle there it makes ${out}°. Another corner of the triangle is ${A}°.`,
+            ask: 'How big is the corner marked ?',
+            right: DEG(C), slips,
+            rightWhy: `Inside the joint: 180° − ${out}° = ${B}°; then ${A}° + ${B}° + ${C}° = 180°`,
+            sum: [{ op: 'sub', a: 180, b: out, say: 'First the corner inside the triangle at the joint: a straight strut is 180' }, { op: 'add', a: A, b: B, say: 'Then add the two corners you know' }, { op: 'sub', a: 180, b: A + B, say: 'Then the rest of the triangle\'s 180' }],
+            help: { title: 'First the corner inside', svg: outsidePicture(A, B, { answer: true }), line: `Two steps. A straight strut is 180°, so inside the joint the triangle's corner is 180 − ${out}. Then the three corners of the triangle make 180°.`,
+              steps: [`The corner inside, at the joint: 180 − ${out} = ${B}.`, `The third corner: 180 − ${A} − ${B}.`] },
+            own: { strand: 'geo', at: 84 }, credit: [{ strand: 'sub', at: 30, weight: 0.3 }], facts: { kind: 'outside', A, B, out, ans: C }, size: 2,
+          }, rand);
+          o.lead = outsidePicture(A, B);
+          return o;
+        }
+      }
+      // the braced panel: the brace's angle with the bottom strut given; asked, its angle with the side strut at the top
+      // (a wide panel, so its corners have room for their angles: the brace low, 25° to 40°)
+      const a = pick([25, 30, 35, 40], rand), flip = rand() < 0.5, ans = 90 - a;
+      const slips = degSlips(ans, [
+        [a, 'z', `${a}° is the brace's angle with the top strut (the struts are parallel): the first step. The side strut is square to the top one: 90 − ${a}.`],
+        [180 - a, 'line', `The brace and the side strut make a corner of a triangle, smaller than a square corner.`],
+        [ans + 10, 'off', `In the triangle under the brace: 90° + ${a}° + ${ans + 10}° = ${90 + a + ans + 10}°, not 180°.`],
+        [ans - 10, 'off', `In the triangle under the brace: 90° + ${a}° + ${ans - 10}° = ${90 + a + ans - 10}°, not 180°.`],
+      ]);
+      const o = ownOrder({
+        key: 'twostep:panel', story: `A brace crosses a square-cornered panel. It makes ${a}° with the bottom strut.`, ask: 'How big is its angle with the side strut, at the top?',
+        right: DEG(ans), slips,
+        rightWhy: `The corner at the bottom right is square: 180° − 90° − ${a}° = ${ans}°`,
+        sum: [{ op: 'add', a: 90, b: a, say: 'First the two corners you know of the triangle under the brace: the square one and the brace\'s' }, { op: 'sub', a: 180, b: 90 + a, say: 'Then the rest of the triangle\'s 180' }],
+        help: { title: 'First another angle', svg: panelPicture(a, flip, { answer: true }), line: 'Two steps. The brace, the bottom strut and the side strut make a triangle, and its corner at the bottom right is square (90°). Or: the brace makes the same angle with the top strut (the struts are parallel), and the side strut is square to it.',
+          steps: [`The corner at the bottom right is 90°.`, `The three corners make 180°: 180 − 90 − ${a}.`] },
+        own: { strand: 'geo', at: 84 }, credit: [{ strand: 'sub', at: 30, weight: 0.3 }], facts: { kind: 'panel', a, ans }, size: 2,
+      }, rand);
+      o.lead = panelPicture(a, flip);
+      return o;
+    },
+  },
+  // a brace's length, corner to corner (the bridge's panels: the 3, 4, 5 family only, so the root at the end is one a
+  // child knows: 50 x 50 is 2,500; and only the brace itself, never a side from it: the game's maker, DT-5, "lets not
+  // ask to many questions about right triangle sides unless we offer a calculator or work-it-out": Work it out walks
+  // through its squares and their sum, and it is a third of the top level's cards)
+  diag: {
+    strand: 'geo', at: () => 86,
+    make(step, { rand = Math.random } = {}) {
+      const [w, h, d] = pick(TRIPLES, rand), side = false;
       const askK = side ? (rand() < 0.5 ? 'w' : 'h') : 'd', known = askK === 'w' ? h : w, ans = askK === 'd' ? d : askK === 'w' ? w : h;
       const slips = askK === 'd'
         ? [{ ...CM(w + h), slip: 'added', why: `${w} + ${h} is going round two sides. Straight across is shorter.` },
@@ -459,17 +724,24 @@ export const MAKERS = {
 
 const M = (maker, step = 1, w = 1) => ({ maker, step, w });
 export const PLACE = {
-  id: 'dock', name: 'The docking bridge', short: 'Dock', math: 'Shapes, angles and triangles', pic: 'dock', job: null,
-  line: 'Build the docking bridge ring by ring: brace the squares, fit the panes, the angles and lengths of its triangles.',
+  id: 'dock', name: 'The docking bridge', short: 'Dock', math: 'Shapes and angles',
+  pic: 'dock', job: null,
+  line: 'Build the docking bridge ring by ring: brace the squares, fit the panes, and the angles of its struts, braces, triangles and panels.',
   levels: [
     { id: 'brace', title: 'Brace the squares', line: 'Tap each wobbly square: a brace makes two triangles', gen: { mix: [M('brace')] } },
     { id: 'fit', title: 'Which pane fits?', line: 'The gap\'s shape, even turned round', gen: { mix: [M('fit')] } },
     { id: 'count', title: 'Count the triangles', line: '5 squares braced: 2 triangles in each', gen: { mix: [M('count')] } },
     { id: 'angle', title: 'Kinds of angles', line: 'Acute, right, obtuse or straight?', gen: { mix: [M('angle')] } },
     { id: 'corner', title: 'A brace in a square corner', line: 'One part is 35°: the other part of the 90°', gen: { mix: [M('corner')] } },
-    { id: 'area', title: 'A triangle pane\'s glass', line: 'Half of base × height: 80 cm by 60 cm', gen: { mix: [M('area')] } },
-    { id: 'third', title: 'The third corner', line: 'Two corners are 60° and 70°: the third?', gen: { mix: [M('third')] } },
-    { id: 'diag', title: 'A brace\'s length', line: 'A panel 60 cm by 80 cm: corner to corner?', gen: { mix: [M('diag', 1, 2), M('diag', 2)] } },
+    { id: 'line', title: 'A straight strut', line: 'A brace meets a strut at 125°: the other side?', gen: { mix: [M('line', 1, 2), M('corner')] } },
+    { id: 'area', title: 'A triangle pane\'s glass', line: 'Half of base × height: 80 cm by 60 cm', gen: { mix: [M('area', 1, 2), M('line')] } },
+    { id: 'parallel', title: 'Parallel struts', line: 'A brace across two parallel struts: a Z and a C', gen: { mix: [M('parallel', 1, 2), M('line')] } },
+    { id: 'third', title: 'The third corner', line: 'Two corners are 60° and 70°: the third?', gen: { mix: [M('third', 1, 2), M('parallel')] } },
+    { id: 'quad', title: 'Four corners', line: 'A pane with four corners: 90°, 90°, 115° and ?', gen: { mix: [M('quad', 1, 2), M('third')] } },
+    { id: 'twostep', title: 'Two steps', line: 'Outside the triangle 125°, another corner 50°: the third', gen: { mix: [M('twostep', 1, 2), M('quad')] } },
+    // (the only level with a right triangle's side, the brace's length, and a third of its cards at that: Work it out
+    // walks through its squares and their sum)
+    { id: 'diag', title: 'A brace\'s length', line: 'A panel 60 cm by 80 cm: corner to corner?', gen: { mix: [M('diag', 1, 1), M('twostep', 1, 2)] } },
   ],
 };
 

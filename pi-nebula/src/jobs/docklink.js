@@ -7,7 +7,12 @@
 //     two triangles, and stops wobbling (its twin on the far side of the tube too); every square braced is the answer;
 //   - at the other levels a right answer puts the ring's braces in, one after another; a wrong one jolts the ring;
 //   - braced, the ring locks: its hoop flashes, its glass goes on, its deck lights come on, and the next slides out;
-//   - after TRY.rings rings, the try's end: a short card (src/jobs/panel.js over), "Build it again" or "Done".
+//   - THE RINGS STAY BUILT (the game's maker, DT-6: "Keep them, but build a new bridge for each ship that docks"): the
+//     crew member's bridge for the ship at the port now (src/jobs/dock.js bridgeOf) is kept between visits; the job
+//     opens with the rings built so far in place, locked and lit, and the next slides out;
+//   - its ninth ring reaches the ship: a wave of light out along the bridge, the ship's docking lights turn green, the
+//     port opens, and the end card (src/jobs/panel.js over): "Next ship" (the next ship comes: a new bridge from ring 1)
+//     or "Done" (the next visit starts the next ship's bridge). One ship waits at a time.
 // The panel's `live` (src/jobs/panel.js): ready(), right(q, coin), wrong(q, coin), and the dock's own: head(o) (the
 // card's top: the bridge plan, which ring), play(o, ui) (the squares to tap), over() (the try's end), update(dt),
 // aim(camera, dt), close(); state() for the rigs.
@@ -18,7 +23,7 @@ import { expand, zonesOf } from '../../kit/layout.js';
 import { placeMatrix } from '../../kit/grid.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { DIR as SKY } from '../../world/sky.js';
-import { TRY, squareSvg } from './dock.js';
+import { BRIDGE, squareSvg, bridgeOf, built, nextShip } from './dock.js';
 
 const CSS = new URL('./dock.css', import.meta.url).href;
 function ensureCss() {
@@ -144,7 +149,8 @@ function make(W, frame) {
   return MADE;
 }
 
-export function dockLink({ W, walls = null, job, spot = null } = {}) {
+// crew: the crew member building (their bridge is kept with them, src/jobs/dock.js bridgeOf); save(): saves them
+export function dockLink({ W, walls = null, job, spot = null, crew = null, save = () => {} } = {}) {
   ensureCss();
   const from = spot || (W.place('airlock') || new THREE.Vector3());
   const frame = portFrame(W, from);
@@ -158,16 +164,31 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
 
   // ── the rings' states: off, out (sliding out of the last), wait (asking: wobbling), brace (its braces going in),
   // lock (its glow, glass and lights), done ──────────────────────────────────────────────────────────────────────
+  // (a bridge whose ship has docked, at the job's opening: the next ship has come, a new bridge for it)
+  const kept = crew ? bridgeOf(crew) : { ship: 1, rings: 0, docked: false };
+  if (crew && kept.docked) { nextShip(crew); save(); }
   let cur = 0, answered = 0, finished = false, closed = false, clock = 0, order = null, ui = null, endT = -1;
   const S = M.rings.map(() => ({ state: 'off', t: 0, ext: 0, braced: new Set(), pop: new Map(), fl: new Map(), jolt: 0, loose: 1, pane: false }));
+  // the rings as the crew member's bridge has them: those built, in place, locked and lit; the next one sliding out
   function reset() {
-    cur = 0; answered = 0; finished = false;
-    S.forEach((s, i) => { Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, pane: false }); s.braced.clear(); s.pop.clear(); s.fl.clear(); const R = M.rings[i]; R.g.visible = false; R.braces.forEach((b) => { b.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.flashes.forEach((f) => { f.visible = false; }); R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08); });
-    M.ghosts.forEach((g) => { g.visible = true; g.material.color.copy(M.planMat.color); g.material.opacity = M.planMat.opacity; });
+    const b = crew ? bridgeOf(crew) : { rings: 0 };
+    cur = b.rings; answered = 0; finished = b.rings >= BRIDGE.rings;
+    S.forEach((s, i) => {
+      Object.assign(s, { state: 'off', t: 0, ext: 0, jolt: 0, loose: 1, pane: false }); s.braced.clear(); s.pop.clear(); s.fl.clear();
+      const R = M.rings[i]; R.g.visible = false; R.braces.forEach((x) => { x.visible = false; }); R.outlines.forEach((o) => { o.visible = false; }); R.flashes.forEach((f) => { f.visible = false; });
+      R.glass.visible = false; R.glassMat.opacity = 0; R.glowMat.color.setRGB(0, 0, 0); R.stripMat.color.setRGB(0.08, 0.08, 0.08);
+      if (i < cur) {
+        // (built on an earlier visit: all its braces in, locked, its glass on and its lights lit)
+        Object.assign(s, { state: 'done', ext: 1, loose: 0 });
+        for (let j = 0; j < R.braces.length; j++) { s.braced.add(j); s.pop.set(j, 9); }
+        R.g.visible = true; R.glass.visible = true; R.glassMat.opacity = R.glassMat.userData.full; R.glowMat.color.setRGB(0.35 * 0.9, 0.85 * 0.9, 1.4 * 0.9); R.stripMat.color.setRGB(1, 1, 1);
+      }
+    });
+    M.ghosts.forEach((g, i) => { g.visible = i >= cur; g.material.color.copy(M.planMat.color); g.material.opacity = M.planMat.opacity; });
     M.shipLights.color.setRGB(...SHIP_RED);
-    slideOut(0);
+    slideOut(cur);
   }
-  function slideOut(i) { if (i >= S.length || i >= TRY.rings) return; const s = S[i]; s.state = 'out'; s.t = 0; s.ext = 0; M.rings[i].g.visible = true; M.ghosts[i].visible = false; }
+  function slideOut(i) { if (i >= S.length || i >= BRIDGE.rings) return; const s = S[i]; s.state = 'out'; s.t = 0; s.ext = 0; M.rings[i].g.visible = true; M.ghosts[i].visible = false; }
   const isBrace = () => !!(order && order.play === 'brace');
 
   // ── the squares a young player braces ─────────────────────────────────────────────────────────────────────────
@@ -223,16 +244,17 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     const lead = order && order.leadDone && ui && ui.card ? ui.card.querySelector('.pnj-pic.is-lead') : null;
     if (lead) lead.innerHTML = order.leadDone;
     answered++;
-    if (answered >= TRY.rings) finished = true;
+    // (kept with the crew member at once: the ring stays built however the visit ends)
+    if (crew) { const b = built(crew); save(); if (b.rings >= BRIDGE.rings) finished = true; } else if (cur + 1 >= BRIDGE.rings) finished = true;
   }
   function wrong() { const s = S[cur]; if (s && s.state === 'wait') s.jolt = 1; }
   // the card's top: the bridge's plan, and a dot for each ring of the try (lit when built, amber the one being built:
   // dots, not a second "n of m" beside the panel's level)
   const ICON = '<svg class="dkb-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 6.5 L15.5 13.5 M4.5 13.5 L15.5 6.5 M10 2.8 V17.2" stroke="currentColor" stroke-width="1.6"/></svg>';
   function head(o, end = false) {
-    const n = Math.min(cur + 1, TRY.rings);
-    const dots = Array.from({ length: TRY.rings }, (x, i) => `<i class="${i < cur || end ? 'is-built' : i === cur ? 'is-now' : ''}"></i>`).join('');
-    const said = end ? `All ${TRY.rings} rings built` : `Ring ${n} of ${TRY.rings}`;
+    const n = Math.min(cur + 1, BRIDGE.rings);
+    const dots = Array.from({ length: BRIDGE.rings }, (x, i) => `<i class="${i < cur || end ? 'is-built' : i === cur ? 'is-now' : ''}"></i>`).join('');
+    const said = end ? `All ${BRIDGE.rings} rings built` : `Ring ${n} of ${BRIDGE.rings}`;
     return `<header class="pnj-cardtop is-plan">${ICON}<b>Bridge plan</b><small class="dkb-rings" role="img" aria-label="${said}" title="${said}">${dots}</small></header>`;
   }
   // the squares to tap, in place of the answers (the order's one coin is "every square braced")
@@ -249,14 +271,15 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     markNext(strip);
     return true;
   }
-  // the try's end, once its last ring is answered: the card in place of a question
+  // the bridge's end, once its last ring is answered: the card in place of a question. "Next ship": the next ship comes
+  // to the port and its bridge starts at ring 1; "Done": the next visit starts it
   function over() {
     if (!finished) return null;
     return {
       html: `${head(null, true)}
-        <p class="pnj-story dkb-end"><b>Three rings built!</b></p>
-        <p class="pnj-story dkb-end2">That's the try. The whole bridge is ${DOCK.rings} rings, out to the ship, and then the docking port opens.</p>`,
-      buttons: [{ label: 'Build it again', again: () => reset() }, { label: 'Done' }],
+        <p class="pnj-story dkb-end"><b>The bridge is built!</b></p>
+        <p class="pnj-story dkb-end2">All ${BRIDGE.rings} rings reach the ship: the docking port opens and the ship docks. The next ship to come will need a new bridge.</p>`,
+      buttons: [{ label: 'Next ship', again: () => { if (crew) { nextShip(crew); save(); } endT = -1; reset(); intro = TIMES.intro; } }, { label: 'Done' }],
     };
   }
 
@@ -313,11 +336,11 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
     // the try done (its last ring locked): the rings' hoops light up one after another, out along the bridge, again
     // and again, while the end card is up, and on along the plan's hoops to the ship (the way to come), whose docking
     // lights turn from red to green when the first wave gets there and stay green, brighter as each wave arrives
-    if (finished && S.every((s, i) => i >= TRY.rings || s.state === 'done')) {
+    if (finished && S.every((s, i) => i >= BRIDGE.rings || s.state === 'done')) {
       if (endT < 0) endT = clock;
       const n = DOCK.rings, t = (clock - endT) * 4 % (n + 6), near = (i) => Math.max(0, 1 - Math.abs(t - i - 0.5) * 0.9);
-      for (let i = 0; i < TRY.rings; i++) { const f = 0.9 + 5 * near(i); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
-      for (let i = TRY.rings; i < n; i++) { const g = M.ghosts[i].material, f = near(i); g.opacity = 0.4 + 0.6 * f; g.color.setRGB(0.25 + 1.6 * f, 0.75 + 1.6 * f, 1.3 + 1.4 * f); }
+      for (let i = 0; i < BRIDGE.rings; i++) { const f = 0.9 + 5 * near(i); M.rings[i].glowMat.color.setRGB(0.35 * f, 0.85 * f, 1.4 * f); }
+      for (let i = BRIDGE.rings; i < n; i++) { const g = M.ghosts[i].material, f = near(i); g.opacity = 0.4 + 0.6 * f; g.color.setRGB(0.25 + 1.6 * f, 0.75 + 1.6 * f, 1.3 + 1.4 * f); }
       const reached = (clock - endT) * 4 >= n, glow = 1 + (t >= n ? Math.max(0, 1 - (t - n) / 2.5) : 0);
       if (reached) M.shipLights.color.setRGB(SHIP_GREEN[0] * glow, SHIP_GREEN[1] * glow, SHIP_GREEN[2] * glow);
       else M.shipLights.color.setRGB(...SHIP_RED);
@@ -339,12 +362,12 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   }
   function aim(camera, dt = 1 / 60) {
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
-    const end = finished && S.every((s, i) => i >= TRY.rings || s.state === 'done');
+    const end = finished && S.every((s, i) => i >= BRIDGE.rings || s.state === 'done');
     // (the first moment: the end's view, along the bridge's plan to the ship waiting at the far end, then over to the
     // ring being built: where it is all going first)
     const first = intro > 0 && forced == null; intro -= dt;
     const V = end || first ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
-    poseFor(V, forced != null ? forced : end || first ? V.ring : Math.min(cur, TRY.rings - 1), camera.aspect || innerWidth / innerHeight);
+    poseFor(V, forced != null ? forced : end || first ? V.ring : Math.min(cur, BRIDGE.rings - 1), camera.aspect || innerWidth / innerHeight);
     if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); camera.fov = V.fov; camera.updateProjectionMatrix(); fresh = false; }
     const k = 1 - Math.exp(-2.5 * dt);
     camPos.lerp(want, k); camQ.slerp(probe.quaternion, k);
@@ -374,7 +397,7 @@ export function dockLink({ W, walls = null, job, spot = null } = {}) {
   return {
     ready, right, wrong, head, play, over, update, aim, close,
     // (for the rigs: the rings' states, the squares to tap on screen, a tap on one of them)
-    state: () => ({ cur, answered, finished, rings: S.slice(0, TRY.rings).map((s) => ({ state: s.state, braced: [...s.braced].sort(), loose: +s.loose.toFixed(2) })), made: M.ms }),
+    state: () => ({ cur, answered, finished, ship: crew ? bridgeOf(crew).ship : 1, built: crew ? bridgeOf(crew).rings : cur, rings: S.slice(0, BRIDGE.rings).map((s) => ({ state: s.state, braced: [...s.braced].sort(), loose: +s.loose.toFixed(2) })), made: M.ms }),
     lookAtRing: (i = null) => { forced = i; },
     // (where ring i's squares are on the screen, as the camera is now: its squares' middles, standing still)
     squaresOnScreen: (i = cur) => {

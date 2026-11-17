@@ -1,8 +1,8 @@
 // THE STATION'S JOB SPOTS, in the world: a glowing ring on the floor and a sign over it at each job (by the station
 // file's names, as spots.js's markers are), a prompt when the player walks up ("Galley kitchen: Start, E"), and the
 // job panel (panel.js) once started. Every job is open from the start, as in Mathwood; a job whose props are still
-// being picked (the arena) is marked "coming soon" and has nothing to press. The dock's bridge is open as a try (three
-// rings: src/jobs/dock.js, its bridge outside the port src/jobs/docklink.js).
+// being picked (the arena) is marked "coming soon" and has nothing to press. The dock's bridge is built ring by ring out
+// to the ship at the port, kept between visits (src/jobs/dock.js, its bridge outside the port src/jobs/docklink.js).
 //
 //   const jobs = startJobs({ W, walls, input, crew: () => crewMember, save: (crew) => {...}, live: { [job id]: fn }, crane })
 //                                 live: what a job's own props are doing right now, for its questions (the smelter's
@@ -140,7 +140,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       panel = openDrive(document.body, { crane, input, W, walls, onClose: done });
     } else {
       // (a job joined to its props: the dock's bridge outside the port, src/jobs/docklink.js; the crane's: openCrane)
-      link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos }) : null;
+      // (the dock's bridge is kept with the crew member between visits: its link saves them as each ring is built)
+      link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos, crew: c, save: () => save(c) }) : null;
       panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
     api.panel = panel;
