@@ -533,10 +533,10 @@ export const MAKERS = {
       const L1 = live.leg1 ? live.leg1() : null, on = (v) => r2(Math.round(v / prec) * prec);
       let i = -1, best = -1;
       if (L1 && pv.there) for (const k of [0, 1]) { const a = Math.abs(on(L1.to[k]) - on(L1.from[k])), b = Math.abs(on(pv.there[k]) - on(L1.to[k])); if (a >= least && b >= least && Math.min(a, b) > best) { best = Math.min(a, b); i = k; } }
-      if (i < 0) { const s = fromLive(live, 'over', { prec, least }) || madeOver(t, prec); return distOrder(s, prec, rand, live, `legs:${step}:d`, { at: MAKERS.legs.at(step) }); }
+      if (i < 0) { const s = fromLive(live, 'over', { prec, least }) || madeOver(t, prec); return distOrder(s, prec, rand, live, `legs:${step}:d`, { second: true, at: MAKERS.legs.at(step) }); }
       const axis = i ? 'y' : 'x', fixed = i ? [null, on(L1.to[1])] : [on(L1.to[0]), null];
       const s = fromLive(live, 'over', { prec, axis, start: fixed });
-      if (!s) { const m = madeOver(t, prec); return distOrder(m, prec, rand, live, `legs:${step}:d`, { at: MAKERS.legs.at(step) }); }
+      if (!s) { const m = madeOver(t, prec); return distOrder(m, prec, rand, live, `legs:${step}:d`, { second: true, at: MAKERS.legs.at(step) }); }
       const p0 = on(L1.from[i]), a = s.from[i], b = s.to[i], leg1 = r2(Math.abs(a - p0)), leg2 = r2(Math.abs(b - a)), all = r2(leg1 + leg2), part = partFor(live, axis);
       const place = s.place && s.place.name ? s.place.name : 'its place';
       const story = step >= 3
@@ -651,12 +651,13 @@ export const MAKERS = {
   },
 };
 // a distance along one axis, taking away (the distance cards, and a trip's first leg)
-function distOrder(s, prec, rand, live, key, { first = false, at = null } = {}) {
+function distOrder(s, prec, rand, live, key, { first = false, second = false, at = null } = {}) {
   const i = s.axis === 'y' ? 1 : 0, a = s.from[i], b = s.to[i], d = r2(Math.abs(b - a)), sum = r2(a + b), part = partFor(live, s.axis);
   const lost = prec < 1 && Math.round(d * 100) % 100 !== 0;
-  const story = first ? `The first leg of this trip: ${part} goes from ${s.axis} = ${t2(a)} to ${targetWords(s, true).replace(/^The/, 'the')} at ${s.axis} = ${t2(b)}.` : `${cap(part)} is at ${s.axis} = ${t2(a)}. ${targetWords(s, true)} is at ${s.axis} = ${t2(b)}.`;
+  const leg = first ? 'first' : second ? 'second' : null;
+  const story = leg ? `The ${leg} leg of this trip: ${part} goes from ${s.axis} = ${t2(a)} to ${targetWords(s, true).replace(/^The/, 'the')} at ${s.axis} = ${t2(b)}.` : `${cap(part)} is at ${s.axis} = ${t2(a)}. ${targetWords(s, true)} is at ${s.axis} = ${t2(b)}.`;
   return ownOrder({
-    key, story, ask: first ? 'How long is the first leg?' : `How far must ${part} go along ${AX[s.axis]}?`,
+    key, story, ask: leg ? `How long is the ${leg} leg?` : `How far must ${part} go along ${AX[s.axis]}?`,
     right: F(d, METRE),
     slips: [{ ...F(sum, METRE), why: `That adds the two. The way between is the bigger take away the smaller: ${t2(Math.max(a, b))} − ${t2(Math.min(a, b))}.` },
       { ...F(b, METRE), why: `${t2(b)} is where it goes. How far is that from ${t2(a)}?` },
