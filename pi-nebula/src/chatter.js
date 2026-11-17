@@ -1,9 +1,9 @@
 // WHAT TWO PEOPLE TALK ABOUT: a conversation picked from the line bank (lines.js) for two of the station's people, the
 // news going round first (news.js), never one heard lately, never one about either of the two speakers.
 //   import { pickTalk, MEMORY } from './chatter.js'
-//   pickTalk(A, B, { sitting, player, now }) -> { id, lines: [{ who: 0 | 1, words }] } | null
+//   pickTalk(A, B, { sitting, player, now, nearby }) -> { id, lines: [{ who: 0 | 1, words }] } | null
 //       A, B: the two people ({ id, name } from the roster); sitting: at a table; player: the player's name (or null);
-//       now: the game's clock, seconds
+//       now: the game's clock, seconds; nearby: anyone else within earshot ({ id, name }): never talked about
 // MEMORY: a conversation is not heard again for MEMORY.again seconds anywhere on the station; a piece of news is talked
 // over at most MEMORY.perNews times (then it is old news), and never again by anyone who has talked it over already.
 import { TALKS } from './lines.js';
@@ -14,13 +14,14 @@ const heard = new Map();        // conversation id -> when it was last begun
 const told = new Map();         // news id -> how many times it has been talked over
 const fill = (s, F) => s.replace(/\{(\w+)\}/g, (m, k) => (F[k] != null ? F[k] : m));
 
-export function pickTalk(A, B, { sitting = false, player = null, now = 0 } = {}) {
+export function pickTalk(A, B, { sitting = false, player = null, now = 0, nearby = [] } = {}) {
   const names = new Set([A.name, B.name, A.id, B.id]);
+  for (const X of nearby) { names.add(X.name); names.add(X.id); }
   const ok = (T) => {
     if (heard.has(T.id) && now - heard.get(T.id) < MEMORY.again) return false;
     if (T.sitting === true && !sitting) return false;
     if (T.sitting === false && sitting) return false;
-    if (T.about && (T.about.includes(A.id) || T.about.includes(B.id))) return false;
+    if (T.about && T.about.some((id) => names.has(id))) return false;
     if (T.who && !(T.who.includes(A.id) && T.who.includes(B.id))) return false;
     return true;
   };

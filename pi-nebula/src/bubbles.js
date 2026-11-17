@@ -14,7 +14,7 @@ const CSS = `
 .pnb-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
 .pnb { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; opacity: 0; transition: opacity 0.22s ease; will-change: transform, opacity; }
 .pnb.is-on { opacity: 1; }
-.pnb-box { max-width: min(250px, 56vw); padding: 7px 12px 8px; text-align: center; color: #eef1f4; background: rgba(13, 17, 23, 0.88);
+.pnb-box { max-width: min(250px, 56vw); padding: 7px 12px 8px; text-align: center; text-wrap: balance; color: #eef1f4; background: rgba(13, 17, 23, 0.88);
   font: 600 14px/1.3 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.4);
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
 .pnb-tail { width: 12px; height: 7px; background: rgba(196, 220, 240, 0.55); clip-path: polygon(0 0, 100% 0, 50% 100%); }
@@ -73,11 +73,12 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
   let frame = 0;
   function update(dt) {
     frame++;
-    const W = innerWidth, H = innerHeight, placed = [];
+    const W = innerWidth, H = innerHeight, placed = [], fading = [];
     camera.updateMatrixWorld();
     for (const b of [...live.values()]) {
       b.t += dt;
-      if (b.t > b.secs) { if (b.on) { b.on = false; b.el.classList.remove('is-on'); } if (b.t > b.secs + 0.3) drop(b); continue; }
+      // (fading out: it keeps its place a moment, so a bubble lifted over it does not drop onto it while it fades)
+      if (b.t > b.secs) { if (b.on) { b.on = false; b.el.classList.remove('is-on'); } if (b.t > b.secs + 0.3) drop(b); else if (b.y != null && b.measured) fading.push(b); continue; }
       const P = b.P, head = P.c && P.c.bones && P.c.bones.Head;
       // (over the head as it is now: standing or sitting)
       // (a captain's over their marker: P.bubbleUp)
@@ -101,15 +102,20 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
         }
       }
       if (seen !== b.on) { b.on = seen; b.el.classList.toggle('is-on', seen); }
-      if (!seen) continue;
+      if (!seen) { b.shownBefore = false; continue; }
       if (!b.measured) { b.w = b.el.offsetWidth; b.h = b.el.offsetHeight; b.measured = true; }
       b.sx = sx; b.sy = sy; placed.push(b);
     }
-    // (two bubbles never on top of each other: the one further back goes up out of the way)
+    // (two bubbles never on top of each other: the one further back goes up out of the way, easing there, never
+    // jumping; one fading out still counts a moment)
     placed.sort((a, b) => b.sy - a.sy);
+    const k = 1 - Math.exp(-14 * dt);
     for (let i = 0; i < placed.length; i++) {
       const a = placed[i]; let y = a.sy;
-      for (let j = 0; j < i; j++) { const o = placed[j]; if (Math.abs(o.sx - a.sx) < (o.w + a.w) / 2 + 4 && y > o.y - o.h - 4 && y - a.h < o.y + 4) y = o.y - o.h - 4; }
+      for (const o of [...fading, ...placed.slice(0, i)]) { if (Math.abs((o.sx ?? o.x) - a.sx) < (o.w + a.w) / 2 + 4 && y > o.y - o.h - 4 && y - a.h < o.y + 4) y = o.y - o.h - 4; }
+      // (the lift over the bubble's own place, eased)
+      const lift = a.sy - y; a.lift = a.lift == null || !a.shownBefore ? lift : a.lift + (lift - a.lift) * k; a.shownBefore = true;
+      y = a.sy - a.lift;
       a.y = y;
       // (kept whole on the screen: a speaker at its edge has their bubble just inside it)
       const x = Math.max(6, Math.min(W - a.w - 6, a.sx - a.w / 2)), top = Math.max(6, y - a.h);

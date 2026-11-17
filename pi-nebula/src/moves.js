@@ -9,7 +9,8 @@
 //   M.look = point | null          the head turns toward a point in the world (most of the way: the eyes do the rest)
 //   M.talk = null | 'speak' | 'listen'     in a talk: speaking, or listening
 //   M.sitting = true               (sitting: no arms, a smaller lean)
-//   M.straight = 0..1              lying on a bed: the legs straightened along the body that much (the scanner's patient)
+//   M.straight = 0..1              on a bed: the legs straightened that much, along the body (lying), or toward
+//   M.legsTo = way | null          a way in the world when given (sitting up along the bed: toward its foot)
 //
 // HOW: each turn is laid on after the clips have set the bones and before the rest of the crew kit's frame (the feet,
 // the arms out, the eyes: so the eyes aim from where the head has turned), by wrapping the person's clip player's own
@@ -73,18 +74,19 @@ export function addMoves(c) {
   // end, so the feet follow)
   const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _dn = new THREE.Vector3(), _ax = new THREE.Vector3();
   function straighten(rq, k) {
-    _dn.set(0, -1, 0).applyQuaternion(rq);
+    // (toward M.legsTo, a way in the world, when given (sitting up along a bed: its foot); else along the body)
+    if (M.legsTo) _dn.copy(M.legsTo).normalize(); else _dn.set(0, -1, 0).applyQuaternion(rq);
     for (const s of ['L', 'R']) {
       const ul = B['UpperLeg' + s], ll = B['LowerLeg' + s]; if (!ul || !ll) continue;
       // (the thigh: from the hip to the knee)
       const th = _k.copy(ll.getWorldPosition(_k)).sub(ul.getWorldPosition(_h)).normalize();
       let ang = Math.acos(Math.max(-1, Math.min(1, th.dot(_dn))));
-      if (ang > 1e-3) turnWorld(ul, _ax.crossVectors(th, _dn).normalize(), ang * k);
+      if (ang > 1e-3 && _ax.crossVectors(th, _dn).lengthSq() > 1e-10) turnWorld(ul, _ax.normalize(), ang * k);
       // (the shin: from the knee to the ankle, as it now lies)
       const ft = B['Foot' + s];
       const sh = ft ? _k.copy(ft.getWorldPosition(_k)).sub(ll.getWorldPosition(_h)).normalize() : (ll.updateWorldMatrix(true, false), _k.setFromMatrixColumn(ll.matrixWorld, 1).normalize());
       ang = Math.acos(Math.max(-1, Math.min(1, sh.dot(_dn))));
-      if (ang > 1e-3) turnWorld(ll, _ax.crossVectors(sh, _dn).normalize(), ang * k);
+      if (ang > 1e-3 && _ax.crossVectors(sh, _dn).lengthSq() > 1e-10) turnWorld(ll, _ax.normalize(), ang * k);
     }
   }
   function lay(dt) {

@@ -23,6 +23,9 @@ export const AGAIN = ['Hello again!', 'Hi again!', 'Hey!', 'Back again?', 'Oh, h
 //   ending with the question (its clip speaks it);
 //   yes / no: their answer to Interested / Not now; again: when they have asked before; waiting: after a yes, until
 //   missions are ready (missions.js)
+// a captain's word when the player has not answered a while
+export const NUDGES = ['So, what do you say?', 'Take your time!', 'No rush. Think it over!', 'It will be fun, I promise!'];
+
 export const CAPTAINS = {
   vega: { ship: 'Explorer', mission: 'exploring', what: 'Join her crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
@@ -37,12 +40,14 @@ export const CAPTAINS = {
 
 // THE SCAN (people.js): what the medic and the patient say at the big scanner, in bubbles, one of each at its moment:
 // the medic's hello as the patient comes up to the bed's foot and the patient's answer; the medic's word as they lie
-// down, and one while the ring goes; the end; the patient's thanks as they go. {patient} and {medic}: their names
+// down, one while the ring goes (during) and one nearer the end (late); the end; the patient's thanks as they go.
+// {patient} and {medic}: their names
 export const SCAN_TALK = {
   hello: ["Hi {patient}! Hop up on the bed for me.", "Hello, {patient}! Up on the bed, please.", "Ready for your scan, {patient}? Up you get."],
   answer: ["Okay!", "Sure thing.", "Here I go."],
   still: ["Lie nice and still now.", "Here we go. Keep still for me.", "Relax. This won't take long."],
-  during: ["Looking good.", "Almost done.", "Nice and still. Well done."],
+  during: ["Looking good.", "Nice and still. Well done.", "Breathe normally. You're doing great."],
+  late: ["Almost done now.", "Nearly finished.", "One more pass to go."],
   done: ["All done! You're in great shape.", "All finished. Everything looks fine!", "That's it! All clear."],
   thanks: ["Thanks, {medic}!", "Thank you!", "Thanks! See you soon."],
 };

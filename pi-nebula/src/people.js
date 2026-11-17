@@ -54,7 +54,7 @@ import { STAND, shine } from './player.js';
 import { addMoves } from './moves.js';
 import { makeBubbles } from './bubbles.js';
 import { pickTalk } from './chatter.js';
-import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK } from './lines.js';
+import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK, NUDGES } from './lines.js';
 import { VOICES, CLIPS as VOICE_CLIPS, clipUrl } from './voices.js';
 import { sound } from './sound.js';
 import { missions } from './missions.js';
@@ -73,6 +73,7 @@ export const LIFE = {
   far: { low: 0, medium: 5, high: 7 },        // m from the camera beyond which a person is drawn with the far copy (?far=N)
   stuck: 3,             // s with a way to go and nothing gained: a loud alarm (counted)
   camClear: 0.65,       // m: someone this near the camera (across the floor, and not well below it) is not drawn
+  talkRoom: 1.8,        // m kept clear round two people talking: no other spot taken that near
 };
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
@@ -80,9 +81,9 @@ export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
 // FRIENDLY: how near the player someone says hello (m), and not again for `again` seconds; a voice at most once in
 // `voiceGap` seconds anywhere (so a room full of people does not all speak at once), hellos at most one in `gap`; the
 // smile while the player is near (the crew kit's smile slider: worn at 0.67 as made); a captain's offer: how near (m),
-// how near they step up to the player first (m), how far the player goes before it is left (m), how long before it is
-// made again (s)
-export const FRIENDLY = { hello: 3.3, again: 80, gap: 1.1, voiceGap: 1.6, voice: 0.6, look: 4, smile: 1, offer: 3.6, near: 2.1, leave: 6, offerAgain: 45, answered: 90 };
+// how near they step up to the player first (m), how long they wait for an answer before a friendly word (s), how far
+// the player goes before it is left (m), how long before it is made again (s)
+export const FRIENDLY = { hello: 3.3, again: 80, gap: 2, voiceGap: 1.6, voice: 0.6, look: 4, smile: 1, offer: 3.6, near: 2.1, nudge: 11, leave: 6, offerAgain: 45, answered: 90 };
 // the patches nobody stands on or walks across: a job spot's ring (its middle, m), a parked ship's way in (its patch of
 // floor when down, m wider), under the crane's loads (each patch it works over, m wider: its own margin and more), the
 // big scanner's rails (its box, m wider)
@@ -301,8 +302,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       }
     }
   }
-  // the talking spots: two places each, face to face
-  const talks = {};
+  // the talking spots: two places each, face to face (each place remembered as one: a pair keeps more room round them)
+  const talks = {}, talkPlaces = new WeakSet();
   for (const [name, defs] of Object.entries(TALKS)) {
     talks[name] = [];
     for (const at of defs) {
@@ -311,6 +312,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       for (const sg of [-1, 1]) { const p = walls.snap(r.p.x + fx * sg, r.p.y + 0.35, r.p.z + fz * sg, 0.6); if (okSpot(p)) two.push(p); }
       if (two.length < 2 || two[0].distanceTo(two[1]) < APART * 0.7) { missing.push('talk ' + name + ' (no room)'); continue; }
       const T = { name: name + '.' + talks[name].length, at: two, who: [null, null], bad: 0 };
+      for (const p of two) talkPlaces.add(p);
       talks[name].push(T);
     }
   }
@@ -388,7 +390,20 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function parse(step) { const [kind, rest] = step.do.split(':'); const [group, n] = (rest || '').split('.'); return { kind, group, n: n == null ? null : +n }; }
   // (every spot someone has: a spot, a seat's place to stand and its seat, a talking spot's places)
   const taken = new Map();       // person -> [points]
-  const crowded = (p, P) => { for (const [Q, pts] of taken) { if (Q === P) continue; for (const q of pts) if (Math.hypot(q.x - p.x, q.z - p.z) < LIFE.room) return true; } return false; };
+  // (a place too near one someone has: LIFE.room apart, or LIFE.talkRoom from a talking pair's place (nobody stands or
+  // sits just behind two people talking, and two do not stop to talk where someone stands that near); `T`: a talking
+  // spot being tried, whose own two places do not count)
+  const crowded = (p, P, T = null) => {
+    for (const [Q, pts] of taken) {
+      if (Q === P) continue;
+      for (const q of pts) {
+        if (T && (q === T.at[0] || q === T.at[1])) continue;
+        const r = T || talkPlaces.has(q) ? LIFE.talkRoom : LIFE.room;
+        if (Math.hypot(q.x - p.x, q.z - p.z) < r) return true;
+      }
+    }
+    return false;
+  };
   // (someone free to be asked over: to talk, or to run the scanner; about as P is (both near the player, or both not))
   const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away);
   function claimFor(P, step) {
@@ -403,13 +418,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // standing about near by is asked over to an empty one, and both go; nobody near: no talk this time)
       const all = (talks[group] || []).filter((t) => t.bad < 2);
       const near = (t) => { const q = t.who[0] || t.who[1]; return q && q.pos && (!P.pos || (q.pos.distanceTo(P.pos) < 40 && q.away === P.away)); };
-      const waiting = all.filter((t) => ((t.who[0] && !t.who[1]) || (!t.who[0] && t.who[1])) && near(t) && !crowded(t.at[t.who[0] ? 1 : 0], P));
+      const waiting = all.filter((t) => ((t.who[0] && !t.who[1]) || (!t.who[0] && t.who[1])) && near(t) && !crowded(t.at[t.who[0] ? 1 : 0], P, t));
       if (waiting.length) { const T = pick(waiting); return talkAt(P, T, T.who[0] ? 1 : 0, step); }
       if (!P.pos) return null;
       // (a captain only now and then: they have crew to find)
       const Q = list.filter((q) => free(q, P) && q.pos.distanceTo(P.pos) < 30 && (!q.cap || Math.random() < 0.3)).sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
       if (!Q) return null;
-      const freeT = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P) && !crowded(t.at[1], P) && !crowded(t.at[1], Q))
+      const freeT = all.filter((t) => !t.who[0] && !t.who[1] && !crowded(t.at[0], P, t) && !crowded(t.at[1], P, t) && !crowded(t.at[1], Q, t))
         .sort((a, b) => a.at[0].distanceTo(P.pos) + a.at[0].distanceTo(Q.pos) - b.at[0].distanceTo(P.pos) - b.at[0].distanceTo(Q.pos));
       const T = freeT[0]; if (!T) return null;
       release(Q); const q = talkAt(Q, T, 1, step); begin(Q, q); if (Q.req) { Q.req.dropped = true; Q.req = null; } Q.act.phase = 'go'; Q.act.delay = rnd(0.8, 2.2);
@@ -668,7 +683,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // do (moves.js), never while their hands are at work; a patient lying on the scanner, legs straight)
       // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
       if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
-      P.moves.straight = P.act && P.act.kind === 'scan' && P.pose ? scanLie(P.act) : 0;
+      const legs = P.act && P.act.kind === 'scan' && P.pose && P.legs;
+      P.moves.straight = legs ? legs.k : 0; P.moves.legsTo = legs ? legs.to : null;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
@@ -689,10 +705,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       else if (scanning && (P.act.phase === 'ready' || P.act.phase === 'bye') && scanning.medic && scanning.medic.inScene) look = headAt(scanning.medic, near);
       else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.busy || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
       else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
-      // (anyone else standing or sitting about: now and then a glance at someone going by, or round the room)
-      else if (!P.walking && !P.convo && far < 12 && !(P.act && P.act.clip && P.act.clip !== STAND)) look = glance(P, near);
+      // (anyone else standing or sitting about, or at work: now and then a glance at someone going by, or round the room
+      // (someone at work less often))
+      else if (!P.walking && !P.convo && far < 20) look = glance(P, near, !!(P.act && P.act.clip && P.act.clip !== STAND));
       if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
-      P.moves.look = look && far < 14 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
+      P.moves.look = look && far < 20 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
       // (a little more smile while the player is near, or just after a hello)
       if (P.smile) {
         const want = (player && player.pos.distanceTo(P.pos) < FRIENDLY.look) || (P.smileUntil && clock < P.smileUntil) ? FRIENDLY.smile : P.smile.base;
@@ -707,10 +724,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
 
   // (standing or sitting about with nothing else to look at: now and then, for a moment, a glance at someone going by
   // in front of them (more often than not, when there is someone), or a look a little to one side; then back)
-  function glance(P, out) {
+  function glance(P, out, working = false) {
     const G = P.glance || (P.glance = { next: clock + rnd(1, 6), until: 0, who: null, at: new THREE.Vector3() });
     if (clock > G.next) {
-      G.until = clock + rnd(1.2, 2.6); G.next = G.until + rnd(3, 8); G.who = null;
+      G.until = clock + rnd(1.2, 2.6); G.next = G.until + (working ? rnd(6, 12) : rnd(3, 7)); G.who = null;
       let best = null, bd = 6;
       for (const Q of list) {
         if (Q === P || Q.away || !Q.walking || !Q.inScene) continue;
@@ -723,8 +740,6 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (clock > G.until) return null;
     return G.who ? (G.who.away || !G.who.inScene ? null : headAt(G.who, out)) : out.copy(G.at);
   }
-  // (how far a patient is laid down on the scanner's bed: 0 sitting on its edge, 1 flat on it)
-  const scanLie = (a) => (a.phase === 'lying' ? 1 : a.phase === 'lie' ? ease(Math.min(1, a.t / 1.6)) : a.phase === 'unlie' ? 1 - ease(Math.min(1, a.t / 1.6)) : 0);
   // (someone standing still in front of a person at their post, within talking distance: a captain's visitor)
   function visitor(P) {
     let best = null, bd = 2.6;
@@ -828,7 +843,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const convos = new Set();
   const READ = (w) => Math.min(8, 1.5 + w.length * 0.055);
   function startTalk(A, B, sitting) {
-    const T = pickTalk(A, B, { sitting, player: (crew() || {}).name || null, now: clock });
+    // (anyone else within earshot is never the one talked about)
+    const nearby = list.filter((X) => X !== A && X !== B && !X.away && !X.hidden && (X.pos.distanceTo(A.pos) < 6 || X.pos.distanceTo(B.pos) < 6));
+    const T = pickTalk(A, B, { sitting, player: (crew() || {}).name || null, now: clock, nearby });
     if (!T) { if (A.act) A.act.again = (A.act.both || 0) + rnd(8, 14); return null; }
     const C = { A, B, lines: T.lines, id: T.id, i: -1, t: 0, gap: rnd(0.3, 0.8), sitting, speaking: null };
     A.convo = B.convo = C; convos.add(C); counts.talks++;
@@ -862,7 +879,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
 
   // ── FRIENDLY: hellos as the player passes, a captain's offer ─────────────────────────────────────────────────
-  let lastHello = -99, lastVoice = -99;
+  let lastHello = -99, lastVoice = -99, lastWords = '';
   const _ap = new THREE.Vector3();
   const headAt = (P, out) => { const H = P.c.bones.Head; if (H && P.inScene) return H.getWorldPosition(out); return out.set(P.pos.x, P.pos.y + 1.6, P.pos.z); };
   const _h = new THREE.Vector3();
@@ -883,11 +900,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     let best = null, bd = FRIENDLY.hello;
     for (const P of list) {
       if (P.away || !P.shown || P.cap || P.hidden || (P.greeted && clock - P.greeted < FRIENDLY.again)) continue;
-      if (P.convo && P.convo.speaking === P) continue;
       // (at the scanner, patient or medic: busy with each other)
       if (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic')) continue;
       const dx = pl.pos.x - P.pos.x, dz = pl.pos.z - P.pos.z, d = Math.hypot(dx, dz);
       if (d > bd || Math.abs(pl.pos.y - P.pos.y) > 1.2) continue;
+      // (two people talking keep to their talk (and look at each other) unless the player comes right up to them)
+      if ((P.convo || (P.act && P.act.kind === 'talk' && P.act.phase === 'do')) && d > 2.4) continue;
+      if (P.convo && P.convo.speaking === P) continue;
       // (the player in front of them, more or less: someone walking away from the player says nothing)
       if ((dx * Math.sin(P.heading) + dz * Math.cos(P.heading)) / (d || 1) < -0.2) continue;
       best = P; bd = d;
@@ -899,10 +918,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const first = !P.greeted;
     P.greeted = clock; P.smileUntil = clock + 4; lastHello = clock; counts.hellos++;
     const V = P.voice && VOICES[P.voice];
+    // (never the same words as the hello just before: two in a row read as a chorus)
     let words = pick(first ? HELLOS : AGAIN);
+    for (let i = 0; i < 4 && words.replace(/\W/g, '') === lastWords; i++) words = pick(first ? HELLOS : AGAIN);
     // (the first hello that can be heard is spoken, in their own voice, its words in the bubble; after that, bubbles)
     if (!P.voiced && V) { const id = pick(V.hellos); if (speak(P, id)) { words = VOICE_CLIPS[id].words; P.voiced = true; } }
-    bubbles.say(P, words, { kind: 'hello', secs: 2.4 });
+    bubbles.say(P, words, { kind: 'hello', secs: 2.4 }); lastWords = words.replace(/\W/g, '');
   }
   // A CAPTAIN: near the player, in view, the offer (who, what for, and the question); the answer; left a while after
   function captain(P, dt, pl) {
@@ -931,9 +952,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (K.state === 'offer') {
       const d = pl ? pl.pos.distanceTo(P.pos) : Infinity;
-      if (!pl || d > FRIENDLY.leave || K.t > 25 || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; }
+      if (!pl || d > FRIENDLY.leave || K.t > 25 || P.away) { endOffer(P); K.cool = FRIENDLY.offerAgain; return; }
       // (the question hidden while a job's prompt is up: one prompt at a time)
-      else bubbles.hideAsk(!!(jobs && jobs.near));
+      bubbles.hideAsk(!!(jobs && jobs.near));
+      // (no answer a while after the offer: a friendly word, once)
+      if (!K.nudged && K.t > FRIENDLY.nudge && !(jobs && jobs.near)) { K.nudged = true; const w = pick(NUDGES); bubbles.say(P, w, { kind: 'captain', secs: 3.2 }); P.talkUntil = clock + 1.4; }
       return;
     }
     if (K.state === 'answered') { if (K.t > 3.5) { K.state = 'idle'; K.busy = false; } return; }
@@ -954,7 +977,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   function offerNow(P) {
     const K = P.cap, st = missions.state(K.id);
-    K.state = 'offer'; K.t = 0;
+    K.state = 'offer'; K.t = 0; K.nudged = false;
     if (st === 'interested') { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
     // question at the bottom of the screen)
@@ -988,6 +1011,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // up, and out the way they came. Their body is turned and moved about the hips (where a person turns lying down),
   // the clips going from walking to sitting to standing straight (lying, it is the calm standing pose, flat on the bed).
   const HIP = { stand: 0.95, sit: 0.5 };
+  // (seconds for the swing round onto the bed, and for lying back)
+  const LIE = { swing: 1.3, back: 1.2 };
   const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
   function bodyQ(out, heading, lie) {
     // (lie 0: standing, turned to `heading`; lie 1: on their back along the bed, head toward the wall, face up)
@@ -1043,6 +1068,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (a.phase === 'sit' || a.phase === 'unsit') {
       // (turned to face out across the bed's side, then down onto its edge; or up off it again)
+      P.legs = null;
       const k = ease(Math.min(1, a.t / 1.1)), u = a.phase === 'sit' ? k : 1 - k;
       const stand = SCAN.path[SCAN.path.length - 1];
       const hips = _w.set(stand.x, stand.y + HIP.stand, stand.z).lerp(_v.copy(SCAN.sit).setY(SCAN.sit.y + 0.08), u);
@@ -1054,12 +1080,28 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (a.phase === 'lie' || a.phase === 'unlie') {
-      // (lying back along the bed: turned about the hips, from sitting on its edge to flat on it, head to the wall)
-      const k = ease(Math.min(1, a.t / 1.6)), u = a.phase === 'lie' ? k : 1 - k;
-      const hips = _w.copy(SCAN.sit).setY(SCAN.top + 0.08).lerp(_v.copy(SCAN.hips).setY(SCAN.top + 0.11), u);
-      setPose(P, hips, bodyQ(_q1, sitH, u), HIP.sit + (HIP.stand - HIP.sit) * u);
-      play(P, u > 0.5 ? STAND : CLIPS.sit, { fade: 0.7 });
-      if (a.t > 1.6) { a.t = 0; a.phase = a.phase === 'lie' ? 'lying' : 'unsit'; if (a.phase === 'lying') a.rounds = Math.round(rnd(SCAN_BED.rounds[0], SCAN_BED.rounds[1])); }
+      // (onto the bed and down in two moves, as someone gets onto a bed: first a swing round to sit along it, facing
+      // its foot, the legs lifted onto it and straightened, the hips slid in to its middle; then down onto the back,
+      // turned about the hips, head to the wall, the legs staying along the bed. Getting up: the same, backwards)
+      const T = LIE.swing + LIE.back, t = a.phase === 'lie' ? Math.min(a.t, T) : T - Math.min(a.t, T);
+      const alongH = Math.atan2(SCAN.along.x, SCAN.along.z);
+      const L = P.legs || (P.legs = { k: 0, to: new THREE.Vector3() });
+      if (t < LIE.swing) {
+        const k = ease(t / LIE.swing), h = wrap(sitH + wrap(alongH - sitH) * k);
+        const hips = _w.copy(SCAN.sit).setY(SCAN.top + 0.08).lerp(_v.copy(SCAN.hips).setY(SCAN.top + 0.08), k);
+        setPose(P, hips, bodyQ(_q1, h, 0), HIP.sit);
+        play(P, CLIPS.sit, { fade: 0.5 });
+        // (the legs straightened as they come round, done before they are over the bed)
+        L.k = ease(Math.max(0, Math.min(1, (k - 0.15) / 0.55))); L.to.set(Math.sin(h), 0, Math.cos(h));
+      } else {
+        const k = ease((t - LIE.swing) / LIE.back);
+        play(P, k > 0.25 ? STAND : CLIPS.sit, { fade: 0.5 });
+        // (the hips' height in the clips as they are blended this moment, so the hips stay where they are)
+        const sw = P.c.person.actions[STAND] ? P.c.person.actions[STAND].getEffectiveWeight() : (k > 0.25 ? 1 : 0);
+        setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.08 + 0.03 * k), bodyQ(_q1, alongH, k), HIP.sit + (HIP.stand - HIP.sit) * Math.max(0, Math.min(1, sw)));
+        L.k = 1; L.to.copy(SCAN.along);
+      }
+      if (a.t > T) { a.t = 0; a.phase = a.phase === 'lie' ? 'lying' : 'unsit'; if (a.phase === 'lying') a.rounds = Math.round(rnd(SCAN_BED.rounds[0], SCAN_BED.rounds[1])); else P.legs = null; }
       return;
     }
     if (a.phase === 'lying') {
@@ -1069,6 +1111,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       P.scripted = true;
       setPose(P, _w.copy(SCAN.hips).setY(SCAN.top + 0.11), bodyQ(_q1, sitH, 1), HIP.stand);
       play(P, STAND, { fade: 0.4 });
+      const L = P.legs || (P.legs = { k: 1, to: new THREE.Vector3() }); L.k = 1; L.to.copy(SCAN.along);
       const S = SCAN.busy;
       if (a.placed && !S.started) S.started = clock;
       if (!SCAN.use && !S.over && (S.started || a.t > 9)) SCAN.use = { from: clock, end: null };
@@ -1099,8 +1142,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       else if (a.starting && a.work <= 0) { a.starting = false; S.started = clock; }
     }
     if (ph === 'lying' && SCAN.use && !S.over) {
-      if (a.work < -rnd(5, 9)) a.work = rnd(1.4, 2.4);
-      if (!said.during && clock - SCAN.use.from > SCAN.round * 0.8) { said.during = clock; scanSay(P, 'during'); }
+      if (a.work < -rnd(8, 14)) a.work = rnd(1.2, 2);
+      // (a word now and then while it goes: not the same twice)
+      if (!said.during && clock - SCAN.use.from > SCAN.round * 0.6) { said.during = clock; scanSay(P, 'during'); }
+      else if (said.during && !said.late && SCAN.use.end == null && clock - SCAN.use.from > SCAN.round * 1.5) { said.late = clock; scanSay(P, 'late'); }
     }
     if (S.over && !said.done) { said.done = clock; a.work = Math.min(a.work, 0); scanSay(P, 'done'); }
     if (ph === 'bye' && !said.thanks) { said.thanks = clock; scanSay(pt, 'thanks'); }
@@ -1108,12 +1153,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.t > 240) next(P);       // (a scan that never came: on with the day)
   }
   // (a word at the scanner, in a bubble: SCAN_TALK; the medic's hands move as they say it)
-  function scanSay(X, kind) {
+  function scanSay(X, kind, not = null) {
     const S = SCAN.busy, first = (Y) => (Y && Y.name ? Y.name.split(' ')[0] : '');
-    const words = pick(SCAN_TALK[kind]).replace('{patient}', first(S && S.patient) || 'there').replace('{medic}', first(S && S.medic) || 'Doc');
+    const L = SCAN_TALK[kind].filter((w) => w !== not);
+    const line = pick(L.length ? L : SCAN_TALK[kind]);
+    const words = line.replace('{patient}', first(S && S.patient) || 'there').replace('{medic}', first(S && S.medic) || 'Doc');
     bubbles.say(X, words, { kind: 'talk' });
     if (S && X === S.medic) X.talkUntil = clock + Math.min(kind === 'still' ? 1.1 : 2.4, READ(words));
     counts.scanWords = (counts.scanWords || 0) + 1;
+    return line;
   }
   function scanDone(P) {
     const S = SCAN && SCAN.busy; if (!S) { next(P); return; }
@@ -1126,7 +1174,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (the patient or the medic gone off before it was done: the patient off the bed at once, where nobody can see
     // (people.js never leaves anyone lying), the scanner parked)
     const S = SCAN.busy; SCAN.busy = null; SCAN.use = null;
-    const pt = S.patient;
+    const pt = S.patient; if (pt) pt.legs = null;
     if (pt && pt !== P && pt.act && pt.act.kind === 'scan') { pt.pose = null; pt.scripted = false; if (!['go', 'ready', 'turn', 'bye'].includes(pt.act.phase)) pt.pos.copy(SCAN.path[0]); pt.act = { kind: 'wait', until: rnd(1, 3), t: 0 }; }
     if (pt === P) { P.pose = null; P.scripted = false; if (P.act && P.act.kind === 'scan' && !['go', 'ready', 'turn', 'bye'].includes(P.act.phase)) P.pos.copy(SCAN.path[0]); }
     const md = S.medic; if (md && md !== P && md.act && md.act.kind === 'scanMedic') md.act = { kind: 'wait', until: rnd(1, 3), t: 0 };
