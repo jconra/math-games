@@ -126,12 +126,16 @@ test('rushed never touches the harder levels, a quick child at a fair pace, or M
     const r = E.answer(crew, medical, q, q.order.coins.findIndex((c) => c.good), { ms: 900 });
     assert.equal(r.pay, q.worth.pay, 'a harder level, answered fast: the full pay');
   }
+  // the dock's squares tapped as fast as fingers go: play, never rushed
+  const tapper = crewOf();
+  setLevelAt(tapper, 'dock', 'brace'); tapper.levels.places.dock.keep = true;
+  for (let k = 0; k < 8; k++) { const q = E.deal(tapper, dock, { rand: seeded(80 + k) }); assert.equal(E.answer(tapper, dock, q, 0, { ms: 700 }).pay, q.worth.pay, 'tapping is play'); }
   // a quick but fair child on the easiest level: 4 to 5 seconds a card
   const kid = crewOf();
   setLevelAt(kid, 'galley', 'kAll'); kid.levels.places.galley.keep = true;
   for (let k = 0; k < 10; k++) {
     const q = E.deal(kid, galley, { rand: seeded(60 + k) });
-    const r = E.answer(kid, galley, q, q.order.coins.findIndex((c) => c.good), { ms: 0.45 * q.worth.secs * 1000 });
+    const r = E.answer(kid, galley, q, q.order.coins.findIndex((c) => c.good), { ms: 0.36 * q.worth.secs * 1000 });
     assert.equal(r.pay, q.worth.pay, 'quick and fair: the full pay');
   }
   // Mathball's balls: their level's own amount, never rushed

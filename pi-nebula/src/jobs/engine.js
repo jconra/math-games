@@ -77,7 +77,7 @@ export const PAY = {
   half: 0.5,         // a right pick after a miss: this share of the card's pay
   // RUSHED (rushOf): only on the easiest levels, and only a run of very quick answers, never one
   easy: 20,          // the easiest levels: at this point of the school guide or under (up to second grade)
-  quick: [0.45, 0.2],   // a first pick in under this share of the card's fair time starts to count as rushed; at the second, fully
+  quick: [0.35, 0.15],  // a first pick in under this share of the card's fair time starts to count as rushed; at the second, fully
   keep: 0.6,         // the run: how much of it each new first pick keeps (so it falls back as soon as the pace is fair)
   run: [1.7, 2.3],   // the run at which the pay starts to come down (the third very quick answer in a row), and reaches...
   floor: 50,         // ...this (about the fifth)
@@ -202,7 +202,8 @@ export function workOf(o, L = null) {
 // intentionally gaming the system) then they should only be making 50 credits"). Kind to a quick child who is right:
 // only on the easiest levels (PAY.easy), only a RUN of very quick first picks, never one. Each first pick there adds how
 // rushed it was (0 at PAY.quick[0] of the card's fair time or slower, 1 at PAY.quick[1] or quicker) to a run that keeps
-// PAY.keep of itself at each pick, so a fair pace lets it fall straight back. Past PAY.run[0] the card's pay comes down,
+// PAY.keep of itself at each pick, so a fair pace lets it fall straight back (a card answered by doing, the dock's
+// squares tapped, never adds to it: that is play). Past PAY.run[0] the card's pay comes down,
 // evenly, to PAY.floor at PAY.run[1]: full pay for the first two very quick answers in a row, about half for the third,
 // the floor by about the fifth. Help used is never rushed; Mathball (no time given) never is.
 // The run is the crew member's own (crew.pace.run, saved with them), across every job.
@@ -220,7 +221,8 @@ function paceOf(crew) {
 function hearPace(crew, q, worth, ms, helped) {
   const P = paceOf(crew), L = q.level, T = worth && worth.secs;
   let k = 0;
-  if (T && Number.isFinite(ms) && ms > 0 && !helped && L && (L.grade ?? 0) <= PAY.easy) {
+  // (a card answered by doing, the dock's squares tapped, is play however quick: never rushed)
+  if (T && Number.isFinite(ms) && ms > 0 && !helped && !q.order.play && L && (L.grade ?? 0) <= PAY.easy) {
     const t = ms / 1000, [q0, q1] = PAY.quick;
     k = Math.max(0, Math.min(1, (q0 * T - t) / ((q0 - q1) * T)));
   }
