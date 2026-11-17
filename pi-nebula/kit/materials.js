@@ -189,7 +189,7 @@ export const BAKED = new Set(['solid', 'floor', 'decal']);
 // THE SHIELD across the hangar's open door: a sheet of faint blue light that holds the air in. Added on top of what is
 // behind it (space shows through), a fine hexagon mesh, slow ripples running across it, brighter toward its edges
 // (where its emitters are). Its pattern follows the world (metres), so any sheet of it matches. One draw.
-function shieldMaterial() {
+export function shieldMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: { uTime: U.time, uColor: { value: new THREE.Color(0.18, 0.55, 1.0) } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
