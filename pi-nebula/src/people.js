@@ -346,11 +346,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // should be normal for a medic and a person to go in there and use it though (or just be there when it loads)")
   const scanPc = pieces.find((x) => x.piece === 'bigscanner');
   const scanD = scanPc ? (W.built.glides || []).find((D) => D.piece === 'bigscanner') || (W.built.glides || [])[0] || null : null;
-  const SCAN = scanPc && groups.scanApproach && groups.scanApproach[0] && groups.scanScreen && groups.scanScreen[0] ? (() => {
+  // (the first of each group's places the station has room for: life.js lists a second place to fall back on; the
+  // walk onto the bed starts from the place the patient waits at)
+  const scanA = (groups.scanApproach || []).find(Boolean), scanS = (groups.scanScreen || []).find(Boolean);
+  const SCAN = scanPc && scanA && scanS ? (() => {
     const M = scanPc.M, q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(M));
     const at = (x, z, y = 0) => new THREE.Vector3(x, y, z).applyMatrix4(M);
     return {
-      M, q, busy: null, path: SCAN_BED.path.map(([x, z]) => at(x, z)), sit: at(SCAN_BED.sit[0], SCAN_BED.sit[1], SCAN_BED.top),
+      M, q, busy: null, path: [scanA.pos.clone(), ...SCAN_BED.path.slice(1).map(([x, z]) => at(x, z))], sit: at(SCAN_BED.sit[0], SCAN_BED.sit[1], SCAN_BED.top),
       hips: at(SCAN_BED.hips[0], SCAN_BED.hips[1], SCAN_BED.top), top: SCAN_BED.top, panel: at(SCAN_BED.panel[0], SCAN_BED.panel[2], SCAN_BED.panel[1]),
       // (the scanner's own ways in the station: across its bed (its +x), out along the bed (its +z))
       across: new THREE.Vector3(1, 0, 0).applyQuaternion(q), along: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
@@ -432,8 +435,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (kind === 'scan') {
       // (a patient's turn in the big scanner: only one at a time, and only with a medic to run it, who is asked over)
-      if (!SCAN || SCAN.busy || !groups.scanApproach[0] || !groups.scanScreen[0]) return null;
-      const A = groups.scanApproach[0], S = groups.scanScreen[0];
+      if (!SCAN || SCAN.busy) return null;
+      const A = scanA, S = scanS;
       if (A.who || S.who) return null;
       const Q = list.filter((q) => free(q, P) && /medic/.test(q.id) && q.pos.distanceTo(A.pos) < 60).sort((a, b) => a.pos.distanceTo(A.pos) - b.pos.distanceTo(A.pos))[0];
       if (!Q) return null;
