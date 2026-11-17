@@ -323,7 +323,9 @@ export class Plan {
     if (this.show.space) { g.fillStyle = COL.bands[3][1]; for (const p of space.section.clear) { this.poly(p, ms); g.fill(); } }
     // the ground, the deck, head height and the ceiling
     const hl = (h, col, dash, t) => { g.strokeStyle = col; g.setLineDash(dash); g.lineWidth = 1.2; g.beginPath(); g.moveTo(S.x, this.sY(h)); g.lineTo(S.x + S.w, this.sY(h)); g.stroke(); g.setLineDash([]); g.fillStyle = col; g.font = `500 10.5px ${FONT}`; g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText(t, S.x + S.w - 6, this.sY(h) - 1); };
-    hl(-deck, '#5a6b7e', [], `ground (the deck ${deck} m up)`); hl(0, COL.floorLine, [], 'deck'); hl(HEAD, COL.headLine, [5, 4], 'head height 2.0'); hl(CEIL, COL.ceilLine, [2, 3], 'ceiling 2.5');
+    // (the ground: under the deck by the space's deck, and by as much more as the ship stands higher on its legs)
+    const up = +(deck + (D.ship?.lab?.stand || 0)).toFixed(2);
+    hl(-up, '#5a6b7e', [], `ground (the deck ${up} m up)`); hl(0, COL.floorLine, [], 'deck'); hl(HEAD, COL.headLine, [5, 4], 'head height 2.0'); hl(CEIL, COL.ceilLine, [2, 3], 'ceiling 2.5');
     if (bp) {
       const bad = this.show.checks && result ? result.marks : [];
       // items from the side (all of them, see-through), then the rooms' boxes

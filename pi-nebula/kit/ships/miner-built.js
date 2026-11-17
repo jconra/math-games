@@ -47,7 +47,13 @@ import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD,
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
 const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-export const DECK = DECK0;   // the cabin's deck, metres off the ground
+export const DECK = DECK0;   // the cabin's deck, metres off the hull's own ground line
+// THE SHIP STANDS 12 CM HIGHER ON LONGER LEGS (the game's maker, MR-4: "I feel like raising the ship up 12 cm on longer
+// legs makes the most sense"; a man walking onto the lift had his head in the belly beside it): every piece of the
+// Miner is placed STAND higher than the station file or a lab's layout puts it (the catalog's `raise`, kit/layout.js),
+// its legs reach STAND further down to the floor and its lift comes down STAND further. Its deck is DECK + STAND (1.94 m)
+// off the floor; the hull's own frame (DECK, the hull file's numbers) is as it was.
+export const STAND = 0.12;
 const dk = C.deckOf(DECK), { bytes, at, tnorm } = C, mesh = (d) => C.decodeMesh(d, Q);
 const polyTo = (acc, pts, n, surf, mat = 'solid') => C.polyTo(acc, pts, n, surf, mat, dk);
 const boxAt = (acc, c, axes, halves, surf, skip = []) => C.boxAt(acc, c, axes, halves, surf, skip, dk);
@@ -808,7 +814,7 @@ export function podJets() { const out = []; for (const P of PODS) for (const sz 
 // the platform up into the airlock.
 export const LIFT = (() => {
   const [x0, x1] = HATCH.x, [z0, z1] = HATCH.z, belly = 1.37, top = DECK - 0.12;
-  return { x: [x0, x1], z: [z0, z1], zc: (z0 + z1) / 2, hx: (x1 - x0) / 2 - 0.06, hz: (z1 - z0) / 2 - 0.06, belly, top, drop: belly, leaf: 0.04, rail: 0.9, rod: 1.5, column: { h: 1.55, t: 0.1 }, airlock: { x: (x1 - x0) / 2 + 0.1, z: [z0 - 0.25, z1 + 0.25], h: 2.1 }, speed: 0.35, hatchSpeed: 0.8 };
+  return { x: [x0, x1], z: [z0, z1], zc: (z0 + z1) / 2, hx: (x1 - x0) / 2 - 0.06, hz: (z1 - z0) / 2 - 0.06, belly, top, drop: belly + STAND, leaf: 0.04, rail: 0.9, rod: 1.5, column: { h: 1.55, t: 0.1 }, airlock: { x: (x1 - x0) / 2 + 0.1, z: [z0 - 0.25, z1 + 0.25], h: 2.1 }, speed: 0.35, hatchSpeed: 0.8 };
 })();
 // THE LIFT WITH THE CABIN INSIDE ('belly, cabin', kit/ships/cabin-built.js builds the rooms from a blueprint): the
 // cabin's own airlock stands over the hatch, its deck cut round the hole, so the stand-in airlock goes and the lift is a
@@ -816,17 +822,18 @@ export const LIFT = (() => {
 //   - the platform rides between the airlock's floor (shut: its top flush with the deck, the middle of the airlock's
 //     floor) and the ground; the hatch's doors go (up, the platform is the floor);
 //   - the platform is a thin deck (CLIFT.thick, 10 cm): down, its tread is a small step off the hangar floor, low
-//     enough that a person steps onto it from beside it under the side blocks (the belly there is 1.68 m up);
+//     enough that a person steps onto it from beside it under the side blocks (the belly there is 1.68 m over the
+//     hull's ground line, 1.80 m over the floor with the ship on its longer legs: STAND);
 //   - his picture's tower at its back and the rods at its front corners TELESCOPE, each in CLIFT.n nested sections
-//     CLIFT.sec tall, the top one fixed in the shaft: down, they stand from the platform up into the shaft; up, they are
-//     folded down through a slot in the platform into the shaft under it, so nothing stands in the airlock and people
-//     walk over it fore and aft;
+//     CLIFT.sec tall (each overlapping the next by 1.6 cm, all the way down), the top one fixed in the shaft: down,
+//     they stand from the platform up into the shaft; up, they are folded down through a slot in the platform into
+//     the shaft under it, so nothing stands in the airlock and people walk over it fore and aft;
 //   - railings stand along the back of each side; the front of each side (from CLIFT.gap forward) is left open to step
 //     on and off by;
 //   - the shaft's sides start at the hull's own underside just outside the hatch (worked out from the hull's faces),
 //     so nothing hangs below the belly beside it (the stand-in shaft's walls all reach down to the keel's 1.37 m).
 // One kit door, 'lift' (0 up, 1 down), heavy (it starts and lands gently), CLIFT.speed of its way a second.
-export const CLIFT = { drop: +(DECK - 0.1).toFixed(3), thick: 0.1, sec: 0.3, n: 6, gap: -0.6, speed: 0.2, rail: 0.9 };
+export const CLIFT = { drop: +(DECK + STAND - 0.1).toFixed(3), thick: 0.1, sec: 0.32, n: 6, gap: -0.6, speed: 0.2, rail: 0.9 };
 function cabinLift(p) {
   const L = LIFT, K = CLIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, hx = L.hx, hz = L.hz, zc = L.zc;
   // the shaft: its four walls from the hull's underside just outside each edge (sampled along it) up to the deck
@@ -966,12 +973,13 @@ function mbLift(p, variant) {
 // and the Explorer's 8k legs are too thick to fold under this ship's slim belly; so each leg is kept plain, his
 // picture's: a square strut, a knee, a piston and a broad foot. Folding (door 'gear', 1 up), it swings back about its
 // axle (across the ship) to lie along its pod under the lower canisters, its foot turning flat; the pod's bottom
-// doors (door 'doors', 1 shut) close under it (built-common.js bayDoors and bayPod, as the Explorer's aft bays).
+// doors (door 'doors', 1 shut) close under it (built-common.js bayDoors and bayPod, as the Explorer's aft bays). Its
+// piston is STAND longer than the hull's ground line asks, so the foot stands on the floor with the ship raised.
 export const GEAR = { x: 2.2, z: -4.15, axle: 1.24, fold: PI / 2, foot: -PI / 2, speed: 0.42, doorSpeed: 0.9 };
 const BAY = { x: [1.82, 2.58], z: [-5.95, -3.85], belly: [0.96, 0.96], wallTop: 1.5, ceil: 1.5, step: 2.58, roof: 1.5, axle: [GEAR.x, GEAR.axle] };
 export const WELLS = { port: { bay: BAY }, starboard: { bay: { ...BAY, mirror: true } } };
 function legLeaves(p, side) {
-  const s = side === 'starboard' ? -1 : 1, x = s * GEAR.x, z = GEAR.z, ya = GEAR.axle, yk = 0.62, yf = 0.13;
+  const s = side === 'starboard' ? -1 : 1, x = s * GEAR.x, z = GEAR.z, ya = GEAR.axle, yk = 0.62, yf = 0.13 - STAND, g0 = -STAND;
   const hinge = { at: dk(V3(x, ya, z)).toArray(), axis: [1, 0, 0], angle: GEAR.fold }, ankle = { at: dk(V3(x, yf, z)).toArray(), axis: [1, 0, 0], angle: GEAR.foot };
   p.leaf('mb:leg strut:' + side, (lp) => {
     const a = new Acc();
@@ -985,9 +993,9 @@ function legLeaves(p, side) {
   p.leaf('mb:leg foot:' + side, (lp) => {
     const a = new Acc();
     C.boxAt(a, V3(x, yf, z), AX, [0.13, 0.07, 0.13], PAL.metal, [], dk);
-    C.boxAt(a, V3(x, 0.05, z), AX, [0.35, 0.05, 0.42], PAL.dark, [], dk);
-    C.boxAt(a, V3(x, 0.115, z), AX, [0.22, 0.03, 0.28], PAL.yellow, ['v-'], dk);
-    a.poly([V3(x - 0.35, 0.0, z - 0.42), V3(x + 0.35, 0.0, z - 0.42), V3(x + 0.35, 0.0, z + 0.42), V3(x - 0.35, 0.0, z + 0.42)].map(dk).reverse(), V3(0, -1, 0), PAL.rubber, 'solid', 99);
+    C.boxAt(a, V3(x, g0 + 0.05, z), AX, [0.35, 0.05, 0.42], PAL.dark, [], dk);
+    C.boxAt(a, V3(x, g0 + 0.115, z), AX, [0.22, 0.03, 0.28], PAL.yellow, ['v-'], dk);
+    a.poly([V3(x - 0.35, g0, z - 0.42), V3(x + 0.35, g0, z - 0.42), V3(x + 0.35, g0, z + 0.42), V3(x - 0.35, g0, z + 0.42)].map(dk).reverse(), V3(0, -1, 0), PAL.rubber, 'solid', 99);
     a.flush(lp);
   }, { door: 'gear', hinge: [hinge, ankle] });
   p.door('gear', [0, -DECK, 0], 0, GEAR.speed);
@@ -1003,18 +1011,24 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 // (the canopy's sill is high on this ship: a pilot sitting on the cabin's deck would not see over it), the seats'
 // middles at SEATS_Z; no overheads (the glass is the roof), no engineer, handholds or locker. The tub under the glass
 // closes the cockpit off (no sky through a gap), the bulkhead behind with the cabin's door (shut) and steps down to it.
-export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
+// The side consoles are 0.75 m long (the family's are 1 m): each ends at the flight deck's edge, not 26 cm past it
+// over the cabin's deck, where the port one stood in the ore station's screen and desk and the starboard one hung over
+// the step (the game's maker, MR-8: "that screen is going into another piece of equipment and that needs to be fixed").
+// 0.75 m is the shortest that keeps a side console's whole face (its screen, switches, knobs and its screen pod).
+export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85 }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'; the blueprint "Ore station on the flight deck"): the cabin's
 // own wall at CABIN_COCKPIT.wall (the mess's forward wall, its doorway in it) closes the cockpit at the back. The flight
 // deck (the seats, pedestal, side consoles and dash, as the family has them) starts at `deck`; behind it, on the cabin's
 // deck, the ORE STATION against the port side (the cockpit family's engineer's desk, its screens toward the middle, the
-// claw arm in view through the side glass over it) and a step up to the flight deck on the starboard side. The tub is cut
+// claw arm in view through the side glass over it; no seat: the game's maker, MR-8, "the co-pilot would easily be able to
+// operate the drill. The third person is just there as backup ... they don't need a seat in the aisle"; it ends 3 cm short
+// of the pilot's side console) and a step up to the flight deck on the starboard side. The tub is cut
 // at the flight deck's edge (its riser the step up); behind that the cockpit's sides come down to the cabin's deck
 // (`side`: x of its side walls, the cabin's room line), a floor under them, and over the cabin's wall a panel up to the
 // glass's back edge (`lid`: how far behind the glass it starts, so nothing of the empty hull shows through it).
-export const CABIN_COCKPIT = { wall: 3.0, deck: 3.75, side: 1.0, step: { x: [-1.0, -0.75], z: [3.25, 3.75], h: 0.31 }, ore: { z: [3.0, 3.75], d: 0.5, w: 0.75 }, lid: 0.02 };
+export const CABIN_COCKPIT = { wall: 3.0, deck: 3.75, side: 1.0, step: { x: [-1.0, -0.75], z: [3.25, 3.75], h: 0.31 }, ore: { z: [3.0, 3.72], d: 0.5, w: 0.72 }, lid: 0.02 };
 function cabinCockpit(p) {
   const Cp = COCKPIT, K = CABIN_COCKPIT, acc = new Acc(), fy = DECK + Cp.floor, out = canopyPanes().outline;
   // the tub ahead of the flight deck's edge (as built-common.js cockpitTub, each polygon clipped at the edge)
@@ -1223,8 +1237,12 @@ export function canisterStep(built, on) { for (const D of built.doors.filter((q)
 // ── IN THE SHIP LAB (labs/ships/main.js) ────────────────────────────────────────────────────────────────────────────
 export const LAB = {
   controls: ['arms', 'thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
+  // (the ship stands STAND higher than its hull's ground line: the cabin inside is built that much higher too, in the
+  // lab and when it is boarded in the game, src/boarding.js)
+  stand: STAND,
   dirt: { None: 0, Some: 0.85, Lots: 1.25 },
-  spots: { Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.05, 3.75], look: [0, 3.5, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } },
+  // (the cameras where they were on the ship, which now stands STAND higher)
+  spots: Object.fromEntries(Object.entries({ Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.05, 3.75], look: [0, 3.5, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } }).map(([k, v]) => [k, { at: [v.at[0], v.at[1] + STAND, v.at[2]], look: [v.look[0], v.look[1] + STAND, v.look[2]] }])),
   doorTip: 'Lower the lift\'s platform to the ground, or bring it back up (with the rooms inside, up to the airlock\'s floor)',
   // (the cabin built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with it (the lift
   // that people ride, its platform the airlock's floor when up; the cockpit open to the cabin behind it), and the
@@ -1297,18 +1315,19 @@ export const LAB = {
 };
 
 // ── the catalog ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// (each piece `raise`d by STAND: wherever the Miner is placed, it stands on its longer legs)
 const GR = 'Ships';
 export const SHIP_MINER_BUILT = {
-  mbHull: { name: 'Miner (built): hull', group: GR, at: 'free', foot: [7, 5, 18], variants: ['hull'], build: mbHull },
-  mbMounts: { name: 'Miner (built): canister mounts', group: GR, at: 'free', foot: [6, 3, 5], variants: ['both sides'], build: mbMounts },
-  mbCanopy: { name: 'Miner (built): canopy', group: GR, at: 'free', foot: [3, 2, 3.5], variants: ['glass'], build: mbCanopy },
-  mbMarks: { name: 'Miner (built): lights and marks', group: GR, at: 'free', foot: [7, 5, 18], variants: ['marks'], build: (p) => mbMarks(p) },
-  mbCanister: { name: 'Miner (built): ore canister', group: GR, at: 'free', foot: [1, 1, 2.2], variants: CANISTERS.spots.map((q) => q.name), build: mbCanister },
-  mbArm: { name: 'Miner (built): mining arm', group: GR, at: 'free', foot: [1.2, 3, 7], variants: ['port', 'starboard'], build: mbArm },
-  mbPod: { name: 'Miner (built): thruster pod', group: GR, at: 'free', foot: [1, 1, 1.3], variants: PODS.map((q) => q.name), build: mbPod },
-  mbLift: { name: 'Miner (built): belly lift', group: GR, at: 'free', foot: [2, 4, 2], variants: ['belly', 'belly, cabin'], build: (p, v) => mbLift(p, v) },
-  mbGear: { name: 'Miner (built): landing leg', group: GR, at: 'free', foot: [1, 1.4, 2], variants: ['port', 'starboard'], build: legLeaves },
-  mbGearDoors: { name: 'Miner (built): leg pod doors', group: GR, at: 'free', foot: [1, 0.5, 2], variants: ['port', 'starboard'], build: mbGearDoors },
-  mbWells: { name: 'Miner (built): leg pods', group: GR, at: 'free', foot: [5, 0.6, 2], variants: ['pods'], build: mbWells },
-  mbCockpit: { name: 'Miner (built): cockpit', group: GR, at: 'free', foot: [2.5, 2, 3], variants: ['two seats', 'two seats, cabin'], build: (p, v) => mbCockpit(p, v) },
+  mbHull: { name: 'Miner (built): hull', group: GR, at: 'free', foot: [7, 5, 18], variants: ['hull'], raise: STAND, build: mbHull },
+  mbMounts: { name: 'Miner (built): canister mounts', group: GR, at: 'free', foot: [6, 3, 5], variants: ['both sides'], raise: STAND, build: mbMounts },
+  mbCanopy: { name: 'Miner (built): canopy', group: GR, at: 'free', foot: [3, 2, 3.5], variants: ['glass'], raise: STAND, build: mbCanopy },
+  mbMarks: { name: 'Miner (built): lights and marks', group: GR, at: 'free', foot: [7, 5, 18], variants: ['marks'], raise: STAND, build: (p) => mbMarks(p) },
+  mbCanister: { name: 'Miner (built): ore canister', group: GR, at: 'free', foot: [1, 1, 2.2], variants: CANISTERS.spots.map((q) => q.name), raise: STAND, build: mbCanister },
+  mbArm: { name: 'Miner (built): mining arm', group: GR, at: 'free', foot: [1.2, 3, 7], variants: ['port', 'starboard'], raise: STAND, build: mbArm },
+  mbPod: { name: 'Miner (built): thruster pod', group: GR, at: 'free', foot: [1, 1, 1.3], variants: PODS.map((q) => q.name), raise: STAND, build: mbPod },
+  mbLift: { name: 'Miner (built): belly lift', group: GR, at: 'free', foot: [2, 4, 2], variants: ['belly', 'belly, cabin'], raise: STAND, build: (p, v) => mbLift(p, v) },
+  mbGear: { name: 'Miner (built): landing leg', group: GR, at: 'free', foot: [1, 1.4, 2], variants: ['port', 'starboard'], raise: STAND, build: legLeaves },
+  mbGearDoors: { name: 'Miner (built): leg pod doors', group: GR, at: 'free', foot: [1, 0.5, 2], variants: ['port', 'starboard'], raise: STAND, build: mbGearDoors },
+  mbWells: { name: 'Miner (built): leg pods', group: GR, at: 'free', foot: [5, 0.6, 2], variants: ['pods'], raise: STAND, build: mbWells },
+  mbCockpit: { name: 'Miner (built): cockpit', group: GR, at: 'free', foot: [2.5, 2, 3], variants: ['two seats', 'two seats, cabin'], raise: STAND, build: (p, v) => mbCockpit(p, v) },
 };

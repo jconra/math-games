@@ -145,7 +145,7 @@ let poolKey = null;
 function setPools(on) { st.pools = !!on; for (const L of poolLights) { if (st.pools) scene.add(L); else scene.remove(L); } poolKey = null; }
 function updatePools() {
   if (!st.pools) return;
-  const P = st.cabin?.parts?.pools, deck = st.space?.deck ?? 0, c = camera.position;
+  const P = st.cabin?.parts?.pools, deck = deckUp(), c = camera.position;
   const r = P && st.bp ? st.bp.rooms.find((R) => c.x >= R.rect[0] && c.x <= R.rect[2] && c.z >= R.rect[1] && c.z <= R.rect[3] && c.y > deck - 0.3 && c.y < deck + 3.2) : null;
   const key = (r?.id ?? '-') + '|' + (st.cabin?.key ?? ''); if (key === poolKey) return; poolKey = key;
   const mine = r ? P.filter((p) => p.room === r.id).sort((a, b) => b.i - a.i).slice(0, POOL_N) : [];
@@ -166,6 +166,10 @@ function setMotion(on) { st.motion = !!on; menu(); }
 function setScreens(k) { st.screens = k === 'vivid' ? 'vivid' : 'soft'; for (const M of Object.values(cabinMats)) livePalette(M.live, st.screens); menu(); }
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5; controls.maxDistance = 80;
 const BP3 = new THREE.Group(); scene.add(BP3);
+// the cabin's deck over the lab's floor: the space's deck (the hull's own frame), and as much higher as the ship stands
+// on its legs (its LAB.stand: the Miner on its longer legs, every one of its pieces raised by it, kit/layout.js)
+const standOf = (S = st.ship) => S?.lab?.stand || 0;
+const deckUp = () => (st.space?.deck ?? 0) + standOf();
 
 // ── loading a ship: its shell and the space measured inside it ───────────────────────────────────────────────────
 const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
@@ -278,7 +282,7 @@ const levelOf = (look) => (LOOKS[look].levels ? (LOOKS[look].levels[st.level] ? 
 function cabinFor(S, bp, look) {
   const level = levelOf(look), lk = look + (level ? ':' + level : ''), key = S.id + '|' + lk + '|' + JSON.stringify(bp);
   if (cabins.has(key)) return cabins.get(key);
-  const space = st.space;
+  const space = standOf(S) ? { ...st.space, deck: st.space.deck + standOf(S) } : st.space;
   // (the cabin's own materials: lit by its strips, little of the lab's sky light let in, the floor tinted for the look,
   // less of a mirror than the station's)
   if (!cabinMats[lk]) cabinMats[lk] = cabinMaterials(look, level);
@@ -311,7 +315,7 @@ const EYE = 1.6, EYE_FOV = 72;
 // its furniture, looking across at it, a little down)
 function roomSpots() {
   if (!cabinOn()) return {};
-  const out = {}, deck = st.space.deck, bp = st.bp;
+  const out = {}, deck = deckUp(), bp = st.bp;
   for (const r of bp.rooms) {
     if (r.ceiling === 'canopy') continue;
     const [x0, z0, x1, z1] = r.rect, f = deck + (r.floor || 0) + EYE, name = (r.name || r.id).split(/[ /]/)[0];
@@ -370,7 +374,7 @@ const mat = (key, make) => { if (!matCache.has(key)) matCache.set(key, make()); 
 function build3d() {
   for (const o of [...BP3.children]) { BP3.remove(o); o.geometry?.dispose(); if (o.isGroup) o.traverse((c) => c.geometry?.dispose()); }
   if (!st.bp || !st.space) return;
-  const deck = st.space.deck, bp = st.bp, built = !!st.cabin;   // (the cabin built: its own walls and furniture boxes)
+  const deck = deckUp(), bp = st.bp, built = !!st.cabin;   // (the cabin built: its own walls and furniture boxes)
   if (st.show.rooms) {
     for (const r of bp.rooms) {
       const K = ROOM_KINDS[r.kind] || { color: '#888888' }, [x0, z0, x1, z1] = r.rect, f = deck + (r.floor || 0), top = typeof r.ceiling === 'number' ? r.ceiling : r.ceiling === 'canopy' ? HEAD : CEIL;
@@ -438,7 +442,7 @@ function setCam(name) {
   // (and the part of it nearer the eye than its middle: half its depth from this side)
   const [across, up, near] = { Hero: [0.32 * (s.x + s.z), 0.5 * s.y + 2, 0.15 * (s.x + s.z)], Side: [s.z / 2, s.y / 2, s.x * 0.3], Front: [s.x / 2, s.y / 2, s.z / 2], Rear: [s.x / 2, s.y / 2, s.z / 2], Top: [s.z / 2, s.x / 2, s.y / 2], Above: [0.2 * (s.x + s.z), 0.2 * (s.x + s.z), 0] }[name];
   const fit = Math.max(across / (t * camera.aspect), up / t) * 1.1 + near;
-  controls.target.set(0, name === 'Above' || name === 'Top' ? st.space.deck + 1 : s.y * 0.42, 0);
+  controls.target.set(0, name === 'Above' || name === 'Top' ? deckUp() + 1 : s.y * 0.42, 0);
   camera.position.copy(controls.target).addScaledVector(d, fit); controls.update();
 }
 function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` + (st.level && LOOKS[st.look].levels?.[st.level] && st.level !== LOOKS[st.look].level ? `&level=${st.level}` : '') : '&inside=0') : '')); }
@@ -617,13 +621,13 @@ renderer.setAnimationLoop((t) => {
   const B = st.shell?.built, L = st.ship?.lab;
   if (B && L && !st.hold) L.step(B, st, dt, { updateDoors, person, jets: st.shell.jets, time: t / 1000 });
   // (the cabin's sliding doors: open as the eye comes near when it is in the ship, else the person; or all open or shut)
-  if (st.cabin && st.doorsAt == null) { const c = camera.position, inShip = Math.abs(c.x) < 2.6 && c.z > -5.6 && c.z < 7 && c.y > st.space.deck - 0.3 && c.y < st.space.deck + 3; updateDoors(st.cabin.built.doors, inShip ? c : person.position, dt, st.cabinDoors); }
+  if (st.cabin && st.doorsAt == null) { const c = camera.position, inShip = Math.abs(c.x) < 2.6 && c.z > -5.6 && c.z < 7 && c.y > deckUp() - 0.3 && c.y < deckUp() + 3; updateDoors(st.cabin.built.doors, inShip ? c : person.position, dt, st.cabinDoors); }
   // (the engines easing to the throttle asked for: the whole range in about a second and a half; the jets follow it)
   if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
   for (const J of st.shell?.jets || []) { if (J.role === 'main') J.set.setThrust(ENGINE.throttle, true); J.set.update(dt); }
   if (on) { fly(dt); controls.update(); updatePools(); moveCabin(dt); if (composer) composer.render(); else renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
-  if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris + (st.cabin?.tris || 0)).toLocaleString()} tris` + (st.cabin ? ` (inside ${Math.round(st.cabin.tris).toLocaleString()})` : '') + (on ? ` · ${fps} fps` : '');
+  if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${+deckUp().toFixed(2)} m up · ${Math.round(st.shell.tris + (st.cabin?.tris || 0)).toLocaleString()} tris` + (st.cabin ? ` (inside ${Math.round(st.cabin.tris).toLocaleString()})` : '') + (on ? ` · ${fps} fps` : '');
 });
 
 await loadOptions();

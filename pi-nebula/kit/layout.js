@@ -125,6 +125,8 @@ export function buildRoom(room, mats, opts = {}) {
     for (const pl of list) {
       const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant, zd.coarse), off = [...(pl.off || [0, 0, 0])];
       if (def.at === 'wall') off[2] += WALL_FACE;
+      // (a piece whose catalog entry has a `raise` stands that much higher than it is placed: the Miner on its longer legs)
+      if (def.raise) off[1] += def.raise;
       placeMatrix({ ...pl, off }, _m, gridOf(zd, room));
       const e = _m.elements.slice(); for (const [k, g] of Object.entries(pieceByMat(p))) lists[k].push({ geo: g, e });
       for (const L of p.lights) lights.push({ ...L, at: _v.set(...L.at).applyMatrix4(_m).toArray(), dir: L.dir ? _d.set(...L.dir).transformDirection(_m).toArray() : null });
@@ -371,6 +373,7 @@ export function roomBounds(room) {
   for (const zd of zonesOf(room)) for (const pl of expand(zd.pieces || [])) {
     const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant), off = [...(pl.off || [0, 0, 0])];
     if (def.at === 'wall') off[2] += WALL_FACE;
+    if (def.raise) off[1] += def.raise;
     placeMatrix({ ...pl, off }, _m, gridOf(zd, room));
     for (const part of p.parts) { part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(_m)); }
     for (const mv of p.movers) for (const part of mv.piece.parts) {

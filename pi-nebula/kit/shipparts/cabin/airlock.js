@@ -8,6 +8,9 @@
 //   suitLockers(p, o)   o.len (1: a unit each half metre), o.depth (0.25), o.h (2), o.poster (a POSTERS index: a single
 //                       unit carries it on its door instead of a window), o.handle, o.trim, o.flicker (true: the
 //                       ship's one tired strip along its top front edge)
+//   highSuitLockers(p, o)   the same up on the wall, shallow, its underside sloping up from the wall: o.y0 (1.05), o.top
+//                       (2.05), o.depth (0.2 at most), o.rise (0.16), and suitLockers' o.len, o.poster, o.handle, o.trim,
+//                       o.flicker
 //   pressurePanel(p, o) o.w (0.34), o.h (0.5), o.y (1.25, its middle)
 //   wallBench(p, o)     o.len (0.45), o.depth (0.34), o.seat (0.45), o.leather (the cushion's colour), o.trim
 import { shape, solid, loft, plate, relief, prism, octagon, add } from '../../bevel.js';
@@ -55,6 +58,56 @@ export function suitLockers(p, o = {}) {
   // 45 degree cut, lighting their fronts; it dips now and then, gently, never strobing. Most of its light is its pool
   // (real-time, so it can dip) and little is baked (which cannot), else the dip is lost in the steady light)
   if (o.flicker) glowStrip(p, len - 0.14, [0, h - 0.018, fz + 0.006], [PI / 4, 0, 0], { flicker: true, wid: 0.018, i: 0.06, dir: [0, -0.5, 1], reach: 1.8, pool: 1.3, poolAt: [0, h - 0.6, fz + 0.75], poolReach: 2.2 });
+  return p;
+}
+// SUIT LOCKERS UP ON THE WALL (the game's maker, MR-9: "make them shallow and more a part of the wall ... have the
+// lockers bottoms angling up (remember, lots of angles is good) and just have the lockers on the top half of that area.
+// The lockers being high and shallow would be good for not clipping with the railing of a person standing on the
+// lift"): from o.y0 (its foot, at the wall; 1.05) to o.top (2.05), o.depth deep (0.2 at most), its underside sloping
+// up from the wall to the front's foot (o.rise, 0.16, a 45 degree cut at 0.2 deep), a lit strip along that slope washing
+// the wall under it. Each half metre a door with an 8-sided window, a suit's helmet and shoulders behind it, SUITS
+// stencilled under; o.poster (a single unit carries the airlock's poster on its door instead), o.handle, o.trim,
+// o.flicker (the ship's one tired strip, along its top front edge), as suitLockers.
+export function highSuitLockers(p, o = {}) {
+  const len = o.len ?? 1, depth = Math.min(o.depth ?? 0.2, 0.2), y0 = o.y0 ?? 1.05, top = o.top ?? 2.05, rise = o.rise ?? 0.16;
+  const d = depth - 0.01 - FACE, fz = FACE + d, yb = y0 + rise, n = Math.max(1, Math.round(len / 0.5)), uw = len / n, L2 = (len - 0.008) / 2;
+  const posterOn = o.poster != null && n === 1, xs = Array.from({ length: n }, (_, i) => -len / 2 + uw * (i + 0.5));
+  const wh = Math.min(0.42, top - yb - 0.3), win = (x) => shape(uw - 0.16, wh, 0.07, x, top - 0.1 - wh / 2), fm = 0.045;
+  const frame = (x) => { const s = win(x); return { ...s, w: s.w + 2 * fm, h: s.h + 2 * fm, c: s.c.map((v) => v + fm * K) }; };
+  // the body: its front from the slope's front edge up, the windows cut through it, the top's front edge chamfered;
+  // under it the slope, a wedge from the wall out to that edge (its side profile pushed along the wall)
+  add(p, 'white', prism([[-L2, yb], [L2, yb], [L2, top - 0.03], [L2 - 0.03, top], [-L2 + 0.03, top], [-L2, top - 0.03]], FACE, fz, { holes: posterOn ? [] : xs.map((x) => octagon(frame(x))), back: false }));
+  add(p, 'white', prism([[FACE, y0], [fz, yb], [FACE, yb]], -L2, L2), [0, 0, 0], [0, -PI / 2, 0]);
+  add(p, 'dark', solid(shape(len - 0.02, 0.045, 0, 0, yb + 0.03), 0.006, { edge: 0.002, back: false }), [0, 0, fz]);
+  // (the strip along the slope, near its front edge, facing down and out: the wall under the lockers lit)
+  const tilt = Math.atan2(d, rise), u = 0.85;
+  glowStrip(p, len - 0.12, [0, y0 + u * rise - 0.004, FACE + u * d + 0.003], [tilt, 0, 0], { wid: 0.012, i: 0.08, dir: [0, 0, 1], reach: 1.3, pool: 0.35, poolAt: [0, y0 - 0.45, FACE + 0.3], poolReach: 1.4 });
+  xs.forEach((x, i) => {
+    // the door below the window (or the whole front, with the poster): a raised border-bevel panel, its handle slot,
+    // SUITS stencilled on it
+    const py1 = posterOn ? top - 0.06 : frame(x).y - frame(x).h / 2 - 0.03;
+    add(p, 'white2', relief(shape(uw - 0.05, py1 - yb - 0.07, 0.035, x, (yb + 0.07 + py1) / 2), PANEL), [0, 0, fz]);
+    const hy = yb + 0.07 + Math.min(0.12, (py1 - yb - 0.07) / 2);
+    add(p, o.handle || 'black', solid(shape(0.03, 0.12, 0.01, x + (i % 2 ? -1 : 1) * (uw / 2 - 0.07), hy), 0.006, { edge: 0.002, back: false }), [0, 0, fz + 0.0035]);
+    add(p, 'amber', plate(shape(0.008, 0.04, 0.003, x + (i % 2 ? -1 : 1) * (uw / 2 - 0.07), hy + 0.03)), [0, 0, fz + 0.0098], null, 'glow');
+    printed(p, 'label:suits', 0.12, 0.06, [x - (i % 2 ? -1 : 1) * 0.04, posterOn ? yb + 0.13 : (yb + 0.07 + py1) / 2, fz + 0.004], null, '#2c2e32');
+    if (posterOn) {
+      const P = POSTERS[o.poster], s = Math.min((uw - 0.17) / P.w, (top - yb - 0.4) / P.h), pw = P.w * s, ph = P.h * s, py = (yb + top) / 2 + 0.07, px = -0.02;
+      add(p, 'white2', solid(shape(pw + 0.03, ph + 0.03, 0.016, x + px, py), 0.005, { edge: 0.0015, back: false, front: [{ inset: 0.008, depth: -0.0015, bevel: 0.0015 }] }), [0, 0, fz + 0.0035]);
+      add(p, '#33363b', decalQuad(pw, ph, 'cabin:poster:' + o.poster), [x + px, py, fz + 0.0073], null, 'decal');
+      pictureLight(p, [x + px, py + ph / 2 + 0.021, fz + 0.0035], null, pw + 0.03);
+      return;
+    }
+    // the window: its frame, the hollow behind (down past the window: the suit hangs in it), the glass, the suit (set
+    // back in the shallow locker), a light over it
+    add(p, o.trim || 'black', relief(frame(x), [{ inset: 0, depth: 0.012, bevel: 0.01 }, { inset: 0.016, depth: 0.004, bevel: 0.006 }, { inset: 0.012, depth: -0.006, bevel: 0.006 }], { hole: true, jamb: -0.025 }), [0, 0, fz]);
+    const w = win(x), hollow = shape(uw - 0.04, top - 0.09 - yb, 0.04, x, (yb + top - 0.09) / 2);
+    add(p, 'grey2', relief(hollow, [{ inset: 0, depth: -(d - 0.03), bevel: 0 }]), [0, 0, fz - 0.025]);
+    add(p, null, plate(shape(w.w, w.h, w.c)), [x, w.y, fz - 0.012], null, 'glass');
+    suit(p, x, w.y - 0.17, fz - 0.17);
+    glowStrip(p, uw - 0.12, [x, top - 0.075, FACE + 0.05], [PI / 2, 0, 0], { i: 0.08, dir: [0, -0.2, 1], reach: 0.8, pool: 0.2, poolAt: [x, w.y, fz + 0.35] });
+  });
+  if (o.flicker) glowStrip(p, len - 0.14, [0, top - 0.018, fz + 0.006], [PI / 4, 0, 0], { flicker: true, wid: 0.018, i: 0.06, dir: [0, -0.5, 1], reach: 1.8, pool: 1.3, poolAt: [0, top - 0.6, fz + 0.75], poolReach: 2.2 });
   return p;
 }
 // a suit on its hook: the helmet (a faceted dome, its visor dark), the shoulders and chest, the arms hanging; its middle at

@@ -34,7 +34,7 @@ import { cornerBench, messTable, stool, topCabinets, coldStore, drinkUnit, backs
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
 import { shallowLocker, endLocker, berthLockers, lockerBody } from '../shipparts/cabin/lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from '../shipparts/cabin/lab.js';
-import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
+import { suitLockers, highSuitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
 import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
 import { reactorCore, drivePumps, driveDims, engStation, gearShelves } from '../shipparts/cabin/engroom.js';
 import { reactorPort } from '../shipparts/cabin/reactor.js';
@@ -377,11 +377,15 @@ function furnishScience({ bp, room, ctx, done, items, f, at, A }) {
 // stretch of wall out of the doorways' way, if one is long enough; hazard hatching at the hull's door (a band on the floor
 // inside its step, and up the casings' faces beside their amber strips).
 function furnishAirlock({ bp, room, ctx, done, items, f, at, A }) {
+  // (a locker with "fit": "high" is built up on the wall, from 1.05 m to 2.05 m, shallow, its underside sloping up from
+  // the wall (kit/shipparts/cabin/airlock.js highSuitLockers: the Miner's airlocks, over the lift and beside it); planned
+  // as the full locker, so nobody's way is planned under it)
   const extra = [], posters = postersFor('airlock'), lockers = items.filter((it) => it.kind === 'locker' && !hangs(it)).map((it) => ({ it, W: wallOf(it, room) })).filter((L) => L.W);
   const single = posters.length ? lockers.find((L) => Math.round((L.W.hi - L.W.lo) / 0.5) === 1) : null;
   for (const L of lockers) {
-    const { it, W } = L, mid = (W.lo + W.hi) / 2;
-    ctx.put('airlock: suit lockers', part(suitLockers, { len: W.hi - W.lo, depth: W.depth, h: +it.h || 2, poster: L === single ? posters[0] : null, flicker: L === lockers.find((M) => M !== single), handle: A.handle, trim: A.trim }), at(W, mid));
+    const { it, W } = L, mid = (W.lo + W.hi) / 2, o = { len: W.hi - W.lo, depth: W.depth, poster: L === single ? posters[0] : null, flicker: L === lockers.find((M) => M !== single), handle: A.handle, trim: A.trim };
+    if (it.fit === 'high') ctx.put('airlock: suit lockers', part(highSuitLockers, { ...o, y0: 1.05, top: Math.min(2.05, +it.h || 2.05) }), at(W, mid));
+    else ctx.put('airlock: suit lockers', part(suitLockers, { ...o, h: +it.h || 2 }), at(W, mid));
     done.add(it.id);
   }
   const outer = (ctx.outerDoors || []).filter((o) => o.d.rooms[0] === room.id), walls = roomWalls(room);

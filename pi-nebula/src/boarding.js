@@ -121,9 +121,10 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       await breath();
       if (s.state !== 'loading') return;
       // where the ship is parked: its hull's placement, its frame's feet on the floor (the cabin is built with its deck
-      // at the space's deck, as the Ship Lab builds it)
+      // at the space's deck, as the Ship Lab builds it), and as much higher as the ship stands on its legs (its LAB.stand:
+      // the Miner's pieces are raised by it, kit/layout.js)
       const pl = s.zd.pieces[0], off = pl.off || [0, 0, 0];
-      s.M = placeMatrix({ ...pl, off: [off[0], off[1] - space.deck, off[2]] }, new THREE.Matrix4());
+      s.M = placeMatrix({ ...pl, off: [off[0], off[1] - space.deck + (s.lab.stand || 0), off[2]] }, new THREE.Matrix4());
       s.inv = s.M.clone().invert(); s.bpData = bp; s.space = space;
       let t = performance.now();
       const C = buildCabinRoom(bp, { space, outer: s.lab.cabin.outer, look: LOOK, mats });

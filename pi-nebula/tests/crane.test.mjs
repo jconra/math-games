@@ -7,7 +7,8 @@ import { planCycle, valueAt, canAt, fillAt, dockedAt, gateAt, loadAt, steadyAt, 
 
 const Q = Math.PI / 2;
 const mounts = [];
-for (const [z, out] of [[-7.208, -1], [-2.792, 1]]) for (const y of [3.644, 2.252]) for (const [x, yaw] of [[40.578, Q], [38.142, -Q]]) mounts.push({ at: [x, y, z], yaw, out: [0, out], upper: y > 3 });
+// (the mounts' heights: the parked Miner on its longer legs, 12 cm higher than before 2026-11-16: 3.644 and 2.252 then)
+for (const [z, out] of [[-7.208, -1], [-2.792, 1]]) for (const y of [3.764, 2.372]) for (const [x, yaw] of [[40.578, Q], [38.142, -Q]]) mounts.push({ at: [x, y, z], yaw, out: [0, out], upper: y > 3 });
 const sockets = []; for (const x of [29, 31.5, 34, 36.5]) for (const y of [0.75, 2.2]) sockets.push({ at: [x, y, -18.16], n: [0, 1], upper: y > 1.5 });
 const bays = []; for (let j = 0; j < 8; j++) bays.push({ at: [46 + j * 1.15, 0.65, -16.8] });
 const site = { carry: 6.3, wallZ: -16.8, shipX: 39.36, turn: [39.36, -16.8], home: [46, -16.8], mounts, sockets, bays, can: { half: 1.088, seat: 0.4, clear: 0.45, rise: 0.9, lift: 0.09 } };

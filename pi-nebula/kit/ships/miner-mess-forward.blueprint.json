@@ -9,6 +9,7 @@
     "deck": 1.82
   },
   "idea": "The day forward, the night aft. Behind the cockpit the mess: a dinette for four, the galley counter and cold store, and the ore-control station (the arms, the cutters, the ore grade) beside the table, so the job's math is done where the crew sits. The lift's airlock in the middle with the four suit lockers round its hatch. The two mirrored 2-high bunks aft between the airlock and engineering, each bunk its own (a curtain, a light, a shelf, a locker). Engineering at the stern.",
+  "notes": "2026-11-16: the airlock's suit lockers hang high on the wall (1.05 to 2.05 m, a quarter metre deep, their undersides sloping up from the wall), clear of the lift's railings and of anyone riding it (the game's maker, MR-9).",
   "rooms": [
     {
       "id": "cockpit",
@@ -338,26 +339,28 @@
       "kind": "locker",
       "room": "airlock",
       "rect": [
-        0.5,
+        0.75,
         -1.0,
         1,
         -0.5
       ],
       "h": 2,
-      "name": "Suit locker"
+      "fit": "high",
+      "name": "Suit locker, high on the wall"
     },
     {
       "id": "suit-p2",
       "kind": "locker",
       "room": "airlock",
       "rect": [
-        0.5,
+        0.75,
         -0.5,
         1,
         0.0
       ],
       "h": 2,
-      "name": "Suit locker"
+      "fit": "high",
+      "name": "Suit locker, high on the wall"
     },
     {
       "id": "suit-s1",
@@ -366,11 +369,12 @@
       "rect": [
         -1,
         -1.0,
-        -0.5,
+        -0.75,
         -0.5
       ],
       "h": 2,
-      "name": "Suit locker"
+      "fit": "high",
+      "name": "Suit locker, high on the wall"
     },
     {
       "id": "suit-s2",
@@ -379,11 +383,12 @@
       "rect": [
         -1,
         -0.5,
-        -0.5,
+        -0.75,
         0.0
       ],
       "h": 2,
-      "name": "Suit locker"
+      "fit": "high",
+      "name": "Suit locker, high on the wall"
     },
     {
       "id": "bunk-p",

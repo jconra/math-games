@@ -295,9 +295,9 @@ export function drawCanopy(p, { panes, spars }, S, GLASS, sparPart, dk) {
 
 // ── THE COCKPIT ───────────────────────────────────────────────────────────────────────────────────────────────────
 // The cockpit family's parts (kit/shipparts/cockpit), as its sample cockpit puts them (cockpitPlan): C { seats, gap,
-// wallX, canopy, dash, floor, seatsZ }; `drop` names the parts left out (a regexp)
+// wallX, canopy, dash, floor, seatsZ, side (the side consoles' options: len) }; `drop` names the parts left out (a regexp)
 export function builtCockpitPlan(C, drop) {
-  const plan = cockpitPlan({ seats: C.seats ?? 2, gap: C.gap, wallX: C.wallX, canopy: C.canopy, seat: { shape: 'bucket', look: 'ship' }, dash: { ...C.dash } });
+  const plan = cockpitPlan({ seats: C.seats ?? 2, gap: C.gap, wallX: C.wallX, canopy: C.canopy, seat: { shape: 'bucket', look: 'ship' }, dash: { ...C.dash }, ...(C.side ? { side: { ...C.side } } : {}) });
   plan.items = plan.items.filter((it) => !drop.test(it.name));
   plan.reach = plan.reach.filter((r) => !drop.test(r.name));
   return plan;

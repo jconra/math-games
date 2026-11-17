@@ -9,7 +9,7 @@
     "deck": 1.82
   },
   "idea": "The arms are worked from the flight deck: the ore-control station stands behind the pilot, the arms and the cutters in view through the side glass, so the dig is flown and worked by the crew together. The mess behind the cockpit has the whole room for the dinette and the galley, its drink unit and cold store beside the counter and a grow pod over it, with a suit locker by the cockpit's door. The airlock is the lift's: the platform rides up through its floor, the hatch's whole size (1.9 by 2 m), so its two suit lockers stand aft of the hatch, either side of the bunk room's door. The two mirrored 2-high bunks aft, each bunk its own (a locker over each), and engineering at the stern.",
-  "notes": "2026-11-16: redrawn to fit the hull's lift. The first drawing put a 1 m hatch in a 1.5 m airlock (z -1 to 0.5) with three suit lockers on it; the lift's real hatch is 1.9 by 2 m (x -0.95 to 0.95, z -1.6 to 0.4: the space file's doors.belly), so the airlock now runs z -2 to 0.5, its lockers off the hatch, the bunks 2 m (their berths 0.6 m deep, so the aisle between them is 0.8 m, clear of both doors; the lockers over the berths) and engineering 3 m, as it was.",
+  "notes": "2026-11-16: redrawn to fit the hull's lift. The first drawing put a 1 m hatch in a 1.5 m airlock (z -1 to 0.5) with three suit lockers on it; the lift's real hatch is 1.9 by 2 m (x -0.95 to 0.95, z -1.6 to 0.4: the space file's doors.belly), so the airlock now runs z -2 to 0.5, its lockers off the hatch, the bunks 2 m (their berths 0.6 m deep, so the aisle between them is 0.8 m, clear of both doors; the lockers over the berths) and engineering 3 m, as it was. 2026-11-16: the airlock's suit lockers hang high on the wall (1.05 to 2.05 m, a quarter metre deep, their undersides sloping up from the wall), clear of the lift's railings and of anyone riding it (the game's maker, MR-9).",
   "eyes": {
     "mess": { "at": [-0.15, 0.85], "look": [0.6, 2.4] },
     "airlock": { "at": [0, 0.3], "look": [0, -2.0] },
@@ -106,8 +106,8 @@
     { "id": "table", "kind": "table", "room": "mess", "rect": [-1, 1.0, -0.25, 2.0], "h": 0.75, "stools": 0, "name": "Mess table (four, on its two benches: no stools, the walk past it is the way through)" },
     { "id": "bench-b", "kind": "bench", "room": "mess", "rect": [-1, 2.0, -0.5, 2.5], "h": 0.45, "name": "Bench" },
     { "id": "shelves", "kind": "rack", "room": "mess", "rect": [-1, 2.5, -0.5, 3], "h": 1.9, "name": "Shelves (cups, the first-aid kit)" },
-    { "id": "suit-p", "kind": "locker", "room": "airlock", "rect": [0.5, -2, 1, -1.75], "h": 2, "name": "Suit locker (port, aft of the hatch)" },
-    { "id": "suit-s", "kind": "locker", "room": "airlock", "rect": [-1, -2, -0.5, -1.75], "h": 2, "name": "Suit locker (starboard, aft of the hatch)" },
+    { "id": "suit-p", "kind": "locker", "room": "airlock", "rect": [0.5, -2, 1, -1.75], "h": 2, "fit": "high", "name": "Suit locker, high on the wall (port, aft of the hatch)" },
+    { "id": "suit-s", "kind": "locker", "room": "airlock", "rect": [-1, -2, -0.5, -1.75], "h": 2, "fit": "high", "name": "Suit locker, high on the wall (starboard, aft of the hatch)" },
     { "id": "bunk-p", "kind": "bunk", "room": "bunks", "rect": [0.4, -4, 1, -2], "h": 1.9, "head": "high", "name": "Bunks, 2-high (port)", "notes": "two bunks, each its owner's own: a curtain, a reading light and a shelf at each" },
     { "id": "bunk-s", "kind": "bunk", "room": "bunks", "rect": [-1, -4, -0.4, -2], "h": 1.9, "head": "high", "name": "Bunks, 2-high (starboard)", "notes": "two bunks, each its owner's own: a curtain, a reading light and a shelf at each" },
     { "id": "lockers-p", "kind": "overhead", "room": "bunks", "rect": [0.4, -4, 1, -2], "h": 0.45, "y": 1.9, "name": "Lockers over the port berths (one each)" },
