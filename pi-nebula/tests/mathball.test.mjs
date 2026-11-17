@@ -70,6 +70,13 @@ test('the reasons for fraction and decimal goals are in plain words: "is more th
   assert.equal(why('more:1/2', '0.6'), '0.6 is more than 1/2: 1/2 is 0.5, and 6 tenths is more than 5 tenths.');
   assert.equal(why('less:1/4', '3/4'), '3/4 is not less than 1/4: 3 quarters is more than 1 quarter.');
   assert.equal(why('eq:1', '3/4'), '3/4 is not equal to 1: the top number, 3, is less than the bottom one, 4: less than one whole.');
+  // (a second blind look: "1 tenths rounds down", a decimal in a fractions round, "1/5 is 4/20 and 1/4 is 5/20")
+  assert.equal(why('round:4', '4.1'), '4.1 rounds to 4: the first digit after the point, 1, is under 5, so it rounds down.');
+  assert.equal(why('round:3', '2.6'), '2.6 rounds to 3: the first digit after the point, 6, is 5 or more, so it rounds up.');
+  assert.equal(why('more:2.5', '2.1'), '2.1 is not more than 2.5: 1 tenth is less than 5 tenths.');
+  assert.equal(why('less:1/2', '1/5'), '1/5 is less than 1/2: half of 5 is 2 and a half, and 1 is less.');
+  assert.equal(why('less:1/4', '1/5'), '1/5 is less than 1/4: cut into 5, the parts are smaller than cut into 4.');
+  for (const L of LADDER) for (const r of L.rules) for (const b of L.pool) assert.ok(!/\b1 (tenths|hundredths)\b/.test(ruleOf(r).why(b)), `${r} with ${b}: ${ruleOf(r).why(b)}`);
 });
 
 test('every level starts its rounds with four goals that pass the ball check, drawn from all its sets', () => {

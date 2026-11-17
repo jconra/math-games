@@ -67,11 +67,11 @@ export const MBCAM = {
   under: 0.7,                     // m it always stays under the ceiling (above it, nothing is drawn: a black screen)
 };
 // AIMING ONLY IN FRONT (aimNow): radians from the way the camera looks. A spot or a goal within `arc` shows its arc (a
-// floor spot only a step or less from the player, `near`, none: an arc to their own feet led nowhere); a goal further
+// spot on the floor or a wall only a step or less from the player, `near`, none: an arc to their own feet led nowhere); a goal further
 // round than `turn` turns the camera (rate: radians a second) to face it first. The view's own width counts
 // too (a phone held upright sees only about 20 degrees either side): a goal whose mouth is further across the screen than
 // `edge` (1: the screen's side) is turned to the same way, and its arc shows only once it is on the screen
-export const FRONT = { arc: 75 * Math.PI / 180, turn: 55 * Math.PI / 180, edge: 0.8, near: 1.5, rate: 6.5, dwell: 120, wait: 0.6 };   // (near: m, a floor spot nearer the player is no aim; dwell: ms a mouse rests on a goal button; wait: s a throw waits for the view to settle once turned)
+export const FRONT = { arc: 75 * Math.PI / 180, turn: 55 * Math.PI / 180, edge: 0.8, near: 1.5, rate: 6.5, dwell: 120, wait: 0.6 };   // (near: m, a floor or wall spot nearer the player is no aim; dwell: ms a mouse rests on a goal button; wait: s a throw waits for the view to settle once turned)
 
 // ── the arena with nobody playing: the floor's light and the signs (the round's first rules at this crew's level) ──
 let idle = null;
@@ -320,7 +320,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (along < -0.05 || along > Wl.len + 0.05) continue;
       best = { t, px, pz, py: o.y + dir.y * t, n: Wl.n };
     }
-    if (best) { const at = [best.px + best.n[0] * PHYS.r, Math.max(0.45, Math.min(3.0, best.py)), best.pz + best.n[1] * PHYS.r]; return offFront(at) <= FRONT.arc ? { at, hit: 'wall' } : null; }
+    // (in front, and more than a step away, as a floor spot: a spot on the wall right beside the player drew a short hook)
+    if (best) { const at = [best.px + best.n[0] * PHYS.r, Math.max(0.45, Math.min(3.0, best.py)), best.pz + best.n[1] * PHYS.r]; return offFront(at) <= FRONT.arc && Math.hypot(at[0] - G.you.x, at[2] - G.you.z) >= FRONT.near ? { at, hit: 'wall' } : null; }
     return null;
   }
   // straight ahead: where a throw the way the camera looks would land

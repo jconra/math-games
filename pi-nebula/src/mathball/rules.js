@@ -60,8 +60,8 @@ function against(v, b, x) {
   const X = value(x), c = cmp(v, X), word = c === 0 ? 'the same as' : c > 0 ? 'more than' : 'less than', so = c === 0 ? 'the same' : c > 0 ? 'more' : 'less';
   if (isFrac(b) && X.n * 2 === X.d) {
     // (against one half: the top number against half the bottom one)
-    const [n, d] = String(b).split('/').map(Number), h = d / 2;
-    return c === 0 ? `${n} is half of ${d}` : `half of ${d} is ${h}, and ${n} is ${so}`;
+    const [n, d] = String(b).split('/').map(Number), h = d / 2, hs = Number.isInteger(h) ? String(h) : `${Math.floor(h)} and a half`;
+    return c === 0 ? `${n} is half of ${d}` : `half of ${d} is ${hs}, and ${n} is ${so}`;
   }
   if (isFrac(b) && String(x) === '1' && c !== 0) {
     // (against one whole: the top number against the bottom one)
@@ -73,6 +73,7 @@ function against(v, b, x) {
     const [n, d] = String(b).split('/').map(Number), [p, q] = String(x).split('/').map(Number), D = lcm(d, q);
     if (d === q && PARTS[d]) return `${n} ${PARTS[d][n === 1 ? 0 : 1]} is ${word} ${p} ${PARTS[d][p === 1 ? 0 : 1]}`;
     if (d === q) return `${n} parts is ${word} ${p} parts of the same size`;
+    if (n === p) return `${n === 1 ? '' : `both have ${n} parts, and `}cut into ${d}, the parts are ${d > q ? 'smaller' : 'bigger'} than cut into ${q}`;
     if (d === D) return `${x} is ${p * D / q}/${D}, and ${b} is ${so}`;
     if (q === D) return `${b} is ${n * D / d}/${D}, ${word} ${x}`;
     return `${b} is ${n * D / d}/${D} and ${x} is ${p * D / q}/${D}`;
@@ -81,6 +82,7 @@ function against(v, b, x) {
   if (isDec(b) || isDec(x)) {
     const asDec = (t, w) => (isDec(t) || /^\d+$/.test(String(t)) ? String(t) : decOf(w));
     const bd = asDec(b, v), xd = asDec(x, X), bw = Math.floor(v.n / v.d), xw = Math.floor(X.n / X.d), PL = ['tenths', 'hundredths', 'thousandths'];
+    const unit = (n, i) => (+n === 1 ? PL[i].slice(0, -1) : PL[i]);     // (1 tenth, 5 tenths)
     // (a fraction said as its decimal first, when it has a short one: 2/4 is 0.5)
     const Bs = isFrac(b) && bd ? `${b} is ${bd}` : String(b), Xs = isFrac(x) && xd ? `${x} is ${xd}` : String(x);
     const is = (s, t) => (s !== String(t) ? `${s},` : `${s} is`);
@@ -92,9 +94,9 @@ function against(v, b, x) {
     const lead = isFrac(b) ? Bs + ', and ' : isFrac(x) ? Xs + ', and ' : '';
     // (the same whole number, one of them with no tenths: the other said as its whole and its tenths: 1.5 is 1 and 5
     // tenths)
-    if (!bf || !xf) { const [s, f] = bf ? [bd, bf] : [xd, xf]; return `${lead}${s} is ${bw} and ${+f} ${PL[f.length - 1]}`; }
+    if (!bf || !xf) { const [s, f] = bf ? [bd, bf] : [xd, xf]; return `${lead}${s} is ${bw} and ${+f} ${unit(f, f.length - 1)}`; }
     const P = bf.padEnd(L, '0'), Q = xf.padEnd(L, '0');
-    for (let i = 0; i < L; i++) if (P[i] !== Q[i]) return `${lead}${i ? 'the same tenths, then ' : ''}${P[i]} ${PL[i]} is ${P[i] > Q[i] ? 'more' : 'less'} than ${Q[i]} ${PL[i]}`;
+    for (let i = 0; i < L; i++) if (P[i] !== Q[i]) return `${lead}${i ? 'the same tenths, then ' : ''}${P[i]} ${unit(P[i], i)} is ${P[i] > Q[i] ? 'more' : 'less'} than ${Q[i]} ${unit(Q[i], i)}`;
     return lead ? lead.slice(0, -', and '.length) : 'the same';
   }
   if (isWhole(v) && !isWhole(X)) return `${b} is a whole number, ${word} ${x}`;
@@ -177,7 +179,7 @@ const KINDS = {
     list: examplesOf((v) => nearest(v) === +k && !isWhole(v) && (2 * v.n) % v.d !== 0, [DECS]),
     why: (v, b) => {
       const r = nearest(v), s = String(b), t = isDec(s) ? +s.split('.')[1][0] : null;
-      const how = isWhole(v) ? `${b} is a whole number already` : t != null ? `${t} tenths ${t >= 5 ? 'rounds up' : 'rounds down'}, to ${r}` : `the nearest whole number is ${r}`;
+      const how = isWhole(v) ? `${b} is a whole number already` : t != null ? `the first digit after the point, ${t}, is ${t >= 5 ? '5 or more, so it rounds up' : 'under 5, so it rounds down'}` : `the nearest whole number is ${r}`;
       return r === +k ? `${b} rounds to ${k}: ${how}.` : `${b} rounds to ${r}, not ${k}: ${how}.`;
     },
   }),
