@@ -665,7 +665,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       }
       // (someone speaking up on their own (a captain, the medic) moves their hands as they talk, as two people talking
       // do (moves.js), never while their hands are at work; a patient lying on the scanner, legs straight)
-      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
+      // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
+      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
       P.moves.straight = P.act && P.act.kind === 'scan' && P.pose ? scanLie(P.act) : 0;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
@@ -834,7 +835,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function endTalk(P) {
     const C = P.convo; if (!C) return;
     convos.delete(C);
-    for (const X of [C.A, C.B]) { if (X.convo === C) X.convo = null; if (X.moves) X.moves.talk = null; if (X.act && X.act.kind === 'talk') X.act.again = (X.act.both || 0) + rnd(3, 8); }
+    // (a short pause before another, if they stay)
+    for (const X of [C.A, C.B]) { if (X.convo === C) X.convo = null; if (X.moves) X.moves.talk = null; if (X.act && X.act.kind === 'talk') X.act.again = (X.act.both || 0) + rnd(2, 4.5); }
   }
   function talking(dt) {
     for (const C of [...convos]) {
@@ -1099,7 +1101,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function scanDone(P) {
     const S = SCAN && SCAN.busy; if (!S) { next(P); return; }
     const M = S.medic; SCAN.busy = null; SCAN.use = null;
-    if (M && M.act && M.act.kind === 'scanMedic') next(M);
+    // (the medic stays at the screen a little while after (the results), rather than walking off with the patient)
+    if (M && M.act && M.act.kind === 'scanMedic') M.act = { kind: 'stand', phase: 'do', t: 0, len: rnd(5, 9), spot: M.act.spot, step: { do: 'stand' }, clip: null };
     next(P);
   }
   function scanOver(P) {
