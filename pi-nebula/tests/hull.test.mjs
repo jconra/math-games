@@ -220,6 +220,28 @@ test('a bare wall, lapped: the rows above the first are tilted and stand clear o
   assert.ok(low < 0.2 * 2.4 / 2 + 0.05, 'by a little, not a lot');
 });
 
+test('nothing on a wall faces into it: flush, lapped, or a row of windows', () => {
+  const WINDOWS = { ...BARE, tiers: [{ name: 'wall', profile: [[0, 0], [0, 3]], parts: [{ group: 'trim', kind: 'windows' }] }] };
+  for (const [plan, sizes] of [[BARE, SIZES], [BARE, { ...SIZES, lap: 0.4 }], [BARE, { ...SIZES, shift: 0.5, uneven: 1 }], [WINDOWS, SIZES]]) {
+    const A = hullArrays(plan, sizes);
+    for (const g of Object.values(A.groups)) {
+      for (let i = 0; i < g.normal.length; i += 3) assert.ok(g.normal[i] >= -1e-6, 'a facet turned its back: ' + g.normal[i]);
+      // and every triangle is wound the way its normal looks
+      for (let t = 0; t < g.index.length; t += 3) {
+        const [a, b, c] = [0, 1, 2].map((k) => [0, 1, 2].map((d) => g.position[g.index[t + k] * 3 + d]));
+        const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const i0 = g.index[t] * 3; assert.ok(n[0] * g.normal[i0] + n[1] * g.normal[i0 + 1] + n[2] * g.normal[i0 + 2] > 0, 'a triangle wound backwards');
+      }
+    }
+    if (plan === WINDOWS) {
+      // three panes in a 12 m row (one every 4.2 m is fitted to one every 4), each facing out, sunk into its frame but in front of the wall
+      assert.equal(A.stats.panes, 3);
+      const w = A.windows.position; for (let i = 0; i < w.length; i += 3) assert.ok(w[i] > 0.02 && w[i] < 0.3, 'a pane ' + w[i] + ' m off the wall');
+      assert.ok(A.groups.trim.plates >= 3 + 2, 'the frames, and a lip above and below');
+    }
+  }
+});
+
 test('no bevel, no gap: flat plates edge to edge, two triangles each', () => {
   const A = hullArrays(BARE, { ...SIZES, bevel: 0, gap: 0 });
   assert.equal(A.groups.band.plates, 12); assert.equal(A.groups.band.triangles, 24);

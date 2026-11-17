@@ -38,7 +38,9 @@ const bytesOf = (t) => Math.round(t.image.width * t.image.height * 4 * 4 / 3);
 
 // one group's material: the standard lit material, with the plate's tone, finish, wear and edge shading worked in
 function plateMaterial(name, shared) {
-  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.4 });
+  // (it mirrors its surroundings half as strongly again as they are: out in space they are nearly black, and metal that
+  // mirrors only black reads as black; the scene must be given surroundings to mirror, as the lab gives it the sky)
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.4, envMapIntensity: 1.5 });
   m.name = 'hull:' + name;
   const own = { uFinish: { value: null }, uLay: { value: new THREE.Vector4(0.25, 0, 0, 0.25) }, uGreyA: { value: new THREE.Color() }, uGreyB: { value: new THREE.Color() }, uFin: { value: new THREE.Vector4() } };
   m.userData.own = own; m.extensions = { derivatives: true };
@@ -128,8 +130,10 @@ export function hullMaterials(look, opts = {}) {
   for (const g of GROUPS) M[g] = plateMaterial(g, shared);
   const wear = picture(wearPixels({ size })); shared.uWear.value = wear;
   // the finish pictures drawn so far, one a kind (two groups with the same finish share it; a kind is drawn the first
-  // time a group asks for it and kept: five kinds at most)
-  const drawn = new Map(), finishFor = (kind) => { if (!drawn.has(kind)) drawn.set(kind, picture(finishPixels(kind, { size }))); return drawn.get(kind); };
+  // time a group asks for it, five kinds at most). A kind no group shows any more is taken off the graphics card; its
+  // pixels are kept here, so going back to it sends them again without drawing them again
+  const drawn = new Map(), onCard = new Set();
+  const finishFor = (kind) => { if (!drawn.has(kind)) drawn.set(kind, picture(finishPixels(kind, { size }))); onCard.add(kind); return drawn.get(kind); };
   let L = null;
   function set(next) {
     L = readLook(next);
@@ -146,6 +150,7 @@ export function hullMaterials(look, opts = {}) {
       const heat = kind === 'tempered';
       if (heat !== ('HULL_HEAT' in m.defines)) { if (heat) m.defines.HULL_HEAT = ''; else delete m.defines.HULL_HEAT; m.needsUpdate = true; }
     }
+    for (const kind of [...onCard]) if (!GROUPS.some((g) => L[g + 'Finish'] === kind)) { drawn.get(kind).dispose(); onCard.delete(kind); }
     M.windows.color.set(L.windowColour).multiplyScalar(L.windowBright);
   }
   set(look);

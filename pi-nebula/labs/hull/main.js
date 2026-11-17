@@ -30,7 +30,8 @@
 // What he changes is kept in this browser (localStorage) between visits; where the windows are, for this tab.
 //
 // FOR THE PICTURE RIGS: ?rig keeps the drawing for a screenshot, ?ui=0 hides the menus, ?fresh forgets what was kept,
-// ?look=<name>&view=<name>&sun=<degrees>; and window.HULL (set, useLook, view, sun, shadows, markers, stats, text).
+// ?look=<name>&view=<name>&sun=<degrees>; and window.HULL (set, useLook, view, from, sun, shadows, markers, stats, text;
+// for measuring: bare, size, repeat).
 import * as THREE from 'three';
 import { createSky, DIR, skyDir } from '../../world/sky.js';
 import { shieldMaterial, U } from '../../kit/materials.js';
@@ -49,11 +50,13 @@ const D2R = Math.PI / 180;
 // ── what is kept between visits: the look, and how the piece is lit and shown ─────────────────────────────────
 // (the sun: `turn` degrees round from where the game's sky has it, `high` degrees above level)
 const SUN0 = { turn: Math.atan2(DIR.sun.z, DIR.sun.x) / D2R, high: Math.asin(DIR.sun.y) / D2R };
-const view = { turn: 0, high: Math.round(SUN0.high), shadows: true, markers: true };
+// (the sun's shadows start off, as nothing in the game casts one: with the game's low sun they change the picture
+// very little, and they cost drawing the hull a second time)
+const view = { turn: 0, high: Math.round(SUN0.high), shadows: false, markers: true };
 let look = readLook(HULL_LOOKS[DEFAULT_LOOK]);
 if (!q.has('fresh')) {
   try { const t = localStorage.getItem(KEY); if (t && isLookText(t)) look = readLook(t); } catch (_) { /* nothing kept */ }
-  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows !== false; view.markers = v.markers !== false; } } catch (_) { /* nothing kept */ }
+  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; } } catch (_) { /* nothing kept */ }
 }
 if (HULL_LOOKS[q.get('look')]) look = readLook(HULL_LOOKS[q.get('look')]);
 if (q.has('sun')) view.turn = ((+q.get('sun') % 360) + 360) % 360 || 0;
@@ -64,7 +67,8 @@ const saveSoon = () => { clearTimeout(saveT); saveT = setTimeout(save, 300); };
 // ── renderer, scene, light ──────────────────────────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: RIG });
 if (!renderer.capabilities.isWebGL2) throw new Error('This lab needs WebGL2');
-renderer.setPixelRatio(RIG ? 1 : Math.min(devicePixelRatio || 1, 2));
+// (as sharp as the game draws: its medium setting on a phone, its high one on a desktop)
+renderer.setPixelRatio(RIG ? 1 : Math.min(devicePixelRatio || 1, TOUCH ? 1.5 : 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.info.autoReset = false;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, 0.15, 6000);
@@ -98,7 +102,6 @@ function placeSun() {
 
 // ── the hull ────────────────────────────────────────────────────────────────────────────────────────────────────
 const mats = hullMaterials(look), shield = shieldMaterial();
-for (const g of GROUPS) mats[g].envMapIntensity = 1.5;
 let hull = null, buildMs = 0, paintMs = 0;
 function rebuild() {
   const t0 = performance.now();
@@ -226,8 +229,8 @@ const WINDOWS = [
 let M = null;
 const st = { group: 'band', said: '', saidOk: true };
 const LOOK_SAYS = { 'dark armour': 'Dark greys, darker trim, a soft brushed sheen, light wear', 'pale plates, dark seams': 'Pale painted plates between dark seams, closer to the station\'s insides', 'old and worn': 'Lapped, heat-stained, pitted and streaked: the older station' };
-const FINISH_SAYS = { plain: 'Bare plate with only a fine grain.', brushed: 'Fine strokes all one way, lighter and darker, shinier and duller.', tempered: 'The colours steel takes when it is heated: straw, bronze, purple, blue, in patches and toward the edges.',
-  hatched: 'Two sets of cut lines at right angles.', mottled: 'Soft blotches, like the hangar\'s floor.' };
+const FINISH_SAYS = { plain: 'Bare plate with only a fine grain.', brushed: 'Fine strokes all one way, lighter and darker, shinier and duller. At 0° they run along the hull, at 90° up and down.', tempered: 'The colours steel takes when it is heated: straw, bronze, purple, blue, in patches and toward the edges.',
+  hatched: 'Two sets of cut lines at right angles. The angle turns them both.', mottled: 'Soft blotches, like the hangar\'s floor.' };
 const FINISH_LABELS = { brushed: { Angle: 'Direction' }, hatched: { Angle: 'Angle' }, tempered: { Strength: 'Heat colour' } };
 
 function looksWin() {
@@ -291,7 +294,7 @@ function lightWin() {
   const deg = (x) => Math.round(x) + '°';
   return [sec('The sun', slide({ label: 'Turn the sun', min: 0, max: 360, step: 1, title: 'Round the hull, from where the game\'s sky has it' }, view.turn, deg, (x) => { view.turn = x; placeSun(); saveSoon(); }),
     slide({ label: 'Sun height', min: -30, max: 85, step: 1, title: 'How far above level the sun stands' }, view.high, deg, (x) => { view.high = x; placeSun(); saveSoon(); }),
-    row(chip('The sun\'s shadows', view.shadows, () => { view.shadows = !view.shadows; placeSun(); saveSoon(); paint('light'); }, false, 'The shadows the tiers cast on one another (they cost: see Cost)'),
+    row(chip('The sun\'s shadows', view.shadows, () => { view.shadows = !view.shadows; placeSun(); saveSoon(); paint('light'); }, false, 'The shadows the tiers cast on one another. They show most with the sun high; they cost drawing the hull a second time (see Cost)'),
       chip('The game\'s sun', false, () => { view.turn = 0; view.high = Math.round(SUN0.high); placeSun(); saveSoon(); paint('light'); }, true, 'Back to where the game\'s sky has its sun'))),
     note('At 0° the sun is where the game\'s sky has it: low, shining on the hangar doors from one side.')];
 }
