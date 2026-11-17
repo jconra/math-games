@@ -52,7 +52,7 @@ export const OPPONENTS = [
   { id: 'pilot-sol', name: 'Pilot Sol', line: 'A fair match', level: 1 },
   { id: 'vega', name: 'Captain Vega', line: 'Hard to beat', level: 2 },
 ];
-const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#9b6ddb', skin: '#e8bf9f', hair: '#6b4127' } };
+const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
 // THE CAMERA: behind the player and above, looking down the court (a phone held upright sees a narrow strip, so it
 // stands further back and higher, looking more steeply down)
 export const MBCAM = {

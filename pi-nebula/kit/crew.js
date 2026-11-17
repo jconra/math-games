@@ -211,8 +211,10 @@ export const UNIFORM_COLOURS = ['#e9ecef', '#c9ccd1', '#8a96a3', '#3b4a5c', '#1f
 // (the white bands), Purple should be an option"). The station uniforms' white bands (atlantis1's stripes on the chest
 // and arms, atlantis2's chest and side panels) are their whites, so a recipe's colours.uniform tints them, and left out
 // they stay white as made. These eight read well on the dark grey cloth (light enough to stand out, not so light they
-// glow), by name, for the Crew Lab's Bands row and the looks' recipes:
-export const BAND_COLOURS = { white: '#e9ecef', purple: '#9b6ddb', teal: '#2ec4b6', orange: '#f0892e', red: '#d9463e', blue: '#3f8fe8', gold: '#e3b341', green: '#5cbf5a' };
+// glow), by name, for the Crew Lab's Bands row and the looks' recipes. (2026-11-17, the game's maker: "can we make this
+// purple tint on the uniform a more rich purple?": the purple was #9b6ddb, which the cloth showed as a pale lavender;
+// now a deeper, richer one, between a violet and a royal purple, tried on the grey and the dark uniforms beside four others)
+export const BAND_COLOURS = { white: '#e9ecef', purple: '#6e28b2', teal: '#2ec4b6', orange: '#f0892e', red: '#d9463e', blue: '#3f8fe8', gold: '#e3b341', green: '#5cbf5a' };
 // a person's height (a recipe's `size`, the whole body scaled about the feet: THE SIZE, in makeCrew), three steps
 export const SIZES = { shorter: 0.9, medium: 1, taller: 1.07 };
 export const SKIN_TONES = ['#f2d3bd', '#e8bf9f', '#d9a37f', '#c48a62', '#a66d45', '#86522f', '#663b22', '#47291a'];
@@ -398,12 +400,18 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
     const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
-        const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm';
+        const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm', hg = hand ? await lib.part('hand', hand) : null;
         const moves = shoulderMoves(g.scene, sh);
-        const rig = shoulderRig(handRig(g.scene.userData.crewRig, hand ? (await lib.part('hand', hand)).scene.userData.crewRig : null), moves);
+        const rig = shoulderRig(handRig(g.scene.userData.crewRig, hg ? hg.scene.userData.crewRig : null), moves);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
         const clips = retargetClips(await lib.rawClips(body), rig, rest);
-        return { body, rig, moves, shoulders: sh, clips: calmStand(clips, g.scene, lib.calm || CALM, moves), stride: strideOf(rig, body) };
+        // (the crew's own copies: THE CALM STANDING POSE, THE HANDS ON THE THIGHS (sitting) and ON A WHEEL (driving), THE
+        // WRISTS A PERSON'S; lib.calm, lib.seat, lib.drive and lib.wrists tried in their places, null: that step left out)
+        const has = (k) => Object.prototype.hasOwnProperty.call(lib, k);
+        const C0 = lib.calm || CALM; let cl = calmStand(clips, g.scene, { ...C0, ...((C0[body]) || {}) }, moves, rig);
+        cl = seatedArms(cl, g.scene, hg ? hg.scene : null, rig, moves, has('seat') ? lib.seat : SEAT, has('drive') ? lib.drive : DRIVE);
+        cl = humanWrists(cl, g.scene, has('wrists') ? lib.wrists : WRISTS);
+        return { body, rig, moves, shoulders: sh, clips: cl, stride: strideOf(rig, body) };
       })());
     }
     return fitted.get(key);
@@ -520,11 +528,25 @@ export function retargetClips(clips, rig, rest = {}) {
 // frame); the head's listening nods kept as they are.
 // Each arm is aimed in the person's own frame (y up, z their front, x out to that arm's side): the upper arm CALM.upper
 // [out, forward] degrees off straight down, the forearm CALM.lower; each turned the shortest way from its rest
-// direction, so the palms come to face the thighs; then ARMS OUT (makeCrew) still turns a bulky outfit's arms out on
-// top. lib.calm (as CALM) tries other values, as the checks do.
+// direction; then ARMS OUT (makeCrew) still turns a bulky outfit's arms out on top. lib.calm (as CALM) tries other
+// values, as the checks do.
+//   2026-11-17 (the game's maker: "Why do our models have such weird poses? Nobody stands around with the wrists outwards
+// like that. The basic shapes dummy looks more comfortable with it's arms straight down"): turned the shortest way, the
+// palms had come to face BACKWARD with the thumbs into the thighs (the hands' rest turn is 45 degrees off palms-down), and
+// the hand part's own line, some 10 degrees off its forearm's, hung as a hand bent out at the wrist. Now THE PALMS TO THE
+// THIGHS (below): the thumbs forward, the palms to the thighs, the wrists straight; the fingers a hand's at rest, a
+// little curled (CALM.fingers: Sit_Listen's first frame; Idle's held them spread); and the arms aimed nearer straight
+// down (they were [5, 3] and [4, 14]). And (station life's blind critic: people standing about "knees bent, hips back,
+// as if half-sitting") the body blended toward its REST, straight up as the outfit was built (CALM.stand 'rest': the
+// knees straight, the hips over the feet), not toward Idle's first frame, its sway at CALM.shift 0.3 of the clip's own
+// (it was 0.5). Each outfit's arms out measured again for it (crew.json `armsOut`: the smallest whole degree that keeps
+// the sleeves and hands 5 mm off the hips and thighs through the stand; most a degree to three more than before, as the
+// upper arm's own aim is two less: the hands about where they were, now turned to the thighs). Tried and not taken: the
+// upper arm straight down and the forearm angled out from the elbow (the hands as far out, the elbows into the jacket's
+// sides on the men's outfits), and the hands further forward (more arms out, not less).
 // (ARM THICKNESS's limits: thinnest, thickest)
 export const ARMS_LIMITS = [0.7, 1.1];
-export const CALM = { clip: 'Stand_Listen', upper: [5, 3], lower: [4, 14], shift: 0.5 };
+export const CALM = { clip: 'Stand_Listen', upper: [3, 3], lower: [2, 10], shift: 0.3, stand: 'rest', palm: 0.5, fingers: 'Sit_Listen' };
 const CALM_BODY = /^(Body|Hips|Abdomen|Torso|Chest|UpperLeg[LR]|LowerLeg[LR]|Foot[LR])$/;
 const CALM_IDLE = /^(Shoulder[LR]|(Thumb|Index|Middle|Ring|Pinky)\d[LR])$/;
 // SHOULDER WIDTH (crew.json suit entry `shoulders`, metres, 2026-11-15; the game's maker, of Ivy in the grey uniform:
@@ -599,15 +621,17 @@ function bareBones(scene) {
   holder.updateMatrixWorld(true);
   return { B, holder };
 }
-function calmStand(clips, scene, C = CALM, moves = null) {
+function calmStand(clips, scene, C = CALM, moves = null, rig = null) {
   const i = clips.findIndex((c) => c.name === C.clip), idle = clips.find((c) => c.name === 'Idle');
   if (i < 0 || !idle) return clips;
   const src = clips[i], dur = src.duration;
   const bare = bareBones(scene); if (!bare) return clips;
   const { B, holder } = bare;
   if (!B.UpperArmL || !B.WristL || !B.Middle1L) return clips;
-  // (the shoulder width's moves (SHOULDER WIDTH): the arms aimed from where the person's upper arms really turn)
+  // (the shoulder width's moves (SHOULDER WIDTH): the arms aimed from where the person's upper arms really turn; and the
+  // hand's own finger joints, as the person wears them (HANDS): the hand's line and its thumb taken from them)
   if (moves) { for (const [n, v] of Object.entries(moves)) if (B[n]) B[n].position.add(v); holder.updateMatrixWorld(true); }
+  if (rig && rig.hand) { for (const [b, v] of Object.entries(rig.dstRest || {})) { const X = B[clean(b)]; if (X && HAND_BONE.test(b)) X.position.fromArray(v); } holder.updateMatrixWorld(true); }
   const restQ = {}, restDir = {}, W = (n) => B[n].getWorldPosition(new THREE.Vector3());
   for (const s of ['L', 'R']) for (const [n, m] of [['UpperArm' + s, 'LowerArm' + s], ['LowerArm' + s, 'Wrist' + s]]) {
     restQ[n] = B[n].getWorldQuaternion(new THREE.Quaternion()); restDir[n] = W(m).sub(W(n)).normalize();
@@ -615,10 +639,15 @@ function calmStand(clips, scene, C = CALM, moves = null) {
   const wristRest = { L: B.WristL.quaternion.toArray(), R: B.WristR.quaternion.toArray() };
   const side = { L: Math.sign(W('UpperArmL').x - W('UpperArmR').x) || 1 }; side.R = -side.L;
   const aim = (deg, sg) => { const r = THREE.MathUtils.degToRad; return new THREE.Vector3(sg * Math.tan(r(deg[0])), -1, Math.tan(r(deg[1]))).normalize(); };
-  // (the clip's tracks, the body's blended toward Idle's first frame, the clavicles and fingers Idle's, by name)
+  // (the clip's tracks, the body's blended toward its rest (C.stand 'rest': straight up, the knees straight and the hips
+  // over the feet, as the outfit was built) or toward Idle's first frame, the clavicles and fingers Idle's, by name)
   const idleAt0 = {}; for (const t of idle.tracks) idleAt0[t.name] = Array.from(t.values.slice(0, t.getValueSize()));
+  const restAt = {}; if (C.stand === 'rest') for (const [n, b] of Object.entries(B)) if (CALM_BODY.test(n)) { restAt[n + '.quaternion'] = b.quaternion.toArray(); restAt[n + '.position'] = b.position.toArray(); }
+  // (the fingers: C.fingers' clip's first frame (a hand hanging at rest, its fingers a little curled), else Idle's)
+  const fc = C.fingers && clips.find((c) => c.name === C.fingers), fingAt0 = {};
+  if (fc) for (const t of fc.tracks) if (/^(Thumb|Index|Middle|Ring|Pinky)\d[LR]\./.test(t.name)) fingAt0[t.name] = Array.from(t.values.slice(0, t.getValueSize()));
   const tracks = src.tracks.map((t0) => {
-    const [bone, prop] = t0.name.split('.'), held = idleAt0[t0.name];
+    const [bone, prop] = t0.name.split('.'), held = C.stand === 'rest' && CALM_BODY.test(bone) ? restAt[t0.name] : fingAt0[t0.name] || idleAt0[t0.name];
     if (held && CALM_IDLE.test(bone)) return new t0.constructor(t0.name, [0, dur], [...held, ...held]);
     if (!held || !CALM_BODY.test(bone) || C.shift >= 1) return t0.clone();
     const t = t0.clone(), n = t.getValueSize(), v = t.values, k = C.shift;
@@ -631,30 +660,253 @@ function calmStand(clips, scene, C = CALM, moves = null) {
   // the arms aimed, a sample every 1/15 s over the clip (the body under them moves a little: its sway and breathing)
   const interp = tracks.filter((t) => B[t.name.split('.')[0]]).map((t) => [B[t.name.split('.')[0]], t.name.split('.')[1], t.createInterpolant()]);
   const steps = Math.max(2, Math.round(dur * 15) + 1), times = [], arm = {};
-  const pq = new THREE.Quaternion(), wq = new THREE.Quaternion(), sw = new THREE.Quaternion();
+  const pq = new THREE.Quaternion(), wq = new THREE.Quaternion(), sw = new THREE.Quaternion(), Q = () => new THREE.Quaternion(), FWD = new THREE.Vector3(0, 0, 1);
   for (let j = 0; j < steps; j++) {
     const t = (dur * j) / (steps - 1); times.push(t);
     for (const [b, p, I] of interp) { const r = I.evaluate(t); if (p === 'quaternion') b.quaternion.fromArray(r).normalize(); else if (p === 'position') b.position.fromArray(r); }
     for (const s of ['L', 'R']) {
-      B['Wrist' + s].quaternion.fromArray(wristRest[s]);
+      const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s];
+      wr.quaternion.fromArray(wristRest[s]);
       for (const [n, deg] of [['UpperArm' + s, C.upper], ['LowerArm' + s, C.lower]]) {
         holder.updateMatrixWorld(true);
         sw.setFromUnitVectors(restDir[n], aim(deg, side[s]));
         wq.copy(sw).multiply(restQ[n]);
         B[n].parent.getWorldQuaternion(pq);
         B[n].quaternion.copy(pq.invert().multiply(wq));
-        (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());
       }
+      // THE PALMS TO THE THIGHS (2026-11-17): the forearm turned about its own line until the thumb points forward (the
+      // turn shared with the upper arm about its own line, C.palm of it, so neither the elbow nor the shoulder takes it
+      // all), and the wrist straightened: the hand's line onto the forearm's (the hand part's own line runs some 10
+      // degrees off its forearm's, which hanging showed as a hand bent out at the wrist)
+      if (C.palm != null && B['Thumb1' + s] && B['Middle1' + s]) {
+        holder.updateMatrixWorld(true);
+        const f = W('Wrist' + s).sub(W('LowerArm' + s)).normalize(), tp = W('Thumb1' + s).sub(W('Wrist' + s));
+        tp.addScaledVector(f, -tp.dot(f)).normalize();
+        const want = FWD.clone().addScaledVector(f, -FWD.dot(f)).normalize(), phi = Math.atan2(f.dot(tp.clone().cross(want)), tp.dot(want));
+        const fw = Q().setFromAxisAngle(f, phi).multiply(la.getWorldQuaternion(Q()));
+        const u = W('LowerArm' + s).sub(W('UpperArm' + s)).normalize();
+        ua.quaternion.copy(ua.parent.getWorldQuaternion(Q()).invert().multiply(Q().setFromAxisAngle(u, phi * C.palm).multiply(ua.getWorldQuaternion(Q())))); ua.updateMatrixWorld(true);
+        la.quaternion.copy(ua.getWorldQuaternion(Q()).invert().multiply(fw)); la.updateMatrixWorld(true);
+        const along = W('Middle1' + s).sub(W('Wrist' + s)).normalize();
+        wr.quaternion.copy(la.getWorldQuaternion(Q()).invert().multiply(Q().setFromUnitVectors(along, f).multiply(wr.getWorldQuaternion(Q())))); wr.updateMatrixWorld(true);
+      }
+      for (const n of ['UpperArm' + s, 'LowerArm' + s, 'Wrist' + s]) (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());
     }
   }
   const out = src.clone(); out.tracks = tracks.map((t) => {
     const bone = t.name.split('.')[0];
     if (t.name.endsWith('.quaternion') && arm[bone]) return new THREE.QuaternionKeyframeTrack(t.name, times, arm[bone]);
-    if (t.name.endsWith('.quaternion') && /^Wrist[LR]$/.test(bone)) { const q = wristRest[bone.slice(-1)]; return new THREE.QuaternionKeyframeTrack(t.name, [0, dur], [...q, ...q]); }
     return t;
   });
   out.userData = { ...(src.userData || {}), calm: true };
   return clips.map((c, j) => (j === i ? out : c));
+}
+// THE HANDS ON THE THIGHS, SITTING; ON A WHEEL, DRIVING (2026-11-17; the game's maker, of the sitting and driving
+// clips: "The sitting ones are really bad because the hands just go right through the thighs", "The driving all need to
+// be about 6 inches higher or more", and of Sol: "must be holding the smallest steering wheel ever ... fingers
+// intertwined"). The Mathwood sitting clips lay the hands where a Mathwood person's thin thighs are: on the crew's
+// trousers they sank 6 to 12 cm in. The crew's own copies (made here at load; Mathwood's files and people as they are):
+//   SITTING (SEAT.clips: Sit_Listen, which the game plays at its tables, and the Crew Lab's Sit_Clap and stools): at every
+//     moment each hand is lifted straight up until none of it, nor the forearm's half next to it, is inside the thigh's
+//     cloth below it (SEAT.clear over it), so it rests ON the thigh; a hand the clip rests beside the hip (nearer it than
+//     SEAT.along of the thigh, or out beside it further than SEAT.side from its line: the women's sitting clip, whose
+//     hands sat on the hips' sides) goes forward along the thigh and in over it first. The arm reaches
+//     there by turning at the shoulder and the elbow (its bend kept on the side the clip bends it), the hand turned as the
+//     clip has it;
+//   DRIVING (DRIVE.clip): each hand DRIVE.up higher, DRIVE.forward further out in front and the two DRIVE.apart apart
+//     (their middle as the clip has it, each hand's own steering moves kept), as on a wheel a person can hold, the hand
+//     turned as the clip has it.
+// The thighs, the forearms and the hands are taken from the outfit and the hand part as made, each point riding the bone
+// that carries most of it. lib.seat and lib.drive (as SEAT, DRIVE) try other values, set before an outfit's clips are
+// first fitted.
+export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.12, along: 0.45, side: 0.05 };
+export const DRIVE = { clip: 'Drive', up: 0.15, apart: 0.34, forward: 0.08 };
+const SEAT_LEG = /^UpperLeg[LR]$/, SEAT_ARM = /^(LowerArm)([LR])$/, SEAT_HAND = /^(Wrist|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)([LR])$/;
+// (a part's points, each in the frame of the bone that carries most of it, at rest: { bone names, points (x, y, z each) };
+// pick(name): the bones whose points are kept)
+function pointsByBone(scene, pick) {
+  const names = [], pts = [], v = new THREE.Vector3();
+  scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const g = o.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bones = o.skeleton.bones, inv = o.skeleton.boneInverses;
+    for (let i = 0; i < P.count; i++) {
+      let b = 0, w = -1; for (let k = 0; k < 4; k++) { const x = comp(SW, i, k); if (x > w) { w = x; b = comp(SI, i, k); } }
+      const name = clean(bones[b].name); if (!pick(name)) continue;
+      v.fromBufferAttribute(P, i).applyMatrix4(o.bindMatrix).applyMatrix4(inv[b]);
+      names.push(name); pts.push(v.x, v.y, v.z);
+    }
+  });
+  return { names, pts };
+}
+// (the arm's two turns found so its wrist joint reaches T (the world): the upper arm turned the least way so the elbow
+// lands where the two lengths meet, on the side the elbow already bends to; then the forearm turned the least way onto
+// T; then the wrist turned so the hand keeps its turn in the world, H)
+const _ik = { s: new THREE.Vector3(), e: new THREE.Vector3(), w: new THREE.Vector3(), u: new THREE.Vector3(), p: new THREE.Vector3(), q: new THREE.Quaternion(), r: new THREE.Quaternion() };
+function turnBoneOnto(bone, from, to) {
+  const r = _ik.r.setFromUnitVectors(from, to), pw = bone.parent.getWorldQuaternion(new THREE.Quaternion()), bw = bone.getWorldQuaternion(new THREE.Quaternion());
+  bone.quaternion.copy(pw.invert().multiply(r.multiply(bw))); bone.updateMatrixWorld(true);
+}
+function reachArm(B, s, T, H) {
+  const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s];
+  const S = ua.getWorldPosition(_ik.s.clone()), E = la.getWorldPosition(_ik.e.clone()), W = wr.getWorldPosition(_ik.w.clone());
+  const a = S.distanceTo(E), b = E.distanceTo(W), u = T.clone().sub(S);
+  const d = Math.min(a + b - 1e-4, Math.max(Math.abs(a - b) + 1e-4, u.length())); u.normalize();
+  const pole = E.clone().sub(S); pole.addScaledVector(u, -pole.dot(u));
+  if (pole.lengthSq() < 1e-10) pole.copy(W.clone().sub(E)).addScaledVector(u, -W.clone().sub(E).dot(u));
+  if (pole.lengthSq() < 1e-10) pole.set(0, 0, -1).addScaledVector(u, u.z);
+  pole.normalize();
+  const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+  const E2 = S.clone().addScaledVector(u, a * ca).addScaledVector(pole, a * sa);
+  turnBoneOnto(ua, E.sub(S).normalize(), E2.clone().sub(S).normalize());
+  const E3 = la.getWorldPosition(new THREE.Vector3()), W3 = wr.getWorldPosition(new THREE.Vector3()), T2 = S.clone().addScaledVector(u, d);
+  turnBoneOnto(la, W3.sub(E3).normalize(), T2.sub(E3).normalize());
+  wr.quaternion.copy(la.getWorldQuaternion(_ik.q).invert().multiply(H)); wr.updateMatrixWorld(true);
+}
+function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
+  const which = clips.map((c, j) => (S && S.clips.test(c.name) ? 'sit' : D && c.name === D.clip ? 'drive' : null));
+  if (!which.some(Boolean)) return clips;
+  const bare = bareBones(scene); if (!bare) return clips;
+  const { B, holder } = bare;
+  if (!B.UpperArmL || !B.UpperArmR || !B.WristL || !B.WristR) return clips;
+  if (moves) for (const [n, v] of Object.entries(moves)) if (B[n]) B[n].position.add(v);
+  // (the hand's own finger joints, as the person wears them: HANDS)
+  if (rig && rig.hand) for (const [b, v] of Object.entries(rig.dstRest || {})) { const X = B[clean(b)]; if (X && HAND_BONE.test(b)) X.position.fromArray(v); }
+  holder.updateMatrixWorld(true);
+  // (the thighs from 6 cm down them on (the hips' and the seat's cloth, which also rides the thighs, left out: a hand
+  // rests on a thigh in front of the hip, and an elbow hangs beside the hip); the forearms' half next to the wrist)
+  const along = (P, k, child) => { const c = B[child], d = c ? c.position.clone().normalize() : null; return d ? P.pts[k * 3] * d.x + P.pts[k * 3 + 1] * d.y + P.pts[k * 3 + 2] * d.z : 0; };
+  const only = (P, keep) => { const o = { names: [], pts: [] }; for (let k = 0; k < P.names.length; k++) if (keep(k)) { o.names.push(P.names[k]); o.pts.push(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]); } return o; };
+  const legs0 = pointsByBone(scene, (n) => SEAT_LEG.test(n)), fore0 = pointsByBone(scene, (n) => SEAT_ARM.test(n));
+  const legs = only(legs0, (k) => along(legs0, k, 'LowerLeg' + legs0.names[k].slice(-1)) > 0.06);
+  const fore = only(fore0, (k) => { const s = fore0.names[k].slice(-1), w = B['Wrist' + s]; return w && along(fore0, k, 'Wrist' + s) > 0.5 * w.position.length(); });
+  const hands = pointsByBone(handScene || scene, (n) => SEAT_HAND.test(n));
+  const v = new THREE.Vector3(), C = 0.015;
+  const at = (P, k, out) => out.set(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]).applyMatrix4(B[P.names[k]].matrixWorld);
+  return clips.map((src, j) => {
+    const kind = which[j]; if (!kind) return src;
+    const dur = src.duration, interp = src.tracks.filter((t) => B[t.name.split('.')[0]]).map((t) => [B[t.name.split('.')[0]], t.name.split('.')[1], t.createInterpolant()]);
+    const steps = Math.max(2, Math.round(dur * 15) + 1), times = [], arm = {};
+    const pose = (t) => { for (const [b, p, I] of interp) { const r = I.evaluate(t); if (p === 'quaternion') b.quaternion.fromArray(r).normalize(); else if (p === 'position') b.position.fromArray(r); } holder.updateMatrixWorld(true); };
+    // (driving: each wrist's own middle over the clip, to keep its steering moves about)
+    const mid = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+    if (kind === 'drive') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
+    const centre = mid.L.clone().add(mid.R).multiplyScalar(0.5), side = Math.sign(B.UpperArmL.getWorldPosition(new THREE.Vector3()).x - B.UpperArmR.getWorldPosition(new THREE.Vector3()).x) || 1;
+    let moved = 0;
+    for (let k = 0; k < steps; k++) {
+      const t = (dur * k) / (steps - 1); times.push(t); pose(t);
+      // (the thighs' cloth seen from above: in each 1.5 cm cell its lowest and its highest point; a hand or forearm point
+      // between the two is in the thigh, and is lifted over its top. A point under a thigh's lowest, a hand hanging
+      // down beside a knee, is not in it)
+      let top = null;
+      if (kind === 'sit') {
+        top = new Map();
+        for (let i = 0; i < legs.names.length; i++) { at(legs, i, v); const key = Math.floor(v.x / C) * 4096 + Math.floor(v.z / C), h = top.get(key); if (!h) top.set(key, [v.y, v.y]); else { if (v.y < h[0]) h[0] = v.y; if (v.y > h[1]) h[1] = v.y; } }
+      }
+      for (const s of ['L', 'R']) {
+        const wr = B['Wrist' + s], W0 = wr.getWorldPosition(new THREE.Vector3()), H = wr.getWorldQuaternion(new THREE.Quaternion());
+        let T = null;
+        if (kind === 'sit') {
+          // (a hand the clip rests beside the hip, nearer it than SEAT.along of the thigh, is moved forward along the
+          // thigh to there, level: onto the thigh rather than the hip)
+          const hip = B['UpperLeg' + s].getWorldPosition(new THREE.Vector3()), ax = B['LowerLeg' + s].getWorldPosition(new THREE.Vector3()).sub(hip); ax.y = 0;
+          const tl = ax.lengthSq(), tc = tl > 1e-6 ? W0.clone().sub(hip).dot(ax) / tl : 1;
+          const fwd = tc < S.along ? ax.clone().multiplyScalar(S.along - tc) : new THREE.Vector3();
+          // (and a hand beside the thigh, further out from its line than SEAT.side, brought in over it)
+          if (tl > 1e-6) { const across = new THREE.Vector3(ax.z, 0, -ax.x).normalize(), off = W0.clone().sub(hip).dot(across); if (Math.abs(off) > S.side) fwd.addScaledVector(across, Math.sign(off) * S.side - off); }
+          let lift = 0;
+          for (const P of [hands, fore]) for (let i = 0; i < P.names.length; i++) {
+            if (P.names[i].slice(-1) !== s) continue;
+            at(P, i, v).add(fwd); const h = top.get(Math.floor(v.x / C) * 4096 + Math.floor(v.z / C));
+            if (h && v.y > h[0] && h[1] + S.clear - v.y > lift) lift = h[1] + S.clear - v.y;
+          }
+          if (lift > 0 || fwd.lengthSq() > 0) T = W0.clone().add(fwd).add(new THREE.Vector3(0, Math.min(lift, S.most), 0));
+        } else {
+          const sg = s === 'L' ? side : -side;
+          T = W0.clone().add(new THREE.Vector3(centre.x + sg * D.apart / 2 - mid[s].x, D.up, D.forward || 0));
+        }
+        if (T) { reachArm(B, s, T, H); moved++; }
+        for (const n of ['UpperArm' + s, 'LowerArm' + s, 'Wrist' + s]) (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());
+      }
+    }
+    if (!moved) return src;
+    const out = src.clone(); out.tracks = src.tracks.map((t) => {
+      const bone = t.name.split('.')[0];
+      return t.name.endsWith('.quaternion') && arm[bone] ? new THREE.QuaternionKeyframeTrack(t.name, times, arm[bone]) : t;
+    });
+    out.userData = { ...(src.userData || {}), seated: kind };
+    return out;
+  });
+}
+// THE WRISTS A PERSON'S (2026-11-17; the game's maker, of the work clips close up: "a wrist turned completely backwards
+// on itself", "some kind of horrible disfigurement"). The Mathwood clips were made for mitten hands: the polishing, the
+// forge, the hammer, sitting and driving turn the hand at the wrist itself by 35 to 180 degrees about the forearm's line
+// and bend it up to 140 degrees, and the forearm one way while the wrist turns back the other (the polishing's right
+// arm: 105 one way, 64 back). A real forearm does the turning along its length, and a wrist bends 70 to 80 degrees at
+// most. On the crew a sleeve's cuff and the hand's stub inside it ride the forearm and the wrist together, so a wrist
+// turned or bent that far tore the cuff into jagged bits with the hand showing past it. The crew's own copies of every
+// clip (made here at load; Mathwood's files and people as they are), at every moment:
+//   THE TURN about the forearm's line, the forearm's and the wrist's together, is shared: the wrist keeps at most
+//     WRISTS.twist degrees of it, the forearm takes the rest up to WRISTS.forearm, and what is left past both is let go
+//     (the hand turns less than the clip asks); the hand's turn in the world is otherwise as the clip has it;
+//   THE BEND at the wrist (all of its turn but that) is held to WRISTS.bend degrees.
+// A clip within all three keeps its tracks as they are (the walk, the run, the calm stand). lib.wrists (as WRISTS) tries
+// other values, set before an outfit's clips are first fitted. (Tried at 30 and 75 first: the polishing's cuffs still
+// broke at their top; at 20 and 55 the cuff stays whole on Ren and nearly so on the cook, the hand turned and bent as
+// a person's can.)
+export const WRISTS = { twist: 20, forearm: 70, bend: 55 };
+const twistAbout = (q, a) => { let t = 2 * Math.atan2(q.x * a.x + q.y * a.y + q.z * a.z, q.w); if (t > Math.PI) t -= 2 * Math.PI; if (t <= -Math.PI) t += 2 * Math.PI; return t; };
+function humanWrists(clips, scene, W = WRISTS) {
+  if (!W) return clips;
+  const bare = bareBones(scene); if (!bare) return clips;
+  const { B } = bare, R = {};
+  for (const s of ['L', 'R']) {
+    const la = B['LowerArm' + s], wr = B['Wrist' + s]; if (!la || !wr) return clips;
+    const b0 = wr.position.clone().normalize(), qw0 = wr.quaternion.clone();
+    R[s] = { qf0: la.quaternion.clone(), qw0, b0, a: b0.clone().applyQuaternion(qw0.clone().invert()) };
+  }
+  const D = Math.PI / 180, TW = W.twist * D, FW = W.forearm * D, BEND = W.bend * D, clamp = (x, m) => Math.max(-m, Math.min(m, x));
+  const qf = new THREE.Quaternion(), qw = new THREE.Quaternion(), d = new THREE.Quaternion(), tw = new THREE.Quaternion(), sw = new THREE.Quaternion(), I0 = new THREE.Quaternion();
+  return clips.map((src) => {
+    let tracks = null;
+    for (const s of ['L', 'R']) {
+      const T0 = tracks || src.tracks, fi = T0.findIndex((t) => t.name === 'LowerArm' + s + '.quaternion'), wi = T0.findIndex((t) => t.name === 'Wrist' + s + '.quaternion');
+      if (fi < 0 || wi < 0) continue;
+      const { qf0, qw0, b0, a } = R[s], If = T0[fi].createInterpolant(), Iw = T0[wi].createInterpolant();
+      const times = [...new Set([...T0[fi].times, ...T0[wi].times])].sort((x, y) => x - y);
+      // (each moment's two turns about the forearm's line, kept running on from the moment before (no jump of a whole
+      // turn), and the wrist's bend)
+      const F = [], Wq = [], th = [];
+      let lf = null, lw = null, over = false;
+      for (const t of times) {
+        qf.fromArray(If.evaluate(t)).normalize(); qw.fromArray(Iw.evaluate(t)).normalize(); F.push(qf.clone()); Wq.push(qw.clone());
+        let f = twistAbout(d.copy(qf0).invert().multiply(qf), b0), w = twistAbout(d.copy(qw0).invert().multiply(qw), a);
+        if (lf != null) { while (f - lf > Math.PI) f -= 2 * Math.PI; while (f - lf < -Math.PI) f += 2 * Math.PI; while (w - lw > Math.PI) w -= 2 * Math.PI; while (w - lw < -Math.PI) w += 2 * Math.PI; }
+        lf = f; lw = w; th.push([f, w]);
+        d.copy(qw0).invert().multiply(qw); tw.set(a.x * (d.x * a.x + d.y * a.y + d.z * a.z), a.y * (d.x * a.x + d.y * a.y + d.z * a.z), a.z * (d.x * a.x + d.y * a.y + d.z * a.z), d.w).normalize();
+        sw.copy(tw).invert().multiply(d);
+        if (Math.abs(w) > TW || Math.abs(f) > FW || 2 * Math.acos(Math.min(1, Math.abs(sw.w))) > BEND) over = true;
+      }
+      if (!over) continue;
+      const fv = [], wv = [], r = new THREE.Quaternion();
+      times.forEach((t, k) => {
+        const [f, w] = th[k], w2 = clamp(w, TW), f2 = clamp(f + (w - w2), FW), phi = f2 - f;
+        const qa = F[k].clone().multiply(r.setFromAxisAngle(b0, phi));
+        const qb = r.setFromAxisAngle(b0, -(w - w2)).clone().multiply(Wq[k]);
+        // (the bend held: the wrist's turn from rest taken apart into its turn about the forearm's line and the bend left)
+        d.copy(qw0).invert().multiply(qb); const p = d.x * a.x + d.y * a.y + d.z * a.z;
+        tw.set(a.x * p, a.y * p, a.z * p, d.w).normalize(); sw.copy(tw).invert().multiply(d);
+        if (sw.w < 0) sw.set(-sw.x, -sw.y, -sw.z, -sw.w);
+        const ang = 2 * Math.acos(Math.min(1, sw.w));
+        if (ang > BEND) { sw.copy(I0.identity().slerp(sw, BEND / ang)); qb.copy(qw0).multiply(tw).multiply(sw); }
+        fv.push(...qa.toArray()); wv.push(...qb.normalize().toArray());
+      });
+      tracks = T0.map((t, k) => (k === fi ? new THREE.QuaternionKeyframeTrack(t.name, times, fv) : k === wi ? new THREE.QuaternionKeyframeTrack(t.name, times, wv) : t));
+    }
+    if (!tracks) return src;
+    const out = src.clone(); out.tracks = tracks; out.userData = { ...(src.userData || {}), wrists: true };
+    return out;
+  });
 }
 function retargetMoves(clips, rig) {
   const map = {}; for (const k of Object.keys(rig.dstRest)) map[clean(k)] = k;
@@ -2712,7 +2964,7 @@ function assemble(suit, others) {
 // measured it in the collars (every outfit, labs/crew/sweeps.js neckOf). Front to back each is left as made (0): the
 // outfits' collars differ there, and the pair fits of the 2026-11-15 sweep already set it. The hair worn rides the head,
 // so a hair fitted by hand to a head stays where it was put on it.
-export const HEAD_LIMITS = { seat: [-0.03, 0.06], forward: [-0.04, 0.04], side: [-0.02, 0.02], size: [0.8, 1.25] };
+export const HEAD_LIMITS = { seat: [-0.03, 0.09], forward: [-0.04, 0.04], side: [-0.02, 0.02], size: [0.8, 1.25] };
 function placeHead(tpl, { seat = 0, forward = 0, side = 0, size = 1, centre = [0, 0] }) {
   const sx = side + (+centre[0] || 0), fz = forward + (+centre[1] || 0);
   tpl.updateMatrixWorld(true);
