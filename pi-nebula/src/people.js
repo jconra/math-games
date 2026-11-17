@@ -497,6 +497,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (placed there as they come aboard: at it at once; already there: turned to it, or sat down, as on arriving)
     if (placed) { arrive(P, true); return; }
     if (P.pos.distanceTo(a.spot.pos) < 0.2) { arrive(P); return; }
+    // (the scanner's patient: think() sets off for the bed's foot, once the medic is at the screen)
+    if (a.kind === 'scan') return;
     route(P, a.spot.pos);
   }
   function route(P, to) {
