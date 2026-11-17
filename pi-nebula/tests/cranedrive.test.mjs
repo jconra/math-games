@@ -110,6 +110,17 @@ test('the autopilot: told to take a canister with its arms already shut round no
   assert.ok(until(D, () => !!D.failed, 5) != null && !D.busy, 'gave up: ' + JSON.stringify(D.failed && D.failed.why));
 });
 
+test('the autopilot: a canister taken out of an upper socket with another docked in the socket under it', () => {
+  const { S, D } = fresh(); D.byHand = false;
+  // (socket 1 the upper over socket 0, both with a canister in: the round clears the upper ones first)
+  S.cans[0].where = 'socket'; S.cans[0].i = 0; S.cans[0].yaw = 0; S.lit[0] = 1; S.iris[0] = 1;
+  S.cans[1].where = 'socket'; S.cans[1].i = 1; S.cans[1].yaw = 0; S.lit[1] = 1; S.iris[1] = 1;
+  const k = sockets[1], at = [k.at[0], k.at[1], k.at[2] + (site.can.half - site.can.seat)], W = [k.at[0], k.at[2] + site.can.half + site.can.clear];
+  D.go([{ to: { x: W[0], z: W[1], yaw: 0 } }, { to: { hoist: at[1] + site.can.rise } }, { to: { x: at[0], z: at[2] } }, { to: { hoist: at[1] } }, { grab: 'shut' }, { until: (d) => d.held === 1, patience: 12 }]);
+  assert.ok(until(D, () => D.held === 1 || !!D.failed, 60) != null && D.held === 1, 'the upper one taken: ' + JSON.stringify(D.failed && D.failed.why));
+  assert.equal(S.cans[0].where, 'socket', 'the lower one stays docked');
+});
+
 test('nothing driven through anything: the floor, the wall, a canister in the way', () => {
   const { S, D } = fresh();
   run(D, 20, toward(S, 33, -17.0));

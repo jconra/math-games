@@ -125,8 +125,10 @@ export function makeDrive(site, state, world = {}, opts = {}) {
         const ax = axOf(k, hx, hz), side = latOf(k, hx, hz);
         if (ax > half - seat - 0.05 && ax < half + clear + 1.0 && side < reach) offer({ kind: 'socket', i: k, at: sockPos(k, Math.min(ax, half + clear)), axis: axisOf(k), c: -1, d: side + 0.15 * Math.abs(hy - s.at[1]), dy: hy - s.at[1], ax, seat: dockAt(k), wait: waitAt(k) });
       } else {
+        // (of two one over the other, the one nearer the cradle's height: a hair more `d` for the further one, so it
+        // stays a measure across, but the upper socket's canister is the one taken when the cradle is down at it)
         const D0 = dockAt(k), dd = Math.hypot(hx - D0[0], hz - D0[2]);
-        if (dd < reach) offer({ kind: 'socket', i: k, at: D0, axis: axisOf(k), c: there, d: dd, dy: hy - D0[1] });
+        if (dd < reach) offer({ kind: 'socket', i: k, at: D0, axis: axisOf(k), c: there, d: dd + 1e-4 * Math.abs(hy - D0[1]), dy: hy - D0[1] });
       }
     });
     B.forEach((b, j) => {
