@@ -44,12 +44,13 @@ export const PUSH = {
   down: 1.0,        // holding it up: the jet straight down
   out: 0.75,        // ... and out from the ship's middle line, its own side
   turn: 2.2,        // how quickly a pod swings to its new way (radians a second)
-  hover: 0.32,      // a hovering pod's thrust (0..1)
-  burst: 0.55,      // added for a push of `full` m/s² (a stop, a turn)
+  hover: 0.3,       // a hovering pod's thrust (0..1: about 0.3 a deep orange, 0.6 bright orange, 0.8 white hot)
+  burst: 0.34,      // added for a push of `full` m/s² (a stop, a turn)
+  inward: 0.25,     // a jet never fires in across the hull: at least this much of it out from the ship's middle line
   full: 2.2,
   flicker: 0.08,    // the burn wavers, each pod on its own beat
 };
-export const HEAT = { glow: [2.4, 0.62, 0.12], cool: [0.5, 0.06, 0.012] };   // the nozzle's glow, hot and nearly cold (linear)
+export const HEAT = { glow: [2.4, 0.62, 0.12], cool: [0.5, 0.06, 0.012], white: [2.6, 1.7, 0.8], halo: 2.1 };   // the nozzle's glow, hot and nearly cold, its white-hot middle (linear); the halo's size against the nozzle's
 
 const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _d = new THREE.Vector3(), _inv = new THREE.Matrix4(), ZERO = new THREE.Vector3();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -68,15 +69,25 @@ export function makeFlight({ pods = [], podHalf = 0.63, swing = { yaw: 1.2, pitc
   // the main engine: its jet in its nozzle (idle is a dull orange), and the nozzle's own glow, which lingers as it cools
   const main = nozzles.length ? makeJets(nozzles.map((n) => ({ at: _v.set(...n.at).applyMatrix4(frame).toArray(), dir: _d.set(...n.dir).transformDirection(frame).toArray(), r: n.r })), { len: jet.len, gain: jet.gain }) : null;
   if (main) group.add(main.group);
+  // (the nozzle's face: hot orange, white in the middle while it runs hot; round it a soft halo of its light on the
+  // rim and the hull: a disc a hair aft of the nozzle's core, and a wider one fainter, both drawn additively)
+  const heatUni = { col: { value: new THREE.Color() }, white: { value: new THREE.Color() }, halo: { value: 0 } };
   const glowMat = new THREE.ShaderMaterial({
-    uniforms: { col: { value: new THREE.Color() } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: heatUni, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform vec3 col; varying vec2 vUv; void main() { float r = length(vUv * 2.0 - 1.0); float a = smoothstep(1.0, 0.2, r); gl_FragColor = vec4(col * a, a); }',
+    fragmentShader: `uniform vec3 col; uniform vec3 white; uniform float halo; varying vec2 vUv;
+      void main() { float r = length(vUv * 2.0 - 1.0);
+        if (halo > 0.5) { float a = (1.0 - smoothstep(0.0, 1.0, r)) * 0.28; gl_FragColor = vec4(col * a, a); return; }
+        float a = 1.0 - smoothstep(0.55, 1.0, r); vec3 c = mix(white, col, smoothstep(0.0, 0.6, r)); gl_FragColor = vec4(c * a, a); }`,
   });
-  const glows = nozzles.map((n) => {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(n.r * 1.05, 24), glowMat), at = _v.set(...n.at).applyMatrix4(frame), dir = _d.set(...n.dir).transformDirection(frame);
-    m.position.copy(at).addScaledVector(dir, -0.04); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir); m.renderOrder = 6; m.frustumCulled = false; m.visible = false; m.name = 'engine heat';
-    group.add(m); return m;
+  const haloMat = glowMat.clone(); haloMat.uniforms = { col: heatUni.col, white: heatUni.white, halo: { value: 1 } };
+  const glows = nozzles.flatMap((n) => {
+    const at = _v.set(...n.at).applyMatrix4(frame).clone(), dir = _d.set(...n.dir).transformDirection(frame).clone();
+    return [[n.r * 1.0, glowMat, 0.015, 'engine heat'], [n.r * HEAT.halo, haloMat, 0.03, 'engine heat halo']].map(([r, mat, aft, name]) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(r, 28), mat);
+      m.position.copy(at).addScaledVector(dir, aft); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir); m.renderOrder = 6; m.frustumCulled = false; m.visible = false; m.name = name;
+      group.add(m); return m;
+    });
   });
   let t = 0, flying = false;
   const fx = {
@@ -91,6 +102,8 @@ export function makeFlight({ pods = [], podHalf = 0.63, swing = { yaw: 1.2, pitc
         const len = Math.hypot(dx, dy, dz);
         if (len > 1e-4) {
           dx /= len; dy /= len; dz /= len;
+          // (out from the hull, never in across it: the push that needs the other side is the other side's pods')
+          if (dx * p.out < PUSH.inward) dx = PUSH.inward * p.out;
           // (the end that faces the way it goes; kept unless the other end is clearly the better)
           if (Math.abs(dz) > 0.2) p.end = Math.sign(dz);
           const e = p.end, yawT = clamp(Math.atan2(dx * e, dz * e), -swing.yaw, swing.yaw), pitchT = clamp(-e * Math.asin(clamp(dy, -1, 1)), -swing.pitch, swing.pitch);
@@ -106,7 +119,7 @@ export function makeFlight({ pods = [], podHalf = 0.63, swing = { yaw: 1.2, pitc
       if (main) { main.setThrust(engine); main.update(dt); }
       const h = clamp(heat, 0, 1);
       for (const g of glows) g.visible = h > 0.01;
-      if (h > 0.01) glowMat.uniforms.col.value.setRGB(...HEAT.cool.map((c, i) => c + (HEAT.glow[i] - c) * h)).multiplyScalar(h);
+      if (h > 0.01) { heatUni.col.value.setRGB(...HEAT.cool.map((c, i) => c + (HEAT.glow[i] - c) * h)).multiplyScalar(h); heatUni.white.value.setRGB(...HEAT.white).multiplyScalar(h * h).add(heatUni.col.value.clone().multiplyScalar(1 - h)); }
     },
     rest() {
       for (const p of P) { p.yaw = 0; p.pitch = 0; poseLeaf(p.L, [0, 0]); p.set.setThrust(0, true); }
@@ -119,7 +132,7 @@ export function makeFlight({ pods = [], podHalf = 0.63, swing = { yaw: 1.2, pitc
 
 // THE AIR BLOWN DOWN: a disc of dust on the floor under the ship, its rings running out, broken by noise (one draw), and
 // motes swirling up off the floor and out (one draw; none on the low setting, fewer on medium)
-const AIR = { spread: 10.5, motes: { low: 0, medium: 60, high: 140 } };
+const AIR = { spread: 12, motes: { low: 0, medium: 90, high: 170 } };
 const DUST_VERT = `varying vec2 vP; void main() { vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const DUST_FRAG = `
   uniform float time; uniform float strength; uniform float spread; varying vec2 vP;
@@ -133,7 +146,7 @@ const DUST_FRAG = `
     // gusts running out from under it: rings broken into arcs by streaks that run out along the floor, over a haze of
     // dust thickest under the ship and thinning to its edge
     float rings = pow(max(0.0, 0.5 + 0.5 * sin((r * 0.95 - time * 2.8) * 2.8 + noise(vec2(a * 3.0, time * 0.7)) * 2.5)), 3.0);
-    float streak = noise(vec2(a * 9.0 + sin(time * 0.3) * 2.0, r * 0.35 - time * 1.9));
+    float streak = noise(vec2(a * 4.0 + r * 0.25 + sin(time * 0.3) * 2.0, r * 0.45 - time * 1.9)) * 0.7 + noise(vec2(a * 2.0 - time * 0.2, r * 0.9 - time * 2.6)) * 0.3;
     float grain = noise(vec2(a * 5.0 + r * 0.5, r * 1.4 - time * 3.4)) * 0.6 + noise(vec2(a * 14.0, r * 3.0 - time * 5.5)) * 0.4;
     float fall = smoothstep(spread, spread * 0.2, r) * smoothstep(0.0, 1.0, r);
     float haze = smoothstep(spread * 0.55, 0.0, r) * 0.22;
@@ -145,7 +158,7 @@ const MOTE_VERT = `
   void main() {
     float life = fract(seed.z + time * (0.22 + 0.3 * seed.y));
     float r = mix(1.2, spread, life), a = seed.x * 6.2831853 + life * (1.4 + seed.y);
-    vec3 p = vec3(cos(a) * r, 0.04 + seed.w * 1.6 * sin(life * 3.14159), sin(a) * r);
+    vec3 p = vec3(cos(a) * r, 0.04 + seed.w * 2.4 * sin(life * 3.14159), sin(a) * r);
     vA = strength * sin(life * 3.14159) * (0.45 + 0.55 * seed.y);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_PointSize = size * (0.5 + seed.w) / max(0.5, -mv.z);
@@ -154,8 +167,8 @@ const MOTE_VERT = `
 const MOTE_FRAG = `varying float vA; void main() { float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, d) * vA; gl_FragColor = vec4(0.74, 0.71, 0.65, a * 0.6); }`;
 
 export function makeDownwash({ parent, quality = 'medium', spread = AIR.spread } = {}) {
-  const uni = { time: { value: 0 }, strength: { value: 0 }, spread: { value: spread }, size: { value: 70 } };
-  const disc = new THREE.Mesh(new THREE.PlaneGeometry(spread * 2, spread * 2, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false }));
+  const uni = { time: { value: 0 }, strength: { value: 0 }, spread: { value: spread }, size: { value: 95 } };
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(spread * 2.7, spread * 2.7, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false }));
   disc.name = 'downwash'; disc.renderOrder = 4; disc.frustumCulled = false; disc.visible = false;
   parent.add(disc);
   const n = AIR.motes[quality] ?? AIR.motes.medium;
@@ -170,10 +183,10 @@ export function makeDownwash({ parent, quality = 'medium', spread = AIR.spread }
   }
   return {
     disc, motes,
-    update(dt, { x = 0, z = 0, y = 0, height = 3, strength = 1 } = {}) {
-      // (stronger as the ship comes down to the floor; spread wider the nearer it is)
+    update(dt, { x = 0, z = 0, y = 0, height = 3, strength = 1, spread: k = 1 } = {}) {
+      // (stronger as the ship comes down to the floor; `spread` its reach as a share of the most it reaches)
       const s = clamp(strength, 0, 1) * clamp(1.35 - height / 7, 0, 1);
-      uni.time.value += dt; uni.strength.value = s;
+      uni.time.value += dt; uni.strength.value = s; uni.spread.value = spread * clamp(k, 0.3, 1.3);
       for (const o of [disc, motes]) if (o) { o.visible = s > 0.01; o.position.set(x, y + 0.025, z); }
     },
     hide() { uni.strength.value = 0; disc.visible = false; if (motes) motes.visible = false; },

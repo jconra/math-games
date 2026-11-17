@@ -72,11 +72,15 @@ export const AREA = /^(hangar-miner|stub-miner|smelter-|ship-miner)/;
 // (the turn slower and the way down starting as it ends: strips of the landing showed a sudden swing, then a long slow sink)
 // (the turn a spin, once and a half round, "a really cool pilot": it starts once the ship is all the way in through the
 // bay door (by then it is 7.7 m out from the pad), so its ends never swing through the door's frame; 17 s in all)
-export const LANDING = { secs: 17, from: 46, hover: 3.0, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
+// (lower once it is in, 2.4 m: the blind critic of the first films found the spin's top half off the top of the
+// picture from the way in, the ship over the camera)
+export const LANDING = { secs: 17, from: 46, hover: 3.0, low: 2.4, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
 // THE LANDING'S THRUSTERS (kit/ships/flight.js): how far the pods may turn here (a little further down than the ship
 // lab's swing, so the jets blow down at the floor), the pods' jets' length against the lab's, the main engine idling,
 // how long its nozzle takes to cool after it is down (s), how long the dust takes to settle (s)
-export const FLIGHT = { swing: { yaw: 1.2, pitch: 0.62 }, podLen: 1.1, idle: 0.15, cool: 30, settle: 1.6 };
+// (and after the critic: the pods' flames dying away as it settles (wind, s) rather than going out at once, the dust
+// settling slower)
+export const FLIGHT = { swing: { yaw: 1.2, pitch: 0.62 }, podLen: 1.1, idle: 0.15, cool: 30, settle: 2.6, wind: 0.7 };
 // THE SWING: how long a swing takes (a pendulum of about the cables' length), how quickly it dies away, and the most
 // it swings (radians)
 export const SWING = { period: 3.2, damp: 0.55, most: 0.06 };
@@ -147,7 +151,8 @@ export function makeCrane({ W, walls, boarding = null }) {
     // (in nose first, slowing; spinning round once and a half on the way in, over the pad; down onto it)
     const kIn = Math.min(1, k / N.inBy), out = (1 - kIn) * (1 - kIn) * N.from;   // (eased in: it slows as it comes)
     const turn = ease((k - N.turnFrom) / (N.turnTo - N.turnFrom)), down = ease((k - N.down) / (1 - N.down));
-    const yaw = Math.PI - 2 * Math.PI * N.turns * turn, h = N.hover * (1 - down) + Math.sin(k * 21) * 0.04 * (1 - down);
+    const hover = N.hover + (N.low - N.hover) * ease((k - N.turnFrom) / 0.2);
+    const yaw = Math.PI - 2 * Math.PI * N.turns * turn, h = hover * (1 - down) + Math.sin(k * 21) * 0.04 * (1 - down);
     const tilt = (1 - kIn) * 0.06 - Math.sin(Math.PI * turn) * 0.025;   // (nose a little up while it slows)
     return { x: S.at.x + S.nose * out, h, z: S.at.z, yaw, tilt };
   }
@@ -162,11 +167,13 @@ export function makeCrane({ W, walls, boarding = null }) {
     const nx = ship.nose * Math.cos(b.yaw), nz = -ship.nose * Math.sin(b.yaw), lx = nz, lz = -nx;
     _acc.set(ax * lx + az * lz, ay, ax * nx + az * nz);
     const now = poseAt(k);
-    return { acc: _acc, spin, hold: k < 0.985 ? 1 : 0, x: now.x, z: now.z, h: now.h };
+    // (the pods hold it all until its feet are nearly down, then ease off; the dust thickens as it comes down)
+    const down = ease((k - LANDING.down) / (1 - LANDING.down));
+    return { acc: _acc, spin, hold: k < 0.96 ? 1 : 1 - 0.6 * (k - 0.96) / 0.04, x: now.x, z: now.z, h: now.h, down };
   }
   // the thrusters, the engine and the air it blows down (made at the first landing; the pods must be live doors: the
   // station file's parked Miner holds none of them)
-  let flight = null, air = null, cool = 0, settle = 0;
+  let flight = null, air = null, cool = 0, settle = 0, wind = 0;
   function flightFx() {
     if (flight !== null || !ship) return flight;
     const pods = W.built.doors.filter((D) => D.zone === 'ship-miner' && D.piece === 'mbPod' && D.hold == null && D.leaves.length && D.leaves[0].hinge);
@@ -191,7 +198,9 @@ export function makeCrane({ W, walls, boarding = null }) {
   function landed() {
     shipAt(null); mode = 'round'; t = 0; C.haul.landed = true;
     // (down: its pods back along it, their jets out; the engine off, its nozzle hot and cooling; the dust settling)
-    if (flight) { flight.rest(); for (const D of ship.pods) W.driven.delete(D); cool = 1; settle = 1; }
+    // (down: the pods' flames dying away, then the pods back along it; the engine off, its nozzle hot and cooling; the
+    // dust settling)
+    if (flight) { cool = 1; settle = 1; wind = 1; }
     if (ship) { for (const D of ship.legs) { D.hold = D.held0 ?? 0; W.driven.delete(D); } setDoors(ship.legs, 0); }
     if (boarding && boarding.hold) boarding.hold('miner', false);
   }
@@ -274,16 +283,17 @@ export function makeCrane({ W, walls, boarding = null }) {
         if (flightFx()) {
           const m = motionAt(k);
           flight.update(dt, { acc: m.acc, spin: m.spin, hold: m.hold, engine: FLIGHT.idle, heat: 1 });
-          air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold });
+          air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold * (0.35 + 0.65 * m.down), spread: 0.65 + 0.55 * m.down });
         }
         if (k >= 1) landed();
         return;
       }
       // (after it is down: its nozzle cooling, the dust settling, for as long as either shows)
-      if (flight && (cool > 0 || settle > 0)) {
+      if (flight && (cool > 0 || settle > 0 || wind > 0)) {
         cool = Math.max(0, cool - dt / FLIGHT.cool); settle = Math.max(0, settle - dt / FLIGHT.settle);
-        flight.update(dt, { engine: 0, heat: cool * cool });
-        if (settle > 0) air.update(dt, { x: ship.at.x, z: ship.at.z, height: 0, strength: settle * settle }); else air.hide();
+        if (wind > 0) { wind = Math.max(0, wind - dt / FLIGHT.wind); if (!wind) { flight.rest(); for (const D of ship.pods) W.driven.delete(D); } }
+        flight.update(dt, { engine: 0, heat: cool * cool, hold: wind * 0.4 });
+        if (settle > 0) air.update(dt, { x: ship.at.x, z: ship.at.z, height: 0, strength: settle * settle, spread: 1.2 }); else air.hide();
       }
       if (mode === 'live' || mode === 'leaving') {
         live.step(dt, mode === 'live' ? cmd : {}); cmd = {};
