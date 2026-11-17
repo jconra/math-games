@@ -3027,7 +3027,9 @@ function assemble(suit, others) {
 // behind, 0.85 cm in front), so the seats that hid the neck from behind in the old collar put the hair on the new one
 // and the chin in it: atlantis2's own seat is 50 > 20 mm, every head 3 cm less deep. From behind the neck is what he
 // tuned on the old collar (never longer); in front the chin clears the collar by a person's least and over (it sat on
-// it). His forward, and each head's own seat, forward and size on it, are as he set them. ~/pw/space-math/CREW_3B.md)
+// it). And the two thickest necks, t8's and crew 1's, came through the raised collar's back where he had them: each
+// is 1 cm further forward on this outfit (forward 6 > 16 mm). His forward for the outfit, and every other head's own
+// seat, forward and size on it, are as he set them. ~/pw/space-math/CREW_3B.md)
 // Done on the bind, not the points (placeHead): each outfit bone the head and hair are skinned to carries them by the
 // move at rest (its inverse bind led by it), and the part's own bones (eyes, face) are moved, turned and sized the same,
 // so every point moves alike whatever its weights, the head's neck as made (never cut, never stretched), its eyes, face
