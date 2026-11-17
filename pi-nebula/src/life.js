@@ -138,13 +138,18 @@ export const CLIPS = { stand: 'Stand_Listen', sit: 'Sit_Listen', walk: 'Walk', r
 const T = (lo, hi) => [lo, hi];
 export const ROSTER = [
   // ── the captains, looking for crew (a yellow marker over each): in the terminal most of the time, now and then out at
-  // their own ship ──
+  // their own ship (Captain Adair's is down for maintenance: she walks the station's rounds instead) ──
   { id: 'vega', name: 'Captain Vega', look: 'vega', voice: 'vega', captain: { ship: 'explorer' },
     day: [{ do: 'stand:windows', for: T(30, 60) }, { do: 'sit:window', for: T(40, 80), p: 0.6 }, { do: 'stand:board', for: T(15, 30), p: 0.5 }, { do: 'stand:explorerShip', for: T(40, 80) }, { do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
   { id: 'ruiz', name: 'Captain Ruiz', look: 'captainMan', voice: 'ruiz', captain: { ship: 'miner' },
     day: [{ do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'stand:windows', for: T(30, 50) }, { do: 'sit:cafe', for: T(60, 120), p: 0.5 }, { do: 'stand:minerShip', for: T(40, 80) }, { do: 'stand:lobby', for: T(15, 30), p: 0.4 }, { do: 'stand:counter', for: T(6, 12), p: 0.5 }] },
   { id: 'hale', name: 'Captain Hale', look: 'captainWoman', voice: 'hale', captain: { ship: 'medic' },
     day: [{ do: 'sit:window', for: T(50, 90) }, { do: 'stand:windows', for: T(20, 40) }, { do: 'stand:medicShip', for: T(40, 80) }, { do: 'stand:medicalFloor', for: T(20, 40), p: 0.5 }, { do: 'stand:board', for: T(15, 25), p: 0.5 }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
+  // (Captain Adair, the security captain on the jobs board, her ship down for maintenance for now (the game's maker,
+  // 2026-11-17: "Add Captain Adair walking about too ... You could just say their ship is down for maintenance for now"):
+  // the captains' uniform in the security crew's blue, about the terminal and walking the station's rounds)
+  { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { uniform: '#2f6db3', skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, voice: 'adair', captain: { ship: 'security' },
+    day: [{ do: 'stand:windows', for: T(25, 50) }, { do: 'walk:patrol', p: 0.5 }, { do: 'stand:board', for: T(15, 30), p: 0.6 }, { do: 'sit:window', for: T(40, 80), p: 0.5 }, { do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
   // ── the station's own: at their posts, and their breaks ──
   { id: 'cook', name: 'Bo', look: 'cook', voice: 'om', rate: 1.04, day: [{ do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'post:cook', clip: 'stand', for: T(6, 14) }, { do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'stand:drinks', for: T(6, 12), p: 0.5 }, { do: 'sit:cafe', for: T(120, 200), p: 0.35 }] },
   { id: 'medic', name: 'Ana', look: 'medic', voice: 'yw', rate: 0.94, day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },

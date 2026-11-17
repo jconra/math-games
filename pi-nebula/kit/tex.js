@@ -182,8 +182,9 @@ function cockpitPrint(g, cell, uvOf, rect) {
 const SUV = (x, y, w, h) => [x / 1024, 1 - (y + h) / 1024, (x + w) / 1024, 1 - y / 1024];
 export const SIGNS = ['TERMINAL', 'HANGAR', 'QUARTERS', 'GALLEY', 'JOBS', 'DOCK', 'DECK 2', 'EXIT'];
 // (the captains hiring, as the station's own people are: Captain Hale of the Medic, Captain Ruiz of the Miner, Captain
-// Vega of the Explorer, who walk about the terminal and offer the player a place: src/life.js, src/lines.js)
-export const CREWS = { medic: ['MEDIC', 'CAPT. HALE', '#ff6a5a'], mining: ['MINING', 'CAPT. RUIZ', '#ffa53a'], explore: ['EXPLORER', 'CAPT. VEGA', '#5fe08a'], security: ['SECURITY', 'CAPT. B. ADAIR', '#5aa8ff'] };
+// Vega of the Explorer, who walk about the terminal and offer the player a place, and Captain Adair of security, who
+// walks about too, her ship down for maintenance for now: src/life.js, src/lines.js)
+export const CREWS = { medic: ['MEDIC', 'CAPT. HALE', '#ff6a5a'], mining: ['MINING', 'CAPT. RUIZ', '#ffa53a'], explore: ['EXPLORER', 'CAPT. VEGA', '#5fe08a'], security: ['SECURITY', 'CAPT. ADAIR', '#5aa8ff'] };
 export const SCREEN_RECT = {
   math: SUV(0, 0, 512, 256), status: SUV(512, 0, 512, 256), terminal: SUV(0, 256, 512, 256), radar: SUV(512, 256, 512, 256),
   jobs: SUV(0, 512, 640, 256), menu: SUV(640, 512, 384, 160), drinks: SUV(640, 672, 384, 96), fuel: SUV(768, 768, 192, 128),
@@ -231,7 +232,8 @@ function bigScreens(g) {
   g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('JOBS BOARD', 26, 548);
   g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CAPTAINS HIRING TODAY', 614, 550);
   g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(22, 572, 596, 2);
-  const rows = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', '130']];
+  // (a job whose ship is down for now says so where its pay would be: Captain Adair's)
+  const rows = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', null]];
   rows.forEach(([k, job, pay], i) => {
     const y = 600 + i * 42, [crew, capt, col] = CREWS[k];
     g.fillStyle = i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(22, y - 18, 596, 38);
@@ -239,7 +241,8 @@ function bigScreens(g) {
     g.textAlign = 'left'; g.fillStyle = col; g.font = F(17); g.fillText(crew, 46, y - 4);
     g.fillStyle = '#cfeaff'; g.font = F(13, false); g.fillText(capt, 46, y + 12);
     g.fillStyle = '#ffffff'; g.font = F(19); g.fillText(job, 210, y + 1);
-    g.textAlign = 'right'; g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1);
+    g.textAlign = 'right';
+    if (pay) { g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1); } else { g.fillStyle = '#9fb3c4'; g.font = F(15); g.fillText('SHIP IN REPAIR', 612, y + 1); }
   });
   // the galley's menu, and the drinks panel under it
   bg(640, 512, 384, 160, '#3a2a18', '#221810', '#ffb347');

@@ -22,7 +22,7 @@ export const AGAIN = ['Hello again!', 'Hi again!', 'Hey!', 'Back again?', 'Oh, h
 //   what: the question's small words at the bottom of the screen; offer: who they are and what they want crew for,
 //   ending with the question (its clip speaks it);
 //   yes / no: their answer to Interested / Not now; again: when they have asked before; waiting: after a yes, until
-//   missions are ready (missions.js)
+//   missions are ready (missions.js); down: their ship is down for now, so no question (only who they are and that)
 // a captain's word when the player has not answered a while
 export const NUDGES = ['So, what do you say?', 'Take your time!', 'No rush. Think it over!', 'It will be fun, I promise!'];
 
@@ -35,7 +35,12 @@ export const CAPTAINS = {
     no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!' },
   hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
-    no: 'That\'s all right, dear. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
+    no: 'That\'s all right. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
+  // (Captain Adair, security: her ship is down for maintenance for now (the game's maker, 2026-11-17: "You could just
+  // say their ship is down for maintenance for now.. until we make that job"): she says who she is and that, and asks
+  // nothing; `down` keeps the question away until her job is made)
+  adair: { ship: 'security ship', mission: 'security', down: true, what: null,
+    offer: { clip: 'adair-pitch' }, hello: { clip: 'adair-hello' }, again: 'Hello again! My ship\'s still in for repairs.' },
 };
 
 // THE SCAN (people.js): what the medic and the patient say at the big scanner, in bubbles, one of each at its moment:

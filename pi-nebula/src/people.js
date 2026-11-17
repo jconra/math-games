@@ -978,7 +978,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (!K.nudged && K.t > FRIENDLY.nudge && !(jobs && jobs.near)) { K.nudged = true; const w = pick(NUDGES); bubbles.say(P, w, { kind: 'captain', secs: 3.2 }); P.talkUntil = clock + 1.4; }
       return;
     }
-    if (K.state === 'answered') { if (K.t > 3.5) { K.state = 'idle'; K.busy = false; } return; }
+    if (K.state === 'answered') { if (K.t > (K.hold || 3.5)) { K.state = 'idle'; K.busy = false; K.hold = 0; } return; }
     // (never while the player is at a job, answering its questions)
     if (!pl || P.away || !P.shown || K.cool > 0 || bubbles.asking || (jobs && jobs.busy && jobs.busy())) return;
     if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
@@ -1006,6 +1006,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const secs = Math.max(6, READ(words) + 2);
     bubbles.say(P, words, { kind: 'captain', secs }); P.talkUntil = clock + Math.min(secs - 1, READ(words));
     missions.asked(K.id);
+    // (a captain whose ship is down for now, Captain Adair: no question; they stay facing the player till they have said
+    // it, then go on with their day)
+    if (K.down) { K.state = 'answered'; K.t = 0; K.hold = Math.min(secs - 1, READ(words) + 0.5); K.cool = FRIENDLY.answered; return; }
     K.ask = bubbles.ask({ who: K.name, what: K.what, yes: 'Interested', no: 'Not now',
       onYes: () => answer(P, true), onNo: () => answer(P, false) });
   }
@@ -1419,7 +1422,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (the voices' clips fetched now, made ready to play once the player touches the page: sound.js)
   for (const def of ROSTER) {
     const V = def.voice && VOICES[def.voice]; if (V) for (const id of V.hellos) sound.load(id, clipUrl(id));
-    const K = CAPTAINS[def.id]; if (def.captain && K) for (const id of [K.offer.clip, K.yes.clip, K.hello.clip]) sound.load(id, clipUrl(id));
+    const K = CAPTAINS[def.id]; if (def.captain && K) for (const x of [K.offer, K.yes, K.hello]) if (x && x.clip) sound.load(x.clip, clipUrl(x.clip));
   }
   // where each comes aboard: their first spot (a post's own, or the first free spot of their day), placed there at once
   for (const def of ROSTER) {

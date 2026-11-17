@@ -14,6 +14,9 @@ export const VOICES = {
   vega: { name: 'Eric (ElevenLabs built-in, id cjVigY5qzO86Huf0OWal)', who: 'Captain Vega: a smooth, warm man\'s voice, calm and trustworthy', hellos: ['vega-hello'] },
   ruiz: { name: 'Pi Nebula Ruiz', who: 'Captain Ruiz: a hearty, friendly man in his early thirties, warm and a little gravelly', hellos: ['ruiz-hello'] },
   hale: { name: 'Pi Nebula Hale', who: 'Captain Hale: a kind, gentle woman in her late sixties, calm and reassuring', hellos: ['hale-hello'] },
+  // (Captain Adair, the security captain: ElevenLabs' built-in voice Sarah, no other captain's; the account's own voices
+  // are full)
+  adair: { name: 'Sarah (ElevenLabs built-in, id EXAVITQu4vr4xnSDxMaL)', who: 'Captain Adair: a mature, confident woman, clear and reassuring', hellos: ['adair-hello'] },
   yw: { name: 'Pi Nebula Crew Young Woman', who: 'a cheerful young woman in her early twenties, bright and friendly', hellos: ['yw-hi', 'yw-hello', 'yw-going', 'yw-hiya'] },
   ym: { name: 'Pi Nebula Crew Young Man', who: 'a friendly young man in his early twenties, light and upbeat', hellos: ['ym-hey', 'ym-hithere', 'ym-hello'] },
   om: { name: 'Pi Nebula Crew Older Man', who: 'a warm, easy-going man in his late fifties, a little gravelly', hellos: ['om-hello', 'om-heythere', 'om-good', 'om-welcome'] },
@@ -25,9 +28,11 @@ export const CLIPS = {
   'ruiz-hello': { voice: 'ruiz', words: 'Hey there!' },
   'ruiz-pitch': { voice: 'ruiz', words: 'Hey! I\'m Captain Ruiz of the Miner. I need crew for a mining run. Interested?' },
   'ruiz-ready': { voice: 'ruiz', words: 'Great! Come find me when you\'re ready.' },
-  'hale-hello': { voice: 'hale', words: 'Hello, dear.' },
+  'hale-hello': { voice: 'hale', words: 'Oh, hello again!' },
   'hale-pitch': { voice: 'hale', words: 'Hello! I\'m Captain Hale of the Medic. We need crew for a rescue mission. Interested?' },
   'hale-ready': { voice: 'hale', words: 'Wonderful. Come and find me when you\'re ready.' },
+  'adair-pitch': { voice: 'adair', words: 'Hi! I\'m Captain Adair, station security. My ship\'s down for maintenance for now. Come and find me later!' },
+  'adair-hello': { voice: 'adair', words: 'Hello again! My ship\'s still in for repairs.' },
   'yw-hi': { voice: 'yw', words: 'Hi!' },
   'yw-hello': { voice: 'yw', words: 'Hello!' },
   'yw-going': { voice: 'yw', words: 'Hey, how\'s it going?' },
