@@ -8,13 +8,13 @@
 //   captains   booth (one per crew: 'medic', 'mining', 'explore', 'security': a U of benches round a table, a screen
 //              with the captain's card, the crew's colour), jobs (the jobs board: 'hang' from the ceiling, both faces,
 //              or 'wall')
-//   the ward   divider ('bed': a screen between two beds)
+//   the ward   divider ('bed', 'bed b': a screen between two beds, a shelf of get-well things on each face), curtain
+//              (a gathered curtain over the top of a bed bay's open side: its length in metres, '3.1')
 import * as THREE from 'three';
 import { rrect, circle, line, put, cylinder } from './geo.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
 import { GLOW } from './materials.js';
-import { pulseLine } from './shipparts/cabin/medical.js';
 
 const PI = Math.PI;
 const FABRIC = { c: '#b8693a', r: 0.92, m: 0, w: 0.25 }, FABRIC2 = { c: '#8c4a28', r: 0.95, m: 0, w: 0.25 }, LINEN = { c: '#c9ccc9', r: 0.9, m: 0, w: 0.2 };
@@ -281,9 +281,84 @@ export function planter(p, v) {
 }
 // ── the ward ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // a bed divider: a free-standing screen between two beds, 2 m along x from x = 0 (its end against the wall the beds'
-// heads are on) to x = 2, 1.75 m tall, its faces on z = +-0.025: a charcoal frame on two splayed feet, a pale panel,
-// the medical mark (a teal pulse line, kit/shipparts/cabin/medical.js) along both faces
-export function divider(p) {
+// heads are on) to x = 2, 1.75 m tall, its faces on z = +-0.025: a charcoal frame on two splayed feet, a pale panel;
+// and on each face, by the bed's head, a small shelf with a few of the things a recovering patient is given. The game's
+// maker (2026-11-17): "I feel like that heartbeat symbol might be getting over-used a bit. I think the dividers are
+// okay. They could use some shelves with some flowers or a teddy bear or something you might find for a recovering
+// person" (the heartbeat line is the monitors' now, not the dividers'). The variant says what is on its two shelves
+// (DIVIDER_SHELVES: the +z face's, then the -z face's), so no two shelves in the ward are alike.
+export const DIVIDER_SHELVES = {
+  bed: [['bear', 'book'], ['flowers', 'card']],
+  'bed b': [['books', 'bear'], ['flowers2', 'card2']],
+};
+// (the get-well things' colours: a few flat colours, no textures)
+const GW = {
+  vase: { c: '#8fbfc4', r: 0.12, m: 0.05, w: 0.1 }, stem: { c: '#4f7a3a', r: 0.8, m: 0, w: 0.3 },
+  petals: [[{ c: '#f2c14e', r: 0.7 }, { c: '#e88aa4', r: 0.7 }], [{ c: '#f4f1ea', r: 0.7 }, { c: '#d9534f', r: 0.7 }]], heart: { c: '#8a5a2b', r: 0.8 },
+  bear: { c: '#a8784a', r: 0.95, m: 0, w: 0.2 }, muzzle: { c: '#dcc19a', r: 0.95, m: 0, w: 0.2 }, eye: { c: '#1d1712', r: 0.35 }, bow: { c: '#c8423b', r: 0.6 },
+  card: [{ c: '#f3eee2', r: 0.7 }, { c: '#e9f0f6', r: 0.7 }], cardArt: [{ c: '#f0a43a', r: 0.6 }, { c: '#6aa9d8', r: 0.6 }],
+  books: [{ c: '#2f5d8a', r: 0.65 }, { c: '#8a3b3b', r: 0.65 }, { c: '#3f6f4f', r: 0.65 }], pages: { c: '#ece4d0', r: 0.85, m: 0, w: 0.2 },
+};
+// (a small ball, squashed or stretched, turned, as a part: an icosphere of the fewest faces that still read as round)
+function ball(p, look, r, at, scale = [1, 1, 1], rot = [0, 0, 0], detail = 1) {
+  const g = new THREE.IcosahedronGeometry(r, detail); put(g, at, rot, scale); p.add('solid', g.index ? g : mergeV(g), look);
+}
+// THE GET-WELL THINGS, each standing on a shelf top at (x, y, z), in the shelf's frame (its back on the panel, +z out)
+const GET_WELL = {
+  // flowers in a glass vase: a few stems fanned out of its mouth, each with a bloom, in two colours; two leaves
+  flowers(p, x, y, z, k = 0) {
+    p.lathe(GW.vase, [[0.001, 0], [0.034, 0], [0.04, 0.03], [0.036, 0.09], [0.024, 0.12], [0.03, 0.14], [0.026, 0.142], [0.02, 0.12], [0.001, 0.12]], 12, [x, y, z]);
+    const stems = [[-0.035, 0.27, -0.02], [0.03, 0.29, 0.01], [-0.005, 0.31, 0.025], [0.045, 0.25, -0.025], [-0.05, 0.24, 0.02]];
+    stems.forEach(([dx, h, dz], i) => {
+      const top = [x + dx, y + h, z + dz], bot = [x, y + 0.11, z], d = [top[0] - bot[0], top[1] - bot[1], top[2] - bot[2]], L = Math.hypot(...d);
+      const g = cylinder(0.003, L, [0, 0, 0], 5); put(g, [(top[0] + bot[0]) / 2, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2], [Math.atan2(d[2], d[1]), 0, -Math.atan2(d[0], d[1])]); p.add('solid', g, GW.stem);
+      ball(p, GW.petals[k][i % 2], 0.024, top, [1, 0.55, 1], [0.3 * dz / 0.03, 0, -0.3 * dx / 0.03], 0);
+      ball(p, GW.heart, 0.009, [top[0], top[1] + 0.008, top[2]], [1, 0.6, 1], [0, 0, 0], 0);
+    });
+    for (const s of [-1, 1]) p.box(GW.stem, [0.06, 0.004, 0.025], [x + s * 0.035, y + 0.16, z + 0.01], [0, 0.4 * s, -0.5 * s], { r: 0.002, cell: 9 });
+  },
+  flowers2(p, x, y, z) { GET_WELL.flowers(p, x, y, z, 1); },
+  // a teddy bear sitting against the panel, its legs out in front: body, head, ears, muzzle and nose, eyes, arms, a bow
+  bear(p, x, y, z) {
+    const B = GW.bear;
+    ball(p, B, 0.05, [x, y + 0.055, z], [1, 1.15, 0.9]);
+    ball(p, B, 0.04, [x, y + 0.14, z + 0.006]);
+    for (const s of [-1, 1]) { ball(p, B, 0.014, [x + s * 0.03, y + 0.172, z], [1, 1, 0.6]); ball(p, GW.muzzle, 0.008, [x + s * 0.03, y + 0.172, z + 0.006], [1, 1, 0.5], [0, 0, 0], 0); }
+    ball(p, GW.muzzle, 0.018, [x, y + 0.128, z + 0.036], [1.1, 0.85, 0.9]);
+    ball(p, GW.eye, 0.006, [x, y + 0.136, z + 0.053], [1, 0.8, 1], [0, 0, 0], 0);
+    for (const s of [-1, 1]) ball(p, GW.eye, 0.0055, [x + s * 0.016, y + 0.152, z + 0.036], [1, 1, 1], [0, 0, 0], 0);
+    for (const s of [-1, 1]) ball(p, B, 0.018, [x + s * 0.05, y + 0.07, z + 0.02], [1, 1.9, 1], [0.5, 0, s * 0.35]);
+    for (const s of [-1, 1]) { ball(p, B, 0.02, [x + s * 0.026, y + 0.02, z + 0.05], [1, 1, 2.0]); ball(p, GW.muzzle, 0.014, [x + s * 0.026, y + 0.02, z + 0.088], [1, 1, 0.4], [0, 0, 0], 0); }
+    for (const s of [-1, 1]) p.box(GW.bow, [0.026, 0.018, 0.01], [x + s * 0.013, y + 0.108, z + 0.032], [0, 0, s * 0.35], { r: 0.003, cell: 9 });
+  },
+  // a get-well card standing open, folded down its middle, a bright picture on its front
+  card(p, x, y, z, k = 0) {
+    for (const s of [-1, 1]) p.box(GW.card[k], [0.075, 0.11, 0.003], [x + s * 0.033, y + 0.055, z + 0.012], [0, s * 0.5, 0], { r: 0.001, cell: 9 });
+    p.box(GW.cardArt[k], [0.04, 0.05, 0.002], [x + 0.034, y + 0.06, z + 0.03], [0, 0.5, 0], { r: 0.001, cell: 9 });
+  },
+  card2(p, x, y, z) { GET_WELL.card(p, x, y, z, 1); },
+  // a book lying flat, its cover and spine coloured, its pages pale at the other three edges
+  book(p, x, y, z, k = 0, lift = 0, turn = 0.25) {
+    const q = new (p.constructor)();
+    q.slab(GW.books[k], -0.07, 0.07, 0, 0.004, -0.05, 0.05, { r: 0.002, cell: 9 });
+    q.slab(GW.books[k], -0.07, 0.07, 0.026, 0.03, -0.05, 0.05, { r: 0.002, cell: 9 });
+    q.slab(GW.books[k], -0.07, -0.064, 0, 0.03, -0.05, 0.05, { r: 0.002, cell: 9 });
+    q.slab(GW.pages, -0.065, 0.066, 0.004, 0.026, -0.047, 0.047, { r: 0.001, cell: 9 });
+    for (const part of q.parts) { put(part.geo, [x, y + lift, z], [0, turn, 0]); p.parts.push(part); }
+  },
+  // two books, one on the other
+  books(p, x, y, z) { GET_WELL.book(p, x, y, z, 1, 0, -0.15); GET_WELL.book(p, x + 0.005, y, z, 2, 0.031, 0.3); },
+};
+// a shelf on the +z face (z = t), by the wall end: a pale board on two charcoal brackets, and its things
+const SHELF = { x: [0.3, 0.92], y: 1.02, d: 0.13 };
+function shelf(p, t, items) {
+  const [x0, x1] = SHELF.x, y = SHELF.y;
+  p.slab('white2', x0, x1, y - 0.022, y, t, t + SHELF.d, { r: 0.006, cell: 0.8 });
+  p.slab('black', x0, x1, y - 0.03, y - 0.022, t + SHELF.d - 0.012, t + SHELF.d, { r: 0.003, cell: 0.8 });
+  for (const x of [x0 + 0.07, x1 - 0.07]) p.box('black', [0.016, 0.1, 0.08], [x, y - 0.075, t + 0.045], [-0.6, 0, 0], { r: 0.004, cell: 9 });
+  items.forEach((name, i) => { const f = GET_WELL[name]; if (f) f(p, x0 + 0.15 + i * 0.3, y, t + SHELF.d / 2); });
+}
+export function divider(p, v) {
   const len = 2.0, h = 1.75, t = 0.025;
   for (const x of [0.03, len - 0.03]) {
     p.slab('black', x - 0.03, x + 0.03, 0.04, h, -t - 0.01, t + 0.01, { r: 0.01 });
@@ -292,8 +367,35 @@ export function divider(p) {
   p.slab('black', 0, len, h - 0.05, h, -t - 0.012, t + 0.012, { r: 0.012, cell: 0.8 });
   p.slab('black', 0.06, len - 0.06, 0.14, 0.18, -t - 0.006, t + 0.006, { r: 0.006, cell: 0.8 });
   p.slab('white2', 0.06, len - 0.06, 0.18, h - 0.05, -t, t, { r: 0.008, cell: 0.6 });
-  pulseLine(p, 0.4, len - 0.4, 1.3, t + 0.002, 0.08);
-  pulseLine(p, -(len - 0.4), -0.4, 1.3, t + 0.002, 0.08, PI);
+  // the two shelves (the -z face's built as a +z face's and turned round onto the other side, by the same end)
+  const sets = DIVIDER_SHELVES[v] || DIVIDER_SHELVES.bed;
+  shelf(p, t, sets[0]);
+  const q = new (p.constructor)(); shelf(q, t, sets[1]);
+  for (const part of q.parts) { put(part.geo, [SHELF.x[0] + SHELF.x[1], 0, 0], [0, PI, 0]); p.parts.push(part); }
+}
+// A CURTAIN ACROSS THE TOP OF A BED'S BAY (the game's maker, 2026-11-17, of the ward's dividers: "maybe also put a
+// curtain on the top part of the gap would be appropriate"): a slim rail hung from the ceiling across the open side of
+// the bay, from one divider's end to the next (or to the wall), and a soft gathered curtain hanging from it over the
+// top part of the opening, its hem above a tall person's head. Along x from 0 to the variant's length (m), facing +z
+// (it reads the same from both sides); its rail at RAIL m, the ceiling over it at 2.8 m.
+const CURTAIN = { rail: 2.36, drop: 0.38, fold: 0.15, depth: 0.028, cloth: { c: '#8ab9b4', r: 0.92, m: 0, w: 0.25 }, hem: { c: '#5f8f8a', r: 0.9, m: 0, w: 0.25 } };
+export function curtain(p, v) {
+  const L = Math.max(0.5, parseFloat(v) || 3), { rail, drop, fold, depth } = CURTAIN;
+  // the rail and the two rods up to the ceiling
+  p.slab('rail', 0, L, rail - 0.012, rail + 0.012, -0.012, 0.012, { r: 0.006, cell: 0.8 });
+  for (const x of [0.06, L - 0.06]) p.cyl('rail', 0.006, 2.8 - rail, [x, (2.8 + rail) / 2, 0], null, 6);
+  // the curtain: a gathered strip, a wave along the rail, hung a few centimetres below it on its rings
+  const n = Math.max(8, Math.round(L / fold * 4)), path = [], Y = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i <= n; i++) {
+    const x = 0.02 + (L - 0.04) * i / n, a = x / fold * Math.PI * 2, z = Math.sin(a) * depth / 2, dz = Math.cos(a) * depth / 2 * Math.PI * 2 / fold;
+    const tx = 1 / Math.hypot(1, dz), tz = dz / Math.hypot(1, dz);
+    path.push({ p: new THREE.Vector3(x, 0, z), x: new THREE.Vector3(-tz, 0, tx), y: Y.clone() });
+  }
+  const top = rail - 0.03, cloth = { pts: [[-0.003, top - drop], [0.003, top - drop], [0.003, top], [-0.003, top]], nrm: [[-1, 0], [1, 0], [1, 0], [-1, 0]] };
+  p.sweep(CURTAIN.cloth, cloth, path);
+  const hem = { pts: [[-0.004, top - drop - 0.004], [0.004, top - drop - 0.004], [0.004, top - drop + 0.05], [-0.004, top - drop + 0.05]], nrm: [[-1, 0], [1, 0], [1, 0], [-1, 0]] };
+  p.sweep(CURTAIN.hem, hem, path);
+  for (let x = 0.08; x < L - 0.05; x += fold) p.cyl('rail', 0.011, 0.006, [x, rail - 0.018, 0], [PI / 2, 0, 0], 8);
 }
 // (an icosphere comes unindexed: merge its corners, give it the blank uv every part carries)
 const mergeV = (g) => { g.deleteAttribute('uv'); const m = mergeVertices(g, 1e-5); m.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(m.attributes.position.count * 2), 2)); return m; };

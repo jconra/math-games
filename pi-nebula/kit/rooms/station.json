@@ -5726,7 +5726,10 @@
         {"piece":"cabinMedBed","cell":[16.5,40],"turn":1,"variant":"arm left","off":[0,0,0.3]},
         {"piece":"cabinMedBed","cell":[16.5,41.5],"turn":1,"variant":"arm left","off":[-0.1,0,0.3]},
         {"piece":"divider","cell":[16.5,39],"turn":0,"variant":"bed","off":[0.33,0,0.45]},
-        {"piece":"divider","cell":[16.5,41],"turn":0,"variant":"bed","off":[0.33,0,-0.45]},
+        {"piece":"divider","cell":[16.5,41],"turn":0,"variant":"bed b","off":[0.33,0,-0.45]},
+        {"piece":"curtain","cell":[17.5,39],"turn":1,"variant":"3.35","off":[-0.45,0,0.6]},
+        {"piece":"curtain","cell":[17.5,40.5],"turn":1,"variant":"3.1","off":[-0.55,0,0.6]},
+        {"piece":"curtain","cell":[17.5,42.5],"turn":1,"variant":"3.35","off":[0.1,0,0.6]},
         {"piece":"pulse","cell":[18,37.5],"turn":0,"variant":"short","off":[0,2.3,0]},
         {"piece":"cabinet","cell":[19,42.5],"turn":2,"variant":"double","off":[0.5,0,0.24]}
       ]
