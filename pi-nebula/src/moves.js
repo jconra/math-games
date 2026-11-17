@@ -206,6 +206,8 @@ export function addMoves(c) {
       if (dz < -0.2 && Math.abs(dx) < Math.abs(dz)) wy = 0;
       wp = Math.max(-MOVES.up, Math.min(MOVES.up, -Math.atan2(dy, Math.hypot(dx, dz))));
     }
+    // (on a bed's move that asks for it: the head turned for a look round at the bed, whatever is looked at)
+    if (M.bed && M.bed.turn) wy = M.bed.turn;
     const k = Math.min(1, dt * MOVES.rate);
     M.yaw += (wy - M.yaw) * k; M.pitch += (wp - M.pitch) * k * 0.8;
     // in a talk: a slow lean one way and then the other; nods (the listener's now and then, the speaker's on a beat)
@@ -243,6 +245,9 @@ export function addMoves(c) {
     // (on a bed, lying back or sitting up: the upper back rounded forward, more of it in the chest)
     const curl = M.bed && M.bed.curl ? M.bed.curl : 0;
     if (curl) { turn(B.Abdomen, X, curl * 0.4, _rq); turn(B.Chest, X, curl * 0.6, _rq); }
+    // (and the chest turned a little with the head, for the look round at the bed)
+    const twist = M.bed && M.bed.twist ? M.bed.twist : 0;
+    if (twist) { turn(B.Abdomen, Y, twist * 0.4, _rq); turn(B.Chest, Y, twist * 0.6, _rq); }
     turn(B.Neck, Y, M.yaw * MOVES.neck, _rq); turn(B.Head, Y, M.yaw * (1 - MOVES.neck), _rq);
     // (on a bed, leaning back: the chin brought down, the neck taking half)
     const chin = M.bed && M.bed.chin ? M.bed.chin : 0;
