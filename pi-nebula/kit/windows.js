@@ -11,7 +11,15 @@
 //             short       a whole window two panels wide in one piece (placed on the grid point between its two
 //                         panels): the same glass as end-left + end-right, 3.25 m, but one pane with no upright in
 //                         the middle, and the wall over and under it one piece with no seam down its middle (the
-//                         scanner room's glass front: the game's maker, "I would prefer to remove the post")
+//                         scanner room's glass front: the game's maker, "I would prefer to remove the post"; the
+//                         terminal's upper window into the arena)
+//             long        the same, four panels wide (placed on the grid point between its middle two panels): the
+//                         glass of end-left + two middles + end-right, 7.25 m, in one pane with nothing standing in it
+//                         (the smelter's control room's window onto the Miner hangar, from either side). The game's
+//                         maker (2026-11-17): "I like windows that don't have stuff in the way ... I still don't think
+//                         interior windows would need them": a window between two of the station's rooms is one pane;
+//                         the big windows onto space keep their uprights ("Maybe it does look good on these main
+//                         windows")
 //   filler  an EDGE piece, the 1 m between two storeys (decks are 4 m apart, rooms 3 m): two-storey rooms stack the
 //           ordinary 3 m panels, deck 0 and deck 1, with this between them. Drawn from 3 m to 4 m.
 //             band    a dark band with a channel along it (the corridor's dark band, a storey up)
@@ -110,6 +118,7 @@ function wholePanel(p, hw, xc) {
 export function pane(p, v) {
   if (v === 'single') return wholePanel(p, 1, 0.1);
   if (v === 'short') return wholePanel(p, 2, XC + 1.1);
+  if (v === 'long') return wholePanel(p, 4, 3 - XC);
   if (v === 'end-left') return endPanel(p);
   if (v === 'end-right') {
     // the left end, mirrored

@@ -40,7 +40,7 @@ export const PIECES = {
   tray: { name: 'Cable tray', group: 'Wall kit', at: 'wall', variants: ['cables'], foot: [2, 0.25, 0.25], build: cableTray },
   sign: { name: 'Lit sign', group: 'Wall kit', at: 'wall', variants: SIGNS.flatMap((n) => [n, n + ' big']), foot: [2.4, 0.6, 0.1], build: sign },
   // windows: wall panels with a window band at eye level; a run is end-left + middles + end-right (a stadium)
-  pane: { name: 'Window wall', group: 'Windows', at: 'edge', variants: ['middle', 'end-left', 'end-right', 'single', 'short'], foot: [2, 3, 0.4], build: pane },
+  pane: { name: 'Window wall', group: 'Windows', at: 'edge', variants: ['middle', 'end-left', 'end-right', 'single', 'short', 'long'], foot: [2, 3, 0.4], build: pane },
   // big rooms (two storeys, 7 m: the ordinary panels stacked, deck 0 and deck 1, the filler band between)
   filler: { name: 'Band between storeys', group: 'Big rooms', at: 'edge', variants: ['band', 'ledge'], foot: [2, 1.2, 0.8], build: filler, y: 3.2 },
   column: { name: 'Column', group: 'Big rooms', at: 'point', variants: ['round', 'square', 'post'], foot: [0.8, 7, 0.8], build: column },
