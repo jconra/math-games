@@ -468,7 +468,10 @@ export function makeView({ W, G: G0 }) {
     // a held ball turned to show its number to the camera (upright)
     facing(b, camera) {
       const p = new THREE.Vector3(MID[0] + b.p[0], b.p[1], MID[2] + b.p[2]), f = camera.position.clone().sub(p).normalize();
-      const up = new THREE.Vector3(0, 1, 0).addScaledVector(f, -f.y).normalize(), x = new THREE.Vector3().crossVectors(up, f);
+      // (upright on the screen: the camera's own up, laid across the line of sight; the world's up fails when the camera
+      // looks steeply down on the ball)
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1); up.addScaledVector(f, -up.dot(f)).normalize();
+      const x = new THREE.Vector3().crossVectors(up, f);
       const m = new THREE.Matrix4().makeBasis(x, up, f), q = new THREE.Quaternion().setFromRotationMatrix(m);
       b.q = [q.x, q.y, q.z, q.w];
     },

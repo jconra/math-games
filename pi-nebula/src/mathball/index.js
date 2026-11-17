@@ -319,9 +319,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const pt = aimUI.touch || aimUI.mouse;
     return (pt && targetAt(pt.x, pt.y)) || aheadAim();
   }
-  // the throw at an aim: physics.js flightPath from where the ball leaves the hand (game.js throwFrom: the throw's own)
+  // the throw at an aim: physics.js flightPath from where the ball leaves the hand (game.js throwFrom: the throw's own).
+  // (none for the straight-ahead aim: an arc nobody aimed read as a trail left on the floor)
   function pathFor(T) {
-    if (!T || T.ball != null) return null;
+    if (!T || T.ball != null || T.ahead) return null;
     const to = T.goal != null ? GOALS[T.goal].aim : T.at, from = throwFrom(G.you.x, G.you.z, to);
     const p = flightPath(from, to, lobTime(from, to), { free: T.goal == null });
     p.goal = T.goal != null ? T.goal : -1;
@@ -356,10 +357,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
 
   // ── each frame ─────────────────────────────────────────────────────────────────────────────────────────────────
-  const cam = { yaw: Math.PI, idle: 99, at: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true, lift: 0 };
+  const cam = { yaw: Math.PI, idle: 99, at: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true, lift: 0, settled: false };
   let lastCam = new THREE.Vector3(MID[0], 3, MID[2] + 8);
   const youNow = { x: 0, z: 0, vx: 0, vz: 0, heading: 0 }, prev = new THREE.Vector3();
-  let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null;
+  let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null, askAt = 0;
   function update(dt, P) {
     if (closed) return;
     // the drags turn the game's camera (taken before the station's camera sees them)
@@ -377,11 +378,16 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       const held = G.you.holding;
       G.step(dt, { eye, sees: (b) => view.sees(b), you: youNow });
       for (const e of G.take()) onEvent(e);
-      // (holding a ball: the goal buttons come up; a new ball in the hand, a word on what to do)
-      if (G.you.holding && !held) { const b = G.you.holding; showGoals(true); say(`Now ${touchy() ? 'tap' : 'click'} a goal that takes ${b.num}`, 4); }
+      // (holding a ball: the goal buttons come up; a new ball in the hand, a word on what to do, once the camera has
+      // turned to the far goals, or 0.9 s on: never "tap a goal" with no goal in view)
+      if (G.you.holding && !held) { showGoals(true); askAt = G.t + 0.9; }
+      if (askAt && (!G.you.holding || G.you.aim != null || G.you.toss)) askAt = 0;
+      if (askAt && (G.t >= askAt || cam.settled)) { askAt = 0; say(`Now ${touchy() ? 'tap' : 'click'} a goal that takes ${G.you.holding.num}`, 4); }
       if (!G.you.holding && goalsShown) showGoals(false);
     } else if (phase === 'end') G.step(dt, { eye, sees: (b) => view.sees(b) });
+    // (a ball in a hand, the player's or the other player's: its number turned to the camera, upright on the screen)
     if (G.you.holding) view.facing(G.you.holding, W.camera);
+    if (G.other.holding) view.facing(G.other.holding, W.camera);
     // the aiming arc, while a ball is in hand
     aimT = aimNow(); view.aim(pathFor(aimT));
     syncTargets();
@@ -431,7 +437,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (e.who === 'you') { answer(false); say(`Bounced out: ${e.why}`, 5, 'bad'); $('.mbl-help').classList.add('is-nudge'); }
       else theirs(`${name.replace(/^(Captain|Pilot) /, '')}'s ${e.num} bounced out of ${ruleOf(e.rule).say}`);
     } else if (e.type === 'change') {
-      if (e.to !== e.from) { view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).say}`, 3.5, 'change'); if (goalsShown) showGoals(true); }
+      if (e.to !== e.from) {
+        view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).say}`, 3.5, 'change');
+        // (its button changes at once, and flashes)
+        if (goalsShown) { showGoals(true); const bt = goalsEl.querySelector(`button[data-goal="${e.goal}"]`); if (bt) bt.classList.add('is-new'); }
+      }
     } else if (e.type === 'taken') say(`${name.replace(/^(Captain|Pilot) /, '')} got that one first`, 2.2, 'them');
     else if (e.type === 'end') endRound(e);
   }
@@ -498,10 +508,14 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (manual && G.you.target) G.you.target = null;   // (walking by hand drops the run to a ball)
       const w = G.you.want;
       if (!manual && w.to) {
-        const dx = w.to[0] - youNow.x, dz = w.to[1] - youNow.z, d = Math.hypot(dx, dz);
+        let dx = w.to[0] - youNow.x, dz = w.to[1] - youNow.z; const d = Math.hypot(dx, dz);
         if (d > 0.05) {
+          // (round the other player, never through them: pushed off them inside a metre)
+          dx /= d; dz /= d;
+          const ox = youNow.x - G.other.x, oz = youNow.z - G.other.z, od = Math.hypot(ox, oz);
+          if (od < 1.0 && od > 1e-3) { const k = (1.0 - od) * 2.2; dx += ox / od * k; dz += oz / od * k; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L; }
           const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw), mag = Math.min(1, d / 0.9);
-          move = { x: (dx * rx + dz * rz) / d * mag, y: (dx * fx + dz * fz) / d * mag, mag };
+          move = { x: (dx * rx + dz * rz) * mag, y: (dx * fx + dz * fz) * mag, mag };
         }
       }
       if (!manual && w.face != null) { const dh = wrapA(w.face - P.heading); P.heading = wrapA(P.heading + dh * Math.min(1, 12 * dt)); }
@@ -534,12 +548,13 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       if (w.face != null) { want = w.face; rate *= 1.5; }
       else if (G.you.holding) {
         // (a ball in hand: toward the court's far end from the player, so its two goals are in view while they choose)
-        want = Math.atan2(-youNow.x * 0.35, farSouth() ? 6 : -6); rate *= 1.8;
+        want = Math.atan2(-youNow.x * 0.35, farSouth() ? 6 : -6); rate *= 2.6;
       }
       else if (Math.hypot(youNow.x, youNow.z) > 2.2) { want = Math.atan2(-youNow.x * 0.55, -youNow.z); rate *= 0.6; }
       else if (sp > 0.8) { want = Math.atan2(youNow.vx, youNow.vz); rate *= Math.min(1, sp / 3); }
       if (want != null) { const d = wrapA(want - cam.yaw); cam.yaw = wrapA(cam.yaw + Math.sign(d) * Math.min(Math.abs(d), rate * dt)); }
-    }
+      cam.settled = want != null && Math.abs(wrapA(want - cam.yaw)) < 0.3;
+    } else cam.settled = true;
     if (cam.fresh) { cam.yaw = Math.PI; }
     const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw), lift = cam.lift;
     let ax = feet.x - fx * C.dist * (1 - lift * 0.12), az = feet.z - fz * C.dist * (1 - lift * 0.12), ay = C.height + lift * 0.9;

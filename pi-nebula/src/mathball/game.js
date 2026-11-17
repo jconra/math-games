@@ -48,7 +48,7 @@ export const ROUND = {
   // where a held ball is (m: to the right, up, forward of the feet): up in front, ready to throw, a little to the right,
   // so the camera behind and above the player sees it over their shoulder, its number turned to it (the game's maker:
   // "when you grab a ball you can see it in front of you")
-  hold: [0.3, 1.5, 0.62],
+  hold: [0.36, 1.62, 0.55],
   fade: 0.8,                       // s a swapped-out ball takes to fade
 };
 // THE OTHER PLAYER'S LEVELS: easier, a match, harder (the player picks one to start a round)
