@@ -1,6 +1,6 @@
 {
  "about": "The crew parts' far copies (made by ~/pw/space-math/rigs/station-life-2/far/far-make.cjs with meshoptimizer 1.3.0): for each part file, its skinned meshes in the order met, their points and triangles as made, and the triangles the far copy keeps (<file stem>.bin, Uint16, one mesh after another). check: a sum over the part's own triangle list, so a part re-made since is noticed (kit/crew.js then draws it whole and says so).",
- "made": "2026-11-17T00:13:06.290Z",
+ "made": "2026-11-17T02:09:06.826Z",
  "rules": {
   "about": "how far each kind of crew part is taken down: keep (the share of its triangles aimed for), error (the most a point may move off the part's surface, in metres: a pixel at 7 m on a 1280 x 720 screen is about 11 mm), normals (their weight, so the shading keeps its shape), uv (the weight of the texture's place on the part, so a big triangle never drags a texture's detail where it was not), flags (meshoptimizer's: ErrorAbsolute: the error in metres; LockBorder keeps the open edges where a part meets another in place: an outfit's collar and cuffs, a hand's stub, a head's neck; RegularizeLight: more even triangles, which bend better with the skin; Permissive: may fold across the texture's seams (hair: one colour all over)). A mesh under smallUnder triangles is kept as made; the eyes and their clear layer are never drawn far off. files: a part file whose rule differs from its kind's (the medic's outfit: 1 cm, where its jacket's hem showed a pale fleck at 2 cm).",
   "smallUnder": 700,
@@ -74,12 +74,12 @@
      "material": "suit_captain1",
      "points": 10772,
      "triangles": 15681,
-     "far": 4911,
-     "check": 993577026,
-     "error": 0.01977
+     "far": 4893,
+     "check": 993916986,
+     "error": 0.01984
     }
    ],
-   "bytes": 29466
+   "bytes": 29358
   },
   "suit_vega.glb": {
    "kind": "suit",
@@ -90,12 +90,12 @@
      "material": "tripo_mat_ad75ea44-1a1e-4f5b-a122-87bb1e6fb418",
      "points": 11782,
      "triangles": 9851,
-     "far": 8419,
+     "far": 8413,
      "check": 655834509,
-     "error": 0.01869
+     "error": 0.01852
     }
    ],
-   "bytes": 50514
+   "bytes": 50478
   },
   "suit_smelter.glb": {
    "kind": "suit",
@@ -106,12 +106,12 @@
      "material": "tripo_mat_35c07fc7-1769-48f8-bea7-b4a7171ddc75.001",
      "points": 6703,
      "triangles": 7048,
-     "far": 4574,
+     "far": 4578,
      "check": 274095988,
-     "error": 0.0199
+     "error": 0.01907
     }
    ],
-   "bytes": 27444
+   "bytes": 27468
   },
   "suit_medic.glb": {
    "kind": "suit",
@@ -122,12 +122,12 @@
      "material": "tripo_mat_02f58299-cb77-48c7-b596-cc797e15b9c8",
      "points": 6328,
      "triangles": 7247,
-     "far": 4183,
+     "far": 4179,
      "check": 258981591,
-     "error": 0.00994
+     "error": 0.00995
     }
    ],
-   "bytes": 25098
+   "bytes": 25074
   },
   "suit_cook.glb": {
    "kind": "suit",
@@ -138,12 +138,12 @@
      "material": "tripo_mat_e20f03f5-6f9f-430d-868c-c43956e533e0.001",
      "points": 6668,
      "triangles": 7743,
-     "far": 4429,
+     "far": 4433,
      "check": 296880430,
-     "error": 0.01904
+     "error": 0.01953
     }
    ],
-   "bytes": 26574
+   "bytes": 26598
   },
   "suit_security.glb": {
    "kind": "suit",
@@ -154,12 +154,12 @@
      "material": "tripo_mat_19ca71f4-5fe9-4b41-88ae-e8f8488c8081.001",
      "points": 6168,
      "triangles": 7188,
-     "far": 4068,
+     "far": 4066,
      "check": 258956253,
      "error": 0.01995
     }
    ],
-   "bytes": 24408
+   "bytes": 24396
   },
   "suit_dockWorker.glb": {
    "kind": "suit",
@@ -170,12 +170,12 @@
      "material": "tripo_mat_daf9fbd5-4bc9-4424-9efe-954ab223dcc6.001",
      "points": 6620,
      "triangles": 7062,
-     "far": 4542,
-     "check": 269354560,
-     "error": 0.01994
+     "far": 4540,
+     "check": 269354676,
+     "error": 0.01992
     }
    ],
-   "bytes": 27252
+   "bytes": 27240
   },
   "suit_civilian.glb": {
    "kind": "suit",
@@ -186,12 +186,12 @@
      "material": "tripo_mat_5f92d2cf-156c-47e8-a404-7df99e82335a.001",
      "points": 5898,
      "triangles": 7032,
-     "far": 3876,
+     "far": 3874,
      "check": 234327619,
-     "error": 0.01988
+     "error": 0.01986
     }
    ],
-   "bytes": 23256
+   "bytes": 23244
   },
   "suit_spaceMan.glb": {
    "kind": "suit",
@@ -202,12 +202,12 @@
      "material": "tripo_mat_22922ad2-4fc3-4bbf-a00a-540df823c830.001",
      "points": 6123,
      "triangles": 7018,
-     "far": 4074,
+     "far": 4078,
      "check": 245341577,
-     "error": 0.01973
+     "error": 0.01895
     }
    ],
-   "bytes": 24444
+   "bytes": 24468
   },
   "suit_spaceWoman.glb": {
    "kind": "suit",
@@ -220,7 +220,7 @@
      "triangles": 7049,
      "far": 4199,
      "check": 256509110,
-     "error": 0.01921
+     "error": 0.0196
     }
    ],
    "bytes": 25194
@@ -236,7 +236,7 @@
      "triangles": 6723,
      "far": 4321,
      "check": 240530501,
-     "error": 0.01856
+     "error": 0.01815
     }
    ],
    "bytes": 25926
@@ -250,12 +250,12 @@
      "material": "tripo_mat_defb590d-45ef-40f1-919e-6da53eacad51.001",
      "points": 6271,
      "triangles": 7052,
-     "far": 4190,
+     "far": 4188,
      "check": 257169767,
-     "error": 0.01984
+     "error": 0.01997
     }
    ],
-   "bytes": 25140
+   "bytes": 25128
   },
   "suit_captainWoman.glb": {
    "kind": "suit",
@@ -266,12 +266,12 @@
      "material": "tripo_mat_2cb921fe-282b-4ab1-ac49-dfc79a2ccfc5.001",
      "points": 5756,
      "triangles": 7059,
-     "far": 3665,
+     "far": 3657,
      "check": 232658900,
-     "error": 0.01976
+     "error": 0.01973
     }
    ],
-   "bytes": 21990
+   "bytes": 21942
   },
   "suit_atlantis1.glb": {
    "kind": "suit",
@@ -282,12 +282,12 @@
      "material": "tripo_mat_a2d5ae38-23b1-472c-ba2a-bde07e0a71bc.001",
      "points": 5536,
      "triangles": 6740,
-     "far": 3610,
-     "check": 216811931,
+     "far": 3616,
+     "check": 216811934,
      "error": 0.0196
     }
    ],
-   "bytes": 21660
+   "bytes": 21696
   },
   "suit_atlantis2.glb": {
    "kind": "suit",
@@ -298,12 +298,12 @@
      "material": "tripo_mat_2ca2ab6c-403a-4adc-b7bd-895e84eb3d3c.001",
      "points": 5926,
      "triangles": 6726,
-     "far": 4052,
+     "far": 4054,
      "check": 229162265,
-     "error": 0.01961
+     "error": 0.01949
     }
    ],
-   "bytes": 24312
+   "bytes": 24324
   },
   "suit_crew1.glb": {
    "kind": "suit",
@@ -314,12 +314,12 @@
      "material": "tripo_mat_7b951650-4ca7-4dde-a7c9-749ec941bc35",
      "points": 9360,
      "triangles": 8440,
-     "far": 6734,
+     "far": 6732,
      "check": 443474448,
      "error": 0.0189
     }
    ],
-   "bytes": 40404
+   "bytes": 40392
   },
   "head_captain1.glb": {
    "kind": "head",
