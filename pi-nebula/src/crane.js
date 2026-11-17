@@ -13,6 +13,12 @@
 //     the bay door, a turn over the pad, its legs down, down onto the pad: LANDING), full again, and the round starts
 //     over ("if the player is walking towards that hanger it could show the ship just coming in for landing so now it
 //     needs to be unloaded"). Missions and contracts come later: `haul` is where they will hook in.
+//     As it lands (the game's maker, 2026-11-17: "It should use the maneuvering thrusters ... They should turn and shoot
+//     out flames. If it was a really cool pilot they could be spinning around as they were traveling in. Also, I'd expect
+//     the main engine to be glowing, even if it is only just idling ... some wind and blasts of air shooting down"): it
+//     spins round once and a half on its way in, its six corner pods turn toward the way they push and fire (to slow it,
+//     to start and stop its spin, to hold it up), its main engine idles and its nozzle stays hot for a while after, and
+//     dust runs out along the floor under it (kit/ships/flight.js).
 //   - DRAWN WITH ITS ROOM. The moving parts are the kit's door leaves, hung on the hangar's own room, so they are drawn
 //     only when it is.
 //   - NOBODY UNDER A LOAD, by itself. The crane knows the patch of floor it is about to work over; while anyone stands
@@ -44,6 +50,8 @@ import { Voxels } from '../kit/bake.js';
 import { updateDoors, setDoors } from '../kit/layout.js';
 import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
+import { POD } from '../kit/ships/miner-built.hull.js';
+import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
 import { LOADS } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 
@@ -61,8 +69,14 @@ export const AREA = /^(hangar-miner|stub-miner|smelter-|ship-miner)/;
 // THE LANDING: seconds in all; where it comes in from (m out past the bay door, along the ship's nose line); its
 // height over the pad while it comes in and turns (its top under the bay door's lintel and the roof's lamps); when
 // its legs come down; the turn
-// (the turn slower and the way down starting as it ends, 15 s in all: strips of the landing showed a sudden swing, then a long slow sink)
-export const LANDING = { secs: 15, from: 46, hover: 3.0, turnFrom: 0.34, turnTo: 0.66, legs: 0.6, down: 0.66 };
+// (the turn slower and the way down starting as it ends: strips of the landing showed a sudden swing, then a long slow sink)
+// (the turn a spin, once and a half round, "a really cool pilot": it starts once the ship is all the way in through the
+// bay door (by then it is 7.7 m out from the pad), so its ends never swing through the door's frame; 17 s in all)
+export const LANDING = { secs: 17, from: 46, hover: 3.0, inBy: 0.34, turnFrom: 0.2, turnTo: 0.68, turns: 1.5, legs: 0.6, down: 0.64 };
+// THE LANDING'S THRUSTERS (kit/ships/flight.js): how far the pods may turn here (a little further down than the ship
+// lab's swing, so the jets blow down at the floor), the pods' jets' length against the lab's, the main engine idling,
+// how long its nozzle takes to cool after it is down (s), how long the dust takes to settle (s)
+export const FLIGHT = { swing: { yaw: 1.2, pitch: 0.62 }, podLen: 1.1, idle: 0.15, cool: 30, settle: 1.6 };
 // THE SWING: how long a swing takes (a pendulum of about the cables' length), how quickly it dies away, and the most
 // it swings (radians)
 export const SWING = { period: 3.2, damp: 0.55, most: 0.06 };
@@ -113,13 +127,8 @@ export function makeCrane({ W, walls, boarding = null }) {
       for (const im of S.meshes) { im.matrix.identity(); im.matrixWorldNeedsUpdate = true; }
       L.ship(null); return;
     }
-    const N = LANDING, ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
-    // (in nose first, slowing; a half turn over the pad; down onto it)
-    const kIn = Math.min(1, k / N.turnFrom), out = (1 - kIn) * (1 - kIn) * N.from;   // (eased in: it slows as it comes)
-    const turn = ease((k - N.turnFrom) / (N.turnTo - N.turnFrom)), down = ease((k - N.down) / (1 - N.down));
-    const yaw = Math.PI * (1 - turn), h = N.hover * (1 - down) + Math.sin(k * 21) * 0.04 * (1 - down);
-    const tilt = (1 - kIn) * 0.06 - Math.sin(Math.PI * turn) * 0.025;   // (nose a little up while it slows)
-    _p.set(S.at.x + S.nose * out, h, S.at.z);
+    const { x, h, z, yaw, tilt } = poseAt(k);
+    _p.set(x, h, z);
     // (turned about the pad's middle: the ship's frame turned by `yaw`, then moved; parked is the identity)
     _q.setFromEuler(_e.set(0, yaw, tilt * S.nose));
     _o.compose(_p, _q, _s); _i.makeTranslation(-S.at.x, 0, -S.at.z); S.M.multiplyMatrices(_o, _i);
@@ -127,17 +136,59 @@ export function makeCrane({ W, walls, boarding = null }) {
     for (const im of S.meshes) { im.matrixAutoUpdate = false; im.matrix.copy(S.M); im.matrixWorldNeedsUpdate = true; }
     L.ship(S.M);
   }
+  // the Miner `k` of the way through its landing, as numbers: where its middle is over the floor, how high, its turn
+  // (0 parked, nose out of the bay door; it comes in turned half round, nose first) and the nose's tilt
+  const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  function poseAt(k) {
+    const N = LANDING, S = ship;
+    // (in nose first, slowing; spinning round once and a half on the way in, over the pad; down onto it)
+    const kIn = Math.min(1, k / N.inBy), out = (1 - kIn) * (1 - kIn) * N.from;   // (eased in: it slows as it comes)
+    const turn = ease((k - N.turnFrom) / (N.turnTo - N.turnFrom)), down = ease((k - N.down) / (1 - N.down));
+    const yaw = Math.PI - 2 * Math.PI * N.turns * turn, h = N.hover * (1 - down) + Math.sin(k * 21) * 0.04 * (1 - down);
+    const tilt = (1 - kIn) * 0.06 - Math.sin(Math.PI * turn) * 0.025;   // (nose a little up while it slows)
+    return { x: S.at.x + S.nose * out, h, z: S.at.z, yaw, tilt };
+  }
+  // how it moves at `k`, for its thrusters: its acceleration in its own frame (x its left, y up, z its nose), its
+  // spin's, and how much the pods hold it up (all of it until its feet are on the pad)
+  const _acc = new THREE.Vector3();
+  function motionAt(k) {
+    // (the window kept inside the landing: at its ends, the nearest whole one)
+    const T = LANDING.secs, e = 0.004, kk = Math.min(1 - e, Math.max(e, k)), a = poseAt(kk - e), b = poseAt(kk), c = poseAt(kk + e), dt2 = (e * T) * (e * T);
+    const ax = (a.x - 2 * b.x + c.x) / dt2, ay = (a.h - 2 * b.h + c.h) / dt2, az = (a.z - 2 * b.z + c.z) / dt2, spin = (a.yaw - 2 * b.yaw + c.yaw) / dt2;
+    // (the ship's own axes in the station: its nose is the parked nose turned by yaw; its left is up across the nose)
+    const nx = ship.nose * Math.cos(b.yaw), nz = -ship.nose * Math.sin(b.yaw), lx = nz, lz = -nx;
+    _acc.set(ax * lx + az * lz, ay, ax * nx + az * nz);
+    const now = poseAt(k);
+    return { acc: _acc, spin, hold: k < 0.985 ? 1 : 0, x: now.x, z: now.z, h: now.h };
+  }
+  // the thrusters, the engine and the air it blows down (made at the first landing; the pods must be live doors: the
+  // station file's parked Miner holds none of them)
+  let flight = null, air = null, cool = 0, settle = 0;
+  function flightFx() {
+    if (flight !== null || !ship) return flight;
+    const pods = W.built.doors.filter((D) => D.zone === 'ship-miner' && D.piece === 'mbPod' && D.hold == null && D.leaves.length && D.leaves[0].hinge);
+    if (!pods.length) { flight = false; return flight; }
+    const frame = new THREE.Matrix4().copy(pods[0].leaves[0].M).multiply(new THREE.Matrix4().makeTranslation(0, -MB.DECK, 0));
+    flight = makeFlight({ pods, podHalf: POD.size[2] / 2, swing: FLIGHT.swing, nozzles: MB.jetNozzles(), jet: MB.JET, podJet: { len: MB.POD_JET.len * FLIGHT.podLen, gain: MB.POD_JET.gain, r: MB.POD_JET.r }, frame, parent: ship.zone.group, quality: W.quality });
+    air = makeDownwash({ parent: room.group, quality: W.quality });
+    ship.pods = pods;
+    return flight;
+  }
   let landT = 0, legsDown = false;
   function beginLanding() {
     L.reset(); t = 0; mode = 'landing'; landT = 0; legsDown = false;
     C.haul = { n: L.round, landed: false, at: performance.now() };
     if (boarding && boarding.hold) boarding.hold('miner', true);
     if (ship) { for (const D of ship.legs) { W.driven.add(D); D.held0 = D.held0 ?? D.hold; D.hold = null; } setDoors(ship.legs, 1); }
+    // (its pods are the landing's to turn)
+    if (flightFx()) { for (const D of ship.pods) W.driven.add(D); cool = 0; settle = 0; }
     // (the ship out past the bay door first, then everything posed: its canisters ride with it from the first frame)
     shipAt(0); L.pose(0);
   }
   function landed() {
     shipAt(null); mode = 'round'; t = 0; C.haul.landed = true;
+    // (down: its pods back along it, their jets out; the engine off, its nozzle hot and cooling; the dust settling)
+    if (flight) { flight.rest(); for (const D of ship.pods) W.driven.delete(D); cool = 1; settle = 1; }
     if (ship) { for (const D of ship.legs) { D.hold = D.held0 ?? 0; W.driven.delete(D); } setDoors(ship.legs, 0); }
     if (boarding && boarding.hold) boarding.hold('miner', false);
   }
@@ -217,8 +268,19 @@ export function makeCrane({ W, walls, boarding = null }) {
         if (ship && k > LANDING.legs && !legsDown) legsDown = true;
         if (ship && legsDown) MB.gearStep(W.built, false, dt, updateDoors);
         shipAt(k); L.pose(0); posePieces(L.state(0), 0);
+        if (flightFx()) {
+          const m = motionAt(k);
+          flight.update(dt, { acc: m.acc, spin: m.spin, hold: m.hold, engine: FLIGHT.idle, heat: 1 });
+          air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold });
+        }
         if (k >= 1) landed();
         return;
+      }
+      // (after it is down: its nozzle cooling, the dust settling, for as long as either shows)
+      if (flight && (cool > 0 || settle > 0)) {
+        cool = Math.max(0, cool - dt / FLIGHT.cool); settle = Math.max(0, settle - dt / FLIGHT.settle);
+        flight.update(dt, { engine: 0, heat: cool * cool });
+        if (settle > 0) air.update(dt, { x: ship.at.x, z: ship.at.z, height: 0, strength: settle * settle }); else air.hide();
       }
       if (mode === 'live' || mode === 'leaving') {
         live.step(dt, mode === 'live' ? cmd : {}); cmd = {};
@@ -272,6 +334,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     away() { if (live) return false; mode = 'away'; return true; },
     land() { beginLanding(); return true; },
     landing: () => (mode === 'landing' ? Math.min(1, landT / LANDING.secs) : null),
+    flight: () => (flight ? { pods: flight.pods.map((p) => ({ yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), end: p.end, thrust: +p.set.thrust.toFixed(3) })), engine: flight.main ? +flight.main.thrust.toFixed(3) : null, cool: +cool.toFixed(3), drawn: flight.drawn, air: air ? +air.disc.material.uniforms.strength.value.toFixed(3) : null } : null),
     voxels: () => voxels || (voxels = reachVoxels(W, L.site)),
     oreOf, shipAt,
   };

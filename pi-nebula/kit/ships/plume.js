@@ -47,10 +47,12 @@ const FRAG = `
     float t = vT, r = 1.0 - facing;
     // the core fades down the length, the sheath sooner at the rim
     float coreW = smoothstep(0.75, 0.15, r);
-    float fadeLen = pow(1.0 - t, 1.3);
+    // (pow only of numbers no rounding takes below zero: on some graphics cards one that is is not a number, and the
+    // glow's blur spreads that pixel into a black block)
+    float fadeLen = pow(max(0.0, 1.0 - t), 1.3);
     // shock diamonds: bright rings down the core, their spacing opening with thrust, fading with distance
     float spacing = 0.09 + 0.09 * thrust;
-    float diamonds = pow(0.5 + 0.5 * cos(t / spacing * 6.2831853), 6.0) * (1.0 - t) * coreW * smoothstep(0.2, 0.6, thrust);
+    float diamonds = pow(max(0.0, 0.5 + 0.5 * cos(t / spacing * 6.2831853)), 6.0) * max(0.0, 1.0 - t) * coreW * smoothstep(0.2, 0.6, thrust);
     // flicker down the plume and a slow throb of the whole
     float flick = 0.85 + 0.3 * noise1(t * 18.0 - time * 26.0) + 0.1 * sin(time * 3.7);
     // (the white-hot middle only when it runs hot: at idle the core is its own dull colour)
