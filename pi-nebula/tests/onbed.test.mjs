@@ -36,7 +36,7 @@ function legs(move, t, who) {
   for (const [i, s] of [[0, 1], [1, -1]]) {
     const hip = add(P.hips, L, s * who.w), ik = twoBone(hip, P.feet[i], P.pole, who.a, who.b), knee = ik.mid, foot = ik.end;
     const sd = sub(foot, knee), sl = len(sd), ankle = add(knee, sd, (sl - 0.08) / sl);
-    const fw = footWay(sd, P.pole, ahead(P.heading), P.flat);
+    const fw = footWay(sd, P.pole, ahead(P.heading), P.flat, { point: P.point, pitch: P.pitch, out: L.map((v) => v * s), roll: P.roll });
     const toe = add(foot, fw.toe, 0.2), heel = add(foot, fw.toe, -0.04), top = add(foot, fw.up, 0.09), instep = add(toe, fw.up, 0.045);
     let deep = 0, what = '';
     for (const B of BOXES) {

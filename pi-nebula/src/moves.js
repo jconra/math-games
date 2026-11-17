@@ -131,7 +131,7 @@ export function addMoves(c) {
     M.hipAt.copy(_mid).sub(c.root.position).applyQuaternion(_iq.copy(_rq).invert());
     c.root.position.add(_v1.copy(D.hips).sub(_mid)); c.root.updateMatrixWorld(true);
     if (!(D.legs > 0.001)) return;
-    for (const [i, s] of [[0, 'L'], [1, 'R']]) {
+    for (const [i, s, sg] of [[0, 'L', 1], [1, 'R', -1]]) {
       const U = B['UpperLeg' + s], L = B['LowerLeg' + s], F = B['Foot' + s]; if (!U || !L) continue;
       const hip = U.getWorldPosition(_h), knee0 = L.getWorldPosition(_k);
       const ik = twoBone(arr(hip), arr(D.feet[i]), arr(D.pole), M.body.a, M.body.b);
@@ -146,7 +146,9 @@ export function addMoves(c) {
       // the foot (the crew's feet hang from the root, not the shins: turned here; the crew kit then puts it at the
       // shin's end): its own +y to the toes, its +z down out of the sole
       if (F && F.parent) {
-        const fw = footWay(arr(_v1.setFromMatrixColumn(L.matrixWorld, 1)), arr(D.pole), arr(D.ahead), D.flat);
+        // (up on the toes, pointed, or turned out at rest: the move's own; their left, for which way is out)
+        _ty.set(sg, 0, 0).applyQuaternion(_rq);
+        const fw = footWay(arr(_v1.setFromMatrixColumn(L.matrixWorld, 1)), arr(D.pole), arr(D.ahead), D.flat, { point: D.point, pitch: D.pitch || 0, out: arr(_ty), roll: D.roll || 0 });
         _ty.fromArray(fw.toe); _tz.fromArray(fw.up).negate(); _tx.crossVectors(_ty, _tz);
         _qa.setFromRotationMatrix(_m4.makeBasis(_tx, _ty, _tz));
         F.getWorldQuaternion(_qb).slerp(_qa, Math.min(1, D.legs));

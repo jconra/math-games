@@ -1048,6 +1048,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     D.fingers = p.fingers ? p.fingers.map((f, i) => D3(f, (D.fingersV || (D.fingersV = [new THREE.Vector3(), new THREE.Vector3()]))[i])) : null;
     D.elbows = p.elbows ? p.elbows.map((f, i) => D3(f, (D.elbowsV || (D.elbowsV = [new THREE.Vector3(), new THREE.Vector3()]))[i])) : null;
     D.legs = p.legs; D.flat = p.flat; D.arms = p.hands ? p.arms : 0; D.chin = p.chin || 0;
+    D.point = p.point; D.pitch = p.pitch || 0; D.roll = p.roll || 0;
     const pose = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
     const h = Math.atan2(D.ahead.x, D.ahead.z);
     pose.q.setFromEuler(_e.set(-p.lean, h, 0, 'YXZ'));
