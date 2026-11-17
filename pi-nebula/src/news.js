@@ -26,6 +26,7 @@ const OUT_THERE = {
 };
 const pick = (L) => L[Math.floor(Math.random() * L.length)];
 const two = (L) => { const a = pick(L); let b = pick(L); while (b === a) b = pick(L); return [a, b]; };
+const same = (a, b) => Object.keys(b).every((k) => a[k] === b[k]);
 
 function makeNews() {
   const list = [];
@@ -36,8 +37,16 @@ function makeNews() {
     fresh(kind = null) { return list.filter((n) => now - n.at < FRESH && (!kind || n.kind === kind)); },
     update(dt) {
       now += dt;
-      // (something new happens out there every five to nine minutes)
-      if (now > next) { next = now + 300 + Math.random() * 240; const k = pick(Object.keys(OUT_THERE)); N.add({ kind: k, ...OUT_THERE[k]() }); }
+      // (something new happens out there every five to nine minutes: not the same kind as the last, nor the same as any
+      // still going round; a planet is found only once)
+      if (now > next) {
+        next = now + 300 + Math.random() * 240;
+        const kinds = Object.keys(OUT_THERE).filter((k) => !list[0] || k !== list[0].kind);
+        for (let i = 0; i < 8; i++) {
+          const k = pick(kinds), item = { kind: k, ...OUT_THERE[k]() };
+          if (!list.some((n) => same(n, item) && (k === 'planet' || now - n.at < FRESH))) { N.add(item); break; }
+        }
+      }
     },
     get now() { return now; },
   };
