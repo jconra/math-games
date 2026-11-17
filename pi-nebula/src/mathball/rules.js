@@ -4,7 +4,8 @@
 // and there could be one that says multiples of 8. So the 8 ball could go in either").
 //
 //   ruleOf('mult:3')          one rule from its short name (the ladder writes rules this way): { id, sign: [words,
-//                             number?] (the board: the words small over the number big), say (plain words), test(v),
+//                             number?] (the board: the words small over the number big), say (plain words), takes
+//                             (what a goal with it takes, where say is not a noun: "numbers that round to 3"), test(v),
 //                             help (one plain line for Help), list (examples), why(ball) (why a ball fits or doesn't) }
 //                             names: even, odd, less:N, more:N, mult:N, fact:N, square, prime, cube, tens:N, ones:N,
 //                             and for fraction and decimal balls eq:N (equal to), between:A:B, round:N (rounds to N);
@@ -105,7 +106,7 @@ const KINDS = {
   }),
   // (less and more than a whole number; or, for fraction and decimal balls, than a fraction or a decimal: 'more:1/2')
   less: (x) => ({
-    sign: ['less than', String(x)], say: `less than ${x}`, test: (v) => cmp(v, value(x)) < 0,
+    sign: ['less than', String(x)], say: `less than ${x}`, takes: `numbers less than ${x}`, test: (v) => cmp(v, value(x)) < 0,
     help: isFrac(x) && value(x).n * 2 === value(x).d ? 'Less than 1/2: the top number is less than half the bottom number (1/3: half of 3 is 1 and a half, and 1 is less).'
       : isFrac(x) && value(x).n === 1 ? `Less than ${x}: a smaller part than ${x}. 1/${value(x).d + 1} and 1/${value(x).d * 2} are smaller: the more parts a whole is cut into, the smaller each part.`
       : !isWhole(value(x)) ? `Less than ${x}: smaller than ${x}, and not ${x} itself.${isFrac(x) && decOf(value(x)) ? ` (${x} is ${decOf(value(x))}.)` : ''}`
@@ -117,7 +118,7 @@ const KINDS = {
     },
   }),
   more: (x) => ({
-    sign: ['more than', String(x)], say: `more than ${x}`, test: (v) => cmp(v, value(x)) > 0,
+    sign: ['more than', String(x)], say: `more than ${x}`, takes: `numbers more than ${x}`, test: (v) => cmp(v, value(x)) > 0,
     help: isFrac(x) && value(x).n * 2 === value(x).d ? 'More than 1/2: the top number is more than half the bottom number (3/4: half of 4 is 2, and 3 is more).'
       : !isWhole(value(x)) ? `More than ${x}: bigger than ${x}, and not ${x} itself.${isFrac(x) && decOf(value(x)) ? ` (${x} is ${decOf(value(x))}.)` : ''}`
         : `More than ${x}: bigger than ${x}, and not ${x} itself.`,
@@ -129,7 +130,7 @@ const KINDS = {
   }),
   // EQUAL TO a fraction, a decimal or 1: the same amount, however it is written (2/4, 3/6 and 0.5 are all 1/2)
   eq: (x) => ({
-    sign: ['equal to', String(x)], say: `equal to ${x}`, test: (v) => cmp(v, value(x)) === 0,
+    sign: ['equal to', String(x)], say: `equal to ${x}`, takes: `numbers equal to ${x}`, test: (v) => cmp(v, value(x)) === 0,
     help: String(x) === '1' ? 'Equal to 1: one whole. The top number and the bottom number are the same (3/3, 4/4).'
       : isFrac(x) && value(x).n * 2 === value(x).d ? `Equal to 1/2: one half. The top number is exactly half the bottom number (2/4, 3/6, 5/10), and 0.5 is a half too.`
         : `Equal to ${x}${NAMES[String(x)] ? `, ${NAMES[String(x)]}` : ''}: the same amount, however it is written (${examplesOf((v) => cmp(v, value(x)) === 0, [FRACS, DECS], 3).replace(' ...', '')}).`,
@@ -148,7 +149,7 @@ const KINDS = {
   }),
   // BETWEEN two numbers (more than the first and less than the second): 'between:0:1' takes 0.3 and 2/3, not 1
   between: (a, b) => ({
-    sign: ['between', `${a} and ${b}`], say: `between ${a} and ${b}`, test: (v) => cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0,
+    sign: ['between', `${a} and ${b}`], say: `between ${a} and ${b}`, takes: `numbers between ${a} and ${b}`, test: (v) => cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0,
     help: `Between ${a} and ${b}: more than ${a} and less than ${b}${String(a) === '0' && String(b) === '1' ? ': a part of one, less than a whole (0.3, 0.75, 2/3)' : ''}.`,
     list: examplesOf((v) => cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0, isFrac(a) || isFrac(b) ? [FRACS, DECS] : [DECS, FRACS]),
     why: (v, B) => (cmp(v, value(a)) > 0 && cmp(v, value(b)) < 0 ? `${B} is between ${a} and ${b}: more than ${a}, less than ${b}.`
@@ -156,7 +157,7 @@ const KINDS = {
   }),
   // ROUNDS TO a whole number: its nearest whole number (the tenths: 5 or more rounds up)
   round: (k) => ({
-    sign: ['rounds to', String(k)], say: `rounds to ${k}`, test: (v) => nearest(v) === +k,
+    sign: ['rounds to', String(k)], say: `rounds to ${k}`, takes: `numbers that round to ${k}`, test: (v) => nearest(v) === +k,
     help: `Rounds to ${k}: ${k} is the nearest whole number. Look at the tenths: 5 or more rounds up (${+k - 1}.6 rounds up to ${k}), under 5 rounds down (${k}.3 rounds down to ${k}).`,
     list: examplesOf((v) => nearest(v) === +k && !isWhole(v) && (2 * v.n) % v.d !== 0, [DECS]),
     why: (v, b) => {

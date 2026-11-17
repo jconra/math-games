@@ -474,7 +474,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       else theirs(`${name.replace(/^(Captain|Pilot) /, '')}'s ${e.num} bounced out of ${ruleOf(e.rule).say}`);
     } else if (e.type === 'change') {
       if (e.to !== e.from) {
-        view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).say}`, 3.5, 'change');
+        view.change(e.goal, e.to); sound.play('change'); say(`The ${GOALS[e.goal].colour} goal now takes ${ruleOf(e.to).takes || ruleOf(e.to).say}`, 3.5, 'change');
         // (its button changes at once, and flashes)
         if (goalsShown) { showGoals(true); const bt = goalsEl.querySelector(`button[data-goal="${e.goal}"]`); if (bt) bt.classList.add('is-new'); }
       }
