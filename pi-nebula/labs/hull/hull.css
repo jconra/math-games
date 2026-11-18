@@ -32,3 +32,5 @@ body { --bar: 0px; }
 .cw.hl-held .cw-sec:has(.hl-live) > *:not(.hl-live) { opacity: 0.1; }
 .cw.hl-held .hl-live { background: rgba(12, 18, 26, 0.7); border-radius: 8px; }
 @media (max-width: 520px) { .cw-slider .kl-label { flex-basis: 96px; } }
+/* the four shape options: four big letters in a row */
+.hl-shapes .chip { min-width: 58px; font-size: 17px; font-weight: 700; padding: 7px 0; }

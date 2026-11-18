@@ -5,22 +5,31 @@
 // experiment."
 //
 // WHAT IS SHOWN: a real-size piece of the hull (sample-plan.js): the wide middle band with one hangar door and its
-// shield, two tiers stepping in above it and two below with rows of lit windows, one bevelled end; a person 1.8 m tall
+// shield, two tiers stepping in above it and two below with rows of windows, one bevelled end; a person 1.8 m tall
 // on the door's sill and a ship-sized block 17 m long in the hangar for scale. It hangs under the game's own sky and sun
 // (world/sky.js), and the sun can be turned round it, because a metal finish changes with the light.
 //
-// THE LOOK IS THE GAME'S, NOT THE LAB'S: the settings, the three ready-made looks and the text that Copy makes are
-// kit/hull-look.js; the materials and the plated tiers are kit/hull.js (hullMaterials, buildHull). This file only
-// shows them and puts sliders on them.
+// THE SHAPE OF THE ARMOUR IS ONE OF FOUR OPTIONS, A TO D (sample-plan.js shapePlan; the game's maker, 2026-11-18: "I
+// would prefer to see options, like A, B, C or D"): stacked plates, shoulders, big raised plates with sunk panels, a
+// mix; each with tiers of different steps. The Shape window switches between them at once; the look stays as it is.
+//
+// THE LOOK IS THE GAME'S, NOT THE LAB'S: the settings, the ready-made looks, the station's own look (the one the
+// game's maker made here: the lab opens on it) and the text that Copy makes are kit/hull-look.js; the materials and the
+// plated tiers are kit/hull.js (hullMaterials, buildHull); the shapes are kit/hull-plates.js. This file only shows
+// them and puts sliders on them.
 //
 // THE CONTROLS: W A S D fly (Space up, C down, Shift faster; the closer to the hull, the slower), drag to look. On a
 // touch screen: drag to look, a stick to fly, two buttons for up and down. THE MENUS are the Crew Lab's own
 // (../crew/windows.js, used as it is): a small master menu of categories, each opening a window that is dragged by its
 // top bar and closed by its X; everything inside a window wraps.
-//   Looks    the three ready-made looks; Copy settings, Paste settings, Reset; the look as text
+//   Shape    the four shape options, A to D
+//   Looks    the station's own look and three ready-made ones; Copy settings, Paste settings, Reset; the look as text
+//            (the shape's letter rides in it)
 //   Colours  the two greys, the trim, how much one plate differs from the next, the window light
-//   Plates   width, height, how far each row laps over the next, the bevel, the cut corners, the seam's gap, the rows' shift, uneven widths
-//            and heights
+//   Plates   width, height, the bevel, the cut corners, the seam's gap, the rows' shift, uneven widths and heights.
+//            (Rows lapping over one another like roof tiles are not offered any more: "I don't want them to look like
+//            shingles". The look still has its `lap` number, so old copied text still pastes; the lab lays every
+//            shape with it at 0.)
 //   Finish   for the middle band, the tiers and the trim, each its own: plain, brushed, tempered, cross-hatched,
 //            mottled, with that finish's own sliders; shine and roughness
 //   Wear     five layers, each its own amount: scratches, worn edges, dark streaks, meteoroid pits, grime
@@ -31,15 +40,15 @@
 // What he changes is kept in this browser (localStorage) between visits; where the windows are, for this tab.
 //
 // FOR THE PICTURE RIGS: ?rig keeps the drawing for a screenshot, ?ui=0 hides the menus, ?fresh forgets what was kept,
-// ?look=<name>&view=<name>&sun=<degrees>; and window.HULL (set, useLook, view, from, sun, shadows, markers, stats, text;
-// for measuring: bare, size, repeat).
+// ?shape=<A to D>&look=<name>&view=<name>&sun=<degrees>; and window.HULL (shape, set, useLook, view, from, sun, shadows,
+// markers, stats, text; for measuring: bare, size, repeat).
 import * as THREE from 'three';
 import { createSky, DIR, skyDir } from '../../world/sky.js';
 import { shieldMaterial, U } from '../../kit/materials.js';
 import { hullMaterials, buildHull } from '../../kit/hull.js';
-import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, DEFAULT_LOOK, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, isLookText, lookName, showValue } from '../../kit/hull-look.js';
+import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, readShape, isLookText, sameLook, lookName, showValue } from '../../kit/hull-look.js';
 import { makeMenus } from '../crew/windows.js';
-import { SAMPLE, SAMPLE_BOX } from './sample-plan.js';
+import { SAMPLE_BOX, SHAPES, SHAPE_NAMES, SHAPE_SAYS, shapePlan } from './sample-plan.js';
 import { inside, markers } from './dressing.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
@@ -53,14 +62,16 @@ const D2R = Math.PI / 180;
 const SUN0 = { turn: Math.atan2(DIR.sun.z, DIR.sun.x) / D2R, high: Math.asin(DIR.sun.y) / D2R };
 // (the sun's shadows start off, as nothing in the game casts one: with the game's low sun they change the picture
 // very little, and they cost drawing the hull a second time)
-const view = { turn: 0, high: Math.round(SUN0.high), shadows: false, markers: true };
-let look = readLook(HULL_LOOKS[DEFAULT_LOOK]);
+const view = { turn: 0, high: Math.round(SUN0.high), shadows: false, markers: true, shape: SHAPES[0] };
+// (the lab opens on the station's own look: the one the game's maker made here)
+let look = readLook(STATION_LOOK);
 if (!q.has('fresh')) {
   try { const t = localStorage.getItem(KEY); if (t && isLookText(t)) look = readLook(t); } catch (_) { /* nothing kept */ }
-  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; } } catch (_) { /* nothing kept */ }
+  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; if (SHAPES.includes(v.shape)) view.shape = v.shape; } } catch (_) { /* nothing kept */ }
 }
 if (HULL_LOOKS[q.get('look')]) look = readLook(HULL_LOOKS[q.get('look')]);
 if (q.get('look') === 'station') look = readLook(STATION_LOOK);
+if (SHAPES.includes((q.get('shape') || '').toUpperCase())) view.shape = q.get('shape').toUpperCase();
 if (q.has('sun')) view.turn = ((+q.get('sun') % 360) + 360) % 360 || 0;
 let saveT = 0;
 const save = () => { try { localStorage.setItem(KEY, writeLook(look)); localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (_) { /* this visit only */ } };
@@ -114,7 +125,8 @@ let hull = null, buildMs = 0, paintMs = 0;
 function rebuild() {
   const t0 = performance.now();
   if (hull) hull.dispose();
-  hull = buildHull(SAMPLE, look, mats, { shield }); stage.add(hull.group);
+  // (every shape is laid flush: rows lapping like roof tiles are not offered any more)
+  hull = buildHull(shapePlan(view.shape), { ...look, lap: 0 }, mats, { shield }); stage.add(hull.group);
   buildMs = performance.now() - t0;
 }
 const room = inside(), marks = markers(); stage.add(room, marks);
@@ -132,10 +144,12 @@ function lookFrom(at, to) {
 }
 const VIEWS = {
   whole: { name: 'Whole piece', at: [27, 8.6, -35], to: [-9, 4, -5] },
+  wall: { name: 'The wall by the door', at: [23, 4.4, -29], to: [-2.6, 4.3, -18] },
   door: { name: 'The door', at: [35, 6, 7], to: [0, 4.6, -1] },
   plates: { name: 'Plates close up', at: [7.2, 5.4, -28.5], to: [-3.6, 4.4, -22.4] },
   end: { name: 'The bevelled end', at: [18, 13, -62], to: [-10, 4, -24] },
   tiers: { name: 'Tiers and windows', at: [16, 22, 0], to: [-6, 14.5, -9] },
+  windows: { name: 'Windows close up', at: [8.3, 15.6, -1.5], to: [-3.2, 13.6, -1.7] },
   below: { name: 'From below', at: [26, -25, 14], to: [-6, -5, -8] },
   person: { name: 'Beside the person', at: [4.4, 2.5, -4.6], to: [0.2, 1.75, -8.2] },
 };
@@ -193,8 +207,14 @@ function changed(key) {
   dirtyLook = true; if (!key || SETTING[key].win === 'plates') dirtyPlates = true;
   saveSoon(); syncText();
 }
-// a whole look taken up (a ready-made one, pasted text, Reset): every window drawn again
-function take(next) { look = readLook(next); changed(); menu(); }
+// a whole look taken up (a ready-made one, pasted text, Reset): every window drawn again. Text that names a shape
+// ("shape":"B") brings its shape with it
+function take(next) { look = readLook(next); const s = readShape(next); if (s) view.shape = s; changed(); menu(); }
+// one of the four shapes: the plates are laid again, the look stays
+function setShape(letter) {
+  if (!SHAPES.includes(letter) || letter === view.shape) return;
+  view.shape = letter; dirtyPlates = true; saveSoon(); syncText(); paint('shape'); paint('cost');
+}
 
 // ── small pieces the windows are made of (the Crew Lab's styles) ───────────────────────────────────────────────
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -227,9 +247,10 @@ function colour(key) {
 
 // ── THE MENUS ───────────────────────────────────────────────────────────────────────────────────────────────────
 const WINDOWS = [
-  { id: 'looks', label: 'Looks', title: 'Three ready-made looks to start from; copy, paste or reset your settings' },
+  { id: 'shape', label: 'Shape', title: 'Four ways to shape the armour, A to D' },
+  { id: 'looks', label: 'Looks', title: 'The station\'s own look and three ready-made ones; copy, paste or reset your settings' },
   { id: 'colours', label: 'Colours', title: 'The greys, the trim and the window light' },
-  { id: 'plates', label: 'Plates', title: 'The plates\' size, how they lap, their bevel and their seams' },
+  { id: 'plates', label: 'Plates', title: 'The plates\' size, their bevel and their seams' },
   { id: 'finish', label: 'Finish', title: 'Plain, brushed, tempered, cross-hatched or mottled, for each group of plates' },
   { id: 'wear', label: 'Wear', title: 'Scratches, worn edges, streaks, pits and grime, each its own amount' },
   { id: 'edges', label: 'Edges', title: 'The darkness along seams, plate edges and inside corners' },
@@ -239,39 +260,52 @@ const WINDOWS = [
 ];
 let M = null;
 const st = { group: 'band', said: '', saidOk: true, textOpen: false };
-const LOOK_SAYS = { 'dark armour': 'Dark greys, heavy bevelled plates with cut corners, dark seams, a soft brushed sheen', 'pale plates, dark seams': 'Pale painted plates between dark seams, closer to the station\'s insides', 'old and worn': 'Lapped, heat-stained, pitted and streaked: the older station' };
+const LOOK_SAYS = { 'dark armour': 'Dark greys, heavy bevelled plates with cut corners, dark seams, a soft brushed sheen', 'pale plates, dark seams': 'Pale painted plates between dark seams, closer to the station\'s insides', 'old and worn': 'Heat-stained, pitted and streaked: the older station' };
 const FINISH_SAYS = { plain: 'Bare plate with only a fine grain.', brushed: 'Fine strokes all one way, lighter and darker, shinier and duller. At 0° they run along the hull, at 90° up and down.', tempered: 'The colours steel takes when it is heated: straw, bronze, purple, blue, in patches and toward the edges.',
   hatched: 'Two sets of cut lines at right angles. The angle turns them both.', mottled: 'Soft blotches, like the hangar\'s floor.' };
 const FINISH_LABELS = { brushed: { Angle: 'Direction' }, hatched: { Angle: 'Angle' }, tempered: { Strength: 'Heat colour' } };
 
+// THE FOUR SHAPES: one press changes the whole piece; the look (greys, finish, wear) stays as it is. (Four small
+// buttons in a row and one line on the one that is showing, so the window stays small and the hull shows beside it.)
+function shapeWin() {
+  const k = view.shape, says = el('div', 'cw-sum'); says.append(el('b', null, k + ': ' + SHAPE_NAMES[k]), el('div', null, SHAPE_SAYS[k]));
+  const pick = row(SHAPES.map((x) => chip(x, x === k, () => setShape(x), false, SHAPE_NAMES[x] + ': ' + SHAPE_SAYS[x]))); pick.classList.add('hl-shapes');
+  return [sec('The shape of the armour', pick, says),
+    note('All four have eight-sided windows, about half of them lit, and tiers that step in by different amounts. Your look stays as you change the shape.')];
+}
+const nameNow = () => (sameLook(look, STATION_LOOK) ? 'station' : lookName(look));
 function looksWin() {
-  const now = lookName(look), list = el('div', 'hl-looks');
-  for (const n of LOOK_NAMES) {
-    const b = el('button', 'hl-look' + (n === now ? ' on' : '')); b.append(el('b', null, n[0].toUpperCase() + n.slice(1)), el('span', null, LOOK_SAYS[n] || ''));
-    b.setAttribute('aria-pressed', String(n === now)); b.onclick = () => { say(''); take(HULL_LOOKS[n]); };
+  const now = nameNow(), list = el('div', 'hl-looks');
+  const one = (n, title, says, to) => {
+    const b = el('button', 'hl-look' + (n === now ? ' on' : '')); b.append(el('b', null, title), el('span', null, says));
+    b.setAttribute('aria-pressed', String(n === now)); b.onclick = () => { say(''); take(to); };
     list.append(b);
-  }
-  const box = el('textarea'); box.id = 'looktext'; box.rows = 9; box.spellcheck = false; box.value = writeLook(look); box.setAttribute('aria-label', 'The look as text');
+  };
+  one('station', 'The station\'s own', 'The look made in this lab for the station: the one it is to be built with', STATION_LOOK);
+  for (const n of LOOK_NAMES) one(n, n[0].toUpperCase() + n.slice(1), LOOK_SAYS[n] || '', HULL_LOOKS[n]);
+  const box = el('textarea'); box.id = 'looktext'; box.rows = 9; box.spellcheck = false; box.value = textNow(); box.setAttribute('aria-label', 'The look as text');
   // (text typed or pasted into the box is taken up as soon as it reads as a look)
-  box.oninput = () => { if (isLookText(box.value)) { const kept = box.value; look = readLook(kept); dirtyLook = dirtyPlates = true; saveSoon(); say('Read from the box.', true); for (const id of M.ids()) if (id !== 'looks') paint(id); } else say('That text is not a look yet.', false); };
+  box.oninput = () => { if (isLookText(box.value)) { const kept = box.value; look = readLook(kept); const s = readShape(kept); if (s) view.shape = s; dirtyLook = dirtyPlates = true; saveSoon(); say('Read from the box.', true); for (const id of M.ids()) if (id !== 'looks') paint(id); } else say('That text is not a look yet.', false); };
   const said = el('div', 'cw-note ' + (st.saidOk ? 'hl-ok' : 'hl-bad'), st.said); said.id = 'said';
   // (the text itself is folded away until it is wanted: Copy and Paste open it only when the browser will not do it for them)
   const fold = el('details', 'hl-fold'); fold.id = 'lookfold'; fold.open = st.textOpen; fold.ontoggle = () => { st.textOpen = fold.open; if (fold.open && M && !(M.state().size.looks || [])[2]) M.refit('looks'); };
   fold.append(el('summary', null, 'The look as text'), box, note('The whole look as text: copy from it, or paste a look into it.'));
-  return [sec('Ready-made looks', list),
-    sec('Your settings', row(chip('Copy settings', false, copyLook, false, 'Copy the whole look as text, to paste to someone'), chip('Paste settings', false, pasteLook, false, 'Take a look from text you have copied'),
-      chip('Reset', false, () => { say('Back to dark armour.', true); take(HULL_LOOKS[DEFAULT_LOOK]); }, true, 'Back to the first ready-made look, dark armour')), said,
+  return [sec('Looks to start from', list),
+    sec('Your settings', row(chip('Copy settings', false, copyLook, false, 'Copy the whole look and the shape\'s letter as text, to paste to someone'), chip('Paste settings', false, pasteLook, false, 'Take a look from text you have copied'),
+      chip('Reset', false, () => { say('Back to the station\'s own look.', true); take(STATION_LOOK); }, true, 'Back to the station\'s own look')), said,
     note('Your changes are kept in this browser between visits.'), fold)];
 }
 function say(text, ok = true) { st.said = text; st.saidOk = ok; const s = $('#said'); if (s) { s.textContent = text; s.className = 'cw-note ' + (ok ? 'hl-ok' : 'hl-bad'); } }
 function showText() { const f = $('#lookfold'); if (f && !f.open) f.open = true; }
 // (the box shows the look as it is now, unless he is typing in it)
-function syncText() { const b = $('#looktext'); if (b && document.activeElement !== b) b.value = writeLook(look); }
+function syncText() { const b = $('#looktext'); if (b && document.activeElement !== b) b.value = textNow(); }
+// (the look as text, with the shape's letter in it)
+function textNow() { return writeLook(look, view.shape); }
 async function copyLook() {
-  const text = writeLook(look); let ok = false;
+  const text = textNow(); let ok = false;
   try { await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]); ok = true; } catch (_) { ok = false; }
   const b = $('#looktext');
-  if (ok) say('Copied: the whole look, ' + SETTINGS.length + ' settings.', true);
+  if (ok) say('Copied: the whole look, ' + SETTINGS.length + ' settings, and shape ' + view.shape + '.', true);
   else { say('This browser would not copy for you: the text is picked out in the box, copy it from there.', false); showText(); if (b) { b.value = text; b.focus(); b.select(); } }
 }
 async function pasteLook() {
@@ -288,7 +322,7 @@ function coloursWin() {
 }
 function platesWin() {
   const n = hull ? hull.stats.plates : null;
-  return [sec('Size', setting('plateW'), setting('plateH')), sec('How they meet', setting('lap'), setting('bevel'), setting('cut'), setting('gap')), sec('How they are laid', setting('shift'), setting('uneven'), setting('unevenRows')),
+  return [sec('Size', setting('plateW'), setting('plateH')), sec('How they meet', setting('bevel'), setting('cut'), setting('gap')), sec('How they are laid', setting('shift'), setting('uneven'), setting('unevenRows')),
     el('div', 'cw-sum', n ? `${n.all} plates on this piece: ${n.band} on the middle band, ${n.tiers} on the tiers, ${n.trim} of trim.` : '')];
 }
 function finishWin() {
@@ -330,14 +364,15 @@ function costWin() {
   if (!hull) return [];
   const s = hull.stats, f = frame;
   return [sum(`The hull alone: ${N(s.triangles.all)} triangles in ${s.draws} draws (a draw is one batch of triangles handed to the graphics card).`,
-    `Plates: ${s.plates.band} middle band, ${s.plates.tiers} tiers, ${s.plates.trim} trim; ${s.windows} windows.`,
+    `Plates: ${s.plates.band} middle band, ${s.plates.tiers} tiers, ${s.plates.trim} trim; ${s.windows} windows, ${s.lit} of them lit.`,
+    `Shape ${view.shape}: ${s.shapes.stacked} stacked plates, ${s.shapes.slabs} big raised plates, ${s.shapes.recesses} sunk panels, ${s.shapes.shoulders} shoulders.`,
     `Memory: ${mats.pictures} pictures (each ${512} pixels square), ${MB(mats.bytes)}; the plates' shapes, ${MB(s.meshBytes)}.`),
     sum(`The whole view now, with the sky, the hangar's inside and the markers: ${N(f.tris)} triangles in ${f.calls} draws${view.shadows ? ' (the sun\'s shadows draw the hull a second time)' : ''}.`,
       `A frame: ${f.ms.toFixed(1)} ms (${Math.round(1000 / f.ms)} a second)` + (f.gpu != null ? `; the drawing itself: ${f.gpu.toFixed(2)} ms.` : '.'),
       `Plates rebuilt in ${buildMs.toFixed(0)} ms; pictures and settings applied in ${paintMs.toFixed(0)} ms.`),
     note('The hull is ' + s.draws + ' draws however big it is: one for each group of plates, one for the windows, one for the shields.')];
 }
-const RENDER = { looks: looksWin, colours: coloursWin, plates: platesWin, finish: finishWin, wear: wearWin, edges: edgesWin, light: lightWin, view: viewWin, cost: costWin };
+const RENDER = { shape: shapeWin, looks: looksWin, colours: coloursWin, plates: platesWin, finish: finishWin, wear: wearWin, edges: edgesWin, light: lightWin, view: viewWin, cost: costWin };
 function paint(id, grow) {
   if (!M || !M.isOpen(id)) return;
   const body = M.body(id), keep = body.scrollTop;
@@ -396,22 +431,23 @@ if (q.get('ui') !== '0') {
   let fresh = true; try { fresh = !sessionStorage.getItem('hulllab.windows.v1'); } catch (_) { /* as a first visit */ }
   M = makeMenus({ items: WINDOWS, store: 'hulllab.windows.v1', top: topPx, onOpen: (id, on) => { if (on) paint(id); } });
   M.master.setAttribute('aria-label', 'Hull Lab menu');
-  // (a first visit on a wide screen starts with the ready-made looks open)
-  if (fresh && innerWidth >= 900) requestAnimationFrame(() => requestAnimationFrame(() => M.open('looks', true)));
+  // (a first visit on a wide screen starts with the four shapes open)
+  if (fresh && innerWidth >= 900) requestAnimationFrame(() => requestAnimationFrame(() => M.open('shape', true)));
 } else for (const id of ['#top', '#stick', '#updown']) $(id).style.display = 'none';    // (a picture rig's view: the hull alone)
 loading.hidden = true;
 
 // for the picture rigs and the checks
 window.HULL = {
   ready: true, VIEWS, renderer,
-  set(o) { take({ ...look, ...o }); }, useLook(name) { if (HULL_LOOKS[name]) take(HULL_LOOKS[name]); },
-  look: () => ({ ...look }), text: () => writeLook(look),
+  set(o) { take({ ...look, ...o }); }, useLook(name) { if (name === 'station') take(STATION_LOOK); else if (HULL_LOOKS[name]) take(HULL_LOOKS[name]); },
+  shape(letter) { if (letter) setShape(String(letter).toUpperCase()); return view.shape; },
+  look: () => ({ ...look }), text: () => textNow(),
   view: (name) => setView(name), from: (at, to) => lookFrom(at, to),
   sun(turn, high) { view.turn = turn; if (high != null) view.high = high; placeSun(); clearTimeout(mirrorT); mirrorSky(); paint('light'); },
   shadows(on) { view.shadows = !!on; placeSun(); }, markers(on) { view.markers = !!on; marks.visible = view.markers; },
   // (for measuring what the look costs: the plates drawn with a plain lit material in place of the hull's own)
   bare(on) { const plain = this._plain || (this._plain = new THREE.MeshStandardMaterial({ color: 0x4d525a, roughness: 0.55, metalness: 0.4 })); hull.group.traverse((o) => { if (o.isMesh && GROUPS.includes(o.name.slice(5))) o.material = on ? plain : mats[o.name.slice(5)]; }); },
   size(w, h) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }, retime() { frame.gpu = null; }, repeat(n) { repeat = Math.max(1, n | 0); frame.gpu = null; },
-  win: (id, on) => M && M.open(id, on), menus: () => M && M.state(), where: () => ({ at: cam.pos.toArray(), yaw: cam.yaw, pitch: cam.pitch }), name: () => lookName(look),
+  win: (id, on) => M && M.open(id, on), menus: () => M && M.state(), where: () => ({ at: cam.pos.toArray(), yaw: cam.yaw, pitch: cam.pitch }), name: () => nameNow(),
   stats: () => ({ ...hull.stats, pictures: mats.pictures, pictureBytes: mats.bytes, frame: { ...frame }, buildMs, paintMs, info: { tris: renderer.info.render.triangles, calls: renderer.info.render.calls, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries } }),
 };
