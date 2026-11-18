@@ -670,18 +670,31 @@ export function armPose(side, q, design = ARMS.design, cutter = ARMS.cutter) {
 const _grip = {};
 export function gripOf(design, mirror = false) {
   const id = design + (mirror ? ':mirror' : ''); if (_grip[id]) return _grip[id];
-  const D = CLAWS[design], mid = V3(0, 0, D.rock), touch = D.segs.map(segTouch);
+  const mid = V3(0, 0, CLAWS[design].rock);
   // (the port arm's claw holds the rock's mirror image, so the ship looks the same with the claw on either side)
-  const inRock = (p) => { const d = p.clone().sub(mid), L = d.length(); d.multiplyScalar(1 / L); if (mirror) d.x = -d.x; return L < rockRadius(d); };
+  return (_grip[id] = gripOn(design, (p) => { const d = p.clone().sub(mid), L = d.length(); d.multiplyScalar(1 / L); if (mirror) d.x = -d.x; return L < rockRadius(d); }));
+}
+// THE GRIP ON ANY ROCK (the drill operator's game: every rock its own shape, turned any way in the hand). inRock(p):
+// whether a point of the claw's own frame (the palm's: +z along the hand, the rock's middle at CLAWS[design].rock
+// along it) is inside the rock. Worked out afresh at each call (a few thousand sums: once as the hand takes hold).
+export function gripOn(design, inRock) {
+  const D = CLAWS[design], touch = D.segs.map(segTouch);
   const hit = (M, pts) => pts.some((q) => inRock(q.clone().applyMatrix4(M)));
   const close = (lo, hi, f) => { let a = lo; if (f(a)) return a; while (a < hi && !f(a + 0.02)) a += 0.02; if (a >= hi) return hi; let b = a + 0.02; for (let i = 0; i < 16; i++) { const md = (a + b) / 2; if (f(md)) b = md; else a = md; } return a; };
-  return (_grip[id] = D.knuckles.map((K) => {
+  return D.knuckles.map((K) => {
     const B = knuckleFrame(K), first = (a) => B.clone().multiply(new THREE.Matrix4().makeRotationX(a));
     const a = close(D.open[0], D.open[0] + 2.4, (x) => hit(first(x), touch[0]));
     if (!D.segs[1]) return [a];
     const second = (b) => first(a).multiply(new THREE.Matrix4().makeTranslation(0, 0, segLength(D.segs[0]))).multiply(new THREE.Matrix4().makeRotationX(b));
     return [a, close(-0.9, 2.4, (x) => hit(second(x), touch[1]))];
-  }));
+  });
+}
+// where the claw's palm is now (a matrix, the built ship's own frame), for whoever puts a rock of their own in it
+// (on the rock, shut: where it holds one, whatever the arm is doing now)
+export function palmOf(built, over = null) {
+  const claw = built.doors.find((D) => D.piece === 'mbArm' && armLeaves(D).side === ARMS.claw); if (!claw) return null;
+  const palm = armPose(ARMS.claw, armAngles(ARMS.design, ARMS.claw, 0, 1, 1, 0, over && over[ARMS.claw]), ARMS.design).palm;
+  return new THREE.Matrix4().multiplyMatrices(claw.leaves[0].M, palm);
 }
 // WORKING A ROCK: what each tool's arm adds to the reaching pose to bring the claw onto a rock held ahead of the nose
 // (every claw holds it in the same place, its middle on the ship's middle line 2.9 m up and 2 m past the nose, so it
@@ -700,19 +713,27 @@ export const WORK = {
 };
 // An arm's pose from where it is in its moves: its tool ('cutter', or a claw's name), how far folded (0 reaching, 1
 // stowed), how far onto the rock (0 reaching, 1 working), how far its claw has closed (0 open, 1 gripping), the
-// wheel's angle. over: joint angles given outright (the rigs' searches).
+// wheel's angle. over: joint angles given outright (the rigs' searches), and for the claw THE WRIST'S OWN TURN:
+//   over.turn   radians the wrist has turned the hand about its own length, on top of the work pose (inward, as roll):
+//               the hand and what it holds go round together, as a wrist turns what it holds. The rock's middle is on
+//               that line, so it stays where it is, under the cutter. Any amount: the wrist is a drum.
+//   over.hold   the fingers' angles shut on the rock that is really in the hand ([[first part, second], ...], from
+//               gripOn), where the rock is not the stand-in
+//   over.loose  0 to 1: the fingers eased open that far from shut (the hand shifting its hold)
 export function armAngles(tool, side, fold = 0, work = 0, grip = 0, spin = 0, over = null) {
   // (a cutter wheel of another size has its own way and work pose where it needs one: 'cutter-<size>')
   const own = (O) => (tool === 'cutter' && O['cutter-' + ARMS.cutter] ? O['cutter-' + ARMS.cutter] : O[tool]);
   const F = FOLDS[ARMS.fold], K = own(WORK), e = ease(work), u = ease(fold), [fs, fe, fw] = wayAt(own(F.ways), u);
   // (onto the rock straight, or by the work pose's own way: rows [when, yaw, shoulder, elbow, wrist], ending on it)
   const [ky, ks, ke, kw] = K.way ? wayAt([[0, 0, 0, 0, 0], ...K.way, [1, K.yaw, K.shoulder, K.elbow, K.wrist]], e) : [K.yaw * e, K.shoulder * e, K.elbow * e, K.wrist * e];
-  const q = { yaw: ky, shoulder: fs + ks, elbow: fe + ke, wrist: fw + kw, pan: (K.pan || 0) * e, roll: (K.roll || 0) * e, spin };
+  const q = { yaw: ky, shoulder: fs + ks, elbow: fe + ke, wrist: fw + kw, pan: (K.pan || 0) * e, roll: (K.roll || 0) * e + ((over && over.turn) || 0), spin };
   if (tool !== 'cutter') {
-    const D = CLAWS[tool], curl = keyed(F.curl, u), G = gripOf(tool, side === 'port'), eg = ease(grip);
+    const D = CLAWS[tool], curl = keyed(F.curl, u), G = (over && over.hold) || gripOf(tool, side === 'port'), eg = ease(grip) * (1 - ((over && over.loose) || 0));
     q.fingers = D.knuckles.map((_, i) => D.open.map((o, k) => (o + (G[i][k] - o) * eg) * (1 - curl) + D.stow[k] * curl));
   }
-  return over ? { ...q, ...over } : q;
+  if (!over) return q;
+  const { turn, hold, loose, ...joints } = over;
+  return { ...q, ...joints };
 }
 
 // THE ARM PIECE: the mount (fixed), and the arm's parts as leaves of door 'arm'. Each arm carries its own tool (the
@@ -1163,7 +1184,7 @@ export function armShow(built, spin = 0, over = null) {
   if (!show) return;
   const rock = ((built.rocks ||= {})[port ? 'port' : 'starboard'] ||= (() => { const r = rockMesh(port); built.group.add(r); return r; })());
   const e = ease(claw.work || 0), at = CLAWS[ARMS.design].rock + ROCK.drift * (1 - e);
-  const palm = armPose(ARMS.claw, { ...armAngles(ARMS.design, ARMS.claw, 0, 1, 0), ...(over?.[ARMS.claw] || {}) }, ARMS.design).palm;
+  const palm = armPose(ARMS.claw, armAngles(ARMS.design, ARMS.claw, 0, 1, 0, 0, over?.[ARMS.claw]), ARMS.design).palm;   // (it goes round with the wrist: over.turn)
   rock.matrix.multiplyMatrices(claw.leaves[0].M, palm).multiply(_rk.makeTranslation(0, 0, at));
   rock.matrixWorldNeedsUpdate = true; rock.visible = true;
 }
@@ -1267,6 +1288,7 @@ export const LAB = {
     out.push({ text: 'Reach', on: now === 'reach', do: ask('reaching'), tip: 'Legs up, then both arms out ahead of the nose' });
     out.push({ text: 'Work a rock', on: now === 'work', do: ask('work'), tip: 'Legs up, arms out, the claw takes hold of a rock and the cutter comes down on it' });
     out.push({ text: st.claw === 'shut' ? 'Claw: shut' : st.claw === 'open' ? 'Claw: open' : 'Claw: as needed', on: false, do: () => { st.claw = st.claw === 'shut' ? 'open' : st.claw === 'open' ? null : 'shut'; redraw(); }, tip: 'Shut or open the claw where it is (as needed: open when reaching, shut on the rock)' });
+    out.push({ text: st.wrist ? 'Wrist: turning' : 'Wrist: still', on: !!st.wrist, do: () => { st.wrist = !st.wrist; redraw(); }, tip: 'On the rock, the wrist turns the hand and the rock in it round together' });
     out.push({ label: 'Claw' });
     Object.entries(CLAWS).forEach(([k, D], i) => out.push({ text: `${i + 1} ${D.name}`, on: ARMS.design === k, do: set('design', k), tip: 'This claw on the arm' }));
     out.push({ label: 'Set up' });
@@ -1277,7 +1299,11 @@ export const LAB = {
   },
   step(B, st, dt, { updateDoors, jets, time }) {
     // (parked means folded: parkedStep)
-    parkedStep(B, st.gear === 'up', LAB.armsWanted(st), dt, updateDoors, { spin: time * ARMS.spin, grip: st.claw === 'shut' ? true : st.claw === 'open' ? false : undefined });
+    // (the wrist turning, the lab's chip: only while the claw is shut on the rock)
+    // (and wound back to straight as soon as it is switched off or the claw opens)
+    const shut = B.doors.some((D) => D.piece === 'mbArm' && (D.grip || 0) >= 1 && (D.work || 0) >= 1);
+    if (st.wrist && shut) B.wristTurn = ((B.wristTurn || 0) + dt * 0.7) % (PI * 2); else if (B.wristTurn) { B.wristTurn = B.wristTurn > PI ? B.wristTurn + dt * 2.5 : B.wristTurn - dt * 2.5; if (B.wristTurn <= 0 || B.wristTurn >= PI * 2) B.wristTurn = 0; }
+    parkedStep(B, st.gear === 'up', LAB.armsWanted(st), dt, updateDoors, { spin: time * ARMS.spin, grip: st.claw === 'shut' ? true : st.claw === 'open' ? false : undefined, over: B.wristTurn ? { [ARMS.claw]: { turn: B.wristTurn } } : null });
     liftStep(B, st.door === 'open', dt, updateDoors);
     const pj = jets?.find((J) => J.role === 'pods')?.set;
     if (pj) pj.setThrust(st.thrusters ? POD_JET.thrust : 0);

@@ -25,10 +25,13 @@
 //   - THE GLOW is one batch of soft points for every lump of ore in every rock, added to the picture; a lump on the far
 //     side of its rock is dimmer, so turning the rock shows where the ore is thick. A lump's glow is as big and bright
 //     as the ore left in it, so a hole visibly thins it.
-//   - DRILLING: the claw holds the rock, the cutter stands on its top. Drag to turn the rock in the claw. Tap a spot:
-//     the rock turns to bring that spot under the cutter (the arm cannot reach round the rock; this is the honest way),
-//     the cutter comes down, chips drift away from the hole, the glow near it fades and the canisters fill, and the
-//     claw turns the rock back as it was, so the hole is seen where it was tapped. The rock
+//   - DRILLING: the claw holds the rock, the cutter waits just above its top. A drag up or down the screen turns the
+//     claw's wrist: the hand and the rock go round together, the fingers shut on the rock's own surface. A drag across
+//     is a turn the wrist cannot make: the fingers ease open, the rock turns in the open hand, and they shut on it
+//     again as the finger lifts. Tap a spot: the claw brings that spot under the cutter (by its wrist, and where the
+//     wrist cannot, by shifting its hold; never with a finger left under the cutter), the cutter comes down, chips
+//     drift away from the hole, the glow near it fades and the canisters fill, and the claw turns the rock back as it
+//     was, so the hole is seen where it was tapped. The rock
 //     keeps its shape; each hole is a dark spot, and cracks spread along its facets hole by hole. After its last hole
 //     it breaks into pieces that float off.
 //   - CHEAP: the ship as built (39 draws); each rock in reach one small mesh; the far rocks and pebbles one batch; the
@@ -48,11 +51,12 @@ import { makeRun, DRILL, ORE, seeded, holeWorth } from './drill.js';
 import { DIR } from '../world/sky.js';
 
 // the eye, in the ship's own frame (x to port, y up, z to the nose; metres): looking for a rock (behind the ship and a
-// little above), and working one (close on the rock in the claw, from ahead and to starboard); on a wide screen and
+// little above), and working one (close on the rock in the claw, from ahead, to port and above: side on to the claw's
+// hand, so the hand is seen holding the rock and going round with it, the cutter above them); on a wide screen and
 // on a tall one
 export const VIEWS = {
   look: { eye: [0, 12, -30], look: [0, 4.6, 40], fov: 46 }, lookTall: { eye: [0, 17, -40], look: [0, 12.5, 40], fov: 60 },
-  work: { eye: [-6.8, 6.15, 16.1], look: [-0.3, 2.85, 8.3], fov: 36 }, workTall: { eye: [-6.3, 6.6, 16.6], look: [-0.15, 2.9, 8.4], fov: 46 },
+  work: { eye: [4.6, 8.0, 17.1], look: [0.1, 3.0, 8.5], fov: 36 }, workTall: { eye: [4.9, 8.4, 17.9], look: [0.25, 3.5, 8.5], fov: 46 },
 };
 // where the rocks in reach are laid out on the screen while looking: [x, y] from -1 to 1 across and up the screen, and
 // how far off (metres from the eye); slot by slot (src/drill.js: a rock's place)
@@ -341,8 +345,58 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     mesh.matrixAutoUpdate = false; mesh.frustumCulled = false; mesh.name = 'drill: the rock in the claw'; G.add(mesh);
     o.mesh.visible = false;
     const U = heldMat.uniforms; U.uSq.value.set(...o.S.sq); U.uGlow.value.copy(colOf.get(rock.metal) || colOf.get('copper')); U.uHoleN.value = 0; U.uCrack.value = 0; U.uScan.value = 0;
-    H = { rock, o, mesh, R: HELD[rock.size], from: { pos: o.pos.clone(), scale: o.scale }, turnFrom: new THREE.Quaternion(), turnTo: new THREE.Quaternion() };
+    // (free: the rock is not in the hand's hold, it turns by itself; turn: how far the wrist has turned the hand;
+    // qPalm: how the rock lies in the hand; grip: the fingers' angles shut on it as it lies; loose: the fingers eased open)
+    H = { rock, o, mesh, R: HELD[rock.size], from: { pos: o.pos.clone(), scale: o.scale }, turnFrom: new THREE.Quaternion(), turnTo: new THREE.Quaternion(),
+      free: true, turn: 0, qPalm: new THREE.Quaternion(), grip: null, loose: 0, looseWant: 0, pend: new THREE.Quaternion(), pending: false, settle: 0, vel: 0, shift: false, t0: 0, t1: 0, back: null };
+    if (!cutKnown) cutterHome();
   }
+  // THE HAND AND THE ROCK. The claw's wrist turns the hand about its own length (kit/ships/miner-built.js armAngles:
+  // over.turn), and the rock's middle is on that line: so the hand and the rock go round together, as a wrist turns
+  // what it holds, the fingers shut on the rock all the while. A drag along the way the wrist turns does that. A drag
+  // the other way is a turn the wrist cannot make: the fingers ease open, the rock turns in the open hand, and they
+  // shut again on its new surface (worked out against the rock's own shape: MB.gripOn).
+  const LOOSE = 0.5, CUT_UP = 0.72, CLEAR = 25 * Math.PI / 180;
+  const clawSide = MB.ARMS.claw, clawDesign = MB.ARMS.design, _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3(), _pq2 = new THREE.Quaternion();
+  const overOf = (turn) => ({ [clawSide]: { turn } });
+  // (the palm's way round, in the ship's frame, for a turn of the wrist)
+  function palmQ(turn, out = new THREE.Quaternion()) { const M = MB.palmOf(built, overOf(turn)); if (!M) return out.identity(); _pm.multiplyMatrices(built.group.matrix, M).decompose(_pp, out, _ps); return out; }
+  // (the line the wrist turns about, and which way a turn counts along it)
+  const wristAxis = new THREE.Vector3(0, 0, 1); let wristSign = 1, cutKnown = false;
+  function wristHome() {
+    const q0 = palmQ(0), q1 = palmQ(0.3); wristAxis.set(0, 0, 1).applyQuaternion(q0).normalize();
+    q1.multiply(q0.invert()); wristSign = (q1.x * wristAxis.x + q1.y * wristAxis.y + q1.z * wristAxis.z) * (q1.w < 0 ? -1 : 1) >= 0 ? 1 : -1;
+  }
+  // (where the cutter comes down: read once from the arm's own pose with its wheel on the rock)
+  function cutterHome() {
+    if (!cutD || !clawD) return; const was = [cutD.work, cutD.t, clawD.work, clawD.t];
+    cutD.work = clawD.work = 1; cutD.t = clawD.t = 0; MB.armShow(built, spin); standIn(); findCutter();
+    [cutD.work, cutD.t, clawD.work, clawD.t] = was; MB.armShow(built, spin); standIn();
+    wristHome(); cutKnown = true;
+  }
+  // the fingers' angles shut on the rock as it lies in the hand now
+  const _gp = new THREE.Vector3(), _gq = new THREE.Quaternion();
+  function gripNow() {
+    const S = H.o.S, at = MB.CLAWS[clawDesign].rock, R = H.R; _gq.copy(H.qPalm).invert();
+    return MB.gripOn(clawDesign, (p) => {
+      _gp.set(p.x, p.y, p.z - at).applyQuaternion(_gq).multiplyScalar(1 / R); _gp.set(_gp.x / S.sq[0], _gp.y / S.sq[1], _gp.z / S.sq[2]);
+      const L = _gp.length(); return L < radiusAt(S, _gp.multiplyScalar(1 / (L || 1)));
+    });
+  }
+  // the hand takes hold of the rock as it lies
+  function regrip() { palmQ(H.turn, _pq); H.qPalm.copy(_pq.invert()).multiply(H.o.q); H.grip = gripNow(); H.looseWant = 0; H.free = false; H.pending = false; H.pend.identity(); }
+  // is a finger where the cutter comes down, with the wrist turned this far? (each finger stands at its knuckle's
+  // place round the hand)
+  function fingerUnder(turn) {
+    palmQ(turn, _pq); _gp.copy(cutDir).applyQuaternion(_pq.invert()); const a = Math.atan2(_gp.y, _gp.x);
+    return MB.CLAWS[clawDesign].knuckles.some((K) => { let d = Math.abs(a - K.phi * Math.PI / 180) % (Math.PI * 2); if (d > Math.PI) d = Math.PI * 2 - d; return d < CLEAR; });
+  }
+  // the turn of the wrist nearest to `turn` that leaves the cutter's place clear of the fingers
+  function clearTurn(turn) { for (let d = 0; d < Math.PI; d += 0.02) { if (!fingerUnder(turn + d)) return turn + d; if (!fingerUnder(turn - d)) return turn - d; } return turn; }
+  // the wrist turned by a drag: the hand and the rock together
+  function wristBy(phi) { if (!H || H.free) return; H.turn += phi * wristSign; }
+  // a turn the wrist cannot make: the fingers ease open and the rock turns in the open hand
+  function looseBy(q) { if (!H) return; H.pend.premultiply(q); H.pending = true; H.free = true; H.looseWant = 1; H.settle = 0.22; H.vel = 0; }
   function dropHeld() { if (!H) return; G.remove(H.mesh); H.mesh.geometry.dispose(); const id = H.rock.id; H = null; dropSeen(id); }
 
   // ── the picture over it: the canisters, the rock in the claw, the hint, the button, a tag for each rock in reach ──
@@ -367,7 +421,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   // ── the game's state ──
   const V = { stage: 'arrive', t: 0, sub: '', subT: 0, clock: 0, scanDone: false, first: false, hot: null, log: [], richSaid: false, lastHole: null };
-  let panel = null, closeIn = -1, armsWant = 'reach', spin = 0, scanT = 0, closed = false;
+  let panel = null, closeIn = -1, armsWant = 'reach', spin = 0, scanT = 0, closed = false, cutCap = 1;
   const cam = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46, fresh: true }, want = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46 };
   const go = (stage) => { V.stage = stage; V.t = 0; V.sub = ''; V.subT = 0; V.log.push(stage); };
 
@@ -402,10 +456,19 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // a hole at a direction of the rock's own (src/drill.js's frame): the rock turns to bring it under the cutter
   function drillAt(dir) {
     if (V.stage !== 'drill' || V.sub || !H || H.rock.left <= 0) return false;
-    findCutter();
+    if (H.free) return false;
     const S = H.o.S, d = _v.set(dir[0] * S.sq[0], dir[1] * S.sq[1], dir[2] * S.sq[2]).normalize().clone();
     H.turnFrom.copy(H.o.q); _v2.copy(d).applyQuaternion(H.o.q);
     H.turnTo.setFromUnitVectors(_v2, cutDir).multiply(H.o.q);
+    // how far round the wrist's own line the spot is from the cutter (the wrist can make that part of the turn), and
+    // whether that is all of it (the spot and the cutter the same way along the hand)
+    const a = wristAxis, sa = _v2.dot(a), ca = cutDir.dot(a);
+    const s2 = _v2.clone().addScaledVector(a, -sa), c2 = cutDir.clone().addScaledVector(a, -ca);
+    const round = s2.lengthSq() > 1e-6 && c2.lengthSq() > 1e-6 ? Math.atan2(_v.crossVectors(s2, c2).dot(a), s2.dot(c2)) : 0;
+    const want = H.turn + round * wristSign, clear = clearTurn(want);
+    H.shift = Math.abs(sa - ca) > 0.035 || Math.abs(clear - want) > 0.01;
+    H.t0 = H.turn; H.t1 = clear; H.back = { qPalm: H.qPalm.clone(), grip: H.grip }; H.vel = 0;
+    if (H.shift) { H.looseWant = 1; H.free = true; }
     V.sub = 'turn'; V.subT = 0; V.dir = [dir[0], dir[1], dir[2]]; doneEl.hidden = true;
     return true;
   }
@@ -435,31 +498,38 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const d = new THREE.Vector3(p.x / S.sq[0], p.y / S.sq[1], p.z / S.sq[2]).normalize();
     return [d.x, d.y, d.z];
   }
-  // (the rock turned by a drag: about the screen's up and across)
-  function turnBy(dx, dy) {
-    if (!H) return;
-    const up = _v.set(0, 1, 0).applyQuaternion(camera.quaternion).applyQuaternion(atQi).clone(), right = _v2.set(1, 0, 0).applyQuaternion(camera.quaternion).applyQuaternion(atQi);
-    _q.setFromAxisAngle(up, dx * 0.0085); H.o.q.premultiply(_q); _q.setFromAxisAngle(right, dy * 0.0085); H.o.q.premultiply(_q); H.o.q.normalize();
+  // THE ROCK TURNED BY A DRAG. A drag along the way the wrist turns (up and down the screen, as the working view
+  // stands) is the wrist's: the hand and the rock go round together. A drag across that is the other turn: the
+  // fingers ease open and the rock turns in the open hand. Which it is, is settled as the drag begins.
+  const _up = new THREE.Vector3(), _right = new THREE.Vector3(), DRAG = 0.0085;
+  function dragAxes() { _up.set(0, 1, 0).applyQuaternion(camera.quaternion).applyQuaternion(atQi); _right.set(1, 0, 0).applyQuaternion(camera.quaternion).applyQuaternion(atQi); const ua = _up.dot(wristAxis), ra = _right.dot(wristAxis), n = Math.hypot(ua, ra) || 1; return [ua / n, ra / n]; }
+  // (which turn a drag that way is: 'wrist' or 'shift')
+  function dragKind(dx, dy) { const [ua, ra] = dragAxes(); return Math.abs(dx * ua + dy * ra) >= Math.abs(dx * ra - dy * ua) ? 'wrist' : 'shift'; }
+  function turnBy(dx, dy, kind = dragKind(dx, dy)) {
+    if (!H || V.stage !== 'drill' || V.sub) return;
+    const [ua, ra] = dragAxes();
+    if (kind === 'wrist') { if (H.free) return; const phi = (dx * ua + dy * ra) * DRAG; wristBy(phi); H.vel = phi * wristSign; return; }
+    _q.setFromAxisAngle(_up, dx * DRAG); _pq2.setFromAxisAngle(_right, dy * DRAG).multiply(_q); looseBy(_pq2);
   }
   let down = null;
   function onDown(e) { if (panel) return; down = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, lx: e.clientX, ly: e.clientY }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) { /* a rig's made-up pointer */ } }
   function onMove(e) {
     if (!down || down.id !== e.pointerId) { if (V.stage === 'look' && e.pointerType === 'mouse') { const o = rockUnder(e.clientX, e.clientY); V.hot = o ? o.rock.id : null; e.currentTarget.style.cursor = o ? 'pointer' : 'default'; } return; }
     if (!down.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 9) down.moved = true;
-    if (down.moved && V.stage === 'drill' && !V.sub) turnBy(e.clientX - down.lx, e.clientY - down.ly);
-    down.lx = e.clientX; down.ly = e.clientY;
+    if (down.moved && V.stage === 'drill' && !V.sub) { if (!down.kind) down.kind = H && H.free ? 'shift' : dragKind(e.clientX - down.x, e.clientY - down.y); turnBy(e.clientX - down.lx, e.clientY - down.ly, down.kind); if (down.kind === 'shift' && H) H.settle = 9; }
+    down.lx = e.clientX; down.ly = e.clientY; down.at = performance.now();
   }
   function onUp(e) {
     if (!down || down.id !== e.pointerId) return;
     const d = down; down = null;
-    if (d.moved) return;
+    if (d.moved) { if (H && d.kind === 'shift') H.settle = 0; else if (H && performance.now() - (d.at || 0) > 90) H.vel = 0; return; }
     if (V.stage === 'look') { const o = rockUnder(e.clientX, e.clientY); if (o) pick(o.rock.id); }
     else if (V.stage === 'drill' && !V.sub) { const s = spotAt(e.clientX, e.clientY); if (s) drillAt(s); }
   }
   function onKey(e) {
     if (panel || V.stage !== 'drill' || V.sub) return;
     const k = { ArrowLeft: [-40, 0], ArrowRight: [40, 0], ArrowUp: [0, -40], ArrowDown: [0, 40] }[e.key];
-    if (k) { e.preventDefault(); turnBy(k[0], k[1]); }
+    if (k) { e.preventDefault(); turnBy(k[0], k[1]); if (H) H.vel = 0; }
   }
   // (the taps and drags are taken below the game's own row of buttons along the top)
   const pad = el.querySelector('.pdr-touch');
@@ -472,7 +542,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   for (const o of seen.values()) { o.pos.copy(o.slotPos); o.scale = o.slotScale; }
 
   const HINTS = { arrive: 'The scan lights up the ore inside each rock: more glow is more ore.', look: 'Tap a rock to fly over to it.', fly: 'The pilot flies you over.', grab: 'The claw takes the rock.', scan: 'Scanning the rock.',
-    drill: 'Drag to turn the rock. Tap a spot to drill there.', breakUp: 'The rock breaks up.', release: 'The claw lets the rock go.', back: 'Looking for the next rock.', full: '' };
+    drill: 'Drag to turn the rock in the claw. Tap a spot to drill there.', breakUp: 'The rock breaks up.', release: 'The claw lets the rock go.', back: 'Looking for the next rock.', full: '' };
   const HOLE_WORDS = (took, wasted) => (wasted ? 'Bare rock. Nothing there.' : took < 0.2 ? 'A little ore.' : took < 0.5 ? 'Good ore.' : 'A thick vein!');
 
   function update(dt) {
@@ -484,10 +554,21 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     // the arms
     const cutting = V.stage === 'drill' && V.sub === 'cut';
     spin += dt * MB.ARMS.spin * (cutting ? 2.6 : 0.5);
-    MB.armStep(built, armsWant, dt, { spin });
-    if (V.stage === 'drill' && (V.sub === 'turn' || V.sub === 'turnBack') && cutD) { cutD.work = Math.max(0.8, cutD.work - dt * 1.5); MB.armShow(built, spin); }
+    // (the hand: the wrist's turn, a flick of it running on a little; the fingers easing open and shut)
+    if (H) {
+      if (!down && H.vel && !H.free && V.stage === 'drill' && !V.sub) { H.turn += H.vel * Math.min(1, dt * 60); H.vel *= Math.exp(-dt * 5); if (Math.abs(H.vel) < 0.0006) H.vel = 0; }
+      const goal = H.looseWant * LOOSE; H.loose = goal > H.loose ? Math.min(goal, H.loose + dt * LOOSE / 0.14) : Math.max(goal, H.loose - dt * LOOSE / 0.2);
+    }
+    const over = H && clawD && H.grip ? { [clawSide]: { turn: H.turn, hold: H.grip, loose: H.loose } } : null;
+    MB.armStep(built, armsWant, dt, { spin, over });
+    // (the cutter waits just above the rock, clear of the fingers as they go round, and comes down only to cut)
+    if (cutD) {
+      const cutNow = V.stage === 'drill' && (V.sub === 'down' || V.sub === 'cut');
+      cutCap = cutNow ? Math.min(1, cutCap + dt * 1.5) : Math.max(CUT_UP, cutCap - dt * 1.5);
+      if (cutD.work > cutCap) { cutD.work = cutCap; MB.armShow(built, spin, over); }
+    }
     standIn();
-    const gripped = clawD ? (clawD.grip || 0) >= 1 : true, onRock = cutD ? (cutD.work || 0) >= 1 : true;
+    const gripped = clawD ? (clawD.grip || 0) >= 1 : true, onRock = cutD ? (cutD.work || 0) >= 1 : true, cutReady = cutD ? (cutD.work || 0) >= CUT_UP - 0.001 : true, cutClear = cutD ? (cutD.work || 0) <= CUT_UP + 0.04 : true;
 
     // the stages
     const S = V.stage;
@@ -497,19 +578,23 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       hint(HINTS.fly);
       const k = ease(V.t / T.fly), o = H.o;
       o.pos.lerpVectors(H.from.pos, heldPos, k); o.scale = H.from.scale + (H.R - H.from.scale) * k;
-      if (V.t >= T.fly) { go('grab'); armsWant = 'work'; scanT = 0; openScan(); }
+      if (V.t >= T.fly) { go('grab'); armsWant = 'work'; scanT = 0; H.o.pos.copy(heldPos); H.turn = 0; regrip(); openScan(); }
     } else if (S === 'grab') {
       hint(panel ? HINTS.scan : HINTS.grab);
       H.o.pos.copy(heldPos); H.o.scale = H.R; scanT += dt; heldMat.uniforms.uScan.value = V.scanDone ? 0 : 0.02 + (scanT * 0.55) % 1;
-      if (V.scanDone && gripped && onRock) { go('drill'); heldMat.uniforms.uScan.value = 0; }
+      if (V.scanDone && gripped && cutReady) { go('drill'); heldMat.uniforms.uScan.value = 0; }
     } else if (S === 'drill') {
       H.o.pos.copy(heldPos);
       if (!V.sub) { hint(HINTS.drill); doneEl.hidden = false; }
       else if (V.sub === 'turn') {
-        V.subT += dt; H.o.q.slerpQuaternions(H.turnFrom, H.turnTo, ease(V.subT / T.turn));
-        if (V.subT >= T.turn) { V.sub = 'down'; V.subT = 0; }
+        // (the wrist brings the spot under the cutter, the hand and the rock together; where the wrist cannot, the
+        // fingers ease open first, the rock turns in the open hand, and they shut on it again)
+        if (!H.shift || H.loose >= LOOSE * 0.8) {
+          V.subT += dt; const k = ease(V.subT / T.turn); H.turn = H.t0 + (H.t1 - H.t0) * k; if (H.shift) H.o.q.slerpQuaternions(H.turnFrom, H.turnTo, k);
+          if (V.subT >= T.turn) { if (H.shift) regrip(); V.sub = 'down'; V.subT = 0; }
+        }
       } else if (V.sub === 'down') {
-        if (onRock) {
+        if (onRock && H.loose <= 0.02) {
           // the hole is made: the ore near it goes to the canisters
           const h = run.drill(V.dir); V.sub = 'cut'; V.subT = 0; V.hole = h; V.lastHole = h ? { took: +h.took.toFixed(3), wasted: h.wasted, left: h.left } : null;
           if (h) {
@@ -531,8 +616,16 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       }
       else if (V.sub === 'turnBack') {
         // (the claw turns the rock back as it was: the hole is seen where it was tapped, the glow round it thinner)
-        V.subT += dt; H.o.q.slerpQuaternions(H.turnTo, H.turnFrom, ease(V.subT / T.turn));
-        if (V.subT >= T.turn) V.sub = '';
+        if (H.shift && V.subT === 0) { H.looseWant = 1; H.free = true; }
+        if (cutClear && (!H.shift || H.loose >= LOOSE * 0.8)) {
+          V.subT += dt; const k = ease(V.subT / T.turn); H.turn = H.t1 + (H.t0 - H.t1) * k; if (H.shift) H.o.q.slerpQuaternions(H.turnTo, H.turnFrom, k);
+          if (V.subT >= T.turn) { if (H.shift) { H.qPalm.copy(H.back.qPalm); H.grip = H.back.grip; H.looseWant = 0; H.free = false; } V.sub = ''; }
+        }
+      }
+      // (a drag across the wrist's way: the rock turns in the open hand, and the fingers shut on it when the finger lifts)
+      if (!V.sub && H.free) {
+        if (H.pending && H.loose >= LOOSE * 0.6) { H.o.q.premultiply(H.pend).normalize(); H.pend.identity(); H.pending = false; }
+        if (!H.pending) { H.settle -= dt; if (H.settle <= 0) regrip(); }
       }
       const U = heldMat.uniforms; if (V.crackTo != null) U.uCrack.value += (V.crackTo - U.uCrack.value) * Math.min(1, dt * 4);
     } else if (S === 'breakUp') { hint(HINTS.breakUp); if (V.t > T.breakUp) { dropHeld(); go('back'); } }
@@ -558,6 +651,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       _q.setFromAxisAngle(_v.set(0.3, 1, 0.1).normalize(), o.spin * dt); o.q.premultiply(_q);
       o.mesh.matrix.compose(o.pos, o.q, _s.setScalar(o.scale)); o.mesh.matrixWorldNeedsUpdate = true;
     }
+    if (H && !H.free && H.grip) H.o.q.copy(palmQ(H.turn, _pq)).multiply(H.qPalm);
     if (H) { H.mesh.visible = S !== 'breakUp'; H.mesh.matrix.compose(H.o.pos, H.o.q, _s.setScalar(H.o.scale)); H.mesh.matrixWorldNeedsUpdate = true; }
     // the glow follows the ore left
     glowN = 0;
@@ -634,7 +728,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       }
       return out.sort((p, q) => q.worth - p.worth);
     },
-    pick, drillAt, letGo, turnBy,
+    pick, drillAt, letGo, turnBy, dragKind,
+    hand: () => (H ? { turn: +H.turn.toFixed(3), loose: +H.loose.toFixed(2), free: H.free, shift: H.shift, axis: wristAxis.toArray().map((x) => +x.toFixed(3)), sign: wristSign, cut: cutDir.toArray().map((x) => +x.toFixed(3)), at: heldPos.toArray().map((x) => +x.toFixed(2)), under: fingerUnder(H.turn), grip: H.grip, cutter: cutD ? +cutD.work.toFixed(2) : null } : null),
     probe: (x, y) => ({ spot: spotAt(x, y), over: (document.elementFromPoint(x, y) || {}).className || null, stage: V.stage, sub: V.sub, down: !!down }),
   };
   return { el, run, update, aim, close, rig, get panel() { return panel; }, get stage() { return V.stage; },
