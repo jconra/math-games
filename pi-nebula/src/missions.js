@@ -31,17 +31,22 @@
 // miss still lights its lamp (amber) and the jump still fires. The jump home changes nothing: home is home.
 // ONE ROCK IN FIVE IS A RICH ONE (RICH): its ore is titanium, which pays double. It is a fact of that haul.
 // THE DRILL OPERATOR (src/drill.js, src/drillview.js): signed for, the work at the rocks is the crew member's own: they
-// pick the rocks and drill them until the eight canisters are full. What the haul sells for is still set by the jump
-// out (the tonnes of ore in the eight canisters) and by the rich rock; good drilling fills the canisters from fewer
-// rocks, so the run is shorter. The one rule for the rich rock stays: one trip in five has one at the field (rolled
-// once a trip, src/trip.js); with the crew's own driller it is always the one worked, and with the crew member at the
-// drill the haul is a rich one if they bring ore from it home. With the pilot's seat left to the crew, the jump out
-// counts as two green lamps (CREW_CLEAN).
+// pick the rocks and drill them until the eight canisters are full. The field is a mix of metals, and THE HAUL SELLS
+// FOR WHAT IS IN IT: each canister comes home holding the ore of one metal (land's `load`: the metal in each), and a
+// tonne of each metal's ore has its own price (src/jobs/smelter.js ORE_PRICE: iron 1,600 credits, nickel 2,400,
+// copper 3,200, cobalt 4,000, gold 8,000). So which rocks they choose changes the pay, and every share is a share of
+// that. The jump out still sets how many tonnes of ore a canister holds. THE RICH ROCK: one trip in five has one at
+// the field (rolled once a trip, src/trip.js); with the crew's own driller it is always the one worked and the whole
+// haul pays double, as it always did; with the crew member at the drill ITS OWN CANISTERS PAY DOUBLE (titanium ore
+// sells for 6,000 credits a tonne, twice a usual haul's 3,000) and the rest of the load sells as what it is. With
+// the pilot's seat left to the crew, the jump out counts as two green lamps (CREW_CLEAN).
 //
 // KEPT WITH THE CREW MEMBER (save.js keeps any field): crew.mission, one at a time:
 //   { id, captain, roles: [...], state: 'signed', signed }                the contract signed, the run not flown yet
 //   { ..., state: 'payout', payout: { n, canisters, ore, oreTonnes, metal, price, yield, rich, clean, sold, share,
-//     pay, at } }                                                         home: the share waiting at the smelter's controls
+//     pay, at, mix } }                                                    home: the share waiting at the smelter's controls
+//     (mix: a haul the crew member drilled, its lots [{ metal, canisters, each (what a canister of it sold for),
+//     pay }], the most canisters first; then `metal` is the first lot's and price and yield are null)
 // A reload in the middle of a trip finds the contract still signed. Collected, the mission is cleared and the captain
 // asks again.
 //
@@ -54,7 +59,7 @@
 //   missions.on(fn) / onGo(fn)       fn(captain, yes) after each (src/mission.js opens the contract, starts the trip)
 //   missions.ready(id)               whether that captain's mission can be flown (its data is here)
 import { ownOrder, earn, jobTally } from './jobs/engine.js';
-import { haulOf, flownHaul, CARRIES, ORE_SELLS } from './jobs/smelter.js';
+import { haulOf, flownHaul, lotsWords, CARRIES, ORE_SELLS, ORE_PRICE } from './jobs/smelter.js';
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
@@ -158,16 +163,24 @@ export function sign(crew, missionId, roleIds, now = Date.now()) {
 }
 // home from the run: the haul's facts set for every slip about it (flownHaul), and the crew member's share of what it
 // sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); clean: the green lamps of
-// the jump out; rich: the rock was a rich one. -> the payout, or null (no contract signed)
-export function land(crew, { n = 0, clean = CARDS, rich = false, now = Date.now() } = {}) {
+// the jump out; rich: the rock was a rich one; load: the crew member drilled it, the metal in each canister (src/drill.js
+// R.load()). -> the payout, or null (no contract signed)
+export function land(crew, { n = 0, clean = CARDS, rich = false, load = null, now = Date.now() } = {}) {
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
-  flownHaul(n, { ore: oreFor(clean), rich });
+  flownHaul(n, { ore: oreFor(clean), rich, ...(load ? { load } : {}) });
   const H = haulOf(n), share = shareOf(m.roles);
   m.state = 'payout';
-  m.payout = { n: H.n, canisters: H.canisters, ore: [H.ore.n, H.ore.d], oreTonnes: H.oreTonnes, metal: H.metal.name, price: H.metal.price, yield: H.yield, rich: H.rich,
-    clean: Math.max(0, Math.min(CARDS, Math.floor(Number(clean) || 0))), sold: H.pay, share, pay: payOf(H.pay, share), at: now };
+  m.payout = { n: H.n, canisters: H.canisters, ore: [H.ore.n, H.ore.d], oreTonnes: H.oreTonnes, metal: H.metal.name, price: H.mix ? null : H.metal.price, yield: H.yield, rich: H.rich,
+    clean: Math.max(0, Math.min(CARDS, Math.floor(Number(clean) || 0))), sold: H.pay, share, pay: payOf(H.pay, share), at: now,
+    ...(H.mix ? { mix: H.mix.map((L) => ({ metal: L.metal.name, canisters: L.canisters, each: L.each, pay: L.pay })) } : {}) };
   return m.payout;
+}
+// what a load the crew member drilled would sell for, and the pay of a share of it (the tests, the notes): load, the
+// metal in each canister
+export function forecastLoad({ clean = CARDS, load = [], roles = ['drill'] } = {}) {
+  const [a, d] = oreFor(clean), sold = load.reduce((sum, m) => sum + (ORE_PRICE[m] || 0) * a / d, 0), share = shareOf(roles);
+  return { ore: [a, d], oreTonnes: CARRIES * a / d, sold, share, pay: payOf(sold, share) };
 }
 // the share collected: the credits arrive as a job's pay does (the crew member's credits, a tally of its own), and the
 // mission is done. -> { pay, credits } or null (nothing waiting)
@@ -187,7 +200,9 @@ export function tearUp(crew) { if (crew) delete crew.mission; }
 // this haul that suits their own level there, and the pay arrives with the right answer. A miss never loses the pay.
 //   grade   the school-guide point of the smelter level they are on (0 starting kindergarten .. 80 eighth grade):
 //           under 20   COUNT: the canisters the crew brought home (the youngest: the four on one side of the Miner)
-//           20 to 43   TIMES: so many tonnes of ore at 3,000 credits a tonne of ore: what the haul sold for
+//           20 to 43   TIMES: so many tonnes of ore at 3,000 credits a tonne of ore: what the haul sold for (a haul
+//                      the crew member drilled, sorted by metal: so many canisters of one metal's ore at so much a
+//                      canister, what that ore sold for; the line under the right answer says what the whole sold for)
 //           44 to 57   A PART: their share as tenths of what it sold for (1/10 of 18,000)
 //           58 on      PERCENT: their share's percent of what it sold for (10% of 18,000)
 //   m: the crew member's mission as kept, its payout waiting (contractOf)
@@ -197,7 +212,9 @@ const N = (n, unit) => ({ v: n, big: say(n), small: n === 1 ? unit[0] : unit[1],
 export const payoutForm = (grade) => (grade < 20 ? 'count' : grade < 44 ? 'times' : grade < 58 ? 'part' : 'percent');
 export function payoutOrder(m, grade = 0, rand = Math.random) {
   const P = m.payout, form = payoutForm(grade), who = rolesWords(m.roles), tenths = P.share / 10;
-  const rock = P.rich ? 'a rich rock' : null, what = `${P.metal} ore`;
+  // (a haul the crew member drilled: its lots, "5 canisters of copper ore, 2 of iron ore and 1 of gold ore")
+  const lots = Array.isArray(P.mix) && P.mix.length ? P.mix : null;
+  const rock = P.rich && !lots ? 'a rich rock' : null, what = `${P.metal} ore`;
   const top = { from: P.rich ? 'Your share: a rich rock' : 'Your share' };
   const done = (o) => Object.assign(o, { payout: P.pay, form });
   // (what the right answer's line says: the pay, in every form)
@@ -207,7 +224,8 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
     const side = grade < 6, n = side ? P.canisters / 2 : P.canisters;
     return done(ownOrder({
       key: `payout:count:${side ? 'side' : 'all'}`,
-      story: `Your crew is home with ${say(P.canisters)} canisters of ${what}${rock ? ` from ${rock}` : ''}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
+      story: lots ? `Your crew is home with ${lotsWords(lots)}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`
+        : `Your crew is home with ${say(P.canisters)} canisters of ${what}${rock ? ` from ${rock}` : ''}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
       ask: side ? 'How many canisters are on this side of the Miner?' : 'How many canisters did your crew bring home?',
       right: N(n, CAN),
       slips: [
@@ -220,6 +238,28 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
       picFirst: true, help: { title: 'Count them', pic: { kind: 'cans', place: side ? 'row' : 'ship', slots: Array(n).fill('full') }, line: 'Touch each canister once as you count: 1, 2, 3 ...' },
       own: { strand: 'number', at: side ? 0 : 6 }, facts: { ...top, form, n, pay: P.pay },
     }, rand, 3));
+  }
+  if (form === 'times' && lots) {
+    // (one lot of it: the roundest price a canister, then the most canisters; two or more canisters where there are)
+    const round = (L) => (L.each % 1000 === 0 ? 0 : L.each % 500 === 0 ? 1 : 2);
+    const L = [...lots].sort((a, b) => (a.canisters < 2) - (b.canisters < 2) || round(a) - round(b) || b.canisters - a.canisters)[0], n = L.canisters, per = L.each, ore = `${L.metal} ore`;
+    return done(ownOrder({
+      key: 'payout:times:lot',
+      story: `Your crew brought home ${lotsWords(lots)}. Each canister of ${ore} sold for ${say(per)} credits.`,
+      ask: `How many credits did the ${ore} sell for?`,
+      right: N(L.pay, CREDIT),
+      slips: [
+        ...(n > 1 ? [{ ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is what one canister sold for. There are ${say(n)} of ${ore}.` }] : []),
+        { ...N(per + n, CREDIT), slip: 'added', why: `That adds the canisters to the price. Every canister sold for ${say(per)} credits: ${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}.` },
+        ...(P.sold !== L.pay ? [{ ...N(P.sold, CREDIT), slip: 'whole', why: `That is what the whole haul sold for, every metal in it. The question is the ${ore}.` }] : []),
+        { ...N((n + 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(n + 1)} canisters. There ${n === 1 ? 'is' : 'are'} ${say(n)} of ${ore}.` },
+        ...(n > 1 ? [{ ...N((n - 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(n - 1)} ${n === 2 ? 'canister' : 'canisters'}. There are ${say(n)} of ${ore}.` }] : []),
+      ],
+      rightWhy: `${say(n)} × ${say(per)} = ${say(L.pay)} credits. The whole haul sold for ${say(P.sold)} credits. ${paid}`, sum: { op: 'mul', a: n, b: per },
+      lines: [[`${L.metal[0].toUpperCase() + L.metal.slice(1)} ore`, `${say(n)} ${n === 1 ? 'canister' : 'canisters'}`], ['A canister of it sold for', `${say(per)} credits`], [`The ${ore} sold for`, '?']],
+      help: { title: 'Canister by canister', line: `Every canister of ${ore} sold for ${say(per)} credits: ${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}.`, steps: [`${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}: ${say(n)} × ${say(per)}`] },
+      own: { strand: 'words', at: 26 }, facts: { ...top, form, n, per, metal: L.metal, lot: L.pay, pay: P.pay },
+    }, rand));
   }
   if (form === 'times') {
     const t = P.oreTonnes, per = P.sold / t;

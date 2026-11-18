@@ -36,6 +36,16 @@
 // sells for, tell the same haul. What a haul sells for is its pay here; who is paid what share of it is the contract's
 // (src/missions.js), and the share is collected at this job's controls (its payout card, src/missions.js payoutOrder).
 //
+// A HAUL THE CREW MEMBER DRILLED THEMSELVES (src/drill.js: the drill operator's game) comes home SORTED: each of its
+// eight canisters holds the ore of one metal, whatever was drilled into it (flownHaul's `load`: the metal in each
+// canister). Every canister of it still holds the same part of a tonne of ore (the jump out sets that, as for any
+// haul a crew flew); what differs is what a tonne of each metal's ore sells for (ORE_PRICE), so the haul sells for
+// what is in it. haulOf gives such a haul as its lots (`mix`: so many canisters of each metal, and what they pay) and
+// its pay as their sum. The slips that read the whole haul then speak of ONE LOT of it (the copper ore's canisters,
+// what the copper ore pays), each a sum for the head, and say what the whole haul pays in the line under the right
+// answer; a slip about canisters counted in the hangar speaks of their ore without naming a metal (the crane does not
+// know which canister is which). A haul a crew drilled without the player is one metal, as it always was.
+//
 // THE PRICES (the game's maker, 2026-11-17: a ten minute run with all three jobs on it, half the haul, should pay
 // about 8,300 credits, a sixth of a 50,000 credit ship; the pilot's tenth about 2,000 for two minutes; a rich rock
 // double). So a haul sells for about 15,000 to 21,000 credits: a tonne of iron pays 6,000 credits (it was 20), and
@@ -72,6 +82,8 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 // ── THE HAUL: what the smelter's equipment reads of one landing's canisters ─────────────────────────────────────────
 //   haulOf(n) -> { n, canisters, fill, metal, ore, yield, oreTonnes, metal10, pay, flown, rich }
+//                and for a sorted haul: mix [{ metal, canisters, sells (a tonne of its ore), each (a canister of it),
+//                oreTonnes, pay }], load (the metal in each canister); its yield and metal10 are null
 //     canisters  all the haul's canisters (CARRIES), wherever they are now: on the ship, at the wall, on the rack
 //     fill       tenths of a tonne in each full canister (LOADS): its ore and its slag together
 //     metal      the metal its ore carries ({ name, price }: METALS)
@@ -89,11 +101,19 @@ const HAUL_ORE = [[3, 4], [5, 8], [7, 8], [1, 2], [3, 8]];
 const HAUL_YIELD = { iron: 50, nickel: 30, copper: 20, cobalt: 10, titanium: 10 };
 export const RICH_METAL = 'titanium';
 export const ORE_SELLS = 3000;   // credits for each tonne of a usual haul's ore (a rich rock's: twice this)
+// WHAT A TONNE OF EACH METAL'S ORE SELLS FOR IN A SORTED HAUL (one the crew member drilled: src/drill.js). The dearer
+// the metal, the more its ore sells for; the rich rock's titanium is twice a usual haul's ore, as it always was. Each
+// but titanium's is a multiple of 800, so a canister of 5/8, 3/4 or 7/8 of a tonne sells for a round number of
+// hundreds (3/4 of a tonne: iron 1,200, nickel 1,800, copper 2,400, cobalt 3,000, titanium 4,500, gold 6,000).
+// A crew's own haul, all one metal, sells for ORE_SELLS a tonne whatever its metal: an ordinary load.
+export const ORE_PRICE = { iron: 1600, nickel: 2400, copper: 3200, cobalt: 4000, titanium: 2 * ORE_SELLS, gold: 8000 };
 
-// THE HAULS A CREW FLEW, by their number: { ore: [a, d] (tonnes of ore in each canister), rich }
+// THE HAULS A CREW FLEW, by their number: { ore: [a, d] (tonnes of ore in each canister), rich, load (a sorted haul:
+// the metal in each of its canisters, by name) }
 const FLOWN = new Map();
 const haulNo = (n) => Math.max(0, Math.floor(Number(n) || 0));
 //   flownHaul(n, { ore: [a, d], rich })   the facts of haul n, which a crew flew (set as it lands)
+//   flownHaul(n, { ore: [a, d], load })   ... which the crew member drilled: load, the metal in each canister
 //   flownHaul(n)                          its facts, or null: nobody the player knows flew it
 //   flownHaul(n, null)                    forgotten (the tests; a haul's number comes round again only after a reload)
 export function flownHaul(n, facts) {
@@ -102,7 +122,9 @@ export function flownHaul(n, facts) {
   else if (facts) {
     const [a, d] = Array.isArray(facts.ore) ? facts.ore : [3, 4];
     if (!(a > 0 && d > 0 && a < d && (CARRIES * a) % d === 0)) throw new Error(`smelter: a flown haul's ore must be a part of a tonne that makes whole tonnes, not ${a}/${d}`);
-    FLOWN.set(k, { ore: [a, d], rich: !!facts.rich });
+    const load = Array.isArray(facts.load) ? facts.load.map(String) : null;
+    if (load && (load.length !== CARRIES || !load.every((m) => ORE_PRICE[m] && METALS.some((M) => M.name === m)))) throw new Error(`smelter: a sorted haul is ${CARRIES} canisters, each of a metal the smelter pours, not ${JSON.stringify(facts.load)}`);
+    FLOWN.set(k, { ore: [a, d], rich: load ? load.includes(RICH_METAL) : !!facts.rich, load });
   }
   return FLOWN.get(k) || null;
 }
@@ -119,9 +141,23 @@ export function haulOf(n = 0) {
     const turn = [...HAUL_ORE.slice(k % HAUL_ORE.length), ...HAUL_ORE.slice(0, k % HAUL_ORE.length)];
     [a, d] = turn.find(([x, y]) => x / y <= fill / 10 - 0.1 + 1e-9) || [3, 8];
   }
+  const oreTonnes = CARRIES * a / d;
+  if (F && F.load) {
+    // (a sorted haul: its lots, the most canisters first, the dearer metal first of two the same; `metal` is the first
+    // lot's, for whoever names a haul by one metal. It has no one yield: each lot sells by the tonne of its ore.)
+    const mix = METALS.map((M) => ({ metal: M, canisters: F.load.filter((x) => x === M.name).length })).filter((L) => L.canisters > 0)
+      .map((L) => ({ ...L, sells: ORE_PRICE[L.metal.name], each: ORE_PRICE[L.metal.name] * a / d, oreTonnes: L.canisters * a / d, pay: L.canisters * ORE_PRICE[L.metal.name] * a / d }))
+      .sort((p, q) => q.canisters - p.canisters || q.sells - p.sells);
+    return { n: k, canisters: CARRIES, fill, metal: mix[0].metal, ore: { n: a, d }, yield: null, oreTonnes, metal10: null, pay: mix.reduce((sum, L) => sum + L.pay, 0), flown: true, rich: F.rich, mix, load: [...F.load] };
+  }
   const rich = !!(F && F.rich), metal = rich ? METALS.find((m) => m.name === RICH_METAL) : METALS[k % 4];
-  const oreTonnes = CARRIES * a / d, y = HAUL_YIELD[metal.name], metal10 = oreTonnes * y / 10;
+  const y = HAUL_YIELD[metal.name], metal10 = oreTonnes * y / 10;
   return { n: k, canisters: CARRIES, fill, metal, ore: { n: a, d }, yield: y, oreTonnes, metal10, pay: metal10 * metal.price / 10, flown: !!F, rich };
+}
+// "5 canisters of copper ore, 2 of iron ore and 1 of gold ore" (a sorted haul's lots, or a count by metal's name)
+export function lotsWords(lots) {
+  const w = lots.map((L, i) => `${L.canisters} ${i ? '' : L.canisters === 1 ? 'canister ' : 'canisters '}of ${L.metal.name || L.metal} ore`);
+  return w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`;
 }
 
 // ── fractions of a tonne (Mathwood's own fractions: labs/fishing/frac.js) ───────────────────────────────────────
@@ -399,16 +435,19 @@ export const MAKERS = {
       let n, a, d, metal, kind = 'own';
       // the haul: the whole of it (once a haul), or the canisters of it counted in the hangar right now (each count once)
       if (H) {
-        const q = H.ore;
-        if (whole && isNew(live, 'ore:haul', 0)) { used(live, 'ore:haul', 0); kind = 'haul'; n = H.canisters; }
+        const q = H.ore, fits = (c) => c != null && (c * q.n) % q.d !== 0 && c * q.n > q.d;
+        // (a sorted haul: one of its lots, the canisters of one metal, each lot once; the canisters counted in the
+        // hangar are any of them, so their ore is not named by a metal)
+        const lot = H.mix ? H.mix.find((L) => L.canisters >= 2 && (whole ? (L.canisters * q.n) % q.d === 0 : fits(L.canisters)) && isNew(live, 'ore:lot:' + L.metal.name, 0)) : null;
+        if (whole && !H.mix && isNew(live, 'ore:haul', 0)) { used(live, 'ore:haul', 0); kind = 'haul'; n = H.canisters; }
         if (!whole) {
-          const fits = (c) => c != null && (c * q.n) % q.d !== 0 && c * q.n > q.d;
           const wall = liveCount(live, 'docked', 2, CARRIES), ship = unloading(live) ? liveCount(live, 'fullOnShip', 2, CARRIES - 1) : null;
           const now = [fits(wall) && { key: 'wall', n: wall }, fits(ship) && { key: 'ship', n: ship }].filter((x) => x && isNew(live, 'ore:' + x.key, x.n));
           const got = now.length ? t.pick(now) : null;
           if (got) { used(live, 'ore:' + got.key, got.n); kind = got.key; n = got.n; }
         }
-        if (kind !== 'own') { a = q.n; d = q.d; metal = H.metal.name; }
+        if (kind === 'own' && lot) { used(live, 'ore:lot:' + lot.metal.name, 0); kind = 'lot'; n = lot.canisters; metal = lot.metal.name; }
+        if (kind !== 'own') { a = q.n; d = q.d; if (kind !== 'lot') metal = H.mix ? null : H.metal.name; }
       }
       if (kind === 'own') {
         // from the log: halves and quarters first, then thirds, fifths and eighths
@@ -423,9 +462,11 @@ export const MAKERS = {
       }
       const q = fr(a, d), ans = fr(n * a, d), each = ofT(q), P1 = parts(d, 1), PS = parts(d);
       const W = (who && who.name) || 'the crew', they = who ? (who.she ? 'she' : 'he') : 'they';
+      const mOre = metal ? `${metal} ore` : 'ore';      // (canisters of a sorted haul counted in the hangar: any metal's)
       const ctx = kind === 'haul' ? { story: `This haul came in on the Miner: ${n} canisters, with ${each} of ${metal} ore in each. The rest is slag.`, ask: `How many tonnes of ${metal} ore did we collect?` }
-        : kind === 'wall' ? { story: `${n} of this haul's canisters are plugged in at the smelter's wall right now. The smelter reads ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore have they brought?` }
-          : kind === 'ship' ? { story: `${n} of this haul's canisters are still full on the Miner. The smelter read ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore are still on the ship?` }
+        : kind === 'lot' ? { story: `This haul came in on the Miner sorted by metal. ${n} of its ${H.canisters} canisters hold ${metal} ore, with ${each} of ore in each. The rest is slag.`, ask: `How many tonnes of ${metal} ore did we collect?` }
+        : kind === 'wall' ? { story: `${n} of this haul's canisters are plugged in at the smelter's wall right now. The smelter reads ${each} of ${mOre} in each.`, ask: `How many tonnes of ${mOre} have they brought?` }
+          : kind === 'ship' ? { story: `${n} of this haul's canisters are still full on the Miner. The smelter read ${each} of ${mOre} in each.`, ask: `How many tonnes of ${mOre} are still on the ship?` }
             : t.pick([
               { story: `${n} of our canisters each hold ${each} of ${metal} ore.`, ask: `How many tonnes of ${metal} ore did we collect?` },
               { story: `An ore drone dropped off ${n} small canisters, with ${each} of ${metal} ore in each.`, ask: `How many tonnes of ${metal} ore is that?` },
@@ -449,13 +490,13 @@ export const MAKERS = {
         // (Work it out: the parts in all, then whole tonnes, the remainder the parts left over: 15 ÷ 4 = 3 r 3, 3 3/4)
         sum: [...(a > 1 ? [{ op: 'mul', a: n, b: a, say: `First the ${PS} of a tonne in all: ${n} lots of ${a}` }] : []),
           { op: 'div', a: top, b: d, say: `${a > 1 ? 'Then' : 'First'} whole tonnes: ${d} ${PS} make one tonne${whole ? '' : ', and what is left over is still ' + PS}` }],
-        help: { title: 'Lots of a fraction', pic: { kind: 'orecans', n, a, d, what: `${metal} ore` },
+        help: { title: 'Lots of a fraction', pic: { kind: 'orecans', n, a, d, what: mOre },
           line: `${n} × ${a}/${d} is ${n} lots of ${a}/${d}: count the ${PS} of a tonne in all the canisters, then make them into whole tonnes, ${d} ${PS} to a tonne.`,
           steps: [a > 1 ? `First the ${PS} in all: ${n} × ${a}` : `First the ${PS} in all: one ${P1} in each of ${n} canisters`,
             `Then whole tonnes: ${d} ${PS} make one tonne, so that many ${PS} ÷ ${d}`,
             ...(whole ? [] : [`What is left over is still ${PS}: it goes over the ${d}`])] },
         own: { strand: 'frac', at: whole ? 44 : 47 }, credit: whole ? [{ strand: 'mul', at: 20, weight: 0.5 }] : [{ strand: 'div', at: 45, weight: 0.5 }],
-        facts: { n, a, d, ans: [top, d], metal, kind, live: kind !== 'own', ...(kind !== 'own' ? { haul: H.n } : {}), ...(kind === 'haul' ? { from: fromOf(H) } : {}) },
+        facts: { n, a, d, ans: [top, d], metal, kind, live: kind !== 'own', ...(kind !== 'own' ? { haul: H.n } : {}), ...(kind === 'haul' || kind === 'lot' ? { from: fromOf(H) } : {}) },
         size: whole ? 1 : 2,
       }, rand);
     },
@@ -635,7 +676,35 @@ export const MAKERS = {
       // then what that pays. (Who is paid what share of it is the contract's, src/missions.js; a haul a crew flew, and
       // a rich rock's double pay, are that haul's own facts: haulOf.)
       const H = live ? haulOf(live.round) : null;
-      if (H && isNew(live, 'pay:haul', 0)) {
+      // A SORTED HAUL (the crew member drilled it): what ONE LOT of it pays, each lot once: its canisters, the part of a
+      // tonne of ore in each, what a tonne of that metal's ore sells for. Three sums for the head: a part of the
+      // price, the parts in one canister, the canisters. The line under the right answer says what the whole haul pays.
+      const lot = H && H.mix ? H.mix.find((L) => isNew(live, 'pay:lot:' + L.metal.name, 0)) : null;
+      if (lot) {
+        used(live, 'pay:lot:' + lot.metal.name, 0);
+        const N = lot.canisters, { n: a, d } = H.ore, m = lot.metal.name, sells = lot.sells, one = sells / d, each = lot.each, pay = lot.pay, PS = parts(d), P1 = parts(d, 1), cans = u(N, CAN);
+        return ownOrder({
+          key: `pay:lot:${m}`, story: `This haul came in on the Miner sorted by metal. ${N} of its ${H.canisters} canisters ${N === 1 ? 'holds' : 'hold'} ${m} ore, with ${ofT(fr(a, d))} of ore in ${N === 1 ? 'it' : 'each'}. ${cap(m)} ore sells for ${credits(sells)} credits a tonne.`, ask: `How many credits does the ${m} ore pay?`, right: P(pay),
+          slips: [
+            { ...P(N * sells), slip: 'wholeTonnes', why: `That pays each canister as a whole tonne of ore. Each holds ${ofT(fr(a, d))}.` },
+            ...(N > 1 ? [{ ...P(each), slip: 'oneCanister', why: `That's the pay for one canister. There ${N === 1 ? 'is' : 'are'} ${cans} of ${m} ore.` }] : []),
+            ...(H.pay !== pay ? [{ ...P(H.pay), slip: 'wholeHaul', why: `That is the whole haul, every metal in it. The question is the ${m} ore: ${cans}.` }] : []),
+            ...(a > 1 ? [{ ...P(N * one), slip: 'onePart', why: `That counts one ${P1} of a tonne in each canister. Each holds ${a} ${PS}.` }] : []),
+            { ...P(pay + each), slip: 'groupOff', why: `That's ${N + 1} canisters. There ${N === 1 ? 'is' : 'are'} ${N} of ${m} ore.` },
+            { ...P(sells), slip: 'onePrice', why: `${credits(sells)} credits is what one whole tonne of ${m} ore sells for.` },
+          ].filter((x) => x.v > 0),
+          rightWhy: `One canister: ${a}/${d} of ${credits(sells)} = ${credits(each)} credits. ${N === 1 ? '' : `${N} canisters: ${N} × ${credits(each)} = ${credits(pay)} credits. `}The whole haul, every metal in it, pays ${credits(H.pay)} credits.`,
+          sum: [{ op: 'div', a: sells, b: d, say: `First one ${P1} of a tonne of ${m} ore: ${credits(sells)} credits cut into ${d}` },
+            ...(a > 1 ? [{ op: 'mul', a: one, b: a, say: `Then one canister: ${a} ${PS} of a tonne` }] : []),
+            ...(N > 1 ? [{ op: 'mul', a: each, b: N, say: `Then all ${N} canisters of ${m} ore` }] : [])],
+          lines: [[`${cap(m)} ore`, `${cans} × ${a}/${d} of a tonne`], ['It sells for', `${credits(sells)} credits a tonne`], ['Pay', '?']],
+          help: { title: 'One canister first', line: `Work out what one canister of ${m} ore pays (${a}/${d} of ${credits(sells)} credits), then take ${N === 1 ? 'that' : `${N} lots of it`}.`,
+            steps: [`One ${P1} of ${credits(sells)}: ${credits(sells)} ÷ ${d}`, ...(a > 1 ? [`One canister, ${a} ${PS}: that × ${a}`] : []), ...(N > 1 ? [`All ${N} canisters: that × ${N}`] : [])] },
+          own: { strand: 'frac', at: 60 }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }],
+          facts: { n: N, each: [a, d], sells, price: sells, ore: lot.oreTonnes, metal: m, ans: pay, whole: H.pay, live: true, lot: true, haul: H.n, from: fromOf(H) }, size: 3,
+        }, rand);
+      }
+      if (H && !H.mix && isNew(live, 'pay:haul', 0)) {
         used(live, 'pay:haul', 0);
         const N = H.canisters, { n: a, d } = H.ore, O = H.oreTonnes, m = H.metal, pct = H.yield, metal10 = H.metal10, pay = H.pay, PS = parts(d);
         const cut = pct === 50 ? [2, 'half'] : pct === 25 ? [4, 'a quarter'] : pct === 20 ? [5, 'a fifth'] : pct === 10 ? [10, 'a tenth'] : null;

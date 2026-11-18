@@ -1,8 +1,10 @@
 // THE DRILL LAB: the drill operator's game by itself (the game's own code: src/drillview.js, src/drill.js,
 // src/jobs/drill.js; nothing here is a copy), under the game's own sky, so it can be tried on a phone without walking
 // through the station. A few plain switches along the top: a new field, the rich rock on or off, the question on or
-// off, the field's metal, the question's level. Errors show on the page (shared/oops.js).
-//   ?seed=7 the same field each time; ?rich=1; ?ask=0; ?metal=nickel; ?level=percent; ?bloom=0; ?rig=1 (for pictures)
+// off, the field (the mix of metals a trip meets, or one metal only), the question's level. Errors show on the page
+// (shared/oops.js).
+//   ?seed=7 the same field each time; ?rich=1; ?ask=0; ?metal=nickel (that metal only); ?level=percent; ?bloom=0;
+//   ?rig=1 (for pictures)
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -11,9 +13,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createSky } from '../../world/sky.js';
 import { buildShip, makeDrillView } from '../../src/drillview.js';
-import { seeded, DRILL } from '../../src/drill.js';
+import { seeded, USUAL } from '../../src/drill.js';
 import { JOB as SCAN } from '../../src/jobs/drill.js';
-import { METALS } from '../../src/jobs/smelter.js';
+import { lotsWords } from '../../src/jobs/smelter.js';
 import * as E from '../../src/jobs/engine.js';
 import { setLevelAt } from '../../../mathwood-valley/src/levels/model.js';
 
@@ -48,12 +50,12 @@ const topBar = () => document.documentElement.style.setProperty('--pdr-top', doc
 new ResizeObserver(topBar).observe(document.getElementById('top')); topBar();
 
 // ── the switches ──
-const st = { rich: Q.get('rich') === '1', ask: Q.get('ask') !== '0', metal: METALS.slice(0, 4).some((m) => m.name === Q.get('metal')) ? Q.get('metal') : 'copper', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0 };
+const st = { rich: Q.get('rich') === '1', ask: Q.get('ask') !== '0', metal: USUAL.includes(Q.get('metal')) ? Q.get('metal') : '', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0 };
 const crew = { id: 'drill-lab', name: 'Driller' };
 E.register(SCAN);
 const levelEl = $('level'), metalEl = $('metal');
 levelEl.innerHTML = SCAN.place.levels.map((L, i) => `<option value="${L.id}">Question ${i + 1}: ${L.title}</option>`).join('');
-metalEl.innerHTML = METALS.slice(0, 4).map((m) => `<option value="${m.name}">${m.name[0].toUpperCase() + m.name.slice(1)} field</option>`).join('');
+metalEl.innerHTML = '<option value="">Mixed field</option>' + USUAL.map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)} only</option>`).join('');
 metalEl.value = st.metal;
 const setLevel = (id) => { try { setLevelAt(crew, 'drill', id); levelEl.value = id; } catch (e) { /* no such level */ } };
 setLevel(SCAN.place.levels.some((L) => L.id === Q.get('level')) ? Q.get('level') : 'part');
@@ -67,8 +69,9 @@ let ship = null, view = null;
 function start() {
   if (view) view.close();
   const rand = st.seed != null ? seeded(st.seed + st.n) : Math.random; st.n++;
-  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, metal: st.metal, rich: st.rich, rand, ask: st.ask, lab: true,
-    onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); note(`The last load: ${DRILL.cans} canisters from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.wasted} in bare rock), in ${m} min ${s} s${r.rich ? '; a rich haul: it pays double' : ''}. A new field is up.`); start(); } });
+  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, metal: st.metal || null, rich: st.rich, rand, ask: st.ask, lab: true,
+    // (what it would sell for is with 3/4 of a tonne of ore in each canister: a run whose jump out the crew's own pilot flew)
+    onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load: ${lotsWords(r.lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.wasted} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
   window.DRILLLAB.view = view;
 }
 $('new').addEventListener('click', () => { note(''); start(); });

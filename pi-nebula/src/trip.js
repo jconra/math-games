@@ -22,7 +22,8 @@
 //   - THE CAPTAIN'S WORDS come up in a bubble on his side of the cockpit (he is not drawn in the other seat yet).
 //   - THE DRILL OPERATOR'S GAME (src/drillview.js, loaded only for a crew member who signed for the drill): at the
 //     field the view goes outside the ship, behind a short fade, and the crew member picks the rocks and drills them
-//     until the eight canisters are full. That view has a Miner of its own, built for outside (legs up, its arms
+//     until the eight canisters are full; the load comes home sorted, a canister of one metal each, and sells for
+//     what is in it (land's `load`). That view has a Miner of its own, built for outside (legs up, its arms
 //     live), far from the parked one, of which nothing is drawn meanwhile. With the pilot's seat left to the crew the
 //     jumps are the short version (the lamps light by themselves) and the crew member rides in the other seat.
 //
@@ -273,9 +274,9 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       if (T.phase === 'dark' && T.fade >= 1) {
         arms.group.visible = false; rocks.group.visible = false; tint(false); space(false);
         T.n = crane.arrive({ flown: true });
-        T.payout = land(crew, { n: T.n, clean: T.clean, rich: T.rich }); save(crew);
+        T.payout = land(crew, { n: T.n, clean: T.clean, rich: T.rich, load: T.load }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
-        try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.metal, tons: ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.oreTonnes] || String(T.payout.oreTonnes) }); } catch (e) { /* no news */ }
+        try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.mix && T.payout.mix.length > 1 ? 'mixed' : T.payout.metal, tons: ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.oreTonnes] || String(T.payout.oreTonnes) }); } catch (e) { /* no news */ }
         fadeWords('The autopilot brings the Miner in through the bay door. Down on the pad: legs down, nozzle still hot.');
         T.phase = 'down'; T.t = 0;
       }
@@ -290,16 +291,17 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   function runDrill(dt, st) {
     if (!T.phase) {
       T.phase = 'toDrill'; T.roll = api.rig.roll ?? (ctx.rand || Math.random)(); T.richField = isRich(() => T.roll); T.rich = false; T.filled = 0;
-      T.metal = METALS[(crane.round + 1) % 4].name; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
+      T.metal = 'mixed'; T.load = null; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
     }
     if (T.phase === 'toDrill' && T.fade >= 1) {
       if (drillErr) { abort(); return; }
       if (!drillKit) { if (T.t > 40) { console.error('trip: the drill never came'); abort(); } return; }
       // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
       W.alone = []; arms.group.visible = false; rocks.group.visible = false;
-      drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, metal: T.metal, rich: T.richField, rand: ctx.rand || Math.random,
+      drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, rich: T.richField, rand: ctx.rand || Math.random, ore: forecast({ clean: T.clean }).ore,
         onSay: (key, more) => { if (TALK[key] && key !== 'full') say(key, more); },
-        onDone: (r) => { T.rich = !!r.rich; T.drillStats = r.stats; T.drillSecs = r.secs; if (T.rich) T.metal = RICH_METAL; T.ore = forecast({ clean: T.clean, rich: T.rich, roles }); T.phase = 'drillDone'; T.t = 0; say(iPilot ? 'full' : 'fullCrew', { tonnes: T.ore.oreTonnes, ore: T.metal }); } });
+        // (the load comes home sorted: the metal in each canister, the haul's facts when it lands)
+        onDone: (r) => { T.load = r.load; T.rich = r.load.includes(RICH_METAL); T.drillStats = r.stats; T.drillSecs = r.secs; T.metal = r.metal; T.ore = forecast({ clean: T.clean, roles }); T.phase = 'drillDone'; T.t = 0; say(iPilot ? 'full' : 'fullCrew', { tonnes: T.ore.oreTonnes, ore: T.metal }); } });
       drillOn = true; el.classList.add('is-drill'); T.phase = 'drill'; T.t = 0; T.fadeTo = 0; say('drillField');
     }
     if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
@@ -358,7 +360,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},      // (the rigs: rig.roll, the roll for the rich rock, under 0.2 for one)
     state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, clean: T.clean, rich: T.rich, roll: T.roll, filled: T.filled, paused: T.paused, n: T.n,
-      drill: drill ? drill.state() : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null, richField: !!T.richField,
+      drill: drill ? drill.state() : null, load: T.load || null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null, richField: !!T.richField,
       panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;

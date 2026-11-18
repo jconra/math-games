@@ -68,7 +68,7 @@ export const RUN_TALK = {
     drillField: ['Look for the glow, {player}. More glow, more ore.', 'The scan is up. Pick us a good one.'],
     pick: ['Going in for that one.', 'Juno, take us over.', 'That one it is.'],
     tuned: ['Good scan!', 'Spot on. Set the drill.'],
-    richAboard: ['Titanium in the canisters! This haul pays double.'],
+    richAboard: ['Titanium in the canisters! Those pay double.'],
     broke: ['That one\'s done. Find us another.', 'She\'s all in pieces. Next rock!'],
     fullCrew: ['Eight canisters, {tonnes} tonnes of {ore} ore. Juno, take us home.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, Juno.'],
     landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],

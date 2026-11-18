@@ -17,14 +17,15 @@
 // `tell`: the numbers, the slips, the pictures and the sums are theirs. Mathwood Valley's makers tell the whole-number
 // stories through SETTING (engine.js). The counting, the box and the canisters filled are this job's own (MAKERS).
 //
-// THE ROCK IN THE CLAW (`live`, from src/drillview.js: { rock: { metal, size, holes, rich }, cans: { full, of } }): the
-// question names the rock's own metal, and where a level counts holes or canisters it uses the rock's holes and the
-// canisters as they are. The tonnes in a story are the scan's reading for the card, sized to suit the level (the game
+// THE ROCK IN THE CLAW (`live`, from src/drillview.js: { rock: { metal, also, size, holes, rich }, cans: { full, of } }):
+// the question names the rock's own metal (its main one, where it has a streak of another), where a level counts
+// holes or canisters it uses the rock's holes and the canisters as they are, and where it speaks of what the ore
+// sells for it is that metal's own price a tonne (src/jobs/smelter.js ORE_PRICE: the payout's). The tonnes in a story are the scan's reading for the card, sized to suit the level (the game
 // counts ore in canisters; it shows no tonnes of its own that a card could contradict). From the levels page, and in
 // node, there is no rock: the maker picks a metal.
 import { partsWord } from '../../../mathwood-valley/labs/fishing/frac.js';
 import { ownOrder } from './engine.js';
-import { MAKERS as SMELTER, METALS, CARRIES, ORE_SELLS } from './smelter.js';
+import { MAKERS as SMELTER, METALS, CARRIES, ORE_PRICE } from './smelter.js';
 import { ORE } from '../drill.js';
 
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
@@ -63,6 +64,9 @@ export const SETTING = {
 // the rock a card is about: the one in the claw, or (the levels page, node) one of the usual metals
 const rockOf = (live, t) => (live && live.rock ? live.rock : { metal: t.pick(METALS.slice(0, 4)).name, size: 'medium', holes: t.int(4, 6), rich: false });
 const glowOf = (rock) => (ORE[rock.metal] || ORE.copper).glow;
+// what a tonne of the rock's own ore sells for (the payout's own prices)
+export const priceOf = (rock) => ORE_PRICE[rock.metal] || ORE_PRICE.copper;
+const cap = (w) => w[0].toUpperCase() + w.slice(1);
 // the words the smelter's makers are given, to ask their sums of this rock
 function tellOf(rock) {
   const ore = `${rock.metal} ore`;
@@ -81,7 +85,7 @@ function tellOf(rock) {
       left: ({ a, b }) => ({ story: `The scan finds ${a} tonnes of ${ore} in this rock. The first hole should take ${b} tonnes of it.`, ask: 'How many tonnes of ore will be left in the rock?',
         added: 'Drilling leaves less in the rock: take away.', part: `${b} tonnes is what the hole takes. The question is what is left in the rock.` }),
     },
-    pay: ({ w }) => { const price = ORE_SELLS * (rock.rich ? 2 : 1); return { m: { name: 'ore', price }, story: `The scan finds ${w} tonnes of ${ore} in this rock. ${rock.rich ? 'Ore from a rich rock' : 'Ore'} sells for ${say(price)} credits a tonne.`, ask: 'How many credits is the ore in this rock worth?' }; },
+    pay: ({ w }) => { const price = priceOf(rock); return { m: { name: 'ore', price }, story: `The scan finds ${w} tonnes of ${ore} in this rock. ${cap(ore)} sells for ${say(price)} credits a tonne.`, ask: 'How many credits is the ore in this rock worth?' }; },
   };
 }
 // one of the smelter's own makers, asked of the rock in the claw
@@ -297,10 +301,10 @@ export const MAKERS = {
   worth: {
     strand: 'pct', at: () => 76,
     make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), rock = rockOf(live, t), ore = `${rock.metal} ore`, price = ORE_SELLS * (rock.rich ? 2 : 1);
+      const t = kit(rand), rock = rockOf(live, t), ore = `${rock.metal} ore`, price = priceOf(rock);
       const W = 10 * t.int(2, 9), pct = t.pick([10, 20, 30, 40, 50]), tonnes = W * pct / 100, sold = tonnes * price, pay = sold * SHARE / 100, ten = W / 10;
       return ownOrder({
-        key: `worth:share:${pct}`, story: `The scan says this rock weighs ${W} tonnes, and ${pct}% of it is ${ore}. ${rock.rich ? 'Ore from a rich rock' : 'Ore'} sells for ${say(price)} credits a tonne, and the drill operator's share is ${SHARE}%.`, ask: 'How many credits is the drill operator\'s share of this rock?', right: C(pay, CREDIT),
+        key: `worth:share:${pct}`, story: `The scan says this rock weighs ${W} tonnes, and ${pct}% of it is ${ore}. ${cap(ore)} sells for ${say(price)} credits a tonne, and the drill operator's share is ${SHARE}%.`, ask: 'How many credits is the drill operator\'s share of this rock?', right: C(pay, CREDIT),
         slips: [
           { ...C(sold, CREDIT), slip: 'noShare', why: `${say(sold)} credits is what the ore sells for. The share is ${SHARE}% of that.` },
           { ...C(W * price * SHARE / 100, CREDIT), slip: 'allRock', why: `That counts the whole ${W} tonnes as ore. Only ${pct}% of the rock is ore.` },
