@@ -28,6 +28,14 @@
 //            same windows every time). The windows come in twos and threes: of every seven frames along a row, two
 //            are blank
 //
+//   flats    [{ group, kind, O, U, V, w, h, kinds, doors, ...shapes }]: flat faces given outright, beside the tiers or
+//            in place of them (a roof, an underside, a wall of a part that has no outline of its own): O a corner in
+//            the world, U along it (to the right, seen from outside), V up it, w by h metres (or quad: its four
+//            corners in U, V, the foot at V = 0 and the top along U, the ends free to slant); kinds: what its foot,
+//            right, top and left are against (SEAM, or INSIDE for an inside corner); doors: its own, as above with
+//            `at` measured along U from O. A door may also say frame: false (no frame is built), shield: false
+//            (nothing across the opening), glass: 0 to 1 (a pane of glass across it, lit that brightly)
+//
 // THE SHAPES a 'plates' part can ask for (the game's maker, 2026-11-18: "plates that were more tiered. So a plate
 // could be on the top and overlap on two that are lower"; "a big plate sitting on-top of a flat wall section that is
 // more than 10 meters or so"; "Some plate bulges should look like shoulders and some flat surfaces should have a
@@ -140,12 +148,12 @@ const area2 = (pts) => { let a = 0; for (let k = 0; k < pts.length; k++) { const
 // it; its shape in that frame is `quad` ([foot left, foot right, top right, top left]: the foot and top run along U,
 // the ends may slant where two runs meet at a mitre); `kinds` say what each side is against (foot, right, top, left).
 export function hullStrips(plan) {
-  const closed = !!plan.closed, n = plan.path.length, runs = closed ? n : n - 1, strips = [];
-  const offs = new Map(), off = (o) => { const k = o.toFixed(4); if (!offs.has(k)) offs.set(k, offsetPath(plan.path, o, closed)); return offs.get(k); };
-  const dir = (i) => { const a = plan.path[i], b = plan.path[(i + 1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; };
+  const path = plan.path || [], tiers = plan.tiers || [], closed = !!plan.closed, n = path.length, runs = closed ? n : n - 1, strips = [];
+  const offs = new Map(), off = (o) => { const k = o.toFixed(4); if (!offs.has(k)) offs.set(k, offsetPath(path, o, closed)); return offs.get(k); };
+  const dir = (i) => { const a = path[i], b = path[(i + 1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; };
   // (a corner of the outline between run i and the next: an inside corner if the next run turns toward the outside)
   const turnIn = (i) => { const a = dir(i), b = dir((i + 1) % runs); return b[0] * -a[1] + b[1] * a[0] > 1e-6; };
-  plan.tiers.forEach((tier, ti) => {
+  tiers.forEach((tier, ti) => {
     const P = tier.profile;
     // (a corner of the profile: an inside corner if the next step turns toward the outside)
     const stepIn = (j) => { if (j <= 0 || j >= P.length - 1) return false; const a = [P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]], b = [P[j + 1][0] - P[j][0], P[j + 1][1] - P[j][1]]; return b[0] * a[1] - b[1] * a[0] > 1e-6; };
@@ -165,6 +173,13 @@ export function hullStrips(plan) {
           quad: [[0, 0], [La, 0], [dot(sub(B1, A0), U), H], [dot(sub(B0, A0), U), H]], kinds: [foot, right, head, left] });
       }
     }
+  });
+  // THE FLATS: flat faces given outright, each in its own frame (a roof, an underside, a wall that is not part of an
+  // outline). A flat is laid, cut round its doors and given its shapes exactly as a strip of a tier is.
+  (plan.flats || []).forEach((f, k) => {
+    const U = unit(f.U), V = unit(f.V), N = unit(cross(U, V));
+    strips.push({ id: strips.length, tier: tiers.length + k, step: 0, run: 0, group: f.group || 'tiers', kind: f.kind || 'plates', part: f, O: f.O, U, V, N,
+      quad: f.quad || [[0, 0], [f.w, 0], [f.w, f.h], [0, f.h]], kinds: f.kinds || [SEAM, SEAM, SEAM, SEAM], doors: f.doors || [] });
   });
   return strips;
 }
@@ -307,7 +322,7 @@ function flat(G, pts, dark) { G.facet(pts.map((p) => ({ p, uv: [0, 0], e: FAR })
 
 // the plan's doors that are in one strip, as that strip's u, v: { u0, u1 (the frame's outside), v0, v1, d (the door) }
 function doorsIn(plan, st) {
-  return (plan.doors || []).filter((d) => d.tier === st.tier && d.step === st.step && d.run === st.run).map((d) => {
+  return (st.doors || (plan.doors || []).filter((d) => d.tier === st.tier && d.step === st.step && d.run === st.run)).map((d) => {
     const jamb = d.jamb ?? 1.2, sill = d.sill ?? 0.8, head = d.head ?? 0.4, v0 = (d.y ?? 0) - st.O[1];
     return { d, jamb, sill, head, u0: d.at - d.w / 2 - jamb, u1: d.at + d.w / 2 + jamb, v0, v1: v0 + sill + d.h + head };
   }).sort((a, b) => a.u0 - b.u0);
@@ -362,7 +377,7 @@ export function hullArrays(plan, sizes) {
   // A WINDOW'S GLASS: one piece, lit or dark (about half of them lit: which ones is settled by where the window is, so
   // they are the same windows every time), a lit one a little brighter or dimmer than the next and dimmer at its foot
   // than at its top, as a lit room shows. The bars between its panes: thin dark strips just in front of it.
-  let windows = 0, lit = 0;
+  let windows = 0, lit = 0, panes = 0;
   const glaze = (st, g) => {
     const on = hash(st.tier * 16 + st.run, g.col, win.seed, 5) < win.lit, bright = on ? 0.62 + 0.38 * hash(st.tier * 16 + st.run, g.col, 11, 2) : 0.05, b = W.position.length / 3, [x0, y0, x1, y1] = g.rect;
     windows++; if (on) lit++;
@@ -443,14 +458,21 @@ export function hullArrays(plan, sizes) {
       stretch(D.u0, D.u1, D.v1, H, [SEAM, SEAM, K[2], SEAM]);                                  // over it
       // the frame: two jambs, a sill and a head, in trim, standing proud; the opening left open, a shield across it
       const bars = [[D.u0, D.u0 + jamb, D.v0, D.v1], [D.u1 - jamb, D.u1, D.v0, D.v1], [D.u0 + jamb, D.u1 - jamb, D.v0, D.v0 + sill], [D.u0 + jamb, D.u1 - jamb, D.v1 - head, D.v1]];
-      bars.forEach(([ua, ub, va, vb], k) => {
+      if (d.frame !== false) bars.forEach(([ua, ub, va, vb], k) => {
         const q = [[ua, va], [ub, va], [ub, vb], [ua, vb]];
         backing(st, q);
         plates(st, { quad: q, kinds: PLAIN }, 'trim', { sizes: { w: k < 2 ? ub - ua : S.w * 1.5, h: vb - va, lap: 0, shift: 0, uneven: 0, unevenRows: 0, bevel: Math.min(Math.max(S.bevel, 0.08), 0.2), gap: S.gap }, proud: proud - Math.min(Math.max(S.bevel, 0.08), 0.2), salt: 40 + k, cut: 0 });
       });
       const o0 = [D.u0 + jamb, D.v0 + sill], o1 = [D.u1 - jamb, D.v1 - head], sb = SH.position.length / 3;
-      for (const [q, uv] of [[[o0[0], o0[1]], [0, 0]], [[o1[0], o0[1]], [1, 0]], [[o1[0], o1[1]], [1, 1]], [[o0[0], o1[1]], [0, 1]]]) { const p = world(st, q, proud * 0.35); SH.position.push(p[0], p[1], p[2]); SH.uv.push(uv[0], uv[1]); }
-      SH.index.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
+      if (d.glass != null) {
+        // (a real room's window: one pane of glass a little way in, lit as brightly as asked, dimmer at its foot)
+        const b = W.position.length / 3;
+        for (const [q, k] of [[[o0[0], o0[1]], 0.7], [[o1[0], o0[1]], 0.7], [[o1[0], o1[1]], 1], [[o0[0], o1[1]], 1]]) { const p = world(st, q, -(d.sink ?? 0.12)); W.position.push(p[0], p[1], p[2]); W.shade.push(d.glass * k); }
+        W.index.push(b, b + 1, b + 2, b, b + 2, b + 3); panes++;
+      } else if (d.shield !== false) {
+        for (const [q, uv] of [[[o0[0], o0[1]], [0, 0]], [[o1[0], o0[1]], [1, 0]], [[o1[0], o1[1]], [1, 1]], [[o0[0], o1[1]], [0, 1]]]) { const p = world(st, q, proud * 0.35); SH.position.push(p[0], p[1], p[2]); SH.uv.push(uv[0], uv[1]); }
+        SH.index.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
+      }
       u = D.u1;
     }
     stretch(u, null, 0, H, [K[0], K[1], K[2], u == null ? K[3] : SEAM]);                        // the wall after the last door (or the whole strip)
@@ -477,10 +499,28 @@ export function hullArrays(plan, sizes) {
   }
 
   const groups = { band: G.band.arrays(), tiers: G.tiers.arrays(), trim: G.trim.arrays() };
-  const stats = { strips: strips.length, windows, lit, glass: W.index.length / 3, doors: SH.index.length / 6, shapes: made, plates: {}, triangles: {} };
+  const stats = { strips: strips.length, windows, lit, panes, glass: W.index.length / 3, doors: SH.index.length / 6, shapes: made, plates: {}, triangles: {} };
   for (const k of Object.keys(groups)) { stats.plates[k] = groups[k].plates; stats.triangles[k] = groups[k].triangles; }
   stats.plates.all = stats.plates.band + stats.plates.tiers + stats.plates.trim;
   stats.triangles.all = stats.triangles.band + stats.triangles.tiers + stats.triangles.trim + stats.glass + stats.doors * 2;
   return { groups, windows: { position: new Float32Array(W.position), shade: new Float32Array(W.shade), index: new Uint32Array(W.index) },
     shields: { position: new Float32Array(SH.position), uv: new Float32Array(SH.uv), index: new Uint32Array(SH.index) }, stats, strips };
+}
+
+// SEVERAL HULLS AS ONE: the lists of numbers of each (hullArrays) joined end to end, so a station made of many parts is
+// still one mesh for each group of plates, one for the glass and one for the shields.
+export function mergeHulls(list) {
+  if (list.length === 1) return list[0];
+  const cat = (arrs, T = Float32Array) => { let n = 0; for (const a of arrs) n += a.length; const out = new T(n); let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; } return out; };
+  const idx = (parts) => { let n = 0; for (const p of parts) n += p.index.length; const out = new Uint32Array(n); let o = 0, base = 0; for (const p of parts) { for (let i = 0; i < p.index.length; i++) out[o + i] = p.index[i] + base; o += p.index.length; base += p.position.length / 3; } return out; };
+  const groups = {}, sum = (f) => list.reduce((t, a) => t + f(a), 0);
+  for (const g of ['band', 'tiers', 'trim']) {
+    const P = list.map((a) => a.groups[g]); groups[g] = { index: idx(P), plates: P.reduce((t, p) => t + p.plates, 0), triangles: P.reduce((t, p) => t + p.triangles, 0) };
+    for (const k of ['position', 'normal', 'uv', 'edge', 'kind', 'tone', 'cut']) groups[g][k] = cat(P.map((p) => p[k]));
+  }
+  const Wn = list.map((a) => a.windows), Sh = list.map((a) => a.shields), stats = { strips: sum((a) => a.stats.strips), windows: sum((a) => a.stats.windows), lit: sum((a) => a.stats.lit), panes: sum((a) => a.stats.panes), glass: sum((a) => a.stats.glass), doors: sum((a) => a.stats.doors), shapes: {}, plates: {}, triangles: {} };
+  for (const k of ['stacked', 'slabs', 'recesses', 'shoulders']) stats.shapes[k] = sum((a) => a.stats.shapes[k]);
+  for (const k of ['band', 'tiers', 'trim', 'all']) { stats.plates[k] = sum((a) => a.stats.plates[k]); stats.triangles[k] = sum((a) => a.stats.triangles[k]); }
+  return { groups, windows: { position: cat(Wn.map((w) => w.position)), shade: cat(Wn.map((w) => w.shade)), index: idx(Wn) },
+    shields: { position: cat(Sh.map((w) => w.position)), uv: cat(Sh.map((w) => w.uv)), index: idx(Sh) }, stats, strips: list.flatMap((a) => a.strips) };
 }

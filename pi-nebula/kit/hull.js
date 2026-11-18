@@ -23,7 +23,7 @@
 // Left out, because each costs another picture read a pixel and another picture in memory for each group: real bumps
 // (cut lines and pits that catch the sun as it turns), and a brushed shine that stretches across the brushing.
 import * as THREE from 'three';
-import { hullArrays } from './hull-plates.js';
+import { hullArrays, mergeHulls } from './hull-plates.js';
 import { GROUPS, plateSizes, readLook } from './hull-look.js';
 import { finishPixels, wearPixels, finishLay, TILE } from './hull-tex.js';
 
@@ -212,8 +212,9 @@ export function hullMaterials(look, opts = {}) {
 // THE PLATED TIERS of a plan, as meshes: one for each group of plates, one for the lit windows, one for the doors'
 // shields (if a shield material is given: the kit's own, kit/materials.js shieldMaterial).
 //   Returns { group, stats: { plates, triangles, panes, draws, ... }, dispose() }
+//   `plan` may be a list of plans (a station made of many parts): they come out as the same few meshes
 export function buildHull(plan, look, mats, opts = {}) {
-  const A = hullArrays(plan, plateSizes(readLook(look))), group = new THREE.Group(), geos = [];
+  const S = plateSizes(readLook(look)), A = mergeHulls((Array.isArray(plan) ? plan : [plan]).map((p) => hullArrays(p, S))), group = new THREE.Group(), geos = [];
   group.name = 'hull';
   const index = (ix, n) => new THREE.BufferAttribute(n > 65535 ? ix : new Uint16Array(ix), 1);
   const mesh = (geo, mat, name) => { geo.computeBoundingSphere(); geo.computeBoundingBox(); geos.push(geo); const m = new THREE.Mesh(geo, mat); m.name = 'hull:' + name; group.add(m); return m; };

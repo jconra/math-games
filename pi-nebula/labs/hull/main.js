@@ -13,6 +13,10 @@
 // would prefer to see options, like A, B, C or D"): stacked plates, shoulders, big raised plates with sunk panels, a
 // mix; each with tiers of different steps. The Shape window switches between them at once; the look stays as it is.
 //
+// THE WHOLE STATION can be shown in place of the piece (one button in the top strip, "The whole station"): the real
+// outside of the station, built by the game's own code round its real rooms (kit/outside.js, kit/outside-plan.js), in
+// shape C. Every slider acts on it as on the piece, and View has its own places to look from.
+//
 // THE LOOK IS THE GAME'S, NOT THE LAB'S: the settings, the ready-made looks, the station's own look (the one the
 // game's maker made here: the lab opens on it) and the text that Copy makes are kit/hull-look.js; the materials and the
 // plated tiers are kit/hull.js (hullMaterials, buildHull); the shapes are kit/hull-plates.js. This file only shows
@@ -40,12 +44,14 @@
 // What he changes is kept in this browser (localStorage) between visits; where the windows are, for this tab.
 //
 // FOR THE PICTURE RIGS: ?rig keeps the drawing for a screenshot, ?ui=0 hides the menus, ?fresh forgets what was kept,
-// ?shape=<A to D>&look=<name>&view=<name>&sun=<degrees>; and window.HULL (shape, set, useLook, view, from, sun, shadows,
+// ?shape=<A to D>&what=station&look=<name>&view=<name>&sun=<degrees>; and window.HULL (what, shape, set, useLook, view, from, sun, shadows,
 // markers, stats, text; for measuring: bare, size, repeat).
 import * as THREE from 'three';
 import { createSky, DIR, skyDir } from '../../world/sky.js';
 import { shieldMaterial, U } from '../../kit/materials.js';
 import { hullMaterials, buildHull } from '../../kit/hull.js';
+import { buildOutside } from '../../kit/outside.js';
+import { OUTSIDE_BOX, OUTSIDE_VIEWS } from '../../kit/outside-plan.js';
 import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, readShape, isLookText, sameLook, lookName, showValue } from '../../kit/hull-look.js';
 import { makeMenus } from '../crew/windows.js';
 import { SAMPLE_BOX, SHAPES, SHAPE_NAMES, SHAPE_SAYS, shapePlan } from './sample-plan.js';
@@ -62,16 +68,18 @@ const D2R = Math.PI / 180;
 const SUN0 = { turn: Math.atan2(DIR.sun.z, DIR.sun.x) / D2R, high: Math.asin(DIR.sun.y) / D2R };
 // (the sun's shadows start off, as nothing in the game casts one: with the game's low sun they change the picture
 // very little, and they cost drawing the hull a second time)
-const view = { turn: 0, high: Math.round(SUN0.high), shadows: false, markers: true, shape: SHAPES[0] };
+// (what: 'piece', the sample piece of hull; 'station', the whole station's outside)
+const view = { turn: 0, high: Math.round(SUN0.high), shadows: false, markers: true, shape: SHAPES[0], what: 'piece' };
 // (the lab opens on the station's own look: the one the game's maker made here)
 let look = readLook(STATION_LOOK);
 if (!q.has('fresh')) {
   try { const t = localStorage.getItem(KEY); if (t && isLookText(t)) look = readLook(t); } catch (_) { /* nothing kept */ }
-  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; if (SHAPES.includes(v.shape)) view.shape = v.shape; } } catch (_) { /* nothing kept */ }
+  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; if (SHAPES.includes(v.shape)) view.shape = v.shape; if (v.what === 'station') view.what = 'station'; } } catch (_) { /* nothing kept */ }
 }
 if (HULL_LOOKS[q.get('look')]) look = readLook(HULL_LOOKS[q.get('look')]);
 if (q.get('look') === 'station') look = readLook(STATION_LOOK);
 if (SHAPES.includes((q.get('shape') || '').toUpperCase())) view.shape = q.get('shape').toUpperCase();
+if (q.get('what') === 'station' || q.get('what') === 'piece') view.what = q.get('what');
 if (q.has('sun')) view.turn = ((+q.get('sun') % 360) + 360) % 360 || 0;
 let saveT = 0;
 const save = () => { try { localStorage.setItem(KEY, writeLook(look)); localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (_) { /* this visit only */ } };
@@ -121,15 +129,29 @@ function placeSun() {
 
 // ── the hull ────────────────────────────────────────────────────────────────────────────────────────────────────
 const mats = hullMaterials(look), shield = shieldMaterial();
-let hull = null, buildMs = 0, paintMs = 0;
+let hull = null, outside = null, buildMs = 0, paintMs = 0;
+const STATION = () => view.what === 'station';
 function rebuild() {
   const t0 = performance.now();
-  if (hull) hull.dispose();
-  // (every shape is laid flush: rows lapping like roof tiles are not offered any more)
-  hull = buildHull(shapePlan(view.shape), { ...look, lap: 0 }, mats, { shield }); stage.add(hull.group);
+  if (STATION()) {
+    // the whole station: the game's own outside (its plates laid again when their sizes change; the rest stays)
+    if (hull && !outside) { hull.dispose(); hull = null; }
+    if (outside) outside.relay(look);
+    else { const o = outside = buildOutside(look, mats, { shield }); hull = { group: o.group, get stats() { return o.stats; }, dispose() { o.dispose(); outside = null; } }; stage.add(o.group); }
+  } else {
+    if (hull) hull.dispose();
+    // (every shape is laid flush: rows lapping like roof tiles are not offered any more)
+    hull = buildHull(shapePlan(view.shape), { ...look, lap: 0 }, mats, { shield }); stage.add(hull.group);
+  }
   buildMs = performance.now() - t0;
 }
 const room = inside(), marks = markers(); stage.add(room, marks);
+// (the hangar's inside, the person and the ship block belong to the piece; the sun's shadows reach as far as what is shown)
+function dress() {
+  room.visible = !STATION(); marks.visible = view.markers && !STATION();
+  const r = STATION() ? 150 : 44; Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r }); sun.shadow.camera.updateProjectionMatrix();
+  sun.target.position.set(...(STATION() ? [20, 4, 27] : [-10, 4, -8]));
+}
 
 // ── the camera: fly it, drag to look ───────────────────────────────────────────────────────────────────────────
 const cam = { pos: new THREE.Vector3(58, 14, 34), yaw: 0, pitch: 0 };
@@ -142,7 +164,7 @@ function lookFrom(at, to) {
   cam.pos.set(...at); const d = _v.set(...to).sub(cam.pos).normalize();
   cam.yaw = Math.atan2(-d.x, -d.z); cam.pitch = Math.asin(-d.y); applyCam();
 }
-const VIEWS = {
+const PIECE_VIEWS = {
   whole: { name: 'Whole piece', at: [27, 8.6, -35], to: [-9, 4, -5] },
   wall: { name: 'The wall by the door', at: [15, 9, -37], to: [-3.5, 4.2, -20.5] },
   door: { name: 'The door', at: [35, 6, 7], to: [0, 4.6, -1] },
@@ -153,10 +175,12 @@ const VIEWS = {
   below: { name: 'From below', at: [26, -25, 14], to: [-6, -5, -8] },
   person: { name: 'Beside the person', at: [4.4, 2.5, -4.6], to: [0.2, 1.75, -8.2] },
 };
-let viewName = VIEWS[q.get('view')] ? q.get('view') : 'whole';
+// (the places to look from are the piece's or the station's, whichever is shown)
+const VIEWS = { ...PIECE_VIEWS, ...OUTSIDE_VIEWS }, viewsNow = () => (STATION() ? OUTSIDE_VIEWS : PIECE_VIEWS), firstView = () => Object.keys(viewsNow())[0];
+let viewName = viewsNow()[q.get('view')] ? q.get('view') : firstView();
 // (on a tall, narrow screen the same view is taken from further back, so the piece still fits across)
 function setView(name) {
-  if (!VIEWS[name]) return; viewName = name;
+  if (!viewsNow()[name]) return; viewName = name;
   const { at, to } = VIEWS[name], k = Math.max(1, 0.82 / camera.aspect);
   lookFrom(at.map((v, i) => to[i] + (v - to[i]) * k), to); paint('view');
 }
@@ -182,8 +206,8 @@ addEventListener('keyup', (e) => { fast = e.shiftKey; keys.delete(e.code); if (e
 addEventListener('blur', () => keys.clear());
 function fly(dt) {
   let fx = stickV.x, fy = vert.v, fz = stickV.y; for (const k of keys) { fx += FLY[k][0]; fy += FLY[k][1]; fz += FLY[k][2]; }
-  const p = cam.pos, B = SAMPLE_BOX, off = Math.hypot(Math.max(B.min[0] - p.x, 0, p.x - B.max[0]), Math.max(B.min[1] - p.y, 0, p.y - B.max[1]), Math.max(B.min[2] - p.z, 0, p.z - B.max[2]));
-  const speed = THREE.MathUtils.clamp(off * 0.7, 2.5, 60) * (fast ? 3 : 1);
+  const p = cam.pos, B = STATION() ? OUTSIDE_BOX : SAMPLE_BOX, off = Math.hypot(Math.max(B.min[0] - p.x, 0, p.x - B.max[0]), Math.max(B.min[1] - p.y, 0, p.y - B.max[1]), Math.max(B.min[2] - p.z, 0, p.z - B.max[2]));
+  const speed = THREE.MathUtils.clamp(off * 0.7, STATION() ? 9 : 2.5, 60) * (fast ? 3 : 1);
   camera.getWorldDirection(_f); _f.y = 0; if (_f.lengthSq() < 1e-6) _f.set(0, 0, -1); _f.normalize(); _r.crossVectors(_f, THREE.Object3D.DEFAULT_UP).normalize();
   _w.set(0, 0, 0).addScaledVector(_f, fz).addScaledVector(_r, fx); if (_w.lengthSq() > 1) _w.normalize(); _w.multiplyScalar(speed); _w.y = THREE.MathUtils.clamp(fy, -1, 1) * speed * 0.7;
   vel.lerp(_w, 1 - Math.exp(-9 * dt)); if (vel.lengthSq() < 1e-6) { vel.set(0, 0, 0); return; }
@@ -210,6 +234,17 @@ function changed(key) {
 // a whole look taken up (a ready-made one, pasted text, Reset): every window drawn again. Text that names a shape
 // ("shape":"B") brings its shape with it
 function take(next) { look = readLook(next); const s = readShape(next); if (s) view.shape = s; changed(); menu(); }
+// the piece or the whole station: the other is put away, the look stays, the view goes to the first place to look from
+function setWhat(what) {
+  if (!['piece', 'station'].includes(what) || what === view.what) return;
+  if (hull) { hull.dispose(); hull = null; }
+  view.what = what; dress(); placeSun(); rebuild(); dirtyPlates = false; setView(firstView()); saveSoon(); whatButton(); menu(); numbers();
+}
+function whatButton() {
+  const b = $('#what'); if (!b) return;
+  b.textContent = STATION() ? 'The sample piece' : 'The whole station'; b.setAttribute('aria-pressed', String(STATION()));
+  b.title = STATION() ? 'Back to the sample piece of hull, with its four shape options' : 'Show the whole station\'s outside, built round its real rooms';
+}
 // one of the four shapes: the plates are laid again, the look stays
 function setShape(letter) {
   if (!SHAPES.includes(letter) || letter === view.shape) return;
@@ -268,6 +303,9 @@ const FINISH_LABELS = { brushed: { Angle: 'Direction' }, hatched: { Angle: 'Angl
 // THE FOUR SHAPES: one press changes the whole piece; the look (greys, finish, wear) stays as it is. (Four small
 // buttons in a row and one line on the one that is showing, so the window stays small and the hull shows beside it.)
 function shapeWin() {
+  if (STATION()) return [sec('The whole station', sum('The station\'s outside, built round its real rooms and plated in shape C: a big raised plate with a sunk panel on every flat stretch of 10 m or more, plain plates elsewhere.'),
+    row(chip('Back to the sample piece', false, () => setWhat('piece'), false, 'The sample piece of hull, with its four shape options'))),
+    note('Every slider acts on the station as on the piece. View has places to look from.')];
   const k = view.shape, says = el('div', 'cw-sum'); says.append(el('b', null, k + ': ' + SHAPE_NAMES[k]), el('div', null, SHAPE_SAYS[k]));
   const pick = row(SHAPES.map((x) => chip(x, x === k, () => setShape(x), false, SHAPE_NAMES[x] + ': ' + SHAPE_SAYS[x]))); pick.classList.add('hl-shapes');
   return [sec('The shape of the armour', pick, says),
@@ -355,14 +393,21 @@ function lightWin() {
     note('At 0° the sun is where the game\'s sky has it: low, shining on the hangar doors from one side.')];
 }
 function viewWin() {
-  return [sec('Look from', row(Object.entries(VIEWS).map(([k, v]) => chip(v.name, k === viewName, () => setView(k), true)))),
-    sec('For scale', row(chip('Person and ship', view.markers, () => { view.markers = !view.markers; marks.visible = view.markers; saveSoon(); paint('view'); }, false, 'A person 1.8 m tall on the door\'s sill; a ship-sized block 17 m long in the hangar'))),
+  return [sec('Look from', row(Object.entries(viewsNow()).map(([k, v]) => chip(v.name, k === viewName, () => setView(k), true)))),
+    sec('For scale', row(chip('Person and ship', view.markers, () => { view.markers = !view.markers; dress(); saveSoon(); paint('view'); }, false, 'A person 1.8 m tall on the door\'s sill; a ship-sized block 17 m long in the hangar'))),
     note(TOUCH ? 'Drag to look. The stick flies; the two buttons go up and down.' : 'W A S D fly, Space up, C down, Shift faster; drag to look. Flying slows down close to the hull.')];
 }
 const N = (x) => Math.round(x).toLocaleString('en-US'), MB = (b) => (b / 1048576).toFixed(1) + ' MB';
 function costWin() {
   if (!hull) return [];
   const s = hull.stats, f = frame;
+  if (STATION()) return [sum(`The whole outside: ${N(s.triangles.all)} triangles in ${s.draws} draws (a draw is one batch of triangles handed to the graphics card).`,
+    `The plated hull is ${N(s.triangles.hull)} of them, in ${s.draws - 3} draws; the girders, wings, radiators, reactor and containers ${N(s.extra.gear)}; the lights ${N(s.extra.glow)}; the painted marks ${N(s.extra.marks)}.`,
+    `Plates: ${N(s.plates.all)}; ${s.shapes.slabs} big raised plates, ${s.shapes.recesses} sunk panels; ${s.windows} windows, ${s.lit} of them lit.`,
+    `Memory: ${mats.pictures} pictures (each ${512} pixels square), ${MB(mats.bytes)}, and the painted marks' own, ${MB(s.marksBytes)}; the shapes, ${MB(s.meshBytes)}.`),
+    sum(`The whole view now, with the sky: ${N(f.tris)} triangles in ${f.calls} draws${view.shadows ? ' (the sun\'s shadows draw the hull a second time)' : ''}.`,
+      `A frame: ${f.ms.toFixed(1)} ms (${Math.round(1000 / f.ms)} a second)` + (f.gpu != null ? `; the drawing itself: ${f.gpu.toFixed(2)} ms.` : '.'),
+      `Plates laid in ${buildMs.toFixed(0)} ms; pictures and settings applied in ${paintMs.toFixed(0)} ms.`)];
   return [sum(`The hull alone: ${N(s.triangles.all)} triangles in ${s.draws} draws (a draw is one batch of triangles handed to the graphics card).`,
     `Plates: ${s.plates.band} middle band, ${s.plates.tiers} tiers, ${s.plates.trim} trim; ${s.windows} windows, ${s.lit} of them lit.`,
     `Shape ${view.shape}: ${s.shapes.stacked} stacked plates, ${s.shapes.slabs} big raised plates, ${s.shapes.recesses} sunk panels, ${s.shapes.shoulders} shoulders.`,
@@ -398,7 +443,7 @@ function numbers() {
   if (!hull) return;
   const s = hull.stats;
   hud.textContent = `${N(s.triangles.all)} triangles · ${s.draws} draws · pictures' memory ${MB(mats.bytes)} · ${frame.ms.toFixed(1)} ms a frame`;
-  hud.title = 'The hull alone: its triangles, its draws, its pictures\' memory; and how long a whole frame takes. More in Cost.';
+  hud.title = (STATION() ? 'The whole outside' : 'The hull alone') + ': its triangles, its draws, its pictures\' memory; and how long a whole frame takes. More in Cost.';
   if (M && M.isOpen('cost')) paint('cost');
 }
 
@@ -423,7 +468,8 @@ renderer.setAnimationLoop((t) => {
 });
 
 // ── start ───────────────────────────────────────────────────────────────────────────────────────────────────────
-layout(); touchControls(); placeSun(); marks.visible = view.markers; setView(viewName);
+layout(); touchControls(); dress(); placeSun(); setView(viewName);
+{ const b = $('#what'); if (b) b.onclick = () => setWhat(STATION() ? 'piece' : 'station'); whatButton(); }
 mats.set(look); rebuild(); dirtyLook = dirtyPlates = false; mirrorSky();
 const topPx = () => $('#top').getBoundingClientRect().bottom;
 numbers();                                // (the strip at the top is its full height before the menu is put under it)
@@ -441,10 +487,11 @@ window.HULL = {
   ready: true, VIEWS, renderer,
   set(o) { take({ ...look, ...o }); }, useLook(name) { if (name === 'station') take(STATION_LOOK); else if (HULL_LOOKS[name]) take(HULL_LOOKS[name]); },
   shape(letter) { if (letter) setShape(String(letter).toUpperCase()); return view.shape; },
+  what(w) { if (w) setWhat(w); return view.what; },
   look: () => ({ ...look }), text: () => textNow(),
   view: (name) => setView(name), from: (at, to) => lookFrom(at, to),
   sun(turn, high) { view.turn = turn; if (high != null) view.high = high; placeSun(); clearTimeout(mirrorT); mirrorSky(); paint('light'); },
-  shadows(on) { view.shadows = !!on; placeSun(); }, markers(on) { view.markers = !!on; marks.visible = view.markers; },
+  shadows(on) { view.shadows = !!on; placeSun(); }, markers(on) { view.markers = !!on; dress(); },
   // (for measuring what the look costs: the plates drawn with a plain lit material in place of the hull's own)
   bare(on) { const plain = this._plain || (this._plain = new THREE.MeshStandardMaterial({ color: 0x4d525a, roughness: 0.55, metalness: 0.4 })); hull.group.traverse((o) => { if (o.isMesh && GROUPS.includes(o.name.slice(5))) o.material = on ? plain : mats[o.name.slice(5)]; }); },
   size(w, h) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }, retime() { frame.gpu = null; }, repeat(n) { repeat = Math.max(1, n | 0); frame.gpu = null; },
