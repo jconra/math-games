@@ -122,6 +122,7 @@ const CSS = `
   .pdr-big { font-size: 18px; top: 290px; white-space: normal; width: max-content; max-width: calc(100vw - 20px); } .pdr-cans b, .pdr-rock b { font-size: 19px; }
 }
 .pdr.is-lab .pdr-cans, .pdr.is-lab .pdr-rock { top: calc(var(--pdr-top, 48px) + 8px); }
+@media (min-width: 641px) { .pdr.has-panel .pdr-rock { display: none; } }
 @media (min-width: 641px) { .pdr.has-panel .pdr-big { left: 30%; } }
 `;
 
@@ -396,10 +397,10 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     return MB.gripOn(clawDesign, (p) => {
       _gp.set(p.x, p.y, p.z - at).applyQuaternion(_gq).multiplyScalar(1 / R); _gp.set(_gp.x / S.sq[0], _gp.y / S.sq[1], _gp.z / S.sq[2]);
       const L = _gp.length(); return L < radiusAt(S, _gp.multiplyScalar(1 / (L || 1)));
-    });
+    }, { hinge: 0.2 });
   }
   // the hand takes hold of the rock as it lies
-  function regrip() { palmQ(H.turn, _pq); H.qPalm.copy(_pq.invert()).multiply(H.o.q); H.grip = gripNow(); H.looseWant = 0; H.free = false; H.pending = false; H.pend.identity(); }
+  function regrip() { palmQ(H.turn, _pq); H.qPalm.copy(_pq.invert()).multiply(H.o.q); const t0 = performance.now(); H.grip = gripNow(); H.gripMs = performance.now() - t0; H.looseWant = 0; H.free = false; H.pending = false; H.pend.identity(); }
   // is a finger where the cutter comes down, with the wrist turned this far? (each finger stands at its knuckle's
   // place round the hand)
   function fingerUnder(turn) {
@@ -766,7 +767,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       return out.sort((p, q) => q.worth - p.worth);
     },
     pick, drillAt, letGo, turnBy, dragKind,
-    hand: () => (H ? { turn: +H.turn.toFixed(3), loose: +H.loose.toFixed(2), free: H.free, shift: H.shift, axis: wristAxis.toArray().map((x) => +x.toFixed(3)), sign: wristSign, cut: cutDir.toArray().map((x) => +x.toFixed(3)), at: heldPos.toArray().map((x) => +x.toFixed(2)), under: fingerUnder(H.turn), grip: H.grip, cutter: cutD ? +cutD.work.toFixed(2) : null } : null),
+    hand: () => (H ? { turn: +H.turn.toFixed(3), loose: +H.loose.toFixed(2), free: H.free, shift: H.shift, axis: wristAxis.toArray().map((x) => +x.toFixed(3)), sign: wristSign, cut: cutDir.toArray().map((x) => +x.toFixed(3)), at: heldPos.toArray().map((x) => +x.toFixed(2)), under: fingerUnder(H.turn), grip: H.grip, gripMs: +(H.gripMs || 0).toFixed(2), cutter: cutD ? +cutD.work.toFixed(2) : null } : null),
     probe: (x, y) => ({ spot: spotAt(x, y), over: (document.elementFromPoint(x, y) || {}).className || null, stage: V.stage, sub: V.sub, down: !!down }),
   };
   return { el, run, update, aim, close, rig, get panel() { return panel; }, get stage() { return V.stage; },

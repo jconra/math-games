@@ -677,8 +677,12 @@ export function gripOf(design, mirror = false) {
 // THE GRIP ON ANY ROCK (the drill operator's game: every rock its own shape, turned any way in the hand). inRock(p):
 // whether a point of the claw's own frame (the palm's: +z along the hand, the rock's middle at CLAWS[design].rock
 // along it) is inside the rock. Worked out afresh at each call (a few thousand sums: once as the hand takes hold).
-export function gripOn(design, inRock) {
+// hinge: a finger's second part is hinged where its first part bears on the rock, so on a rough rock the first of its
+// own length lies at the surface whatever its angle: that much of it (metres from its hinge) is left out of the test,
+// or it would never be found clear and would stand bent back.
+export function gripOn(design, inRock, { hinge = 0 } = {}) {
   const D = CLAWS[design], touch = D.segs.map(segTouch);
+  if (hinge > 0 && touch[1]) touch[1] = touch[1].filter((q) => q.z >= hinge);
   const hit = (M, pts) => pts.some((q) => inRock(q.clone().applyMatrix4(M)));
   const close = (lo, hi, f) => { let a = lo; if (f(a)) return a; while (a < hi && !f(a + 0.02)) a += 0.02; if (a >= hi) return hi; let b = a + 0.02; for (let i = 0; i < 16; i++) { const md = (a + b) / 2; if (f(md)) b = md; else a = md; } return a; };
   return D.knuckles.map((K) => {
