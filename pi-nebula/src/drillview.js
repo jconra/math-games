@@ -27,8 +27,8 @@
 //   - THE LOW SCAN is always on: the ore inside every rock glows in its metal's colour, more glow for more of it. No
 //     tags, no numbers and no names on the rocks. THE CHART at the side says what a tonne of each metal sells for,
 //     with its colour (the one price list: src/jobs/smelter.js).
-//   - THE FULL SCAN: the rock being looked at (the one under the mouse, or the one nearest the middle of the view) has
-//     thin corners round it, and the Scan button reads out exactly how many tonnes of each metal it holds (src/drill.js
+//   - THE FULL SCAN: the rock being looked at (the one the mouse was last on, or with no mouse the one nearest the
+//     middle of the view) has thin corners round it, and the Scan button reads out exactly how many tonnes of each metal it holds (src/drill.js
 //     scanOf). It reaches any rock that can be seen. A rock scanned keeps its readout beside it.
 //   - THE QUESTION comes when the rock is in the claw, about that rock's own numbers. However it is answered, the game
 //     goes on the same.
@@ -472,7 +472,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const big = (html, secs = 3.2) => { bigEl.innerHTML = html; bigEl.hidden = false; bigT = secs; };
 
   // ── the game's state ──
-  const V = { stage: 'arrive', t: 0, sub: '', subT: 0, clock: 0, asked: false, eyed: null, mouse: null, log: [], lastHole: null, trip: null };
+  const V = { stage: 'arrive', t: 0, sub: '', subT: 0, clock: 0, asked: false, eyed: null, pinned: null, mouse: null, log: [], lastHole: null, trip: null };
   let panel = null, closeIn = -1, armsWant = 'reach', spin = 0, scanT = 0, closed = false, cutQ = null;
   const look = { yaw: 0, pitch: 0 };      // the eye turned by the player's drag, while looking for a rock
   const cam = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46, fresh: true }, want = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46 };
@@ -604,7 +604,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     if (down.moved) {
       const dx = e.clientX - down.lx, dy = e.clientY - down.ly;
       if (V.stage === 'drill' && !V.sub) turnBy(dx, dy);
-      else if (looking() || V.stage === 'fly') { look.yaw -= dx * 0.0052; look.pitch = Math.max(-0.75, Math.min(0.95, look.pitch + dy * 0.0042)); }
+      else if (looking() || V.stage === 'fly') { look.yaw -= dx * 0.0052; look.pitch = Math.max(-0.75, Math.min(0.95, look.pitch + dy * 0.0042)); V.pinned = null; }
     }
     down.lx = e.clientX; down.ly = e.clientY; down.at = performance.now();
   }
@@ -803,12 +803,16 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     if (Math.abs(cameraIn.fov - cam.fov) > 0.01 || cameraIn.far !== 3200) { cameraIn.fov = cam.fov; cameraIn.near = 0.3; cameraIn.far = 3200; cameraIn.aspect = innerWidth / innerHeight; cameraIn.updateProjectionMatrix(); }
     cameraIn.updateMatrixWorld(true);
     glow.material.uniforms.uPx.value = renderer.getDrawingBufferSize(ndc).y / (2 * Math.tan(cam.fov * Math.PI / 360));
-    // the rock looked at: the one under the mouse, else the one nearest the middle of the view
+    // the rock looked at: the one the mouse was last on (it stays the one while the mouse goes to the Scan button),
+    // else the one nearest the middle of the view
     const show = looking() && !panel;
     let eyed = null;
     if (show) {
       const m = V.mouse && !down ? rockUnder(V.mouse.x, V.mouse.y) : null;
-      eyed = m || rockUnder(innerWidth / 2, innerHeight * (tall() ? 0.4 : 0.45), Math.min(innerWidth, innerHeight) * 0.3);
+      if (m) V.pinned = m.rock.id;
+      eyed = V.pinned != null ? seen.get(V.pinned) || null : null;
+      if (eyed) { proj(eyed.pos, scr); if (!eyed.mesh.visible || scr.z >= 1 || scr.x < 0 || scr.x > innerWidth || scr.y < 58 || scr.y > innerHeight) eyed = null; }
+      if (!eyed) { V.pinned = null; eyed = rockUnder(innerWidth / 2, innerHeight * (tall() ? 0.4 : 0.45), Math.min(innerWidth, innerHeight) * 0.3); }
     }
     V.eyed = eyed ? eyed.rock.id : null;
     eyeEl.hidden = !eyed;

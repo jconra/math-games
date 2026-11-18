@@ -185,7 +185,8 @@ const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ meta
 // the slip's rows: the plain sum. ask: which row is the one asked for ('sold' or 'pay': shown as "?"), or none
 export function payoutLines(P, ask = null) {
   const lots = lotsOf(P);
-  return [...lots.map((L) => [cap(L.metal), `${tonnesWords(L.tonnes)} × ${say(L.price)} = ${say(L.pay)}`]),
+  // (a row is one sum, kept short enough for one line on a phone: "0.86 tonnes × 3,000 = 2,580")
+  return [...lots.map((L) => [cap(L.metal), `${L.tonnes} ${L.tonnes === 1 ? 'tonne' : 'tonnes'} × ${say(L.price)} = ${say(L.pay)}`]),
     ['Sold for', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
 }
 export function payoutOrder(m, grade = 0, rand = Math.random) {

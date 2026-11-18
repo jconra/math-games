@@ -77,8 +77,9 @@ const CSS = `
 .pmt-count small { display: block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #a7b0ba; }
 .pmt-count b { font-size: 26px; font-weight: 800; }
 .pmt-count em { display: block; font-style: normal; font-size: 14px; color: #cfe6ff; min-height: 1.35em; }
-.pmt.is-drill .pmt-say { top: 160px; right: auto; left: max(14px, 2vw); max-width: min(280px, 40vw); }
-@media (max-width: 640px) { .pmt.is-drill .pmt-say { top: auto; bottom: 150px; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { top: 204px; bottom: auto; } }
+/* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's button and line, and put away while the question is up) */
+.pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
+@media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 178px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-fade p { font-size: 17px; } .pmt-count b { font-size: 22px; } }
 `;
 
@@ -229,7 +230,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     // the jump computer: three cards, three lamps, and the jump fires by itself
     jump(dt, st) {
       if (!T.phase) {
-        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Pilot Juno works out the jump home' : 'Pilot Juno works out the jump'));
+        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Juno plots the jump home' : 'Juno plots the jump'));
         if (st.mine) { T.phase = 'cards'; openCards(); } else T.phase = 'crew';
       }
       // (a pilot of the captain's own: the lamps light by themselves)
