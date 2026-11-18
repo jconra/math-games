@@ -31,7 +31,11 @@
 //               bigger beveled mass. Also, it would probably be good to make the shipping docks not stick out quite
 //               that much. Like the numbers should probably be above them and they should dock inside further (like
 //               another 1/3 of the container inside) It would also be cool if there were some angled walls around the
-//               shipping containers that make a narrow slot for them."
+//               shipping containers that make a narrow slot for them."; then, with red lines drawn beside each
+//               container (a line sloping down from under the numbers toward the container's outer end, then a
+//               short drop to the shelf): "I like those angles walls, they make sense for slotting the containers
+//               into those sockets. But this is what I intended by angled walls. They are much more noticeable like
+//               this. And they provide some protection for the cargo containers."
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -268,8 +272,11 @@ const SLOT_DECK = -5.02;                                // (the cargo deck's top
 // angled walls that make a narrow slot for it: a wall each side of every slot, DOCK.out long, 1.6 m thick for most of
 // its length (so the slot is as wide as its socket) and cut back at an angle over its last DOCK.flare to a tip
 // DOCK.tip wide, so every slot opens like a funnel at its mouth. One bevelled block lies over the walls' inner part
-// (DOCK.block deep), and each slot's number is on its face, above the slot
-export const DOCK = { out: 3.6, flare: 1.5, tip: 0.4, block: 1.9, top: -1.6, roof: 0.3, in: 12.2 / 3 };
+// (DOCK.block deep), and each slot's number is on its face, above the slot.
+// THE GUARD WALLS, as he drew them: beside every container a wall DOCK.guard.thick thick that starts under the block
+// at the block's own height and slopes down as it runs out along the container, to DOCK.guard.low above the shelf
+// at x = DOCK.guard.to, where it ends in a short upright edge. One each side of every slot, on the walls' own lines
+export const DOCK = { out: 3.6, flare: 1.5, tip: 0.4, block: 1.9, top: -1.6, roof: 0.3, in: 12.2 / 3, guard: { to: -14.6, low: 1.3, thick: 0.8 } };
 const dockWalls = () => [SLOTS.z[0] - 2.25, ...SLOTS.z.map((z) => z + 2.25)];   // (the middle of each wall, along z)
 function dockPlans() {
   const x1 = SLOTS.x, x0 = x1 - DOCK.out, xm = x0 + DOCK.flare, t = DOCK.tip / 2, W = dockWalls(), over = boxPath(x1 - DOCK.block, x1, W[0] - 0.8, W[W.length - 1] + 0.8);
@@ -278,6 +285,15 @@ function dockPlans() {
       const path = [[x1, zc + 0.8], [x1, zc - 0.8], [xm, zc - 0.8], [x0, zc - t], [x0, zc + t], [xm, zc + 0.8]];
       return { name: 'dock wall ' + (i + 1), closed: true, path, tiers: [{ name: 'dock wall ' + (i + 1), profile: [[0, SLOT_DECK, 'in'], [0, DOCK.top]], parts: [plates('band')] }], flats: flatsOf(path, [], DOCK.top, true, plain) };
     }),
+    { name: 'dock guards', flats: W.flatMap((zc) => {
+      const g = DOCK.guard, t = g.thick / 2, xi = x1 - DOCK.block, L = xi - g.to, hi = DOCK.top - SLOT_DECK, lo = g.low, d = hi - lo, len = Math.hypot(L, d), wall = (f) => ({ group: 'band', kind: 'plates', ...f });
+      return [
+        wall({ O: [xi, SLOT_DECK, zc + t], U: [0, 1, 0], V: [-1, 0, 0], quad: [[0, 0], [hi, 0], [lo, L], [0, L]], w: hi, h: L }),          // its south face
+        wall({ O: [g.to, SLOT_DECK, zc - t], U: [0, 1, 0], V: [1, 0, 0], quad: [[0, 0], [lo, 0], [hi, L], [0, L]], w: hi, h: L }),         // its north face
+        { group: 'tiers', kind: 'plates', O: [xi, DOCK.top, zc + t], U: [0, 0, -1], V: [-L / len, -d / len, 0], w: g.thick, h: len },      // its sloping top
+        wall({ O: [g.to, SLOT_DECK, zc - t], U: [0, 0, 1], V: [0, 1, 0], w: g.thick, h: lo }),                                              // its outer end
+      ];
+    }) },
     { name: 'dock block', closed: true, path: over, tiers: [{ name: 'dock block', profile: [[0, DOCK.top], [0, DOCK.roof - 0.5], [-0.5, DOCK.roof]], parts: [plates('band'), plates('tiers')] }],
       flats: [...flatsOf(offsetPath(over, -0.5, true), [], DOCK.roof, true, plain), ...flatsOf(over, [], DOCK.top, false, plain)] },
   ];
