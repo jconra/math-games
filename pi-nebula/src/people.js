@@ -591,13 +591,18 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return null;
   }
   let presenceClock = 0, nearMost = 8;
+  // (a captain whose line the player picked on a jobs board, src/jobsboard.js, and is being led to: their id)
+  let seeking = null;
   function presence(dt, focus, camera) {
     presenceClock -= dt; if (presenceClock > 0) return; presenceClock = PRESENCE.every;
     const L = list.filter((P) => !P.hidden);
     for (const P of L) P.rank = Math.hypot(P.pos.x - focus.x, P.pos.z - focus.z) + Math.abs(P.pos.y - focus.y) * 2;
     for (const P of L) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank ?? Infinity) : P.rank; }
     L.sort((a, b) => a.rankPair - b.rankPair || a.order - b.order);
-    const want = new Set(L.slice(0, nearMost));
+    // (a captain the player is being led to, src/jobsboard.js: one of those about however many are nearer, in the last
+    // one's place, so the line never ends where nobody stands)
+    const S = seeking ? L.find((P) => P.cap && P.cap.id === seeking) : null;
+    const want = new Set(L.slice(0, S && L.indexOf(S) >= nearMost ? nearMost - 1 : nearMost)); if (S) want.add(S);
     for (const P of [...want]) { const Q = partner(P); if (Q) want.add(Q); }
     const pl = playerNow ? playerNow.pos : null;
     const unseen = (P) => !inView(P, camera);
@@ -952,6 +957,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     bubbles.say(P, words, { kind: 'hello', secs: 2.4 }); lastWords = words.replace(/\W/g, '');
   }
   // A CAPTAIN: near the player, in view, the offer (who, what for, and the question); the answer; left a while after
+  // (seeking, above: a captain whose line the player picked on a jobs board and is being led to: they make their offer
+  // when the player walks up even if they asked a little while ago, and before a nearer captain does)
   function captain(P, dt, pl) {
     const K = P.cap; K.t += dt; K.cool -= dt;
     if (K.state === 'turning') {
@@ -991,14 +998,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
     const d = pl.pos.distanceTo(P.pos);
     if (d > FRIENDLY.offer || Math.abs(pl.pos.y - P.pos.y) > 1.2) return;
-    // (only the nearest captain speaks up)
-    for (const Q of list) if (Q !== P && Q.cap && !Q.away && Q.shown && pl.pos.distanceTo(Q.pos) < d) return;
+    // (only the nearest captain speaks up; the one the player was led to, before a nearer one)
+    if (seeking !== K.id) for (const Q of list) if (Q !== P && Q.cap && !Q.away && Q.shown && (Q.cap.id === seeking ? pl.pos.distanceTo(Q.pos) <= FRIENDLY.offer : pl.pos.distanceTo(Q.pos) < d)) return;
     offer(P);
   }
   // (the offer begun: the captain stops and turns to the player; offerNow speaks once they face them)
   function offer(P) {
     const K = P.cap;
     endTalk(P);
+    if (seeking === K.id) seeking = null;      // (found)
     K.state = 'turning'; K.t = 0; K.busy = true; P.greeted = clock; P.smileUntil = clock + 9; counts.offers++;
   }
   function offerNow(P) {
@@ -1057,6 +1065,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     askGo(id) { const P = capOf(id), pl = playerNow; if (!P || P.away || !pl || pl.pos.distanceTo(P.pos) > FRIENDLY.leave || bubbles.asking) return false; goAsk(P); return true; },
     release(id, cool = FRIENDLY.answered) { const P = capOf(id); if (!P) return false; const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; } K.state = 'answered'; K.t = 0; K.hold = 2.5; K.cool = cool; return true; },
     at(id) { const P = capOf(id); return P ? { pos: P.pos, away: !!P.away } : null; },
+    // (a captain's line picked on a jobs board: the player is being led to them; null: no longer)
+    seek(id) { const P = id ? capOf(id) : null; seeking = P ? id : null; if (P) P.cap.cool = 0; return !!P; },
+    get seeking() { return seeking; },
   };
   function endOffer(P) {
     const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; }

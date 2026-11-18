@@ -219,6 +219,37 @@ export function screenAtlas() {
   const t = tex(c, true, false); return { map: t };
 }
 
+// THE CAPTAINS' BOARD's own picture: captains hiring, one row each (the colour of the crew, the job, the captain, the
+// pay), 640 x 256, drawn with its top left corner at (0, 0) of `g` as it stands. The screen sheet draws it at its place
+// (below); the game draws it again live over the boards' screens, the row of a captain picked lit (`picked`: that
+// row's crew; src/jobsboard.js). HIRING: its rows, top to bottom: [crew, the job, the pay (null: the ship in repair)];
+// HIRING_AT: the picture's size, where its title band ends, and where the first row starts and how far apart rows are.
+export const HIRING = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', null]];
+export const HIRING_AT = { w: 640, h: 256, title: 60, first: 67, row: 42 };
+export function captainsBoard(g, picked = null) {
+  const F = (px, bold = true) => (bold ? 'bold ' : '') + px + 'px "DejaVu Sans", Arial, sans-serif';
+  const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#163f5a'); gr.addColorStop(1, '#0d2638'); g.fillStyle = gr; g.fillRect(0, 0, 640, 256);
+  g.strokeStyle = '#59c3ff'; g.lineWidth = 3; g.strokeRect(5, 5, 630, 246);
+  g.textBaseline = 'middle';
+  // (CAPTAINS HIRING: beside it hangs the station's own STATION JOBS board, and two boards called nearly the same read
+  // as one)
+  g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('CAPTAINS HIRING', 26, 36);
+  g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CREW FOR THEIR SHIPS', 614, 38);
+  g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(22, 60, 596, 2);
+  // (a job whose ship is down for now says so where its pay would be: Captain Adair's)
+  HIRING.forEach(([k, job, pay], i) => {
+    const y = 88 + i * 42, [crew, capt, col] = CREWS[k], on = picked === k;
+    g.fillStyle = on ? col + '3a' : i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(22, y - 18, 596, 38);
+    if (on) { g.strokeStyle = col; g.lineWidth = 2; g.strokeRect(21, y - 19, 598, 40); }
+    g.fillStyle = col; g.fillRect(26, y - 13, 10, 28);
+    g.textAlign = 'left'; g.fillStyle = col; g.font = F(17); g.fillText(crew, 46, y - 4);
+    g.fillStyle = '#cfeaff'; g.font = F(13, false); g.fillText(capt, 46, y + 12);
+    g.fillStyle = '#ffffff'; g.font = F(19); g.fillText(job, 210, y + 1);
+    g.textAlign = 'right';
+    if (pay) { g.fillStyle = on ? '#ffffff' : '#ffe3a0'; g.font = F(22); g.fillText((on ? '\u25B8 ' : '') + pay + ' CR', 612, y + 1); } else { g.fillStyle = '#9fb3c4'; g.font = F(15); g.fillText('IN REPAIR', 612, y + 1); }
+  });
+}
+
 // the bottom half of the screen sheet: the jobs board, the galley's boards, the captains' cards, the lit signs
 function bigScreens(g) {
   const F = (px, bold = true) => (bold ? 'bold ' : '') + px + 'px "DejaVu Sans", Arial, sans-serif';
@@ -227,25 +258,8 @@ function bigScreens(g) {
     g.strokeStyle = edge; g.lineWidth = 3; g.strokeRect(x + 5, y + 5, w - 10, h - 10);
   };
   g.textBaseline = 'middle';
-  // the jobs board: captains hiring, one row each (the colour of the crew, the job, the captain, the pay)
-  bg(0, 512, 640, 256, '#163f5a', '#0d2638');
-  // (CAPTAINS HIRING: beside it hangs the station's own STATION JOBS board, and two boards called nearly the same read
-  // as one)
-  g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('CAPTAINS HIRING', 26, 548);
-  g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CREW FOR THEIR SHIPS', 614, 550);
-  g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(22, 572, 596, 2);
-  // (a job whose ship is down for now says so where its pay would be: Captain Adair's)
-  const rows = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', null]];
-  rows.forEach(([k, job, pay], i) => {
-    const y = 600 + i * 42, [crew, capt, col] = CREWS[k];
-    g.fillStyle = i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(22, y - 18, 596, 38);
-    g.fillStyle = col; g.fillRect(26, y - 13, 10, 28);
-    g.textAlign = 'left'; g.fillStyle = col; g.font = F(17); g.fillText(crew, 46, y - 4);
-    g.fillStyle = '#cfeaff'; g.font = F(13, false); g.fillText(capt, 46, y + 12);
-    g.fillStyle = '#ffffff'; g.font = F(19); g.fillText(job, 210, y + 1);
-    g.textAlign = 'right';
-    if (pay) { g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1); } else { g.fillStyle = '#9fb3c4'; g.font = F(15); g.fillText('IN REPAIR', 612, y + 1); }
-  });
+  // the jobs board: captains hiring (its own picture, above)
+  g.save(); g.translate(0, 512); captainsBoard(g); g.restore();
   // the galley's menu, and the drinks panel under it
   bg(640, 512, 384, 160, '#3a2a18', '#221810', '#ffb347');
   g.textAlign = 'left'; g.fillStyle = '#ffd59a'; g.font = F(28); g.fillText('GALLEY', 664, 544);

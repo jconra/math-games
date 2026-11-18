@@ -11,15 +11,28 @@
 // one by tapping or clicking its row on the board itself, or walk up to the board (a prompt comes up: E, or its button)
 // and pick from the list that opens on the screen; a glowing line on the floor then leads from the player to that job
 // (guide.js), and fades as they get there or when another is picked. The list has the board's own look.
+// AND THE CAPTAINS HIRING, the other board (kit/furniture.js jobs 'hang', and the lower screen of each 'pair'). The
+// game's maker (2026-11-18): "I was thinking they should all be able to be picked. Although the missions should lead
+// you to the captain." A captain's line is picked as a job's is (its row on a screen, or from the same list, under
+// the station's jobs), and the line it lays leads to that captain, wherever they are walking at the time (the guide
+// follows them: guide.js `follow`); arriving, the captain makes their own offer as they do to anyone who walks up
+// (people.js). A captain with no mission to pick (their ship in repair) keeps a line to read. The captains' picture
+// is the kit's own (kit/tex.js captainsBoard), drawn again here on the lower half of the same one canvas so the row
+// picked can be lit: still one texture, one material, and one mesh a room.
 //
-//   const board = makeJobsBoard({ W, walls, input, jobs, guide, asking })   asking(): a question already up (a captain's)
+//   const board = makeJobsBoard({ W, walls, input, jobs, guide, asking, captains })   asking(): a question already up
+//                 (a captain's); captains(): the people's captains ({ at(id), seek(id) }: people.js), or null before
+//                 they are aboard
 //   board.update(dt, P, playing)   each frame: the prompt near the board, the board's picture when the pick changes
 //   board.open() / board.close() / board.pick(id) / board.stop()     (the rigs: GAME.board)
-//   board.rows, board.picked, board.near, board.isOpen
+//   board.rows, board.picked, board.near, board.isOpen; board.captains (the captains' rows), board.hiring (where
+//   they are in their picture: kit/tex.js HIRING_AT)
 //   board.at (the spot under the big board), board.boards ([{ at, small, room }]: every board's spot, for the rigs)
 import * as THREE from 'three';
 import { piecesOf } from './people.js';
 import { JOBS_SCREEN, JOBS_PAIR } from '../kit/furniture.js';
+import { CREWS, HIRING, HIRING_AT, captainsBoard } from '../kit/tex.js';
+import { CAPTAIN_ROWS, targetOf } from './boardpick.js';
 
 // THE JOBS LISTED, in the board's order (the station's own: src/jobs/), each its colour, what it is and where it is
 export const STATION_JOBS = [
@@ -35,7 +48,8 @@ export const STATION_JOBS = [
 // small for a finger: a tap on the board opens the list instead. A small copy on a wall: its prompt comes up
 // `nearSmall` from the spot in front of it (`stand` out from the wall); a row too small on the screen for the mouse's
 // pointer (`pointer`, px) opens the list too.
-export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 6 };
+// (`sought`: seconds a captain walked up to keeps the first word after their line is done with)
+export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 6, sought: 8 };
 
 const CSS = `
 .pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
@@ -72,9 +86,16 @@ const CSS = `
 .pjb-row em { font-style: normal; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffe3a0; text-align: right; }
 .pjb-line .pjb-row.is-on { background: rgba(89, 195, 255, 0.3) !important; box-shadow: inset 0 0 0 3px var(--job, var(--cyan)); }
 .pjb-row.is-on em::before { content: '\\25B8 '; color: #fff; }
+.pjb-sub { display: flex; align-items: baseline; gap: 10px; margin: 14px 2px 2px; padding-bottom: 6px; border-bottom: 2px solid rgba(89, 195, 255, 0.5); }
+.pjb-sub b { font-size: 18px; font-weight: 800; letter-spacing: 0.04em; color: #fff; }
+.pjb-sub small { font-size: 13px; color: #9fd8ff; letter-spacing: 0.06em; text-transform: uppercase; }
+.pjb-line .pjb-row.is-off { cursor: default; opacity: 0.55; background: rgba(89, 195, 255, 0.05) !important; }
+.pjb-row.is-off em { color: #9fb3c4; }
 .pjb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: #9fd8ff; }
 .pjb-stop { height: 36px; padding: 0 14px; font-size: 13px !important; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #cfeaff !important; background: rgba(255, 255, 255, 0.07) !important; clip-path: var(--oct); --cut: 8px; }
 .pjb-stop[hidden] { display: none; }
+@media (max-height: 800px) { .pjb { padding-top: 10px; padding-bottom: 8px; } .pjb-head { margin-bottom: 4px; padding-bottom: 4px; } .pjb-line { margin-top: 4px; } .pjb-row { min-height: 42px; padding-top: 1px; padding-bottom: 1px; }
+  .pjb-sub { margin-top: 8px; padding-bottom: 3px; } .pjb-foot { margin-top: 6px; } }
 @media (max-width: 640px) { .pjb { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 12px 12px 10px; } .pjb-head b { font-size: 20px; } .pjb-row { min-height: 52px; } .pjb-row small { font-size: 13px; }
   .pjb-prompt { width: calc(100vw - 24px); } .pjb-prompt .pjb-pw { flex: 1; } }
 .pjb-chip { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 14; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px;
@@ -87,22 +108,28 @@ const CSS = `
 @media (max-width: 640px) { .pjb-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); } }
 `;
 
-export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = () => false }) {
+export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = () => false, captains = () => null }) {
   if (!document.getElementById('pjb-css')) { const st = document.createElement('style'); st.id = 'pjb-css'; st.textContent = CSS; document.head.appendChild(st); }
   // the boards in the station: the big one (the 'station' jobs board piece, its first: both its faces) and its small
   // copies (each 'pair' piece: its upper screen), and the room each hangs in
-  const found = piecesOf(W.R).filter((x) => x.piece === 'jobs' && (x.variant === 'station' || x.variant === 'pair'));
+  const all = piecesOf(W.R).filter((x) => x.piece === 'jobs'), found = all.filter((x) => x.variant === 'station' || x.variant === 'pair');
   const pc = found.find((x) => x.variant === 'station') || found[0];
+  // (the big captains' board: both its faces)
+  const hangs = all.filter((x) => x.variant === 'hang');
   const spotOf = (id) => (jobs && jobs.spots || []).find((s) => s.job.id === id);
   // (each job's name is its own, as its sign in the station says it: the jobs' data, src/jobs/*.js)
   const rows = STATION_JOBS.filter((r) => spotOf(r.id)).map((r) => ({ ...r, name: spotOf(r.id).job.sign || r.name }));
+  // (the captains hiring, in their board's own order: the crew's colour, the captain, the job in the board's words)
+  const caps = HIRING.map(([crew, job, pay]) => { const c = CAPTAIN_ROWS.find((r) => r.crew === crew); return c ? { ...c, colour: CREWS[crew][2], line: job[0] + job.slice(1).toLowerCase(), pay } : null; }).filter(Boolean);
+  const rowOf = (id) => rows.find((r) => r.id === id) || caps.find((r) => r.id === id) || null;
   let picked = null, near = false, open = false;
-  const api = { rows, get picked() { return picked; }, get near() { return near; }, get isOpen() { return open; }, at: null, open: () => openList(), close: () => closeList(), pick: (id) => pick(id), stop: () => stop() };
+  const api = { rows, captains: caps, hiring: HIRING_AT, get picked() { return picked; }, get near() { return near; }, get isOpen() { return open; }, at: null, open: () => openList(), close: () => closeList(), pick: (id) => pick(id), stop: () => stop() };
   if (!pc) { console.info('jobs board: the station has no station jobs board'); return Object.assign(api, { update() {} }); }
 
   // ── the board's picture: drawn on a canvas as the captains' board is drawn (kit/tex.js), a row a job ──────────────
+  // (one canvas for both boards: the station's jobs on its upper half, the captains hiring on its lower half)
   const CW = 1024, CH = Math.round(CW * JOBS_SCREEN.h / JOBS_SCREEN.w);
-  const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
+  const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH * 2;
   const g = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   // (the title band, then a row a job: its name and, under it, what it is; where it is to the right)
   const TOP = 72, ROW = (CH - TOP - 18) / rows.length;
@@ -124,25 +151,36 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
       g.fillStyle = '#cfeaff'; g.font = F(21, false); g.fillText(r.line, 64, y + ROW * 0.74);
       g.textAlign = 'right'; g.fillStyle = on ? '#ffffff' : '#ffe3a0'; g.font = F(23); g.fillText((on ? '\u25B8 ' : '') + r.place.toUpperCase(), CW - 48, y + ROW * 0.5);
     });
+    // (the captains' board, the kit's own picture, the row of a captain picked lit)
+    const cap = caps.find((c) => c.id === picked);
+    g.save(); g.translate(0, CH); g.scale(CW / HIRING_AT.w, CH / HIRING_AT.h); captainsBoard(g, cap ? cap.crew : null); g.restore();
     tex.needsUpdate = true;
   }
   draw();
   // (the picture on every screen, just over the pieces' dark screens: one material; each room's screens one mesh in
   // that room's own group, drawn with it. Each screen also leaves a marker of its own, placed and turned as the screen
   // is and named for the rigs to find: the big board's 'station jobs board', a small copy's 'station jobs board, small')
-  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(0.86, 0.86, 0.86) });
+  // (drawn a hair toward the camera: the captains' picture lies a millimetre over the kit's own)
+  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(0.86, 0.86, 0.86), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   const boards = [], faces = [], byZone = new Map();
-  for (const B of [pc, ...found.filter((x) => x !== pc && x.variant === 'pair')]) {
-    const small = B.variant === 'pair', S = small ? JOBS_PAIR : JOBS_SCREEN;
+  for (const B of [pc, ...found.filter((x) => x !== pc && x.variant === 'pair'), ...hangs]) {
+    const small = B.variant === 'pair', hang = B.variant === 'hang', S = small ? JOBS_PAIR : JOBS_SCREEN;
     const zone = (W.room && W.room(B.room)) || W.zoneAt(new THREE.Vector3().setFromMatrixPosition(B.M)), holder = zone ? zone.group : W.scene;
     const mid = new THREE.Vector3().setFromMatrixPosition(B.M), out = new THREE.Vector3(0, 0, 1).transformDirection(B.M);
-    // (the spot to stand: on the floor under the big board's middle; in front of a small copy, out from its wall)
-    const at = small ? walls.snap(mid.x + out.x * BOARD.stand, 0.4, mid.z + out.z * BOARD.stand, 1.2) : walls.snap(mid.x, 0.4, mid.z, 3);
-    const board = { small, room: B.room, at: at || new THREE.Vector3(mid.x, 0, mid.z), near: small ? BOARD.nearSmall : BOARD.near, zone };
-    boards.push(board);
-    for (const s of small ? [1] : [1, -1]) {
-      const local = new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, small ? S.up : 0, s * S.z + (small ? 0.0015 : 0));
-      const F = { board, w: S.w, h: S.h, world: B.M.clone().multiply(local), holder };
+    // (the spot to stand: on the floor under the big board's middle; in front of a small copy, out from its wall. The
+    // big captains' board has none of its own: it hangs beside the station's, whose prompt is up under both)
+    let board = null;
+    if (!hang) {
+      const at = small ? walls.snap(mid.x + out.x * BOARD.stand, 0.4, mid.z + out.z * BOARD.stand, 1.2) : walls.snap(mid.x, 0.4, mid.z, 3);
+      board = { small, room: B.room, at: at || new THREE.Vector3(mid.x, 0, mid.z), near: small ? BOARD.nearSmall : BOARD.near, zone };
+      boards.push(board);
+    }
+    // (its screens: [which way it faces, how high over the piece's middle, whose list]: a big board's two faces; a
+    // small pair's two screens, the station's jobs over the captains hiring)
+    const kind = hang ? 'captains' : 'jobs', screens = small ? [[1, S.up, 'jobs'], [1, -S.up, 'captains']] : [[1, 0, kind], [-1, 0, kind]];
+    for (const [s, y, list] of screens) {
+      const local = new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, y, s * S.z + (small ? 0.0015 : 0));
+      const F = { board, small, kind: list, w: S.w, h: S.h, world: B.M.clone().multiply(local), holder };
       F.inv = F.world.clone().invert();
       faces.push(F); if (!byZone.has(holder)) byZone.set(holder, []); byZone.get(holder).push(F);
     }
@@ -152,9 +190,11 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     const toHolder = new THREE.Matrix4().copy(holder.matrixWorld).invert(), pos = [], uv = [], ix = [], v = new THREE.Vector3();
     for (const F of list) {
       const k = pos.length / 3, m = new THREE.Matrix4().multiplyMatrices(toHolder, F.world);
-      for (const [a, b] of [[0, 0], [1, 0], [1, 1], [0, 1]]) { v.set((a - 0.5) * F.w, (b - 0.5) * F.h, 0).applyMatrix4(m); pos.push(v.x, v.y, v.z); uv.push(a, b); }
+      // (its own half of the picture, a quarter of a pixel in from the line between the two)
+      const v0 = F.kind === 'captains' ? 0 : 0.5, e = 0.25 / (CH * 2);
+      for (const [a, b] of [[0, 0], [1, 0], [1, 1], [0, 1]]) { v.set((a - 0.5) * F.w, (b - 0.5) * F.h, 0).applyMatrix4(m); pos.push(v.x, v.y, v.z); uv.push(a, v0 + e + b * (0.5 - 2 * e)); }
       ix.push(k, k + 1, k + 2, k, k + 2, k + 3);
-      const mark = new THREE.Object3D(); mark.name = 'station jobs board' + (F.board.small ? ', small' : ''); mark.userData.size = [F.w, F.h];
+      const mark = new THREE.Object3D(); mark.name = (F.kind === 'captains' ? 'captains board' : 'station jobs board') + (F.small ? ', small' : ''); mark.userData.size = [F.w, F.h];
       mark.matrixAutoUpdate = false; mark.matrix.copy(m); mark.matrixWorldNeedsUpdate = true; holder.add(mark);
     }
     const g = new THREE.BufferGeometry();
@@ -171,14 +211,16 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   const faceAt = (hit) => (hit.near ? null : (hit.data.faces || []).find((F) => { _p.copy(hit.point).applyMatrix4(F.inv); return Math.abs(_p.z) < 0.03 && Math.abs(_p.x) <= F.w / 2 + 0.01 && Math.abs(_p.y) <= F.h / 2 + 0.01; }) || null);
   const rowAt = (F, point) => {
     _p.copy(point).applyMatrix4(F.inv);
-    const v = (F.h / 2 - _p.y) / F.h * CH;   // (canvas pixels from the top; the same on every screen)
+    const t = (F.h / 2 - _p.y) / F.h;        // (0 at the screen's top, 1 at its foot)
+    if (F.kind === 'captains') { const u = t * HIRING_AT.h, i = Math.floor((u - HIRING_AT.first) / HIRING_AT.row); return u < HIRING_AT.title ? -1 : i >= 0 && i < caps.length ? i : null; }
+    const v = t * CH;                        // (canvas pixels from the top; the same on every screen)
     const i = Math.floor((v - TOP - 6) / ROW);
     return v < TOP ? -1 : i >= 0 && i < rows.length ? i : null;
   };
   // (how tall a row is on the screen where it was hit, in the page's pixels)
   const _up = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
   const rowPx = (F, point) => {
-    _up.setFromMatrixColumn(F.world, 1).normalize().multiplyScalar(F.h * ROW / CH / 2);
+    _up.setFromMatrixColumn(F.world, 1).normalize().multiplyScalar(F.h * (F.kind === 'captains' ? HIRING_AT.row / HIRING_AT.h : ROW / CH) / 2);
     _a.copy(point).add(_up).project(W.camera); _b.copy(point).sub(_up).project(W.camera);
     return Math.abs(_a.y - _b.y) / 2 * innerHeight;
   };
@@ -194,22 +236,24 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     // (beside a screen, not on it: the list, when the player is at a board; never a row guessed at)
     if (!F) { if (near) openList(); return; }
     if (!inSight(F, pk.hit.point)) return;
-    const i = rowAt(F, pk.hit.point);
-    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openList(); else if (i != null) pick(rows[i].id);
+    const i = rowAt(F, pk.hit.point), on = F.kind === 'captains' ? caps : rows;
+    // (a captain with no mission to pick: their line is to read, and a click on it does nothing)
+    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openList(); else if (i != null && on[i].pick !== false) pick(on[i].id);
   });
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
   const prompt = document.createElement('div');
   prompt.className = 'pjb-prompt'; prompt.hidden = true;
-  prompt.innerHTML = '<div class="pjb-pw"><b>Station jobs</b><small>Pick one, and a line on the floor leads you there</small></div><button type="button" class="pjb-open">Pick<kbd>E</kbd></button>';
+  prompt.innerHTML = '<div class="pjb-pw"><b>Jobs and captains</b><small>Pick one, and a line on the floor leads you there</small></div><button type="button" class="pjb-open">Pick<kbd>E</kbd></button>';
   document.body.appendChild(prompt);
   prompt.querySelector('.pjb-open').addEventListener('click', () => openList());
   const panel = document.createElement('div');
-  panel.className = 'pjb'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Station jobs'); panel.tabIndex = -1;
+  panel.className = 'pjb'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Station jobs and captains hiring'); panel.tabIndex = -1;
   panel.innerHTML = '<div class="pjb-head"><b>STATION JOBS</b><small>Work aboard the station</small><button type="button" class="pjb-x" aria-label="Close (Esc)">&times;</button></div><div class="pjb-rows"></div>'
-    + '<div class="pjb-foot"><span>Pick a job: a glowing line on the floor leads you to it.</span><button type="button" class="pjb-stop" hidden>No line</button></div>';
+    + '<div class="pjb-sub"><b>CAPTAINS HIRING</b><small>Crew for their ships</small></div><div class="pjb-rows pjb-caps"></div>'
+    + '<div class="pjb-foot"><span>Pick one: a glowing line on the floor leads you there.</span><button type="button" class="pjb-stop" hidden>No line</button></div>';
   document.body.appendChild(panel);
-  const list = panel.querySelector('.pjb-rows');
+  const list = panel.querySelector('.pjb-rows'), capList = panel.querySelector('.pjb-caps');
   // (following a line: a small chip at the top says to which job, in its colour, with an X to take the line away)
   const chip = document.createElement('div');
   chip.className = 'pjb-chip'; chip.hidden = true;
@@ -225,12 +269,24 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     b.addEventListener('click', () => { pick(r.id); closeList(); });
     line.appendChild(b); list.appendChild(line);
   });
+  // (the captains under them, as their board has them: the number keys go on from the jobs'; a captain with no
+  // mission to pick is a line to read)
+  const keyed = [...rows, ...caps.filter((c) => c.pick)];
+  caps.forEach((r) => {
+    const line = document.createElement('div'); line.className = 'pjb-line';
+    line.innerHTML = `<kbd class="pjb-key"${r.pick ? '' : ' style="visibility:hidden"'}>${r.pick ? keyed.indexOf(r) + 1 : ''}</kbd>`;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pjb-row' + (r.pick ? '' : ' is-off'); b.dataset.job = r.id; b.disabled = !r.pick;
+    b.style.setProperty('--job', r.colour);
+    b.innerHTML = `<i style="background:${r.colour}"></i><span><b style="color:${r.colour}">${r.name}</b><small>${r.line}</small></span><em>${r.pay ? r.pay + ' cr' : 'In repair'}</em>`;
+    if (r.pick) b.addEventListener('click', () => { pick(r.id); closeList(); });
+    line.appendChild(b); capList.appendChild(line);
+  });
   panel.querySelector('.pjb-x').addEventListener('click', () => closeList());
   panel.querySelector('.pjb-stop').addEventListener('click', () => { stop(); closeList(); });
   function mark() {
-    for (const b of list.querySelectorAll('.pjb-row')) b.classList.toggle('is-on', b.dataset.job === picked);
+    for (const b of panel.querySelectorAll('.pjb-row')) b.classList.toggle('is-on', b.dataset.job === picked);
     panel.querySelector('.pjb-stop').hidden = !picked;
-    const r = rows.find((x) => x.id === picked);
+    const r = rowOf(picked);
     if (r) { chip.querySelector('span').textContent = r.name; chip.style.setProperty('--chip', r.colour); }
     draw();
   }
@@ -240,28 +296,33 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     open = true; panel.hidden = false; prompt.hidden = true; mark();
     if (input) { wasInput = input.enabled; input.enabled = false; }
     // (the keyboard's focus on the panel, not a row: a row lit by it read as a job already picked)
-    if (!matchMedia('(pointer: coarse)').matches) (list.querySelector('.is-on') || panel).focus({ preventScroll: true });
+    if (!matchMedia('(pointer: coarse)').matches) (panel.querySelector('.pjb-row.is-on') || panel).focus({ preventScroll: true });
   }
   function closeList() {
     if (!open) return;
     open = false; panel.hidden = true;
     if (input) input.enabled = wasInput;
   }
-  // a job picked: lit on the board and in the list, and the line to it; the same one again: the line off
-  let player = null, playing = false;
+  // a job picked: lit on the board and in the list, and the line to it; the same one again: the line off. A captain
+  // picked: the same, the line to wherever that captain is and after them as they walk (boardpick.js targetOf); the
+  // people are told who the player is being led to (people.js `seek`: that captain is kept about, and makes the offer
+  // when the player walks up)
+  let player = null, playing = false, sought = 0;
+  const captainAt = (id) => { const c = captains(); return c ? c.at(id) : null; };
+  const seek = (id) => { const c = captains(); if (c && c.seek) c.seek(id); };
   function pick(id) {
-    const s = spotOf(id); if (!s) return false;
+    const t = targetOf(id, { spotOf, captainAt, rows, captains: caps }); if (!t) return false;
     if (picked === id) { stop(); return true; }
-    picked = id; mark();
-    guide.to(s.pos, { near: (s.job.near ?? 1.7) - 0.1, label: id, colour: (rows.find((r) => r.id === id) || {}).colour }, player ? player.pos : null);
+    picked = id; sought = 0; seek(t.kind === 'captain' ? id : null); mark();
+    guide.to(t.pos, { near: t.near, label: id, colour: t.colour, follow: t.follow || null }, player ? player.pos : null);
     return true;
   }
-  function stop() { picked = null; guide.clear(); mark(); }
+  function stop() { picked = null; sought = 0; seek(null); guide.clear(); mark(); }
   addEventListener('keydown', (e) => {
     if (!playing || (jobs && jobs.panel)) return;
     if (open) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeList(); return; }
-      const n = +e.key; if (n >= 1 && n <= rows.length) { e.preventDefault(); pick(rows[n - 1].id); closeList(); }
+      const n = +e.key; if (n >= 1 && n <= keyed.length) { e.preventDefault(); pick(keyed[n - 1].id); closeList(); }
       return;
     }
     // (E is the board's only while its prompt is the one up: never a captain's question's too)
@@ -272,8 +333,10 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
   api.update = (dt, P, isPlaying = true) => {
     playing = isPlaying && !!P; player = P;
     if (!playing) { if (open) closeList(); prompt.hidden = true; chip.hidden = true; near = false; return; }
-    // (the line done with: the board's pick let go when the line is gone, as they got there)
-    if (picked && !guide.active) { picked = null; mark(); }
+    // (the line done with: the board's pick let go when the line is gone, as they got there, or is another's now. A
+    // captain walked up to keeps the first word for a few seconds more, till their offer is made: people.js)
+    if (picked && guide.active !== picked) { if (caps.some((c) => c.id === picked)) sought = BOARD.sought; picked = null; mark(); }
+    if (sought > 0) { sought -= dt; if (sought <= 0) seek(null); }
     chip.hidden = !picked || open;
     // near a board (the big one, or a small copy), looking its way, no job's own prompt up, no panel open: the prompt
     W.camera.getWorldDirection(_d); _d.y = 0; _d.normalize();
@@ -286,7 +349,7 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     // (one prompt at a time: a captain's question up, the board's waits)
     prompt.hidden = !near || open || !!asking();
     // (a job picked: the prompt says which, and that another can be picked)
-    const pr = picked && rows.find((r) => r.id === picked);
+    const pr = picked && rowOf(picked);
     const sub = pr ? 'Follow the ' + (pr.hue ? pr.hue + ' ' : '') + 'line to ' + pr.name + '.' : 'Pick one, and a line on the floor leads you there';
     if (prompt.dataset.sub !== sub) {
       prompt.dataset.sub = sub; prompt.querySelector('small').textContent = sub;

@@ -7,6 +7,10 @@
 //
 //   const guide = makeGuide({ W, walls })
 //   guide.to(pos, { near, colour, label })   a line to `pos` (a Vector3 on a floor); `near`: how close counts as there
+//   guide.to(pos, { ..., follow })           a line to someone who walks about (a captain picked on a jobs board):
+//                                            follow() gives where they are now (a Vector3, or null while they cannot
+//                                            be found); the line is laid afresh from the player once they have walked
+//                                            GUIDE.moved from its end, and the column of light stands over them
 //   guide.clear()                            the line faded out
 //   guide.update(dt, player)                 each frame (player: the player's { pos }, or null)
 //   guide.active                             the place the line leads to (its label), or null
@@ -28,6 +32,7 @@ export const GUIDE = {
   colour: [1.0, 0.75, 0.3],                   // its colour when the job gives none (the board gives each its own)
   marks: 0.75, speed: 1.4,                    // a bright chevron every this far along, flowing this fast toward the place
   off: 2.2, replan: 1.2,                      // wandered this far off the line: worked out again (no oftener than this, s)
+  moved: 2.0, tries: 5,                       // a place that walks about: this far from the line's end, the line is laid afresh; no way found: tried again this many times
   fade: 0.6, planMs: 5,                       // seconds to fade in and out; ms of way-finding a frame (a one-off, while it is worked out)
   round: 0.45,                                // the corners rounded off within this far of each turn (m)
   centre: 0.6,                                // how far the line may be moved off the walker's way toward the most room (m)
@@ -69,7 +74,7 @@ const BEACON_FRAG = `
   varying vec2 vUv;
   void main() {
     float across = 1.0 - smoothstep(0.15, 1.0, abs(vUv.x - 0.5) * 2.0);
-    float up = pow(1.0 - vUv.y, 1.4);
+    float up = pow(max(0.0, 1.0 - vUv.y), 1.4);   // (never the power of a number under zero: at the column's top edge, smoothed, that is not a number at all, and the glow spread it into a black block over half the view)
     float pulse = 0.7 + 0.3 * sin(uTime * 3.0 - vUv.y * 7.0);
     float a = across * up * pulse * uOpacity * 0.8;
     if (a < 0.004) discard;
@@ -104,7 +109,7 @@ export function lineRGB(hex) {
 export function makeGuide({ W, walls }) {
   const lines = [];      // the line now (last) and any fading out
   let want = null, req = null, replanAt = 0, clock = 0;
-  const counts = { lines: 0, replans: 0, arrived: 0, failed: 0 };
+  const counts = { lines: 0, replans: 0, moved: 0, arrived: 0, failed: 0 };
   let beacon = null;
 
   function material() {
@@ -204,15 +209,15 @@ export function makeGuide({ W, walls }) {
   }
   function plan(from) {
     if (!want) return;
-    req = walls.plan(from, want.pos);
-    replanAt = clock;
+    req = walls.plan(from, want.pos.clone());     // (its own copy: a place that walks about moves while the way is worked out)
+    replanAt = clock; want.again = false;
   }
   const api = {
     get active() { return want ? want.label : null; },
     get target() { return want ? want.pos : null; },
     turnTo: null,       // (a line just picked: the heading it sets off along, once: the game turns its camera to it)
-    to(pos, { near = 1.6, colour = null, label = '' } = {}, from = null) {
-      want = { pos: pos.clone(), near, label };
+    to(pos, { near = 1.6, colour = null, label = '', follow = null } = {}, from = null) {
+      want = { pos: pos.clone(), near, label, follow, tries: 0 };
       for (const o of lines) o.fading = true;
       req = null;
       if (from) plan(from); else want.pending = true;
@@ -223,6 +228,8 @@ export function makeGuide({ W, walls }) {
       clock += dt;
       for (const L of lines) L.mesh.material.uniforms.uTime.value = clock * GUIDE.speed;
       const P = player && player.pos;
+      // (a place that walks about: where it is now)
+      if (want && want.follow) { const q = want.follow(); if (q) want.pos.copy(q); }
       if (want && P && want.pending) { want.pending = false; plan(P); }
       // the way, worked out a little each frame; shown once it gets there (or as near as it can)
       if (req) {
@@ -230,7 +237,7 @@ export function makeGuide({ W, walls }) {
           const w = req.way; req = null;
           if (w && w.length >= 2 && w.short < 1.5) {
             if (w.short > 0.05) w.push(want.pos.clone());
-            show(w);
+            show(w); want.tries = 0;
             const L = lines[lines.length - 1];
             // (the job's own colour, deepened where pale, as the page's numbers: the shader writes it as it is)
             if (want.colour) L.mesh.material.uniforms.uColour.value.setRGB(...lineRGB(want.colour));
@@ -238,6 +245,8 @@ export function makeGuide({ W, walls }) {
             // (a line just picked: the way it sets off, for the camera to turn to; not a line worked out again)
             if (!want.shown) { want.shown = true; const k = Math.min(L.pts.length - 1, Math.round(2.5 / GUIDE.step)), a = L.pts[0], b = L.pts[k]; if (Math.hypot(b.x - a.x, b.z - a.z) > 0.3) api.turnTo = Math.atan2(b.x - a.x, b.z - a.z); }
           }
+          // (no way to someone walking about, just now: tried again in a moment, from where they have got to)
+          else if (want.follow && want.tries < GUIDE.tries) { want.tries++; want.again = true; }
           else { counts.failed++; console.info('guide: no way to ' + (want && want.label)); want = null; }
         }
       }
@@ -248,9 +257,13 @@ export function makeGuide({ W, walls }) {
         cur.start = Math.max(cur.start, cur.acc[cur.near] + 0.25);      // (from just ahead of the player's feet)
         cur.mesh.material.uniforms.uStart.value = cur.start;
         const there = Math.hypot(P.x - want.pos.x, P.z - want.pos.z) < want.near && Math.abs(P.y - want.pos.y) < 1.2;
+        // (the place has walked on from where the line ends: laid afresh from where the player is)
+        const end = cur.pts[cur.pts.length - 1], moved = !!want.follow && Math.hypot(end.x - want.pos.x, end.z - want.pos.z) + Math.abs(end.y - want.pos.y) > GUIDE.moved;
         if (there) { counts.arrived++; api.clear(); }
-        else if (off > GUIDE.off && !req && clock - replanAt > GUIDE.replan) { counts.replans++; plan(P); }
+        else if ((off > GUIDE.off || moved) && !req && clock - replanAt > GUIDE.replan) { counts.replans++; if (moved) counts.moved++; plan(P); }
       }
+      // (no line yet to someone walking about, the last try found no way: once more)
+      else if (want && want.again && P && !req && clock - replanAt > GUIDE.replan) plan(P);
       for (const L of [...lines]) {
         const goal = L.fading ? 0 : 1;
         L.opacity += Math.sign(goal - L.opacity) * Math.min(Math.abs(goal - L.opacity), dt / GUIDE.fade);
@@ -270,7 +283,8 @@ export function makeGuide({ W, walls }) {
       if (beacon) {
         beacon.visible = !!top && top.opacity > 0.001;
         if (top) {
-          beacon.position.copy(top.pts[top.pts.length - 1]);
+          // (over the line's end; over someone walking about themselves, wherever they have got to)
+          if (want && want.follow && !top.fading) beacon.position.copy(want.pos); else beacon.position.copy(top.pts[top.pts.length - 1]);
           beacon.material.uniforms.uColour.value.copy(top.colour || top.mesh.material.uniforms.uColour.value);
           beacon.material.uniforms.uOpacity.value = top.opacity;
           beacon.material.uniforms.uTime.value = clock;

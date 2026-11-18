@@ -130,10 +130,10 @@ async function boot() {
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard() : null) } }, hints: { smelter: () => (mission ? mission.hint() : null) }, crane, lib, people: () => people });
-  // the station's own jobs board beside the captains', and the glowing line on the floor to the job picked on it
-  // (jobsboard.js, guide.js)
+  // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
+  // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });
-  const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking) });
+  const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
   const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
