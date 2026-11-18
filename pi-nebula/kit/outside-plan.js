@@ -27,6 +27,11 @@
 //               bit smaller and have the lines between the lights"; "The doors look a bit small, are they human
 //               size?"; "Can you slap some mottling texture on that landing pad? It looks way to clean and basic.It
 //               also looks a bit too raised. Can you just remove the hull plates it sits on and lower it?"
+//   2026-11-18  (the dock side) "I feel like it might look better if it was a mix. Like some of it was wrapped in a
+//               bigger beveled mass. Also, it would probably be good to make the shipping docks not stick out quite
+//               that much. Like the numbers should probably be above them and they should dock inside further (like
+//               another 1/3 of the container inside) It would also be cool if there were some angled walls around the
+//               shipping containers that make a narrow slot for them."
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -45,7 +50,8 @@
 //   the girders    out of the smelter end and out of the medical end, two pairs of solar wings on each
 //   the west side  the lower hull round the terminal, the arena, the corridors, the quarters, the spine and the
 //                  airlock (walls where the rooms' own walls are, so every real window stays where it is), a deck
-//                  under them, and the cargo slots low on the dock side with three containers plugged in
+//                  under them, and the cargo slots low on the dock side: three containers plugged in, each a third
+//                  of its length inside, between angled walls with a bevelled block over them carrying the numbers
 // The plates are the lab's shape C (labs/hull/sample-plan.js): a big raised plate with a sunk bevelled panel on a flat
 // stretch of 10 m or more, plain plates elsewhere. Laid with the station's own look (kit/hull-look.js STATION_LOOK).
 import { offsetPath, SEAM, INSIDE } from './hull-plates.js';
@@ -258,12 +264,30 @@ function westFlats(o) {
 export const SLOTS = { x: -7, z: [3.5, 8, 12.5, 17], w: 2.9, h: 2.9, foot: -4.75, full: [0, 1, 2] };   // (the fourth slot is empty)
 export const DECK_PATH = [[25.5, -9.6], [9, -9.6], [-7, -3.5], [-7, 22], [-21, 22], [-21, 38], [-6, 42.5], [25.5, 62]];
 const SLOT_DECK = -5.02;                                // (the cargo deck's top; its plates stand a bevel higher)
+// THE CARGO DOCK'S HOUSING, from his words: each container goes a third of its length further in (DOCK.in), between
+// angled walls that make a narrow slot for it: a wall each side of every slot, DOCK.out long, 1.6 m thick for most of
+// its length (so the slot is as wide as its socket) and cut back at an angle over its last DOCK.flare to a tip
+// DOCK.tip wide, so every slot opens like a funnel at its mouth. One bevelled block lies over the walls' inner part
+// (DOCK.block deep), and each slot's number is on its face, above the slot
+export const DOCK = { out: 3.6, flare: 1.5, tip: 0.4, block: 1.9, top: -1.6, roof: 0.3, in: 12.2 / 3 };
+const dockWalls = () => [SLOTS.z[0] - 2.25, ...SLOTS.z.map((z) => z + 2.25)];   // (the middle of each wall, along z)
+function dockPlans() {
+  const x1 = SLOTS.x, x0 = x1 - DOCK.out, xm = x0 + DOCK.flare, t = DOCK.tip / 2, W = dockWalls(), over = boxPath(x1 - DOCK.block, x1, W[0] - 0.8, W[W.length - 1] + 0.8);
+  return [
+    ...W.map((zc, i) => {
+      const path = [[x1, zc + 0.8], [x1, zc - 0.8], [xm, zc - 0.8], [x0, zc - t], [x0, zc + t], [xm, zc + 0.8]];
+      return { name: 'dock wall ' + (i + 1), closed: true, path, tiers: [{ name: 'dock wall ' + (i + 1), profile: [[0, SLOT_DECK, 'in'], [0, DOCK.top]], parts: [plates('band')] }], flats: flatsOf(path, [], DOCK.top, true, plain) };
+    }),
+    { name: 'dock block', closed: true, path: over, tiers: [{ name: 'dock block', profile: [[0, DOCK.top], [0, DOCK.roof - 0.5], [-0.5, DOCK.roof]], parts: [plates('band'), plates('tiers')] }],
+      flats: [...flatsOf(offsetPath(over, -0.5, true), [], DOCK.roof, true, plain), ...flatsOf(over, [], DOCK.top, false, plain)] },
+  ];
+}
 function deckPlans(o) {
   const tiers = [{ name: 'west deck', profile: [[-2.6, -7.8], [0, -5.2], [0, FOOT - 0.6], [-0.6, FOOT]], parts: [plates('tiers'), plates('band', BIG), plates('tiers')] }];
   // the cargo slots: framed sockets in the dock face (run 2, walked south from z = -3.5), lit where nothing is plugged in
   const doors = SLOTS.z.map((z) => ({ tier: 0, step: 1, run: 2, at: z + 3.5, w: SLOTS.w, h: SLOTS.h, y: SLOTS.foot - 0.25, sill: 0.25, head: 0.4, jamb: 0.45, proud: 0.4, glass: 0.55 }));
   const flats = [...flatsOf(offsetPath(DECK_PATH, -0.6, true), [], FOOT, true, plain), ...flatsOf(offsetPath(DECK_PATH, -2.6, true), [], -7.8, false, plain)];
-  const pad = boxPath(-23.5, -5, 0.8, 22.4);
+  const pad = boxPath(-17, -5, 0.8, 22.4);               // (the shelf under the containers: it stood out to x = -23.5 before they went further in)
   return [{ name: 'west deck', closed: true, path: DECK_PATH, tiers, doors, flats, windows: { ...WIN, seed: o.seed } },
     { name: 'cargo deck', closed: true, path: pad, tiers: [{ name: 'cargo deck', profile: [[-1, -6.3], [0, -5.5], [0, SLOT_DECK]], parts: [plates('tiers'), plates('tiers')] }],
       flats: [...flatsOf(pad, [], SLOT_DECK, true, plain), ...flatsOf(offsetPath(pad, -1, true), [], -6.3, false, plain)] }];
@@ -275,7 +299,7 @@ function deckPlans(o) {
 //   seed     which half of the hull's windows are lit (the game gives a fresh number each time it starts)
 export function outsidePlans(opts = {}) {
   const o = { inside: !!opts.inside, seed: opts.seed ?? 11 };
-  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o)];
+  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o), ...dockPlans()];
 }
 
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
@@ -403,11 +427,11 @@ export function outsideGear(opts = {}) {
   // the cargo slots: three containers plugged end-on into their sockets, a rail each side of every slot
   const S = SLOTS, y0 = SLOT_DECK + 0.32;
   S.full.forEach((k) => {
-    const z = S.z[k], col = lin(BOX_COLOURS[k]), rib = col.map((v) => v * 0.6), x1 = S.x - 0.45, xm = x1 - BOX.len / 2;
+    const z = S.z[k], col = lin(BOX_COLOURS[k]), rib = col.map((v) => v * 0.6), x1 = S.x - 0.45 + DOCK.in, xm = x1 - BOX.len / 2;
     G.box([xm, y0 + BOX.h / 2, z], [BOX.len / 2, BOX.h / 2, BOX.w / 2], col);
     for (let i = 0; i < 9; i++) G.box([x1 - 0.7 - i * 1.35, y0 + BOX.h / 2, z], [0.07, BOX.h / 2 - 0.12, BOX.w / 2 + 0.04], rib);
   });
-  for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25; G.box([-14.6, y0 + 0.12, z], [7.2, 0.12, 0.12], yellow); }
+  for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25, xa = S.x - DOCK.out - 0.3, xb = -16.6; G.box([(xa + xb) / 2, y0 + 0.12, z], [(xa - xb) / 2, 0.12, 0.12], yellow); }
   if (!opts.inside) for (const hg of HANGARS) {
     const x0 = 19.4, x1 = 58.9, z0 = hg.z - 13.8, z1 = hg.z + 13.8, y1 = 10.9, wallC = lin('#39424f'), floorC = lin('#586273');
     G.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], floorC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
@@ -419,11 +443,11 @@ export function outsideGear(opts = {}) {
 export function outsideMarks() {
   const S = SLOTS, y0 = SLOT_DECK + 0.32, out = [];
   for (const m of MARKS) {
-    if (m.slot != null) out.push({ text: m.text, O: [-22.6, y0 + 0.02, S.z[m.slot] - 1.2], U: [0, 0, 1], V: [1, 0, 0], w: 2.4, h: 1.5 });          // on the deck, read from the dock
+    if (m.slot != null) out.push({ text: m.text, O: [S.x - DOCK.block - 0.36, DOCK.top + 0.2, S.z[m.slot] - 0.85], U: [0, 0, 1], V: [0, 1, 0], w: 1.7, h: 1.05 });   // above its slot, on the block's face, read from the dock
     else {
-      const z = S.z[m.box], x1 = S.x - 0.45, y = y0 + 1.05;
-      out.push({ text: m.text, O: [x1 - 1.2, y, z - BOX.w / 2 - 0.06], U: [-1, 0, 0], V: [0, 1, 0], w: 4.6, h: 0.75 });                          // its north side
-      out.push({ text: m.text, O: [x1 - 5.8, y, z + BOX.w / 2 + 0.06], U: [1, 0, 0], V: [0, 1, 0], w: 4.6, h: 0.75 });                           // its south side
+      const z = S.z[m.box], x1 = S.x - 0.45 + DOCK.in, xo = x1 - BOX.len, y = y0 + 1.05;                                                     // (its sides' marks are on the part that stands out of its slot)
+      out.push({ text: m.text, O: [xo + 5, y, z - BOX.w / 2 - 0.06], U: [-1, 0, 0], V: [0, 1, 0], w: 4.6, h: 0.75 });                            // its north side
+      out.push({ text: m.text, O: [xo + 0.4, y, z + BOX.w / 2 + 0.06], U: [1, 0, 0], V: [0, 1, 0], w: 4.6, h: 0.75 });                           // its south side
       out.push({ text: m.text.slice(0, 1), O: [x1 - BOX.len - 0.02, y - 0.1, z - 0.5], U: [0, 0, 1], V: [0, 1, 0], w: 1, h: 1 });                // its outer end: the sign alone
     }
   }

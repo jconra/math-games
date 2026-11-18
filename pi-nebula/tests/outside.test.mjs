@@ -40,7 +40,7 @@ test('outside: the plan is sound in every look (whole numbers of triangles, noth
     }
     for (const [x, y, z] of points(A)) assert.ok(x >= OUTSIDE_BOX.min[0] && x <= OUTSIDE_BOX.max[0] && y >= OUTSIDE_BOX.min[1] && y <= OUTSIDE_BOX.max[1] && z >= OUTSIDE_BOX.min[2] && z <= OUTSIDE_BOX.max[2], `a plate at ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`);
   }
-  assert.equal(outsidePlans().length, 11);   // (the body, three masses, two pyramids, the spire, the keel, the west rooms, two decks)
+  assert.equal(outsidePlans().length, 17);   // (the body, three masses, two pyramids, the spire, the keel, the west rooms, two decks, the cargo dock's five walls and its block)
 });
 
 test('outside: it goes round the REAL rooms: every room is under the hull, and the hangar doors are where the rooms have them', () => {
