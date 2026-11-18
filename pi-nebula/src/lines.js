@@ -32,7 +32,14 @@ export const CAPTAINS = {
     no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!' },
   ruiz: { ship: 'Miner', mission: 'mining', what: 'Join his crew for a mining run?',
     offer: { clip: 'ruiz-pitch' }, yes: { clip: 'ruiz-ready' }, hello: { clip: 'ruiz-hello' },
-    no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!' },
+    no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!',
+    // (his mission is made, src/missions.js: contract: said as his contract's card comes up; signed: as it is signed;
+    // go, goWhat: shall we go now (the bubble, the question's small words); goYes, goNo: his answers; payout: home,
+    // the share still waiting. No recorded clips for these yet: bubbles only.)
+    contract: 'Great! Here is my contract. Have a look.', signed: 'Welcome aboard, pilot!',
+    go: 'The Miner is on her pad. Ready to head out?', goWhat: 'Start the mining run now?',
+    goYes: 'Then let\'s fly!', goNo: 'No rush. Find me, or take the pilot\'s seat on the Miner.',
+    payout: 'Good flying! Your share is waiting at the smelter\'s controls.' },
   hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
     no: 'That\'s all right. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
@@ -41,6 +48,21 @@ export const CAPTAINS = {
   // nothing; `down` keeps the question away until her job is made)
   adair: { ship: 'security ship', mission: 'security', down: true, what: null,
     offer: { clip: 'adair-pitch' }, hello: { clip: 'adair-hello' }, again: 'Hello again! My ship\'s still in for repairs.' },
+};
+
+// A CAPTAIN'S RUN (src/trip.js): what the captain says from the other seat as the run goes, one of each at its moment,
+// in a bubble (no recorded clips yet). {player}: the crew member's name; {ore}: the metal; {tonnes}: the haul's ore
+export const RUN_TALK = {
+  mining: {
+    out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
+    clean: ['A clean jump! Right on the rocks. More time to dig.', 'Three green lamps! That gives us more time at the rocks.'],
+    wide: ['A little wide, but we\'re here. Less time to dig.', 'We came out a bit wide. We\'ll dig what we have time for.'],
+    field: ['Kestrel, bring that one in. Okafor, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
+    rich: ['Look at that! A rich one: titanium all through it!', 'Titanium! That rock pays double!'],
+    full: ['Eight canisters, {tonnes} tonnes of {ore} ore. Take us home, pilot.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, {player}.'],
+    home: ['There\'s the station. The autopilot has the landing.', 'Home. The autopilot takes her in.'],
+    landed: ['Good flying, {player}. Your share is at the smelter\'s controls.'],
+  },
 };
 
 // THE SCAN (people.js): what the medic and the patient say at the big scanner, in bubbles, one of each at its moment:

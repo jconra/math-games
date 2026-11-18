@@ -1002,9 +1002,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     K.state = 'turning'; K.t = 0; K.busy = true; P.greeted = clock; P.smileUntil = clock + 9; counts.offers++;
   }
   function offerNow(P) {
-    const K = P.cap, st = missions.state(K.id);
+    const K = P.cap, st = missions.state(K.id, crew());
     K.state = 'offer'; K.t = 0; K.nudged = false;
-    if (st === 'interested') { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
+    // (a contract signed with this captain, src/missions.js: shall we go now? Home, the share not collected yet: where
+    // it is)
+    if (st === 'signed') { goAsk(P); return; }
+    if (st === 'payout') { const w = K.payout || K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4.5 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
+    if (st === 'interested' && !missions.ready(K.id)) { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
     // question at the bottom of the screen)
     let words = K.again;
@@ -1022,12 +1026,38 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function answer(P, yes) {
     const K = P.cap; counts.answers++;
     if (K.voice) { K.voice.stop(); K.voice = null; lastVoice = -99; }
-    missions.answer({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
-    const words = yes ? VOICE_CLIPS[K.yes.clip].words : K.no;
-    if (yes) speak(P, K.yes.clip, 0.8);
+    // (a mission that is made: yes brings up the contract's card, src/mission.js; they stay with the player meanwhile)
+    const made = yes && missions.ready(K.id) && K.contract;
+    const words = made ? K.contract : yes ? VOICE_CLIPS[K.yes.clip].words : K.no;
+    if (yes && !made) speak(P, K.yes.clip, 0.8);
     bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words));
     K.ask = null; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; P.smileUntil = clock + 5;
+    if (made) K.hold = 60;
+    missions.answer({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
   }
+  // SHALL WE GO NOW? (a contract signed: the run starts "by talking to the captain or clicking on the pilot seat")
+  function goAsk(P) {
+    const K = P.cap, words = K.go || 'Ready to go?';
+    K.state = 'offer'; K.t = 0; K.nudged = true; K.busy = true;
+    bubbles.say(P, words, { kind: 'captain', secs: Math.max(5, READ(words) + 2) }); P.talkUntil = clock + Math.min(3, READ(words));
+    K.ask = bubbles.ask({ who: K.name, what: K.goWhat || 'Start the mission now?', yes: 'Let\'s go', no: 'Not yet', onYes: () => goAnswer(P, true), onNo: () => goAnswer(P, false) });
+  }
+  function goAnswer(P, yes) {
+    const K = P.cap, words = yes ? K.goYes : K.goNo; counts.answers++;
+    if (words) { bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words)); }
+    K.ask = null; K.state = 'answered'; K.t = 0; K.hold = 0; K.cool = yes ? FRIENDLY.answered : 12; P.smileUntil = clock + 5;
+    missions.go({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
+  }
+  // (for src/mission.js: a captain kept with the player while their contract's card is up; a word from them; shall we
+  // go, asked at once where they stand together; let go again)
+  const capOf = (id) => list.find((P) => P.cap && P.cap.id === id) || null;
+  const captainApi = {
+    hold(id, secs = 60) { const P = capOf(id); if (!P) return false; const K = P.cap; K.state = 'answered'; K.t = 0; K.hold = secs; K.busy = true; return true; },
+    say(id, words, secs = null) { const P = capOf(id); if (!P || P.away || !words) return false; bubbles.say(P, words, { kind: 'captain', secs: secs ?? Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words)); return true; },
+    askGo(id) { const P = capOf(id), pl = playerNow; if (!P || P.away || !pl || pl.pos.distanceTo(P.pos) > FRIENDLY.leave || bubbles.asking) return false; goAsk(P); return true; },
+    release(id, cool = FRIENDLY.answered) { const P = capOf(id); if (!P) return false; const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; } K.state = 'answered'; K.t = 0; K.hold = 2.5; K.cool = cool; return true; },
+    at(id) { const P = capOf(id); return P ? { pos: P.pos, away: !!P.away } : null; },
+  };
   function endOffer(P) {
     const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; }
     if (K.walking) { K.walking = false; play(P, STAND); }
@@ -1535,7 +1565,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return true;
     },
   };
-  const api = { list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
+  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };
   return api;
 }

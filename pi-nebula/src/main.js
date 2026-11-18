@@ -40,6 +40,7 @@ import { soundButton } from './ui/soundbutton.js';
 import { makeGuide } from './guide.js';
 import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
+import { makeMission } from './mission.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 4;                 // shown small on the title; goes up with index.html's ?v=
@@ -127,11 +128,16 @@ async function boot() {
   // the station's jobs: their spots, the prompt, the job panel (jobs/index.js); credits are saved with the crew member
   // (the smelter's pay slips count the canisters really in the hangar: the crane's load, as it is when a slip is made)
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
-  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), live: { smelter: () => (crane.on ? crane.load() : null) }, crane, lib, people: () => people });
+  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
+    live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard() : null) } }, hints: { smelter: () => (mission ? mission.hint() : null) }, crane, lib, people: () => people });
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job picked on it
   // (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });
   const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking) });
+  // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
+  // the contract's card are loaded only when one is wanted)
+  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
+    body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -155,8 +161,9 @@ async function boot() {
     if (GAME.mode === 'title' || !P) drift(now);
     else {
       const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
-      board.update(dt, P, GAME.mode === 'play' && !atJob);
-      guide.update(dt, GAME.mode === 'play' && !atJob ? P : null);
+      const onTrip = mission.update(dt, P, GAME.mode === 'play' && !atJob);   // (on a captain's run: in the pilot's seat)
+      board.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip);
+      guide.update(dt, GAME.mode === 'play' && !atJob && !onTrip ? P : null);
       if (atJob && guide.active) guide.clear();      // (at a job: there, the line done with)
       // (a job just picked on the board: the camera turned, over most of a second, to look along the way the line sets
       // off, so the line is in view and "forward" follows it)
@@ -166,16 +173,17 @@ async function boot() {
       // player's head rather than running up behind their back; eased off again as the line ends)
       chase.lift += ((guide.active ? CAM_LIFT : 0) - chase.lift) * Math.min(1, dt * 2);
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
-      const move = ctl ? ctl.move : atJob ? null : auto.way ? autoMove() : input.move;
+      const move = ctl ? ctl.move : atJob || onTrip ? null : auto.way ? autoMove() : input.move;
       P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? people.list : [], clip: ctl && ctl.clip, clipSpeed: ctl && ctl.clipSpeed });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
+      if (onTrip) mission.aim(W.camera, dt);
       // (how far the camera that is DRAWN is from the head: at a job that is the job's own camera, not the follow camera,
       // which still runs behind the player and may be pressed against a wall there: the player vanished for about a
       // second in the arena, standing near its wall with Mathball's camera metres away)
       const camNear = atJob ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
-      P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes());     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
+      P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes()) && !mission.seated;     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
@@ -194,6 +202,7 @@ async function boot() {
     // of them standing on a way's patch is counted, so it waits for them)
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
+    mission.late();      // (out on a run: no haze between the cockpit and the rocks)
     W.frame(dt, now, eyes);
     GAME.frames++;
   }
@@ -238,7 +247,7 @@ async function boot() {
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; jobs.update(0, null, false); jobs.close();
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); jobs.update(0, null, false); jobs.close();
     board.update(0, null, false); board.stop();
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();

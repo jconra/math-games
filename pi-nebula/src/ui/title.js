@@ -118,8 +118,9 @@ const theme = {
     joblevels(ctx) {
       const p = ctx.current();
       if (!p) return;
-      Promise.all([import('../jobs/index.js'), import('./levels.js')]).then(([J, L]) => {
-        L.openJobLevels(document.body, p, { jobs: J.JOBS, onChange: (x) => ctx.changed(x || p), onClose: () => ctx.focusKey('joblevels', false) });
+      // (and the pilot's seat's, whose cards come up on a captain's run: src/jobs/pilot.js)
+      Promise.all([import('../jobs/index.js'), import('./levels.js'), import('../jobs/pilot.js')]).then(([J, L, P]) => {
+        L.openJobLevels(document.body, p, { jobs: [...J.JOBS, P.JOB], onChange: (x) => ctx.changed(x || p), onClose: () => ctx.focusKey('joblevels', false) });
       }).catch((e) => console.error('Pi Nebula: the job levels could not open', e));
     },
     // the height on the new crew member's form

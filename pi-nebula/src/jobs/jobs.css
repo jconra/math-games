@@ -198,3 +198,20 @@
 .pnj.is-over .pnj-level, .pnj.is-over .pnj-foot { visibility: hidden; }
 .pnj-endbtn.is-again { background: var(--accent) !important; color: var(--accent-ink) !important; box-shadow: none; }
 .pnj-endbtn b { font-size: 18px; }
+/* ── the pilot's seat on a captain's run (src/trip.js): the jump computer's card top and its three lamps, one lit by
+   each right answer (green at the first pick, amber after a miss; the one being worked for has a bright rim) ── */
+.pnj-cardtop.is-jump b { color: #9fe8ff; }
+.pnj-icon.is-jump { color: #9fe8ff; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.pnj-lamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 10px; }
+.pnj-lamp { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+  background: rgba(0, 0, 0, 0.28); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.22); clip-path: var(--oct); --cut: 6px; }
+.pnj-lamp i { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #27323c; box-shadow: inset 0 0 0 1.5px rgba(150, 210, 250, 0.35); }
+.pnj-lamp span { overflow: hidden; text-overflow: ellipsis; }
+.pnj-lamp.is-now { color: var(--ink); box-shadow: inset 0 0 0 1.5px rgba(150, 210, 250, 0.75); }
+.pnj-lamp.is-now i { animation: pnj-lampnow 1.2s ease-in-out infinite; }
+.pnj-lamp.is-lit { color: #c9ffe0; }
+.pnj-lamp.is-lit i { background: var(--good); box-shadow: 0 0 8px rgba(89, 214, 139, 0.9); }
+.pnj-lamp.is-late { color: #ffe2b0; }
+.pnj-lamp.is-late i { background: #ffb02e; box-shadow: 0 0 8px rgba(255, 176, 46, 0.9); }
+@keyframes pnj-lampnow { 50% { background: #5b7384; } }
+@media (max-width: 640px) { .pnj-lamp { font-size: 11px; padding: 5px 6px; gap: 5px; letter-spacing: 0.05em; } }

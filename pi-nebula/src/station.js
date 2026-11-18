@@ -9,6 +9,8 @@
 //                            whatever drives it), what glides by itself (the big scanner's ring, by the clock `now`),
 //                            the dust, the sky, the picture
 //   W.view(name) / W.place(name) / W.room(id)                   the station file's named views, spots and rooms
+//   W.alone = Set of room ids   only these rooms are drawn, and none of the doors' leaves: a ship out on a trip
+//                            (src/trip.js: the station is not out there); null: as always
 //   W.seenFrom = point       a view from outside (the dock's bridge job): the rooms drawn are those seen from this point
 //                            inside the station, not from the camera out in space (null: from the camera, as always)
 //
@@ -153,11 +155,22 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   const keepShut = new Set(), driven = new Set();   // (driven: doors something else works, a parked ship's ways in: boarding.js)
   // (a view from outside the station, the dock's bridge job: the rooms to draw are the ones seen from a point inside it,
   // W.seenFrom (a Vector3), not from the camera, out in space where no room is near; null: from the camera)
-  const W0 = { seenFrom: null };
+  // (a ship out on a trip, src/trip.js: only its own room is drawn, W.alone; the doors' leaves, which hang on the
+  // station itself and not on a room, are put away with the rest and brought back as they were)
+  const W0 = { seenFrom: null, alone: null, hidden: null };
+  function setAlone(ids) {
+    if (W0.hidden) { for (const [o, v] of W0.hidden) o.visible = v; W0.hidden = null; }
+    W0.alone = ids ? new Set(ids) : null;
+    if (!W0.alone) return;
+    const zoneGroups = new Set(built.zones.map((z) => z.group));
+    W0.hidden = built.group.children.filter((o) => !zoneGroups.has(o)).map((o) => [o, o.visible]);
+    for (const [o] of W0.hidden) o.visible = false;
+  }
   function frame(dt, now, eyes = null) {
     U.time.value = now;
     resize();
     if (built.zones.length > 1) updateZones(built, W0.seenFrom || camera.position, RANGE, camera, R.portals);
+    if (W0.alone) for (const z of built.zones) z.group.visible = W0.alone.has(z.id);
     if (dust.visible) dust.userData.update(dt, camera.position);
     sky.update(dt);
     // each door opens for whoever is nearest it (the kit's doors sense one point at a time); a door in keepShut (one
@@ -174,5 +187,6 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   }
 
   return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
-    get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; } };
+    get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; },
+    get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); } };
 }

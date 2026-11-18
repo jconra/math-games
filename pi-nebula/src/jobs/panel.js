@@ -26,6 +26,11 @@
 //   a question by doing (the squares to brace: it fills ui.answers and calls ui.pick(0) when done; the order's `play`
 //   keeps keys and clicks from picking before); over() end the job's run with a card of its own ({ html, buttons }).
 //   An order may bring its picture drawn (o.lead) and coins that are pictures (c.svg).
+//   Such an object may also bring a card of its own in place of one of the level's: card() -> null, or a question
+//   ready made ({ order, level: { id, grade }, worth, misses: 0, picked: new Set(), done: false, answer(q, i, { ms,
+//   helped }) -> what engine.js answer gives }): the share of a run waiting at the smelter's controls (src/mission.js).
+//   pay: false: the job's cards pay nothing by themselves (the pilot's seat on a captain's run, whose share is the pay
+//   for all of it: src/trip.js); the level and the kinds of math hear them as ever.
 import * as E from './engine.js';
 import { helpPicture } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
@@ -40,7 +45,7 @@ export function ensureCss() {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const PANEL = { nextMs: 1350, shakeMs: 420 };
 
-export function openPanel(root, { job, crew, live = null, onClose = () => {}, onSave = () => {}, onCredits = () => {} } = {}) {
+export function openPanel(root, { job, crew, live = null, pay = true, onClose = () => {}, onSave = () => {}, onCredits = () => {} } = {}) {
   ensureCss();
   const el = document.createElement('div');
   el.className = 'pnj';
@@ -130,6 +135,10 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       const now = !!(o.facts && o.facts.live), from = o.facts && o.facts.from;
       return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>${from ? esc(from) : now ? 'The hangar, right now' : who ? `${esc(who.name)}'s load` : 'From the log'}</small></header>`;
     }
+    if (job.card === 'jump') {
+      // (the pilot's seat: on a run its top is the trip's own, with the jump's three lamps: src/trip.js head)
+      return `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Jump computer</b><small>Work out the jump</small></header>`;
+    }
     return `<header class="pnj-cardtop is-recipe"><span class="pnj-icon is-pot" aria-hidden="true"></span><b>Galley order</b><small>${who ? `from ${esc(who.name)}` : 'Recipe card'}</small></header>`;
   }
   // an order with rows of its own (the whole pay slip): the rows are the story, set out as the slip
@@ -193,8 +202,11 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       let now = null;
       const read = live ? (typeof live === 'function' ? live : live.now) : null;
       if (read) { try { now = read(); } catch (e) { console.warn('Pi Nebula: the job could not read its props', e); } }
-      q = E.deal(crew, job, { last: lastAsk, live: now });
-      lastAsk = q.order.ask_ || null;
+      // (a card the job's props bring ready made, in place of one of the level's)
+      let made = null;
+      if (own && own.card) { try { made = own.card(); } catch (e) { console.warn('Pi Nebula: the job could not bring its card', e); } }
+      q = made || E.deal(crew, job, { last: lastAsk, live: now });
+      if (!made) lastAsk = q.order.ask_ || null;
       onSave();
       helped = helpOn; t0 = performance.now();
     };
@@ -276,7 +288,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
     if (q.order.play && !q.order.played) return null;
     const btn = answers.children[i];
     if (!btn || btn.classList.contains('is-dull')) return null;
-    const r = E.answer(crew, job, q, i, { ms: performance.now() - t0, helped });
+    const r = q.answer ? q.answer(q, i, { ms: performance.now() - t0, helped }) : E.answer(crew, job, q, i, { ms: performance.now() - t0, helped, pay });
     if (!r) return null;
     onSave();
     // (a job joined to its props hears each pick: the crane operator job's crane makes the move, or shows the wrong one's path)
@@ -286,7 +298,7 @@ export function openPanel(root, { job, crew, live = null, onClose = () => {}, on
       busy = true;
       btn.classList.add('is-right');
       line.textContent = q.order.rightWhy || 'Right!'; line.className = 'pnj-line is-right';
-      fly(btn, r.pay);
+      if (r.pay) fly(btn, r.pay);
       showCredits(r.pay); onCredits(r.credits, r.pay);
       if (r.up) showLevel('Up a level!');
       else if (r.down) showLevel('A level easier for now');

@@ -79,7 +79,9 @@ function sideMarks(s) {
   return new THREE.Vector3(s.pos.x + lx * SIDE.far * k + fx * 0.6, s.pos.y, s.pos.z + lz * SIDE.far * k + fz * 0.6);
 }
 
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, crane = null, lib = null, people = () => null } = {}) {
+// hints: { [job id]: fn -> words or null }: a job's prompt line for now, in place of its own (the smelter's, while a
+// share of a run waits there: src/mission.js)
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -239,7 +241,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
         prompt.classList.toggle('is-soon', !best.job.open);
         prompt.classList.toggle('is-pair', !!alt);
         prompt.querySelector('b').textContent = best.job.sign;
-        prompt.querySelector('small').textContent = best.job.hint;
+        prompt.querySelector('small').textContent = (hints[best.job.id] && hints[best.job.id]()) || best.job.hint;
         goBtn.hidden = !best.job.open; goBtn.dataset.job = best.job.id;
         otherBtn.hidden = !alt;
         if (alt) {
@@ -294,6 +296,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   const inEyes = () => !!(at && !at.job.game && (at.job.seated || !(at.job.view && W.view(at.job.view))));
   // (a game job walks the player itself: main.js asks it how, each frame)
   const control = (dt, P) => (panel && at && at.job.game && panel.control ? panel.control(dt, P) : null);
-  const api = { update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
+  // (the rings and signs put away while a ship is out on a trip, where the station is not: src/trip.js)
+  const show = (on) => { group.visible = !!on; };
+  const api = { show, update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
   return api;
 }
