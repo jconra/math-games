@@ -38,7 +38,7 @@ import { CAPTAIN_ROWS, targetOf } from './boardpick.js';
 export const STATION_JOBS = [
   { id: 'galley', name: 'Galley kitchen', line: 'Cook up the diners\' orders', place: 'Terminal', colour: '#ffb347', hue: 'gold' },
   { id: 'medical', name: 'Triage desk', line: 'Help the patients who come in', place: 'Medical', colour: '#ff6a5a', hue: 'red' },
-  { id: 'smelter', name: 'Smelter controls', line: 'Work out what a haul of ore pays', place: 'Smelter', colour: '#ff8a3a', hue: 'orange' },
+  { id: 'smelter', name: 'Smelter controls', line: 'Work out what a load of metal sells for', place: 'Smelter', colour: '#ff8a3a', hue: 'orange' },
   { id: 'crane', name: 'Crane operator', line: 'Check the crane\'s moves', place: 'Control room', colour: '#ffd35a', hue: 'yellow' },
   { id: 'dock', name: 'Docking bridge', line: 'Build the bridge out to a ship', place: 'Dock', colour: '#59c3ff', hue: 'blue' },
   { id: 'arena', name: 'Mathball', line: 'Throw number balls into the right goals', place: 'Arena', colour: '#b98cff', hue: 'purple' },

@@ -33,7 +33,7 @@
 //     of each metal is weighed in as whole hundredths of a tonne (ten kilograms); any less than that stays in the
 //     rock. So the rock, the store and the payout all count the same exact amounts, and no rounding is ever needed.
 //   - A ROCK STANDS SO MANY HOLES: a flat one 4, a round one 5, a long one 6. After the last it crumbles and is gone.
-//   - THE STORE: the Miner's 8 canisters are one store of 6 tonnes (each holds 3/4 of a tonne). The game keeps how many
+//   - THE STORE: the Miner's 8 canisters are one store of 8 tonnes (a canister holds one tonne). The game keeps how many
 //     tonnes of each metal are aboard, every bit of it. The run is over when the store is full; metal past that stays
 //     in the rock. THE ROW OF 8 on the screen is only a picture of the store: coloured in proportion, a metal at a time
 //     (half iron, a quarter nickel and a quarter titanium shows 4, 2 and 2: rowOf).
@@ -44,12 +44,12 @@
 //     each is (ODDS): iron most, gold least. So rocks differ by themselves, and now and then one holds a lot of a dear
 //     metal; nothing says so but its glow. A rock worked is gone. Should the rocks ever run low, there are more further
 //     out (the rings do not run out).
-import { METALS, CARRIES, CAN_HOLDS, HOLD, priceOf, sellsFor, tidyStore } from './jobs/smelter.js';
+import { METALS, ORE, CARRIES, CAN_TONNES, HOLD, priceOf, sellsFor, tidyStore } from './jobs/smelter.js';
 
 export const DRILL = {
   cans: CARRIES,            // canisters, one store
   hold: HOLD,               // tonnes of metal the store holds
-  can: CAN_HOLDS[0] / CAN_HOLDS[1],   // tonnes a canister holds
+  can: CAN_TONNES,          // tonnes a canister holds: one
   field: 30,                // rocks in a field
   reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.1,                // within this of the line, all of a lump
@@ -78,11 +78,9 @@ export const KINDS = [
 // HOW COMMON EACH METAL IS in the field's rocks (of 100 tonnes of ore): the dearer, the rarer
 export const ODDS = { iron: 48, nickel: 25, copper: 14, cobalt: 7, titanium: 4, gold: 2 };
 export const NAMES = METALS.map((m) => m.name);
-// each metal's glow (the game's maker's picture: gold amber, copper teal) and its symbol
-export const ORE = {
-  iron: { sym: 'Fe', glow: '#ff4a36' }, nickel: { sym: 'Ni', glow: '#a4f36a' }, copper: { sym: 'Cu', glow: '#2fe3cf' },
-  cobalt: { sym: 'Co', glow: '#5a8cff' }, titanium: { sym: 'Ti', glow: '#d6ccff' }, gold: { sym: 'Au', glow: '#ffc233' },
-};
+// each metal's glow (the game's maker's picture: gold amber, copper teal) and its symbol: kept with the one list of
+// the metals (src/jobs/smelter.js ORE), handed on here
+export { ORE };
 export const metalOf = (name) => METALS.find((m) => m.name === name) || METALS[0];
 
 // a random number maker from a seed (the same field again for the same seed: the tests, the lab's "the same field")
@@ -265,7 +263,7 @@ export function rowCount(ore) {
 //   R.pick(id) -> the rock (look -> ask);  R.asked() (ask -> drill: the question is over, however it was answered)
 //   R.drill(dir) -> what drillHole gives, with { aboard, full, done } (the rock crumbled or the store full: on to
 //                   'look' or 'full' by itself);  R.letGo() the rock let go early (ask or drill -> look)
-//   R.ore (the store: tonnes of each metal, every bit), R.aboard (tonnes in all, 0 .. 6), R.full (canisters' worth
+//   R.ore (the store: tonnes of each metal, every bit), R.aboard (tonnes in all, 0 .. 8), R.full (canisters' worth
 //   aboard, 0 .. 8), R.store() (the store to the hundredth of a tonne), R.row() (the row's picture of it), R.sells()
 //   (what the store would sell for now), R.rocks (the field), R.held, R.stats { rocks, holes, bare }
 export function makeRun({ rand = Math.random } = {}) {

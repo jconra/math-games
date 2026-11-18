@@ -88,6 +88,21 @@
 .pnj-chart div { display: contents; }
 .pnj-chart dt { color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; padding-top: 2px; }
 .pnj-chart dd { margin: 0; color: var(--ink); }
+/* a chart beside the story (the smelter's: what each metal sells for, the mining run's own chart: src/pricechart.js):
+   dark, each metal's dot in its colour */
+.pnj-beside { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; margin: 0 0 8px; }
+.pnj-beside .pnj-story, .pnj-beside .pnj-chart.is-slip { margin-bottom: 0; }
+.pnj-beside .pnj-chart.is-slip dd { white-space: nowrap; }
+.pnj-prices { display: grid; grid-template-columns: auto auto; column-gap: 12px; row-gap: 1px; align-items: baseline; padding: 7px 10px 8px; font-size: 13.5px; color: #dfe6ee;
+  background: rgba(6, 10, 15, 0.82); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.3); border-radius: 4px; }
+.pnj-prices small { grid-column: 1 / -1; margin-bottom: 3px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.pnj-prices span { white-space: nowrap; }
+.pnj-prices b { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pnj-prices i, .pnj-coinrows i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--c); box-shadow: 0 0 6px var(--c); }
+@media (max-width: 640px) {
+  .pnj-beside { gap: 8px; } .pnj-prices { font-size: 12.5px; column-gap: 7px; padding: 6px 7px 7px; }
+  .pnj-beside .pnj-chart.is-slip { font-size: 14.5px; gap: 4px 8px; } .pnj-beside .pnj-chart.is-slip dt { font-size: 10.5px; letter-spacing: 0.04em; }
+}
 .pnj-story { margin: 0 0 8px; font-size: 17px; line-height: 1.4; }
 .pnj-ask { margin: 0; font-size: 18px; font-weight: 700; color: #ffd29e; }
 
@@ -112,6 +127,11 @@
 .pnj-coin.is-right small { color: #e9fff2; }
 @keyframes pnj-pop { 50% { transform: scale(1.06); } }
 .pnj-answers.is-wide .pnj-coin b { font-size: 19px; }
+/* an answer that is a set of numbers (how much of each metal): a row for each, the metal's name and its number */
+.pnj-coinrows { display: grid; grid-template-columns: auto auto; column-gap: 12px; row-gap: 1px; align-items: baseline; justify-content: center; text-align: left; font-size: 14.5px; }
+.pnj-coinrows span { white-space: nowrap; color: var(--ink); text-transform: capitalize; }
+.pnj-answers.is-sets .pnj-coin .pnj-coinrows b { font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+.pnj-answers.is-sets .pnj-coin { padding: 8px 8px 6px; }
 
 /* (never squeezed: its min-height let a full panel shrink it to one line, and a second line of why ran on under the
    foot's Levels and Help; now the panel scrolls instead) */

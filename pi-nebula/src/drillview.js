@@ -58,7 +58,8 @@ import * as MB from '../kit/ships/miner-built.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as SCAN } from './jobs/drill.js';
 import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, rowOf, scanOf, rockSells } from './drill.js';
-import { METALS, sellsFor, lotsWords, tonnesWords } from './jobs/smelter.js';
+import { sellsFor, lotsWords, tonnesWords } from './jobs/smelter.js';
+import { priceChart } from './pricechart.js';
 import { DIR } from '../world/sky.js';
 
 // FLYING BY HAND (the game's maker: "If you want to fly and you signed up to be a pilot, you can click a button to fly
@@ -457,7 +458,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const el = document.createElement('div'); el.className = 'pdr' + (lab ? ' is-lab' : '');
   el.innerHTML = `<div class="pdr-touch"></div><div class="pdr-reads"></div><div class="pdr-eye" hidden><i></i></div>
     <div class="pdr-side"><div class="pdr-box pdr-cans"><small>Canisters full</small><b></b><div class="pdr-row">${'<i></i>'.repeat(DRILL.cans)}</div><p class="pdr-store"></p></div>
-      <div class="pdr-box pdr-chart"><small>A tonne sells for</small>${METALS.map((m) => `<span><i style="--c: ${(ORE[m.name] || ORE.copper).glow}"></i>${esc(cap(m.name))}</span><b>${say(m.price)}</b>`).join('')}</div>
+      <div class="pdr-box pdr-chart">${priceChart()}</div>
       <div class="pdr-box pdr-holes" hidden><b></b><span></span></div></div>
     <div class="pdr-big" hidden></div><div class="pdr-hint"></div>
     <button type="button" class="pdr-btn pdr-scan" hidden>Scan this rock<kbd>S</kbd></button><button type="button" class="pdr-btn pdr-done" hidden>Done with this rock</button>

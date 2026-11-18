@@ -63,7 +63,7 @@ import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
 import { POD } from '../kit/ships/miner-built.hull.js';
 import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
-import { haulOf } from './jobs/smelter.js';
+import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 
 export const RULES = {
@@ -118,7 +118,7 @@ export function makeCrane({ W, walls, boarding = null }) {
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
   const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; } };
-  const oreOf = () => haulOf(L.round).fill / 10;   // (tonnes in a full canister of this haul, ore and slag together: the haul's own, src/jobs/smelter.js)
+  const oreOf = () => CAN_TONNES;   // (tonnes of metal in a full canister: one, src/jobs/smelter.js; it only weighs on the hook, nothing asks about it)
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
 
   // ── the Miner, for its landing: its own room (drawn with the hangar), the leaves that are its alone, its legs ──

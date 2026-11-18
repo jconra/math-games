@@ -272,7 +272,10 @@ export function register(job) {
 // ── a job's own makers: the same order shape as Mathwood's counter (src/math/counter.js counterOrder) ─────────────
 // core = { key, story, ask, right: Face, slips: [Face & { slip, why }], pic, rightWhy, sum, help, own: { strand, at } }
 // and, where a job wants them: picFirst (its picture is on the card from the start: the things to count ARE the
-// question), lines (the card's own lines for the story, [[label, value], ...]: a pay slip's rows)
+// question), lines (the card's own lines for the story, [[label, value], ...]: a pay slip's rows), chart (a chart
+// beside the story: { title, rows: [[name, price], ...] }, the smelter's price list). An answer's face may be a SET of
+// numbers, one to a row (`rows`: [[name, number], ...], the smelter's "how much of each metal"): its `big` is the
+// same numbers in a line, for anything that reads the face as words.
 export function ownOrder(core, rand = Math.random, coins = 4) {
   const t = tools(rand);
   const seen = new Set([String(core.right.v)]), wrong = [];
@@ -280,16 +283,16 @@ export function ownOrder(core, rand = Math.random, coins = 4) {
     if (!s || wrong.length >= coins - 1) continue;
     if (s.v == null || seen.has(String(s.v)) || !(typeof s.v !== 'number' || s.v > 0)) continue;
     seen.add(String(s.v));
-    wrong.push({ v: s.v, big: s.big, small: s.small || '', label: s.label, good: false, slip: s.slip || null, why: s.why || '', ...(s.svg ? { svg: s.svg } : {}) });
+    wrong.push({ v: s.v, big: s.big, small: s.small || '', label: s.label, good: false, slip: s.slip || null, why: s.why || '', ...(s.svg ? { svg: s.svg } : {}), ...(s.rows ? { rows: s.rows } : {}) });
   }
   const R = core.right;
   // (an answer may be a picture: its face's svg goes on the button, the dock's panes, the pilot's maps)
-  const all = t.shuffle([{ v: R.v, big: R.big, small: R.small || '', label: R.label, good: true, slip: null, why: '', ...(R.svg ? { svg: R.svg } : {}) }, ...wrong]);
+  const all = t.shuffle([{ v: R.v, big: R.big, small: R.small || '', label: R.label, good: true, slip: null, why: '', ...(R.svg ? { svg: R.svg } : {}), ...(R.rows ? { rows: R.rows } : {}) }, ...wrong]);
   return {
     id: Math.floor(rand() * 1e9).toString(36), key: core.key, story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`,
     coins: all, answer: R.label, pic: core.pic || null, picFirst: !!core.picFirst, rightWhy: core.rightWhy, sum: core.sum ? sumOf(core.sum) : null,
     help: core.help || null, own: core.own, credit: core.credit || [], facts: core.facts || null, size: core.size || 1, lines: core.lines || null,
-    ...(core.lead ? { lead: core.lead } : {}), ...(core.tap ? { tap: core.tap } : {}),
+    ...(core.lead ? { lead: core.lead } : {}), ...(core.tap ? { tap: core.tap } : {}), ...(core.chart ? { chart: core.chart } : {}),
   };
 }
 

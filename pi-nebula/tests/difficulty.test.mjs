@@ -28,7 +28,9 @@ test('a crew member\'s starting difficulty: Easy at each job\'s first level; Med
     assert.equal(at('easy'), ids(J)[0], `${J.id}: Easy`);
     assert.equal(at('medium'), want[J.id][0], `${J.id}: Medium`);
     assert.equal(at('hard'), want[J.id][1], `${J.id}: Hard`);
-    assert.ok(ids(J).indexOf(want[J.id][1]) >= ids(J).length - 5, `${J.id}: Hard is near the top of the ladder`);
+    // (the smelter's ladder has the pay's own rungs above Hard's: how much of each metal, what a metal sells for, the
+    // total sale price in its two steps, the whole pay slip)
+    assert.ok(ids(J).indexOf(want[J.id][1]) >= ids(J).length - 6, `${J.id}: Hard is near the top of the ladder`);
   }
   // a crew member saved before, with an age, keeps the age's start
   assert.equal(E.deal(crewOf({ age: 15 }), galley, { rand: seeded(3), now: T0 }).level.id, 'bigger');

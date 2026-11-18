@@ -8,7 +8,7 @@ import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
 import { missions, ROLES, MISSIONS, CARDS } from '../src/missions.js';
 import { JOB as pilot, pickAsk, plotJudge } from '../src/jobs/pilot.js';
-import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, priceOf, CARRIES, LOADS, METALS, CHART, PRICE_TIMES, HOLD } from '../src/jobs/smelter.js';
+import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, aboutStore, priceOf, CARRIES, METALS, CHART, PRICE_TIMES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
 import { crewLoad, seeded as seed } from '../src/drill.js';
 import { helpPicture, navMap, mapSpot, PALE, NIGHT } from '../src/jobs/pics.js';
 import { CAPTAINS } from '../src/lines.js';
@@ -92,7 +92,9 @@ test('the mission\'s steps: out, the jump, the field, the jump home, home; a pil
 
 // ── the haul and the money ───────────────────────────────────────────────────────────────────────────────────────
 // (three loads to try: the game's maker's own example, a load of one metal, and one of odd amounts)
-const LOADS3 = [{ iron: 3, nickel: 1.5, titanium: 1.5 }, { copper: 6 }, { iron: 2.37, nickel: 0.82, cobalt: 1.4, gold: 0.41, copper: 1 }];
+// (three full loads of the Miner's eight tonnes: the game's maker's own example, 50% iron, 25% nickel, 25% titanium;
+// one metal; and a mixed one to the hundredth of a tonne)
+const LOADS3 = [{ iron: 4, nickel: 2, titanium: 2 }, { copper: 8 }, { iron: 3.16, nickel: 1.09, cobalt: 1.87, gold: 0.55, copper: 1.33 }];
 const ROLE_MIXES = [['pilot'], ['drill'], ['engineer'], ['pilot', 'drill'], ['pilot', 'engineer'], ['drill', 'engineer'], ['pilot', 'drill', 'engineer']];
 
 test('one price list: the game\'s maker\'s chart, every price the same number of times it', () => {
@@ -105,14 +107,16 @@ test('one price list: the game\'s maker\'s chart, every price the same number of
   for (const m of METALS) assert.ok(Number.isInteger(m.price / 100), m.name);
   // there is no other list: nothing else in the smelter's file or the missions' prices anything
   for (const gone of ['ORE_PRICE', 'ORE_SELLS', 'RICH_METAL']) assert.ok(!(gone in (smelterAll)), gone);
+  // one canister holds one tonne, so the list is a canister's price too; the canister of 3/4 of a tonne is gone
+  assert.equal(CAN_TONNES, 1); for (const gone of ['CAN_HOLDS', 'LOADS']) assert.ok(!(gone in (smelterAll)), gone);
 });
 
 test('the pay is the plain sum: each metal\'s tonnes times what a tonne of it sells for, added up; and each mix of jobs its share of that', () => {
-  assert.equal(HOLD, 6);
-  const want = [19500, 24000, 21480];
+  assert.equal(HOLD, 8);
+  const want = [26000, 32000, 28660];
   LOADS3.forEach((store, i) => {
     const S = sellsFor(store), plain = Object.entries(store).reduce((a, [m, t]) => a + t * CHART[m] * PRICE_TIMES, 0);
-    assert.ok(near(S.pay, plain)); assert.equal(S.pay, want[i]); assert.equal(S.tonnes, 6);
+    assert.ok(near(S.pay, plain)); assert.equal(S.pay, want[i]); assert.equal(S.tonnes, 8);
     assert.deepEqual(S.lots.map((L) => [L.metal.name, L.tonnes, L.price, L.pay]).sort(), Object.entries(store).map(([m, t]) => [m, t, priceOf(m), Math.round(t * priceOf(m))]).sort());
     for (let k = 1; k < S.lots.length; k++) assert.ok(S.lots[k].tonnes <= S.lots[k - 1].tonnes, 'the most tonnes first');
     for (const roles of ROLE_MIXES) {
@@ -124,20 +128,25 @@ test('the pay is the plain sum: each metal\'s tonnes times what a tonne of it se
     assert.equal(MS.forecast({ store, roles: MINING.roles }).pay, plain / 2);
   });
   // what the three loads pay each mix of jobs (the notes' table)
-  assert.deepEqual(ROLE_MIXES.map((r) => MS.forecast({ store: LOADS3[0], roles: r }).pay), [1950, 3900, 3900, 5850, 5850, 7800, 9750]);
+  assert.deepEqual(ROLE_MIXES.map((r) => MS.forecast({ store: LOADS3[0], roles: r }).pay), [2600, 5200, 5200, 7800, 7800, 10400, 13000]);
   // an empty store sells for nothing; a metal the smelter does not pour is not in it
   assert.equal(sellsFor({}).pay, 0); assert.deepEqual(sellsFor({ cheese: 2, iron: 1 }).lots.map((L) => L.metal.name), ['iron']);
 });
 
-test('the money is the size the game\'s maker asked: an ordinary mixed load 17,000 to 20,000, about 2,000 for the pilot, 8,500 to 10,000 for all three jobs', () => {
+test('the money as it is now: an ordinary mixed load of eight tonnes sells for 24,000 to 27,500, about 2,600 for the pilot, 12,000 to 13,750 for all three jobs', () => {
+  // The prices are the game's maker's own and are not changed here. His sums (2026-11-17) were for a load of six
+  // tonnes: about 17,000 to 20,000, the pilot's tenth about 2,000, all three jobs 8,500 to 10,000. A canister holds a
+  // whole tonne now, so the same rocks at the same prices fill a store a third bigger and a load sells for about a
+  // third more. Whether the prices should come down for it is his to say (src/jobs/smelter.js PRICE_TIMES: "If they
+  // make too much money then reduce the sell price").
   // (an ordinary load: what the captain's own driller brings home, working the nearest rocks of many fields)
   let sum = 0; const N = 300;
   for (let s = 1; s <= N; s++) sum += sellsFor(crewLoad(seed(s))).pay;
   const sold = sum / N;
-  assert.ok(sold >= 17000 && sold <= 20000, `an ordinary load sells for ${Math.round(sold)}`);
-  assert.ok(Math.abs(sold * 0.1 - 2000) < 300, `the pilot's tenth: ${Math.round(sold * 0.1)}`);
-  assert.ok(sold * 0.2 >= 3400 && sold * 0.2 <= 4000, `the drill's fifth: ${Math.round(sold * 0.2)}`);
-  assert.ok(sold * 0.5 >= 8300 && sold * 0.5 <= 10000, `all three jobs: ${Math.round(sold * 0.5)}`);
+  assert.ok(sold >= 24000 && sold <= 27500, `an ordinary load sells for ${Math.round(sold)}`);
+  assert.ok(Math.abs(sold * 0.1 - 2600) < 300, `the pilot's tenth: ${Math.round(sold * 0.1)}`);
+  assert.ok(sold * 0.2 >= 4800 && sold * 0.2 <= 5500, `the drill's fifth: ${Math.round(sold * 0.2)}`);
+  assert.ok(sold * 0.5 >= 12000 && sold * 0.5 <= 13750, `all three jobs: ${Math.round(sold * 0.5)}`);
 });
 
 test('no answer changes the haul: what comes home is the store, whatever the lamps showed and whatever was answered', () => {
@@ -150,42 +159,41 @@ test('no answer changes the haul: what comes home is the store, whatever the lam
     const crew = crewOf(); MS.sign(crew, 'mining', ['pilot', 'drill']); flownHaul(9, null);
     const P = MS.land(crew, { n: 9, store, now: 5, ...extra }); pays.push(JSON.stringify(P));
     assert.deepEqual(Object.keys(P).sort(), ['at', 'canisters', 'lots', 'n', 'pay', 'share', 'sold', 'tonnes']);
-    assert.equal(P.sold, 21480); assert.equal(P.pay, 6444);
+    assert.equal(P.sold, 28660); assert.equal(P.pay, 8598);
   }
   assert.equal(new Set(pays).size, 1); flownHaul(9, null);
 });
 
-test('a haul the player went out for is one haul on every slip: its store, its canisters\' weight, what it sells for', () => {
+test('a haul the player went out for is one haul on every slip: its store, eight tonnes in the eight canisters, what it sells for', () => {
   const rand = seeded(5), M = smelter.makers;
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,
     steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 } });
   for (let n = 1; n <= 40; n++) for (const store of LOADS3) {
     forget(); flownHaul(n, null);
-    const before = haulOf(n);
+    assert.equal(haulOf(n).flown, false);
     const crew = crewOf(); MS.sign(crew, 'mining', ['pilot']);
     const P = MS.land(crew, { n, store, now: 5 }), H = haulOf(n), S = sellsFor(store);
     assert.equal(H.flown, true); assert.equal(H.n, n); assert.equal(H.canisters, CARRIES); assert.deepEqual(H.store, store);
-    // every canister holds 3/4 of a tonne of metal, six tonnes in all; no yield: it sells by the tonne of metal
-    assert.deepEqual(H.ore, { n: 3, d: 4 }); assert.equal(H.oreTonnes, 6); assert.equal(H.tonnes, 6); assert.equal(H.yield, null); assert.equal(H.metal10, null);
-    // its canisters weigh the haul's own weight or the next heavy enough to hold their metal and a tenth of a tonne of slag
-    assert.ok(LOADS.includes(H.fill) && 0.75 <= H.fill / 10 - 0.1 + 1e-9, `haul ${n}: 3/4 in ${H.fill / 10}`);
-    if (before.fill / 10 - 0.1 >= 0.75 - 1e-9) assert.equal(H.fill, before.fill);
-    assert.equal(H.pay, S.pay); assert.equal(H.metal.name, S.lots[0].metal.name, 'named by the metal there is most of');
+    // eight tonnes in all, a tonne to a canister; nothing of it is anything but metal, and all of it is sold
+    assert.equal(H.tonnes, 8); assert.equal(H.tonnes, H.canisters * CAN_TONNES); assert.equal(H.pay, S.pay); assert.deepEqual(H.lots, S.lots);
+    assert.deepEqual(Object.keys(H).sort(), ['canisters', 'flown', 'lots', 'n', 'pay', 'store', 'tonnes']);
     // the payout is that haul's: what it sold for, the pilot's tenth
-    assert.deepEqual(P, { n, canisters: CARRIES, tonnes: 6, lots: S.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: S.pay, share: 10, pay: S.pay / 10, at: 5 });
+    assert.deepEqual(P, { n, canisters: CARRIES, tonnes: 8, lots: S.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: S.pay, share: 10, pay: S.pay / 10, at: 5 });
     assert.deepEqual([P.sold, P.share, P.pay], [MS.forecast({ store }).sold, 10, MS.forecast({ store }).pay]);
     if (n % 7) { flownHaul(n, null); continue; }
-    // ... and the smelter's own slips about that haul say the same
-    const ore = M.ore.make(1, { rand, live: live(n) }), load = M.weigh.make(2, { rand, live: { ...live(n), docked: [], fullOnShip: 0, phase: 'load' } });
-    assert.equal(ore.facts.kind, 'haul'); assert.equal(ore.facts.from, 'This haul'); assert.equal(rightOf(ore), 6); assert.ok(ore.story.includes('3/4 of a tonne of metal in each'), ore.story);
-    let sum = 0; for (let k = 0; k < S.lots.length; k++) { const pay = M.pay.make(2, { rand, live: live(n) }); assert.equal(pay.facts.from, 'This haul'); assert.ok(pay.facts.lot, pay.story); sum += rightOf(pay); assert.ok(pay.story.includes(`${priceOf(pay.facts.metal).toLocaleString('en-US')} credits a tonne`), pay.story); }
-    assert.ok(near(sum, P.sold), `the slips add up to ${sum}, the payout says ${P.sold}`);
-    assert.equal(load.facts.kind, 'load'); assert.equal(load.facts.w, H.fill); assert.equal(load.facts.from, 'This haul');
+    // ... and the smelter's own slips about that haul say the same: its amounts (told round where they are not), each
+    // at its price on the chart, added up; a store of whole tonnes is told exactly, and its slip's answer is the payout's
+    const told = aboutStore(store, 1), pay = M.pay.make(2, { rand, live: live(n) });
+    assert.equal(pay.facts.from, 'Your crew\'s haul'); assert.equal(pay.facts.mine, true); assert.equal(pay.facts.sold, P.sold);
+    assert.equal(rightOf(pay), told.reduce((a, x) => a + x.tonnes * x.metal.price, 0)); assert.equal(pay.facts.about, !told.exact);
+    if (told.exact) { assert.equal(rightOf(pay), P.sold, pay.story); assert.ok(!/about/i.test(`${pay.story} ${pay.ask}`), pay.story); }
+    else assert.ok(/about/.test(pay.story) && pay.rightWhy.includes(`${P.sold.toLocaleString('en-US')} credits`), pay.story);
+    assert.ok(/Your crew came home with/.test(pay.story) && !/canister|3\/4/.test(pay.story), pay.story);
     flownHaul(n, null);
   }
   forget();
-  // a haul nobody the player knows flew is as it was: one metal's ore, its yield
-  assert.equal(flownHaul(3), null); assert.equal(haulOf(3).flown, false); assert.ok(haulOf(3).yield > 0);
+  // a haul nobody the player knows flew is one of the Miner's own: whole canisters of each metal, in quarters of the load
+  assert.equal(flownHaul(3), null); assert.equal(haulOf(3).flown, false); assert.equal(haulOf(3).tonnes, 8);
   assert.throws(() => flownHaul(3, { store: {} }), /its store/); assert.throws(() => flownHaul(3, { ore: [3, 4] }), /its store/);
 });
 

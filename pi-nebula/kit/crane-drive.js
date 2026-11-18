@@ -29,7 +29,7 @@
 //     site      kit/crane.js's site (site.rail: where the hook may go; site.dims: the parts' sizes)
 //     state     a snapshot (crane-plan.js stateAt), changed in place from now on (kit/crane.js poses it)
 //     world     { solid(x, y, z): true inside what stands still, eyes: [{ x, y, z }] where people's feet are }
-//     opts      { speed (SPEED), ore(c): tonnes of ore a full canister c holds, people: the autopilot's rule }
+//     opts      { speed (SPEED), ore(c): tonnes of metal a full canister c holds (one), people: the autopilot's rule }
 //   D.step(dt, cmd)     cmd = { move: [x, z] (a push in the station's plane, length up to 1), hoist: -1..1 (up +),
 //                       turn: -1..1 (the cradle, + turns it from +z toward +x) }. Ignored while the autopilot has
 //                       steps. D.notes: what it would not do just now and why ([{ key, text }])
@@ -67,7 +67,7 @@ export function makeDrive(site, state, world = {}, opts = {}) {
   const S = state, sp = opts.speed || SPEED, d = site.dims, R = d.R, half = site.can.half, lift = site.can.lift || 0;
   const M = site.mounts, K = site.sockets, B = site.bays, G = d.grip, A = d.arc, armR = A.r + A.tube;
   const seat = site.can.seat, clear = site.can.clear;
-  const oreOf = opts.ore || (() => 1.2);
+  const oreOf = opts.ore || (() => 1);
   const KIN = { x: sp.bridge, z: sp.trolley, hoist: sp.hoist, yaw: sp.turn };
   let held = S.cans.findIndex((q) => q.where === 'held');
   const vel = { x: 0, z: 0, hoist: 0, yaw: 0 };

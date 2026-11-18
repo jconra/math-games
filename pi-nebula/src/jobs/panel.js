@@ -5,10 +5,12 @@
 //                    a thin bar for the right answers toward the next level, "Kept ·" and no bar when the level is kept;
 //                    the arrows stop at the levels chosen), and "Done" (Esc)
 //   the card         the job's scene (a recipe card in the galley, a patient chart at the triage desk, a pay slip at
-//                    the smelter: its rows in place of the story where the order has them), the story and the
+//                    the smelter: its rows in place of the story where the order has them, and beside them the
+//                    chart of what each metal sells for where the order has one), the story and the
 //                    question, and for the youngest the things to count drawn on it
-//   the answers      four buttons, each the number big and its unit small under it. No key numbers on them (keys 1 to
-//                    4 still pick). A wrong pick shakes and goes dull with one plain line why, and the Help button
+//   the answers      four buttons, each the number big and its unit small under it (an answer that is a set of
+//                    numbers, the smelter's "how much of each metal": a row for each, its name and its number). No
+//                    key numbers on them (keys 1 to 4 still pick). A wrong pick shakes and goes dull with one plain line why, and the Help button
 //                    glows; a right one lights up, its credits fly to the count, and the next card slides in by itself
 //                    (no result screen, nothing to press)
 //   Help             always one click away (key H): the picture for THIS question (Mathwood's drawings), one line on
@@ -41,6 +43,7 @@ import { helpPicture, navMap, mapSpot } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
 import { workOf, sumWords } from '../../../mathwood-valley/src/math/longwork.js';
 import { openJobLevels } from '../ui/levels.js';
+import { priceChart, metalDot } from '../pricechart.js';
 
 const CSS = new URL('./jobs.css', import.meta.url).href;
 export function ensureCss() {
@@ -157,12 +160,15 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     // answered by a tap has its map)
     const lead = o.tap ? navMap({ ...o.tap.map, dark }) : o.lead || (pic && pic.svg) || '';
     el.dataset.key = o.key || '';   // (which maker made the card: a job's props may draw for it, the crane game's grid)
+    // (a chart beside the story: what each metal sells for, at the smelter's controls)
     card.innerHTML = `${sceneHtml(o)}
-      ${storyHtml(o)}
+      ${o.chart ? `<div class="pnj-beside"><div>${storyHtml(o)}</div><div class="pnj-prices">${priceChart(o.chart)}</div></div>` : storyHtml(o)}
       ${lead ? `<div class="pnj-pic is-lead${o.tap ? ' is-tap' : ''}${pic && pic.flip && !o.lead ? ' is-flip' : ''}">${lead}</div>` : ''}
       <p class="pnj-ask">${esc(o.ask)}</p>`;
     answers.innerHTML = '';
-    answers.classList.toggle('is-wide', o.coins.some((c) => String(c.big).length > 7));
+    answers.classList.toggle('is-wide', o.coins.some((c) => !c.rows && String(c.big).length > 7));
+    // (answers that are sets of numbers: a row for each, the name and the number)
+    answers.classList.toggle('is-sets', o.coins.some((c) => c.rows));
     // (answers that are pictures, the panes the dock offers: the picture on the button, its words for a screen reader)
     answers.classList.toggle('is-pics', o.coins.some((c) => c.svg));
     answers.classList.toggle('is-tap', !!o.tap);
@@ -170,7 +176,9 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'pnj-coin'; b.dataset.i = String(i);
       b.setAttribute('aria-label', c.label);
-      b.innerHTML = c.svg ? `<span class="pnj-coinpic">${c.svg}</span>` : `<b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}`;
+      b.innerHTML = c.svg ? `<span class="pnj-coinpic">${c.svg}</span>`
+        : c.rows ? `<span class="pnj-coinrows">${c.rows.map(([name, n]) => `<span>${metalDot(name)}${esc(name)}</span><b>${esc(n)}</b>`).join('')}</span>${c.small ? `<small>${esc(c.small)}</small>` : ''}`
+          : `<b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}`;
       b.addEventListener('click', () => pick(i));
       answers.appendChild(b);
     });
@@ -278,7 +286,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     const put = () => {
       card.classList.remove('is-done', 'is-out');
       card.innerHTML = end.html;
-      answers.innerHTML = ''; answers.classList.remove('is-waiting', 'is-wide', 'is-pics');
+      answers.innerHTML = ''; answers.classList.remove('is-waiting', 'is-wide', 'is-pics', 'is-sets');
       for (const B of end.buttons || []) {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'pnj-coin pnj-endbtn' + (B.again ? ' is-again' : '');

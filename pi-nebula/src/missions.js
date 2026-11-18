@@ -23,8 +23,8 @@
 // THE MONEY (the game's maker, 2026-11-18: "It's as simple as add up what they came back with and multiply each type
 // of metal with what it is worth and that's what you get paid"). What comes home is a STORE: so many tonnes of each
 // metal (src/drill.js: the crew member's own drilling, or the captain's own driller working the same field by the
-// same rules). It sells for each metal's tonnes times what a tonne of it sells for, added up (src/jobs/smelter.js
-// sellsFor, the one price list). The crew member's pay is their roles' shares of that, added up: the pilot's 10% of
+// same rules: eight tonnes in the Miner's eight canisters, a tonne to a canister). It sells for each metal's tonnes
+// times what a tonne of it sells for, added up (src/jobs/smelter.js sellsFor, the one price list). The crew member's pay is their roles' shares of that, added up: the pilot's 10% of
 // an 18,000 credit haul is 1,800 credits. NOTHING ELSE ENTERS IT: no answer to any card changes what comes home or
 // what it sells for. The jump's three lamps only show where the pilot is in the jump (green for a card right at the
 // first pick, amber after a miss). The cards on a run are not paid one by one: the share is the pay for all the work
@@ -201,7 +201,8 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
     const side = grade < 6, n = side ? P.canisters / 2 : P.canisters;
     return done(ownOrder({
       key: `payout:count:${side ? 'side' : 'all'}`,
-      story: `${home}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
+      // (a question is told in canisters or in tonnes, never both: this one counts canisters, so its story does too)
+      story: `Your crew is home with its canisters full. The haul sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
       ask: side ? 'How many canisters are on this side of the Miner?' : 'How many canisters did your crew bring home?',
       right: N(n, CAN),
       slips: [

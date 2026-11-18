@@ -58,7 +58,8 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   el.className = 'pmc'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', `${captain}'s contract`);
   root.appendChild(el);
   function draw() {
-    const share = shareOf([...mine]), sample = 18000;
+    // (the example: an ordinary load of the Miner's eight tonnes, the game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000)
+    const share = shareOf([...mine]), sample = 24000;
     el.innerHTML = `<section class="pmc-card">
       <header class="pmc-top"><b>${esc(M.name)}</b><small>${esc(captain)}'s contract</small></header>
       <p class="pmc-what">The Miner flies out to the rocks, fills its 8 canisters with ore and comes home. Each job on the run earns a share of what the haul sells for.</p>
