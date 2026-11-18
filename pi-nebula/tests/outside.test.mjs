@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsidePlans, outsideGear, outsideMarks, flatsOf, MASSES, PADS, PYRAMIDS, RAISED, MID, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
+import { outsidePlans, outsideGear, outsideMarks, flatsOf, MASSES, PADS, PAD_DOOR, PAD_DOORS, PYRAMIDS, RAISED, MID, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
 import { hullArrays, mergeHulls } from '../kit/hull-plates.js';
 import { STATION_LOOK, HULL_LOOKS, plateSizes } from '../kit/hull-look.js';
 
@@ -40,7 +40,7 @@ test('outside: the plan is sound in every look (whole numbers of triangles, noth
     }
     for (const [x, y, z] of points(A)) assert.ok(x >= OUTSIDE_BOX.min[0] && x <= OUTSIDE_BOX.max[0] && y >= OUTSIDE_BOX.min[1] && y <= OUTSIDE_BOX.max[1] && z >= OUTSIDE_BOX.min[2] && z <= OUTSIDE_BOX.max[2], `a plate at ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`);
   }
-  assert.equal(outsidePlans().length, 13);   // (the body, three masses, two pads, two pyramids, the spire, the keel, the west rooms, two decks)
+  assert.equal(outsidePlans().length, 11);   // (the body, three masses, two pyramids, the spire, the keel, the west rooms, two decks)
 });
 
 test('outside: it goes round the REAL rooms: every room is under the hull, and the hangar doors are where the rooms have them', () => {
@@ -139,7 +139,17 @@ test('outside: the roof as his drawing: one raised level, a landing pad in each 
   PADS.forEach((pad, i) => {
     const [z0, z1] = RAISED.bays[i];
     assert.ok(pad.path.every((p) => !inPoly(P, p[0], p[1]) && p[1] > z0 && p[1] < z1 && p[0] > RAISED.bay && inPoly(BODY_PATH, p[0], p[1])), pad.name + ' is in its bay');
-    assert.ok(pad.tall <= 1 && area(pad.path) >= 150, 'a low pad big enough to land on');
+    assert.ok(pad.tall <= 0.5 && area(pad.path) >= 380, 'a pad lying on the roof, big enough for the game\'s ships (16 to 20 m long)');
+    assert.ok(pad.ring <= pad.square * 0.55, 'the circle well inside the square');
+    assert.ok(!outsidePlans().some((pl) => pl.name === pad.name), 'no plated platform under it');
+  });
+  // a doorway to each pad, in the middle arm's side wall facing it, big enough for a person with room to spare
+  assert.equal(PAD_DOORS.length, 2); assert.ok(PAD_DOOR.h >= 2.1 && PAD_DOOR.w >= 1.2 && PAD_DOOR.foot + PAD_DOOR.h < RAISED.to - RAISED.bevel);
+  PAD_DOORS.forEach((d, i) => {
+    const pad = PADS[d.pad], zs = pad.path.map((q) => q[1]), xs = pad.path.map((q) => q[0]);
+    assert.ok(inPoly(P, d.x, d.z - d.out * 0.5) && !inPoly(P, d.x, d.z + d.out * 0.5), 'in a wall of the raised level, facing out');
+    assert.ok(Math.abs(d.z - SPIRE.z) < 20 && d.x > Math.min(...xs) && d.x < Math.max(...xs) && (d.out > 0 ? Math.min(...zs) - d.z : d.z - Math.max(...zs)) < 2.5, 'on the middle arm, right beside its pad');
+    assert.ok(Math.abs(PAD_DOORS[1 - i].z - (2 * MID - d.z)) < 1e-6 && PAD_DOORS[1 - i].x === d.x, 'the two doorways mirror each other');
   });
   // two pyramids, one on each end arm; a mirrored pair; each comes to a small flat top
   assert.equal(PYRAMIDS.length, 2);

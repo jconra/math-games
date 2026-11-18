@@ -20,7 +20,13 @@
 //   2026-11-18  (with a drawing over the roof seen from above: one red outline, two green squares, two yellow crossed
 //               squares) "Can we make the roof look like this? With the red being the raised level and the green
 //               being 2 landing pads. The yellow is just some pyramid type structure" and "I meant to draw it
-//               symmetrical btw, just using the mouse to draw"
+//               symmetrical btw, just using the mouse to draw"; then "Can you put down a dark square with yellow
+//               boundary and a circle inside on those exterior landing pads" and "It would be good to have some
+//               doorways going to the landing pads also", with a door sketched on the middle arm's side wall
+//               beside a pad, toward the back ("Maybe a door like this"); and of the circle: "maybe it can be a
+//               bit smaller and have the lines between the lights"; "The doors look a bit small, are they human
+//               size?"; "Can you slap some mottling texture on that landing pad? It looks way to clean and basic.It
+//               also looks a bit too raised. Can you just remove the hull plates it sits on and lower it?"
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -129,22 +135,31 @@ const spirePath = boxPath(SPIRE.x - 5, SPIRE.x + 5, SPIRE.z - 5, SPIRE.z + 5, 2.
 // THE ROOF, AS HIS DRAWING. Everything on it is the same on each side of the line z = MID (the roof's own middle is
 // z = 27 and the spire stands at z = 25: MID is between the two, so neither is seen to be off).
 //   the raised level   its outline seen from above: the east faces of the three arms at x = 51.4, the two bays cut back
-//                      to x = 33.5 (so the strip along the back is 7 m wide), every outer corner cut
-//   the pads           one in each bay, on the roof itself: 16 m across, corners cut, 0.7 m tall
-//   the pyramids       one on each end arm: 7.5 m across at the foot, 4.3 m tall, its top cut off 1.7 m across
-export const MID = 26, RAISED = { to: 4.2, bevel: 1.6, front: 51.4, back: 26.5, bay: 33.5, bays: [[42, 61], [-9, 10]], ends: [-23.5, 75.5] };
+//                      to x = 31.5 (so the strip along the back is 5 m wide), every outer corner cut; 4.8 m tall
+//   the pads           one in each bay, lying on the roof itself with no plates under it: a dark mottled square 20 m
+//                      across (the game's ships are 16 to 20 m long), a yellow boundary, a yellow circle inside, a
+//                      small light at each corner (all in the gear, below)
+//   the doorways       one to each pad, where he sketched it: in the middle arm's side wall (the spire's side),
+//                      toward the back; a framed two-leaf door 3 m wide and 2.6 m tall with a small light over it
+//   the pyramids       one on each end arm: 7 m across at the foot, 4.3 m tall, its top cut off 1.6 m across
+export const MID = 26, RAISED = { to: 4.8, bevel: 1.6, front: 51.4, back: 26.5, bay: 31.5, bays: [[41, 63], [-11, 11]], ends: [-24, 76] };
 const mirror = (path) => path.map(([x, z]) => [x, 2 * MID - z]).reverse();     // (the same outline on the other side of MID, walked the same way round)
 const RAISED_PATH = (() => {
   const R = RAISED, [n, s] = R.ends, f = R.front, b = R.back, [[s0, s1], [n0, n1]] = R.bays;
   return [[f, s - 6], [f, s1], [R.bay, s1], [R.bay, s0], [f, s0], [f, n1], [R.bay, n1], [R.bay, n0], [f, n0], [f, n + 6], [f - 6, n], [b + 9, n], [b, n + 9], [b, s - 9], [b + 9, s], [f - 6, s]];
 })();
-const padSouth = boxPath(35.3, 51.3, 43.5, 59.5, 3), pyramidSouth = boxPath(38.25, 45.75, 64.5, 72);
-export const PADS = [{ name: 'south landing pad', path: padSouth, at: [43.3, 51.5] }, { name: 'north landing pad', path: mirror(padSouth), at: [43.3, 2 * MID - 51.5] }].map((p) => ({ ...p, tall: 0.7, bevel: 0.35, ring: 5.2 }));
-export const PYRAMIDS = [{ name: 'south pyramid', path: pyramidSouth }, { name: 'north pyramid', path: mirror(pyramidSouth) }].map((p) => ({ ...p, foot: 0.5, tall: 4.3, slope: 2.9 }));
+const padSouth = boxPath(32.5, 52.5, 42, 62), pyramidSouth = boxPath(38.5, 45.5, 66, 73);
+export const PADS = [{ name: 'south landing pad', path: padSouth, at: [42.5, 52] }, { name: 'north landing pad', path: mirror(padSouth), at: [42.5, 2 * MID - 52] }].map((p) => ({ ...p, tall: 0.36, square: 10, ring: 5 }));   // (tall: its top above the roof, 4 cm over the plates round it)
+export const PYRAMIDS = [{ name: 'south pyramid', path: pyramidSouth }, { name: 'north pyramid', path: mirror(pyramidSouth) }].map((p) => ({ ...p, foot: 0.5, tall: 4.3, slope: 2.7 }));
 
 // THE MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
+// (a doorway in a wall 3.2 m tall under its bevel, framed; its foot is at the top of the roof's plates; `at` is its middle
+// along its wall; x, z: the same place in the world, and `out` the way it faces along z; its leaves and light are in the gear)
+export const PAD_DOOR = { w: 3, h: 2.6, x: 37, foot: 0.3 };
+const padDoor = (d) => ({ tier: 0, step: 0, run: d.run, at: d.at, w: PAD_DOOR.w, h: PAD_DOOR.h, y: ROOF + PAD_DOOR.foot, sill: 0, head: 0.25, jamb: 0.25, proud: 0.12, shield: false });
+export const PAD_DOORS = [{ run: 3, at: PAD_DOOR.x - RAISED.bay, pad: 0, x: PAD_DOOR.x, z: RAISED.bays[0][0], out: 1 }, { run: 5, at: RAISED.front - PAD_DOOR.x, pad: 1, x: PAD_DOOR.x, z: RAISED.bays[1][1], out: -1 }];
 export const MASSES = [
-  { name: 'raised level', side: 'above', path: RAISED_PATH, to: RAISED.to, bevel: RAISED.bevel, holes: () => [offsetPath(spirePath, 3.2, true), ...PYRAMIDS.map((p) => p.path)] },
+  { name: 'raised level', side: 'above', path: RAISED_PATH, to: RAISED.to, bevel: RAISED.bevel, doors: PAD_DOORS.map(padDoor), holes: () => [offsetPath(spirePath, 3.2, true), ...PYRAMIDS.map((p) => p.path)] },
   { name: 'north belly block', side: 'below', path: boxPath(35, 48, -31.62, -4, [3, 3, 2, 2]), to: 3.8, bevel: 1.5, over: 'north' },
   { name: 'south belly slab', side: 'below', path: boxPath(27, 42, 36, 70, 4), to: 5.2, bevel: 2 },
 ];
@@ -158,12 +173,7 @@ function massPlan(m, seed) {
     const profile = m.over ? [[-m.bevel, end], [0, end + m.bevel], [0, BELLY, 'in'], [0, L.band.foot - 0.6], [-0.6, L.band.foot]] : [[-m.bevel, end], [0, end + m.bevel], [0, BELLY, 'in']];
     tiers.push({ name: m.name, profile, parts: m.over ? [plates('tiers'), plates('band', BIG_LOW), plates('band', BIG_LOW), plates('tiers')] : [plates('tiers'), plates('band', BIG_LOW)] });
   }
-  return { name: m.name, closed: true, path: m.path, tiers, windows: { ...WIN, seed }, flats: flatsOf(offsetPath(m.path, -m.bevel, true), m.holes ? m.holes() : [], end, up, bigIf(4)) };
-}
-// a landing pad: a low plated platform on the roof (its painted ring and its corner lights are in the gear)
-function padPlan(p) {
-  const top = ROOF + p.tall;
-  return { name: p.name, closed: true, path: p.path, tiers: [{ name: p.name, profile: [[0, ROOF, 'in'], [0, top - p.bevel], [-p.bevel, top]], parts: [plates('band'), plates('tiers')] }], flats: flatsOf(offsetPath(p.path, -p.bevel, true), [], top, true, plain) };
+  return { name: m.name, closed: true, path: m.path, tiers, ...(m.doors ? { doors: m.doors } : {}), windows: { ...WIN, seed }, flats: flatsOf(offsetPath(m.path, -m.bevel, true), m.holes ? m.holes() : [], end, up, bigIf(4)) };
 }
 // a pyramid with its top cut off, standing on the raised level
 function pyramidPlan(p) {
@@ -187,7 +197,7 @@ function bodyPlan(o) {
     // the smelter's high window in the north end (run 2, walked west from x = 53.5)
     { tier: 1, step: 2, run: 2, at: 53.5 - 33, w: 7.6, h: 1.65, y: 4.8, sill: 0, head: 0, jamb: 0, frame: false, shield: false, ...(o.inside ? {} : { glass: 0.85 }) },
   ];
-  const holesUp = [...MASSES.filter((m) => m.side === 'above').map((m) => m.path), ...PADS.map((p) => p.path)];   // (the spire stands on the raised level)
+  const holesUp = [...MASSES.filter((m) => m.side === 'above').map((m) => m.path), ...PADS.map((p) => p.path)];   // (the spire stands on the raised level; a pad lies in a hole in the roof's plates)
   const holesDown = [...MASSES.filter((m) => m.side === 'below').map((m) => m.path), offsetPath(spirePath, 1.6, true)];
   const flats = [...flatsOf(offsetPath(BODY_PATH, -up.in - 2.2, true), holesUp, ROOF, true, bigIf(7)), ...flatsOf(offsetPath(BODY_PATH, -lo.in - 3, true), holesDown, BELLY, false, bigIf(7))];
   return { name: 'body', closed: true, path: BODY_PATH, tiers, doors, flats, windows: { ...WIN, seed: o.seed } };
@@ -265,7 +275,7 @@ function deckPlans(o) {
 //   seed     which half of the hull's windows are lit (the game gives a fresh number each time it starts)
 export function outsidePlans(opts = {}) {
   const o = { inside: !!opts.inside, seed: opts.seed ?? 11 };
-  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PADS.map(padPlan), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o)];
+  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o)];
 }
 
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
@@ -352,16 +362,43 @@ export function outsideGear(opts = {}) {
       for (let i = 0; i < 2; i++) for (let j = 0; j < 4; j++) G.box([g.x, y0 + up * (hh * 2) * (j + 0.5) / 4, zc - hw + hw * (i + 0.5)], [0.26, hh / 4 - 0.22, hw / 2 - 0.22], cell);
     }
   }
-  // the landing pads: a painted ring on each, and a small light at each of its four sides' ends
-  // (the ring is a low flat-topped kerb, 0.42 m tall: the pad's plates stand a bevel above its top, and paint laid flat on it would be under them)
+  // the landing pads, as he asked: "a dark square with yellow boundary and a circle inside", lying on the roof with no
+  // plates under it, and mottled ("It looks way to clean and basic"): the square's top is a grid of small faces whose
+  // corners carry a blotchy dark grey (the same blotches every time); the boundary and the circle are low yellow kerbs
+  // in short lengths, each worn a little differently; a small light at each corner
+  const hash2 = (i, j) => { const v = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
+  const soft = (x, z) => { const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j, a = u * u * (3 - 2 * u), b = v * v * (3 - 2 * v); return (hash2(i, j) * (1 - a) + hash2(i + 1, j) * a) * (1 - b) + (hash2(i, j + 1) * (1 - a) + hash2(i + 1, j + 1) * a) * b; };
+  const blotch = (x, z) => 0.5 * soft(x * 0.33, z * 0.33) + 0.3 * soft(x * 0.95 + 7, z * 0.95 + 3) + 0.2 * soft(x * 2.6 + 11, z * 2.6 + 5);
+  const padDark = lin('#0b0c10'), padPale = lin('#626a78'), worn = (c, x, z) => { const k = 0.5 + 0.75 * blotch(x * 1.7 + 31, z * 1.7 + 17); return c.map((v) => v * k); };
   for (const p of PADS) {
-    const y = ROOF + p.tall, [px, pz] = p.at, seg = 32, r0 = p.ring - 0.2, r1 = p.ring + 0.2, top = y + 0.42;
-    for (let i = 0; i < seg; i++) {
-      const a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2, at = (r, t, yy) => [px + Math.cos(t) * r, yy, pz + Math.sin(t) * r];
-      G.quad([at(r0, a, top), at(r1, a, top), at(r1, b, top), at(r0, b, top)], yellow);
-      G.quad([at(r1, a, y), at(r1, b, y), at(r1, b, top), at(r1, a, top)], yellow); G.quad([at(r0, a, y), at(r0, b, y), at(r0, b, top), at(r0, a, top)], yellow);
+    const [px, pz] = p.at, q = p.square, top = ROOF + p.tall, k = top + 0.05, N = 36, first = G.count;
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const x = px - q + 2 * q * i / N, z = pz - q + 2 * q * j / N, t = Math.min(1, Math.max(0, (blotch(x, z) - 0.3) / 0.42));
+      G.vert([x, top, z], padDark.map((v, c) => v + (padPale[c] - v) * t * (0.35 + 0.65 * t)));
     }
-    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) L.ball([px + dx * 6.1, y + 0.55, pz + dz * 6.1], 0.28, white, 6);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = first + j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; G.index.push(a, c, b, b, c, d); }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) G.quad([[px + dx * q - dz * q, ROOF, pz + dz * q - dx * q], [px + dx * q + dz * q, ROOF, pz + dz * q + dx * q], [px + dx * q + dz * q, top, pz + dz * q + dx * q], [px + dx * q - dz * q, top, pz + dz * q - dx * q]], padDark);
+    // the boundary: sixteen lengths a side
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let i = 0; i < 16; i++) {
+      const along = -q + 2 * q * (i + 0.5) / 16, x = px + dx * (q - 0.18) + (dx ? 0 : along), z = pz + dz * (q - 0.18) + (dz ? 0 : along);
+      G.box([x, (top + k) / 2, z], [dx ? 0.18 : q / 16, (k - top) / 2, dz ? 0.18 : q / 16], worn(yellow, x, z));
+    }
+    const seg = 40, r0 = p.ring - 0.18, r1 = p.ring + 0.18;
+    for (let i = 0; i < seg; i++) {
+      const a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2, at = (r, t, yy) => [px + Math.cos(t) * r, yy, pz + Math.sin(t) * r], col = worn(yellow, px + Math.cos(a) * p.ring, pz + Math.sin(a) * p.ring);
+      G.quad([at(r0, a, k), at(r1, a, k), at(r1, b, k), at(r0, b, k)], col);
+      G.quad([at(r1, a, top), at(r1, b, top), at(r1, b, k), at(r1, a, k)], col); G.quad([at(r0, a, top), at(r0, b, top), at(r0, b, k), at(r0, a, k)], col);
+    }
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) L.ball([px + dx * (q - 0.18), k + 0.2, pz + dz * (q - 0.18)], 0.26, white, 6);
+  }
+  // the doors to the pads: two steel leaves set back in each doorway with a small dark window each, a dark seam between
+  // them, a small light over the doorway
+  for (const d of PAD_DOORS) {
+    const y0 = ROOF + PAD_DOOR.foot, hw = PAD_DOOR.w / 2, hh = PAD_DOOR.h / 2, zi = d.z - d.out * 0.08, leaf = lin('#4a5160');
+    for (const sx of [-1, 1]) G.box([d.x + sx * (hw / 2 + 0.02), y0 + hh, zi], [hw / 2 - 0.02, hh, 0.06], leaf);
+    G.box([d.x, y0 + hh, zi - d.out * 0.03], [0.04, hh, 0.04], dark);
+    for (const sx of [-1, 1]) G.box([d.x + sx * hw * 0.5, y0 + hh * 1.3, zi + d.out * 0.07], [hw * 0.28, 0.22, 0.02], dark);
+    L.box([d.x, y0 + PAD_DOOR.h + 0.37, d.z + d.out * 0.42], [0.8, 0.05, 0.05], white);
   }
   // the cargo slots: three containers plugged end-on into their sockets, a rail each side of every slot
   const S = SLOTS, y0 = SLOT_DECK + 0.32;

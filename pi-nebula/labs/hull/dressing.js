@@ -2,8 +2,11 @@
 // things to judge size by.
 //   inside()    the hangar behind the door as a plain lit box: a floor, walls, a roof with three light strips
 //   markers()   a person 1.8 m tall standing on the door's sill, and a ship-sized block 17 m long parked in the hangar
+//   stationMarkers()   for the whole station: a person 1.8 m tall beside each door to a landing pad and one in the
+//               middle of each pad, and a ship-sized block 17 m long on the south pad
 import * as THREE from 'three';
 import { DOOR } from './sample-plan.js';
+import { PADS, PAD_DOORS, LEVELS } from '../../kit/outside-plan.js';
 
 const flat = (c) => new THREE.MeshBasicMaterial({ color: c });
 const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
@@ -24,13 +27,25 @@ export function inside() {
   return g;
 }
 
-export function markers() {
-  const g = new THREE.Group(); g.name = 'markers';
-  // a person, 1.8 m: legs, body, head, in a bright orange that reads against any hull
+// a person, 1.8 m: legs, body, head, in a bright orange that reads against any hull
+function person() {
   const suit = flat(0xff7a1a), skin = flat(0xf1c9a0), p = new THREE.Group();
   p.add(box(0.34, 0.86, 0.22, suit, 0, 0.43, 0), box(0.46, 0.62, 0.26, suit, 0, 1.17, 0));
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), skin); head.position.set(0, 1.67, 0); p.add(head);
-  p.position.set(0.3, DOOR.sill, -8.2); p.name = 'person'; g.add(p);
+  p.name = 'person'; return p;
+}
+export function stationMarkers() {
+  const g = new THREE.Group(), y = LEVELS.roof; g.name = 'station markers';
+  for (const d of PAD_DOORS) { const p = person(); p.position.set(d.x + 2.3, y + 0.32, d.z + d.out * 0.9); g.add(p); }
+  for (const pad of PADS) { const p = person(); p.position.set(pad.at[0], y + pad.tall, pad.at[1]); g.add(p); }
+  const ship = new THREE.Group(), pad = PADS[0];
+  ship.add(box(6.4, 3, 17, flat(0x7d8690), 0, 1.5, 0), box(4.6, 1.1, 5, flat(0x545c66), 0, 3.55, -4.6), box(6.5, 0.5, 17.1, flat(0xdc7526), 0, 1.1, 0));
+  ship.rotation.y = Math.PI / 2; ship.position.set(pad.at[0] + 1.5, y + pad.tall, pad.at[1] + 2.5); ship.name = 'ship'; g.add(ship);
+  return g;
+}
+export function markers() {
+  const g = new THREE.Group(); g.name = 'markers';
+  const p = person(); p.position.set(0.3, DOOR.sill, -8.2); g.add(p);
   // a ship-sized block, 17 m long, parked across the hangar behind the shield (so it is never between the camera and
   // the plates): a plain body, a darker cabin at one end, an orange stripe
   const ship = new THREE.Group();

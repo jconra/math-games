@@ -55,7 +55,7 @@ import { OUTSIDE_BOX, OUTSIDE_VIEWS } from '../../kit/outside-plan.js';
 import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, readShape, isLookText, sameLook, lookName, showValue } from '../../kit/hull-look.js';
 import { makeMenus } from '../crew/windows.js';
 import { SAMPLE_BOX, SHAPES, SHAPE_NAMES, SHAPE_SAYS, shapePlan } from './sample-plan.js';
-import { inside, markers } from './dressing.js';
+import { inside, markers, stationMarkers } from './dressing.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const canvas = $('#c'), hud = $('#hud'), loading = $('#loading');
@@ -145,10 +145,10 @@ function rebuild() {
   }
   buildMs = performance.now() - t0;
 }
-const room = inside(), marks = markers(); stage.add(room, marks);
+const room = inside(), marks = markers(), stationMarks = stationMarkers(); stage.add(room, marks, stationMarks);
 // (the hangar's inside, the person and the ship block belong to the piece; the sun's shadows reach as far as what is shown)
 function dress() {
-  room.visible = !STATION(); marks.visible = view.markers && !STATION();
+  room.visible = !STATION(); marks.visible = view.markers && !STATION(); stationMarks.visible = view.markers && STATION();
   const r = STATION() ? 150 : 44; Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r }); sun.shadow.camera.updateProjectionMatrix();
   sun.target.position.set(...(STATION() ? [20, 4, 27] : [-10, 4, -8]));
 }
