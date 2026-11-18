@@ -382,6 +382,69 @@ Object.assign(DRAW, {
   method(p) { return { svg: methodPic(p.kind, p), line: '' }; },
 });
 
+// ── THE DRILL OPERATOR'S SCAN (src/jobs/drill.js): a rock with the ore the scan lights up inside it, its holes, the
+// box the scan measures it by ────────────────────────────────────────────────────────────────────────────────────────
+const ROCKC = '#4a4640', ROCKE = '#2c2925';
+const rockShape = (cx, cy, rx, ry) => { let d = ''; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, k = 1 + 0.09 * Math.sin(i * 2.7 + 1) + 0.06 * Math.cos(i * 4.1); d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * rx * k).toFixed(1)} ${(cy + Math.sin(a) * ry * k).toFixed(1)}`; } return `<path d="${d}Z" fill="${ROCKC}" stroke="${ROCKE}" stroke-width="2" stroke-linejoin="round"/>`; };
+// a lump of ore glowing in the rock, in the metal's own colour
+const lump = (x, y, r, glow) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r * 1.7).toFixed(1)}" fill="${glow}" opacity="0.28"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${glow}" stroke="#fff" stroke-width="0.8"/>`;
+Object.assign(DRAW, {
+  // the things the scan shows, to count: `groups` rows of `each` (each vein a row of lumps); or `split` [a, b]: a near
+  // the top and b near the bottom; or just `n`. what: 'vein' (a short glowing bar) or 'lump' (a glowing dot)
+  scan({ n = 0, groups = 0, each = 0, split = null, what = 'vein', glow = '#2fe3cf', ask = '' }) {
+    let s = rockShape(W / 2, 66, 150, 54);
+    const items = [];
+    const vein = (x, y, i) => { const a = (i * 47 % 50) - 25; return `<g transform="rotate(${a} ${x.toFixed(1)} ${y.toFixed(1)})"><rect x="${(x - 17).toFixed(1)}" y="${(y - 7).toFixed(1)}" width="34" height="14" rx="7" fill="${glow}" opacity="0.3"/><rect x="${(x - 14).toFixed(1)}" y="${(y - 4).toFixed(1)}" width="28" height="8" rx="4" fill="${glow}" stroke="#fff" stroke-width="0.8"/></g>`; };
+    if (groups) {
+      const dy = Math.min(26, 84 / groups), y0 = 66 - dy * (groups - 1) / 2, dx = Math.min(34, 200 / each), x0 = W / 2 - dx * (each - 1) / 2;
+      for (let g = 0; g < groups; g++) { s += `<path d="M${x0 - 10} ${y0 + g * dy}h${dx * (each - 1) + 20}" stroke="${glow}" stroke-width="5" opacity="0.35" stroke-linecap="round"/>`; for (let e = 0; e < each; e++) s += lump(x0 + e * dx, y0 + g * dy, 6, glow); }
+    } else if (split) {
+      const row = (k, y) => { const dx = Math.min(46, 230 / Math.max(1, k)), x0 = W / 2 - dx * (k - 1) / 2; for (let i = 0; i < k; i++) items.push([x0 + i * dx, y + ((i % 2) ? 5 : -4)]); };
+      row(split[0], 44); row(split[1], 88);
+      s += `<path d="M${W / 2 - 132} 66h264" stroke="#fff" stroke-width="1" stroke-dasharray="4 5" opacity="0.5"/>`;
+    } else {
+      const cols = Math.min(5, n), rows = Math.ceil(n / cols), dx = Math.min(50, 240 / cols), dy = 30, y0 = 66 - dy * (rows - 1) / 2;
+      for (let i = 0; i < n; i++) { const r = Math.floor(i / cols), inRow = Math.min(cols, n - r * cols), x0 = W / 2 - dx * (inRow - 1) / 2; items.push([x0 + (i % cols) * dx, y0 + r * dy + ((i % 2) ? 4 : -4)]); }
+    }
+    items.forEach(([x, y], i) => { s += what === 'vein' ? vein(x, y, i) : lump(x, y, 7, glow); });
+    if (ask) s += text(W / 2, 140, ask, { size: 13.5, fill: ASK, weight: 800 });
+    return { svg: svg(ask ? 150 : 128, s), line: '' };
+  },
+  // the holes a rock stands: one ring for each, the ones drilled already dark with a cross
+  holes({ all, used, glow = '#2fe3cf' }) {
+    let s = rockShape(W / 2, 60, 150, 48);
+    const dx = Math.min(44, 250 / all), x0 = W / 2 - dx * (all - 1) / 2;
+    for (let i = 0; i < all; i++) {
+      const x = x0 + i * dx, done = i < used;
+      s += done ? `<circle cx="${x}" cy="60" r="12" fill="#0d0b09" stroke="${SOFT}" stroke-width="1.5"/><path d="M${x - 6} 54l12 12M${x + 6} 54l-12 12" stroke="${SOFT}" stroke-width="2"/>`
+        : `<circle cx="${x}" cy="60" r="12" fill="none" stroke="${glow}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
+    }
+    s += text(W / 2, 130, 'The crossed holes are drilled. Count the rings still open.', { size: 12.5, fill: ASK, weight: 800 });
+    return { svg: svg(140, s), line: '' };
+  },
+  // the box the scan measures a rock by: so long, so wide, so high; per: what a cubic metre weighs; ball: the rock a
+  // ball inside the box, filling about half of it
+  rockbox({ l, w, h, per = null, ball = false }) {
+    const x = 96, y = 44, bw = 150, bh = 70, ox = 34, oy = -22;
+    let s = `<path d="M${x} ${y}h${bw}v${bh}h${-bw}Z M${x} ${y}l${ox} ${oy}h${bw}l${-ox} ${-oy} M${x + bw} ${y}l${ox} ${oy}v${bh}l${-ox} ${-oy}" fill="none" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`;
+    s += ball ? `<circle cx="${x + bw / 2 + 8}" cy="${y + bh / 2 - 6}" r="${bh / 2 + 6}" fill="${ROCKC}" stroke="${ROCKE}" stroke-width="2" opacity="0.92"/>` : rockShape(x + bw / 2 + 10, y + bh / 2 - 6, bw / 2 - 2, bh / 2 + 2);
+    s += text(x + bw / 2, y + bh + 16, `${l} m long`, { size: 12.5 }) + text(x - 8, y + bh / 2 + 4, `${h} m high`, { size: 12.5, anchor: 'end' }) + text(x + bw + ox + 6, y + bh + oy + 2, `${w} m wide`, { size: 12.5, anchor: 'start' });
+    s += text(W / 2, 150, ball ? `the box: ${l} × ${w} × ${h} cubic metres; a ball fills about half of it` : `the box: ${l} × ${w} × ${h} = ? cubic metres`, { size: 12.5, fill: per ? SOFT : ASK, weight: per ? 600 : 800 });
+    if (per) s += text(W / 2, 170, `each cubic metre weighs ${per} tonnes: ? tonnes`, { size: 13.5, fill: ASK, weight: 800 });
+    return { svg: svg(per ? 180 : 160, s), line: '' };
+  },
+  // filling canisters from a rock's ore: each tonne of ore cut into d parts, a canister taking n of them (the shade
+  // changes at each new canister)
+  fillcans({ tonnes, n, d }) {
+    const shown = Math.min(tonnes, 6), bw = Math.min(52, (W - 20) / shown), x0 = (W - shown * bw) / 2;
+    let s = text(W / 2, 14, `${tonnes} tonnes of ore${shown < tonnes ? ` (the first ${shown} drawn)` : ''}, each cut into ${partsWord(d)}`, { size: 12.5 });
+    for (let i = 0; i < shown; i++) for (let k = 0; k < d; k++) { const pw = (bw - 6) / d, can = Math.floor((i * d + k) / n); s += `<rect x="${(x0 + i * bw + k * pw).toFixed(1)}" y="24" width="${(pw - 1).toFixed(1)}" height="30" fill="${can % 2 ? FILL2 : '#fff'}" stroke="${INK}" stroke-width="1"/>`; }
+    s += text(W / 2, 74, `a canister takes ${n === 1 ? 'one part' : `${n} parts`}: ${n}/${d} of a tonne (a new shade for each canister)`, { size: 11, fill: SOFT });
+    s += text(W / 2, 96, `${tonnes} ÷ ${n}/${d} = ? canisters`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(106, s), line: '' };
+  },
+});
+
 // ── the crane game's pictures are its own (src/jobs/cranepics.js): its orders carry them ready made (help.svg) ──────
 const t1 = (x) => String(Math.round(x * 10) / 10);
 

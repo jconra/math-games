@@ -132,6 +132,12 @@ const FT = (f) => { const s = simplest(f), big = fracText(s), small = s.n < s.d 
 const ONE_PART = { 2: 'half', 3: 'third', 4: 'quarter', 5: 'fifth', 6: 'sixth', 8: 'eighth', 10: 'tenth' };
 const parts = (d, k = 2) => (k === 1 ? ONE_PART[d] || `${d}th` : partsWord(d));
 
+// ANOTHER TELLING (a maker's `tell`): the drill operator's job (src/jobs/drill.js) asks the same sums of a rock in the
+// claw as these slips ask of a load: a part of it, its weights in tenths, a percent of it, what its ore is worth. It
+// hands the maker the words (tell.metal; tell.ore(whole) -> { of, is, it }; tell.part / tell.percent -> the stories to
+// pick from; tell.weigh -> { add, both, left }; tell.pay -> { m, story, ask }); the numbers, the slips, the pictures
+// and the sums are the maker's own, unchanged. Without it nothing changes.
+const toldOre = (tell, whole) => (tell && tell.ore ? tell.ore(whole) : oreOf(whole));
 // the ore a question is about: one load while the number is a load's size, a month of loads past that
 const oreOf = (whole) => (whole <= 30 ? { of: 'the ore in this load', is: `The load is ${whole} tonnes.`, it: 'load' } : { of: 'this month\'s ore', is: `The Miners brought in ${whole} tonnes this month.`, it: 'ore' });
 
@@ -329,11 +335,11 @@ export const MAKERS = {
   // step 2  several parts: 3/4 of the 12 tonnes is rock
   part: {
     strand: 'frac', at: (step) => (step <= 1 ? 28 : 40),
-    make(step, { rand = Math.random, frac = 0 } = {}) {
-      const t = kit(rand), metal = t.pick(METALS.slice(0, 4)).name;
+    make(step, { rand = Math.random, frac = 0, tell = null } = {}) {
+      const t = kit(rand), metal = (tell && tell.metal) || t.pick(METALS.slice(0, 4)).name;
       if (step <= 1) {
         const d = t.pick(frac < 0.5 ? [2, 3, 4, 5] : [3, 4, 5, 6, 8, 10]), k = t.int(2, 9), whole = d * k;
-        const O = oreOf(whole), ctx = t.pick([
+        const O = toldOre(tell, whole), ctx = t.pick((tell && tell.part && tell.part({ step: 1, n: 1, d, whole, metal, O })) || [
           { key: 'metal', story: `1/${d} of ${O.of} is ${metal}. ${O.is}`, ask: `How many tonnes of ${metal} is that?`, what: metal },
           { key: 'drained', story: `${O.is} 1/${d} of it has gone through the crusher so far.`, ask: 'How many tonnes have gone through?', what: 'crushed' },
         ]);
@@ -352,7 +358,7 @@ export const MAKERS = {
         }, rand);
       }
       const [n, d] = t.pick(frac < 0.5 ? [[2, 3], [3, 4], [2, 5], [3, 5], [4, 5]] : [[3, 4], [3, 5], [4, 5], [5, 6], [3, 8], [5, 8], [3, 10], [7, 10]]), k = t.int(2, 9), whole = d * k, ans = n * k;
-      const O = oreOf(whole), ctx = t.pick([
+      const O = toldOre(tell, whole), ctx = t.pick((tell && tell.part && tell.part({ step: 2, n, d, whole, metal, O })) || [
         { key: 'slag', story: `${n}/${d} of ${O.of} is slag, and the rest is metal. ${O.is}`, ask: 'How many tonnes of slag is that?', what: 'slag' },
         { key: 'metal', story: `${n}/${d} of ${O.of} is ${metal}. ${O.is}`, ask: `How many tonnes of ${metal} is that?`, what: metal },
         { key: 'melted', story: `${O.is} The furnace has melted ${n}/${d} of it so far.`, ask: 'How many tonnes has it melted?', what: 'melted' },
@@ -460,15 +466,15 @@ export const MAKERS = {
   // step 2  a load of canisters: 8 canisters of 1.2 tonnes (the canisters counted in the hangar where they can be)
   weigh: {
     strand: 'dec', at: (step) => (step <= 1 ? 50 : 60),
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand);
+    make(step, { rand = Math.random, live = null, tell = null } = {}) {
+      const t = kit(rand), told = (tell && tell.weigh) || null;
       if (step <= 1) {
         for (let tries = 0; tries < 80; tries++) {
           const a = t.int(6, 29), b = t.int(4, 19);   // tenths
           if (a % 10 === 0 || b % 10 === 0 || a === b) continue;
           if (t.chance(0.55)) {
             const s = a + b, parts = (a % 10) + (b % 10), wholes = Math.floor(a / 10) + Math.floor(b / 10);
-            const ctx = t.pick([
+            const ctx = t.pick(told ? told.add({ a: t1(a), b: t1(b) }) : [
               `The first canister came in holding ${t1(a)} tonnes of ore and the second holding ${t1(b)} tonnes.`,
               `The scale under the crane reads ${t1(a)} tonnes for one canister and ${t1(b)} tonnes for the next.`,
             ]);
@@ -476,7 +482,7 @@ export const MAKERS = {
               key: 'weigh:add', story: ctx, ask: 'How many tonnes is that together?', right: D(s * 10),
               slips: [
                 ...(parts >= 10 ? [{ ...D(wholes * 100 + parts), slip: 'wholeParts', why: `${a % 10} tenths and ${b % 10} tenths make ${parts} tenths, and 10 tenths are another whole tonne: carry it.` }] : []),
-                { ...D(Math.abs(a - b) * 10), slip: 'subtracted', why: 'That takes one from the other. Both canisters count: add them.' },
+                { ...D(Math.abs(a - b) * 10), slip: 'subtracted', why: told ? told.both : 'That takes one from the other. Both canisters count: add them.' },
                 { ...D((s + 1) * 10), slip: 'off', why: 'One tenth too many. Line the points up and add each column.' },
                 { ...D((s - 1) * 10), slip: 'off', why: 'One tenth short. Line the points up and add each column.' },
                 { ...D(s * 100), slip: 'pointLost', why: `${a} + ${b} = ${s}, but those are tenths of a tonne: ${s} tenths.` },
@@ -487,15 +493,16 @@ export const MAKERS = {
             }, rand);
           }
           if (a <= b + 1) continue;
+          const L = told ? told.left({ a: t1(a), b: t1(b) }) : { story: `A canister came in holding ${t1(a)} tonnes of ore. ${t1(b)} tonnes have drained into the crusher so far.`, ask: 'How many tonnes are still in the canister?', added: 'Draining leaves less in the canister: take away.', part: `${t1(b)} tonnes is what has drained. The question is what is still inside.` };
           const d = a - b, borrow = a % 10 < b % 10, digitwise = Math.abs(Math.floor(a / 10) - Math.floor(b / 10)) * 10 + Math.abs((a % 10) - (b % 10));
           return ownOrder({
-            key: 'weigh:left', story: `A canister came in holding ${t1(a)} tonnes of ore. ${t1(b)} tonnes have drained into the crusher so far.`, ask: 'How many tonnes are still in the canister?', right: D(d * 10),
+            key: 'weigh:left', story: L.story, ask: L.ask, right: D(d * 10),
             slips: [
               ...(borrow && digitwise !== d ? [{ ...D(digitwise * 10), slip: 'smallerFromBigger', why: `In the tenths the smaller digit was taken from the bigger. ${a % 10} tenths is less than ${b % 10} tenths: borrow a whole tonne.` }] : []),
-              { ...D((a + b) * 10), slip: 'added', why: 'Draining leaves less in the canister: take away.' },
+              { ...D((a + b) * 10), slip: 'added', why: L.added },
               { ...D((d + 1) * 10), slip: 'off', why: 'One tenth too many. Line the points up and take away each column.' },
               { ...D((d > 1 ? d - 1 : d + 2) * 10), slip: 'off', why: 'Line the points up and take away each column again.' },
-              { ...D(b * 10), slip: 'part', why: `${t1(b)} tonnes is what has drained. The question is what is still inside.` },
+              { ...D(b * 10), slip: 'part', why: L.part },
             ],
             pic: { kind: 'columns', rows: [dec(a, 1), dec(b, 1)], op: '−' },
             rightWhy: `${dec(a, 1)} − ${dec(b, 1)} = ${t1(d)} tonnes`, sum: { op: 'sub', a: a / 10, b: b / 10 },
@@ -537,12 +544,12 @@ export const MAKERS = {
   // step 2  any percent, from 10% (35% of the 20 tonnes is iron: 10% is 2, 30% is 6, 5% is 1)
   percent: {
     strand: 'pct', at: (step) => (step <= 1 ? 58 : 62),
-    make(step, { rand = Math.random, frac = 0 } = {}) {
-      const t = kit(rand), metal = t.pick(METALS.slice(0, 4)).name;   // (the common ones: nobody's ore is 70% gold)
+    make(step, { rand = Math.random, frac = 0, tell = null } = {}) {
+      const t = kit(rand), metal = (tell && tell.metal) || t.pick(METALS.slice(0, 4)).name;   // (the common ones: nobody's ore is 70% gold)
       if (step <= 1) {
         const pct = t.pick([50, 25, 10, 25, 10]), n = 100 / pct, whole = n * t.int(2, pct === 10 ? 9 : 12), part = whole / n;
         const said = pct === 50 ? 'half' : pct === 25 ? 'a quarter' : 'a tenth';
-        const O = oreOf(whole), ctx = t.pick([
+        const O = toldOre(tell, whole), ctx = t.pick((tell && tell.percent && tell.percent({ pct, whole, metal, O })) || [
           { key: 'metal', story: `${pct}% of ${O.of} is ${metal}. ${O.is}`, ask: `How many tonnes of ${metal} is that?`, rest: `the other ${100 - pct}%: the rest of the ore` },
           ...(whole <= 30 ? [{ key: 'left', story: `The displays at the wall say ${pct}% of this load is still in its canisters. The load was ${whole} tonnes.`, ask: 'How many tonnes are still in the canisters?', rest: `the ${100 - pct}% that has drained` }] : []),
         ]);
@@ -567,18 +574,19 @@ export const MAKERS = {
         const part10 = whole * pct / 10;   // the answer in tenths
         if (!Number.isInteger(part10) || whole === 100 || (!small && part10 % 10)) continue;
         const ten10 = whole, T = (x10) => D(x10 * 10);   // (10% of the load, in tenths, is the load's own number)
+        const O = toldOre(tell, whole), any = (tell && tell.percent && tell.percent({ pct, whole, metal, O })[0]) || { story: `${pct}% of ${O.of} is ${metal}. ${O.is}`, ask: `How many tonnes of ${metal} is that?`, rest: 'the rest of the ore' };
         return ownOrder({
-          key: `percent:any:${pct}`, story: `${pct}% of ${oreOf(whole).of} is ${metal}. ${oreOf(whole).is}`, ask: `How many tonnes of ${metal} is that?`, right: T(part10),
+          key: `percent:any:${pct}`, story: any.story, ask: any.ask, right: T(part10),
           slips: [
             { ...T(pct * 10), slip: 'percentCount', why: `${pct}% isn't ${pct} tonnes: it's ${pct} out of every 100. 10% of ${whole} tonnes is ${t1(ten10)}.` },
-            { ...T(whole * 10 - part10), slip: 'rest', why: `${t1(whole * 10 - part10)} tonnes is the other ${100 - pct}%: the rest of the ore.` },
+            { ...T(whole * 10 - part10), slip: 'rest', why: `${t1(whole * 10 - part10)} tonnes is the other ${100 - pct}%: ${any.rest.replace(/^the other \d+%: /, '')}.` },
             { ...T(ten10), slip: 'tenOnly', why: `${t1(ten10)} tonnes is 10%. ${pct}% is ${t1(pct)} lots of that.` },
             { ...T(part10 + ten10), slip: 'tenOff', why: `That's 10% too much: ${pct + 10}%. Count the 10%s again.` },
-            ...(part10 > whole ? [{ ...T(part10 * 10), slip: 'pointLost', why: `That's more than all the ore there is. ${pct}% is only a part of the ${whole} tonnes.` }] : []),
+            ...(part10 > whole ? [{ ...T(part10 * 10), slip: 'pointLost', why: `That's more than all the ${tell ? O.it : 'ore'} there is. ${pct}% is only a part of the ${whole} tonnes.` }] : []),
             { ...T(part10 + 5), slip: 'off', why: `Find 10% of the ${whole} tonnes first, then build ${pct}% from it.` },
           ],
           pic: { kind: 'pctbar', whole, n: pct % 10 ? 20 : 10, take: pct % 10 ? pct / 5 : pct / 10, unit: TONNE, mode: 'part' },
-          sum: tenthSteps(whole, pct, oreOf(whole).it),
+          sum: tenthSteps(whole, pct, O.it),
           rightWhy: pct === 5 ? `10% of ${whole} is ${t1(ten10)}, and 5% is half of that: ${t1(part10)} tonnes`
             : pct % 10 ? `10% of ${whole} is ${t1(ten10)} and 5% is ${dec(ten10 * 5, 2, { trim: true })}: ${pct}% is ${Math.floor(pct / 10)} × ${t1(ten10)} + ${dec(ten10 * 5, 2, { trim: true })} = ${t1(part10)} tonnes`
               : `10% of ${whole} is ${t1(ten10)}, so ${pct}% is ${pct / 10} × ${t1(ten10)} = ${t1(part10)} tonnes`,
@@ -596,15 +604,16 @@ export const MAKERS = {
   //         is titanium; 60,000 credits a tonne)
   pay: {
     strand: 'dec', at: (step) => (step <= 1 ? 66 : 76),
-    make(step, { rand = Math.random, live = null, frac = 0 } = {}) {
+    make(step, { rand = Math.random, live = null, frac = 0, tell = null } = {}) {
       const t = kit(rand), P = (credits) => { const n = Math.round(credits * 100), whole = n % 100 === 0; return { v: n, big: whole ? (n / 100).toLocaleString('en-US') : dec(n, 2, { trim: true }), small: n === 100 ? CREDIT[0] : CREDIT[1], label: `${whole ? n / 100 : dec(n, 2, { trim: true })} ${n === 100 ? CREDIT[0] : CREDIT[1]}` }; };
       if (step <= 1) {
         for (let tries = 0; tries < 60; tries++) {
-          const m = t.pick(frac < 0.5 ? METALS.slice(0, 4) : METALS), w = t.int(6, frac < 0.5 ? 49 : 95);   // tenths of a tonne
+          const w = t.int(6, frac < 0.5 ? 49 : 95);   // tenths of a tonne
+          const told = tell && tell.pay ? tell.pay({ w: t1(w) }) : null, m = told ? told.m : t.pick(frac < 0.5 ? METALS.slice(0, 4) : METALS);
           if (w % 10 === 0) continue;
           const pay = w * m.price / 10, whole = Math.floor(w / 10);
           return ownOrder({
-            key: `pay:metal:${m.name}`, story: `The smelter poured ${t1(w)} tonnes of ${m.name} from this load. ${cap(m.name)} pays ${credits(m.price)} credits a tonne.`, ask: 'How many credits does the load pay?', right: P(pay),
+            key: `pay:metal:${m.name}`, story: told ? told.story : `The smelter poured ${t1(w)} tonnes of ${m.name} from this load. ${cap(m.name)} pays ${credits(m.price)} credits a tonne.`, ask: told ? told.ask : 'How many credits does the load pay?', right: P(pay),
             slips: [
               { ...P(w * m.price), slip: 'pointLost', why: `${w} × ${credits(m.price)} = ${(w * m.price).toLocaleString('en-US')}, but ${t1(w)} is ${w} tenths of a tonne: a tenth of that.` },
               ...(whole >= 1 ? [{ ...P(whole * m.price), slip: 'wholeOnly', why: `That pays for the ${u(whole, ['whole tonne', 'whole tonnes'])} and leaves out the other ${dec(w % 10, 1)} of a tonne.` }] : []),
