@@ -48,8 +48,9 @@ export const STATION_JOBS = [
 // small for a finger: a tap on the board opens the list instead. A small copy on a wall: its prompt comes up
 // `nearSmall` from the spot in front of it (`stand` out from the wall); a row too small on the screen for the mouse's
 // pointer (`pointer`, px) opens the list too.
-// (`sought`: seconds a captain walked up to keeps the first word after their line is done with)
-export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 6, sought: 8 };
+// (`sought`: seconds a captain walked up to keeps the first word after their line is done with; `ghost`: ms after a
+// tap on a board opens the list in which the list takes no click)
+export const BOARD = { near: 6.5, facing: 0.25, finger: 36, nearSmall: 2.6, stand: 0.95, pointer: 6, sought: 8, ghost: 300 };
 
 const CSS = `
 .pjb-prompt, .pjb, .pjb-chip { --ink: #eef1f4; --dim: #a7b0ba; --line: rgba(196, 220, 240, 0.36); --cyan: #59c3ff; --accent: #ff8f2e; --accent-ink: #1c1205; --cut: 12px;
@@ -234,11 +235,11 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open) return;
     const F = faceAt(pk.hit);
     // (beside a screen, not on it: the list, when the player is at a board; never a row guessed at)
-    if (!F) { if (near) openList(); return; }
+    if (!F) { if (near) openFromTap(); return; }
     if (!inSight(F, pk.hit.point)) return;
     const i = rowAt(F, pk.hit.point), on = F.kind === 'captains' ? caps : rows;
     // (a captain with no mission to pick: their line is to read, and a click on it does nothing)
-    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openList(); else if (i != null && on[i].pick !== false) pick(on[i].id);
+    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openFromTap(); else if (i != null && on[i].pick !== false) pick(on[i].id);
   });
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
@@ -290,6 +291,12 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     if (r) { chip.querySelector('span').textContent = r.name; chip.style.setProperty('--chip', r.colour); }
     draw();
   }
+  // (the list opened by a tap on a board comes up under the finger, and the browser then sends that same tap's click
+  // to whatever is there now: a row of the list, which was picked without being meant (a phone, the list of ten rows
+  // tall enough to lie under any tap on a small board). For a moment after such an opening the list takes no click.)
+  let tapOpened = -1e9;
+  function openFromTap() { if (open || !playing) return; tapOpened = performance.now(); openList(); }
+  panel.addEventListener('click', (e) => { if (performance.now() - tapOpened < BOARD.ghost) { e.stopPropagation(); e.preventDefault(); } }, true);
   let wasInput = true;
   function openList() {
     if (open || !playing) return;
