@@ -315,7 +315,7 @@ export const MAKERS = {
         rightWhy: `${pct}% of ${W} is ${tonnes} tonnes of ore; × ${say(price)} = ${say(sold)} credits; ${SHARE}% of that is ${say(pay)} credits`,
         sum: [{ op: 'div', a: W, b: 10, say: 'First 10% of the rock: a tenth of it' }, ...(pct > 10 ? [{ op: 'mul', a: ten, b: pct / 10, say: `Then ${pct}% is ${pct / 10} lots of 10%: the tonnes of ore` }] : []),
           { op: 'mul', a: tonnes, b: price, say: `Then what the ore sells for: ${say(price)} credits a tonne` }, { op: 'div', a: sold, b: 5, say: `Then the share: ${SHARE}% is a fifth of it` }],
-        lines: [['The rock', `${W} tonnes`], ['Ore', `${pct}% of the rock`], ['Ore sells for', `${say(price)} credits a tonne`], ['The drill operator\'s share', `${SHARE}%`], ['The share of this rock', '?']],
+        lines: [['The rock', `${W} tonnes`], ['Ore', `${pct}% of the rock`], [`${cap(ore)} sells for`, `${say(price)} credits a tonne`], ['The drill operator\'s share', `${SHARE}%`], ['The share of this rock', '?']],
         pic: { kind: 'pctbar', whole: W, n: 10, take: pct / 10, unit: TONNE, mode: 'part' },
         help: { title: 'Three sums, one after the other', line: `First the tonnes of ore (${pct}% of the ${W} tonnes), then what they sell for at ${say(price)} credits a tonne, then ${SHARE}% of that: a fifth.`,
           steps: [`First the ore: ${pct}% of ${W} tonnes`, `Then what it sells for: that × ${say(price)}`, `Then the share: that ÷ 5`] },
