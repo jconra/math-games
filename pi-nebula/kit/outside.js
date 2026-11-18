@@ -20,10 +20,10 @@ import { outsidePlans, outsideGear, outsideMarks } from './outside-plan.js';
 
 // the painted marks: every text drawn once into one small picture, a flat piece for each mark
 function marksMesh(fog) {
-  const marks = outsideMarks(), texts = [...new Set(marks.map((m) => m.text))], CW = 512, CH = 96, c = document.createElement('canvas');
+  const marks = outsideMarks(), texts = [...new Set(marks.map((m) => m.text))], CW = 256, CH = 64, c = document.createElement('canvas');
   c.width = CW; c.height = CH * texts.length;
   const g = c.getContext('2d'); g.fillStyle = '#e9ecef'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  const wide = texts.map((t, i) => { let px = 84; g.font = `700 ${px}px system-ui, "Segoe UI", Arial, sans-serif`; const w = g.measureText(t).width; if (w > CW - 16) { px *= (CW - 16) / w; g.font = `700 ${px}px system-ui, "Segoe UI", Arial, sans-serif`; } g.fillText(t, CW / 2, CH * (i + 0.5) + 3); return Math.min(CW - 16, w) / CW; });
+  const wide = texts.map((t, i) => { let px = 54; g.font = `700 ${px}px system-ui, "Segoe UI", Arial, sans-serif`; const w = g.measureText(t).width; if (w > CW - 16) { px *= (CW - 16) / w; g.font = `700 ${px}px system-ui, "Segoe UI", Arial, sans-serif`; } g.fillText(t, CW / 2, CH * (i + 0.5) + 2); return Math.min(CW - 16, w) / CW; });
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const pos = [], uv = [], idx = [];
   marks.forEach((m, k) => {

@@ -24,10 +24,11 @@
 //   the body       ONE hull round the three hangars, the smelter (north end) and the medical centre (south end): the
 //                  hangars' band in the middle with the three doors, ONE terrace above it and ONE below it with a band
 //                  of windows each (their steps and heights differ), a flat plated roof and underside
-//   the masses     above the upper terrace and below the lower one, four bulky bevelled masses, no two alike: the
-//                  south shoulder (the big one: it runs out to the station's south end and over its edge), the north
-//                  shoulder (smaller, lower, sitting in on the roof), a U-shaped mass under the body that wraps the
-//                  keel's foot (open toward the hangar doors), and a block under the north end that runs out over it
+//   the masses     above the upper terrace and below the lower one, five bulky bevelled masses, no two alike. On the
+//                  roof: the south shoulder (the big one: it runs out to the station's south end and over its edge),
+//                  the north shoulder (smaller, lower, sitting in on the roof), and a low U-shaped mass that wraps
+//                  the spire's foot (open toward the hangar doors). Under the body: a block under the north end that
+//                  runs out over it, and a long thick slab under the south half, on the dock side
 //   the spire      above the middle hangar: a tower, the control centre with its windows, a mast and the beacon
 //   the keel       below the middle hangar: the radiators round it, the reactor ball under it
 //   the girders    out of the smelter end and out of the medical end, two pairs of solar wings on each
@@ -110,7 +111,8 @@ export function flatsOf(outer, holes, y, up, part) {
   }
   return out;
 }
-const plain = () => plates('tiers'), bigIf = (least) => (w, h) => plates('tiers', Math.min(w, h) >= least ? BIG : {});
+// (a band gets its big plate if its narrow way is at least `least` m, and no more than `most`: one plate 28 m by 30 m is not armour)
+const plain = () => plates('tiers'), bigIf = (least, most = 16) => (w, h) => plates('tiers', Math.min(w, h) >= least && Math.min(w, h) <= most ? BIG : {});
 
 // ── THE BODY ────────────────────────────────────────────────────────────────────────────────────────────────────
 // its outline at the band's wall: the east face is the hangars' own door wall, the ends are the smelter's and the
@@ -119,14 +121,14 @@ export const BODY_PATH = [[59.02, 71], [59.02, -21], [53.5, -31.02], [26.5, -31.
 const WIN = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09, cut: 0.3, lit: 0.5 };
 const spirePath = boxPath(SPIRE.x - 5, SPIRE.x + 5, SPIRE.z - 5, SPIRE.z + 5, 2.2);
 
-// THE FOUR MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
+// THE FIVE MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
 export const MASSES = [
   { name: 'south shoulder', side: 'above', path: boxPath(34.4, 51.4, 45, 85.62, [3.5, 3.5, 3, 3]), to: 6.6, bevel: 2.4, over: 'south' },
   { name: 'north shoulder', side: 'above', path: boxPath(28, 45, -20, 2.5, 3), to: 4.4, bevel: 1.6 },
-  { name: 'keel horseshoe', side: 'below', u: true, to: 5.4, bevel: 2.2,
-    // (a U seen from above, open toward the hangar doors: two arms 8 m wide and a back 8 m wide round the keel's foot)
-    path: [[51.5, 43], [51.5, 35], [34, 35], [34, 15], [51.5, 15], [51.5, 7], [26, 7], [26, 43]] },
-  { name: 'north belly block', side: 'below', path: boxPath(33, 50, -31.62, -4, [3, 3, 2, 2]), to: 3.8, bevel: 1.5, over: 'north' },
+  // (a U seen from above, open toward the hangar doors: a back 5.2 m wide and two arms 5 m wide round the spire's foot)
+  { name: 'spire horseshoe', side: 'above', u: true, to: 3, bevel: 1.3, path: [[50, 39.5], [50, 34.5], [31.4, 34.5], [31.4, 15.5], [50, 15.5], [50, 10.5], [26.2, 10.5], [26.2, 39.5]] },
+  { name: 'north belly block', side: 'below', path: boxPath(35, 48, -31.62, -4, [3, 3, 2, 2]), to: 3.8, bevel: 1.5, over: 'north' },
+  { name: 'south belly slab', side: 'below', path: boxPath(27, 42, 36, 70, 4), to: 5.2, bevel: 2 },
 ];
 function massPlan(m, seed) {
   const up = m.side === 'above', L = LEVELS, end = up ? ROOF + m.to : BELLY - m.to, tiers = [];

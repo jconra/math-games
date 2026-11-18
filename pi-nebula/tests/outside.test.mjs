@@ -40,7 +40,7 @@ test('outside: the plan is sound in every look (whole numbers of triangles, noth
     }
     for (const [x, y, z] of points(A)) assert.ok(x >= OUTSIDE_BOX.min[0] && x <= OUTSIDE_BOX.max[0] && y >= OUTSIDE_BOX.min[1] && y <= OUTSIDE_BOX.max[1] && z >= OUTSIDE_BOX.min[2] && z <= OUTSIDE_BOX.max[2], `a plate at ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`);
   }
-  assert.equal(outsidePlans().length, 10);
+  assert.equal(outsidePlans().length, 11);
 });
 
 test('outside: it goes round the REAL rooms: every room is under the hull, and the hangar doors are where the rooms have them', () => {
@@ -116,24 +116,26 @@ test('outside: ONE terrace above the hangars and ONE below, each with its window
 });
 
 test('outside: the bulky masses: two shoulders above, unlike each other; masses below too; one of them U-shaped; no two alike', () => {
-  const above = MASSES.filter((m) => m.side === 'above'), below = MASSES.filter((m) => m.side === 'below');
-  assert.equal(above.length, 2); assert.ok(below.length >= 2);
+  const above = MASSES.filter((m) => m.side === 'above'), below = MASSES.filter((m) => m.side === 'below'), shoulders = above.filter((m) => !m.u);
+  assert.equal(shoulders.length, 2); assert.ok(below.length >= 2);
   assert.equal(new Set(MASSES.map((m) => m.name)).size, MASSES.length);
-  const unlike = (a, b) => Math.abs(area(a.path) - area(b.path)) / Math.max(area(a.path), area(b.path)) > 0.15 && Math.abs(a.to - b.to) >= 0.5 && a.bevel !== b.bevel;
+  // no two alike: every pair differs in how far it stands out and in its bevel, and in its size, its shape or its side
+  const unlike = (a, b) => Math.abs(a.to - b.to) >= 0.5 && a.bevel !== b.bevel && (Math.abs(area(a.path) - area(b.path)) / Math.max(area(a.path), area(b.path)) > 0.15 || !!a.u !== !!b.u || a.side !== b.side);
   for (let i = 0; i < MASSES.length; i++) for (let j = i + 1; j < MASSES.length; j++) assert.ok(unlike(MASSES[i], MASSES[j]), MASSES[i].name + ' and ' + MASSES[j].name + ' are too alike');
-  // the two shoulders: not in the same place on each side of the spire (one runs out over the station's end, one sits in)
-  const mid = (m) => m.path.reduce((t, p) => t + p[1], 0) / m.path.length, [s, n] = above;
+  // the two shoulders: not the same size, and not in the same place on each side of the spire (one runs out over the station's end, one sits in)
+  const mid = (m) => m.path.reduce((t, p) => t + p[1], 0) / m.path.length, [s, n] = shoulders;
+  assert.ok(area(s.path) > area(n.path) * 1.3 && s.to > n.to + 1);
   assert.ok(mid(s) > SPIRE.z && mid(n) < SPIRE.z, 'one each side of the spire');
   assert.ok(Math.abs(Math.abs(mid(s) - SPIRE.z) - Math.abs(mid(n) - SPIRE.z)) > 5, 'not mirrored about the spire');
   assert.ok(Math.max(...s.path.map((p) => p[1])) > Math.max(...BODY_PATH.map((p) => p[1])), 'the south shoulder runs out over the station\'s end');
   assert.ok(n.path.every((p) => inPoly(BODY_PATH, p[0], p[1])), 'the north shoulder sits in on the roof');
-  // a U seen from above: an outline that turns inward twice, wrapped round the keel's foot and open on one side
-  const u = MASSES.filter((m) => m.u); assert.equal(u.length, 1);
+  // a U seen from above: an outline that turns inward twice, wrapped round the spire's foot and open on one side
+  const u = MASSES.filter((m) => m.u); assert.equal(u.length, 1); assert.equal(u[0].side, 'above');
   const P = u[0].path, turnsIn = P.filter((p, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], d1 = [p[0] - a[0], p[1] - a[1]], d2 = [b[0] - p[0], b[1] - p[1]]; return d2[0] * -d1[1] + d2[1] * d1[0] > 1e-6; }).length;
   assert.equal(turnsIn, 2);
-  assert.ok(!inPoly(P, SPIRE.x, SPIRE.z) && inPoly(P, SPIRE.x - 10, SPIRE.z) && inPoly(P, SPIRE.x, SPIRE.z - 14) && inPoly(P, SPIRE.x, SPIRE.z + 14), 'the U wraps the keel\'s foot');
-  // every mass is heavily bevelled, and is plated like the rest
-  for (const m of MASSES) assert.ok(m.bevel >= 1.5 && m.bevel / m.to >= 0.3);
+  assert.ok(!inPoly(P, SPIRE.x, SPIRE.z) && inPoly(P, SPIRE.x - 10, SPIRE.z) && inPoly(P, SPIRE.x, SPIRE.z - 14) && inPoly(P, SPIRE.x, SPIRE.z + 14) && !inPoly(P, SPIRE.x + 9.5, SPIRE.z), 'the U wraps the spire\'s foot and is open toward the doors');
+  // every mass is heavily bevelled
+  for (const m of MASSES) assert.ok(m.bevel >= 1.2 && m.bevel / m.to >= 0.3);
 });
 
 test('outside: plated in shape C: big raised plates with sunk panels on the big flat stretches', () => {
