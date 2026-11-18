@@ -1,23 +1,33 @@
 // THE PILOT'S SEAT: the jump computer's math, for a crew member who signs on as a captain's pilot (src/missions.js; the
 // game's maker, 2026-11-17: "if you are the pilot then you take the ship out of the hanger, then calculate a jump
-// (with maybe 3 questions)"). One ladder like every job's, kids to grown-ups, on JUMP DISTANCES AND TIMES:
-// counting the hops to the rocks; hops in all and hops left; past ten along the numbered beacons; equal jumps; jumps
-// and totals; a distance shared out into equal jumps; speed and time (how far); how fast and how long; bigger trips by
-// the minute; distances in tenths; whole fuel cells for a jump; fuel by the jump (ratio tables); speeds with tenths;
-// proportions; two legs and the speed over a whole trip; and at the top seconds into minutes. Kilometres, seconds and
-// minutes throughout; decimals stay decimals.
-// Mathwood Valley's question makers tell the stories of fuel cells, equal jumps, totals, shared distances, whole cells
-// and the ratio tables through SETTING (engine.js). The hops on the jump computer's picture of the way, the speeds and
-// times, and the distances in tenths are this job's own makers (MAKERS below): Mathwood's speed stories are told with
-// wagons and stagecoaches in miles and have no hook for another world yet.
+// (with maybe 3 questions)"). One ladder like every job's, kids to grown-ups, and EVERY CARD IS ABOUT NAVIGATING (the
+// game's maker: "it would be awesome if we can make all the math relative to the navigation in some way ... I think
+// it will be fun to see how math can be actually applied"). The asteroid field is in the planet's rings; the map shows
+// the planet in the middle with its rings round it. Easiest first:
+//   the hops to the field, counted on the jump computer's picture of the way; fuel against the way (3 units away,
+//   fuel for 5; there and back; "can we get there and back?"); past ten along the numbered beacons; equal jumps;
+//   jumps, fuel and totals; a distance shared out into equal jumps; points on the map, one quarter of it; headings
+//   and turns; speed and time (how far, how fast, how long); the sensor's angle; bigger trips by the minute; the whole
+//   map, with negatives; round the compass; fuel by the jump; a course round the rings; two legs; seconds into
+//   minutes; and at the top "which is the right way to work it out": four diagrams, each with its equation, for the
+//   right triangle and for a rock's length from its angle and distance, the ship's computer doing the arithmetic.
+// Kilometres, seconds, minutes, degrees and plain units throughout; decimals stay decimals.
+// Mathwood Valley's question makers tell the stories of jumps of the same length, totals, what is left, a distance
+// shared out and the ratio tables through SETTING (engine.js). The hops, the fuel against the way, the map, the
+// headings, the speeds and times and the "which sum fits" cards are this job's own makers (MAKERS below): Mathwood's
+// speed stories are told with wagons in miles and have no hook for another world, and it has no maps or headings.
+// A POINT ON THE MAP is answered by picking, of four small maps, the one with the field marked in the right place (or
+// by reading the point off the map on the card). A tap on one big map is the better answer and is not built yet:
+// ~/pw/space-math/MINING_1.md says what it would take.
 //
 // THE JUMP'S THREE LAMPS (distance, charge, go: src/trip.js): a jump is three cards. Where a level has a card that
-// suits the lamp being lit (an Ask's `lamp`), that one is dealt: how far for DISTANCE, fuel cells for CHARGE, how
-// long or how fast for GO; where it has none, any card of the level (pickAsk).
-// WHERE TO: on a trip the cards say where the jump is going (`live.to`: 'field' on the way out, 'home' on the way
-// back); from the levels page, either.
+// suits the lamp being lit (an Ask's `lamp`), that one is dealt: where and how far for DISTANCE, the fuel for CHARGE,
+// the heading and the time for GO; where it has none, any card of the level (pickAsk).
+// WHERE TO: on a trip the cards that name a place say where the jump is going (`live.to`: 'field' on the way out,
+// 'home' on the way back); from the levels page, either.
 import { dec } from '../../../mathwood-valley/src/math/counterkit.js';
 import { ownOrder } from './engine.js';
+import { navMap, methodPic } from './pics.js';
 
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
 const say = (n) => Number(n).toLocaleString('en-US');
@@ -29,29 +39,18 @@ const FOLK = [{ name: 'Pilot Juno', she: true }, { name: 'Captain Ruiz', she: fa
 
 export const SETTING = {
   folk: FOLK,
-  // the youngest: fuel cells to count (Mathwood's picture-story shape for a can)
-  things: [{ key: 'cells', unit: CELL, shape: 'can', short: ['cell', 'cells'] }],
-  kmoreHow: [({ b }) => `The engineer brings ${b} more.`, ({ b }) => `A supply drone drops off ${b} more.`, ({ b, p }) => `${p.They} finds ${b} more in the locker.`],
-  kleftHow: [({ b }) => `The jump drive used ${b} of them.`, ({ b, p }) => `${p.They} put ${b} of them in the jump drive.`, ({ b }) => `${b} of them went to the Explorer's crew.`],
   groups: [
     { key: 'jumps', item: ['jump', 'jumps'], unit: KM, story: ({ a, b }) => `The way ahead is ${a} jumps, and each jump is ${b} kilometres long.`, ask: () => 'How many kilometres is the way ahead?' },
     { key: 'cells', item: ['jump', 'jumps'], unit: CELL, story: ({ a, b }) => `The trip is ${a} jumps. The jump drive burns ${b} fuel cells on every jump.`, ask: () => 'How many fuel cells does the trip need?' },
-    { key: 'charge', item: ['power bank', 'power banks'], unit: MIN, story: ({ a, b }) => `The jump drive has ${a} power banks. Each one takes ${b} minutes to charge.`, ask: () => 'How many minutes does it take to charge them all, one after another?' },
-    { key: 'beacons', item: ['jump', 'jumps'], unit: ['beacon', 'beacons'], story: ({ a, b, f }) => `${f.name} plots ${a} jumps, with ${b} beacons to pass on each jump.`, ask: () => 'How many beacons is that in all?' },
   ],
   share: [
     { key: 'legs', thing: KM, box: ['jump', 'jumps'], story: ({ total, groups }) => `The way ahead is ${total} kilometres. The jump drive covers it in ${groups} jumps, all the same length.`, ask: 'How many kilometres is each jump?' },
     { key: 'cells', thing: CELL, box: ['jump', 'jumps'], story: ({ total, groups }) => `The Miner carries ${total} fuel cells for ${groups} jumps, the same number for each jump.`, ask: 'How many fuel cells are there for each jump?' },
     { key: 'minutes', thing: MIN, box: ['jump', 'jumps'], story: ({ total, groups }) => `The whole trip takes ${total} minutes, in ${groups} jumps that each take the same time.`, ask: 'How many minutes does each jump take?' },
   ],
-  crates: [
-    { key: 'cells', box: CELL, story: ({ total, per }) => `The jump home needs ${total} units of charge. One fuel cell holds ${per} units.`, ask: 'How many fuel cells are needed so there is enough charge?' },
-    { key: 'banks', box: ['power bank', 'power banks'], story: ({ total, per, f }) => `${f.name} has ${total} units of charge to store. A power bank holds ${per} units.`, ask: 'How many power banks are needed to hold it all?' },
-  ],
   partsLeft: [
     { key: 'toGo', unit: KM, story: ({ a, b }) => `The way ahead was ${a} kilometres. The Miner has flown ${b} kilometres of it.`, ask: 'How many kilometres are still to go?' },
     { key: 'cellsLeft', unit: CELL, story: ({ a, b }) => `The Miner set out with ${a} fuel cells. Its jumps so far have used ${b} of them.`, ask: 'How many fuel cells are left?' },
-    { key: 'charge', unit: ['unit', 'units'], story: ({ a, b }) => `The jump drive needs ${a} units of charge. It has ${b} units so far.`, ask: 'How many more units does it need?' },
   ],
   partsTogether: [
     { key: 'legs', unit: KM, story: ({ a, b }) => `The first jump is ${a} kilometres and the second jump is ${b} kilometres.`, ask: 'How many kilometres is that in all?' },
@@ -62,12 +61,6 @@ export const SETTING = {
     { key: 'cells', top: ['jump', 'jumps'], bot: CELL, botShort: ['cell', 'cells'], s: (a, b) => `The jump drive burns ${a} fuel cells for every ${b} jumps.` },
     { key: 'charge', top: MIN, bot: ['unit of charge', 'units of charge'], botShort: ['unit', 'units'], s: (a, b) => `The reactor makes ${a} units of charge every ${b} minutes.` },
     { key: 'km', top: SEC, bot: KM, botShort: ['km', 'km'], s: (a, b) => `On its thrusters the Miner covers ${a} kilometres every ${b} seconds.` },
-  ],
-  proportions: [
-    // (their units short: the ratio table's rows are named by them, "cells in all")
-    ({ n, d, D }) => ({ key: 'burn', s: `${n} of every ${d} fuel cells aboard ${n === 1 ? 'is' : 'are'} for the jump drive. The Miner carries ${D} fuel cells.`, ask: 'How many of them are for the jump drive?', unit: ['cell', 'cells'], what: 'jump drive' }),
-    ({ n, d, D }) => ({ key: 'drive', s: `${n} of every ${d} kilometres of this trip ${n === 1 ? 'is' : 'are'} flown on the jump drive, and the rest on thrusters. The trip is ${D} kilometres.`, ask: 'How many kilometres are flown on the jump drive?', unit: ['km', 'km'], what: 'jump drive' }),
-    ({ n, d, D }) => ({ key: 'beacons', s: `${n} of every ${d} beacons on this route ${n === 1 ? 'is' : 'are'} lit. There are ${D} beacons on the route.`, ask: 'How many of them are lit?', unit: ['beacon', 'beacons'], what: 'lit' }),
   ],
 };
 
@@ -382,78 +375,338 @@ export const MAKERS = {
     },
   },
 
-  // ── distances in tenths of a kilometre ───────────────────────────────────────────────────────────────────────
-  // step 1  adding and taking away: 2.5 kilometres and 1.8 more; 6.2 kilometres with 3.7 flown
-  tenths: {
-    strand: 'dec', at: () => 50,
-    make(step, { rand = Math.random, live = null } = {}) {
-      const t = kit(rand), W = destOf(live, t);
-      for (let tries = 0; tries < 80; tries++) {
-        const a = t.int(12, 79), b = t.int(6, 49);   // tenths
-        if (a % 10 === 0 || b % 10 === 0 || a === b) continue;
-        if (t.chance(0.55)) {
-          const s = a + b, parts = (a % 10) + (b % 10), wholes = Math.floor(a / 10) + Math.floor(b / 10);
-          return ownOrder({
-            key: 'tenths:add', story: `The first jump is ${t1(a)} kilometres and the second jump is ${t1(b)} kilometres.`, ask: 'How many kilometres is that in all?', right: D(s * 10),
-            slips: [
-              ...(parts >= 10 ? [{ ...D(wholes * 100 + parts), slip: 'wholeParts', why: `${a % 10} tenths and ${b % 10} tenths make ${parts} tenths, and 10 tenths are another whole kilometre: carry it.` }] : []),
-              { ...D(Math.abs(a - b) * 10), slip: 'subtracted', why: 'That takes one from the other. Both jumps count: add them.' },
-              { ...D((s + 1) * 10), slip: 'off', why: 'One tenth too many. Line the points up and add each column.' },
-              { ...D((s - 1) * 10), slip: 'off', why: 'One tenth short. Line the points up and add each column.' },
-              { ...D(s * 100), slip: 'pointLost', why: `${a} + ${b} = ${s}, but those are tenths of a kilometre: ${s} tenths.` },
-            ],
-            pic: { kind: 'columns', rows: [dec(a, 1), dec(b, 1)], op: '+' },
-            rightWhy: `${dec(a, 1)} + ${dec(b, 1)} = ${t1(s)} kilometres`, sum: { op: 'add', a: a / 10, b: b / 10 },
-            own: { strand: 'dec', at: 50 }, credit: [], facts: { a, b, op: '+', ans: s },
-          }, rand);
-        }
-        if (a <= b + 1) continue;
-        const d = a - b, borrow = a % 10 < b % 10, digitwise = Math.abs(Math.floor(a / 10) - Math.floor(b / 10)) * 10 + Math.abs((a % 10) - (b % 10));
+  // ── THE FUEL AGAINST THE WAY (the youngest: the game's maker's "The asteroid field is 3 units away and we have enough
+  // fuel for 8 units. Can we get there and back?"). The fuel and the way are drawn on the card, a box a unit. ──────
+  // step 1  fuel left when we get there: 3 units away, fuel for 5
+  // step 2  there and back: 3 units away, how many units for the round trip
+  // step 3  can we get there and back: 3 units away, fuel for 8 (yes, 2 to spare; yes, none to spare; no, 2 short)
+  fuel: {
+    strand: 'number', at: (step) => [4, 10, 14][Math.max(1, Math.min(3, step)) - 1],
+    make(step, { rand = Math.random } = {}) {
+      const t = kit(rand), UNIT = ['unit', 'units'];
+      if (step <= 1) {
+        const out = t.int(1, 4), fuel = out + t.int(1, 5 - Math.min(out, 4) + 2), left = fuel - out;
         return ownOrder({
-          key: 'tenths:left', story: `${W.is} ${t1(a)} kilometres away. The Miner has flown ${t1(b)} kilometres of the way.`, ask: 'How many kilometres are still to go?', right: D(d * 10),
+          key: 'fuel:left', story: `The asteroid field is ${u(out, UNIT)} away. We have fuel for ${u(fuel, UNIT)}.`, ask: 'How many units of fuel are left when we get there?',
+          right: C(left, UNIT),
           slips: [
-            ...(borrow && digitwise !== d ? [{ ...D(digitwise * 10), slip: 'smallerFromBigger', why: `In the tenths the smaller digit was taken from the bigger. ${a % 10} tenths is less than ${b % 10} tenths: borrow a whole kilometre.` }] : []),
-            { ...D((a + b) * 10), slip: 'added', why: 'Flying part of the way leaves less to go: take away.' },
-            { ...D((d + 1) * 10), slip: 'off', why: 'One tenth too many. Line the points up and take away each column.' },
-            { ...D((d > 1 ? d - 1 : d + 2) * 10), slip: 'off', why: 'Line the points up and take away each column again.' },
-            { ...D(b * 10), slip: 'part', why: `${t1(b)} kilometres is what it has flown. The question is what is still to go.` },
+            { ...C(out, UNIT), slip: 'taken', why: `${out} is what the way there burns. Count the fuel that is left over.` },
+            { ...C(fuel, UNIT), slip: 'all', why: `${fuel} is all our fuel. The way there burns ${out} of it.` },
+            { ...C(left + 1, UNIT), slip: 'off', why: 'One too many. Match each box of the way to a box of fuel, and count the fuel left over.' },
+            { ...C(fuel + out, UNIT), slip: 'added', why: 'Flying burns fuel: there is less left, not more.' },
           ],
-          pic: { kind: 'columns', rows: [dec(a, 1), dec(b, 1)], op: '−' },
-          rightWhy: `${dec(a, 1)} − ${dec(b, 1)} = ${t1(d)} kilometres`, sum: { op: 'sub', a: a / 10, b: b / 10 },
-          own: { strand: 'dec', at: 50 }, credit: [], facts: { a, b, op: '−', ans: d, to: W.key },
+          rightWhy: `${fuel} take away ${out} leaves ${u(left, UNIT)}`, sum: { op: 'sub', a: fuel, b: out },
+          picFirst: true, help: { title: 'Fuel against the way', pic: { kind: 'fuel', fuel, out, ask: 'how many boxes of fuel are left over?' }, line: 'Every unit of the way burns one unit of fuel. Match them up and count the fuel left over.' },
+          own: { strand: 'number', at: 4 }, credit: [{ strand: 'sub', at: 5, weight: 0.5 }], facts: { kind: 'left', out, fuel, ans: left },
+        }, rand, 3);
+      }
+      if (step === 2) {
+        const out = t.int(2, 6), ans = out * 2;
+        return ownOrder({
+          key: 'fuel:back', story: `The asteroid field is ${u(out, UNIT)} away. We fly there, and then we fly home again.`, ask: 'How many units is the trip there and back?',
+          right: C(ans, UNIT),
+          slips: [
+            { ...C(out, UNIT), slip: 'one', why: `${out} units is only the way there. We have to come home too.` },
+            { ...C(ans + 1, UNIT), slip: 'off', why: `One too many. The way there is ${out}, and the way back is ${out} more.` },
+            { ...C(ans - 1, UNIT), slip: 'off', why: `One short. The way there is ${out}, and the way back is ${out} more.` },
+            { ...C(out + 2, UNIT), slip: 'added', why: `That adds 2 for the two ways. Each way is ${out} units: ${out} and ${out} more.` },
+          ],
+          rightWhy: `${out} there and ${out} back make ${u(ans, UNIT)}`, sum: { op: 'add', a: out, b: out },
+          picFirst: true, help: { title: 'There and back', pic: { kind: 'fuel', out, back: true, ask: 'how many boxes, there and back?' }, line: `The way back is as long as the way there: ${out} and ${out} more.` },
+          own: { strand: 'number', at: 10 }, credit: [{ strand: 'add', at: 8, weight: 0.5 }], facts: { kind: 'back', out, ans },
+        }, rand, 3);
+      }
+      // can we get there and back? (the answer says by how much)
+      const out = t.int(2, 6), need = out * 2, spare = t.pick([-3, -2, -1, 0, 1, 2, 3, 4]), fuel = Math.max(out + 1, need + spare), d = fuel - need;
+      const F = (v) => ({ v: v + 100, big: v >= 0 ? 'Yes' : 'No', small: v > 0 ? `${u(v, UNIT)} to spare` : v === 0 ? 'with none to spare' : `${u(-v, UNIT)} short`, label: v > 0 ? `Yes, with ${u(v, UNIT)} to spare` : v === 0 ? 'Yes, with none to spare' : `No, we are ${u(-v, UNIT)} short` });
+      const oneWay = fuel - out;      // (the slip: only the way there counted)
+      return ownOrder({
+        key: 'fuel:can', story: `The asteroid field is ${u(out, UNIT)} away, and we have fuel for ${u(fuel, UNIT)}.`, ask: 'Can we get there and back?',
+        right: F(d),
+        slips: [
+          ...(oneWay !== d ? [{ ...F(oneWay), slip: 'one', why: `That counts only the way there. There and back is ${out} and ${out} more: ${need} units.` }] : []),
+          { ...F(-d || 2), slip: 'swapped', why: `There and back is ${need} units, and we have fuel for ${fuel}. ${fuel >= need ? 'That is enough.' : 'That is not enough.'}` },
+          { ...F(d + 1), slip: 'off', why: `There and back is ${need} units. Set that against our ${fuel} units of fuel again.` },
+          { ...F(d - 1), slip: 'off', why: `There and back is ${need} units. Set that against our ${fuel} units of fuel again.` },
+        ],
+        rightWhy: `There and back is ${out} + ${out} = ${need} units. We have ${fuel}: ${d > 0 ? `${u(d, UNIT)} to spare` : d === 0 ? 'just enough' : `${u(-d, UNIT)} short`}`,
+        sum: [{ op: 'add', a: out, b: out, say: 'First the way there and back' }, d >= 0 ? { op: 'sub', a: fuel, b: need, say: 'Then the fuel left over' } : { op: 'sub', a: need, b: fuel, say: 'Then how much fuel is missing' }],
+        picFirst: true, help: { title: 'Fuel against the way', pic: { kind: 'fuel', fuel, out, back: true, ask: 'is there a box of fuel for every box of the way?' }, line: `There and back is ${out} and ${out} more. Match every unit of the way to a unit of fuel.`, steps: [`First there and back: ${out} + ${out}`, 'Then set it against the fuel'] },
+        own: { strand: 'words', at: 14 }, credit: [{ strand: 'add', at: 10, weight: 0.5 }], facts: { kind: 'can', out, fuel, need, ans: d }, size: 2,
+      }, rand, 3);
+    },
+  },
+
+  // ── POINTS ON THE MAP (the game's maker: "We have authorization to mine at -8, 3, can you plot that on our map? And it
+  // can show the planet in the middle with the rings around it. Or if it is on the far side of the planet it could be
+  // a 2 step problem to plot a course around the rings"). A point is found by picking the map that has it marked (four
+  // small maps), or read off the map on the card. ─────────────────────────────────────────────────────────────────
+  // step 1  one quarter of the map: (4, 3)
+  // step 2  the whole map, with negatives: (-8, 3)
+  // step 3  a course round the rings to a field on the planet's far side: how long is it
+  plot: {
+    strand: 'geo', at: (step) => [30, 50, 62][Math.max(1, Math.min(3, step)) - 1],
+    make(step, { rand = Math.random } = {}) {
+      const t = kit(rand);
+      if (step >= 3) {
+        const a = t.int(5, 8), b = t.int(5, 8), h = t.int(4, 6), across = a + b, ans = across + 2 * h, UNIT = ['unit', 'units'];
+        const course = [[-a, 0], [-a, h], [b, h], [b, 0]], pts = [{ x: -a, y: 0, kind: 'ship', label: 'us' }, { x: b, y: 0, kind: 'field', label: 'field' }];
+        const signSlip = Math.abs(b - a) + 2 * h;
+        return ownOrder({
+          key: 'plot:course', story: `We are at (${-a}, 0). The field is on the far side of the planet, at (${b}, 0), and nobody flies through the rings. Our course goes round them: up to (${-a}, ${h}), across to (${b}, ${h}), and down to the field.`, ask: 'How many units long is the course?',
+          right: C(ans, UNIT),
+          slips: [
+            { ...C(across, UNIT), slip: 'straight', why: `${across} units is the straight line through the rings. The course goes up ${h}, across, and down ${h}.` },
+            ...(signSlip !== ans && signSlip > 0 ? [{ ...C(signSlip, UNIT), slip: 'sign', why: `From ${-a} to ${b} is not ${Math.abs(b - a)}: it is ${a} units to 0 and ${b} more beyond it, ${across} in all.` }] : []),
+            { ...C(across + h, UNIT), slip: 'oneLeg', why: `That counts the way up but not the way down. Up ${h}, across ${across}, down ${h}.` },
+            { ...C(ans + 1, UNIT), slip: 'off', why: `Up ${h}, across from ${-a} to ${b}, down ${h}. Add the three legs again.` },
+          ],
+          rightWhy: `Up ${h}, across ${a} + ${b} = ${across}, down ${h}: ${h} + ${across} + ${h} = ${u(ans, UNIT)}`,
+          sum: [{ op: 'add', a, b, say: `First across: from ${-a} to 0, and on to ${b}` }, { op: 'add', a: across, b: h, say: 'Then the way up' }, { op: 'add', a: across + h, b: h, say: 'Then the way down' }],
+          lead: navMap({ hi: 9, quad: 4, points: pts, course, size: 190, ask: 'the course: ? units' }),
+          help: { title: 'Leg by leg', pic: { kind: 'map', hi: 9, quad: 4, points: pts, course, ask: `up ${h}, across ?, down ${h}` }, line: `Three legs. The one across goes from ${-a} to ${b}: count the units to 0, then the units beyond it.`, steps: [`Across: ${a} + ${b}`, `Up and down: ${h} and ${h} more`, 'Then add the legs'] },
+          own: { strand: 'geo', at: 62 }, credit: [{ strand: 'add', at: 30, weight: 0.5 }], facts: { form: 'course', a, b, h, ans }, size: 3,
         }, rand);
       }
-      throw new Error('pilot tenths: nothing made');
+      const whole = step === 2, hi = whole ? 9 : 7, quad = whole ? 4 : 1;
+      let x = 1, y = 2;
+      for (let tries = 0; tries < 60; tries++) {
+        x = whole ? t.int(-8, 8) : t.int(1, 6); y = whole ? t.int(-8, 8) : t.int(1, 6);
+        if (Math.abs(x) !== Math.abs(y) && x !== 0 && y !== 0 && (!whole || (Math.max(Math.abs(x), Math.abs(y)) >= 4 && (x < 0 || y < 0)))) break;
+      }
+      const said = (p) => `(${p[0]}, ${p[1]})`, here = [x, y];
+      // the slips children make: across and up swapped; a sign lost; one off along a line
+      const wrongs = whole
+        ? [[[y, x], 'swapped', 'the first number is how far across (left is minus), the second how far up (down is minus)'], [[-x, y], 'sign', `the first number is ${x}: ${x < 0 ? 'minus means left of the planet' : 'no minus means right of the planet'}`], [[x, -y], 'sign', `the second number is ${y}: ${y < 0 ? 'minus means below the planet' : 'no minus means above the planet'}`], [[-x, -y], 'sign', 'both signs are turned round there']]
+        : [[[y, x], 'swapped', 'the first number is how far across, the second how far up'], [[x + 1 > 6 ? x - 1 : x + 1, y], 'off', `count ${x} lines across from the planet`], [[x, y + 1 > 6 ? y - 1 : y + 1], 'off', `count ${y} lines up from the planet`]];
+      const pt = (p) => [{ x: p[0], y: p[1], kind: 'field' }];
+      if (t.chance(0.5)) {
+        // which map has it marked
+        const M = (p) => ({ v: said(p), big: said(p), small: '', label: `the map with the field at ${said(p)}`, svg: navMap({ hi, quad, points: pt(p), size: 132, numbers: true }) });
+        return ownOrder({
+          key: `plot:mark:${whole ? 'whole' : 'quarter'}`, story: `We have authorization to mine at ${said(here)}. The planet is at (0, 0).`, ask: 'Which map has the field marked in the right place?',
+          right: M(here), slips: wrongs.map(([p, slip, why]) => ({ ...M(p), slip, why: `That map has it at ${said(p)}: ${why}.` })),
+          rightWhy: `${said(here)}: ${Math.abs(x)} ${x < 0 ? 'to the left' : 'across'}, then ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}`,
+          help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, points: [], ask: `${said(here)}: ${Math.abs(x)} ${x < 0 ? 'left' : 'across'}, ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}. Where?` }, line: `Start at the planet, (0, 0). The first number is how far across${whole ? ' (minus: to the left)' : ''}; the second is how far up${whole ? ' (minus: down)' : ''}.`, steps: [`Across: ${x}`, `Then up: ${y}`] },
+          own: { strand: 'geo', at: whole ? 50 : 30 }, facts: { form: 'mark', x, y, whole }, size: 1,
+        }, rand);
+      }
+      // read it off the map
+      const T2 = (p) => ({ v: said(p), big: said(p), small: '', label: said(p) });
+      return ownOrder({
+        key: `plot:read:${whole ? 'whole' : 'quarter'}`, story: 'The scan has found an asteroid field. It is marked on our map. The planet is at (0, 0).', ask: 'Where is the field?',
+        right: T2(here), slips: wrongs.map(([p, slip, why]) => ({ ...T2(p), slip, why: `Not ${said(p)}: ${why}.` })),
+        rightWhy: `${Math.abs(x)} ${x < 0 ? 'to the left' : 'across'} and ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}: ${said(here)}`,
+        lead: navMap({ hi, quad, points: pt(here), size: 190, ask: 'the field is at (?, ?)' }),
+        help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, points: pt(here), ask: 'across first, then up: (?, ?)' }, line: `Count the lines from the planet across to the field${whole ? ' (to the left is minus)' : ''}: that is the first number. Then count up${whole ? ' (down is minus)' : ''}: the second.`, steps: ['First how far across', 'Then how far up'] },
+        own: { strand: 'geo', at: whole ? 50 : 30 }, facts: { form: 'read', x, y, whole }, size: 1,
+      }, rand);
+    },
+  },
+
+  // ── HEADINGS AND TURNS (the game's maker: "Our sensor array picked up a signal for a dense field 30 degrees to its
+  // right. The sensor is pointed 45 degrees to the left of our nose. How many degrees must we change our heading?") ──
+  // step 1  a turn between two headings: nose at 40°, the field at 70°; a new heading after a turn
+  // step 2  the sensor's angle and the signal's: 30° right of a sensor pointed 45° left of the nose
+  // step 3  round the compass: past 360°, and the heading for home (the other way round)
+  heading: {
+    strand: 'geo', at: (step) => [34, 46, 56][Math.max(1, Math.min(3, step)) - 1],
+    make(step, { rand = Math.random } = {}) {
+      const t = kit(rand), DEG = (v, small = 'degrees') => ({ v, big: `${v}°`, small, label: `${v} degrees${small === 'degrees' ? '' : ' ' + small}` });
+      if (step <= 1) {
+        const now = t.int(1, 12) * 10, turn = t.int(2, 12) * 5, to = now + turn;
+        if (t.chance(0.5)) {
+          return ownOrder({
+            key: 'heading:turn', story: `Our nose points at ${now}° on the compass. The asteroid field is at ${to}°.`, ask: 'How many degrees must we turn to point at it?',
+            right: DEG(turn),
+            slips: [
+              { ...DEG(to + now), slip: 'added', why: `That adds the two headings. The turn is the gap between them: from ${now}° round to ${to}°.` },
+              { ...DEG(to), slip: 'bigger', why: `${to}° is where the field is. We are at ${now}° already: the turn is only the gap.` },
+              { ...DEG(turn + 10), slip: 'off', why: `From ${now}° a turn of ${turn + 10}° would end at ${to + 10}°, past the field.` },
+              { ...DEG(turn > 10 ? turn - 10 : turn + 5), slip: 'off', why: `From ${now}° that turn would not end at ${to}°.` },
+            ],
+            rightWhy: `${to}° − ${now}° = a turn of ${turn}°`, sum: { op: 'sub', a: to, b: now },
+            help: { title: 'The gap between two headings', pic: { kind: 'compass', rose: true, lines: [{ deg: now, label: `our nose: ${now}°`, colour: 'ship' }, { deg: to, label: `the field: ${to}°`, colour: 'ask', dash: true }], ask: `from ${now}° round to ${to}°: ? degrees` }, line: `The turn is the gap between where the nose points and where the field is: ${to} − ${now}.`, steps: [`The gap: ${to} − ${now}`] },
+            own: { strand: 'geo', at: 34 }, credit: [{ strand: 'sub', at: 22, weight: 0.5 }], facts: { form: 'turn', now, to, ans: turn },
+          }, rand);
+        }
+        return ownOrder({
+          key: 'heading:new', story: `Our nose points at ${now}° on the compass. The captain calls a turn of ${turn}° to the right.`, ask: 'What is our heading after the turn?',
+          right: DEG(to),
+          slips: [
+            ...(now - turn > 0 ? [{ ...DEG(now - turn), slip: 'subtracted', why: 'On the compass a turn to the right makes the heading bigger. That is a turn to the left.' }] : []),
+            { ...DEG(turn), slip: 'new', why: `${turn}° is the turn. We started at ${now}°, not at 0°.` },
+            { ...DEG(to + 10), slip: 'off', why: `${now} and ${turn} more do not make ${to + 10}.` },
+            { ...DEG(to - 10), slip: 'off', why: `${now} and ${turn} more do not make ${to - 10}.` },
+          ],
+          rightWhy: `${now}° + ${turn}° = ${to}°`, sum: { op: 'add', a: now, b: turn },
+          help: { title: 'A turn to the right', pic: { kind: 'compass', rose: true, lines: [{ deg: now, label: `our nose: ${now}°`, colour: 'ship' }, { deg: to, label: `after ${turn}° right: ?`, colour: 'ask', dash: true }], ask: `${now}° and ${turn}° more: ?` }, line: `The compass counts up to the right. A turn of ${turn}° to the right adds ${turn} to the heading.`, steps: [`${now} + ${turn}`] },
+          own: { strand: 'geo', at: 34 }, credit: [{ strand: 'add', at: 22, weight: 0.5 }], facts: { form: 'new', now, turn, ans: to },
+        }, rand);
+      }
+      if (step === 2) {
+        // the sensor is pointed s off the nose, and the signal is g off the sensor (each left or right): the turn is the two together
+        let s = 45, g = 30, ss = -1, gs = 1;
+        for (let tries = 0; tries < 40; tries++) { s = t.int(4, 16) * 5; g = t.int(2, 12) * 5; ss = t.chance(0.5) ? -1 : 1; gs = t.chance(0.6) ? -ss : ss; if (s !== g && ss * s + gs * g !== 0 && Math.abs(ss * s + gs * g) <= 120) break; }
+        const net = ss * s + gs * g, side = (v) => (v < 0 ? 'left' : 'right'), same = ss === gs;
+        const T = (v) => DEG(Math.abs(v), `to the ${side(v)}`), other = same ? ss * Math.abs(s - g) || ss * 5 : ss * (s + g);
+        const cand = [[-net, 'swapped', `The signal is to the ${side(net)} of our nose, not the ${side(-net)}. Follow the sensor's ${s}° to the ${side(ss)}, then the signal's ${g}° to the ${side(gs)}.`],
+          [other, same ? 'subtracted' : 'added', same ? `Both angles are to the ${side(ss)}: they add up.` : `The sensor points ${side(ss)} and the signal is back to its ${side(gs)}: one takes away from the other.`],
+          [-other, same ? 'subtracted' : 'added', same ? `Both angles are to the ${side(ss)}: they add up, and the turn is to the ${side(ss)}.` : `One angle is to the left and one to the right: one takes away from the other.`],
+          [ss * s, 'one', `${s}° to the ${side(ss)} is where the sensor points. The signal is ${g}° to the ${side(gs)} of that.`]];
+        return ownOrder({
+          key: `heading:sensor:${same ? 'same' : 'across'}`, story: `Our sensor array picked up a signal from a dense field, ${g} degrees to its ${side(gs)}. The sensor is pointed ${s} degrees to the ${side(ss)} of our nose.`, ask: 'How must we change our heading to point at the field?',
+          right: T(net), slips: cand.filter(([v]) => v !== 0 && v !== net).map(([v, slip, why]) => ({ ...T(v), v: v + 1000, slip, why })),
+          rightWhy: same ? `${s}° ${side(ss)} and ${g}° more ${side(gs)}: ${s} + ${g} = ${Math.abs(net)}° to the ${side(net)}` : `${s}° ${side(ss)}, then ${g}° back to the ${side(gs)}: ${Math.max(s, g)} − ${Math.min(s, g)} = ${Math.abs(net)}° to the ${side(net)}`,
+          sum: same ? { op: 'add', a: s, b: g } : { op: 'sub', a: Math.max(s, g), b: Math.min(s, g) },
+          help: { title: 'Two angles, one turn', pic: { kind: 'compass', lines: [{ deg: 0, label: 'our nose', colour: 'ship' }, { deg: ss * s, label: `the sensor: ${s}° ${side(ss)}`, dash: true }, { deg: net, label: `the signal: ${g}° ${side(gs)} of it`, colour: 'ask' }], ask: 'our nose to the signal: ? degrees, and which way?' }, line: same ? `The sensor is ${s}° to the ${side(ss)}, and the signal is ${g}° further the same way: add them.` : `The sensor is ${s}° to the ${side(ss)}, and the signal comes ${g}° back toward the ${side(gs)}: take the smaller from the bigger, and see which side is left.`, steps: [same ? `${s} + ${g}` : `${Math.max(s, g)} − ${Math.min(s, g)}`, 'Then which side of the nose it is on'] },
+          own: { strand: 'geo', at: 46 }, credit: [{ strand: same ? 'add' : 'sub', at: 22, weight: 0.5 }], facts: { form: 'sensor', s: ss * s, g: gs * g, ans: net }, size: 2,
+        }, rand);
+      }
+      // round the compass
+      if (t.chance(0.5)) {
+        const now = t.int(28, 35) * 10, turn = t.int(2, 9) * 10 + (360 - now), to = now + turn - 360;
+        return ownOrder({
+          key: 'heading:round', story: `Our nose points at ${now}° on the compass. The captain calls a turn of ${turn}° to the right. The compass starts again at 0° after 360°.`, ask: 'What is our heading after the turn?',
+          right: DEG(to),
+          slips: [
+            { ...DEG(now + turn), slip: 'past', why: `${now + turn}° is past the top of the compass. After 360° it starts again at 0°: take 360 away.` },
+            { ...DEG(turn), slip: 'new', why: `${turn}° is the turn. We started at ${now}°.` },
+            { ...DEG(to + 10), slip: 'off', why: `${now} + ${turn} = ${now + turn}, and ${now + turn} − 360 is not ${to + 10}.` },
+            { ...DEG(now - turn > 0 ? now - turn : to + 20), slip: 'subtracted', why: 'A turn to the right makes the heading bigger, round past 360° to 0° and on.' },
+          ],
+          rightWhy: `${now}° + ${turn}° = ${now + turn}°, and ${now + turn} − 360 = ${to}°`, sum: [{ op: 'add', a: now, b: turn, say: 'First the turn added on' }, { op: 'sub', a: now + turn, b: 360, say: 'Then once round the compass taken off' }],
+          help: { title: 'Round the compass', pic: { kind: 'compass', rose: true, lines: [{ deg: now, label: `our nose: ${now}°`, colour: 'ship' }, { deg: to, label: `after ${turn}° right: ?`, colour: 'ask', dash: true }], ask: `${now}° and ${turn}° more, past 360°: ?` }, line: 'Add the turn. If that goes past 360°, the compass has started again: take 360 away.', steps: [`${now} + ${turn}`, 'Then take away 360'] },
+          own: { strand: 'geo', at: 56 }, credit: [{ strand: 'add', at: 30, weight: 0.5 }], facts: { form: 'round', now, turn, ans: to }, size: 2,
+        }, rand);
+      }
+      const out = t.int(1, 17) * 10, home = out + 180;
+      return ownOrder({
+        key: 'heading:home', story: `We flew out to the asteroid field on a heading of ${out}°. To fly home we turn right round: half a turn is 180°.`, ask: 'What heading takes us home?',
+        right: DEG(home),
+        slips: [
+          { ...DEG(out + 90), slip: 'quarter', why: 'That is a quarter turn, 90°: it points off to the side. Home is half a turn, 180°.' },
+          { ...DEG(360 - out), slip: 'mirror', why: `That takes ${out} from 360. The way home is the way out turned half round: add 180.` },
+          { ...DEG(180 - out > 0 ? 180 - out : home + 10), slip: 'subtracted', why: `Half a turn adds 180° to the heading: ${out} + 180.` },
+          { ...DEG(home - 10), slip: 'off', why: `${out} + 180 is not ${home - 10}.` },
+        ],
+        rightWhy: `${out}° + 180° = ${home}°`, sum: { op: 'add', a: out, b: 180 },
+        help: { title: 'Half a turn', pic: { kind: 'compass', rose: true, lines: [{ deg: out, label: `the way out: ${out}°`, colour: 'ship' }, { deg: home, label: 'the way home: ?', colour: 'ask', dash: true }], ask: `${out}° turned half round: ?` }, line: `The way home is straight back the way we came: half a turn, 180°, on from ${out}°.`, steps: [`${out} + 180`] },
+        own: { strand: 'geo', at: 56 }, credit: [{ strand: 'add', at: 30, weight: 0.5 }], facts: { form: 'home', out, ans: home },
+      }, rand);
+    },
+  },
+
+  // ── WHICH IS THE RIGHT WAY TO WORK IT OUT (the game's maker: "the question is just about how to do the equation. But
+  // then it can be calculated automatically ... we can just offer four different diagrams with an equation"). The
+  // crew member picks the diagram and equation that fit; the ship's computer does the arithmetic and says the answer. ──
+  // step 1  the right triangle: the planet straight ahead, the field off to its side at a right angle
+  // step 2  a rock's length from the angle it spans and how far off it is (and the other way round)
+  method: {
+    strand: 'geo', at: (step) => (step <= 1 ? 80 : 84),
+    make(step, { rand = Math.random } = {}) {
+      const t = kit(rand), km = (v) => `${say(Math.round(v))} kilometres`;
+      const coin = (kind, eq, o, v) => ({ v, big: eq, small: '', label: eq, svg: methodPic(kind, { ...o, eq }) });
+      if (step <= 1) {
+        const P = t.int(10, 20) * 10000, F = t.int(2, 8) * 5000, far = t.chance(0.6);
+        if (far) {
+          const d = Math.hypot(P, F), o = { a: 'planet: a', b: 'field: b', c: 'distance ?', mark: 'far' };
+          return ownOrder({
+            key: 'method:hyp', story: `The asteroid field is in the ring to the side of the planet. The planet is ${km(P)} straight ahead. The field is ${km(F)} from the planet, at a right angle to our line to the planet.`, ask: 'Which is the right way to work out our distance to the field?',
+            right: coin('tri', 'distance = √(a² + b²)', o, 'hyp'),
+            slips: [
+              { ...coin('tri', 'distance = a + b', o, 'sum'), slip: 'added', why: 'a + b is the way round by the planet: two sides of the triangle. Straight to the field is the long side, shorter than that.' },
+              { ...coin('tri', 'distance = a − b', o, 'diff'), slip: 'subtracted', why: 'a − b is shorter than the way to the planet. The field is further off than the planet, off to its side.' },
+              { ...coin('tri', 'distance = √(a² − b²)', o, 'leg'), slip: 'leg', why: 'Taking the squares away finds a short side from the long one. Here the long side is the one asked for: add the squares.' },
+              { ...coin('tri', 'distance = (a × b) ÷ 2', o, 'area'), slip: 'area', why: 'Half of a × b is how much room is inside the triangle, not how long its side is.' },
+            ],
+            rightWhy: `The ship's computer: √(${say(P)}² + ${say(F)}²) = about ${km(d)}`,
+            help: { title: 'A right triangle', pic: { kind: 'method', a: `a = ${say(P)}`, b: `b = ${say(F)}`, c: '?', mark: 'far' }, line: 'Us, the planet and the field make a triangle with a square corner at the planet. The side across from the square corner is the long one: its square is the other two squares added.', steps: ['Square the two short sides', 'Add the squares', 'Take the square root'] },
+            own: { strand: 'geo', at: 80 }, credit: [{ strand: 'pow', at: 70, weight: 0.5 }], facts: { form: 'hyp', P, F, ans: d }, size: 2,
+          }, rand);
+        }
+        const D = Math.max(P + 1000, Math.round(Math.hypot(P, F) / 1000) * 1000), side = Math.sqrt(D * D - P * P), o = { a: 'planet: a', b: 'ring ?', c: 'field: c', mark: 'side' };
+        return ownOrder({
+          key: 'method:leg', story: `The planet is ${km(P)} straight ahead, and the scan puts the asteroid field ${km(D)} from us. The field is in the ring, out to the side of the planet at a right angle to our line to the planet.`, ask: 'Which is the right way to work out how far the field is from the planet?',
+          right: coin('tri', 'ring = √(c² − a²)', o, 'leg'),
+          slips: [
+            { ...coin('tri', 'ring = c − a', o, 'diff'), slip: 'subtracted', why: 'c − a would be right only if the field were straight behind the planet. It is off to the side: the triangle\'s sides go by their squares.' },
+            { ...coin('tri', 'ring = √(c² + a²)', o, 'hyp'), slip: 'hyp', why: 'Adding the squares finds the long side. The long side, c, is known here: take the square of a away from it.' },
+            { ...coin('tri', 'ring = c + a', o, 'sum'), slip: 'added', why: 'c + a is longer than either. The side asked for is the short one.' },
+            { ...coin('tri', 'ring = c ÷ a', o, 'ratio'), slip: 'ratio', why: 'c ÷ a says how many times longer one side is than the other, not how long the third side is.' },
+          ],
+          rightWhy: `The ship's computer: √(${say(D)}² − ${say(P)}²) = about ${km(side)}`,
+          help: { title: 'A right triangle', pic: { kind: 'method', a: `a = ${say(P)}`, b: '?', c: `c = ${say(D)}`, mark: 'side' }, line: 'Us, the planet and the field make a triangle with a square corner at the planet. The long side\'s square is the other two squares added, so a short side\'s square is the long one\'s less the other\'s.', steps: ['Square the long side and the side we know', 'Take one square from the other', 'Take the square root'] },
+          own: { strand: 'geo', at: 80 }, credit: [{ strand: 'pow', at: 70, weight: 0.5 }], facts: { form: 'leg', P, D, ans: side }, size: 2,
+        }, rand);
+      }
+      const A = t.pick([4, 6, 8, 10, 12, 16, 20]), half = A / 2, tan = Math.tan(half * Math.PI / 180), o = { ang: 'angle', dist: 'distance', len: 'length ?' };
+      if (t.chance(0.6)) {
+        const D = t.int(4, 40) * 250, len = 2 * D * tan;
+        return ownOrder({
+          key: 'method:span', story: `Our jump path passes close to a large asteroid. It is ${km(D)} away, straight ahead of our sensor, and its two far ends are ${A}° apart as we see them.`, ask: 'Which is the right way to find its length?',
+          right: coin('arc', 'length = 2 × distance × tan(angle ÷ 2)', o, 'tan'),
+          slips: [
+            { ...coin('arc', 'length = distance × angle', o, 'times'), slip: 'times', why: 'Kilometres times degrees is not a length. The angle has to go through tan first, which turns it into a slope.' },
+            { ...coin('arc', 'length = distance ÷ tan(angle ÷ 2)', o, 'div'), slip: 'inverse', why: 'Dividing by tan makes a wider angle give a shorter rock. A wider angle means a longer one: multiply.' },
+            { ...coin('arc', 'length = 2 × distance × cos(angle ÷ 2)', o, 'cos'), slip: 'cos', why: 'cos of a small angle is nearly 1: that would make every rock about twice as long as it is far. tan is the side across the angle over the side along it.' },
+            { ...coin('arc', 'length = distance + angle', o, 'sum'), slip: 'added', why: 'Kilometres and degrees cannot be added.' },
+          ],
+          rightWhy: `The ship's computer: 2 × ${say(D)} × tan(${half}°) = about ${km(len)}`,
+          help: { title: 'Two right triangles', pic: { kind: 'method', ang: `${A}°`, dist: `${say(D)} km`, len: '?' }, line: 'The line straight to the rock\'s middle cuts the picture into two right triangles, each with half the angle. In each, tan of the half angle is half the length over the distance.', steps: ['Halve the angle', 'Half the length = distance × tan of that', 'Double it'] },
+          own: { strand: 'geo', at: 84 }, credit: [{ strand: 'ratio', at: 72, weight: 0.5 }], facts: { form: 'span', D, A, ans: len }, size: 2,
+        }, rand);
+      }
+      const L = t.int(2, 20) * 50, dist = (L / 2) / tan, o2 = { ang: 'angle', dist: 'distance ?', len: 'length' };
+      return ownOrder({
+        key: 'method:range', story: `The chart says the asteroid ahead is ${km(L)} long. From end to end it spans ${A}° on our screen, and we are facing its middle.`, ask: 'Which is the right way to find how far away it is?',
+        right: coin('arc', 'distance = (length ÷ 2) ÷ tan(angle ÷ 2)', o2, 'tan'),
+        slips: [
+          { ...coin('arc', 'distance = length × tan(angle ÷ 2)', o2, 'times'), slip: 'inverse', why: 'tan of a small angle is a small number: that would put the rock closer than it is long. A small angle means it is far off: divide.' },
+          { ...coin('arc', 'distance = length ÷ angle', o2, 'div'), slip: 'times', why: 'Kilometres over degrees is not a distance. The angle has to go through tan first.' },
+          { ...coin('arc', 'distance = length × angle', o2, 'mult'), slip: 'times', why: 'That makes a wider angle mean further away. The closer a rock is, the wider it looks.' },
+          { ...coin('arc', 'distance = length − angle', o2, 'diff'), slip: 'subtracted', why: 'Kilometres and degrees cannot be taken from each other.' },
+        ],
+        rightWhy: `The ship's computer: (${say(L)} ÷ 2) ÷ tan(${half}°) = about ${km(dist)}`,
+        help: { title: 'Two right triangles', pic: { kind: 'method', ang: `${A}°`, dist: '?', len: `${say(L)} km` }, line: 'The line to the rock\'s middle makes two right triangles, each with half the angle and half the length. tan of the half angle is half the length over the distance, so the distance is half the length over that tan.', steps: ['Halve the angle, and halve the length', 'Distance = half the length ÷ tan of the half angle'] },
+        own: { strand: 'geo', at: 84 }, credit: [{ strand: 'ratio', at: 72, weight: 0.5 }], facts: { form: 'range', L, A, ans: dist }, size: 2,
+      }, rand);
     },
   },
 };
 
 // ── the ladder: easiest first, every step small ──────────────────────────────────────────────────────────────────
-// (lamp: the jump's lamp an Ask suits, for pickAsk: 'distance' how far, 'charge' the fuel cells, 'go' how long or fast)
-const K = (step, w = 1, lamp = 'charge') => ({ maker: 'wordsK', step, w, lamp });
+// (lamp: the jump's lamp an Ask suits, for pickAsk: 'distance' where and how far, 'charge' the fuel, 'go' the heading
+// and the time)
 const W = (step, types, w = 1) => ({ maker: 'words', step, types, w });
 const M = (maker, step, w = 1, lamp = null) => ({ maker, step, w, ...(lamp ? { lamp } : {}) });
 
 export const PLACE = {
-  id: 'pilot', name: 'The pilot\'s seat', short: 'Pilot', math: 'Jump distances and times: hops, equal jumps, speeds, minutes', pic: 'pilot', job: null,
-  line: 'The jump computer on a captain\'s run: hops to count, jumps of the same length, a distance shared out, and how far, how fast and how long.',
+  id: 'pilot', name: 'The pilot\'s seat', short: 'Pilot', math: 'Navigating: fuel and distance, the map, headings, speed and time', pic: 'pilot', job: null,
+  line: 'The jump computer on a captain\'s run: fuel against the way, points on the map round the planet, headings and turns, how far and how long, and which sum fits.',
   levels: [
-    { id: 'kHops', title: 'Counting the hops', line: 'Up to 5: the hops to the rocks; fuel cells and 1 more', gen: { mix: [M('hops', 1, 2, 'distance'), K(1)] } },
-    { id: 'kMore', title: 'Hops in all, hops left', line: 'Up to 10: 3 hops to the beacon and 2 more; 7 hops, 3 made', gen: { mix: [M('hops', 2, 2, 'distance'), K(2)] } },
-    { id: 'kPast', title: 'Past ten, beacon by beacon', line: 'At beacon 8, 5 more hops; 8 fuel cells and 5 more', gen: { mix: [M('hops', 3, 2, 'distance'), K(3)] } },
-    { id: 'kEqual', title: 'Equal jumps', line: '3 jumps of 5 kilometres', strand: 'words', gen: { mix: [M('hops', 4, 2, 'distance'), K(3)] } },
-    { id: 'jumps', title: 'Jumps and totals', line: '4 jumps of 6 kilometres; 15 kilometres and 18 more', gen: { mix: [W(1, ['groups', 'parts'])] } },
+    { id: 'kHops', title: 'Hops and fuel', line: 'Up to 5: the hops to the field; 3 units away with fuel for 5', gen: { mix: [M('hops', 1, 2, 'distance'), M('fuel', 1, 1, 'charge')] } },
+    { id: 'kMore', title: 'Hops in all, hops left', line: 'Up to 10: 3 hops to the beacon and 2 more; 7 hops, 3 made', gen: { mix: [M('hops', 2, 2, 'distance'), M('fuel', 1, 1, 'charge')] } },
+    { id: 'kBack', title: 'There and back', line: '3 units away: how many units there and back', gen: { mix: [M('fuel', 2, 2, 'charge'), M('hops', 2, 1, 'distance')] } },
+    { id: 'kPast', title: 'Past ten, beacon by beacon', line: 'At beacon 8, 5 more hops; from beacon 8 to beacon 13', gen: { mix: [M('hops', 3, 2, 'distance'), M('fuel', 2, 1, 'charge')] } },
+    { id: 'kCan', title: 'Can we get there and back?', line: '3 units away and fuel for 8: yes, with 2 units to spare', strand: 'words', gen: { mix: [M('fuel', 3, 2, 'charge'), M('hops', 3, 1, 'distance')] } },
+    { id: 'kEqual', title: 'Equal jumps', line: '3 jumps of 5 kilometres', strand: 'words', gen: { mix: [M('hops', 4, 2, 'distance'), M('fuel', 3, 1, 'charge')] } },
+    { id: 'jumps', title: 'Jumps, fuel and totals', line: '4 jumps of 6 kilometres; 15 kilometres and 18 more; 30 fuel cells, 12 used', gen: { mix: [W(1, ['groups', 'parts'])] } },
     { id: 'share', title: 'Sharing a distance out', line: '24 kilometres in 4 equal jumps', gen: { mix: [W(2, ['share'], 2), W(1, ['groups'])] } },
-    { id: 'speed', title: 'Speed and time: how far', line: '6 kilometres a second for 5 seconds', gen: { mix: [M('rate', 1, 2, 'distance'), W(2, ['share'])] } },
+    { id: 'plot1', title: 'Points on the map', line: 'One quarter of the map: mine at (4, 3)', gen: { mix: [M('plot', 1, 2, 'distance'), W(2, ['share'])] } },
+    { id: 'turn', title: 'Headings and turns', line: 'Nose at 40°, the field at 70°: how far to turn', gen: { mix: [M('heading', 1, 2, 'go'), M('plot', 1, 1, 'distance')] } },
+    { id: 'speed', title: 'Speed and time: how far', line: '6 kilometres a second for 5 seconds', gen: { mix: [M('rate', 1, 2, 'distance'), M('heading', 1, 1, 'go')] } },
     { id: 'fast', title: 'How fast, how long', line: '45 kilometres in 9 seconds; 40 kilometres at 8 kilometres a second', gen: { mix: [M('rate', 2, 2, 'go'), M('rate', 1, 1, 'distance')] } },
-    { id: 'minutes', title: 'Bigger trips, by the minute', line: '360 kilometres at 40 kilometres a minute', gen: { mix: [M('rate', 3, 2), M('rate', 2, 1, 'go')] } },
-    { id: 'tenths', title: 'Distances in tenths', line: '2.5 kilometres and 1.8 more; 6.2 kilometres with 3.7 flown', gen: { mix: [M('tenths', 1, 2, 'distance'), M('rate', 3)] } },
-    { id: 'cells', title: 'Whole fuel cells', line: '50 units of charge, 12 to a fuel cell: 5 cells', gen: { mix: [W(7, ['share'], 2), M('rate', 3)] } },
-    { id: 'table', title: 'Fuel by the jump', line: '3 fuel cells for every 2 jumps; for 10 jumps?', gen: { mix: [M('ratio', 3, 2, 'charge'), M('rate', 3)] } },
-    { id: 'decSpeed', title: 'Speeds with tenths', line: '7.5 kilometres a second for 4 seconds; 30 kilometres at 7.5 a second', gen: { mix: [M('rate', 4, 2), M('ratio', 3, 1, 'charge')] } },
-    { id: 'prop', title: 'Proportions', line: '3 of every 4 kilometres on the jump drive; of 20 kilometres?', gen: { mix: [M('ratio', 5, 2), M('rate', 4)] } },
-    { id: 'legs', title: 'Two legs, one trip', line: '120 kilometres at 40 a minute, then 90 at 30; the speed over the whole trip', gen: { mix: [M('rate', 5, 2, 'go'), M('ratio', 5)] } },
+    { id: 'sensor', title: 'The sensor\'s angle', line: 'A signal 30° right of a sensor pointed 45° left of the nose', gen: { mix: [M('heading', 2, 2, 'go'), M('rate', 2)] } },
+    { id: 'minutes', title: 'Bigger trips, by the minute', line: '360 kilometres at 40 kilometres a minute', gen: { mix: [M('rate', 3, 2), M('heading', 2, 1, 'go')] } },
+    { id: 'plot4', title: 'The whole map', line: 'With negatives: mine at (-8, 3)', gen: { mix: [M('plot', 2, 2, 'distance'), M('rate', 3)] } },
+    { id: 'round', title: 'Round the compass', line: 'Nose at 320°, a turn of 70° right; the heading for home', gen: { mix: [M('heading', 3, 2, 'go'), M('plot', 2, 1, 'distance')] } },
+    { id: 'table', title: 'Fuel by the jump', line: '3 fuel cells for every 2 jumps; for 10 jumps?', gen: { mix: [M('ratio', 3, 2, 'charge'), M('heading', 3, 1, 'go')] } },
+    { id: 'course', title: 'A course round the rings', line: 'From (-6, 0) round to (7, 0): up 5, across, down 5', gen: { mix: [M('plot', 3, 2, 'distance'), M('rate', 4)] } },
+    { id: 'legs', title: 'Two legs, one trip', line: '120 kilometres at 40 a minute, then 90 at 30; the speed over the whole trip', gen: { mix: [M('rate', 5, 2, 'go'), M('plot', 3, 1, 'distance')] } },
     { id: 'minsec', title: 'Seconds into minutes', line: '2,400 kilometres at 8 kilometres a second: how many minutes?', gen: { mix: [M('rate', 6, 2, 'go'), M('rate', 5)] } },
+    { id: 'triangle', title: 'Which sum fits: the right triangle', line: 'The planet ahead, the field off to its side: which equation gives the distance', gen: { mix: [M('method', 1, 2, 'distance'), M('rate', 6, 1, 'go')] } },
+    { id: 'span', title: 'Which sum fits: an angle and a distance', line: 'A rock 10° wide at 2,000 kilometres: which equation gives its length', gen: { mix: [M('method', 2, 2, 'distance'), M('method', 1)] } },
   ],
 };
 

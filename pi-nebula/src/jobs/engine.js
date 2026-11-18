@@ -280,14 +280,16 @@ export function ownOrder(core, rand = Math.random, coins = 4) {
     if (!s || wrong.length >= coins - 1) continue;
     if (s.v == null || seen.has(String(s.v)) || !(typeof s.v !== 'number' || s.v > 0)) continue;
     seen.add(String(s.v));
-    wrong.push({ v: s.v, big: s.big, small: s.small || '', label: s.label, good: false, slip: s.slip || null, why: s.why || '' });
+    wrong.push({ v: s.v, big: s.big, small: s.small || '', label: s.label, good: false, slip: s.slip || null, why: s.why || '', ...(s.svg ? { svg: s.svg } : {}) });
   }
   const R = core.right;
-  const all = t.shuffle([{ v: R.v, big: R.big, small: R.small || '', label: R.label, good: true, slip: null, why: '' }, ...wrong]);
+  // (an answer may be a picture: its face's svg goes on the button, the dock's panes, the pilot's maps)
+  const all = t.shuffle([{ v: R.v, big: R.big, small: R.small || '', label: R.label, good: true, slip: null, why: '', ...(R.svg ? { svg: R.svg } : {}) }, ...wrong]);
   return {
     id: Math.floor(rand() * 1e9).toString(36), key: core.key, story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`,
     coins: all, answer: R.label, pic: core.pic || null, picFirst: !!core.picFirst, rightWhy: core.rightWhy, sum: core.sum ? sumOf(core.sum) : null,
     help: core.help || null, own: core.own, credit: core.credit || [], facts: core.facts || null, size: core.size || 1, lines: core.lines || null,
+    ...(core.lead ? { lead: core.lead } : {}),
   };
 }
 

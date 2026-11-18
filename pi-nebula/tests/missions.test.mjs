@@ -239,19 +239,22 @@ test('the payout card: a question about this haul for every level, the same pay 
 });
 
 // ── the pilot's ladder ───────────────────────────────────────────────────────────────────────────────────────────
-test('the pilot\'s seat joins Mathwood\'s levels: sixteen levels, easiest first, kindergarten to eighth grade', () => {
+const LEVELS = ['kHops', 'kMore', 'kBack', 'kPast', 'kCan', 'kEqual', 'jumps', 'share', 'plot1', 'turn', 'speed', 'fast', 'sensor', 'minutes', 'plot4', 'round', 'table', 'course', 'legs', 'minsec', 'triangle', 'span'];
+test('the pilot\'s seat joins Mathwood\'s levels: twenty-two levels, easiest first, kindergarten to past eighth grade', () => {
   assert.equal(E.register(pilot), true); assert.deepEqual(PROBLEMS, []);
   const L = PLACE.pilot.levels;
-  assert.equal(L.length, 16);
+  assert.deepEqual(L.map((x) => x.id), LEVELS);
   for (let i = 1; i < L.length; i++) assert.ok(L[i].grade >= L[i - 1].grade, `${L[i].id}: ${L[i].grade} after ${L[i - 1].grade}`);
-  assert.equal(L[0].grade, 0); assert.ok(L[L.length - 1].grade >= 76);
-  assert.deepEqual(L.map((x) => x.id), ['kHops', 'kMore', 'kPast', 'kEqual', 'jumps', 'share', 'speed', 'fast', 'minutes', 'tenths', 'cells', 'table', 'decSpeed', 'prop', 'legs', 'minsec']);
-  // no step up is more than about a school year and a half
+  assert.equal(L[0].grade, 0); assert.ok(L[L.length - 1].grade >= 80);
+  // no step up is more than about a school year
   for (let i = 1; i < L.length; i++) assert.ok(L[i].grade - L[i - 1].grade <= 12, `${L[i - 1].id} to ${L[i].id}: ${L[i].grade - L[i - 1].grade}`);
 });
 
-test('every level of the pilot\'s ladder deals good cards: one right answer, wrong ones that say why, a picture, and Mathwood\'s west left out', () => {
+test('every level of the pilot\'s ladder deals good cards about navigating: one right answer, wrong ones that say why, a picture', () => {
   const WEST = /\b(horse|cattle|wagon|saloon|stagecoach|rifle|cowhand|steer|Yuma|Tucson|jerky|harvest supper|town social|miles?)\b/i;
+  // every card is about the way, the fuel, the map or the heading: no sum with only a space word on it
+  const NAV = /\b(hops?|jumps?|fuel|field|rocks|station|beacons?|course|heading|nose|compass|map|kilometres|trip|way ahead|sensor|planet|asteroid|flies|flew|thrusters|reactor)\b/i;
+  const seenKinds = new Set();
   for (const L of pilot.place.levels) {
     const rand = seeded(L.id.length * 131 + L.grade);
     const keys = new Set();
@@ -259,40 +262,38 @@ test('every level of the pilot\'s ladder deals good cards: one right answer, wro
       const crew = crewOf();
       setLevelAt(crew, 'pilot', L.id);
       const to = k % 2 ? 'home' : 'field', q = E.deal(crew, pilot, { rand, live: k % 5 === 4 ? null : { lamp: ['distance', 'charge', 'go'][k % 3], to } }), o = q.order;
-      assert.equal(q.level.id, L.id); keys.add(o.key);
+      assert.equal(q.level.id, L.id); keys.add(o.key); seenKinds.add(o.key.split(':')[0]);
       assert.equal(o.coins.filter((c) => c.good).length, 1, `${L.id}: ${o.story}`);
       assert.ok(o.coins.length >= 3, `${L.id}: ${o.coins.length} answers`);
       assert.equal(new Set(o.coins.map((c) => c.label)).size, o.coins.length, `${L.id}: two answers alike`);
-      const text = `${o.story} ${o.ask} ${o.coins.map((c) => `${c.big} ${c.small} ${c.why}`).join(' ')} ${o.rightWhy || ''}`;
+      const text = `${o.story} ${o.ask} ${o.coins.map((c) => `${c.big} ${c.small} ${c.label} ${c.why}`).join(' ')} ${o.rightWhy || ''}`;
       assert.ok(!/NaN|undefined|Infinity|\[object/.test(text), `${L.id}: ${text}`);
       assert.ok(!WEST.test(`${o.story} ${o.ask}`), `${L.id}: the west got in: ${o.story} ${o.ask}`);
-      // right answers right, wrong ones wrong and each with a line why
-      const right = rightOf(o);
-      assert.ok(Number.isFinite(right) && right > 0, `${L.id}: ${o.answer}`);
-      for (const c of o.coins.filter((x) => !x.good)) { assert.ok(num(c.label) !== right, `${L.id}: ${c.label} is the answer too`); assert.ok(c.why && c.why.length > 12, `${L.id}: ${c.label} has no line why`); }
-      // decimals stay decimals, and no fraction is written as a decimal with a long tail
-      for (const c of o.coins) assert.ok(/^[\d,]+(\.\d{1,2})?$/.test(c.big), `${L.id}: ${c.big}`);
-      // Help: a picture for this card; a card of this job's own that is not a picture to count has a "?" on its picture
+      assert.ok(NAV.test(`${o.story} ${o.ask}`), `${L.id}: not about navigating: ${o.story} ${o.ask}`);
+      for (const c of o.coins.filter((x) => !x.good)) assert.ok(c.why && c.why.length > 12, `${L.id}: ${c.label} has no line why`);
+      // an answer is a number with its unit, a yes or no, a point, a heading, or a picture (a map, a diagram with its equation)
+      for (const c of o.coins) assert.ok(c.svg ? c.svg.startsWith('<svg') && !/NaN|undefined/.test(c.svg) : /^([\d,]+(\.\d{1,2})?°?|Yes|No|\(-?\d, -?\d\))$/.test(c.big), `${L.id}: ${c.big}`);
+      if (o.lead) assert.ok(o.lead.startsWith('<svg') && o.lead.includes('?') && !/NaN|undefined/.test(o.lead), `${L.id}/${o.key}: its map`);
+      // Help: a picture for this card
       const pic = helpPicture(o);
       assert.ok(pic.svg.startsWith('<svg') && !/NaN|undefined/.test(pic.svg), `${L.id}/${o.key}: no picture`);
-      // it pays what a card of its work pays (the run pays by the share; the levels page shows a card's worth)
       assert.ok(q.worth.pay >= E.PAY.min && q.worth.pay <= E.PAY.max && q.worth.secs > 4 && q.worth.secs < 60, `${L.id}: ${q.worth.pay} for ${q.worth.secs} s`);
     }
     assert.ok(keys.size >= 2, `${L.id}: only ${[...keys]}`);
-    // an example for the levels page
     const ex = E.example(pilot, L, seeded(3));
     assert.ok(ex.q.length > 20 && ex.a, L.id);
   }
+  for (const kind of ['hops', 'fuel', 'plot', 'heading', 'rate', 'method', 'groups', 'share', 'parts', 'ratio']) assert.ok(seenKinds.has(kind), kind);
 });
 
-test('the pilot\'s own makers are right: the hops, the speeds and times, the tenths', () => {
+test('the pilot\'s own makers are right: the hops, the fuel, the map, the headings, the speeds and times, which sum fits', () => {
   const rand = seeded(21), M = pilot.makers;
-  // (a card's sums: each can be laid out by the worked sheet, and the last works on from the ones before it: two
-  // legs are two sums of their own, then the two together)
+  // (a card's sums: each can be laid out by the worked sheet, and the last works on from the ones before it)
   const sumEnds = (o) => { const chain = o.sum.chain || [o.sum]; for (const x of chain) assert.doesNotThrow(() => workOf(x), `${o.key}: ${JSON.stringify(x)}`); assert.ok(chain.length === 1 || chain[chain.length - 1].carried, `${o.key}: ${JSON.stringify(chain)}`); return endOf(chain[chain.length - 1]); };
+  const good = (o) => o.coins.find((c) => c.good);
   for (let k = 0; k < 400; k++) {
     const live = k % 3 ? { to: k % 2 ? 'home' : 'field' } : null, frac = (k % 5) / 4;
-    // the hops: counted on the card (no sum to count 1 to 5; the others' sums end on the answer)
+    // the hops: counted on the card
     for (const step of [1, 2, 3, 4]) {
       const o = M.hops.make(step, { rand, live }), f = o.facts, r = rightOf(o);
       assert.equal(o.picFirst, true); assert.equal(o.coins.length, 3, o.story); assert.equal(o.help.pic.kind, 'hops');
@@ -301,28 +302,69 @@ test('the pilot\'s own makers are right: the hops, the speeds and times, the ten
       assert.ok(r <= [5, 10, 20, 50][step - 1], `${o.story}: ${r}`);
       if (step === 3) assert.ok(f.end > 10 && f.end <= 20, o.story);
       if (o.sum) assert.ok(near(sumEnds(o), want), o.story);
-      // the picture never writes the answer: the hops are there to count (a line of beacons shows its "?")
-      if (f.kind === 'land' || f.kind === 'gap' || f.kind === 'equal') assert.ok(helpPicture(o).svg.includes('?'), o.key);
       if (live && f.to) assert.equal(f.to, live.to);
+    }
+    // the fuel against the way: what is left, there and back, can we get there and back
+    for (const step of [1, 2, 3]) {
+      const o = M.fuel.make(step, { rand }), f = o.facts, lab = good(o).label;
+      assert.equal(o.picFirst, true); assert.equal(o.coins.length, 3, o.story); assert.equal(o.help.pic.kind, 'fuel');
+      if (f.kind === 'left') { assert.equal(rightOf(o), f.fuel - f.out); assert.ok(f.fuel <= 10 && f.fuel > f.out); assert.ok(near(sumEnds(o), f.fuel - f.out)); }
+      else if (f.kind === 'back') { assert.equal(rightOf(o), 2 * f.out); assert.ok(2 * f.out <= 12); }
+      else {
+        const d = f.fuel - 2 * f.out;
+        assert.equal(f.ans, d); assert.equal(f.need, 2 * f.out);
+        assert.equal(lab, d > 0 ? `Yes, with ${d} ${d === 1 ? 'unit' : 'units'} to spare` : d === 0 ? 'Yes, with none to spare' : `No, we are ${-d} ${d === -1 ? 'unit' : 'units'} short`, o.story);
+        assert.equal(good(o).big, d >= 0 ? 'Yes' : 'No');
+        assert.ok(near(sumEnds(o), Math.abs(d)), o.story);
+      }
+    }
+    // the map: a point in one quarter, a point anywhere, a course round the rings
+    for (const step of [1, 2]) {
+      const o = M.plot.make(step, { rand }), f = o.facts, P = `(${f.x}, ${f.y})`;
+      assert.equal(o.coins.length, 4, o.story);
+      if (step === 1) assert.ok(f.x >= 1 && f.x <= 6 && f.y >= 1 && f.y <= 6 && f.x !== f.y); else assert.ok(Math.abs(f.x) <= 8 && Math.abs(f.y) <= 8 && f.x * f.y !== 0 && (f.x < 0 || f.y < 0), P);
+      assert.ok(good(o).label.endsWith(P), `${o.story}: ${good(o).label}`);
+      if (f.form === 'mark') { assert.ok(o.story.includes(P)); for (const c of o.coins) assert.ok(c.svg, 'four small maps'); assert.ok(o.coins.some((c) => c.label.endsWith(`(${f.y}, ${f.x})`)), 'across and up swapped is one of them'); }
+      else { assert.ok(o.lead && !o.story.includes(P)); assert.ok(!o.lead.includes(P), 'the map does not write the answer'); }
+      assert.ok(helpPicture(o).svg.includes('?'));
+    }
+    const c3 = M.plot.make(3, { rand }), f3 = c3.facts;
+    assert.equal(rightOf(c3), f3.a + f3.b + 2 * f3.h, c3.story); assert.ok(near(sumEnds(c3), f3.a + f3.b + 2 * f3.h)); assert.ok(c3.lead.includes('?'));
+    assert.ok(c3.coins.some((c) => num(c.label) === f3.a + f3.b), 'the straight line through the rings is one of the wrong ones');
+    // headings: a turn, a new heading, the sensor's angle, round the compass, the way home
+    for (const step of [1, 2, 3]) {
+      const o = M.heading.make(step, { rand }), f = o.facts, lab = good(o).label;
+      assert.equal(o.coins.length, 4, o.story); assert.equal(o.help.pic.kind, 'compass'); assert.ok(helpPicture(o).svg.includes('?'));
+      if (f.form === 'turn') assert.equal(rightOf(o), f.to - f.now);
+      else if (f.form === 'new') assert.equal(rightOf(o), f.now + f.turn);
+      else if (f.form === 'sensor') { assert.equal(f.ans, f.s + f.g); assert.equal(lab, `${Math.abs(f.ans)} degrees to the ${f.ans < 0 ? 'left' : 'right'}`, o.story); assert.ok(f.ans !== 0 && Math.abs(f.ans) <= 120); assert.ok(near(sumEnds(o), Math.abs(f.ans))); }
+      else if (f.form === 'round') { assert.equal(rightOf(o), (f.now + f.turn) % 360); assert.ok(f.now + f.turn > 360); assert.ok(near(sumEnds(o), rightOf(o))); }
+      else { assert.equal(rightOf(o), f.out + 180); assert.ok(f.out + 180 < 360); }
     }
     // speed, time and distance
     for (const step of [1, 2, 3, 4, 5, 6]) {
       const o = M.rate.make(step, { rand, live, frac }), f = o.facts, r = rightOf(o);
       let want;
-      if (step <= 3) { assert.equal(f.d, f.sp * f.tm); want = f.form === 'distance' ? f.d : f.form === 'speed' ? f.sp : f.tm; assert.equal(f.unit, step === 3 ? 'minute' : 'second'); if (step === 1) assert.equal(f.form, 'distance'); if (step === 2) assert.ok(f.form !== 'distance'); if (step < 3) assert.ok(f.sp <= 9 && f.tm <= 9); else assert.ok(f.sp % 10 === 0); }
-      else if (step === 4) { assert.equal(f.d10, f.sp * f.tm); want = f.form === 'distance' ? f.d10 / 10 : f.tm; assert.ok(f.sp % 10 !== 0, 'a speed with tenths'); }
-      else if (step === 5) { assert.deepEqual(f.d, [f.s[0] * f.t[0], f.s[1] * f.t[1]]); want = f.form === 'legs' ? f.t[0] + f.t[1] : (f.d[0] + f.d[1]) / (f.t[0] + f.t[1]); assert.ok(Number.isInteger(want)); }
+      if (step <= 3) { assert.equal(f.d, f.sp * f.tm); want = f.form === 'distance' ? f.d : f.form === 'speed' ? f.sp : f.tm; if (step === 1) assert.equal(f.form, 'distance'); if (step === 2) assert.ok(f.form !== 'distance'); }
+      else if (step === 4) { assert.equal(f.d10, f.sp * f.tm); want = f.form === 'distance' ? f.d10 / 10 : f.tm; }
+      else if (step === 5) { assert.deepEqual(f.d, [f.s[0] * f.t[0], f.s[1] * f.t[1]]); want = f.form === 'legs' ? f.t[0] + f.t[1] : (f.d[0] + f.d[1]) / (f.t[0] + f.t[1]); }
       else { assert.equal(f.d, f.sp * f.m * 60); want = f.form === 'minutes' ? f.m : f.d; }
       assert.ok(near(r, want), `${o.story} ${o.ask} -> ${o.answer}, not ${want}`);
       assert.ok(near(sumEnds(o), want), `${o.key}: ${o.story}`);
       assert.equal(o.coins.length, 4, `${o.key}: ${o.story}`);
-      assert.ok(helpPicture(o).svg.includes('?'), o.key); assert.ok(o.help.steps.length >= 1);
-      if (live && f.to) assert.equal(f.to, live.to);
+      assert.ok(helpPicture(o).svg.includes('?'), o.key);
     }
-    // distances in tenths
-    const o = M.tenths.make(1, { rand, live }), f = o.facts;
-    assert.ok(near(rightOf(o), (f.op === '+' ? f.a + f.b : f.a - f.b) / 10), o.story); assert.ok(near(sumEnds(o), rightOf(o)));
-    assert.equal(o.pic.kind, 'columns'); assert.equal(o.coins.length, 4);
+    // which is the right way to work it out: four diagrams, each with its equation; the computer does the sum
+    for (const step of [1, 2]) {
+      const o = M.method.make(step, { rand }), f = o.facts, eq = good(o).label;
+      assert.equal(o.coins.length, 4, o.story);
+      for (const c of o.coins) { assert.ok(c.svg && c.svg.includes(c.label.replace(/&/g, '&amp;')), 'the equation is on its diagram'); }
+      const want = { hyp: ['distance = √(a² + b²)', Math.hypot(f.P || 0, f.F || 0)], leg: ['ring = √(c² − a²)', Math.sqrt((f.D || 0) ** 2 - (f.P || 0) ** 2)],
+        span: ['length = 2 × distance × tan(angle ÷ 2)', 2 * (f.D || 0) * Math.tan((f.A || 0) / 2 * Math.PI / 180)], range: ['distance = (length ÷ 2) ÷ tan(angle ÷ 2)', (f.L || 0) / 2 / Math.tan((f.A || 0) / 2 * Math.PI / 180)] }[f.form];
+      assert.equal(eq, want[0], o.story); assert.ok(near(f.ans, want[1]) && f.ans > 0);
+      assert.ok(o.rightWhy.startsWith('The ship\'s computer:') && o.rightWhy.includes(Math.round(want[1]).toLocaleString('en-US')), o.rightWhy);
+      assert.ok(helpPicture(o).svg.includes('?') && o.help.steps.length >= 2);
+    }
   }
 });
 
@@ -339,11 +381,11 @@ test('where the jump is going: the cards of the way out speak of the rocks, the 
 
 test('the jump\'s three lamps: a card that suits the lamp is dealt where the level has one', () => {
   const rand = seeded(8);
-  // the youngest: the hops for DISTANCE, the fuel cells for CHARGE
+  // the youngest: the hops for DISTANCE, the fuel against the way for CHARGE
   const L1 = pilot.place.levels.find((x) => x.id === 'kHops').gen.mix;
   for (let k = 0; k < 30; k++) {
     assert.equal(pickAsk(L1, { rand, live: { lamp: 'distance' } }).maker, 'hops');
-    assert.equal(pickAsk(L1, { rand, live: { lamp: 'charge' } }).maker, 'wordsK');
+    assert.equal(pickAsk(L1, { rand, live: { lamp: 'charge' } }).maker, 'fuel');
     assert.equal(pickAsk(L1, { rand, live: { lamp: 'go' } }), null, 'none suits: the level\'s own pick');
     assert.equal(pickAsk(L1, { rand, live: null }), null); assert.equal(pickAsk(L1, { rand }), null);
   }

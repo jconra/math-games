@@ -294,6 +294,94 @@ Object.assign(DRAW, {
   },
 });
 
+// ── NAVIGATING (src/jobs/pilot.js): the map with the planet in the middle and its rings round it, the fuel against the
+// way, the compass, and the diagrams of "which is the right way to work it out" ───────────────────────────────────────
+const PLANET = '#c9935a', RING = '#b9a27a', FIELD = '#b5523a', SHIP = '#2f6db3';
+// THE MAP: a square grid from lo to hi both ways (quad 1: 0 to hi, the planet in the corner; else -hi to hi, the planet
+// in the middle), the planet and its rings at 0, 0, and on it: points [{ x, y, kind: 'field' | 'ship' | 'way', label }],
+// a course [[x, y], ...] drawn leg by leg, and `ask`: words under it. size: its side in the picture (it is its own
+// svg, so it can be an answer button's picture too). Every grid line is one unit; the axes are numbered.
+export function navMap({ hi = 7, quad = 4, points = [], course = null, size = 150, ring = 2.6, numbers = true, ask = '' }) {
+  const lo = quad === 1 ? 0 : -hi, pad = numbers ? 16 : 6, S = size, span = hi - lo, u = (S - 2 * pad) / span;
+  const X = (x) => pad + (x - lo) * u, Y = (y) => S - pad - (y - lo) * u, f = (v) => v.toFixed(1);
+  let s = `<rect x="0" y="0" width="${S}" height="${S + (ask ? 18 : 0)}" fill="#f4ecdc"/><clipPath id="m${quad}${hi}${S}"><rect x="${pad}" y="${pad}" width="${S - 2 * pad}" height="${S - 2 * pad}"/></clipPath>`;
+  for (let k = lo; k <= hi; k++) {
+    const axis = k === 0, w = axis ? 1.5 : 0.5, c = axis ? INK : '#c9bb9c';
+    s += `<path d="M${f(X(k))} ${f(Y(lo))}V${f(Y(hi))}M${f(X(lo))} ${f(Y(k))}H${f(X(hi))}" stroke="${c}" stroke-width="${w}"/>`;
+    if (numbers && (span <= 8 || k % 2 === 0) && !(k === 0 && quad !== 1)) s += text(X(k), S - 4, String(k), { size: 8, fill: SOFT, weight: 600 }) + text(6, Y(k) + 3, String(k), { size: 8, fill: SOFT, weight: 600 });
+  }
+  // the planet and its rings (clipped to the grid: in the corner on a one-quarter map)
+  s += `<g clip-path="url(#m${quad}${hi}${S})"><ellipse cx="${f(X(0))}" cy="${f(Y(0))}" rx="${f(ring * u)}" ry="${f(ring * u * 0.42)}" fill="none" stroke="${RING}" stroke-width="${f(Math.max(2, u * 0.5))}" opacity="0.85"/><circle cx="${f(X(0))}" cy="${f(Y(0))}" r="${f(Math.max(4, u * 1.15))}" fill="${PLANET}" stroke="${INK}" stroke-width="1"/></g>`;
+  if (course) {
+    s += `<path d="M${course.map(([x, y]) => `${f(X(x))} ${f(Y(y))}`).join('L')}" fill="none" stroke="${SHIP}" stroke-width="2" stroke-dasharray="5 3"/>`;
+    for (const [x, y] of course.slice(1, -1)) s += `<circle cx="${f(X(x))}" cy="${f(Y(y))}" r="2.6" fill="#fff" stroke="${SHIP}" stroke-width="1.4"/>`;
+  }
+  for (const p of points) {
+    const x = X(p.x), y = Y(p.y);
+    if (p.kind === 'ship') s += `<path d="M${f(x - 5)} ${f(y + 5)}L${f(x)} ${f(y - 6)}L${f(x + 5)} ${f(y + 5)}L${f(x)} ${f(y + 2)}Z" fill="${SHIP}" stroke="${INK}" stroke-width="0.8"/>`;
+    else s += `<path d="M${f(x - 5)} ${f(y)}L${f(x)} ${f(y - 5)}L${f(x + 5)} ${f(y)}L${f(x)} ${f(y + 5)}Z" fill="${FIELD}" stroke="${INK}" stroke-width="0.9"/>`;
+    if (p.label) s += text(x + (p.x > hi - 2 ? -8 : 8), y - 7, p.label, { size: 9, fill: INK, weight: 700, anchor: p.x > hi - 2 ? 'end' : 'start' });
+  }
+  if (ask) s += text(S / 2, S + 12, ask, { size: 10, fill: ASK, weight: 800 });
+  return `<svg viewBox="0 0 ${S} ${S + (ask ? 18 : 0)}" xmlns="http://www.w3.org/2000/svg" role="img" class="bmp-svg">${s}</svg>`;
+}
+// WHICH IS THE RIGHT WAY TO WORK IT OUT: a small diagram with its equation under it (an answer button's picture).
+//   kind 'tri': the ship, the planet straight ahead and the field off to the side at a right angle; mark: which side
+//   is asked ('far': ship to field; 'side': planet to field). kind 'arc': the ship and a rock seen across an angle.
+//   eq: the equation's words; none: the diagram alone, its unknown a "?" (Help's picture)
+export function methodPic(kind, { eq = '', a = 'a', b = 'b', c = '?', ang = 'angle', dist = 'distance', len = '?', mark = 'far' } = {}) {
+  const w = 170, h = eq ? 118 : 100;
+  let s = `<rect width="${w}" height="${h}" fill="#f4ecdc"/>`;
+  if (kind === 'tri') {
+    const A = [18, 78], B = [140, 78], C = [140, 22];
+    s += `<path d="M${A}L${B}L${C}Z" fill="#fff" stroke="${INK}" stroke-width="1.4"/><path d="M${B[0] - 9} ${B[1]}v-9h9" fill="none" stroke="${INK}" stroke-width="1"/>`;
+    s += `<path d="M${A[0] - 6} ${A[1] + 5}l6 -11l6 11z" fill="${SHIP}"/><circle cx="${B[0]}" cy="${B[1]}" r="7" fill="${PLANET}" stroke="${INK}" stroke-width="1"/><path d="M${C[0] - 5} ${C[1]}l5 -5l5 5l-5 5z" fill="${FIELD}" stroke="${INK}" stroke-width="0.8"/>`;
+    s += text(78, 92, a, { size: 10, fill: mark === 'base' ? ASK : INK, weight: 700 }) + text(153, 54, b, { size: 10, fill: mark === 'side' ? ASK : INK, weight: mark === 'side' ? 800 : 700 }) + text(70, 44, c, { size: mark === 'far' ? 12 : 10, fill: mark === 'far' ? ASK : INK, weight: 800 });
+  } else {
+    const A = [16, 55];
+    s += `<path d="M${A}L150 30M${A}L150 80" stroke="${INK}" stroke-width="1.2"/><path d="M${A}H142" stroke="${SOFT}" stroke-width="1" stroke-dasharray="4 3"/>`;
+    s += `<path d="M150 30l8 12l-4 14l5 12l-9 12l-9 -10l3 -14l-5 -13z" fill="${SOFT}" stroke="${INK}" stroke-width="1"/><path d="M${A[0] - 6} ${A[1] + 5}l11 -5l-11 -5z" fill="${SHIP}"/>`;
+    s += `<path d="M46 49.6a30 30 0 0 1 0 10.8" fill="none" stroke="${ASK}" stroke-width="1.4"/>` + text(60, 58, ang, { size: 9.5, fill: INK, weight: 700, anchor: 'start' }) + text(96, 50, dist, { size: 9.5, fill: INK, weight: 700 }) + text(164, 58, len, { size: 12, fill: ASK, weight: 800, anchor: 'end' });
+  }
+  if (eq) s += `<rect x="4" y="${h - 22}" width="${w - 8}" height="18" rx="3" fill="#fff" stroke="${INK}" stroke-width="1"/>` + text(w / 2, h - 9, eq, { size: eq.length > 26 ? 8.6 : 10, fill: INK, weight: 800 });
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" role="img" class="bmp-svg">${s}</svg>`;
+}
+
+Object.assign(DRAW, {
+  // THE FUEL against THE WAY: a box for each unit of fuel, and under them the way out (and back) a box a unit; `ask`
+  // the words under it, with their "?"
+  fuel({ fuel = null, out, back = false, ask }) {
+    const n = Math.max(fuel || 0, out * (back ? 2 : 1)), bw = Math.min(30, (W - 90) / n), x0 = 78;
+    let s = '';
+    if (fuel != null) { s += text(72, 30, 'fuel', { size: 11.5, fill: SOFT, anchor: 'end' }); for (let i = 0; i < fuel; i++) s += `<rect x="${(x0 + i * bw).toFixed(1)}" y="16" width="${(bw - 3).toFixed(1)}" height="20" rx="3" fill="${AMBER}" stroke="${INK}" stroke-width="1.1"/>`; }
+    s += text(72, 62, back ? 'there, back' : 'the way', { size: 11.5, fill: SOFT, anchor: 'end' });
+    for (let i = 0; i < out * (back ? 2 : 1); i++) s += `<rect x="${(x0 + i * bw).toFixed(1)}" y="48" width="${(bw - 3).toFixed(1)}" height="20" rx="3" fill="${i < out ? BLUE : '#fff'}" stroke="${INK}" stroke-width="1.1"/>`;
+    s += text(W / 2, 92, ask, { size: 13.5, fill: ASK, weight: 800 });
+    return { svg: svg(102, s), line: '' };
+  },
+  // the map, large (Help's picture of a card about a point or a course)
+  map(p) { return { svg: navMap({ ...p, size: 230 }), line: '' }; },
+  // THE COMPASS: the ship in the middle, its nose a line (up the page when `nose` is not given as a heading), and the
+  // lines it is told of: [{ deg (clockwise from the nose, or a heading), label, dash }]; `ask`: the words under it
+  compass({ lines = [], ask = '', rose = false }) {
+    const cx = 104, cy = 76, R = 54, rad = (d) => (d - 90) * Math.PI / 180;
+    let s = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="#fff" stroke="${SOFT}" stroke-width="1.2"/>`;
+    if (rose) for (const d of [0, 90, 180, 270]) s += text(cx + Math.cos(rad(d)) * (R + 11), cy + Math.sin(rad(d)) * (R + 11) + 4, `${d}°`, { size: 9.5, fill: SOFT });
+    for (let d = 0; d < 360; d += 30) s += `<path d="M${(cx + Math.cos(rad(d)) * (R - 4)).toFixed(1)} ${(cy + Math.sin(rad(d)) * (R - 4)).toFixed(1)}L${(cx + Math.cos(rad(d)) * R).toFixed(1)} ${(cy + Math.sin(rad(d)) * R).toFixed(1)}" stroke="${SOFT}" stroke-width="1"/>`;
+    lines.forEach((L, i) => {
+      const a = rad(L.deg), r = R - 6 - (i % 2) * 4, colour = L.colour === 'ask' ? ASK : L.colour === 'ship' ? SHIP : INK;
+      s += `<path d="M${cx} ${cy}L${(cx + Math.cos(a) * r).toFixed(1)} ${(cy + Math.sin(a) * r).toFixed(1)}" stroke="${colour}" stroke-width="${L.colour === 'ship' ? 2.6 : 1.8}"${L.dash ? ' stroke-dasharray="5 3"' : ''} stroke-linecap="round"/>`;
+      // (what each line is, listed beside the compass with a stroke of the line's own)
+      if (L.label) s += `<path d="M186 ${32 + i * 20}h16" stroke="${colour}" stroke-width="${L.colour === 'ship' ? 2.6 : 1.8}"${L.dash ? ' stroke-dasharray="5 3"' : ''}/>` + text(208, 36 + i * 20, L.label, { size: 10.5, fill: colour, weight: 700, anchor: 'start' });
+    });
+    s += `<path d="M${cx - 5} ${cy + 5}l5 -11l5 11l-5 -3z" fill="${SHIP}" stroke="${INK}" stroke-width="0.8"/>`;
+    s += text(W / 2, 166, ask, { size: ask.length > 40 ? 11.5 : 13.5, fill: ASK, weight: 800 });
+    return { svg: svg(176, s), line: '' };
+  },
+  // the diagram of a "which is the right way" card, its unknown a "?"
+  method(p) { return { svg: methodPic(p.kind, p), line: '' }; },
+});
+
 // ── the crane game's pictures are its own (src/jobs/cranepics.js): its orders carry them ready made (help.svg) ──────
 const t1 = (x) => String(Math.round(x * 10) / 10);
 

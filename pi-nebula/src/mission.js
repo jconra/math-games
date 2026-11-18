@@ -113,7 +113,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         return { right: true, first: q.misses === 0, pay: r.pay, worth: r.pay, credits: r.credits, moved: 0, up: false, down: false, level: null, why: q.order.rightWhy };
       } };
   }
-  const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? `Work out your share of the haul: ${m.payout.pay.toLocaleString('en-US')} credits are waiting` : null; };
+  const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
   let synced = null, tail = null, tailT = 0;
   const api = {
