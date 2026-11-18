@@ -140,13 +140,16 @@ Object.assign(DRAW, {
   // tonnes at a price: a box for every whole tonne with what it pays, a shorter one for the part of a tonne
   paybars({ w, price }) {
     const whole = Math.floor(w / 10), part = w % 10, shown = Math.min(whole, 4), more = whole - shown, bw = 62, mw = 78, pw = part ? 34 + 3 * part : 0;
+    // (the price as it is said, 60,000: smaller in its box as it grows longer)
+    const pr = Number(price).toLocaleString('en-US'), ps = pr.length > 6 ? 11 : pr.length > 5 ? 12.5 : 14;
     let s = '', x = (W - (shown * bw + (more ? mw : 0) + pw)) / 2;
-    for (let i = 0; i < shown; i++) { s += `<rect x="${x.toFixed(1)}" y="30" width="${bw - 4}" height="32" rx="3" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + text(x + (bw - 4) / 2, 51, String(price), { size: 14, weight: 800 }) + text(x + (bw - 4) / 2, 76, '1 tonne', { size: 10.5, fill: SOFT }); x += bw; }
+    for (let i = 0; i < shown; i++) { s += `<rect x="${x.toFixed(1)}" y="30" width="${bw - 4}" height="32" rx="3" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + text(x + (bw - 4) / 2, 51, pr, { size: ps, weight: 800 }) + text(x + (bw - 4) / 2, 76, '1 tonne', { size: 10.5, fill: SOFT }); x += bw; }
     if (more) { s += `<rect x="${x.toFixed(1)}" y="30" width="${mw - 4}" height="32" rx="3" fill="none" stroke="${INK}" stroke-width="1.3" stroke-dasharray="4 3"/>` + text(x + (mw - 4) / 2, 50, `${more} more…`, { size: 11, fill: SOFT }); x += mw; }
     if (part) s += `<rect x="${x.toFixed(1)}" y="30" width="${pw - 4}" height="32" rx="3" fill="${FILL2}" stroke="${ASK}" stroke-width="1.3"/>` + text(x + (pw - 4) / 2, 52, '?', { size: 15, fill: ASK, weight: 800 })
       + `<path d="M${(x + (pw - 4) / 2).toFixed(1)} 64v8" stroke="${ASK}" stroke-width="1.2"/>` + text(Math.min(W - 44, x + (pw - 4) / 2), 86, `0.${part} of a tonne`, { size: 10.5, fill: ASK });
-    s += text(W / 2, 16, `every tonne pays ${price} credits`, { size: 12.5, fill: SOFT });
-    s += text(W / 2, 108, `${whole ? `${whole} × ${price}, and ` : ''}0.${part} × ${price}: how many credits?`, { size: 14, fill: ASK, weight: 800 });
+    s += text(W / 2, 16, `every tonne pays ${pr} credits`, { size: 12.5, fill: SOFT });
+    const last = `${whole ? `${whole} × ${pr}, and ` : ''}0.${part} × ${pr}: how many credits?`;
+    s += text(W / 2, 108, last, { size: last.length > 40 ? 12.5 : 14, fill: ASK, weight: 800 });
     return { svg: svg(118, s), line: '' };
   },
   // down the pay slip: the ore, the part of it that is metal, what that pays; each a "?" until it is worked out
@@ -155,9 +158,139 @@ Object.assign(DRAW, {
     const bx = [10, 128, 246], bw = 104, t1 = (x) => String(x / 10);
     const box = (i, top, mid, bot) => `<rect x="${bx[i]}" y="20" width="${bw}" height="62" rx="5" fill="${i === 2 ? FILL2 : '#fff'}" stroke="${i === 2 ? ASK : INK}" stroke-width="1.3"/>`
       + text(bx[i] + bw / 2, 37, top, { size: 11, fill: SOFT }) + text(bx[i] + bw / 2, 57, mid, { size: 13.5, weight: 800 }) + text(bx[i] + bw / 2, 75, bot, { size: 12, fill: ASK, weight: 800 });
-    let s = box(0, '1. the ore', `${n} × ${each || t1(w)}`, '= ? tonnes') + box(1, `2. the ${metal}`, `${pct}% of it`, '= ? tonnes') + box(2, '3. the pay', `× ${price}`, '= ? credits');
+    let s = box(0, '1. the ore', `${n} × ${each || t1(w)}`, '= ? tonnes') + box(1, `2. the ${metal}`, `${pct}% of it`, '= ? tonnes') + box(2, '3. the pay', `× ${Number(price).toLocaleString('en-US')}`, '= ? credits');
     for (const x of [116, 234]) s += `<path d="M${x} 51h8m-4 -4l4 4l-4 4" fill="none" stroke="${SOFT}" stroke-width="1.6"/>`;
     return { svg: svg(92, s), line: '' };
+  },
+});
+
+// ── the pilot's seat (src/jobs/pilot.js): the jump computer's picture of the way, and the payout's two (src/missions.js) ──
+// The two ends of a way: the station (a ring with four spokes) and the rocks (two lumps). (x, y) the middle of each.
+const say = (n) => Number(n).toLocaleString('en-US');
+const stationAt = (x, y) => `<circle cx="${x}" cy="${y}" r="8.5" fill="#fff" stroke="${INK}" stroke-width="2.2"/><circle cx="${x}" cy="${y}" r="3" fill="${COOL}"/><path d="M${x - 13} ${y}h4.5M${x + 8.5} ${y}h4.5M${x} ${y - 13}v4.5M${x} ${y + 8.5}v4.5" stroke="${INK}" stroke-width="2"/>`;
+const rocksAt = (x, y) => `<path d="M${x - 12} ${y + 6}l-1 -8l6 -7l8 1l4 7l-4 8z" fill="${SOFT}" stroke="${INK}" stroke-width="1.2"/><path d="M${x + 4} ${y + 9}l-1 -5l5 -3l5 3l-2 6z" fill="${FILL2}" stroke="${INK}" stroke-width="1.1"/>`;
+// (from where, to where: [the near end's drawing, the far end's, their names])
+const endsOf = (to) => (to === 'home' ? [rocksAt, stationAt, 'the rocks', 'the station'] : [stationAt, rocksAt, 'the station', 'the rocks']);
+const hop = (xa, xb, y, h, colour, dash = '') => `<path d="M${xa.toFixed(1)} ${y}Q${((xa + xb) / 2).toFixed(1)} ${(y - h).toFixed(1)} ${xb.toFixed(1)} ${y}" fill="none" stroke="${colour}" stroke-width="2.6" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+// a bracket over x0..x1 with its words above it (the whole of a way: its length, or a "?")
+const over = (x0, x1, y, words, ask = false) => `<path d="M${x0} ${y + 7}v-6H${x1}v6" fill="none" stroke="${ask ? ASK : SOFT}" stroke-width="1.4"/>` + text((x0 + x1) / 2, y - 5, words, { size: 13, fill: ask ? ASK : INK, weight: ask ? 800 : 700 });
+
+Object.assign(DRAW, {
+  // THE HOPS on the way (the youngest count them): 'count' so many hops from one end to the other; 'more' a hops to
+  // the beacon and b after it, in two colours; 'left' n hops, the first b made (ticked, pale); 'line' on from a
+  // numbered beacon (its number under it; the last one's a "?" when that is what is asked); 'equal' g jumps of e
+  // kilometres, the whole a "?"
+  hops(p) {
+    if (p.mode === 'equal') {
+      const x0 = 30, x1 = W - 30, y = 78, sw = (x1 - x0) / p.g, h = Math.min(30, sw * 0.42);
+      let s = over(x0, x1, 22, '? kilometres in all', true);
+      for (let i = 0; i < p.g; i++) s += hop(x0 + i * sw, x0 + (i + 1) * sw, y, h, BLUE) + text(x0 + (i + 0.5) * sw, y - h * 0.5 - 8, `${p.e} km`, { size: sw < 70 ? 11.5 : 13 });
+      for (let i = 0; i <= p.g; i++) s += `<circle cx="${(x0 + i * sw).toFixed(1)}" cy="${y}" r="3.2" fill="${INK}"/>`;
+      s += text(W / 2, y + 20, `${p.g} jumps, ${p.e} kilometres each`, { size: 12, fill: SOFT });
+      return { svg: svg(104, s), line: '' };
+    }
+    if (p.mode === 'line') {
+      const x0 = 28, x1 = W - 28, y = 52, sw = (x1 - x0) / p.b, h = Math.min(28, sw * 0.45), end = p.a + p.b;
+      let s = '';
+      for (let i = 0; i < p.b; i++) s += hop(x0 + i * sw, x0 + (i + 1) * sw, y, h, BLUE);
+      for (let i = 0; i <= p.b; i++) s += `<circle cx="${(x0 + i * sw).toFixed(1)}" cy="${y}" r="${i === 0 || i === p.b ? 5 : 3.2}" fill="${i === 0 || i === p.b ? AMBER : INK}" stroke="${INK}" stroke-width="1"/>`;
+      s += text(x0, y + 22, String(p.a), { size: 15, weight: 800 }) + text(x0, y + 36, 'beacon', { size: 10.5, fill: SOFT });
+      s += p.ask === 'end' ? text(x1, y + 22, '?', { size: 16, fill: ASK, weight: 800 }) : text(x1, y + 22, String(end), { size: 15, weight: 800 });
+      s += text(x1, y + 36, 'beacon', { size: 10.5, fill: SOFT });
+      if (p.ask !== 'end') s += text(W / 2, y + 30, '? hops', { size: 14, fill: ASK, weight: 800 });
+      return { svg: svg(96, s), line: '' };
+    }
+    const n = p.mode === 'more' ? p.a + p.b : p.n, [near, far, nearName, farName] = endsOf(p.to);
+    const x0 = 44, x1 = W - 44, y = 58, sw = (x1 - x0) / n, h = Math.min(30, 10 + sw * 0.4);
+    let s = near(20, y - 4) + far(W - 20, y - 4) + text(3, y + 26, nearName, { size: 10.5, fill: SOFT, anchor: 'start' }) + text(W - 3, y + 26, farName, { size: 10.5, fill: SOFT, anchor: 'end' });
+    for (let i = 0; i < n; i++) {
+      const xa = x0 + i * sw, xb = xa + sw, made = p.mode === 'left' && i < p.b, after = p.mode === 'more' && i >= p.a;
+      s += hop(xa, xb, y, h, made ? SOFT : after ? AMBER : BLUE, made ? '3 4' : '');
+      if (made) s += `<path d="M${(xa + sw / 2 - 5).toFixed(1)} ${(y - h - 3).toFixed(1)}l4 4l7 -8" fill="none" stroke="${SOFT}" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    for (let i = 0; i <= n; i++) {
+      const beacon = p.mode === 'more' && i === p.a;
+      s += `<circle cx="${(x0 + i * sw).toFixed(1)}" cy="${y}" r="${beacon ? 5.5 : 3.2}" fill="${beacon ? AMBER : INK}" stroke="${INK}" stroke-width="1"/>`;
+      if (beacon) s += text(x0 + i * sw, y + 20, 'beacon', { size: 10.5, fill: SOFT });
+    }
+    return { svg: svg(92, s), line: '' };
+  },
+  // SPEED, TIME AND DISTANCE: the way cut into a stretch for each second (or minute). 'distance': every stretch the
+  // speed, the whole a "?"; 'speed': the whole known, every stretch a "?"; 'time': the whole and one stretch known,
+  // how many fit?
+  trip({ form, speed = null, steps = null, total = null, step, to }) {
+    const x0 = 16, x1 = W - 40, y = 72, far = endsOf(to)[1];
+    let s = `<path d="M${x0} ${y}H${x1}" stroke="${SOFT}" stroke-width="2" stroke-dasharray="5 5"/>` + far(W - 20, y - 2);
+    s += `<path d="M${x0 - 6} ${y - 5}l11 5l-11 5z" fill="${COOL}" stroke="${INK}" stroke-width="1"/>`;
+    if (form === 'time') {
+      const sw = Math.max(46, (x1 - x0) * Math.min(0.3, 1 / Math.max(2, Math.round(Number(total) / Number(speed)) || 2)));
+      s += `<path d="M${x0} ${y - 8}v16M${(x0 + sw).toFixed(1)} ${y - 8}v16" stroke="${INK}" stroke-width="1.6"/>`;
+      s += text(x0 + sw / 2, y - 12, `${speed} km`, { size: 12.5 }) + text(x0 + sw / 2, y + 22, `1 ${step[0]}`, { size: 11, fill: SOFT });
+      s += text((x0 + sw + x1) / 2, y + 22, `${speed} more each ${step[0]} ...`, { size: 11, fill: SOFT });
+      s += over(x0, x1, 28, `${say(total)} km`);
+      s += text(W / 2, y + 44, `how many ${step[1]} of ${speed} fit in ${say(total)}?`, { size: 13.5, fill: ASK, weight: 800 });
+      return { svg: svg(126, s), line: '' };
+    }
+    const n = steps, sw = (x1 - x0) / n, small = n > 4;
+    for (let i = 0; i <= n; i++) s += `<path d="M${(x0 + i * sw).toFixed(1)} ${y - 8}v16" stroke="${INK}" stroke-width="1.6"/>`;
+    for (let i = 0; i < n; i++) {
+      const mx = x0 + (i + 0.5) * sw;
+      s += form === 'distance' ? text(mx, y - 12, String(speed), { size: small ? 11 : 13 }) : text(mx, y - 11, '?', { size: small ? 13 : 16, fill: ASK, weight: 800 });
+      s += text(mx, y + 22, small ? String(i + 1) : `${step[0]} ${i + 1}`, { size: small ? 10 : 10.5, fill: SOFT });
+    }
+    s += form === 'distance' ? over(x0, x1, 28, '? km', true) : over(x0, x1, 28, `${say(total)} km`);
+    if (small) s += text((x0 + x1) / 2, y + 38, `${step[1]}`, { size: 10.5, fill: SOFT });
+    return { svg: svg(small ? 116 : 104, s), line: '' };
+  },
+  // TWO LEGS: each leg's minutes and the two together ('time'); or all the kilometres over all the minutes ('speed')
+  legs({ mode, d, s = null, t = null }) {
+    const bx = [5, 189], bw = 166;
+    const box = (i, top, mid, bot) => `<rect x="${bx[i]}" y="16" width="${bw}" height="60" rx="5" fill="#fff" stroke="${INK}" stroke-width="1.3"/>`
+      + text(bx[i] + bw / 2, 32, top, { size: 11, fill: SOFT }) + text(bx[i] + bw / 2, 51, mid, { size: 12, weight: 800 }) + text(bx[i] + bw / 2, 69, bot, { size: 12, fill: ASK, weight: 800 });
+    let out = '';
+    if (mode === 'time') {
+      out += box(0, 'the first leg', `${say(d[0])} km at ${s[0]} a minute`, '= ? minutes') + box(1, 'the second leg', `${say(d[1])} km at ${s[1]} a minute`, '= ? minutes');
+      out += text(180, 51, '+', { size: 18, weight: 800 }) + text(W / 2, 98, 'the two together = ? minutes', { size: 14, fill: ASK, weight: 800 });
+    } else {
+      out += box(0, 'all the kilometres', `${say(d[0])} + ${say(d[1])}`, '= ? km') + box(1, 'all the minutes', `${t[0]} + ${t[1]}`, '= ? minutes');
+      out += text(180, 51, '÷', { size: 18, weight: 800 }) + text(W / 2, 98, 'kilometres ÷ minutes = ? kilometres a minute', { size: 13, fill: ASK, weight: 800 });
+    }
+    return { svg: svg(108, out), line: '' };
+  },
+  // SECONDS AND MINUTES: two sums one after the other ('minutes': the seconds, then the minutes; 'far': the seconds
+  // in the minutes, then the kilometres)
+  convert({ mode, d = null, sp, m = null }) {
+    const bx = [10, 196], bw = 154;
+    const box = (i, top, mid, bot) => `<rect x="${bx[i]}" y="16" width="${bw}" height="60" rx="5" fill="${i ? FILL2 : '#fff'}" stroke="${i ? ASK : INK}" stroke-width="1.3"/>`
+      + text(bx[i] + bw / 2, 32, top, { size: 11, fill: SOFT }) + text(bx[i] + bw / 2, 51, mid, { size: 13.5, weight: 800 }) + text(bx[i] + bw / 2, 69, bot, { size: 12, fill: ASK, weight: 800 });
+    const out = (mode === 'minutes'
+      ? box(0, '1. the seconds', `${say(d)} km ÷ ${sp}`, '= ? seconds') + box(1, '2. the minutes', '÷ 60', '= ? minutes')
+      : box(0, '1. the seconds', `${m} × 60`, '= ? seconds') + box(1, '2. the kilometres', `× ${sp}`, '= ? km'))
+      + `<path d="M172 46h14m-5 -5l5 5l-5 5" fill="none" stroke="${SOFT}" stroke-width="1.8"/>`
+      + text(W / 2, 94, '60 seconds make one minute', { size: 12, fill: SOFT });
+    return { svg: svg(102, out), line: '' };
+  },
+  // THE PAYOUT (src/missions.js): so many tonnes of ore, each sold for the same; the whole a "?"
+  tonnes({ n, price }) {
+    const bw = Math.min(48, (W - 16) / n), x0 = (W - n * bw) / 2, pr = say(price);
+    let s = text(W / 2, 16, `every tonne of ore sold for ${pr} credits`, { size: 12.5, fill: SOFT });
+    for (let i = 0; i < n; i++) s += `<rect x="${(x0 + i * bw).toFixed(1)}" y="26" width="${(bw - 4).toFixed(1)}" height="30" rx="3" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + text(x0 + i * bw + (bw - 4) / 2, 46, pr, { size: bw < 46 ? 10.5 : 12, weight: 800 }) + text(x0 + i * bw + (bw - 4) / 2, 70, '1 tonne', { size: 9.5, fill: SOFT });
+    s += text(W / 2, 94, `${n} lots of ${pr} = ? credits`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(104, s), line: '' };
+  },
+  // ... what the haul sold for, cut into d equal parts, n of them the crew member's share: each a "?"
+  sharebar({ whole, n, d, pct = false }) {
+    const x0 = 10, x1 = W - 10, pw = (x1 - x0) / d;
+    let s = `<path d="M${x0} 26v-6H${x1}v6" fill="none" stroke="${SOFT}" stroke-width="1.3"/>` + text(W / 2, 14, `the haul sold for ${say(whole)} credits`, { size: 13 });
+    for (let i = 0; i < d; i++) {
+      const on = i < n;
+      s += `<rect x="${(x0 + i * pw).toFixed(1)}" y="32" width="${(pw - 2).toFixed(1)}" height="30" rx="3" fill="${on ? FILL2 : '#fff'}" stroke="${on ? ASK : INK}" stroke-width="1.3"/>`;
+      if (on) s += text(x0 + i * pw + (pw - 2) / 2, 53, '?', { size: 15, fill: ASK, weight: 800 });
+      else if (pct && pw > 30) s += text(x0 + i * pw + (pw - 2) / 2, 52, '10%', { size: 10, fill: SOFT });
+    }
+    s += text(W / 2, 84, pct ? `10% is one part in 10: ${say(whole)} ÷ 10` : `${d} equal parts: each is ${say(whole)} ÷ ${d}`, { size: 12.5, fill: SOFT });
+    s += text(W / 2, 104, `your share: the ${n === 1 ? 'shaded part' : `${n} shaded parts`} = ? credits`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(114, s), line: '' };
   },
 });
 

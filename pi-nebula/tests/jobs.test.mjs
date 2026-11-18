@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
 import { JOB as galley } from '../src/jobs/galley.js';
 import { JOB as medical } from '../src/jobs/medical.js';
-import { JOB as smelter, STEADY, CARRIES, METALS, LOADS, forget, haulOf } from '../src/jobs/smelter.js';
+import { JOB as smelter, STEADY, CARRIES, METALS, LOADS, ORE_SELLS, forget, haulOf } from '../src/jobs/smelter.js';
 import { parseFrac, value } from '../../mathwood-valley/labs/fishing/frac.js';
 import { SPOTS } from '../src/life.js';
 import { readFileSync } from 'node:fs';
@@ -16,11 +16,14 @@ import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { JOB as arena } from '../src/jobs/arena.js';
 import { JOB as dock } from '../src/jobs/dock.js';
 import { JOB as crane } from '../src/jobs/crane.js';
+import { JOB as pilot } from '../src/jobs/pilot.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PROBLEMS, PLACE } from '../../mathwood-valley/src/levels/places.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 
-const OPEN = [galley, medical, smelter, crane, arena];
+// (the pilot's seat is not one of the station's job spots: its cards come up on a captain's run, src/trip.js; its
+// ladder is a job's ladder like the others', and its own tests are missions.test.mjs)
+const OPEN = [galley, medical, smelter, crane, arena, pilot];
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 
 test('the open jobs join Mathwood\'s levels cleanly', () => {
@@ -261,8 +264,13 @@ test('the smelter: the haul is the same haul on every slip about it, its ore aga
     const q = H.ore.n / H.ore.d;
     assert.ok([2, 4, 8].includes(H.ore.d) && q < 1 && q <= H.fill / 10 - 0.1 + 1e-9, `haul ${r}: ${H.ore.n}/${H.ore.d} of a tonne in ${H.fill / 10}`);
     assert.ok(Number.isInteger(H.oreTonnes) && near(H.oreTonnes, CARRIES * q));
-    assert.ok(Number.isInteger(H.metal10) && H.metal10 >= 5 && Number.isInteger(H.pay) && near(H.pay, H.metal10 / 10 * H.metal.price));
+    // (the metal in tenths of a tonne: at the least 0.3 of a tonne, a cobalt haul's tenth of 3 tonnes of ore)
+    assert.ok(Number.isInteger(H.metal10) && H.metal10 >= 3 && Number.isInteger(H.pay) && near(H.pay, H.metal10 / 10 * H.metal.price));
     assert.ok(METALS.includes(H.metal));
+    // every usual haul's ore sells for the same, whatever its metal: 3,000 credits a tonne of ore (the dearer the
+    // metal, the less of the ore it is); so a haul sells for 9,000 to 21,000 credits
+    assert.equal(H.pay, H.oreTonnes * ORE_SELLS, `haul ${r}: ${H.metal.name}`);
+    assert.ok(H.pay >= 9000 && H.pay <= 21000); assert.equal(H.flown, false); assert.equal(H.rich, false);
   }
   const rand = seeded(61), M = smelter.makers;
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,

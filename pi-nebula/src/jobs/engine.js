@@ -24,9 +24,10 @@
 //   deal(crew, job, { rand, last, live })   -> a question: the order (story, ask, coins [{ big, small, label, good, why }],
 //                                        pic, rightWhy, sum, own), lv (levelFor's answer: the level, its place) and
 //                                        worth (workOf: what the card pays, from the work it asks)
-//   answer(crew, job, q, coin, { ms, helped })   -> { right, first, pay, worth, rushed, credits, moved, level, up, down }
+//   answer(crew, job, q, coin, { ms, helped, pay })   -> { right, first, pay, worth, rushed, credits, moved, level, up, down }
 //                                        the first pick of a question is the one that counts for the level; a right
-//                                        pick after a miss pays half; changes the crew member (save after)
+//                                        pick after a miss pays half; changes the crew member (save after); pay false:
+//                                        a card that pays nothing by itself (a captain's run pays by its share)
 //   level(crew, job)                  -> the level tool's view (Mathwood leveltool.js): the arrows and the bar
 //   step(crew, job, dir)              -> the arrows: up or down a level by hand (changes the crew member: save after)
 //   workOf(order, level)              -> { secs, pay, parts, words, steps }   what a card pays, and why (THE PAY below)
@@ -326,7 +327,9 @@ export function example(job, L, rand = Math.random) {
 }
 
 // ── an answer ─────────────────────────────────────────────────────────────────────────────────────────────────────
-export function answer(crew, job, q, coin, { ms = null, helped = false, now = Date.now() } = {}) {
+// (pay false: a card on a captain's run, src/trip.js: the level and the kinds of math hear it as any card's, but it
+// pays nothing by itself: the crew member's share of the haul is the pay for all the work of the run, src/missions.js)
+export function answer(crew, job, q, coin, { ms = null, helped = false, now = Date.now(), pay: paid = true } = {}) {
   const c = typeof coin === 'number' ? q.order.coins[coin] : coin;
   if (!c || q.done) return null;
   const right = !!c.good, first = q.misses === 0;
@@ -346,7 +349,7 @@ export function answer(crew, job, q, coin, { ms = null, helped = false, now = Da
   const run = first ? hearPace(crew, q, worth, ms, helped) : paceOf(crew).run, kept = worth.ball ? 1 : rushOf(crew, run);
   if (right) {
     const full = kept < 1 ? PAY.floor + (worth.pay - PAY.floor) * kept : worth.pay;
-    pay = round10(first ? full : full * PAY.half);
+    pay = paid ? round10(first ? full : full * PAY.half) : 0;
     crew.credits = whole(crew.credits) + pay;
     tally.earned += pay;
     q.done = true;

@@ -347,7 +347,7 @@ export function chairScreen(W, crane, chair = chairFrame(W)) {
     g.strokeStyle = 'rgba(120, 220, 255, 0.35)'; g.lineWidth = 3; g.strokeRect(8, 8, 496, 320);
     g.font = '700 30px "Segoe UI", system-ui, sans-serif'; g.fillStyle = '#7fd8ff'; g.textAlign = 'left';
     g.fillText('CRANE', 26, 52);
-    const words = { round: 'BY ITSELF', live: 'BY HAND', leaving: 'BY HAND', handover: 'BY HAND', landing: 'MINER LANDING', away: 'MINER AWAY' };
+    const words = { round: 'BY ITSELF', live: 'BY HAND', leaving: 'BY HAND', handover: 'BY HAND', landing: 'MINER LANDING', away: 'MINER AWAY', out: 'MINER AWAY' };
     g.font = '600 22px "Segoe UI", system-ui, sans-serif'; g.fillStyle = mode === 'round' ? '#8fa3b0' : '#ffb46b'; g.textAlign = 'right';
     g.fillText(crane.done && mode === 'round' ? 'ALL DONE' : words[mode] || '', 486, 50);
     const rows = [['X', w.x], ['Y', w.y], ['HEIGHT', w.h], ['HOLDING', w.load]];

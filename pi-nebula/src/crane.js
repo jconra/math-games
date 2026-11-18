@@ -12,7 +12,14 @@
 //     it is out of sight, the Miner is away on a run; when the hangar is next in sight it comes in to land (through
 //     the bay door, a turn over the pad, its legs down, down onto the pad: LANDING), full again, and the round starts
 //     over ("if the player is walking towards that hanger it could show the ship just coming in for landing so now it
-//     needs to be unloaded"). Missions and contracts come later: `haul` is where they will hook in.
+//     needs to be unloaded").
+//   - A RUN THE PLAYER CREWS (src/missions.js, src/trip.js; the game's maker, 2026-11-17: "Now the ship is ready to go
+//     out. The player can go enter into a contract with the captain to go on a mining mission"). With a contract
+//     signed the Miner waits on its pad (crane.awayHeld: it does not go away when the player leaves the area).
+//     depart(): the Miner is out with the player aboard; what was left of the round is finished out of sight (nobody
+//     waits for the crane), and nothing here moves or lands by itself (mode 'out'). arrive(): home, down on its pad
+//     at once (the trip's fade hides it), the next haul aboard, the round from its top, the nozzle still hot;
+//     `haul.flown` says a crew the player was on brought it. back(): the run given up, the Miner parked as it was.
 //     As it lands (the game's maker, 2026-11-17: "It should use the maneuvering thrusters ... They should turn and shoot
 //     out flames. If it was a really cool pilot they could be spinning around as they were traveling in. Also, I'd expect
 //     the main engine to be glowing, even if it is only just idling ... some wind and blasts of air shooting down"): it
@@ -40,7 +47,10 @@
 //
 //   const crane = makeCrane({ W, walls, boarding })
 //   crane.update(dt, { eyes, player, people })   once a frame, before the picture
-//   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away')
+//   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away'
+//                                  | 'out': away with the player aboard)
+//   crane.depart() / crane.arrive({ flown }) -> the haul's number / crane.back()   a run the player crews (above)
+//   crane.awayHeld                 true: the Miner stays on its pad when the player leaves the area (a contract signed)
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
 //   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (src/jobs/crane.js toGrid)
 //   crane.cams()                   the cameras: [{ name, at, look, fov }]
@@ -53,7 +63,7 @@ import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
 import { POD } from '../kit/ships/miner-built.hull.js';
 import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
-import { LOADS } from './jobs/smelter.js';
+import { haulOf } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 
 export const RULES = {
@@ -93,7 +103,7 @@ export function makeCrane({ W, walls, boarding = null }) {
   // (the grid the crane's numbers count on: the hangar's own, beside its pieces in the station file; else the place's)
   const hangarDef = (W.R?.rooms || []).find((z) => z.craneGrid) || null;
   const L = makeOreLine(W.built, { rail: W.R?.places?.crane || null, grid: hangarDef ? hangarDef.craneGrid : null });
-  if (!L) { console.info('crane: the station has no ore line'); return { on: false, mode: 'none', update() {}, load: () => null, pose() {}, take: () => false, give() {}, command() {}, cams: () => [], grid: (x, z) => [x, z] }; }
+  if (!L) { console.info('crane: the station has no ore line'); return { on: false, mode: 'none', update() {}, load: () => null, pose() {}, take: () => false, give() {}, command() {}, cams: () => [], grid: (x, z) => [x, z], depart: () => true, arrive: () => 0, back: () => true, round: 0 }; }
   // its room (the hangar the crane's own piece is in), and the rooms that look into it through a window (an opening
   // between two rooms that does not reach the floor)
   const room = W.room(L.doors[0].zone);
@@ -108,7 +118,7 @@ export function makeCrane({ W, walls, boarding = null }) {
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
   const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; } };
-  const oreOf = () => LOADS[L.round % LOADS.length] / 10;   // (tonnes of ore in a full canister of this haul)
+  const oreOf = () => haulOf(L.round).fill / 10;   // (tonnes in a full canister of this haul, ore and slag together: the haul's own, src/jobs/smelter.js)
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
 
   // ── the Miner, for its landing: its own room (drawn with the hangar), the leaves that are its alone, its legs ──
@@ -267,6 +277,8 @@ export function makeCrane({ W, walls, boarding = null }) {
     get done() { return mode === 'round' && t >= L.length - 1e-6; },
     update(dt, { eyes = [], player = null, people = null } = {}) {
       eyesNow = eyes;
+      // (out on a run with the player aboard: nothing here moves, and nothing lands by itself, until arrive() or back())
+      if (mode === 'out') return;
       // (the player gone from the hangar's area with it out of sight: the Miner is away; when it is next in sight, in it
       // comes to land, the next haul)
       const here = player ? W.zoneAt(player.pos) : null, inArea = !player || !here || AREA.test(here.id);
@@ -331,7 +343,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     take() {
       if (mode === 'live') return true;
       if (mode === 'leaving') { live = makeDrive(L.site, live.state, world, { ore: oreOf }); mode = 'live'; return true; }
-      if (mode === 'landing' || mode === 'away') return false;
+      if (mode === 'landing' || mode === 'away' || mode === 'out') return false;
       if (!voxels) voxels = reachVoxels(W, L.site);
       handAt = L.clean(t);
       if (handAt == null) handAt = t;
@@ -349,6 +361,33 @@ export function makeCrane({ W, walls, boarding = null }) {
     skip(seconds) { if (mode !== 'round') return t; t = Math.min(L.length, t + seconds); L.pose(t); return t; },
     away() { if (live) return false; mode = 'away'; return true; },
     land() { beginLanding(); return true; },
+    // ── a run the player crews (src/trip.js) ──
+    // out, with the player aboard: what is left of the round finished out of sight, the crane parked; false while
+    // someone has the crane's controls
+    depart() {
+      if (mode === 'out') return true;
+      if (mode === 'live' || mode === 'handover') return false;
+      if (mode === 'leaving') { L.resume(live.state); live = null; }
+      if (mode === 'landing') landed();
+      t = L.length; L.pose(t); posePieces(L.state(t), 0);
+      mode = 'out'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
+      return true;
+    },
+    // home: down on its pad at once (nobody sees it come: the trip's fade, or the hangar out of sight), the next haul
+    // aboard and the round from its top, its nozzle still hot. flown: a crew the player was on brought it.
+    // -> the haul's number
+    arrive({ flown = false } = {}) {
+      if (mode === 'live' || mode === 'handover' || mode === 'leaving') return null;
+      if (mode === 'landing') landed();
+      L.reset(); t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
+      C.haul = { n: L.round, landed: true, at: performance.now(), flown: !!flown };
+      shipAt(null); L.pose(0); posePieces(L.state(0), 0);
+      if (boarding && boarding.hold) boarding.hold('miner', false);
+      if (flightFx()) { flight.rest(); cool = 1; settle = 0; wind = 0; air.hide(); }
+      return L.round;
+    },
+    // the run given up: the Miner on its pad as it was, its round done
+    back() { if (mode !== 'out') return false; mode = 'round'; t = L.length; L.pose(t); posePieces(L.state(t), 0); return true; },
     landing: () => (mode === 'landing' ? Math.min(1, landT / LANDING.secs) : null),
     flight: () => (flight ? { pods: flight.pods.map((p) => ({ yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), end: p.end, thrust: +p.set.thrust.toFixed(3) })), engine: flight.main ? +flight.main.thrust.toFixed(3) : null, cool: +cool.toFixed(3), drawn: flight.drawn, air: air ? +air.disc.material.uniforms.strength.value.toFixed(3) : null } : null),
     voxels: () => voxels || (voxels = reachVoxels(W, L.site)),

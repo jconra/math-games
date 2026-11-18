@@ -14,11 +14,12 @@ import { JOB as smelter } from '../src/jobs/smelter.js';
 import { JOB as crane } from '../src/jobs/crane.js';
 import { JOB as dock } from '../src/jobs/dock.js';
 import { JOB as arena } from '../src/jobs/arena.js';
+import { JOB as pilot } from '../src/jobs/pilot.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 import { storeOrder } from '../../mathwood-valley/src/levels/place/store.js';
 
-const JOBS = [galley, medical, smelter, crane, dock];
+const JOBS = [galley, medical, smelter, crane, dock, pilot];   // (the pilot's cards pay by the run's share; a card's own worth still follows these rules)
 const crewOf = () => ({ id: 'c1', name: 'Test', look: { id: 'zuri' } });
 // a card dealt at one level of a job, as the job deals it
 function cardAt(job, L, rand) {
