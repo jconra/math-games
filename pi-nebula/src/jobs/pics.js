@@ -336,7 +336,7 @@ export function methodPic(kind, { eq = '', a = 'a', b = 'b', c = '?', ang = 'ang
     const A = [18, 78], B = [140, 78], C = [140, 22];
     s += `<path d="M${A}L${B}L${C}Z" fill="#fff" stroke="${INK}" stroke-width="1.4"/><path d="M${B[0] - 9} ${B[1]}v-9h9" fill="none" stroke="${INK}" stroke-width="1"/>`;
     s += `<path d="M${A[0] - 6} ${A[1] + 5}l6 -11l6 11z" fill="${SHIP}"/><circle cx="${B[0]}" cy="${B[1]}" r="7" fill="${PLANET}" stroke="${INK}" stroke-width="1"/><path d="M${C[0] - 5} ${C[1]}l5 -5l5 5l-5 5z" fill="${FIELD}" stroke="${INK}" stroke-width="0.8"/>`;
-    s += text(78, 92, a, { size: 10, fill: mark === 'base' ? ASK : INK, weight: 700 }) + text(153, 54, b, { size: 10, fill: mark === 'side' ? ASK : INK, weight: mark === 'side' ? 800 : 700 }) + text(70, 44, c, { size: mark === 'far' ? 12 : 10, fill: mark === 'far' ? ASK : INK, weight: 800 });
+    s += text(78, 92, a, { size: 10, fill: mark === 'base' ? ASK : INK, weight: 700 }) + text(134, 56, b, { size: 10, fill: mark === 'side' ? ASK : INK, weight: mark === 'side' ? 800 : 700, anchor: 'end' }) + text(56, 36, c, { size: mark === 'far' ? 12 : 10, fill: mark === 'far' ? ASK : INK, weight: 800 });
   } else {
     const A = [16, 55];
     s += `<path d="M${A}L150 30M${A}L150 80" stroke="${INK}" stroke-width="1.2"/><path d="M${A}H142" stroke="${SOFT}" stroke-width="1" stroke-dasharray="4 3"/>`;

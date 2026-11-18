@@ -424,8 +424,9 @@ export const MAKERS = {
         key: 'fuel:can', story: `The asteroid field is ${u(out, UNIT)} away, and we have fuel for ${u(fuel, UNIT)}.`, ask: 'Can we get there and back?',
         right: F(d),
         slips: [
+          // (a yes against a no first: the question is whether, then by how much)
+          { ...F(d === 0 ? -1 : -d), slip: 'swapped', why: `There and back is ${need} units, and we have fuel for ${fuel}. ${fuel >= need ? 'That is enough.' : 'That is not enough.'}` },
           ...(oneWay !== d ? [{ ...F(oneWay), slip: 'one', why: `That counts only the way there. There and back is ${out} and ${out} more: ${need} units.` }] : []),
-          { ...F(-d || 2), slip: 'swapped', why: `There and back is ${need} units, and we have fuel for ${fuel}. ${fuel >= need ? 'That is enough.' : 'That is not enough.'}` },
           { ...F(d + 1), slip: 'off', why: `There and back is ${need} units. Set that against our ${fuel} units of fuel again.` },
           { ...F(d - 1), slip: 'off', why: `There and back is ${need} units. Set that against our ${fuel} units of fuel again.` },
         ],

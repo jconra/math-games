@@ -221,6 +221,6 @@
 .pnj[data-job="pilot"] .pnj-pic.is-lead svg { max-height: 230px; }
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
   .pnj[data-job="pilot"] .pnj-coinpic svg { max-height: 104px; }
-  .pnj[data-job="pilot"] .pnj-pic.is-lead svg { max-height: 150px; }
+  .pnj[data-job="pilot"] .pnj-pic.is-lead svg { max-height: 180px; }
   .pnj[data-job="pilot"] .pnj-panel { max-height: 78vh; }
 }

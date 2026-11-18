@@ -237,7 +237,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     // at the rocks: the crew's drilling, watched through the glass
     work(dt, st) {
       if (!T.phase) {
-        T.phase = 'reach'; T.rich = isRich(ctx.rand || Math.random); T.filled = 0; armsWant = 'work'; richShown = false; cutT = 0; words('At the rocks');
+        T.phase = 'reach'; T.roll = (ctx.rand || Math.random)(); T.rich = isRich(() => T.roll); T.filled = 0; armsWant = 'work'; richShown = false; cutT = 0; words('At the rocks');
         T.metal = T.rich ? RICH_METAL : METALS[(crane.round + 1) % 4].name; T.ore = forecast({ clean: T.clean, rich: T.rich, roles });
       }
       const gripped = arms.doors.some((D) => (D.grip || 0) >= 1), cutting = arms.doors.every((D) => (D.work || 0) >= 1);
@@ -274,7 +274,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     space(false);
     if (arms) { W.scene.remove(arms.group); arms.dispose(); arms = null; }
     if (rocks) { W.scene.remove(rocks.group); rocks.dispose(); rocks = null; }
-    if (stand && P()) ctx.put(stand, P().heading);
+    // (back on their feet where they stood, turned to the cabin behind the seats: the way out)
+    if (stand && P()) { const v = new THREE.Vector3(0, 0, -1).transformDirection(S.M); ctx.put(stand, Math.atan2(v.x, v.z)); }
   }
   function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock }); }
   function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); crane.back(); el.remove(); onEnd({ payout: null, aborted: true, secs: T.clock }); }
@@ -310,7 +311,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     // (the rigs: the cut-scene and the fades hurried on)
     skip(secs = 1) { T.t += secs; if (T.phase === 'cut') cutT += secs; },
     get panel() { return panel; },
-    state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, clean: T.clean, rich: T.rich, filled: T.filled, paused: T.paused, n: T.n,
+    state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, clean: T.clean, rich: T.rich, roll: T.roll, filled: T.filled, paused: T.paused, n: T.n,
       panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;
