@@ -175,12 +175,19 @@ test('outside: the dock side as his sketch: one big shell over the rooms there, 
   // every real opening on that side is in its upright lower wall, under the band that stands out
   for (const d of plan.doors) assert.ok(d.tier === 0 && d.step === 0 && d.y + d.h <= SHELL.brow[0]);
   assert.equal(plan.doors.length, 6);
-  // two pads on its top, apart, with the block between them; a door from the block toward each
+  // two pads on its top with the indoor walkway between them: lined up (the same reach toward the station's middle,
+  // the same distance from the walkway), rectangles with their long way toward the station's middle
   assert.equal(SHELL_PADS.length, 2);
-  for (const pad of SHELL_PADS) { assert.equal(pad.y, SHELL.roof); assert.ok(pad.path.every((q) => inPoly(SHELL_PATH, q[0], q[1])), pad.name + ' is on the shell'); assert.ok(area(pad.path) >= 100); }
-  const [n, s0] = SHELL_PADS; assert.ok(n.at[1] + n.square < SHELL_BLOCK.z0 && s0.at[1] - s0.square > SHELL_BLOCK.z1, 'the block stands between the two pads');
+  for (const pad of SHELL_PADS) { assert.equal(pad.y, SHELL.roof); assert.ok(pad.path.every((q) => inPoly(SHELL_PATH, q[0], q[1])), pad.name + ' is on the shell'); assert.ok(pad.half[0] > pad.half[1] * 1.3 && area(pad.path) >= 150); }
+  const [n, s0] = SHELL_PADS, B = SHELL_BLOCK;
+  assert.ok(n.at[0] === s0.at[0] && n.half[0] === s0.half[0] && n.half[1] === s0.half[1], 'lined up');
+  const gapN = B.z0 - (n.at[1] + n.half[1]), gapS = (s0.at[1] - s0.half[1]) - B.z1;
+  assert.ok(gapN > 0.5 && gapS > 0.5 && Math.abs(gapN - gapS) < 1e-6, 'the walkway between them, as far from one as from the other');
+  // the walkway runs from the body's wall to the top's dock edge
+  const west = Math.min(...SHELL_PATH.filter((q) => q[1] < B.z0 + 1).map((q) => q[0]));
+  assert.ok(B.x1 > 18.9 && B.x0 <= west + SHELL.bevel + 0.1, 'the walkway reaches the edge');
   assert.equal(SHELL_DOORS.length, 2);
-  for (const d of SHELL_DOORS) { const pad = SHELL_PADS[d.pad]; assert.ok(Math.sign(pad.at[1] - d.z) === d.out && Math.abs(d.x - pad.at[0]) < pad.square + 2, 'a door facing its pad'); }
+  for (const d of SHELL_DOORS) { const pad = SHELL_PADS[d.pad]; assert.ok(Math.sign(pad.at[1] - d.z) === d.out && Math.abs(d.x - pad.at[0]) < pad.half[0], 'a door facing its pad'); }
 });
 
 test('outside: plated in shape C: big raised plates with sunk panels on the big flat stretches', () => {

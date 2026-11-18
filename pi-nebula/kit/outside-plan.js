@@ -38,7 +38,10 @@
 //               this. And they provide some protection for the cargo containers."; and, with a sketch of one big
 //               red mass over the dock-side rooms (a flat top with two blue squares on it and a bevelled block
 //               between them, its side in three bands, the middle one standing out): "And for putting a shell around
-//               the backside. I was thinking something like this would be good. With a couple more landing spots."
+//               the backside. I was thinking something like this would be good. With a couple more landing spots.";
+//               and of the first build of that top: "Id prefer for the indoor walkway to go to the edge and for the
+//               pads to be lined up. The pads can be rectangles too and extend further towards the center of the
+//               station."
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -244,16 +247,18 @@ const FOOT = -0.7, LOW = 3.1;
 // window), a top band, a bevel in to the flat top at SHELL.roof
 export const SHELL = { roof: 11.4, brow: [6.9, 7.7, 9.1, 9.8], out: 0.9, bevel: 0.8 };
 export const SHELL_PATH = [[18.93, 37.03], [18.93, -7.03], [12.93, -7.03], [12.93, -1.03], [-1.03, -1.03], [-1.03, 0.97], [-5.03, 0.97], [-5.03, 20.97], [-9.03, 20.97], [-9.03, 37.03]];
-// the block on its top, between the two pads, against the body's wall: its two west corners cut, a door in its north
-// side and one in its south side
-export const SHELL_BLOCK = { x0: 5, x1: 18.93, z0: 15.6, z1: 22.4, cut: 2.5, to: 4.4, bevel: 1.5, door: 10 };
+// THE INDOOR WALKWAY on its top (his name for it): a covered way from the body's wall straight out to the top's dock
+// edge, its two outer corners cut, a door in its north side and one in its south side. THE TWO PADS lie one each side
+// of it, lined up (the same reach along x, the same distance from the walkway): rectangles 17 m by 11.5 m, their
+// long way toward the middle of the station
+export const SHELL_BLOCK = { x0: -4.2, x1: 18.93, z0: 15, z1: 21, cut: 1.2, to: 4.4, bevel: 1.2, door: 5.5 };
 const blockPath = boxPath(SHELL_BLOCK.x0, SHELL_BLOCK.x1, SHELL_BLOCK.z0, SHELL_BLOCK.z1, [0, SHELL_BLOCK.cut, SHELL_BLOCK.cut, 0]);
 // (the shell and its block end at the body's own west wall: their walls are OPEN outlines that start and end there, so
 // nothing is laid along that wall, where the hangars are. A top is cut from the same outline taken a bevel further
 // east, so that brought in by the bevel it ends exactly at the wall)
 const toWall = (path, by) => path.map(([x, z]) => [x > 18.9 ? x + by : x, z]), openAtWall = (path) => [...path.slice(1), path[0]];
-export const SHELL_PADS = [{ name: 'dock landing pad north', at: [4.5, 8] }, { name: 'dock landing pad south', at: [3, 29.6] }]
-  .map((p) => ({ ...p, y: SHELL.roof, tall: 0.36, square: 6, ring: 3, grid: 20, path: boxPath(p.at[0] - 6, p.at[0] + 6, p.at[1] - 6, p.at[1] + 6) }));
+export const SHELL_PADS = [{ name: 'dock landing pad north', at: [5.5, 8.25] }, { name: 'dock landing pad south', at: [5.5, 27.75] }]
+  .map((p) => ({ ...p, y: SHELL.roof, tall: 0.36, half: [8.5, 5.75], ring: 4, grid: [30, 20], path: boxPath(p.at[0] - 8.5, p.at[0] + 8.5, p.at[1] - 5.75, p.at[1] + 5.75) }));
 export const SHELL_DOORS = [{ run: 0, at: SHELL_BLOCK.x1 - SHELL_BLOCK.door, pad: 0, x: SHELL_BLOCK.door, z: SHELL_BLOCK.z0, out: -1 }, { run: 4, at: SHELL_BLOCK.door - (SHELL_BLOCK.x0 + SHELL_BLOCK.cut), pad: 1, x: SHELL_BLOCK.door, z: SHELL_BLOCK.z1, out: 1 }].map((d) => ({ ...d, y: SHELL.roof }));
 function shellPlans(o) {
   const [b0, b1, b2, b3] = SHELL.brow, R = SHELL.roof, out = SHELL.out;
@@ -451,17 +456,19 @@ export function outsideGear(opts = {}) {
   const blotch = (x, z) => 0.5 * soft(x * 0.33, z * 0.33) + 0.3 * soft(x * 0.95 + 7, z * 0.95 + 3) + 0.2 * soft(x * 2.6 + 11, z * 2.6 + 5);
   const padDark = lin('#0b0c10'), padPale = lin('#626a78'), worn = (c, x, z) => { const k = 0.5 + 0.75 * blotch(x * 1.7 + 31, z * 1.7 + 17); return c.map((v) => v * k); };
   for (const p of [...PADS, ...SHELL_PADS]) {
-    const [px, pz] = p.at, q = p.square, top = p.y + p.tall, k = top + 0.05, N = p.grid || 30, first = G.count;
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
-      const x = px - q + 2 * q * i / N, z = pz - q + 2 * q * j / N, t = Math.min(1, Math.max(0, (blotch(x, z) - 0.3) / 0.42));
+    const [px, pz] = p.at, [hx, hz] = p.half || [p.square, p.square], [Nx, Nz] = Array.isArray(p.grid) ? p.grid : [p.grid || 30, p.grid || 30], top = p.y + p.tall, k = top + 0.05, first = G.count;
+    for (let j = 0; j <= Nz; j++) for (let i = 0; i <= Nx; i++) {
+      const x = px - hx + 2 * hx * i / Nx, z = pz - hz + 2 * hz * j / Nz, t = Math.min(1, Math.max(0, (blotch(x, z) - 0.3) / 0.42));
       G.vert([x, top, z], padDark.map((v, c) => v + (padPale[c] - v) * t * (0.35 + 0.65 * t)));
     }
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = first + j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; G.index.push(a, c, b, b, c, d); }
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) G.quad([[px + dx * q - dz * q, p.y, pz + dz * q - dx * q], [px + dx * q + dz * q, p.y, pz + dz * q + dx * q], [px + dx * q + dz * q, top, pz + dz * q + dx * q], [px + dx * q - dz * q, top, pz + dz * q - dx * q]], padDark);
+    for (let j = 0; j < Nz; j++) for (let i = 0; i < Nx; i++) { const a = first + j * (Nx + 1) + i, b = a + 1, c = a + Nx + 1, d = c + 1; G.index.push(a, c, b, b, c, d); }
+    for (const sx of [-1, 1]) G.quad([[px + sx * hx, p.y, pz - hz], [px + sx * hx, p.y, pz + hz], [px + sx * hx, top, pz + hz], [px + sx * hx, top, pz - hz]], padDark);
+    for (const sz of [-1, 1]) G.quad([[px - hx, p.y, pz + sz * hz], [px + hx, p.y, pz + sz * hz], [px + hx, top, pz + sz * hz], [px - hx, top, pz + sz * hz]], padDark);
     // the boundary: sixteen lengths a side
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let i = 0; i < 16; i++) {
-      const along = -q + 2 * q * (i + 0.5) / 16, x = px + dx * (q - 0.18) + (dx ? 0 : along), z = pz + dz * (q - 0.18) + (dz ? 0 : along);
-      G.box([x, (top + k) / 2, z], [dx ? 0.18 : q / 16, (k - top) / 2, dz ? 0.18 : q / 16], worn(yellow, x, z));
+    for (let i = 0; i < 16; i++) {
+      const ax = -hx + 2 * hx * (i + 0.5) / 16, az = -hz + 2 * hz * (i + 0.5) / 16;
+      for (const sx of [-1, 1]) { const x = px + sx * (hx - 0.18), z = pz + az; G.box([x, (top + k) / 2, z], [0.18, (k - top) / 2, hz / 16], worn(yellow, x, z)); }
+      for (const sz of [-1, 1]) { const x = px + ax, z = pz + sz * (hz - 0.18); G.box([x, (top + k) / 2, z], [hx / 16, (k - top) / 2, 0.18], worn(yellow, x, z)); }
     }
     const seg = 40, r0 = p.ring - 0.18, r1 = p.ring + 0.18;
     for (let i = 0; i < seg; i++) {
@@ -469,7 +476,7 @@ export function outsideGear(opts = {}) {
       G.quad([at(r0, a, k), at(r1, a, k), at(r1, b, k), at(r0, b, k)], col);
       G.quad([at(r1, a, top), at(r1, b, top), at(r1, b, k), at(r1, a, k)], col); G.quad([at(r0, a, top), at(r0, b, top), at(r0, b, k), at(r0, a, k)], col);
     }
-    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) L.ball([px + dx * (q - 0.18), k + 0.2, pz + dz * (q - 0.18)], 0.26, white, 6);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) L.ball([px + dx * (hx - 0.18), k + 0.2, pz + dz * (hz - 0.18)], 0.26, white, 6);
   }
   // the doors to the pads: two steel leaves set back in each doorway with a small dark window each, a dark seam between
   // them, a small light over the doorway
