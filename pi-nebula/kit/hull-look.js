@@ -111,6 +111,17 @@ export const HULL_LOOKS = {
   },
 };
 export const LOOK_NAMES = Object.keys(HULL_LOOKS);
+// THE STATION'S OWN LOOK: the settings the game's maker made in the Hull Lab and copied out (2026-11-17), as copied.
+// The real station's hull is to be built with these (STATION_LOOK below reads them); the lab shows them at ?look=station.
+const STATION_TEXT = {
+  grey: '#555b77', grey2: '#52576f', trim: '#353e40', vary: 0.14, windowColour: '#7295a7', windowBright: 0.6,
+  plateW: 8.1, plateH: 4.1, lap: 0, bevel: 0.32, cut: 0.01, gap: 0, shift: 0.5, uneven: 0, unevenRows: 0.01,
+  bandFinish: 'mottled', bandStrength: 0.59, bandAngle: 88, bandSpacing: 0.12, bandEdges: 0.5, bandShine: 0.38, bandRough: 0.21,
+  tiersFinish: 'mottled', tiersStrength: 0.56, tiersAngle: 0, tiersSpacing: 0.12, tiersEdges: 0.7, tiersShine: 0.55, tiersRough: 0.45,
+  trimFinish: 'hatched', trimStrength: 0.6, trimAngle: 45, trimSpacing: 0.14, trimEdges: 0.5, trimShine: 0.25, trimRough: 0.72,
+  scratches: 0.83, edgeWear: 0.41, streaks: 0.79, pits: 0.46, grime: 1,
+  edgeDark: 0.82, edgeWide: 0.86,
+};
 export const DEFAULT_LOOK = LOOK_NAMES[0];
 
 // ── READ, CLAMP, WRITE ───────────────────────────────────────────────────────────────────────────────────────────
@@ -176,3 +187,5 @@ export function showValue(s, v) {
   if (s.unit === 'm') return (+v.toFixed(2)) + ' m';
   return String(+v.toFixed(2));
 }
+
+export const STATION_LOOK = readLook(STATION_TEXT);

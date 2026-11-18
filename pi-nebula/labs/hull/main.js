@@ -37,7 +37,7 @@ import * as THREE from 'three';
 import { createSky, DIR, skyDir } from '../../world/sky.js';
 import { shieldMaterial, U } from '../../kit/materials.js';
 import { hullMaterials, buildHull } from '../../kit/hull.js';
-import { SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, DEFAULT_LOOK, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, isLookText, lookName, showValue } from '../../kit/hull-look.js';
+import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, DEFAULT_LOOK, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, isLookText, lookName, showValue } from '../../kit/hull-look.js';
 import { makeMenus } from '../crew/windows.js';
 import { SAMPLE, SAMPLE_BOX } from './sample-plan.js';
 import { inside, markers } from './dressing.js';
@@ -60,6 +60,7 @@ if (!q.has('fresh')) {
   try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v && typeof v === 'object') { if (Number.isFinite(+v.turn)) view.turn = ((+v.turn % 360) + 360) % 360; if (Number.isFinite(+v.high)) view.high = Math.max(-30, Math.min(85, +v.high)); view.shadows = v.shadows === true; view.markers = v.markers !== false; } } catch (_) { /* nothing kept */ }
 }
 if (HULL_LOOKS[q.get('look')]) look = readLook(HULL_LOOKS[q.get('look')]);
+if (q.get('look') === 'station') look = readLook(STATION_LOOK);
 if (q.has('sun')) view.turn = ((+q.get('sun') % 360) + 360) % 360 || 0;
 let saveT = 0;
 const save = () => { try { localStorage.setItem(KEY, writeLook(look)); localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (_) { /* this visit only */ } };

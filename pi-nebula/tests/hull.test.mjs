@@ -4,7 +4,7 @@
 //   node --test pi-nebula/tests/hull.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, DEFAULT_LOOK, FINISHES, FINISH_NAMES, FINISH_USES, GROUPS, GROUP_NAMES, readLook, readSetting, readColour, writeLook, isLookText, sameLook, lookName, plateSizes, showValue } from '../kit/hull-look.js';
+import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, DEFAULT_LOOK, FINISHES, FINISH_NAMES, FINISH_USES, GROUPS, GROUP_NAMES, readLook, readSetting, readColour, writeLook, isLookText, sameLook, lookName, plateSizes, showValue } from '../kit/hull-look.js';
 import { offsetPath, insetPoly, hullStrips, layPlates, hullArrays, SEAM, INSIDE } from '../kit/hull-plates.js';
 import { SAMPLE, SAMPLE_BOX, DOOR } from '../labs/hull/sample-plan.js';
 
@@ -375,4 +375,10 @@ test('smaller plates: more of them, and the triangles keep step (ten a plate)', 
     assert.ok(A.stats.plates.all > 100 && A.stats.triangles.all < 150000, s.key + ' at ' + v + ': ' + A.stats.triangles.all + ' triangles');
     for (const g of Object.values(A.groups)) for (const x of g.position) assert.ok(Number.isFinite(x));
   }
+});
+
+test("the station's own look: the maker's copied settings read whole, and write back to the same look", () => {
+  for (const k of SETTINGS) assert.ok(STATION_LOOK[k.key] !== undefined, k.key);
+  assert.equal(STATION_LOOK.grey, '#555b77'); assert.equal(STATION_LOOK.trimFinish, 'hatched'); assert.equal(STATION_LOOK.grime, 1);
+  assert.ok(sameLook(readLook(JSON.parse(writeLook(STATION_LOOK))), STATION_LOOK));
 });
