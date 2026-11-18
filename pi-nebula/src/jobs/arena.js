@@ -53,6 +53,7 @@ export const PLACE = {
 };
 
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   id: 'arena', name: 'Mathball', short: 'Mathball', open: true, game: 'mathball',
   // the ring inside the arena's door, on the court's south end, facing up the court (the court's own frame: court.js)
   spot: { piece: 'arena', local: [0, 0, 6.9], face: [0, -1] },

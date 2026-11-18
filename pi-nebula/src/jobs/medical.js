@@ -151,6 +151,7 @@ export const PLACE = {
 };
 
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   id: 'medical', name: 'The triage desk', short: 'Medical', open: true,
   // where the job is: at the triage desk, facing it
   spot: { place: 'triageDesk' },

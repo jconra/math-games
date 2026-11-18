@@ -731,6 +731,7 @@ function pickAsk(mix, { rand = Math.random, live = null } = {}) {
 // seat"); the crane game comes up, with free control a switch on its screen (src/cranedrive.js)
 export const OPERATOR = { piece: 'opChair', local: [0, 0, -0.95], face: [0, 1] };
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   id: 'crane', name: 'Crane system', short: 'Crane', open: true, pickAsk,
   spot: OPERATOR, near: 2.3, seated: true,
   sign: 'Crane operator', hint: 'Verify the crane\'s moves: credits for each right answer',

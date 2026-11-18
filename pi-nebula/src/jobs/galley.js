@@ -167,6 +167,7 @@ export const PLACE = {
 };
 
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   id: 'galley', name: 'The galley kitchen', short: 'Galley', open: true,
   // where the job is: BEHIND the counter, on the cook's side (the game's maker: "it feels like they are standing on the
   // wrong side of that counter"): at the plain stretch of counter beside the cook, who serves at the food wells, turned

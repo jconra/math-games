@@ -788,6 +788,7 @@ export const PLACE = {
 };
 
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   // (named in the game's maker's own words: "I thought that there were controls in the smelter room for the smelter pay
   // desk?")
   id: 'smelter', name: 'The smelter controls', short: 'Smelter', open: true,

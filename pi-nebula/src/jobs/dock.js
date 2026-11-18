@@ -749,6 +749,7 @@ export const PLACE = {
 // the job: its spot in the docking airlock's near room, a step back from the inner door (3.5 m in from the outer port
 // was on the inner door's step, in its doorway, where no way could reach: the walk there stopped short)
 export const JOB = {
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT; the game's maker: "the dark mode looks better")
   id: 'dock', name: 'The docking bridge', short: 'Dock', open: true,
   spot: { place: 'airlock', toward: { place: 'galley' }, out: 5 }, face: 'airlock',
   sign: 'Docking bridge', hint: 'Build the bridge out to the ship',
