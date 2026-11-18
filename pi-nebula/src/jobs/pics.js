@@ -379,7 +379,7 @@ function drawMethod(kind, { eq = '', a = 'a', b = 'b', c = '?', ang = 'angle', d
     const A = [16, 55];
     s += `<path d="M${A}L150 30M${A}L150 80" stroke="${K.INK}" stroke-width="1.2"/><path d="M${A}H142" stroke="${K.SOFT}" stroke-width="1" stroke-dasharray="4 3"/>`;
     s += `<path d="M150 30l8 12l-4 14l5 12l-9 12l-9 -10l3 -14l-5 -13z" fill="${K.SOFT}" stroke="${K.INK}" stroke-width="1"/><path d="M${A[0] - 6} ${A[1] + 5}l11 -5l-11 -5z" fill="${K.SHIP}"/>`;
-    s += `<path d="M46 49.6a30 30 0 0 1 0 10.8" fill="none" stroke="${K.ASK}" stroke-width="1.4"/>` + text(60, 58, ang, { size: 9.5, fill: K.INK, weight: 700, anchor: 'start' }) + text(96, 50, dist, { size: 9.5, fill: K.INK, weight: 700 }) + text(164, 58, len, { size: 12, fill: K.ASK, weight: 800, anchor: 'end' });
+    s += `<path d="M46 49.6a30 30 0 0 1 0 10.8" fill="none" stroke="${K.ASK}" stroke-width="1.4"/>` + text(30, 80, ang, { size: 9.5, fill: K.INK, weight: 700, anchor: 'start' }) + `<path d="M44 73L48 61" stroke="${K.SOFT}" stroke-width="0.8"/>` + text(98, 51, dist, { size: 9.5, fill: K.INK, weight: 700 }) + text(166, 21, len, { size: 11, fill: K.ASK, weight: 800, anchor: 'end' });
   }
   if (eq) s += `<rect x="4" y="${h - 22}" width="${w - 8}" height="18" rx="3" fill="${K.PAPER}" stroke="${K.INK}" stroke-width="1"/>` + text(w / 2, h - 9, eq, { size: eq.length > 26 ? 8.6 : 10, fill: K.INK, weight: 800 });
   return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" role="img" class="bmp-svg">${s}</svg>`;
@@ -417,7 +417,8 @@ Object.assign(DRAW, {
     return { svg: svg(176, s), line: '' };
   },
   // the diagram of a "which is the right way" card, its unknown a "?"
-  method(p) { return { svg: methodPic(p.kind, p), line: '' }; },
+  // (the right triangle where the card gives its sides, a, b, c; else the rock seen across an angle)
+  method(p) { return { svg: methodPic(p.a != null || p.c != null ? 'tri' : 'arc', p), line: '' }; },
 });
 
 // ── THE DRILL OPERATOR'S CARDS (src/jobs/drill.js): the rock in the claw with the ore the scan shows inside it, its
@@ -462,9 +463,9 @@ Object.assign(DRAW, {
     s += rockShape(x + bw / 2 + ox * 0.45, y + bh / 2 + oy * 0.45, bw / 2 - 4, bh / 2 - (shape === 'flat' ? 1 : 3));
     const yb = y + bh;
     s += text(x + bw / 2, yb + 15, `${l} m long`, { size: 12.5 }) + text(x - 8, y + bh / 2 + 4, `${h} m high`, { size: 12.5, anchor: 'end' }) + text(x + bw + ox + 6, yb + oy + 2, `${w} m wide`, { size: 12.5, anchor: 'start' });
-    const box = vol != null ? `the box: ${vol} cubic metres; the rock fills about half of it` : per ? `the box: ${l} × ${w} × ${h} cubic metres; the rock fills about half of it` : `the box: ${l} × ${w} × ${h} = ? cubic metres`;
+    const box = vol != null ? `the box: ${vol} cubic metres; about half of it is rock` : per ? `the box: ${l} × ${w} × ${h} cubic metres; about half is rock` : `the box: ${l} × ${w} × ${h} = ? cubic metres`;
     s += text(W / 2, yb + 38, box, { size: 12.5, fill: per ? K.SOFT : K.ASK, weight: per ? 600 : 800 });
-    if (per) s += text(W / 2, yb + 58, `each cubic metre of rock weighs ${per} tonnes: ? tonnes`, { size: 13.5, fill: K.ASK, weight: 800 });
+    if (per) s += text(W / 2, yb + 58, `a cubic metre weighs ${per} tonnes: ? tonnes`, { size: 13.5, fill: K.ASK, weight: 800 });
     return { svg: svg(yb + (per ? 68 : 48), s), line: '' };
   },
   // a bar cut into d equal parts, the first n of them marked: `top` what the bar is, `each` the words in a part ('?':
@@ -485,15 +486,15 @@ Object.assign(DRAW, {
   // a metal's colour), ask (the box asked for) }; `op` the sign between them, `last` the sign before the last box
   // where that is another one, `ask` the words under the row
   boxes({ boxes = [], op = '+', last = null, ask = '' }) {
-    const n = boxes.length, gap = 26, bw = Math.min(150, (W - 12 - gap * (n - 1)) / n), x0 = (W - (n * bw + (n - 1) * gap)) / 2, tall = boxes.some((b) => b.bot);
+    const n = boxes.length, gap = n > 3 ? 18 : 26, bw = Math.min(150, (W - 8 - gap * (n - 1)) / n), x0 = (W - (n * bw + (n - 1) * gap)) / 2, tall = boxes.some((b) => b.bot), small = bw < 80;
     let s = '';
     boxes.forEach((b, i) => {
       const x = x0 + i * (bw + gap), mid = String(b.mid);
       s += `<rect x="${x.toFixed(1)}" y="14" width="${bw.toFixed(1)}" height="${tall ? 62 : 46}" rx="5" fill="${b.ask ? K.FILL2 : K.PAPER}" stroke="${b.ask ? K.ASK : K.INK}" stroke-width="1.3"/>`;
       if (b.glow) s += `<circle cx="${(x + 10).toFixed(1)}" cy="24" r="4.5" fill="${b.glow}" stroke="${K.INK}" stroke-width="0.6"/>`;
-      s += text(x + bw / 2, 30, b.top, { size: 11, fill: K.SOFT }) + text(x + bw / 2, 50, mid, { size: mid.length * 7.4 > bw - 8 ? Math.max(9, (bw - 8) / mid.length * 1.75) : 13.5, weight: 800 });
-      if (b.bot) s += text(x + bw / 2, 68, b.bot, { size: 12, fill: K.ASK, weight: 800 });
-      if (i < n - 1) { const sign = i === n - 2 && last ? last : op; if (sign) s += text(x + bw + gap / 2, tall ? 50 : 42, sign, { size: 18, weight: 800 }); }
+      s += text(x + bw / 2 + (b.glow && small ? 5 : 0), 30, b.top, { size: small ? 9.5 : 11, fill: K.SOFT }) + text(x + bw / 2, 50, mid, { size: mid.length * 7.4 > bw - 8 ? Math.max(9, (bw - 8) / mid.length * 1.75) : 13.5, weight: 800 });
+      if (b.bot) s += text(x + bw / 2, 68, b.bot, { size: small ? 10.5 : 12, fill: K.ASK, weight: 800 });
+      if (i < n - 1) { const sign = i === n - 2 && last ? last : op; if (sign) s += text(x + bw + gap / 2, tall ? 50 : 42, sign, { size: small ? 15 : 18, weight: 800 }); }
     });
     if (ask) s += text(W / 2, tall ? 96 : 80, ask, { size: 14, fill: K.ASK, weight: 800 });
     return { svg: svg((tall ? 80 : 64) + (ask ? 26 : 0), s), line: '' };

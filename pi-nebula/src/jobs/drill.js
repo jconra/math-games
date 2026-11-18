@@ -486,7 +486,7 @@ export const MAKERS = {
         rightWhy: `${worked}; ${SHARE}% of that is ${say(sold)} ÷ 5 = ${say(pay)} credits`,
         sum: [...chain, { op: 'div', a: sold, b: 5, say: `Then the share: ${SHARE}% is a fifth of it` }],
         lines: [...ms.map((x) => [cap(x.m), `${u(x.t, TONNE)} at ${say(x.price)} credits a tonne`]), ['The drill operator\'s share', `${SHARE}%`], ['The share of this rock', '?']],
-        help: { title: 'What it sells for, then a fifth', pic: { kind: 'boxes', boxes: [...boxes, { top: `the share: ${SHARE}%`, mid: '÷ 5', bot: '= ? credits', ask: true }], op: ms.length > 1 ? '+' : '', last: '→', ask: '' }, line: `First what the ore sells for (each metal's tonnes times its price), then ${SHARE}% of that: a fifth.`,
+        help: { title: 'What it sells for, then a fifth', pic: { kind: 'boxes', boxes: [...boxes, { top: `${SHARE}% of it`, mid: '÷ 5', bot: '= ? credits', ask: true }], op: ms.length > 1 ? '+' : '', last: '→', ask: '' }, line: `First what the ore sells for (each metal's tonnes times its price), then ${SHARE}% of that: a fifth.`,
           steps: [...ms.map((x) => `The ${x.m}: ${x.t} × ${say(x.price)}`), ...(ms.length > 1 ? ['Add them'] : []), 'Then the share: that ÷ 5'] },
         own: { strand: 'pct', at: 76 }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }], facts: { sold, pay, T }, size: 3,
       }, rand);
