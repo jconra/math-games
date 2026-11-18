@@ -162,9 +162,9 @@ export function isLookText(text) {
   const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a < 0 || b <= a) return false;
   try { const o = JSON.parse(text.slice(a, b + 1)); return !!o && typeof o === 'object' && !Array.isArray(o) && SETTINGS.some((s) => s.key in o); } catch (_) { return false; }
 }
-// a look as text: one line a window of settings, so it can be read as well as pasted
+// a look as text: one line a window of settings, so it can be read as well as pasted (and the shape's letter, if one is given)
 const WINS = ['colours', 'plates', 'finish', 'wear', 'edges'];
-export function writeLook(look) {
+export function writeLook(look, shape) {
   const L = readLook(look), lines = [];
   for (const w of WINS) {
     const mine = SETTINGS.filter((s) => s.win === w);
@@ -172,7 +172,20 @@ export function writeLook(look) {
     const rows = w === 'finish' ? GROUPS.map((g) => mine.filter((s) => s.group === g)) : [mine];
     for (const r of rows) lines.push(r.map((s) => JSON.stringify(s.key) + ':' + JSON.stringify(L[s.key])).join(','));
   }
-  return '{"hull look":1,\n' + lines.join(',\n') + '}';
+  return '{"hull look":1,' + (SHAPE_LETTERS.includes(shape) ? '"shape":"' + shape + '",' : '') + '\n' + lines.join(',\n') + '}';
+}
+// THE SHAPE'S LETTER: which of the hull's four shape options (A to D: labs/hull/sample-plan.js) was showing when a
+// look was copied. It rides in the look's text ("shape":"B") beside the settings, and is not one of them: readLook
+// drops it, readShape reads it (a letter, or null if the text names none).
+export const SHAPE_LETTERS = ['A', 'B', 'C', 'D'];
+export function readShape(input) {
+  let o = input;
+  if (typeof input === 'string') {
+    const a = input.indexOf('{'), b = input.lastIndexOf('}');
+    try { o = a >= 0 && b > a ? JSON.parse(input.slice(a, b + 1)) : null; } catch (_) { o = null; }
+  }
+  const v = o && typeof o === 'object' && typeof o.shape === 'string' ? o.shape.trim().toUpperCase() : null;
+  return SHAPE_LETTERS.includes(v) ? v : null;
 }
 export const sameLook = (a, b) => SETTINGS.every((s) => readSetting(s, a?.[s.key]) === readSetting(s, b?.[s.key]));
 // the name of the ready-made look these settings are, or null

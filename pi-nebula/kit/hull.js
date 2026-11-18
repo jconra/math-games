@@ -6,8 +6,10 @@
 //
 // HOW THE LOOK IS MADE, CHEAPLY (the finished station will be covered in this, and it has to run on a phone):
 //   - Every plate of one group shares ONE material and ONE mesh: three groups (the middle band, the tiers, the trim) are
-//     three draws, the lit windows a fourth, the doors' shields a fifth. A plate is 10 triangles (22 with its corners
+//     three draws, the windows' glass a fourth, the doors' shields a fifth. A plate is 10 triangles (22 with its corners
 //     cut, a few more when lapped).
+//   - The hull's SHAPES (kit/hull-plates.js: stacked plates, a big raised plate, a recessed panel, shoulders) are more
+//     plates in those same groups, and the eight-sided windows are in the trim and the glass: no more draws.
 //   - Each kind of FINISH is one tiling picture, drawn once in code (kit/hull-tex.js) the first time a group uses it;
 //     the brushing's direction and the cut lines' angle and spacing only turn and size that picture on the plate. The
 //     WEAR is one more picture, shared by all three groups. A pixel reads two pictures (the station's floor reads four).
