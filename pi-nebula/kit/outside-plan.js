@@ -287,14 +287,21 @@ function westFlats(o) {
   wall(-9.03, 28.97, -15.03, 28.97, FOOT, LOW, [S, S, S, I]);                                     // the airlock
   wall(-15.03, 28.97, -15.03, 33.03, FOOT, LOW, undefined, [hole(2.03, 3.6, 0, 2.9, 0.04)]);      // ... and its outer door
   wall(-15.03, 33.03, -9.03, 33.03, FOOT, LOW, [S, I, S, S]);
-  wall(12.93, 37.03, 12.93, 57.03, FOOT, LOW, [I, S, S, S]);                                      // the spine, south of the terminal
-  wall(12.93, 57.03, 18.93, 57.03, FOOT, LOW);
+  // the spine, south of the terminal: no deck is under it any more, so it is a tube along the body's side with a
+  // floor of its own 1.2 m under the rooms' floor level (the body's lower windows show under it)
+  const TUBE = FOOT - 1.2;
+  wall(12.93, 37.06, 12.93, 57.03, TUBE, LOW, [I, S, S, S]);
+  wall(12.93, 57.03, 18.93, 57.03, TUBE, LOW);
+  flats.push(...flatsOf(boxPath(12.93, 19.6, 37.06, 57.03), [], TUBE, false, () => ({ group: 'tiers', kind: 'plates' })));
   roof(12.93, 18.93, 37.03, 57.03, LOW); roof(-15.03, -9.03, 28.97, 33.03, LOW);
   return flats;
 }
 // THE DECK under the west rooms (their lower level), and the cargo slots in its dock face
 export const SLOTS = { x: -7, z: [3.5, 8, 12.5, 17], w: 2.9, h: 2.9, foot: -4.75, full: [0, 1, 2] };   // (the fourth slot is empty)
-export const DECK_PATH = [[25.5, -9.6], [9, -9.6], [-7, -3.5], [-7, 22], [-21, 22], [-21, 38], [-6, 42.5], [25.5, 62]];
+// (it ends flush under the terminal's south wall. It ran on south to z = 62 at first; the game's maker, 2026-11-18,
+// of that part: "This wall in red seems kind of unnecessary. I feel like it would block the view from the windows of
+// the terminal. And it makes these windows in blue blocked." The blue ones are the body's own lower windows.)
+export const DECK_PATH = [[25.5, -9.6], [9, -9.6], [-7, -3.5], [-7, 22], [-21, 22], [-21, 37.06], [25.5, 37.06]];
 const SLOT_DECK = -5.02;                                // (the cargo deck's top; its plates stand a bevel higher)
 // THE CARGO DOCK'S HOUSING, from his words: each container goes a third of its length further in (DOCK.in), between
 // angled walls that make a narrow slot for it: a wall each side of every slot, DOCK.out long, 1.6 m thick for most of
