@@ -35,7 +35,10 @@
 //               container (a line sloping down from under the numbers toward the container's outer end, then a
 //               short drop to the shelf): "I like those angles walls, they make sense for slotting the containers
 //               into those sockets. But this is what I intended by angled walls. They are much more noticeable like
-//               this. And they provide some protection for the cargo containers."
+//               this. And they provide some protection for the cargo containers."; and, with a sketch of one big
+//               red mass over the dock-side rooms (a flat top with two blue squares on it and a bevelled block
+//               between them, its side in three bands, the middle one standing out): "And for putting a shell around
+//               the backside. I was thinking something like this would be good. With a couple more landing spots."
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -52,9 +55,11 @@
 //   the spire      above the middle hangar: a tower, the control centre with its windows, a mast and the beacon
 //   the keel       below the middle hangar: the radiators round it, the reactor ball under it
 //   the girders    out of the smelter end and out of the medical end, two pairs of solar wings on each
-//   the west side  the lower hull round the terminal, the arena, the corridors, the quarters, the spine and the
-//                  airlock (walls where the rooms' own walls are, so every real window stays where it is), a deck
-//                  under them, and the cargo slots low on the dock side: three containers plugged in, each a third
+//   the west side  THE SHELL, as he sketched it: one big bevelled mass 12 m tall over the terminal, the arena, the
+//                  corridors and the quarters (its walls where those rooms' own outer walls are, so every real window
+//                  is still flush in it), its side in three bands with the middle one standing out, a flat top with
+//                  two more landing pads and a bevelled block between them with a door to each. The airlock and the
+//                  spine south of the terminal keep their own low hull. A deck under them all, and the cargo slots low on the dock side: three containers plugged in, each a third
 //                  of its length inside, between angled walls with a bevelled block over them carrying the numbers
 // The plates are the lab's shape C (labs/hull/sample-plan.js): a big raised plate with a sunk bevelled panel on a flat
 // stretch of 10 m or more, plain plates elsewhere. Laid with the station's own look (kit/hull-look.js STATION_LOOK).
@@ -159,15 +164,15 @@ const RAISED_PATH = (() => {
   return [[f, s - 6], [f, s1], [R.bay, s1], [R.bay, s0], [f, s0], [f, n1], [R.bay, n1], [R.bay, n0], [f, n0], [f, n + 6], [f - 6, n], [b + 9, n], [b, n + 9], [b, s - 9], [b + 9, s], [f - 6, s]];
 })();
 const padSouth = boxPath(32.5, 52.5, 42, 62), pyramidSouth = boxPath(38.5, 45.5, 66, 73);
-export const PADS = [{ name: 'south landing pad', path: padSouth, at: [42.5, 52] }, { name: 'north landing pad', path: mirror(padSouth), at: [42.5, 2 * MID - 52] }].map((p) => ({ ...p, tall: 0.36, square: 10, ring: 5 }));   // (tall: its top above the roof, 4 cm over the plates round it)
+export const PADS = [{ name: 'south landing pad', path: padSouth, at: [42.5, 52] }, { name: 'north landing pad', path: mirror(padSouth), at: [42.5, 2 * MID - 52] }].map((p) => ({ ...p, y: ROOF, tall: 0.36, square: 10, ring: 5 }));   // (tall: its top above the roof, 4 cm over the plates round it)
 export const PYRAMIDS = [{ name: 'south pyramid', path: pyramidSouth }, { name: 'north pyramid', path: mirror(pyramidSouth) }].map((p) => ({ ...p, foot: 0.5, tall: 4.3, slope: 2.7 }));
 
 // THE MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
 // (a doorway in a wall 3.2 m tall under its bevel, framed; its foot is at the top of the roof's plates; `at` is its middle
 // along its wall; x, z: the same place in the world, and `out` the way it faces along z; its leaves and light are in the gear)
 export const PAD_DOOR = { w: 3, h: 2.6, x: 37, foot: 0.3 };
-const padDoor = (d) => ({ tier: 0, step: 0, run: d.run, at: d.at, w: PAD_DOOR.w, h: PAD_DOOR.h, y: ROOF + PAD_DOOR.foot, sill: 0, head: 0.25, jamb: 0.25, proud: 0.12, shield: false });
-export const PAD_DOORS = [{ run: 3, at: PAD_DOOR.x - RAISED.bay, pad: 0, x: PAD_DOOR.x, z: RAISED.bays[0][0], out: 1 }, { run: 5, at: RAISED.front - PAD_DOOR.x, pad: 1, x: PAD_DOOR.x, z: RAISED.bays[1][1], out: -1 }];
+const padDoor = (d) => ({ tier: 0, step: 0, run: d.run, at: d.at, w: PAD_DOOR.w, h: PAD_DOOR.h, y: d.y + PAD_DOOR.foot, sill: 0, head: 0.25, jamb: 0.25, proud: 0.12, shield: false });
+export const PAD_DOORS = [{ run: 3, at: PAD_DOOR.x - RAISED.bay, pad: 0, x: PAD_DOOR.x, z: RAISED.bays[0][0], out: 1 }, { run: 5, at: RAISED.front - PAD_DOOR.x, pad: 1, x: PAD_DOOR.x, z: RAISED.bays[1][1], out: -1 }].map((d) => ({ ...d, y: ROOF }));
 export const MASSES = [
   { name: 'raised level', side: 'above', path: RAISED_PATH, to: RAISED.to, bevel: RAISED.bevel, doors: PAD_DOORS.map(padDoor), holes: () => [offsetPath(spirePath, 3.2, true), ...PYRAMIDS.map((p) => p.path)] },
   { name: 'north belly block', side: 'below', path: boxPath(35, 48, -31.62, -4, [3, 3, 2, 2]), to: 3.8, bevel: 1.5, over: 'north' },
@@ -229,39 +234,62 @@ function keelPlan(o) {
   return { name: 'keel', closed: true, path: spirePath, tiers: [{ name: 'keel', profile, parts }], windows: { ...WIN, seed: o.seed }, flats: flatsOf(offsetPath(spirePath, -1.4, true), [], KEEL_FOOT, false, plain) };
 }
 
-// ── THE WEST SIDE: the hull round the rooms west of the hangars, as walls and roofs given outright ───────────────
-// (walls 3 cm outside the rooms' own, walked with the outside on the right; they stop at the body's own west wall; the low rooms' roof at 3.1 m, the terminal's
-// and the arena's at 8 m; everything stands on the deck below, whose top is 0.7 m under the floors)
-const FOOT = -0.7, LOW = 3.1, TALL = 8;
+// ── THE WEST SIDE ───────────────────────────────────────────────────────────────────────────────────────────────
+// (everything stands on the deck below, whose top is 0.7 m under the floors; the low rooms' own roof is at 3.1 m)
+const FOOT = -0.7, LOW = 3.1;
+// THE SHELL. Its outline is the outer walls of the rooms it covers, 3 cm outside them (walked with the outside on the
+// right), so the real windows are flush in it and nothing has to be seen through a deep hole; the notch the corridor
+// made between the quarters and the terminal is filled in. Its side, foot to top: an upright wall up to 6.9 m (the
+// real openings are all in it), a band standing 0.9 m out (7.7 to 9.1 m: it is the brow over the terminal's long
+// window), a top band, a bevel in to the flat top at SHELL.roof
+export const SHELL = { roof: 11.4, brow: [6.9, 7.7, 9.1, 9.8], out: 0.9, bevel: 0.8 };
+export const SHELL_PATH = [[18.93, 37.03], [18.93, -7.03], [12.93, -7.03], [12.93, -1.03], [-1.03, -1.03], [-1.03, 0.97], [-5.03, 0.97], [-5.03, 20.97], [-9.03, 20.97], [-9.03, 37.03]];
+// the block on its top, between the two pads, against the body's wall: its two west corners cut, a door in its north
+// side and one in its south side
+export const SHELL_BLOCK = { x0: 5, x1: 18.93, z0: 15.6, z1: 22.4, cut: 2.5, to: 4.4, bevel: 1.5, door: 10 };
+const blockPath = boxPath(SHELL_BLOCK.x0, SHELL_BLOCK.x1, SHELL_BLOCK.z0, SHELL_BLOCK.z1, [0, SHELL_BLOCK.cut, SHELL_BLOCK.cut, 0]);
+// (the shell and its block end at the body's own west wall: their walls are OPEN outlines that start and end there, so
+// nothing is laid along that wall, where the hangars are. A top is cut from the same outline taken a bevel further
+// east, so that brought in by the bevel it ends exactly at the wall)
+const toWall = (path, by) => path.map(([x, z]) => [x > 18.9 ? x + by : x, z]), openAtWall = (path) => [...path.slice(1), path[0]];
+export const SHELL_PADS = [{ name: 'dock landing pad north', at: [4.5, 8] }, { name: 'dock landing pad south', at: [3, 29.6] }]
+  .map((p) => ({ ...p, y: SHELL.roof, tall: 0.36, square: 6, ring: 3, grid: 20, path: boxPath(p.at[0] - 6, p.at[0] + 6, p.at[1] - 6, p.at[1] + 6) }));
+export const SHELL_DOORS = [{ run: 0, at: SHELL_BLOCK.x1 - SHELL_BLOCK.door, pad: 0, x: SHELL_BLOCK.door, z: SHELL_BLOCK.z0, out: -1 }, { run: 4, at: SHELL_BLOCK.door - (SHELL_BLOCK.x0 + SHELL_BLOCK.cut), pad: 1, x: SHELL_BLOCK.door, z: SHELL_BLOCK.z1, out: 1 }].map((d) => ({ ...d, y: SHELL.roof }));
+function shellPlans(o) {
+  const [b0, b1, b2, b3] = SHELL.brow, R = SHELL.roof, out = SHELL.out;
+  // an opening for something real: in the lab a pane of glass across it; inside the game nothing (the room's own is there)
+  const hole = (run, at, w, y, h, glass) => ({ tier: 0, step: 0, run, at, w, h, y, sill: 0, head: 0, jamb: 0, frame: false, shield: false, ...(o.inside || glass == null ? {} : { glass }) });
+  // (its runs are counted from the spine's north end)
+  const wallPath = openAtWall(SHELL_PATH);
+  const doors = [
+    hole(2, 10.93, 1.5, 1.45, 1.05, 0.8), hole(2, 12.93, 1.5, 1.45, 1.05, 0.04),     // the loop hallway's and the quarters corridor's windows (north)
+    hole(5, 1.03, 1.5, 1.45, 1.05, 0.8),                                             // the quarters' window (west)
+    hole(7, 10.03, 4.8, FOOT, LOW + 0.37 - FOOT),                                    // the airlock comes through the terminal's west wall
+    hole(8, 10.03, 19.4, 0.35, 6.4, 0.3),                                            // the terminal's long window, toward the planet
+    hole(8, 15.93 + 9.03, 5.8, FOOT, LOW - FOOT),                                    // the spine goes on south through the shell's south wall
+  ];
+  const profile = [[0, FOOT, 'in'], [0, b0], [out, b1], [out, b2], [0.2, b3], [0.2, R - SHELL.bevel], [-SHELL.bevel, R]];
+  const parts = [plates('band', BIG), plates('tiers'), plates('band'), plates('tiers'), plates('band'), plates('tiers')];
+  const B = SHELL_BLOCK, top = R + B.to;
+  return [
+    { name: 'west shell', closed: false, path: wallPath, tiers: [{ name: 'west shell', profile, parts }], doors, windows: { ...WIN, seed: o.seed },
+      flats: flatsOf(offsetPath(toWall(SHELL_PATH, SHELL.bevel), -SHELL.bevel, true), [blockPath, ...SHELL_PADS.map((p) => p.path)], R, true, bigIf(7)) },
+    { name: 'shell block', closed: false, path: openAtWall(blockPath), tiers: [{ name: 'shell block', profile: [[0, R, 'in'], [0, top - B.bevel], [-B.bevel, top]], parts: [plates('band', BIG_LOW), plates('tiers')] }],
+      doors: SHELL_DOORS.map(padDoor), flats: flatsOf(offsetPath(toWall(blockPath, B.bevel), -B.bevel, true), [], top, true, bigIf(4)) },
+  ];
+}
+// what keeps its own low hull: the airlock, and the spine south of the terminal (walls 3 cm outside the rooms' own)
 function westFlats(o) {
   const S = SEAM, I = INSIDE, flats = [];
   const wall = (ax, az, bx, bz, y0, y1, kinds, doors) => { const l = Math.hypot(bx - ax, bz - az); flats.push({ group: 'band', kind: 'plates', O: [ax, y0, az], U: [(bx - ax) / l, 0, (bz - az) / l], V: [0, 1, 0], w: l, h: y1 - y0, kinds, doors, ...BIG }); };
   const roof = (x0, x1, z0, z1, y, shapes) => flats.push({ group: 'tiers', kind: 'plates', O: [x0, y, z1], U: [1, 0, 0], V: [0, 0, -1], w: x1 - x0, h: z1 - z0, ...shapes });
-  // an opening for something real: in the lab a pane of glass across it; inside the game nothing (the room's own is there)
   const hole = (at, w, y, h, glass) => ({ at, w, y, h, sill: 0, head: 0, jamb: 0, frame: false, shield: false, ...(o.inside || glass == null ? {} : { glass }) });
-  wall(18.93, -7.03, 12.93, -7.03, FOOT, LOW);                                                     // the spine's north end
-  wall(12.93, -7.03, 12.93, -1.03, FOOT, LOW, [S, I, S, S]);
-  wall(12.93, -1.03, -1.03, -1.03, FOOT, LOW, [S, S, S, I], [hole(10.93, 1.5, 1.45, 1.05, 0.8), hole(12.93, 1.5, 1.45, 1.05, 0.04)]);   // the loop hallway and the quarters corridor: its two windows
-  wall(-1.03, -1.03, -1.03, 0.97, FOOT, LOW, [S, I, S, S]);
-  wall(-1.03, 0.97, -5.03, 0.97, FOOT, LOW, [S, S, S, I]);                                        // the quarters
-  wall(-5.03, 0.97, -5.03, 5.03, FOOT, LOW, undefined, [hole(1.03, 1.5, 1.45, 1.05, 0.8)]);       // ... and their window
-  wall(-5.03, 5.03, -1.03, 5.03, FOOT, LOW, [S, I, S, S]);
-  wall(-1.03, 5.03, -1.03, 20.97, FOOT, LOW, [S, I, S, I]);                                       // the corridor
-  wall(-1.03, 20.97, -9.03, 20.97, FOOT, TALL);                                                   // the terminal's north wall
-  wall(-9.03, 20.97, -9.03, 37.03, FOOT, TALL, undefined, [hole(10.03, 4.8, FOOT, LOW + 0.37 - FOOT)]);   // its west wall (the airlock comes through it)
   wall(-9.03, 28.97, -15.03, 28.97, FOOT, LOW, [S, S, S, I]);                                     // the airlock
   wall(-15.03, 28.97, -15.03, 33.03, FOOT, LOW, undefined, [hole(2.03, 3.6, 0, 2.9, 0.04)]);      // ... and its outer door
   wall(-15.03, 33.03, -9.03, 33.03, FOOT, LOW, [S, I, S, S]);
-  wall(-9.03, 37.03, 12.93, 37.03, FOOT, TALL, undefined, [hole(10.03, 19.4, 0.35, 6.4, 0.3)]);   // the terminal's south wall: the long window, toward the planet
-  wall(12.93, 37.03, 12.93, 57.03, FOOT, LOW, [S, S, S, I]);                                      // the spine, south of the terminal
+  wall(12.93, 37.03, 12.93, 57.03, FOOT, LOW, [I, S, S, S]);                                      // the spine, south of the terminal
   wall(12.93, 57.03, 18.93, 57.03, FOOT, LOW);
-  // the terminal's and the arena's walls above the low roofs
-  // (the arena's east wall is the spine's west wall, x = 13: above the spine's roof the tall wall stands just east of it)
-  wall(12.93, 37.03, 13.03, 37.03, LOW, TALL, [I, S, S, S]); wall(13.03, 37.03, 13.03, 2.97, LOW, TALL, [I, S, S, S]); wall(13.03, 2.97, 2.97, 2.97, LOW, TALL, [I, S, S, S]);
-  wall(2.97, 2.97, 2.97, 20.97, LOW, TALL, [I, S, S, S]); wall(2.97, 20.97, -1.03, 20.97, LOW, TALL, [I, S, S, S]);
-  // the roofs
-  roof(12.93, 18.93, -7.03, 2.97, LOW); roof(13.03, 18.93, 2.97, 37.03, LOW); roof(12.93, 18.93, 37.03, 57.03, LOW); roof(-1.03, 12.93, -1.03, 2.97, LOW); roof(-1.03, 2.97, 2.97, 20.97, LOW); roof(-5.03, -1.03, 0.97, 5.03, LOW); roof(-15.03, -9.03, 28.97, 33.03, LOW);
-  roof(2.97, 13.03, 2.97, 20.97, TALL, BIG); roof(-9.03, 13.03, 20.97, 37.03, TALL, BIG);
+  roof(12.93, 18.93, 37.03, 57.03, LOW); roof(-15.03, -9.03, 28.97, 33.03, LOW);
   return flats;
 }
 // THE DECK under the west rooms (their lower level), and the cargo slots in its dock face
@@ -315,7 +343,7 @@ function deckPlans(o) {
 //   seed     which half of the hull's windows are lit (the game gives a fresh number each time it starts)
 export function outsidePlans(opts = {}) {
   const o = { inside: !!opts.inside, seed: opts.seed ?? 11 };
-  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o), ...dockPlans()];
+  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), ...shellPlans(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o), ...dockPlans()];
 }
 
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
@@ -410,14 +438,14 @@ export function outsideGear(opts = {}) {
   const soft = (x, z) => { const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j, a = u * u * (3 - 2 * u), b = v * v * (3 - 2 * v); return (hash2(i, j) * (1 - a) + hash2(i + 1, j) * a) * (1 - b) + (hash2(i, j + 1) * (1 - a) + hash2(i + 1, j + 1) * a) * b; };
   const blotch = (x, z) => 0.5 * soft(x * 0.33, z * 0.33) + 0.3 * soft(x * 0.95 + 7, z * 0.95 + 3) + 0.2 * soft(x * 2.6 + 11, z * 2.6 + 5);
   const padDark = lin('#0b0c10'), padPale = lin('#626a78'), worn = (c, x, z) => { const k = 0.5 + 0.75 * blotch(x * 1.7 + 31, z * 1.7 + 17); return c.map((v) => v * k); };
-  for (const p of PADS) {
-    const [px, pz] = p.at, q = p.square, top = ROOF + p.tall, k = top + 0.05, N = 36, first = G.count;
+  for (const p of [...PADS, ...SHELL_PADS]) {
+    const [px, pz] = p.at, q = p.square, top = p.y + p.tall, k = top + 0.05, N = p.grid || 30, first = G.count;
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const x = px - q + 2 * q * i / N, z = pz - q + 2 * q * j / N, t = Math.min(1, Math.max(0, (blotch(x, z) - 0.3) / 0.42));
       G.vert([x, top, z], padDark.map((v, c) => v + (padPale[c] - v) * t * (0.35 + 0.65 * t)));
     }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = first + j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; G.index.push(a, c, b, b, c, d); }
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) G.quad([[px + dx * q - dz * q, ROOF, pz + dz * q - dx * q], [px + dx * q + dz * q, ROOF, pz + dz * q + dx * q], [px + dx * q + dz * q, top, pz + dz * q + dx * q], [px + dx * q - dz * q, top, pz + dz * q - dx * q]], padDark);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) G.quad([[px + dx * q - dz * q, p.y, pz + dz * q - dx * q], [px + dx * q + dz * q, p.y, pz + dz * q + dx * q], [px + dx * q + dz * q, top, pz + dz * q + dx * q], [px + dx * q - dz * q, top, pz + dz * q - dx * q]], padDark);
     // the boundary: sixteen lengths a side
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let i = 0; i < 16; i++) {
       const along = -q + 2 * q * (i + 0.5) / 16, x = px + dx * (q - 0.18) + (dx ? 0 : along), z = pz + dz * (q - 0.18) + (dz ? 0 : along);
@@ -433,8 +461,8 @@ export function outsideGear(opts = {}) {
   }
   // the doors to the pads: two steel leaves set back in each doorway with a small dark window each, a dark seam between
   // them, a small light over the doorway
-  for (const d of PAD_DOORS) {
-    const y0 = ROOF + PAD_DOOR.foot, hw = PAD_DOOR.w / 2, hh = PAD_DOOR.h / 2, zi = d.z - d.out * 0.08, leaf = lin('#4a5160');
+  for (const d of [...PAD_DOORS, ...SHELL_DOORS]) {
+    const y0 = d.y + PAD_DOOR.foot, hw = PAD_DOOR.w / 2, hh = PAD_DOOR.h / 2, zi = d.z - d.out * 0.08, leaf = lin('#4a5160');
     for (const sx of [-1, 1]) G.box([d.x + sx * (hw / 2 + 0.02), y0 + hh, zi], [hw / 2 - 0.02, hh, 0.06], leaf);
     G.box([d.x, y0 + hh, zi - d.out * 0.03], [0.04, hh, 0.04], dark);
     for (const sx of [-1, 1]) G.box([d.x + sx * hw * 0.5, y0 + hh * 1.3, zi + d.out * 0.07], [hw * 0.28, 0.22, 0.02], dark);

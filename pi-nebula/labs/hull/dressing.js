@@ -3,10 +3,11 @@
 //   inside()    the hangar behind the door as a plain lit box: a floor, walls, a roof with three light strips
 //   markers()   a person 1.8 m tall standing on the door's sill, and a ship-sized block 17 m long parked in the hangar
 //   stationMarkers()   for the whole station: a person 1.8 m tall beside each door to a landing pad and one in the
-//               middle of each pad, and a ship-sized block 17 m long on the south pad
+//               middle of each pad (the roof's two and the dock side's two), and a ship-sized block 17 m long on the
+//               roof's south pad
 import * as THREE from 'three';
 import { DOOR } from './sample-plan.js';
-import { PADS, PAD_DOORS, LEVELS } from '../../kit/outside-plan.js';
+import { PADS, PAD_DOORS, SHELL_PADS, SHELL_DOORS } from '../../kit/outside-plan.js';
 
 const flat = (c) => new THREE.MeshBasicMaterial({ color: c });
 const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
@@ -35,10 +36,10 @@ function person() {
   p.name = 'person'; return p;
 }
 export function stationMarkers() {
-  const g = new THREE.Group(), y = LEVELS.roof; g.name = 'station markers';
-  for (const d of PAD_DOORS) { const p = person(); p.position.set(d.x + 2.3, y + 0.32, d.z + d.out * 0.9); g.add(p); }
-  for (const pad of PADS) { const p = person(); p.position.set(pad.at[0], y + pad.tall, pad.at[1]); g.add(p); }
-  const ship = new THREE.Group(), pad = PADS[0];
+  const g = new THREE.Group(); g.name = 'station markers';
+  for (const d of [...PAD_DOORS, ...SHELL_DOORS]) { const p = person(); p.position.set(d.x + 2.3, d.y + 0.32, d.z + d.out * 0.9); g.add(p); }
+  for (const pad of [...PADS, ...SHELL_PADS]) { const p = person(); p.position.set(pad.at[0], pad.y + pad.tall, pad.at[1]); g.add(p); }
+  const ship = new THREE.Group(), pad = PADS[0], y = pad.y;
   ship.add(box(6.4, 3, 17, flat(0x7d8690), 0, 1.5, 0), box(4.6, 1.1, 5, flat(0x545c66), 0, 3.55, -4.6), box(6.5, 0.5, 17.1, flat(0xdc7526), 0, 1.1, 0));
   ship.rotation.y = Math.PI / 2; ship.position.set(pad.at[0] + 1.5, y + pad.tall, pad.at[1] + 2.5); ship.name = 'ship'; g.add(ship);
   return g;

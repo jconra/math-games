@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsidePlans, outsideGear, outsideMarks, flatsOf, MASSES, PADS, PAD_DOOR, PAD_DOORS, PYRAMIDS, RAISED, MID, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
+import { outsidePlans, outsideGear, outsideMarks, flatsOf, SHELL, SHELL_PATH, SHELL_PADS, SHELL_DOORS, SHELL_BLOCK, MASSES, PADS, PAD_DOOR, PAD_DOORS, PYRAMIDS, RAISED, MID, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
 import { hullArrays, mergeHulls } from '../kit/hull-plates.js';
 import { STATION_LOOK, HULL_LOOKS, plateSizes } from '../kit/hull-look.js';
 
@@ -40,15 +40,15 @@ test('outside: the plan is sound in every look (whole numbers of triangles, noth
     }
     for (const [x, y, z] of points(A)) assert.ok(x >= OUTSIDE_BOX.min[0] && x <= OUTSIDE_BOX.max[0] && y >= OUTSIDE_BOX.min[1] && y <= OUTSIDE_BOX.max[1] && z >= OUTSIDE_BOX.min[2] && z <= OUTSIDE_BOX.max[2], `a plate at ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`);
   }
-  assert.equal(outsidePlans().length, 18);   // (the body, three masses, two pyramids, the spire, the keel, the west rooms, two decks, the cargo dock's five walls, its guard walls and its block)
+  assert.equal(outsidePlans().length, 20);   // (the body, three masses, two pyramids, the spire, the keel, the west shell and its block, the west rooms, two decks, the cargo dock's five walls, its guard walls and its block)
 });
 
 test('outside: it goes round the REAL rooms: every room is under the hull, and the hangar doors are where the rooms have them', () => {
   const roofs = outsidePlans().find((p) => p.name === 'west rooms').flats.filter((f) => f.V[2] === -1);
   for (const c of CELLS.values()) {
-    const body = inPoly(BODY_PATH, c.x, c.z), west = roofs.find((f) => c.x > f.O[0] && c.x < f.O[0] + f.w && c.z < f.O[2] && c.z > f.O[2] - f.h);
-    assert.ok(body || west, `the ${c.room} at ${c.x}, ${c.z} is outside the hull`);
-    assert.ok(body ? LEVELS.roof > c.h : west.O[1] > c.h - 0.9 && west.O[1] >= 3.07, `the roof over the ${c.room} is too low`);
+    const body = inPoly(BODY_PATH, c.x, c.z), shell = inPoly(SHELL_PATH, c.x, c.z), west = roofs.find((f) => c.x > f.O[0] && c.x < f.O[0] + f.w && c.z < f.O[2] && c.z > f.O[2] - f.h);
+    assert.ok(body || shell || west, `the ${c.room} at ${c.x}, ${c.z} is outside the hull`);
+    assert.ok(body ? LEVELS.roof > c.h : shell ? SHELL.roof > c.h + 1 : west.O[1] > c.h - 0.9 && west.O[1] >= 3.07, `the roof over the ${c.room} is too low`);
   }
   // the three big doors: the rooms' own door pieces
   const doors = STATION.rooms.flatMap((r) => r.pieces.filter((p) => p.piece === 'baydoor2').map((p) => ({ room: r.id, x: p.cell[0] * 2, z: p.cell[1] * 2 })));
@@ -167,6 +167,22 @@ test('outside: the roof as his drawing: one raised level, a landing pad in each 
   for (const m of MASSES) assert.ok(m.bevel >= 1.2 && m.bevel / m.to >= 0.3);
 });
 
+test('outside: the dock side as his sketch: one big shell over the rooms there, two more landing pads on its top, a block between them with a door to each', () => {
+  const plan = outsidePlans().find((p) => p.name === 'west shell'), tier = plan.tiers[0];
+  // one mass, taller than every room under it and lower than the body's own roof; its side in bands, the middle one standing out
+  assert.ok(SHELL.roof > 10 && SHELL.roof < LEVELS.band.top);
+  const outs = tier.profile.map((q) => q[0]); assert.ok(Math.max(...outs) >= 0.8 && outs[0] === 0 && outs[outs.length - 1] < 0);
+  // every real opening on that side is in its upright lower wall, under the band that stands out
+  for (const d of plan.doors) assert.ok(d.tier === 0 && d.step === 0 && d.y + d.h <= SHELL.brow[0]);
+  assert.equal(plan.doors.length, 6);
+  // two pads on its top, apart, with the block between them; a door from the block toward each
+  assert.equal(SHELL_PADS.length, 2);
+  for (const pad of SHELL_PADS) { assert.equal(pad.y, SHELL.roof); assert.ok(pad.path.every((q) => inPoly(SHELL_PATH, q[0], q[1])), pad.name + ' is on the shell'); assert.ok(area(pad.path) >= 100); }
+  const [n, s0] = SHELL_PADS; assert.ok(n.at[1] + n.square < SHELL_BLOCK.z0 && s0.at[1] - s0.square > SHELL_BLOCK.z1, 'the block stands between the two pads');
+  assert.equal(SHELL_DOORS.length, 2);
+  for (const d of SHELL_DOORS) { const pad = SHELL_PADS[d.pad]; assert.ok(Math.sign(pad.at[1] - d.z) === d.out && Math.abs(d.x - pad.at[0]) < pad.square + 2, 'a door facing its pad'); }
+});
+
 test('outside: plated in shape C: big raised plates with sunk panels on the big flat stretches', () => {
   const s = LAB.stats.shapes;
   assert.ok(s.slabs >= 25 && s.recesses >= 15, JSON.stringify(s));
@@ -197,12 +213,12 @@ test('outside: girders with solar wings out of both ends, radiators and the reac
   assert.ok(outsideMarks().length >= MARKS.length);
 });
 
-test('outside: cheap: under 60,000 triangles and 12 draws in the station\'s own look (and no look runs away)', () => {
+test('outside: cheap: under 50,000 triangles and 12 draws in the station\'s own look (and no look runs away)', () => {
   for (const look of [STATION_LOOK, ...Object.values(HULL_LOOKS)]) {
     const A = build({}, look), g = outsideGear(), all = A.stats.triangles.all + g.lit.triangles + g.glow.triangles + outsideMarks().length * 2;
     const draws = ['band', 'tiers', 'trim'].filter((k) => A.groups[k].index.length).length + (A.windows.index.length ? 1 : 0) + (A.shields.index.length ? 1 : 0) + 3;
     // (a look that cuts every plate's corners and lays small plates, "old and worn", is the dearest: about 77,000)
-    assert.ok(all < (look === STATION_LOOK ? 40000 : 90000), all + ' triangles'); assert.ok(draws <= 12, draws + ' draws');
+    assert.ok(all < (look === STATION_LOOK ? 50000 : 100000), all + ' triangles'); assert.ok(draws <= 12, draws + ' draws');
   }
 });
 
