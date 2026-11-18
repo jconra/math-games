@@ -45,11 +45,13 @@ import { crewLoad } from './drill.js';
 import { stepsFor, land, LAMPS } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
+import { MINER } from './flymodel.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
 // screen and the bottom of a phone's) and without
-export const SEAT = { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.6, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 };
+// (the Miner's own facts now: src/flymodel.js MINER.seat; the flying's cockpit view is the same seat)
+export const SEAT = MINER.seat;
 // the plain grey rocks beyond (the field's real look is to come): [x, y, z, radius] in the ship's frame, metres
 const ROCKS = [[-9, 5.5, 34, 2.6], [11, 1.5, 46, 3.4], [-20, -3, 62, 5], [5, 9, 70, 4], [24, 6, 84, 7], [-34, 8, 98, 8.5], [2, -9, 58, 3], [-6, 0.5, 104, 6]];
 export const JUMP = { secs: 2.6, flash: 1.5 };   // the jump's picture: how long, and when its flash is whitest

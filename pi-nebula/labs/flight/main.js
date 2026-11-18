@@ -1,0 +1,74 @@
+// THE FLIGHT LAB: flying by hand, by itself. The game's own station (src/station.js), its own parked Miner and cabin
+// (src/boarding.js, src/crane.js), its own outside (src/outside.js) and its own flying (src/flying.js, src/flymodel.js):
+// nothing here is a copy, so a change to the flying shows here and in the game alike. No contract, no jump, no pay: the
+// Miner is on its pad with the crew member in the pilot's seat.
+//
+// THE GAME'S MAKER asked for it so the flying can be tried by itself. What is the lab's own:
+//   - "Back on the pad" and "Outside, coming home" put the ship at the two places a mining run flies from;
+//   - the Jump button, offered once the ship is clear of the station as in the game, has nowhere to jump to here: it
+//     puts the ship where the jump home would (outside, in sight of the station);
+//   - the autopilot leaves the station from the pad and comes in to land from outside;
+//   - "flip up and down" is kept in this browser (in the game it is kept with the crew member).
+//
+// Address switches: ?q=low|medium|high  the picture's quality; ?view=behind  start in the view from behind;
+// ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a screenshot; ?seed=N  which of the
+// outside's windows are lit. window.LAB: { ready, W, F (the flying), boarding, crane, outside, step }.
+import * as THREE from 'three';
+import { loadStation } from '../../src/station.js';
+import { makeWalls } from '../../src/walls.js';
+import { makeBoarding } from '../../src/boarding.js';
+import { makeCrane } from '../../src/crane.js';
+import { addOutside } from '../../src/outside.js';
+import { startFlying } from '../../src/flying.js';
+import { MINER } from '../../src/flymodel.js';
+
+const KEEP = 'pi-nebula.flightlab';
+const q = new URLSearchParams(location.search), HOLD = q.has('hold');
+const canvas = document.getElementById('c'), note = document.getElementById('note'), loading = document.getElementById('loading');
+const LAB = window.LAB = { ready: false, F: null };
+const kept = (() => { try { return JSON.parse(localStorage.getItem(KEEP)) || {}; } catch (e) { return {}; } })();
+const keep = (s) => { try { localStorage.setItem(KEEP, JSON.stringify(s)); } catch (e) { /* blocked: not kept */ } };
+
+const W = LAB.W = await loadStation({ canvas, quality: q.get('q'), rig: q.has('rig') || HOLD, say: (f, words) => { loading.textContent = words + '…'; } });
+const walls = makeWalls(W.built, { portals: W.R.portals });
+for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);
+for (const D of W.built.glides || []) D.use = null;
+const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
+const crane = LAB.crane = makeCrane({ W, walls, boarding });
+const outside = LAB.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
+
+// someone aboard: a stand-in for the crew member (no body to draw), in the Miner's hangar until its cabin is built,
+// then in its cockpit, where they stay
+const pad = new THREE.Vector3(...MINER.pad), body = { pos: pad.clone().add(new THREE.Vector3(4, 0.1, 8)), c: null }, eyes = [body.pos];
+const ship = boarding.ships.find((s) => s.id === MINER.id);
+W.camera.position.set(pad.x + 13, 3.2, pad.z + 11); W.camera.lookAt(pad.x, 2.6, pad.z);
+
+let F = null, now = 0;
+function begin() {
+  const sp = boarding.spots(MINER.id); body.pos.set(...sp.rooms.cockpit);
+  crane.depart();
+  F = LAB.F = startFlying({ W, boarding, crane, outside }, {
+    cfg: MINER, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept,
+    onSettings: (s) => keep(s), words: (w) => { note.textContent = w; },
+    // (nowhere to jump to here: where the jump home would bring it out)
+    onJump: () => F.arrive(), onLanded: () => { F.goal = 'free'; },
+  });
+  loading.remove(); LAB.ready = true;
+}
+document.getElementById('pad').addEventListener('click', (e) => { if (F) F.reset(); e.target.blur(); });
+document.getElementById('home').addEventListener('click', (e) => { if (F) F.arrive(); e.target.blur(); });
+
+function tick(dt) {
+  now += dt;
+  if (!F && ship && ship.state === 'in') begin();
+  if (F) { F.update(dt); F.aim(W.camera, dt); }
+  boarding.update(dt, { player: body, eyes, camera: W.camera });
+  crane.update(dt, { eyes, player: body });
+  if (F) F.late();
+  outside.update(W.camera);
+  W.frame(dt, now, eyes);
+}
+let last = 0;
+if (!HOLD) W.renderer.setAnimationLoop((ms) => { const dt = last ? Math.min(0.05, (ms - last) / 1000) : 1 / 60; last = ms; tick(dt); });
+LAB.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) tick(dt); };
+tick(1 / 60);

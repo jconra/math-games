@@ -14,6 +14,7 @@
 //   ?hold                no clock of its own: nothing moves until GAME.step(dt) is called (for films and frame strips)
 //   ?rig                 keeps the picture readable for a screenshot
 //   ?nopeople            the station without its people
+//   ?seed=N              which of the outside's windows are lit (otherwise a different half each time the game starts)
 //   ?crowd=N             that many of the station's people about the player at once, whatever the quality (life.js NEAR:
 //                        the cost rigs); ?far=N: people drawn with their far copy from N metres (people.js LIFE.far)
 import * as THREE from 'three';
@@ -41,6 +42,7 @@ import { makeGuide } from './guide.js';
 import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
 import { makeMission } from './mission.js';
+import { addOutside } from './outside.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 4;                 // shown small on the title; goes up with index.html's ?v=
@@ -74,6 +76,9 @@ async function boot() {
 
   const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => progress(0.02 + f * 0.8, words) });
   GAME.W = W;
+  // the station's outside, round the rooms: seen from the windows, out of the hangar doors, and from a ship flown out
+  // (src/outside.js). Its lit windows are a different half each time the game starts (?seed=N: the same ones, for the rigs)
+  const outside = GAME.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
 
   // ── where a person can walk ──────────────────────────────────────────────────────────────────────────────────
   progress(0.84, 'Checking the doors');
@@ -203,6 +208,7 @@ async function boot() {
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
+    outside.update(W.camera);
     W.frame(dt, now, eyes);
     GAME.frames++;
   }

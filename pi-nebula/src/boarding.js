@@ -8,6 +8,7 @@
 //   B.ships                                            [{ id, state ('out' | 'loading' | 'in'), ... }]
 //   B.inside(p)                                        the ship whose cabin a point is in (or null)
 //   B.where(p)                                         where aboard: 'explorer/mess' (the ship and its room), or null
+//   B.fly(id, D)                                       a ship flown (src/flying.js): its cabin drawn where it is now
 //   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
 //
 // HOW (nothing here knows a coordinate: ships, rooms and doors are found by name in the station file):
@@ -181,7 +182,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     s.wayParts.clear();
     for (const L of s.lifts) { L.key = L.patch = null; L.carried.clear(); }
     for (const e of s.entries) e.locked = true;
-    s.cabin = null; s.state = 'out'; poolKey = null;
+    s.cabin = null; s.flown = null; s.state = 'out'; poolKey = null;
     for (const L of pools) { L.intensity = 0; L.userData.pool = null; }
     console.info('boarding: the ' + s.id + '\'s cabin is dropped');
   }
@@ -195,9 +196,11 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     const rt = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(0.05, 30, rt);
     cc.position.copy(at); W.scene.add(cc);
     const shown = W.built.group.visible, sky = W.sky.object.visible;
-    W.built.group.visible = false; W.sky.object.visible = false;
+    // (and not the station's outside, src/outside.js: the cabin's picture of itself is as it was before there was one)
+    const outside = W.scene.getObjectByName('outside'), outShown = outside ? outside.visible : false;
+    W.built.group.visible = false; W.sky.object.visible = false; if (outside) outside.visible = false;
     cc.update(W.renderer, W.scene);
-    W.built.group.visible = shown; W.sky.object.visible = sky; W.scene.remove(cc);
+    W.built.group.visible = shown; W.sky.object.visible = sky; W.scene.remove(cc); if (outside) outside.visible = outShown;
     const env = pmrem.fromCubemap(rt.texture).texture; rt.dispose();
     return env;
   }
@@ -333,17 +336,23 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
 
   // the room of a ship's cabin a point is in (its blueprint's room), or null
   function roomOf(s, p) {
-    _p.copy(p).applyMatrix4(s.inv);
+    const inv = s.flown && !aboard(s, p, s.inv) ? s.flown.inv : s.inv;
+    _p.copy(p).applyMatrix4(inv);
     return s.bpData.rooms.find((r) => _p.x >= r.rect[0] && _p.x <= r.rect[2] && _p.z >= r.rect[1] && _p.z <= r.rect[3]) || null;
+  }
+  // is a point in a ship's cabin, the ship standing where `inv` undoes (parked, or flown to)?
+  function aboard(s, p, inv) {
+    _p.copy(p).applyMatrix4(inv);
+    const y = _p.y - s.space.deck; if (y < -0.4 || y > 3.4) return false;
+    return s.bpData.rooms.some((r) => _p.x >= r.rect[0] - 0.1 && _p.x <= r.rect[2] + 0.1 && _p.z >= r.rect[1] - 0.1 && _p.z <= r.rect[3] + 0.1);
   }
   // which ship's cabin a point is in (its rooms, deck to ceiling)
   const _p = new THREE.Vector3();
   function inside(p) {
     for (const s of ships) {
       if (s.state !== 'in') continue;
-      _p.copy(p).applyMatrix4(s.inv);
-      const y = _p.y - s.space.deck; if (y < -0.4 || y > 3.4) continue;
-      if (s.bpData.rooms.some((r) => _p.x >= r.rect[0] - 0.1 && _p.x <= r.rect[2] + 0.1 && _p.z >= r.rect[1] - 0.1 && _p.z <= r.rect[3] + 0.1)) return s;
+      // (a ship being flown: the crew member's body stays where it is parked, the camera rides in it where it is now)
+      if (aboard(s, p, s.inv) || (s.flown && aboard(s, p, s.flown.inv))) return s;
     }
     return null;
   }
@@ -393,10 +402,10 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     // the pools of the room the camera is in
     if (pools.length) {
       const cs = inside(camera.position), r = cs ? roomOf(cs, camera.position) : null, key = cs && r ? cs.id + '|' + r.id : null;
-      if (key !== poolKey) {
+      if (key !== poolKey || (cs && cs.flown)) {      // (a ship in flight: its pools of light ride with it)
         poolKey = key;
         const mine = r ? (cs.cabin.C.parts.pools || []).filter((p) => p.room === r.id).sort((a, b) => b.i - a.i).slice(0, POOL_N) : [];
-        pools.forEach((L, i) => { const p = mine[i]; L.userData.pool = p || null; L.intensity = p ? p.i : 0; if (!p) return; L.position.set(p.at[0], p.at[1] + cs.space.deck, p.at[2]).applyMatrix4(cs.M); L.color.setRGB(...p.color); L.distance = p.reach; });
+        pools.forEach((L, i) => { const p = mine[i]; L.userData.pool = p || null; L.intensity = p ? p.i : 0; if (!p) return; L.position.set(p.at[0], p.at[1] + cs.space.deck, p.at[2]).applyMatrix4(cs.flown ? cs.flown.M : cs.M); L.color.setRGB(...p.color); L.distance = p.reach; });
       }
       for (const L of pools) { const p = L.userData.pool; if (p?.tag === FLICKER_TAG) L.intensity = p.i * flick; else if (p?.tag === CORE_TAG) L.intensity = p.i * core; }
     }
@@ -407,7 +416,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     if (W.scene.fog) { W.scene.fog.near = base.fogNear + (INSIDE.fogNear - base.fogNear) * look.inside; W.scene.fog.far = base.fogFar + (INSIDE.fogFar - base.fogFar) * look.inside; }
     // the player lit by the cabin they are in (and by the station's rooms again once out: player.js's own check)
     if (player) {
-      if (inShip && inShip.cabin?.env && player.cabin !== inShip) { player.cabin = inShip; player.zone = W.zoneAt(player.pos); shine(player.c, inShip.cabin.env); }
+      if (inShip && inShip.cabin?.env && player.cabin !== inShip) { player.cabin = inShip; player.zone = W.zoneAt(player.pos); if (player.c) shine(player.c, inShip.cabin.env); }
       else if (!inShip && player.cabin) { player.cabin = null; player.zone = null; }
     }
   }
@@ -443,5 +452,14 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   // (a ship that is not parked yet, the Miner landing (src/crane.js): its cabin not loaded or drawn, its lift left as it
   // is, until it is down)
   function hold(id, on = true) { const s = ships.find((q) => q.id === id); if (s) s.held = !!on; return !!s; }
-  return { ships, update, inside, where, look, spots, hold, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, ...(s.stats || {}) })) };
+  // (a ship flown, src/flying.js: its cabin drawn where the ship is now. D: a Matrix4, from where it is parked to where it
+  // is now; null: parked again. Where a person can walk stays where it is parked: nobody walks about a ship in flight.)
+  function fly(id, D) {
+    const s = ships.find((q) => q.id === id); if (!s || !s.cabin) return false;
+    if (!D) { s.flown = null; s.cabin.group.matrix.copy(s.M); }
+    else { s.flown = s.flown || { M: new THREE.Matrix4(), inv: new THREE.Matrix4() }; s.flown.M.multiplyMatrices(D, s.M); s.flown.inv.copy(s.flown.M).invert(); s.cabin.group.matrix.copy(s.flown.M); }
+    s.cabin.group.matrixWorldNeedsUpdate = true;
+    return true;
+  }
+  return { ships, update, inside, where, look, spots, hold, fly, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, ...(s.stats || {}) })) };
 }

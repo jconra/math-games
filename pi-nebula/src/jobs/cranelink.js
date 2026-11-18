@@ -23,6 +23,7 @@
 import * as THREE from 'three';
 import { makeGame, toGrid, fromGrid, gridOf, placeOf, magicMoves, GAME } from './crane.js';
 import { followCam, viewCam, ensureCss, VIEWS as DRIVE_VIEWS, VIEW_NAMES } from '../cranedrive.js';
+import { SEES as FAR } from '../station.js';   // (how far the game's camera sees)
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // the views of the game: from above with the grid (while a card waits; the film follows the crane while it moves), and
@@ -357,7 +358,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     if (v === 'grid' && !busy && !moving && crane.mode !== 'landing') { aimTop(camera); return; }
     top.on = false; crane.view = null;
     if (camera.view && camera.view.enabled) camera.clearViewOffset();
-    if (camera.near !== 0.03 || camera.far !== 120) { camera.near = 0.03; camera.far = 120; camera.updateProjectionMatrix(); }
+    if (camera.near !== 0.03 || camera.far !== FAR) { camera.near = 0.03; camera.far = FAR; camera.updateProjectionMatrix(); }
     const shift = innerHeight > innerWidth * 1.05 || innerWidth <= 640 ? [0, -0.22] : [0.18, 0];
     if (v === 'grid' && film) { filmCam(camera, S, dt, shift); return; }
     cam.aim(camera, S, dt, { fixed: v === 'grid' || v === 'follow' ? null : viewCam(crane, v), shift });
@@ -449,7 +450,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
     strip.remove(); cv.remove(); document.body.classList.remove('pcg-on');
     crane.target = null; crane.places = []; crane.view = null;
     if (W.camera.view && W.camera.view.enabled) W.camera.clearViewOffset();
-    W.camera.near = 0.03; W.camera.far = 120; W.camera.updateProjectionMatrix();
+    W.camera.near = 0.03; W.camera.far = FAR; W.camera.updateProjectionMatrix();
     if (crane.drive) { crane.drive.hurry = 1; crane.drive.byHand = true; crane.drive.rules.people = false; crane.drive.aimAt = null; if (!keep) crane.drive.stop(); }
     if (!keep) crane.give();
   }

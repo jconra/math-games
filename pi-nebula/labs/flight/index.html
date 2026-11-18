@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Flight Lab</title>
+<meta name="description" content="A space station lab: flying by hand, by itself. The Miner on its pad, the station's outside, and the game's own flight controls, with no contract to sign. Lift off, fly out through the bay door, round the station, back in, and set down.">
+<meta name="theme-color" content="#05070b">
+<link rel="icon" href="data:,">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../shared/oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070b; color: #e8eef5; overflow: hidden; font: 400 15px/1.35 system-ui, "Segoe UI", Roboto, "DejaVu Sans", sans-serif; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #top { position: fixed; left: 0; right: 0; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; background: rgba(7, 10, 15, 0.82); border-bottom: 1px solid rgba(79, 182, 255, 0.3); }
+  #top h1 { margin: 0 4px 0 0; font: 700 16px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #9fdcff; }
+  #top a { color: #9fdcff; font-size: 13px; margin-right: 4px; }
+  #top button { font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 10px; color: #e8eef5; background: #152131; border: 1px solid rgba(79, 182, 255, 0.45); border-radius: 6px; }
+  #note { flex: 1 1 100%; margin: 0; font-size: 12.5px; color: #a9b8c8; min-height: 1.3em; }
+  #loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 18px; color: #cfe6ff; background: #05070b; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="The Miner on its pad in its hangar, the bay door ahead"></canvas>
+<div id="top">
+  <h1>Flight Lab</h1><a href="../">All labs</a>
+  <button type="button" id="pad">Back on the pad</button>
+  <button type="button" id="home">Outside, coming home</button>
+  <p id="note" aria-live="polite"></p>
+</div>
+<div id="loading">Warming the engine…</div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>

@@ -11,6 +11,7 @@
 //   W.view(name) / W.place(name) / W.room(id)                   the station file's named views, spots and rooms
 //   W.alone = Set of room ids   only these rooms are drawn, and none of the doors' leaves: a ship out on a trip
 //                            (src/trip.js: the station is not out there); null: as always
+//   W.rooms = fn             a last word on which rooms are drawn: fn(room, drawn) -> drawn (src/outside.js); null: none
 //   W.seenFrom = point       a view from outside (the dock's bridge job): the rooms drawn are those seen from this point
 //                            inside the station, not from the camera out in space (null: from the camera, as always)
 //
@@ -39,6 +40,9 @@ export const QUALITY = {
 export const pickQuality = (asked) => (asked in QUALITY ? asked : (matchMedia('(pointer: coarse)').matches ? 'medium' : 'high'));
 
 const RANGE = 34;   // (how far a room's own picture of itself looks, metres)
+// how far the camera sees, metres: the station's own outside is 270 m from end to end and is seen from the windows
+// (src/outside.js; it was 120 m while there was nothing outside to see). A ship flown outside sees further (src/flying.js).
+export const SEES = 700;
 const FAR = new THREE.Vector3(1e6, 1e6, 1e6), ONE = [null];
 
 // a pause long enough for the screen to be drawn (so the title's loading bar moves between the heavy steps); a
@@ -52,7 +56,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.74;
   renderer.shadowMap.enabled = false; renderer.info.autoReset = false;
   renderer.setPixelRatio(Math.min(devicePixelRatio, Q.ratio));
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, 1, 0.03, 120);
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, 1, 0.03, SEES);
   const mats = makeMaterials(), pmrem = new THREE.PMREMGenerator(renderer);
   const fill = new THREE.HemisphereLight(0xdde2e8, 0x5d6065, 0.75); scene.add(fill);
   const dust = makeDust(); dust.visible = false; scene.add(dust);
@@ -157,7 +161,9 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // W.seenFrom (a Vector3), not from the camera, out in space where no room is near; null: from the camera)
   // (a ship out on a trip, src/trip.js: only its own room is drawn, W.alone; the doors' leaves, which hang on the
   // station itself and not on a room, are put away with the rest and brought back as they were)
-  const W0 = { seenFrom: null, alone: null, hidden: null };
+  // (W.rooms: a last word on which rooms are drawn, fn(room, drawn) -> drawn; the station's outside has it: the white
+  // stand-in walls it covers are put away, and a ship flown outside is seen from out there, src/outside.js)
+  const W0 = { seenFrom: null, alone: null, hidden: null, rooms: null };
   function setAlone(ids) {
     if (W0.hidden) { for (const [o, v] of W0.hidden) o.visible = v; W0.hidden = null; }
     W0.alone = ids ? new Set(ids) : null;
@@ -171,6 +177,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     resize();
     if (built.zones.length > 1) updateZones(built, W0.seenFrom || camera.position, RANGE, camera, R.portals);
     if (W0.alone) for (const z of built.zones) z.group.visible = W0.alone.has(z.id);
+    if (W0.rooms) for (const z of built.zones) z.group.visible = !!W0.rooms(z, z.group.visible);
     if (dust.visible) dust.userData.update(dt, camera.position);
     sky.update(dt);
     // each door opens for whoever is nearest it (the kit's doors sense one point at a time); a door in keepShut (one
@@ -188,5 +195,6 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
 
   return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
     get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; },
-    get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); } };
+    get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); },
+    get rooms() { return W0.rooms; }, set rooms(fn) { W0.rooms = fn || null; }, sees: SEES, pmrem };
 }

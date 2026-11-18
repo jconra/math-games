@@ -50,6 +50,7 @@
 //   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away'
 //                                  | 'out': away with the player aboard)
 //   crane.depart() / crane.arrive({ flown }) -> the haul's number / crane.back()   a run the player crews (above)
+//   crane.fly(D, dt, how)          while it is out: the Miner drawn where it has been flown to (src/flying.js)
 //   crane.awayHeld                 true: the Miner stays on its pad when the player leaves the area (a contract signed)
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
 //   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (src/jobs/crane.js toGrid)
@@ -152,6 +153,11 @@ export function makeCrane({ W, walls, boarding = null }) {
     // (turned about the pad's middle: the ship's frame turned by `yaw`, then moved; parked is the identity)
     _q.setFromEuler(_e.set(0, yaw, tilt * S.nose));
     _o.compose(_p, _q, _s); _i.makeTranslation(-S.at.x, 0, -S.at.z); S.M.multiplyMatrices(_o, _i);
+    shipMoved();
+  }
+  // the Miner drawn where S.M has it (S.M: from where it is parked to where it is now), with all that rides on it
+  function shipMoved() {
+    const S = ship;
     S.zone.group.matrixAutoUpdate = false; S.zone.group.matrix.copy(S.M); S.zone.group.matrixWorldNeedsUpdate = true;
     for (const im of S.meshes) { im.matrixAutoUpdate = false; im.matrix.copy(S.M); im.matrixWorldNeedsUpdate = true; }
     L.ship(S.M);
@@ -197,7 +203,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     ship.pods = pods;
     return flight;
   }
-  let landT = 0, legsDown = false;
+  let landT = 0, legsDown = false, aloft = false;
   function beginLanding() {
     L.reset(); t = 0; mode = 'landing'; landT = 0; legsDown = false;
     C.haul = { n: L.round, landed: false, at: performance.now() };
@@ -379,6 +385,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     arrive({ flown = false } = {}) {
       if (mode === 'live' || mode === 'handover' || mode === 'leaving') return null;
       if (mode === 'landing') landed();
+      aloft = false;
       L.reset(); t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
       C.haul = { n: L.round, landed: true, at: performance.now(), flown: !!flown };
       shipAt(null); L.pose(0); posePieces(L.state(0), 0);
@@ -387,7 +394,26 @@ export function makeCrane({ W, walls, boarding = null }) {
       return L.round;
     },
     // the run given up: the Miner on its pad as it was, its round done
-    back() { if (mode !== 'out') return false; mode = 'round'; t = L.length; L.pose(t); posePieces(L.state(t), 0); return true; },
+    back() { if (mode !== 'out') return false; if (aloft) C.fly(null); mode = 'round'; t = L.length; L.pose(t); posePieces(L.state(t), 0); return true; },
+    // FLOWN (src/flying.js), while it is out with the player aboard: the Miner drawn where it has been flown to. D: a
+    // Matrix4, from where it is parked to where it is now (null: parked again, its thrusters at rest). how: how it is
+    // moving, for its thrusters and the air it blows down (kit/ships/flight.js): { acc, spin, hold, engine, heat } and
+    // { x, z, height } over the hangar's floor (height null: not over it).
+    fly(D, dt = 0, how = null) {
+      if (mode !== 'out' || !ship) return false;
+      if (!D) {
+        if (aloft) { aloft = false; shipAt(null); L.pose(t); posePieces(L.state(t), 0); if (flight) { flight.rest(); for (const P of ship.pods) W.driven.delete(P); } if (air) air.hide(); }
+        return true;
+      }
+      if (!aloft) { aloft = true; if (flightFx()) for (const P of ship.pods) W.driven.add(P); }
+      ship.M.copy(D); shipMoved(); L.pose(t); posePieces(L.state(t), 0);
+      if (flight && how) {
+        flight.update(dt, how);
+        if (how.height != null && how.hold > 0.01) air.update(dt, { x: how.x, z: how.z, height: how.height, strength: how.hold * (how.height < 4 ? 0.8 : 0.4), spread: 1 }); else air.hide();
+      }
+      return true;
+    },
+    get aloft() { return aloft; },
     landing: () => (mode === 'landing' ? Math.min(1, landT / LANDING.secs) : null),
     flight: () => (flight ? { pods: flight.pods.map((p) => ({ yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), end: p.end, thrust: +p.set.thrust.toFixed(3) })), engine: flight.main ? +flight.main.thrust.toFixed(3) : null, cool: +cool.toFixed(3), drawn: flight.drawn, air: air ? +air.disc.material.uniforms.strength.value.toFixed(3) : null } : null),
     voxels: () => voxels || (voxels = reachVoxels(W, L.site)),
