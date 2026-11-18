@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Drill Lab</title>
+<meta name="description" content="A space station lab: the drill operator's game by itself. Spot a rock by the glow of the ore inside it, fly over, answer the scan's question, turn the rock in the claw and drill where the ore is thick, until the Miner's eight canisters are full.">
+<meta name="theme-color" content="#05070b">
+<link rel="icon" href="data:,">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../shared/oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070b; color: #e8eef5; overflow: hidden; font: 400 15px/1.35 system-ui, "Segoe UI", Roboto, "DejaVu Sans", sans-serif; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #top { position: fixed; left: 0; right: 0; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; background: rgba(7, 10, 15, 0.82); border-bottom: 1px solid rgba(79, 182, 255, 0.3); }
+  #top h1 { margin: 0 4px 0 0; font: 700 16px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #9fdcff; }
+  #top a { color: #9fdcff; font-size: 13px; margin-right: 4px; }
+  #top button, #top select { font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 10px; color: #e8eef5; background: #152131; border: 1px solid rgba(79, 182, 255, 0.45); border-radius: 6px; }
+  #top button[aria-pressed="true"] { background: #1d5f86; border-color: #9fdcff; }
+  #top select { max-width: 46vw; }
+  #note { flex: 1 1 100%; margin: 0; font-size: 12.5px; color: #a9b8c8; min-height: 1.3em; }
+  #loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 18px; color: #cfe6ff; background: #05070b; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="The Miner among the rocks of the asteroid field"></canvas>
+<div id="top">
+  <h1>Drill Lab</h1><a href="../">All labs</a>
+  <button type="button" id="new">New field</button>
+  <button type="button" id="rich" aria-pressed="false">Rich rock: off</button>
+  <button type="button" id="ask" aria-pressed="true">Question: on</button>
+  <select id="metal" aria-label="The field's metal"></select>
+  <select id="level" aria-label="The question's level"></select>
+  <p id="note" aria-live="polite"></p>
+</div>
+<div id="loading">Unfolding the arms…</div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>

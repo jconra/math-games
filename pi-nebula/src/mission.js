@@ -30,6 +30,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // ── the seat's prompt (the job prompt's own look) and a word at the top when a share is waiting ──
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
   prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Take the Miner out to the rocks</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
+  const promptFor = (m) => { const pilot = m.roles.includes('pilot'); prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; prompt.querySelector('small').textContent = pilot ? 'Take the Miner out to the rocks' : 'Ride out to the rocks with the crew'; };
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => start('seat'));
   addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start('seat'); } });
@@ -140,6 +142,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (tail) { tail.update(dt); tailT -= dt; if (tailT <= 0) tail = null; }
       // the pilot's seat: in the cockpit with a contract signed
       const at = playing && m && m.state === 'signed' && !card && !loading && !jobs.panel && boarding.where(P.pos) === MISSIONS[m.id].ship + '/cockpit' && crane.mode !== 'out';
+      if (at && prompt.hidden) promptFor(m);
       prompt.hidden = !at;
       return loading;
     },

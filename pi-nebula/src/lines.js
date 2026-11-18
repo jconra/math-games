@@ -36,10 +36,10 @@ export const CAPTAINS = {
     // (his mission is made, src/missions.js: contract: said as his contract's card comes up; signed: as it is signed;
     // go, goWhat: shall we go now (the bubble, the question's small words); goYes, goNo: his answers; payout: home,
     // the share still waiting. No recorded clips for these yet: bubbles only.)
-    contract: 'Great! Here is my contract. Have a look.', signed: 'Welcome aboard, pilot!',
+    contract: 'Great! Here is my contract. Have a look.', signed: 'Welcome aboard!',
     go: 'The Miner is on her pad. Ready to head out?', goWhat: 'Start the mining run now?',
-    goYes: 'Then let\'s fly!', goNo: 'No rush. Find me, or take the pilot\'s seat on the Miner.',
-    payout: 'Good flying! Your share is waiting at the smelter\'s controls.' },
+    goYes: 'Then let\'s fly!', goNo: 'No rush. Find me, or start from the Miner\'s cockpit.',
+    payout: 'Good work! Your share is waiting at the smelter\'s controls.' },
   hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
     no: 'That\'s all right. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
@@ -62,6 +62,16 @@ export const RUN_TALK = {
     full: ['Eight canisters, {tonnes} tonnes of {ore} ore. Take us home, pilot.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, {player}.'],
     home: ['There\'s the station. The autopilot has the landing.', 'Home. The autopilot takes her in.'],
     landed: ['Good flying, {player}. Your share is at the smelter\'s controls.'],
+    // (the crew member at the drill, src/drillview.js; and the lines for a run whose pilot is the captain's own)
+    crewOut: ['We\'re clear of the station. Juno has the jump.', 'Clear of the station. Juno is working out the jump.'],
+    crewJump: ['Juno has us at the rocks. The drill is yours, {player}.', 'Here we are. Find us a good rock, {player}.'],
+    drillField: ['Look for the glow, {player}. More glow, more ore.', 'The scan is up. Pick us a good one.'],
+    pick: ['Going in for that one.', 'Juno, take us over.', 'That one it is.'],
+    tuned: ['Good scan!', 'Spot on. Set the drill.'],
+    richAboard: ['Titanium in the canisters! This haul pays double.'],
+    broke: ['That one\'s done. Find us another.', 'She\'s all in pieces. Next rock!'],
+    fullCrew: ['Eight canisters, {tonnes} tonnes of {ore} ore. Juno, take us home.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, Juno.'],
+    landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],
   },
 };
 

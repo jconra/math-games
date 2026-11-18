@@ -20,6 +20,11 @@
 //     are part of the hangar's still picture and stay folded under the cockpit's sill, out of the pilot's sight).
 //   - THE CARDS PAY NOTHING BY THEMSELVES (the panel's pay: false): the share at the smelter is the pay.
 //   - THE CAPTAIN'S WORDS come up in a bubble on his side of the cockpit (he is not drawn in the other seat yet).
+//   - THE DRILL OPERATOR'S GAME (src/drillview.js, loaded only for a crew member who signed for the drill): at the
+//     field the view goes outside the ship, behind a short fade, and the crew member picks the rocks and drills them
+//     until the eight canisters are full. That view has a Miner of its own, built for outside (legs up, its arms
+//     live), far from the parked one, of which nothing is drawn meanwhile. With the pilot's seat left to the crew the
+//     jumps are the short version (the lamps light by themselves) and the crew member rides in the other seat.
 //
 //   const T = startTrip(ctx, { mission, roles, from, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
 //       people, crew, save, body, put, onCredits }; from: 'seat' | 'captain'
@@ -32,7 +37,7 @@ import * as MB from '../kit/ships/miner-built.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
 import { METALS, CARRIES, RICH_METAL } from './jobs/smelter.js';
-import { stepsFor, isRich, land, forecast, LAMPS, CARDS } from './missions.js';
+import { stepsFor, isRich, land, forecast, LAMPS, CARDS, CREW_CLEAN } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
 
@@ -71,6 +76,8 @@ const CSS = `
   clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px); animation: pmt-pop 0.5s ease; }
 .pmt-rich small { display: block; font-size: 14px; letter-spacing: 0.04em; }
 @keyframes pmt-pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } }
+.pmt.is-drill .pmt-say { top: 150px; }
+@media (max-width: 640px) { .pmt.is-drill .pmt-say { top: 204px; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-rich { font-size: 18px; top: 30%; } .pmt-fade p { font-size: 17px; } .pmt-count b { font-size: 22px; } }
 `;
 
@@ -109,6 +116,9 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   prompt.querySelector('.pnj-go').addEventListener('click', () => openCards());
 
   const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, fade: 0, fadeTo: 0, clean: 0, rich: false, filled: 0, lamps: [], lit: 0, n: null, paused: false, log: [] };
+  // (signed for which: the pilot's seat, the drill)
+  const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill');
+  let drill = null, drillKit = null, drillErr = null, drillOn = false;
   let panel = null, arms = null, rocks = null, hidden = null, stand = null, sayT = 0, jumpT = -1, jumpDone = null, fireIn = -1, spin = 0, armsWant = 'stowed', richShown = false, cutT = 0;
   const name = crew.name || 'pilot';
   const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, ...more }[k] ?? ''));
@@ -210,17 +220,20 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
         stand = P().pos.clone();
         if (!crane.depart()) { abort(); return; }
         build(); space(true);
+        // (the drill operator's game: fetched and its ship built now, behind the fade, so the field does not wait)
+        if (iDrill && !drillKit) import('./drillview.js').then(async (m) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
         fadeWords('The Miner lifts off its pad and heads out through the bay door, on autopilot.');
         T.phase = 'away'; T.t = 0;
       }
-      if (T.phase === 'away' && T.t > Math.max(2.2, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'clear'; say('out'); }
+      if (T.phase === 'away' && T.t > Math.max(2.2, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'clear'; say(iPilot ? 'out' : 'crewOut'); }
       if (T.phase === 'clear' && T.fade <= 0) next();
     },
     // the jump computer: three cards, three lamps, and the jump fires by itself
     jump(dt, st) {
       if (!T.phase) {
-        T.lamps = []; T.lit = 0; fireIn = -1; words(st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks');
-        if (st.mine) { T.phase = 'cards'; openCards(); } else { T.phase = 'crew'; }
+        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Pilot Juno works out the jump home' : 'Pilot Juno works out the jump'));
+        // (the captain's own pilot: an ordinary jump, src/missions.js CREW_CLEAN)
+        if (st.mine) { T.phase = 'cards'; openCards(); } else { T.phase = 'crew'; if (st.counts) T.clean = CREW_CLEAN; }
       }
       // (a pilot of the captain's own: the lamps light by themselves)
       if (T.phase === 'crew' && T.t > 1.2 * (T.lit + 1)) { T.lamps[T.lit] = 'lit'; T.lit++; if (T.lit >= st.cards) fireIn = 0.6; }
@@ -230,14 +243,15 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       }
       if (T.phase === 'jumping') {
         jumpT += dt;
-        if (!jumpDone && jumpT >= JUMP.flash) { jumpDone = true; T.inField = st.to === 'field'; rocks.group.visible = T.inField; if (T.inField) say(T.clean >= st.cards ? 'clean' : 'wide'); else { say('home'); arms.rockOn = false; arms.armsAs = null; } }
+        if (!jumpDone && jumpT >= JUMP.flash) { jumpDone = true; T.inField = st.to === 'field'; rocks.group.visible = T.inField; if (T.inField) say(!st.mine ? 'crewJump' : T.clean >= st.cards ? 'clean' : 'wide'); else { say('home'); arms.rockOn = false; arms.armsAs = null; } }
         if (jumpT >= JUMP.secs) { jumpT = -1; drawJump(); next(); }
       }
     },
-    // at the rocks: the crew's drilling, watched through the glass
+    // at the rocks: the crew member's own drilling (signed for the drill: runDrill), or the crew's, watched through the glass
     work(dt, st) {
+      if (iDrill) { runDrill(dt, st); return; }
       if (!T.phase) {
-        T.phase = 'reach'; T.roll = (ctx.rand || Math.random)(); T.rich = isRich(() => T.roll); T.filled = 0; armsWant = 'work'; richShown = false; cutT = 0; words('At the rocks');
+        T.phase = 'reach'; T.roll = api.rig.roll ?? (ctx.rand || Math.random)(); T.rich = isRich(() => T.roll); T.filled = 0; armsWant = 'work'; richShown = false; cutT = 0; words('At the rocks');
         T.metal = T.rich ? RICH_METAL : METALS[(crane.round + 1) % 4].name; T.ore = forecast({ clean: T.clean, rich: T.rich, roles });
       }
       const gripped = arms.doors.some((D) => (D.grip || 0) >= 1), cutting = arms.doors.every((D) => (D.work || 0) >= 1);
@@ -260,15 +274,45 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
         arms.group.visible = false; rocks.group.visible = false; tint(false); space(false);
         T.n = crane.arrive({ flown: true });
         T.payout = land(crew, { n: T.n, clean: T.clean, rich: T.rich }); save(crew);
+        if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.metal, tons: ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.oreTonnes] || String(T.payout.oreTonnes) }); } catch (e) { /* no news */ }
         fadeWords('The autopilot brings the Miner in through the bay door. Down on the pad: legs down, nozzle still hot.');
         T.phase = 'down'; T.t = 0;
       }
-      if (T.phase === 'down' && T.t > Math.max(2.4, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'up'; say('landed'); }
+      if (T.phase === 'down' && T.t > Math.max(2.4, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'up'; say(iPilot ? 'landed' : 'landedCrew'); }
       if (T.phase === 'up' && T.fade <= 0) next();
     },
   };
+  // THE DRILL OPERATOR'S GAME at the field (src/drillview.js): a short fade, the view outside the ship, the game until
+  // the eight canisters are full, a fade back to the seat. The rich rock is rolled here, once a trip, as for a crew's
+  // drilling; the haul is a rich one if ore from it comes home.
+  const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
+  function runDrill(dt, st) {
+    if (!T.phase) {
+      T.phase = 'toDrill'; T.roll = api.rig.roll ?? (ctx.rand || Math.random)(); T.richField = isRich(() => T.roll); T.rich = false; T.filled = 0;
+      T.metal = METALS[(crane.round + 1) % 4].name; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
+    }
+    if (T.phase === 'toDrill' && T.fade >= 1) {
+      if (drillErr) { abort(); return; }
+      if (!drillKit) { if (T.t > 40) { console.error('trip: the drill never came'); abort(); } return; }
+      // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
+      W.alone = []; arms.group.visible = false; rocks.group.visible = false;
+      drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, metal: T.metal, rich: T.richField, rand: ctx.rand || Math.random,
+        onSay: (key, more) => { if (TALK[key] && key !== 'full') say(key, more); },
+        onDone: (r) => { T.rich = !!r.rich; T.drillStats = r.stats; T.drillSecs = r.secs; if (T.rich) T.metal = RICH_METAL; T.ore = forecast({ clean: T.clean, rich: T.rich, roles }); T.phase = 'drillDone'; T.t = 0; say(iPilot ? 'full' : 'fullCrew', { tonnes: T.ore.oreTonnes, ore: T.metal }); } });
+      drillOn = true; el.classList.add('is-drill'); T.phase = 'drill'; T.t = 0; T.fadeTo = 0; say('drillField');
+    }
+    if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; }
+    if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.fadeTo = 1; fadeWords('Back to your seat ...'); }
+    if (T.phase === 'fromDrill' && T.fade >= 1) { endDrill(); T.fadeTo = 0; next(); }
+  }
+  function endDrill() {
+    if (!drill) return;
+    drillOn = false; drill.close(); drill = null; el.classList.remove('is-drill'); camFresh = true;
+    if (T.space) { W.alone = [S.zone.id]; if (arms) arms.group.visible = true; }
+  }
   function cleanUp() {
+    endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
     if (panel) { panel.close(true); panel = null; }
     removeEventListener('keydown', onKey); prompt.remove();
     space(false);
@@ -298,9 +342,10 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     },
     // the camera: the pilot's eyes, looking out over the nose (turned clear of the job panel while it is up)
     aim(camera, dt = 1 / 60) {
+      if (drill && drillOn) { drill.aim(camera, dt); return; }
       if (!api.seated || !S.M) return;
       const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, up = !!panel;
-      _eye.copy(inShip(SEAT.eye)); _look.copy(inShip(tall ? (up ? SEAT.lookTallPanel : SEAT.lookTall) : up ? SEAT.lookPanel : SEAT.look));
+      _eye.copy(inShip(iPilot ? SEAT.eye : [-SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]])); _look.copy(inShip(tall ? (up ? SEAT.lookTallPanel : SEAT.lookTall) : up ? SEAT.lookPanel : SEAT.look));
       if (camFresh) { camLook.copy(_look); camFresh = false; } else camLook.lerp(_look, 1 - Math.exp(-3 * dt));
       camera.position.copy(_eye); camera.lookAt(camLook);
       const fov = tall ? SEAT.fovTall : SEAT.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
@@ -310,8 +355,10 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     abort,
     // (the rigs: the cut-scene and the fades hurried on)
     skip(secs = 1) { T.t += secs; if (T.phase === 'cut') cutT += secs; },
-    get panel() { return panel; },
+    get panel() { return panel; }, get drill() { return drill; },
+    rig: {},      // (the rigs: rig.roll, the roll for the rich rock, under 0.2 for one)
     state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, clean: T.clean, rich: T.rich, roll: T.roll, filled: T.filled, paused: T.paused, n: T.n,
+      drill: drill ? drill.state() : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null, richField: !!T.richField,
       panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;

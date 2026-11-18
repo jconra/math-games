@@ -30,6 +30,13 @@
 // canisters: 7 tonnes for three green lamps, 6 for two, 5 for one or none (ORE_BY_CLEAN). A card answered right after a
 // miss still lights its lamp (amber) and the jump still fires. The jump home changes nothing: home is home.
 // ONE ROCK IN FIVE IS A RICH ONE (RICH): its ore is titanium, which pays double. It is a fact of that haul.
+// THE DRILL OPERATOR (src/drill.js, src/drillview.js): signed for, the work at the rocks is the crew member's own: they
+// pick the rocks and drill them until the eight canisters are full. What the haul sells for is still set by the jump
+// out (the tonnes of ore in the eight canisters) and by the rich rock; good drilling fills the canisters from fewer
+// rocks, so the run is shorter. The one rule for the rich rock stays: one trip in five has one at the field (rolled
+// once a trip, src/trip.js); with the crew's own driller it is always the one worked, and with the crew member at the
+// drill the haul is a rich one if they bring ore from it home. With the pilot's seat left to the crew, the jump out
+// counts as two green lamps (CREW_CLEAN).
 //
 // KEPT WITH THE CREW MEMBER (save.js keeps any field): crew.mission, one at a time:
 //   { id, captain, roles: [...], state: 'signed', signed }                the contract signed, the run not flown yet
@@ -53,12 +60,15 @@ import { haulOf, flownHaul, CARRIES, ORE_SELLS } from './jobs/smelter.js';
 // until then the captain's own crew member does it), and who that is ──
 export const ROLES = {
   pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno' },
-  drill: { id: 'drill', name: 'Drill operator', does: 'operating the drill', share: 20, ready: false, crew: 'Miner Kestrel' },
+  drill: { id: 'drill', name: 'Drill operator', does: 'operating the drill', share: 20, ready: true, crew: 'Miner Kestrel' },
   engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: false, crew: 'Engineer Okafor' },
 };
 export const CARDS = 3;      // the cards of a jump (its three lamps: distance, charge, go)
 export const LAMPS = ['Distance', 'Charge', 'Go'];
 export const RICH = 0.2;     // one rock in five is a rich one
+// the jump out flown by the captain's own pilot (the crew member signed for the drill only): an ordinary jump, two
+// lamps' worth of time at the rocks, so the haul is the middle one (6 tonnes of ore)
+export const CREW_CLEAN = 2;
 // tonnes of ore in each of the eight canisters, by the lamps of the jump out lit green (0 to 3): [a, d] of a tonne
 export const ORE_BY_CLEAN = [[5, 8], [5, 8], [3, 4], [7, 8]];
 

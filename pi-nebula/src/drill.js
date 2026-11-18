@@ -54,7 +54,7 @@ export const DRILL = {
 // each metal's glow (the game's maker's picture: gold amber, platinum white, copper teal) and its symbol for the tag
 export const ORE = {
   iron: { sym: 'Fe', glow: '#ff6b2c' }, nickel: { sym: 'Ni', glow: '#a4f36a' }, copper: { sym: 'Cu', glow: '#2fe3cf' },
-  cobalt: { sym: 'Co', glow: '#5a8cff' }, titanium: { sym: 'Ti', glow: '#f1ecff' }, gold: { sym: 'Au', glow: '#ffc233' },
+  cobalt: { sym: 'Co', glow: '#5a8cff' }, titanium: { sym: 'Ti', glow: '#d6ccff' }, gold: { sym: 'Au', glow: '#ffc233' },
 };
 export const metalOf = (name) => METALS.find((m) => m.name === name) || METALS[0];
 
