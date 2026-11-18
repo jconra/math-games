@@ -397,8 +397,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     return new THREE.Vector3().crossVectors(b.clone().multiplyScalar(a.lengthSq()).sub(a.clone().multiplyScalar(b.lengthSq())), n).multiplyScalar(1 / d).add(C);
   }
   // THE CUTTER'S BOOM: the arm's last link (its hand and its wheel) slid out from its wrist by `ext` (the ship's frame),
-  // on a plain dark rod. null: slid home, no rod.
-  const boom = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.55, metalness: 0.45 })); boom.visible = false; boom.matrixAutoUpdate = false; boom.name = 'drill: the cutter\'s boom'; G.add(boom);
+  // on a plain steel rod (pale, so it is seen against the dark rock: the wheel never looks loose from its arm). null:
+  // slid home, no rod.
+  const boom = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xaab0b8, roughness: 0.5, metalness: 0.25 })); boom.visible = false; boom.matrixAutoUpdate = false; boom.name = 'drill: the cutter\'s boom'; G.add(boom);
   const cutEnd = cutD ? cutD.leaves.filter((L) => L.meshes[0] && /arm (hand|wheel-[a-z]+):/.test(L.meshes[0].name)) : [];
   const _bm = new THREE.Matrix4(), _bt = new THREE.Matrix4(), _bv = new THREE.Vector3();
   function boomTo(ext, q) {
@@ -463,6 +464,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     <button type="button" class="pdr-btn pdr-fly" hidden>Fly manually</button>`;
   root.appendChild(el);
   const $ = (s) => el.querySelector(s), readsEl = $('.pdr-reads'), eyeEl = $('.pdr-eye'), cansB = $('.pdr-cans b'), cansI = [...el.querySelectorAll('.pdr-row i')], storeEl = $('.pdr-store'), holesEl = $('.pdr-holes'), hintEl = $('.pdr-hint'), doneEl = $('.pdr-done'), scanEl = $('.pdr-scan'), bigEl = $('.pdr-big');
+  const sideEls = [...el.querySelectorAll('.pdr-side .pdr-box')];      // (the boxes at the side: a readout keeps clear of them)
   // (the "fly manually" button's place: FLY_BY_HAND above)
   const flyEl = $('.pdr-fly'); flyEl.hidden = !(FLY_BY_HAND && pilot);
   // (the line along the bottom: what to do now; or, for a few seconds, what just happened)
@@ -821,13 +823,14 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     scanEl.disabled = !eyed || eyed.rock.scanned;
     const words = !eyed ? 'Look at a rock to scan it' : eyed.rock.scanned ? 'Scanned' : 'Scan this rock';
     if (scanEl._w !== words) { scanEl._w = words; scanEl.innerHTML = eyed && !eyed.rock.scanned ? `${words}<kbd>S</kbd>` : words; }
-    // the readouts (each beside its rock, none over another)
-    const placed = [];
+    // the readouts (each beside its rock, none over another, none under the boxes at the side)
+    const placed = []; let sided = false;
     for (const o of seen.values()) {
       if (!o.rock.scanned) continue;
       const t = readOf(o), on = show && o.mesh.visible;
       proj(o.pos, scr); const vis = on && scr.z < 1 && scr.x > -40 && scr.x < innerWidth + 40 && scr.y > 40 && scr.y < innerHeight + 40;
       t.hidden = !vis; if (!vis) continue;
+      if (!sided) { sided = true; for (const b of sideEls) { if (b.hidden) continue; const q = b.getBoundingClientRect(); if (q.width) placed.push({ x: q.left, y: q.top, w: q.width, h: q.height }); } }
       const r = Math.max(12, shownPx(o) * 1.15), w = t.offsetWidth || 110, h = t.offsetHeight || 40;
       const x = Math.max(4, Math.min(innerWidth - w - 4, scr.x + r + 8 + w > innerWidth - 4 ? scr.x - r - 8 - w : scr.x + r + 8)); let y = Math.max(62, Math.min(innerHeight - h - 4, scr.y - h / 2));
       for (const b of placed) if (x < b.x + b.w + 4 && x + w + 4 > b.x && y < b.y + b.h + 3 && y + h + 3 > b.y) y = b.y + b.h + 3;
