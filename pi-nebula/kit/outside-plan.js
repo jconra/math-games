@@ -17,6 +17,10 @@
 //   2026-11-18  "Also, I didn't mean for all the terrace to be ripped out. It didnt look bad, just a bit boring. It
 //               might look great with a layer of terrace above and below with some other unique bulky areas above
 //               and below that. Maybe U shaped areas."
+//   2026-11-18  (with a drawing over the roof seen from above: one red outline, two green squares, two yellow crossed
+//               squares) "Can we make the roof look like this? With the red being the raised level and the green
+//               being 2 landing pads. The yellow is just some pyramid type structure" and "I meant to draw it
+//               symmetrical btw, just using the mouse to draw"
 //   2026-11-18  (the windows) "it would be cool if there was some randomness ... It makes it feel more lived in if
 //               things change."
 //
@@ -24,11 +28,12 @@
 //   the body       ONE hull round the three hangars, the smelter (north end) and the medical centre (south end): the
 //                  hangars' band in the middle with the three doors, ONE terrace above it and ONE below it with a band
 //                  of windows each (their steps and heights differ), a flat plated roof and underside
-//   the masses     above the upper terrace and below the lower one, five bulky bevelled masses, no two alike. On the
-//                  roof: the south shoulder (the big one: it runs out to the station's south end and over its edge),
-//                  the north shoulder (smaller, lower, sitting in on the roof), and a low U-shaped mass that wraps
-//                  the spire's foot (open toward the hangar doors). Under the body: a block under the north end that
-//                  runs out over it, and a long thick slab under the south half, on the dock side
+//   the roof       as his drawing, the same on each side of its middle: ONE raised level, a strip along the back (the
+//                  dock side) with three arms coming forward to the hangars' side: one at each end and one in the
+//                  middle, which the spire stands on. In the two bays between the arms, down on the roof itself, a
+//                  landing pad each. On each end arm a pyramid with its top cut off
+//   the masses     below the lower terrace, two bulky bevelled masses, unlike each other: a block under the north end
+//                  that runs out over it, and a long thick slab under the south half, on the dock side
 //   the spire      above the middle hangar: a tower, the control centre with its windows, a mast and the beacon
 //   the keel       below the middle hangar: the radiators round it, the reactor ball under it
 //   the girders    out of the smelter end and out of the medical end, two pairs of solar wings on each
@@ -121,12 +126,25 @@ export const BODY_PATH = [[59.02, 71], [59.02, -21], [53.5, -31.02], [26.5, -31.
 const WIN = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09, cut: 0.3, lit: 0.5 };
 const spirePath = boxPath(SPIRE.x - 5, SPIRE.x + 5, SPIRE.z - 5, SPIRE.z + 5, 2.2);
 
-// THE FIVE MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
+// THE ROOF, AS HIS DRAWING. Everything on it is the same on each side of the line z = MID (the roof's own middle is
+// z = 27 and the spire stands at z = 25: MID is between the two, so neither is seen to be off).
+//   the raised level   its outline seen from above: the east faces of the three arms at x = 51.4, the two bays cut back
+//                      to x = 33.5 (so the strip along the back is 7 m wide), every outer corner cut
+//   the pads           one in each bay, on the roof itself: 16 m across, corners cut, 0.7 m tall
+//   the pyramids       one on each end arm: 7.5 m across at the foot, 4.3 m tall, its top cut off 1.7 m across
+export const MID = 26, RAISED = { to: 4.2, bevel: 1.6, front: 51.4, back: 26.5, bay: 33.5, bays: [[42, 61], [-9, 10]], ends: [-23.5, 75.5] };
+const mirror = (path) => path.map(([x, z]) => [x, 2 * MID - z]).reverse();     // (the same outline on the other side of MID, walked the same way round)
+const RAISED_PATH = (() => {
+  const R = RAISED, [n, s] = R.ends, f = R.front, b = R.back, [[s0, s1], [n0, n1]] = R.bays;
+  return [[f, s - 6], [f, s1], [R.bay, s1], [R.bay, s0], [f, s0], [f, n1], [R.bay, n1], [R.bay, n0], [f, n0], [f, n + 6], [f - 6, n], [b + 9, n], [b, n + 9], [b, s - 9], [b + 9, s], [f - 6, s]];
+})();
+const padSouth = boxPath(35.3, 51.3, 43.5, 59.5, 3), pyramidSouth = boxPath(38.25, 45.75, 64.5, 72);
+export const PADS = [{ name: 'south landing pad', path: padSouth, at: [43.3, 51.5] }, { name: 'north landing pad', path: mirror(padSouth), at: [43.3, 2 * MID - 51.5] }].map((p) => ({ ...p, tall: 0.7, bevel: 0.35, ring: 5.2 }));
+export const PYRAMIDS = [{ name: 'south pyramid', path: pyramidSouth }, { name: 'north pyramid', path: mirror(pyramidSouth) }].map((p) => ({ ...p, foot: 0.5, tall: 4.3, slope: 2.9 }));
+
+// THE MASSES (each its own closed outline; `to`: how far above the roof or below the underside it reaches)
 export const MASSES = [
-  { name: 'south shoulder', side: 'above', path: boxPath(34.4, 51.4, 45, 85.62, [3.5, 3.5, 3, 3]), to: 6.6, bevel: 2.4, over: 'south' },
-  { name: 'north shoulder', side: 'above', path: boxPath(28, 45, -20, 2.5, 3), to: 4.4, bevel: 1.6 },
-  // (a U seen from above, open toward the hangar doors: a back 5.2 m wide and two arms 5 m wide round the spire's foot)
-  { name: 'spire horseshoe', side: 'above', u: true, to: 3, bevel: 1.3, path: [[50, 39.5], [50, 34.5], [31.4, 34.5], [31.4, 15.5], [50, 15.5], [50, 10.5], [26.2, 10.5], [26.2, 39.5]] },
+  { name: 'raised level', side: 'above', path: RAISED_PATH, to: RAISED.to, bevel: RAISED.bevel, holes: () => [offsetPath(spirePath, 3.2, true), ...PYRAMIDS.map((p) => p.path)] },
   { name: 'north belly block', side: 'below', path: boxPath(35, 48, -31.62, -4, [3, 3, 2, 2]), to: 3.8, bevel: 1.5, over: 'north' },
   { name: 'south belly slab', side: 'below', path: boxPath(27, 42, 36, 70, 4), to: 5.2, bevel: 2 },
 ];
@@ -140,7 +158,17 @@ function massPlan(m, seed) {
     const profile = m.over ? [[-m.bevel, end], [0, end + m.bevel], [0, BELLY, 'in'], [0, L.band.foot - 0.6], [-0.6, L.band.foot]] : [[-m.bevel, end], [0, end + m.bevel], [0, BELLY, 'in']];
     tiers.push({ name: m.name, profile, parts: m.over ? [plates('tiers'), plates('band', BIG_LOW), plates('band', BIG_LOW), plates('tiers')] : [plates('tiers'), plates('band', BIG_LOW)] });
   }
-  return { name: m.name, closed: true, path: m.path, tiers, windows: { ...WIN, seed }, flats: flatsOf(offsetPath(m.path, -m.bevel, true), [], end, up, bigIf(4)) };
+  return { name: m.name, closed: true, path: m.path, tiers, windows: { ...WIN, seed }, flats: flatsOf(offsetPath(m.path, -m.bevel, true), m.holes ? m.holes() : [], end, up, bigIf(4)) };
+}
+// a landing pad: a low plated platform on the roof (its painted ring and its corner lights are in the gear)
+function padPlan(p) {
+  const top = ROOF + p.tall;
+  return { name: p.name, closed: true, path: p.path, tiers: [{ name: p.name, profile: [[0, ROOF, 'in'], [0, top - p.bevel], [-p.bevel, top]], parts: [plates('band'), plates('tiers')] }], flats: flatsOf(offsetPath(p.path, -p.bevel, true), [], top, true, plain) };
+}
+// a pyramid with its top cut off, standing on the raised level
+function pyramidPlan(p) {
+  const y0 = ROOF + RAISED.to, top = y0 + p.tall;
+  return { name: p.name, closed: true, path: p.path, tiers: [{ name: p.name, profile: [[0, y0, 'in'], [0, y0 + p.foot], [-p.slope, top]], parts: [plates('band'), plates('tiers')] }], flats: flatsOf(offsetPath(p.path, -p.slope, true), [], top, true, plain) };
 }
 
 function bodyPlan(o) {
@@ -159,7 +187,7 @@ function bodyPlan(o) {
     // the smelter's high window in the north end (run 2, walked west from x = 53.5)
     { tier: 1, step: 2, run: 2, at: 53.5 - 33, w: 7.6, h: 1.65, y: 4.8, sill: 0, head: 0, jamb: 0, frame: false, shield: false, ...(o.inside ? {} : { glass: 0.85 }) },
   ];
-  const holesUp = [...MASSES.filter((m) => m.side === 'above').map((m) => m.path), offsetPath(spirePath, 3.2, true)];
+  const holesUp = [...MASSES.filter((m) => m.side === 'above').map((m) => m.path), ...PADS.map((p) => p.path)];   // (the spire stands on the raised level)
   const holesDown = [...MASSES.filter((m) => m.side === 'below').map((m) => m.path), offsetPath(spirePath, 1.6, true)];
   const flats = [...flatsOf(offsetPath(BODY_PATH, -up.in - 2.2, true), holesUp, ROOF, true, bigIf(7)), ...flatsOf(offsetPath(BODY_PATH, -lo.in - 3, true), holesDown, BELLY, false, bigIf(7))];
   return { name: 'body', closed: true, path: BODY_PATH, tiers, doors, flats, windows: { ...WIN, seed: o.seed } };
@@ -168,7 +196,8 @@ function bodyPlan(o) {
 // ── THE SPIRE AND THE KEEL ──────────────────────────────────────────────────────────────────────────────────────
 export const SPIRE_TOP = 63, KEEL_FOOT = -40;
 function spirePlan(o) {
-  const profile = [[3.2, ROOF, 'in'], [3.2, ROOF + 2], [1.4, ROOF + 3.4], [0, ROOF + 3.4, 'in'], [0, 33], [-0.6, 33.6], [-0.6, 40], [3.4, 44.6], [3.4, 48], [2.2, 49.2], [-1.6, 49.2, 'in'], [-1.6, 62], [-2.6, SPIRE_TOP]];
+  const R = ROOF + RAISED.to;                            // (its foot stands on the raised level)
+  const profile = [[3.2, R, 'in'], [3.2, R + 2], [1.4, R + 3.4], [0, R + 3.4, 'in'], [0, 33], [-0.6, 33.6], [-0.6, 40], [3.4, 44.6], [3.4, 48], [2.2, 49.2], [-1.6, 49.2, 'in'], [-1.6, 62], [-2.6, SPIRE_TOP]];
   const parts = [plates('band'), plates('tiers'), plates('tiers'), plates('band', BIG), plates('tiers'), plates('band'), plates('tiers'), ROW, plates('tiers'), plates('tiers'), plates('band', BIG), plates('tiers')];
   // (the control centre is one room: all its windows are lit, and they are bigger than the hull's)
   return { name: 'spire', closed: true, path: spirePath, tiers: [{ name: 'spire', profile, parts }], windows: { ...WIN, w: 2.2, h: 1.8, pitch: 2.9, lip: 0.4, sink: 0.15, cut: 0.4, lit: 1, bar: 0.1, seed: o.seed },
@@ -236,7 +265,7 @@ function deckPlans(o) {
 //   seed     which half of the hull's windows are lit (the game gives a fresh number each time it starts)
 export function outsidePlans(opts = {}) {
   const o = { inside: !!opts.inside, seed: opts.seed ?? 11 };
-  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o)];
+  return [bodyPlan(o), ...MASSES.map((m) => massPlan(m, o.seed)), ...PADS.map(padPlan), ...PYRAMIDS.map(pyramidPlan), spirePlan(o), keelPlan(o), { name: 'west rooms', flats: westFlats(o), windows: { ...WIN, seed: o.seed } }, ...deckPlans(o)];
 }
 
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
@@ -322,6 +351,17 @@ export function outsideGear(opts = {}) {
       // (each wing: two columns of four dark cells, the frame showing between them)
       for (let i = 0; i < 2; i++) for (let j = 0; j < 4; j++) G.box([g.x, y0 + up * (hh * 2) * (j + 0.5) / 4, zc - hw + hw * (i + 0.5)], [0.26, hh / 4 - 0.22, hw / 2 - 0.22], cell);
     }
+  }
+  // the landing pads: a painted ring on each, and a small light at each of its four sides' ends
+  // (the ring is a low flat-topped kerb, 0.42 m tall: the pad's plates stand a bevel above its top, and paint laid flat on it would be under them)
+  for (const p of PADS) {
+    const y = ROOF + p.tall, [px, pz] = p.at, seg = 32, r0 = p.ring - 0.2, r1 = p.ring + 0.2, top = y + 0.42;
+    for (let i = 0; i < seg; i++) {
+      const a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2, at = (r, t, yy) => [px + Math.cos(t) * r, yy, pz + Math.sin(t) * r];
+      G.quad([at(r0, a, top), at(r1, a, top), at(r1, b, top), at(r0, b, top)], yellow);
+      G.quad([at(r1, a, y), at(r1, b, y), at(r1, b, top), at(r1, a, top)], yellow); G.quad([at(r0, a, y), at(r0, b, y), at(r0, b, top), at(r0, a, top)], yellow);
+    }
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) L.ball([px + dx * 6.1, y + 0.55, pz + dz * 6.1], 0.28, white, 6);
   }
   // the cargo slots: three containers plugged end-on into their sockets, a rail each side of every slot
   const S = SLOTS, y0 = SLOT_DECK + 0.32;

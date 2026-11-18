@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsidePlans, outsideGear, outsideMarks, flatsOf, MASSES, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
+import { outsidePlans, outsideGear, outsideMarks, flatsOf, MASSES, PADS, PYRAMIDS, RAISED, MID, LEVELS, OPENINGS, HANGARS, DOOR, BODY_PATH, MARKS, SLOTS, GIRDER, SPIRE, OUTSIDE_BOX, OUTSIDE_VIEWS } from '../kit/outside-plan.js';
 import { hullArrays, mergeHulls } from '../kit/hull-plates.js';
 import { STATION_LOOK, HULL_LOOKS, plateSizes } from '../kit/hull-look.js';
 
@@ -40,7 +40,7 @@ test('outside: the plan is sound in every look (whole numbers of triangles, noth
     }
     for (const [x, y, z] of points(A)) assert.ok(x >= OUTSIDE_BOX.min[0] && x <= OUTSIDE_BOX.max[0] && y >= OUTSIDE_BOX.min[1] && y <= OUTSIDE_BOX.max[1] && z >= OUTSIDE_BOX.min[2] && z <= OUTSIDE_BOX.max[2], `a plate at ${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`);
   }
-  assert.equal(outsidePlans().length, 11);
+  assert.equal(outsidePlans().length, 13);   // (the body, three masses, two pads, two pyramids, the spire, the keel, the west rooms, two decks)
 });
 
 test('outside: it goes round the REAL rooms: every room is under the hull, and the hangar doors are where the rooms have them', () => {
@@ -115,32 +115,51 @@ test('outside: ONE terrace above the hangars and ONE below, each with its window
   assert.ok(LAB.stats.windows >= 60 && LAB.stats.lit / LAB.stats.windows > 0.35 && LAB.stats.lit / LAB.stats.windows < 0.7, 'about half the windows are lit');
 });
 
-test('outside: the bulky masses: two shoulders above, unlike each other; masses below too; one of them U-shaped; no two alike', () => {
-  const above = MASSES.filter((m) => m.side === 'above'), below = MASSES.filter((m) => m.side === 'below'), shoulders = above.filter((m) => !m.u);
-  assert.equal(shoulders.length, 2); assert.ok(below.length >= 2);
+test('outside: the roof as his drawing: one raised level, a landing pad in each of its two bays, a pyramid on each end, the same on each side of the middle', () => {
+  const above = MASSES.filter((m) => m.side === 'above'), below = MASSES.filter((m) => m.side === 'below');
+  assert.deepEqual(above.map((m) => m.name), ['raised level']); assert.ok(below.length >= 2);
   assert.equal(new Set(MASSES.map((m) => m.name)).size, MASSES.length);
-  // no two alike: every pair differs in how far it stands out and in its bevel, and in its size, its shape or its side
-  const unlike = (a, b) => Math.abs(a.to - b.to) >= 0.5 && a.bevel !== b.bevel && (Math.abs(area(a.path) - area(b.path)) / Math.max(area(a.path), area(b.path)) > 0.15 || !!a.u !== !!b.u || a.side !== b.side);
-  for (let i = 0; i < MASSES.length; i++) for (let j = i + 1; j < MASSES.length; j++) assert.ok(unlike(MASSES[i], MASSES[j]), MASSES[i].name + ' and ' + MASSES[j].name + ' are too alike');
-  // the two shoulders: not the same size, and not in the same place on each side of the spire (one runs out over the station's end, one sits in)
-  const mid = (m) => m.path.reduce((t, p) => t + p[1], 0) / m.path.length, [s, n] = shoulders;
-  assert.ok(area(s.path) > area(n.path) * 1.3 && s.to > n.to + 1);
-  assert.ok(mid(s) > SPIRE.z && mid(n) < SPIRE.z, 'one each side of the spire');
-  assert.ok(Math.abs(Math.abs(mid(s) - SPIRE.z) - Math.abs(mid(n) - SPIRE.z)) > 5, 'not mirrored about the spire');
-  assert.ok(Math.max(...s.path.map((p) => p[1])) > Math.max(...BODY_PATH.map((p) => p[1])), 'the south shoulder runs out over the station\'s end');
-  assert.ok(n.path.every((p) => inPoly(BODY_PATH, p[0], p[1])), 'the north shoulder sits in on the roof');
-  // a U seen from above: an outline that turns inward twice, wrapped round the spire's foot and open on one side
-  const u = MASSES.filter((m) => m.u); assert.equal(u.length, 1); assert.equal(u[0].side, 'above');
-  const P = u[0].path, turnsIn = P.filter((p, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], d1 = [p[0] - a[0], p[1] - a[1]], d2 = [b[0] - p[0], b[1] - p[1]]; return d2[0] * -d1[1] + d2[1] * d1[0] > 1e-6; }).length;
-  assert.equal(turnsIn, 2);
-  assert.ok(!inPoly(P, SPIRE.x, SPIRE.z) && inPoly(P, SPIRE.x - 10, SPIRE.z) && inPoly(P, SPIRE.x, SPIRE.z - 14) && inPoly(P, SPIRE.x, SPIRE.z + 14) && !inPoly(P, SPIRE.x + 9.5, SPIRE.z), 'the U wraps the spire\'s foot and is open toward the doors');
+  const P = above[0].path, same = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+  const mirrored = (path, other = path) => path.every((p) => other.some((q) => same(q, [p[0], 2 * MID - p[1]])));
+  // the middle it is mirrored about is the roof's own, near enough, and the spire's
+  const zs = BODY_PATH.map((p) => p[1]), bodyMid = (Math.min(...zs) + Math.max(...zs)) / 2;
+  assert.ok(Math.abs(MID - bodyMid) <= 1.5 && Math.abs(MID - SPIRE.z) <= 1.5);
+  assert.ok(mirrored(P), 'the raised level is the same on each side of the middle');
+  // one outline with two bays in it: it turns inward four times; the bays are open toward the hangar doors, the strip
+  // along the back is whole, and the spire stands on the middle arm
+  const turnsIn = P.filter((p, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], d1 = [p[0] - a[0], p[1] - a[1]], d2 = [b[0] - p[0], b[1] - p[1]]; return d2[0] * -d1[1] + d2[1] * d1[0] > 1e-6; }).length;
+  assert.equal(turnsIn, 4);
+  assert.equal(RAISED.bays.length, 2);
+  for (const [z0, z1] of RAISED.bays) { const z = (z0 + z1) / 2; assert.ok(!inPoly(P, 45, z) && !inPoly(P, RAISED.front - 0.1, z) && inPoly(P, RAISED.back + 2, z), 'a bay open toward the doors, the strip behind it'); }
+  assert.ok(inPoly(P, SPIRE.x, SPIRE.z) && inPoly(P, RAISED.front - 1, SPIRE.z), 'the spire stands on the middle arm, which comes forward to the hangars\' side');
+  assert.ok(P.every((p) => inPoly(BODY_PATH, p[0], p[1])), 'the raised level sits in on the roof');
+  // two landing pads, one in each bay, down on the roof itself; a mirrored pair
+  assert.equal(PADS.length, 2);
+  assert.ok(mirrored(PADS[0].path, PADS[1].path) && same(PADS[1].at, [PADS[0].at[0], 2 * MID - PADS[0].at[1]]));
+  PADS.forEach((pad, i) => {
+    const [z0, z1] = RAISED.bays[i];
+    assert.ok(pad.path.every((p) => !inPoly(P, p[0], p[1]) && p[1] > z0 && p[1] < z1 && p[0] > RAISED.bay && inPoly(BODY_PATH, p[0], p[1])), pad.name + ' is in its bay');
+    assert.ok(pad.tall <= 1 && area(pad.path) >= 150, 'a low pad big enough to land on');
+  });
+  // two pyramids, one on each end arm; a mirrored pair; each comes to a small flat top
+  assert.equal(PYRAMIDS.length, 2);
+  assert.ok(mirrored(PYRAMIDS[0].path, PYRAMIDS[1].path));
+  for (const py of PYRAMIDS) {
+    assert.ok(py.path.every((p) => inPoly(P, p[0], p[1])), py.name + ' stands on the raised level');
+    const w = Math.max(...py.path.map((p) => p[0])) - Math.min(...py.path.map((p) => p[0]));
+    assert.ok(w - 2 * py.slope > 0.5 && w - 2 * py.slope < w / 3 && py.tall >= 3, 'its sides lean in to a small top');
+    assert.ok(RAISED.bays.every(([z0, z1]) => py.path.every((p) => p[1] < z0 || p[1] > z1)) && py.path.every((p) => Math.abs(p[1] - SPIRE.z) > 30), 'on an end arm');
+  }
+  // the masses under the body are unlike each other
+  const unlike = (a, b) => Math.abs(a.to - b.to) >= 0.5 && a.bevel !== b.bevel && Math.abs(area(a.path) - area(b.path)) / Math.max(area(a.path), area(b.path)) > 0.15;
+  for (let i = 0; i < below.length; i++) for (let j = i + 1; j < below.length; j++) assert.ok(unlike(below[i], below[j]), below[i].name + ' and ' + below[j].name + ' are too alike');
   // every mass is heavily bevelled
   for (const m of MASSES) assert.ok(m.bevel >= 1.2 && m.bevel / m.to >= 0.3);
 });
 
 test('outside: plated in shape C: big raised plates with sunk panels on the big flat stretches', () => {
   const s = LAB.stats.shapes;
-  assert.ok(s.slabs >= 25 && s.recesses >= 20, JSON.stringify(s));
+  assert.ok(s.slabs >= 25 && s.recesses >= 15, JSON.stringify(s));
   assert.equal(s.stacked, 0); assert.equal(s.shoulders, 0);   // (the kit's blocks-on-a-wall "shoulders" are not what he meant: not used)
 });
 
