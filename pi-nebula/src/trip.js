@@ -39,7 +39,7 @@ import { news } from './news.js';
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
 // screen and the bottom of a phone's) and without
-export const SEAT = { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-2.6, 3.0, 12], lookTall: [0.2, 2.2, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 };
+export const SEAT = { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.2, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 };
 // the plain grey rocks beyond (the field's real look is to come): [x, y, z, radius] in the ship's frame, metres
 const ROCKS = [[-9, 5.5, 34, 2.6], [11, 1.5, 46, 3.4], [-20, -3, 62, 5], [5, 9, 70, 4], [24, 6, 84, 7], [-34, 8, 98, 8.5], [2, -9, 58, 3], [-6, 0.5, 104, 6]];
 export const JUMP = { secs: 2.6, flash: 1.5 };   // the jump's picture: how long, and when its flash is whitest
@@ -287,7 +287,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       // (the captain's bubble and the last fade outlive the trip a moment)
       if (sayT > 0) { sayT -= dt; if (sayT <= 0) sayEl.classList.remove('is-on'); }
       if (T.fade !== T.fadeTo) { T.fade = T.fadeTo > T.fade ? Math.min(T.fadeTo, T.fade + dt / FADE) : Math.max(T.fadeTo, T.fade - dt / FADE); fadeEl.style.opacity = String(T.fade); }
-      if (T.done) { if (!T.aborted && (T.endT += dt) > 7 && el.parentNode) el.remove(); else if (!T.aborted && T.endT > 0.1) $('.pmt-chip').hidden = true; return; }
+      if (T.done) { if (!T.aborted && (T.endT += dt) > 7 && el.parentNode) el.remove(); else if (!T.aborted) $('.pmt-chip').style.display = 'none'; return; }
       if (T.i < 0) next();
       T.t += dt;
       RUN[steps[T.i].kind](dt, steps[T.i]);
