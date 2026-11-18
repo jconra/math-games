@@ -284,15 +284,15 @@ function westFlats(o) {
   const wall = (ax, az, bx, bz, y0, y1, kinds, doors) => { const l = Math.hypot(bx - ax, bz - az); flats.push({ group: 'band', kind: 'plates', O: [ax, y0, az], U: [(bx - ax) / l, 0, (bz - az) / l], V: [0, 1, 0], w: l, h: y1 - y0, kinds, doors, ...BIG }); };
   const roof = (x0, x1, z0, z1, y, shapes) => flats.push({ group: 'tiers', kind: 'plates', O: [x0, y, z1], U: [1, 0, 0], V: [0, 0, -1], w: x1 - x0, h: z1 - z0, ...shapes });
   const hole = (at, w, y, h, glass) => ({ at, w, y, h, sill: 0, head: 0, jamb: 0, frame: false, shield: false, ...(o.inside || glass == null ? {} : { glass }) });
-  wall(-9.03, 28.97, -15.03, 28.97, FOOT, LOW, [S, S, S, I]);                                     // the airlock
+  wall(-9.03, 28.97, -15.03, 28.97, FOOT, LOW, [S, S, S, I]);                                     // the airlock (it stands on the deck, whose edge is flush with its outer face)
   wall(-15.03, 28.97, -15.03, 33.03, FOOT, LOW, undefined, [hole(2.03, 3.6, 0, 2.9, 0.04)]);      // ... and its outer door
   wall(-15.03, 33.03, -9.03, 33.03, FOOT, LOW, [S, I, S, S]);
-  // the spine, south of the terminal: no deck is under it any more, so it is a tube along the body's side with a
-  // floor of its own 1.2 m under the rooms' floor level (the body's lower windows show under it)
-  const TUBE = FOOT - 1.2;
+  // the spine, south of the terminal: no deck is under it any more, so it is a tube along the body's side with a floor
+  // of its own 1.2 m under the rooms' floor level (the body's lower windows show under it)
+  const TUBE = FOOT - 1.2, under = () => ({ group: 'tiers', kind: 'plates' });
   wall(12.93, 37.06, 12.93, 57.03, TUBE, LOW, [I, S, S, S]);
   wall(12.93, 57.03, 18.93, 57.03, TUBE, LOW);
-  flats.push(...flatsOf(boxPath(12.93, 19.6, 37.06, 57.03), [], TUBE, false, () => ({ group: 'tiers', kind: 'plates' })));
+  flats.push(...flatsOf(boxPath(12.93, 19.6, 37.06, 57.03), [], TUBE, false, under));
   roof(12.93, 18.93, 37.03, 57.03, LOW); roof(-15.03, -9.03, 28.97, 33.03, LOW);
   return flats;
 }
@@ -301,7 +301,12 @@ export const SLOTS = { x: -7, z: [3.5, 8, 12.5, 17], w: 2.9, h: 2.9, foot: -4.75
 // (it ends flush under the terminal's south wall. It ran on south to z = 62 at first; the game's maker, 2026-11-18,
 // of that part: "This wall in red seems kind of unnecessary. I feel like it would block the view from the windows of
 // the terminal. And it makes these windows in blue blocked." The blue ones are the body's own lower windows.)
-export const DECK_PATH = [[25.5, -9.6], [9, -9.6], [-7, -3.5], [-7, 22], [-21, 22], [-21, 37.06], [25.5, 37.06]];
+// (and on the west it ends flush with the airlock's outer face, the docking port: it stood out to x = -21, 6 m past it;
+// of that, the same day: "Can you make this big slab not go out as far?" ... "So its flush withe the docking port, and
+// it's okay if the containers stick out some, although the containers can go further inside". PORT is that line; the
+// shelf under the containers ends on it too, and the containers stand half a metre past it)
+export const PORT = -15.06;
+export const DECK_PATH = [[25.5, -9.6], [9, -9.6], [-7, -3.5], [-7, 22], [PORT, 22], [PORT, 37.06], [25.5, 37.06]];
 const SLOT_DECK = -5.02;                                // (the cargo deck's top; its plates stand a bevel higher)
 // THE CARGO DOCK'S HOUSING, from his words: each container goes a third of its length further in (DOCK.in), between
 // angled walls that make a narrow slot for it: a wall each side of every slot, DOCK.out long, 1.6 m thick for most of
@@ -338,7 +343,7 @@ function deckPlans(o) {
   // the cargo slots: framed sockets in the dock face (run 2, walked south from z = -3.5), lit where nothing is plugged in
   const doors = SLOTS.z.map((z) => ({ tier: 0, step: 1, run: 2, at: z + 3.5, w: SLOTS.w, h: SLOTS.h, y: SLOTS.foot - 0.25, sill: 0.25, head: 0.4, jamb: 0.45, proud: 0.4, glass: 0.55 }));
   const flats = [...flatsOf(offsetPath(DECK_PATH, -0.6, true), [], FOOT, true, plain), ...flatsOf(offsetPath(DECK_PATH, -2.6, true), [], -7.8, false, plain)];
-  const pad = boxPath(-17, -5, 0.8, 22.4);               // (the shelf under the containers: it stood out to x = -23.5 before they went further in)
+  const pad = boxPath(PORT, -5, 0.8, 22.4);              // (the shelf under the containers, out to the docking port's line: it stood out to x = -23.5 at first)
   return [{ name: 'west deck', closed: true, path: DECK_PATH, tiers, doors, flats, windows: { ...WIN, seed: o.seed } },
     { name: 'cargo deck', closed: true, path: pad, tiers: [{ name: 'cargo deck', profile: [[-1, -6.3], [0, -5.5], [0, SLOT_DECK]], parts: [plates('tiers'), plates('tiers')] }],
       flats: [...flatsOf(pad, [], SLOT_DECK, true, plain), ...flatsOf(offsetPath(pad, -1, true), [], -6.3, false, plain)] }];
@@ -482,7 +487,7 @@ export function outsideGear(opts = {}) {
     G.box([xm, y0 + BOX.h / 2, z], [BOX.len / 2, BOX.h / 2, BOX.w / 2], col);
     for (let i = 0; i < 9; i++) G.box([x1 - 0.7 - i * 1.35, y0 + BOX.h / 2, z], [0.07, BOX.h / 2 - 0.12, BOX.w / 2 + 0.04], rib);
   });
-  for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25, xa = S.x - DOCK.out - 0.3, xb = -16.6; G.box([(xa + xb) / 2, y0 + 0.12, z], [(xa - xb) / 2, 0.12, 0.12], yellow); }
+  for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25, xa = S.x - DOCK.out - 0.3, xb = PORT + 0.5; G.box([(xa + xb) / 2, y0 + 0.12, z], [(xa - xb) / 2, 0.12, 0.12], yellow); }
   if (!opts.inside) for (const hg of HANGARS) {
     const x0 = 19.4, x1 = 58.9, z0 = hg.z - 13.8, z1 = hg.z + 13.8, y1 = 10.9, wallC = lin('#39424f'), floorC = lin('#586273');
     G.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], floorC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
