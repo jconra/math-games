@@ -538,6 +538,7 @@ export const MAKERS = {
             { ...DEG(turn), slip: 'new', why: `${turn}° is the turn. We started at ${now}°, not at 0°.` },
             { ...DEG(to + 10), slip: 'off', why: `${now} and ${turn} more do not make ${to + 10}.` },
             { ...DEG(to - 10), slip: 'off', why: `${now} and ${turn} more do not make ${to - 10}.` },
+            { ...DEG(to + 20), slip: 'off', why: `${now} and ${turn} more do not make ${to + 20}.` },
           ],
           rightWhy: `${now}° + ${turn}° = ${to}°`, sum: { op: 'add', a: now, b: turn },
           help: { title: 'A turn to the right', pic: { kind: 'compass', rose: true, lines: [{ deg: now, label: `our nose: ${now}°`, colour: 'ship' }, { deg: to, label: `after ${turn}° right: ?`, colour: 'ask', dash: true }], ask: `${now}° and ${turn}° more: ?` }, line: `The compass counts up to the right. A turn of ${turn}° to the right adds ${turn} to the heading.`, steps: [`${now} + ${turn}`] },
