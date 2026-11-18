@@ -18,7 +18,8 @@
 //                 real ones fold, for whoever gets on from that side); o.len, o.w, o.gap, o.top as medBed's
 //   bedhead     the wall panel behind a bed's head ('1', '2' ...: the bed's number): a plate with the number, a screen
 //               of vital signs (two traces, three numbers), a white light strip under them that lights the pillow (the
-//               bay's own light), rows of small sockets, a few of them coloured. Hangs on a wall's face.
+//               bed's own light), rows of small sockets, a few of them coloured. Hangs on a wall's face. The light is
+//               set bed by bed, as whoever is in the bed has it: '2' (dim), '2 bright', '2 off' (kit/ward-names.js)
 //   curtain     a ward curtain on a slim track hung from the ceiling, the cloth hanging from it to 30 cm off the floor
 //               in soft folds. '<where> <how> <length>': where 'side' (from a wall out along a bed's side: its first end
 //               on the wall) or 'foot' (free at both ends, across the bays' feet); how 'drawn' (along the whole track),
@@ -44,7 +45,7 @@ import { lines } from './shipparts/cabin/medbay.js';
 import { FLAT } from './shipparts/cabin/bits.js';
 import { lean } from './shipparts/cabin/galley.js';
 import { SHEET } from './shipparts/cabin/ship.js';
-import { CURTAIN_HOW, curtainOf, clothSpan, tableThings, tableOk } from './ward-names.js';
+import { CURTAIN_HOW, curtainOf, clothSpan, tableThings, tableOk, bedHeadOf, BED_LIGHT } from './ward-names.js';
 
 const PI = Math.PI;
 // the looks: a bed's pale padded plastic, its blanket and the darker band across it, a pillow; the cloth of a curtain
@@ -140,9 +141,11 @@ export function wardBed(p, o = {}, pulse = null) {
 // ── the wall panel behind a bed's head ──────────────────────────────────────────────────────────────────────────────
 // (hangs on a wall's face: z = 0 on the face, centred on x = 0, its heights from the floor)
 const VITALS = { 1: ['72', '98', '16'], 2: ['64', '97', '14'], 3: ['81', '99', '18'], 4: ['68', '96', '15'] };
+// (the strip itself: a bright one glows about twice as white as a dim one; one switched off is a pale grey lens)
+const STRIP_BRIGHT = [6.4, 6.4, 6.3], STRIP_OFF = { c: '#7d8388', r: 0.25, m: 0, w: 0.1 };
 export function bedHead(p, v) {
   p = lean(p);
-  const n = parseInt(v, 10) || 1, W = 1.5, y0 = 0.94, y1 = 2.02, d = 0.1;   // (10 cm deep: it takes in a plain wall panel's middle upright, which stands 9 cm out)
+  const { n, light } = bedHeadOf(v) || { n: 1, light: 'dim' }, W = 1.5, y0 = 0.94, y1 = 2.02, d = 0.1;   // (10 cm deep: it takes in a plain wall panel's middle upright, which stands 9 cm out)
   add(p, 'white2', solid(shape(W, y1 - y0, 0.07, 0, (y0 + y1) / 2), d, { edge: 0.012, back: false }), [0, 0, 0]);
   p.slab('dark', -W / 2 + 0.05, W / 2 - 0.05, 1.335, 1.343, d, d + 0.002, flat(['-z', '-y', '+y', '-x', '+x']));
   // the plate with the bed's tag
@@ -162,11 +165,13 @@ export function bedHead(p, v) {
   segText(p, hr, { h: 0.058, at: [nx, sy + sh * 0.27, tz], look: TRACE.green, mat: 'glow', t: 0.009 });
   segText(p, ox, { h: 0.058, at: [nx, sy, tz], look: TRACE.cyan, mat: 'glow', t: 0.009 });
   segText(p, br, { h: 0.058, at: [nx, sy - sh * 0.27, tz], look: TRACE.white, mat: 'glow', t: 0.009 });
-  // the light strip under them, in a dark slot: the bay's own light, on the pillow
+  // the light strip under them, in a dark slot: the bed's own light, on the pillow, set as whoever is in the bed has
+  // it (dim, bright or off)
   p.slab('dark', -0.47, 0.47, 1.375, 1.455, d, d + 0.008, flat(['-z']));
-  p.glowSlab('strip', -0.44, 0.44, 1.393, 1.437, d + 0.008, d + 0.012);
+  if (light === 'off') p.slab(STRIP_OFF, -0.44, 0.44, 1.393, 1.437, d + 0.008, d + 0.012, { r: 0.003, seg: 1, cell: 9 });
+  else p.glowSlab(light === 'bright' ? STRIP_BRIGHT : 'strip', -0.44, 0.44, 1.393, 1.437, d + 0.008, d + 0.012);
   // (a pool of light on the pillow, the bed and the floor beside it: three lights along the strip, aimed down and out)
-  for (const x of [-0.3, 0, 0.3]) p.light([x, 1.4, d + 0.12], 1.3, [1, 0.97, 0.92], [0, -0.74, 0.67], 4.4);
+  if (BED_LIGHT[light] > 0) for (const x of [-0.3, 0, 0.3]) p.light([x, 1.4, d + 0.12], BED_LIGHT[light], [1, 0.97, 0.92], [0, -0.74, 0.67], 4.4);
   // two rows of small sockets, a few of them coloured (and a dark slot in each)
   const row = (y, xs, cols) => xs.forEach((x, i) => {
     p.slab(cols[i] ? DOT[cols[i]] : 'white', x - 0.033, x + 0.033, y - 0.048, y + 0.048, d, d + 0.01, flat(['-z']));
@@ -424,7 +429,7 @@ export function medStool(p) {
 
 const wardPiece = (name, variants, foot, build, more = {}) => ({ name, group: 'Medical', at: 'free', variants, foot, build, ...more });
 export const WARD_PIECES = {
-  bedhead: wardPiece("Bed's wall panel", ['1', '2', '3', '4'], [1.5, 2.1, 0.1], bedHead, { at: 'wall' }),
+  bedhead: wardPiece("Bed's wall panel", ['1', '2 bright', '3 off', '4'], [1.5, 2.1, 0.1], bedHead, { at: 'wall', accepts: (v) => !!bedHeadOf(v) }),
   curtain: wardPiece('Ward curtain', ['side drawn 2.5', 'side half 2.5', 'side back 2.5', 'side end 2.5', 'foot bare 3.1', 'foot back 3.1'], [3.1, 3, 0.2], curtain, { accepts: (v) => !!curtainOf(v) }),
   bedtable: wardPiece('Bedside table', ['flowers card', 'bear books', 'flowers2 card2 cup', 'book cup', 'bare'], [0.5, 1.3, 0.45], bedTable, { accepts: tableOk }),
   ivstand: wardPiece('Drip stand', ['one bag', 'two bags'], [0.6, 2.1, 0.6], ivStand),

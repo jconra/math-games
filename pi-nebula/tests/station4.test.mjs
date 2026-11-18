@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { curtainOf, clothSpan, tableThings, tableOk, wardBedOf, THING_NAMES, CURTAIN_HOW } from '../kit/ward-names.js';
+import { curtainOf, clothSpan, tableThings, tableOk, wardBedOf, bedHeadOf, THING_NAMES, CURTAIN_HOW } from '../kit/ward-names.js';
 import { SCAN_BED } from '../src/life.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -48,8 +48,9 @@ test('the ward: curtains between the beds, no dividers and no shelves, a wall pa
   assert.equal(beds.length, 3); assert.deepEqual(beds.map((b) => b.ward), [1, 2, 3]);
   const ship = JSON.parse(read('../kit/rooms/ship-medic.json')), shipBeds = JSON.stringify(ship).match(/"piece":"cabinMedBed"[^}]*/g) || [];
   assert.ok(shipBeds.length >= 1 && shipBeds.every((s) => !/ward/.test(s)), "the Medic's own beds are not the ward's");
-  // behind each bed's head: its wall panel, with the bed's number, in line with the bed
-  const heads = W.filter((p) => p.piece === 'bedhead').map((p) => ({ n: +p.variant, ...at(p) }));
+  // behind each bed's head: its wall panel, with the bed's number, in line with the bed (a panel's name is its bed's
+  // number, and since round five how that bed's light is set: '2 bright')
+  const heads = W.filter((p) => p.piece === 'bedhead').map((p) => ({ n: (bedHeadOf(p.variant) || {}).n, ...at(p) }));
   for (const b of beds) { const h = heads.find((q) => q.n === b.ward); assert.ok(h && Math.abs(h.z - b.z) < 0.02, 'bed ' + b.ward + ' has its panel'); }
   // between each pair of beds: one curtain on a track from the beds' wall, halfway between them, as long as a bed
   const sides = W.filter((p) => p.piece === 'curtain' && curtainOf(p.variant) && curtainOf(p.variant).where === 'side').map((p) => ({ ...curtainOf(p.variant), ...at(p), dir: along(p) }));

@@ -4,6 +4,9 @@
 //   tableThings('flowers card')    -> ['flowers', 'card']: what stands on a bedside table, left to right ('bare': nothing)
 //   wardBedOf('ward 2, left rail down') -> { ward: 2, down: -1 }: a ward bed's number and which side's long rail is
 //                                     folded down (-1 the left of someone at its foot, 1 the right, 0 neither), or null
+//   bedHeadOf('2 bright')          -> { n: 2, light: 'bright' }: the bed a wall panel hangs behind, and how that bed's
+//                                     own light is set: 'dim' (a name with the number alone: '2'), 'bright' or 'off';
+//                                     or null
 export const CURTAIN_HOW = ['drawn', 'half', 'back', 'end', 'bare'];
 // (how much of its track a curtain's cloth takes up: all of it drawn, about half, or a bunch half a metre wide)
 export const BUNCH = 0.5;
@@ -24,4 +27,17 @@ export const tableOk = (v) => tableThings(v).length <= 3 && tableThings(v).every
 export function wardBedOf(v) {
   const m = /^ward (\d+)(?:, (left|right) rail down)?$/.exec(String(v));
   return m ? { ward: +m[1], down: m[2] === 'left' ? -1 : m[2] === 'right' ? 1 : 0 } : null;
+}
+// EACH BED ITS OWN LIGHT (the game's maker, 2026-11-18: "I think dim is better. But it would be cool if it changed.
+// Some people want it bright, some want it dark. But probably more should be dim"; and, asked whether from bed to bed:
+// "Each bed. They do each have their own light right? It makes sense a person in a bed could control their own
+// light."): the strip in a bed's wall panel is set by the panel's name, as whoever is in that bed has it. The same
+// every visit: the room file says which bed has which. BED_LIGHT: how strong each of the strip's three lights is
+// (dim: as every bed's was). A bright bed also has its bay's own ceiling light on: in the room file, the ceiling
+// piece over that bed is 'light' (over the other beds a plain 'panel', as the ward was dimmed in round four); the
+// strip alone, however strong, lights little more than the pillow.
+export const BED_LIGHT = { off: 0, dim: 1.3, bright: 4 };
+export function bedHeadOf(v) {
+  const m = /^(\d+)(?: (dim|bright|off))?$/.exec(String(v));
+  return m ? { n: +m[1], light: m[2] || 'dim' } : null;
 }
