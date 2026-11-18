@@ -310,7 +310,7 @@ test('the smelter: the haul is the same haul on every slip about it: eight tonne
     // a part of it, as a fraction: one of its shares, its canisters
     const part = M.part.make(1, { rand, live: L }), fp = part.facts;
     assert.equal(fp.from, 'This haul'); assert.equal(fp.unit, 'canisters'); assert.equal(fp.whole, CARRIES); assert.ok(Object.values(H.store).includes(rightOf(part)), part.story);
-    assert.ok(part.story.includes(`${fp.n}/${fp.d} of them hold`), part.story);
+    assert.ok(part.story.includes(`${fp.n}/${fp.d} hold`) && part.story.startsWith('Of the 8 canisters of this haul'), part.story);
     // each once a haul: the next slips are from the log; a new haul is new
     assert.equal(M.each.make(1, { rand, live: L }).facts.from, undefined);
     assert.equal(M.pay.make(3, { rand, live: L }).facts.from, undefined);

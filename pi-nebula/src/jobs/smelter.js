@@ -349,10 +349,12 @@ function toldLoad(L, W, how) {
   const crew = W ? `${W}'s crew` : 'A mining crew';
   return how === 'shares' ? `${crew} collected ${T} tonnes of ore. ${cap(list(ps.map((p) => `${p.pct}% is ${p.m.name}`)))}.` : `${crew} collected ${T} tonnes of ore: ${list(ps.map((p) => `${tonnesWords(p.amt)} of ${p.m.name}`))}.`;
 }
-// HOW MUCH OF EACH METAL, as sums the worked sheet can do. Shares in quarters: a half, a quarter, three quarters.
-// Any others: 10% of the load first, then each share as so many 10%s (and half of 10% for a 5). A sum two metals
-// share (two shares of 25%) is worked once, for both. A step that works on from an earlier one names it (`uses`).
+// HOW MUCH OF EACH METAL, as sums the worked sheet can do. A share in quarters is cut straight from the load: a
+// half, a quarter, three quarters. Any other: 10% of the load first, then the share as so many 10%s (and half of 10%
+// for a 5). A sum two metals share (two shares of 25%) is worked once, for both. A step that works on from an earlier
+// one names it (`uses`).
 // -> { steps, by: the step that finds each share's amount, by its percent }
+const QUARTER = { 50: '50% is half', 25: '25% is a quarter', 75: '75% is three quarters' };
 function amountSteps(L) {
   const T = L.total, units = L.unit[1], steps = [], seen = new Map(), by = new Map(), ten = r2(T / 10);
   // (a sum already there is not written twice: the step it was is handed back)
@@ -360,27 +362,32 @@ function amountSteps(L) {
   // (the metals of one share, named together)
   const names = new Map(); for (const p of L.parts) names.set(p.pct, [...(names.get(p.pct) || []), p.m.name]);
   const the = (pct) => `The ${list(names.get(pct))}`;
-  if (quarters([...names.keys()])) {
-    for (const pct of names.keys()) {
-      if (pct === 100) by.set(pct, push({ op: 'mul', a: T, b: 1, say: `${the(pct)}: all of the ${T} ${units}` }));
-      else if (pct === 50) by.set(pct, push(cutBy(T, 2, `${the(pct)}: 50% is half of the ${T} ${units}`)));
-      else if (pct === 25) by.set(pct, push(cutBy(T, 4, `${the(pct)}: 25% is a quarter of the ${T} ${units}`)));
-      else { const q = push(cutBy(T, 4, `First 25%: a quarter of the ${T} ${units}`)); by.set(pct, push({ op: 'mul', a: r2(T / 4), b: 3, say: `${the(pct)}: 75% is 3 lots of 25%` }, { a: q })); }
-    }
-    return { steps, by };
-  }
-  const first = push(cutBy(T, 10, `First 10%: a tenth of the ${T} ${units}`));
+  const first = [...names.keys()].some((pct) => pct !== 100 && !QUARTER[pct]) ? push(cutBy(T, 10, `First 10%: a tenth of the ${T} ${units}`)) : null;
   for (const pct of names.keys()) {
-    const k = Math.floor(pct / 10), five = pct % 10 === 5;
-    let found = first;
-    if (k > 1) found = push({ op: 'mul', a: ten, b: k, say: `${five ? `For the ${list(names.get(pct))}, ${k * 10}%` : `${the(pct)}: ${pct}%`} is ${k} lots of 10%` }, { a: first });
-    if (five) {
-      const half = push(cutBy(ten, 2, k ? '5% is half of 10%' : `${the(pct)}: 5% is half of 10%`), { a: first });
-      found = k >= 1 ? push({ op: 'add', a: r2(ten * k), b: r2(ten / 2), say: `${the(pct)}: ${k * 10}% and 5% make ${pct}%` }, { a: found, b: half }) : half;
+    if (pct === 100) by.set(pct, push({ op: 'mul', a: T, b: 1, say: `${the(pct)}: all of the ${T} ${units}` }));
+    else if (pct === 50) by.set(pct, push(cutBy(T, 2, `${the(pct)}: 50% is half of the ${T} ${units}`)));
+    else if (pct === 25) by.set(pct, push(cutBy(T, 4, `${the(pct)}: 25% is a quarter of the ${T} ${units}`)));
+    else if (pct === 75) { const q = push(cutBy(T, 4, `First 25%: a quarter of the ${T} ${units}`)); by.set(pct, push({ op: 'mul', a: r2(T / 4), b: 3, say: `${the(pct)}: 75% is 3 lots of 25%` }, { a: q })); }
+    else {
+      const k = Math.floor(pct / 10), five = pct % 10 === 5;
+      let found = first;
+      if (k > 1) found = push({ op: 'mul', a: ten, b: k, say: `${five ? `For the ${list(names.get(pct))}, ${k * 10}%` : `${the(pct)}: ${pct}%`} is ${k} lots of 10%` }, { a: first });
+      if (five) {
+        const half = push(cutBy(ten, 2, k ? '5% is half of 10%' : `${the(pct)}: 5% is half of 10%`), { a: first });
+        found = k >= 1 ? push({ op: 'add', a: r2(ten * k), b: r2(ten / 2), say: `${the(pct)}: ${k * 10}% and 5% make ${pct}%` }, { a: found, b: half }) : half;
+      }
+      by.set(pct, found);
     }
-    by.set(pct, found);
   }
   return { steps, by };
+}
+// ... and Help's one line on how to go about it: the shares in quarters by name, the others from 10%
+function amountsLine(L) {
+  const T = L.total, units = L.unit[1], pcts = [...new Set(L.parts.map((p) => p.pct))], cut = pcts.filter((x) => QUARTER[x]).map((x) => QUARTER[x]), rest = pcts.filter((x) => !QUARTER[x]);
+  const five = rest.some((x) => x % 10) ? ', and 5% is half of 10%' : '', whole = 'Together the shares make the whole load.';
+  if (!rest.length) return `Every share is a part of the ${T} ${units}: ${list(cut)}. ${whole}`;
+  if (!cut.length) return `Find 10% of the ${T} ${units} first: ${T} ÷ 10. Every share is so many 10%s${five}. ${whole}`;
+  return `${cap(list(cut))} of the ${T} ${units}. For the other shares find 10% first: ${T} ÷ 10. Each is so many 10%s${five}. ${whole}`;
 }
 // each metal's amount at its price, then all of them added up. by: the steps that found the amounts (amountSteps),
 // where the slip had them worked out first
@@ -426,15 +433,13 @@ function eachCard(L, { t, rand, who = null, W, key = 'each', H = null }) {
     ...(right[0] - step > 0 ? [{ amts: right.map((a, i) => (i === 0 ? r2(a - step) : a)), slip: 'short', why: `Those add up to only ${nf(T - step)} ${units}. Every bit of the load is one metal or another: ${T} ${units} in all.` }] : []),
   ]);
   const slips = [{ amts: ps.map((p) => p.pct), slip: 'percentCount', why: `Those are the percents, not the ${units}. ${ps[0].pct}% means ${ps[0].pct} out of every 100: of the ${T} ${units}, that is ${nf(right[0])}.` }, ...wrong];
-  const easy = quarters(ps.map((p) => p.pct)), sums = amountSteps(L).steps;
+  const sums = amountSteps(L).steps;
   return madeBy(carriedBy(ownOrder({
     key: `${key}:${unit === CAN ? 'cans' : 'tonnes'}:${k}`, story: toldLoad(L, W, 'shares'), ask: unit === CAN ? 'How many canisters of each metal is that?' : 'How many tonnes of each metal did they collect?',
     right: face(right), slips: slips.map((s) => ({ ...face(s.amts), slip: s.slip, why: s.why })),
     rightWhy: `${ps.map((p) => `${p.pct}% of ${T} is ${nf(p.amt)}`).join(', ')}: ${right.map(nf).join(' + ')} = ${T} ${units}, the whole load.`,
     sum: sums,
-    help: { title: 'Share by share', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${p.pct}% of ${T}`, () => '= ?'), op: '', ask: `how many ${units} of each?` },
-      line: easy ? `Every share is a part of the ${T} ${units}: 50% is half of them, 25% is a quarter. Together the shares make the whole load.`
-        : `Find 10% of the ${T} ${units} first: ${T} ÷ 10. Every share is so many 10%s, and 5% is half of 10%. Together the shares make the whole load.` },
+    help: { title: 'Share by share', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${p.pct}%`, () => `of ${T} = ?`), op: '', ask: `how many ${units} of each?` }, line: amountsLine(L) },
     own: { strand: 'pct', at: 64 }, credit: [{ strand: 'frac', at: 40, weight: 0.5 }],
     facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct, amt: p.amt })) }, ans: right, step: 'each', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}) }, size: 2,
   }, rand), sums), who);
@@ -603,7 +608,7 @@ export const MAKERS = {
       if (mine) {
         H = HH; used(live, 'part:haul', step); kind = 'haul'; n = mine.f.n; d = mine.f.d; k = H.canisters / d; unit = CAN; metal = mine.L.metal.name;
         const rest = H.lots.filter((L) => L !== mine.L).sort((a, b) => b.tonnes - a.tonnes || a.price - b.price);
-        story = `This haul came in on the Miner in the hangar, in ${H.canisters} canisters. ${n}/${d} of them hold ${metal}${rest.length === 1 ? ` and the rest hold ${rest[0].metal.name}` : `, ${list(rest.map((L) => `${F(L.tonnes, H.canisters)} hold ${L.metal.name}`))}`}.`;
+        story = `Of the ${H.canisters} canisters of this haul, ${n}/${d} hold ${metal}${rest.length === 1 ? ` and the rest hold ${rest[0].metal.name}` : `, ${list(rest.map((L) => `${F(L.tonnes, H.canisters)} hold ${L.metal.name}`))}`}.`;
         ask = `How many canisters of ${metal} is that?`; restIs = `the ${list(rest.map((L) => L.metal.name))}`;
       } else {
         if (one) { n = 1; d = t.pick(frac < 0.5 ? [2, 3, 4, 5] : [3, 4, 5, 6, 8, 10]); } else [n, d] = t.pick(frac < 0.5 ? [[2, 3], [3, 4], [2, 5], [3, 5], [4, 5]] : [[3, 4], [3, 5], [4, 5], [5, 6], [3, 8], [5, 8], [3, 10], [7, 10]]);
