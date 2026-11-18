@@ -73,7 +73,7 @@ export const FLY_BY_HAND = false;
 // and above: side on to the claw's hand, so the hand is seen holding the rock and going round with it, the cutter
 // above them); on a wide screen and on a tall one
 export const VIEWS = {
-  look: { eye: [0, 12, -30], look: [0, 4.6, 40], fov: 46 }, lookTall: { eye: [0, 17, -40], look: [0, 12.5, 40], fov: 60 },
+  look: { eye: [0, 12, -30], look: [0, 4.6, 40], fov: 54 }, lookTall: { eye: [0, 17, -40], look: [0, 12.5, 40], fov: 62 },
   work: { eye: [4.9, 8.2, 17.6], look: [0.1, 3.0, 8.6], fov: 37 }, workTall: { eye: [5.2, 8.6, 18.4], look: [0.25, 3.5, 8.6], fov: 47 },
   pivot: [0, 4.4, 3],
 };
@@ -82,7 +82,7 @@ const HAND = { flat: 0, round: 0, long: 0.45 };   // how much further along the 
 const T = { arrive: 1.4, turn: 0.3, down: 0.5, cut: 0.95, up: 0.35, breakUp: 1.7, release: 1.3, back: 0.8, full: 3.2 };   // seconds
 const FLY = { speed: 26, least: 2.4, most: 9, clear: 9 };   // flying over to a rock: metres a second, the shortest and longest it takes (s), how far other rocks are kept from the ship (m)
 const CAM_RATE = 2.4, SUN_K = 1.7, CUT_UP = 0.72, WHEEL = 0.4, BITE = 0.13;
-const GLOW_PX = 13;        // a far rock's glow is drawn no smaller than this across its radius, in the screen's dots
+const GLOW_PX = [34, 50, 0.38];   // a far rock's glow, across its radius: so many of the screen's dots at so many metres, and how slowly it shrinks further off
 
 const CSS = `
 .pdr { position: fixed; inset: 0; z-index: 21; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; cursor: default;
@@ -126,12 +126,13 @@ const CSS = `
 @keyframes pdr-ping { from { box-shadow: inset 0 0 0 1.2px #fff, 0 0 0 10px rgba(110, 225, 255, 0.5); } }
 @media (max-width: 640px) {
   .pdr-hint { font-size: 15px; padding: 8px 12px 9px; bottom: max(14px, env(safe-area-inset-bottom)); }
-  .pdr-btn { bottom: max(84px, calc(env(safe-area-inset-bottom) + 84px)); right: 50%; transform: translateX(50%); }
+  .pdr-btn { bottom: max(118px, calc(env(safe-area-inset-bottom) + 118px)); right: 50%; transform: translateX(50%); height: 44px; }
   .pdr-side { top: max(108px, calc(env(safe-area-inset-top) + 108px)); left: 8px; }
   .pdr-chart { position: fixed; right: 8px; top: max(108px, calc(env(safe-area-inset-top) + 108px)); font-size: 12.5px; column-gap: 8px; padding: 6px 9px 7px; }
   .pdr-big { font-size: 18px; top: 290px; white-space: normal; width: max-content; max-width: calc(100vw - 20px); } .pdr-cans b, .pdr-holes b { font-size: 19px; }
   .pdr-read { font-size: 12px; padding: 3px 7px 4px; }
 }
+@media (hover: none) and (pointer: coarse) { .pdr kbd { display: none; } }
 .pdr.is-lab .pdr-side { top: calc(var(--pdr-top, 48px) + 8px); }
 @media (max-width: 640px) { .pdr.is-lab .pdr-chart { top: calc(var(--pdr-top, 48px) + 8px); } }
 @media (min-width: 641px) { .pdr.has-panel .pdr-big { left: 30%; } }
@@ -273,8 +274,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (const [n, big] of [[26, true], [240, false]]) {
       const im = new THREE.InstancedMesh(g, big ? farMat : fieldMat, n);
       for (let i = 0; i < n; i++) {
-        const a = r() * Math.PI * 2, d = big ? 1400 + r() * 1200 : Math.sqrt(r()) * (DRILL.wide + 80), y = (r() - 0.5) * (big ? 700 : DRILL.thick * 2.4), k = big ? 14 + r() * 30 : 0.05 + r() * 0.2;
-        p.set(Math.sin(a) * d, y, Math.cos(a) * d);
+        const a = r() * Math.PI * 2, d = big ? 1400 + r() * 1200 : Math.sqrt(r()) * (DRILL.wide + 120), y = (r() - 0.5) * (big ? 700 : DRILL.thick * 2.4), k = big ? 14 + r() * 30 : 0.05 + r() * 0.2;
+        p.set(Math.sin(a) * d, y, Math.cos(a) * d + DRILL.ahead);
         _e.set(r() * 6, r() * 6, r() * 6); q.setFromEuler(_e); s.set(k * (0.8 + r() * 0.5), k * (0.7 + r() * 0.4), k);
         im.setMatrixAt(i, m.compose(p, q, s));
       }
@@ -520,8 +521,11 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     t.innerHTML = scanOf(o.rock).map((x) => `<div><i style="--c: ${(ORE[x.metal] || ORE.copper).glow}"></i>${esc(cap(x.metal))}<b>${esc(tonnesWords(x.tonnes))}</b></div>`).join('');
     readsEl.appendChild(t); o.tag = t; return t;
   }
+  // (on the finger's lift, as the Done button below: a tap straight after a drag gets no click on some phones)
+  let scanAt = 0;
   scanEl.addEventListener('pointerdown', (e) => e.stopPropagation());
-  scanEl.addEventListener('click', (e) => { e.stopPropagation(); scan(); });
+  scanEl.addEventListener('pointerup', (e) => { e.stopPropagation(); if (scanEl.disabled) return; scanAt = performance.now(); scan(); });
+  scanEl.addEventListener('click', (e) => { e.stopPropagation(); if (performance.now() - scanAt > 600) scan(); });
 
   // ── drilling: the wrist turned by a drag; a tap on the rock drills there ──
   // a hole at a direction of the rock's own (src/drill.js's frame)
@@ -552,10 +556,18 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const proj = (p, out) => { _v.copy(p).applyMatrix4(at).project(camera); out.x = (_v.x * 0.5 + 0.5) * innerWidth; out.y = (-_v.y * 0.5 + 0.5) * innerHeight; out.z = _v.z; return out; };
   const pxOf = (p, r) => { const d = _v.copy(p).applyMatrix4(at).sub(camera.position).dot(_v2.set(0, 0, -1).applyQuaternion(camera.quaternion)); return r / Math.max(0.1, d) / Math.tan(camera.fov * Math.PI / 360) * innerHeight / 2; };
   const scr = { x: 0, y: 0, z: 0 };
-  // the rock at a place on the screen: the nearest to it, within its own size or a finger's width
+  // HOW BIG A ROCK'S GLOW IS DRAWN. Near, its true size. Far off a rock is a few of the screen's dots across, so the
+  // scan draws its ore larger than life, spread wider than the rock itself, each vein's colour apart from the next:
+  // GLOW_PX[0] dots across its radius at GLOW_PX[1] metres, shrinking only slowly further off (so a nearer rock still
+  // looks nearer). bigOf: how many times larger than life, at so many metres from the eye; shownPx: its radius on
+  // the screen.
+  const realPx = (far) => ROCK_R / Math.max(1, far) / Math.tan(camera.fov * Math.PI / 360) * innerHeight / 2;
+  const bigOf = (far) => Math.max(1, Math.min(16, GLOW_PX[0] * Math.pow(GLOW_PX[1] / Math.max(GLOW_PX[1], far), GLOW_PX[2]) / realPx(far)));
+  const shownPx = (o) => { const far = o.far || 100; return realPx(far) * bigOf(far); };
+  // the rock at a place on the screen: the nearest to it, within its glow or a finger's width
   function rockUnder(x, y, reach = 28) {
     let best = null, bd = Infinity;
-    for (const o of seen.values()) { if (!o.mesh.visible) continue; proj(o.pos, scr); if (scr.z >= 1) continue; const r = Math.max(reach, pxOf(o.pos, ROCK_R * 1.5) * 1.15), d = Math.hypot(scr.x - x, scr.y - y); if (d < r && d < bd) { bd = d; best = o; } }
+    for (const o of seen.values()) { if (!o.mesh.visible) continue; proj(o.pos, scr); if (scr.z >= 1) continue; const r = Math.max(reach, shownPx(o) * 1.25), d = Math.hypot(scr.x - x, scr.y - y); if (d < r && d < bd) { bd = d; best = o; } }
     return best;
   }
   // a tap on the rock in the claw -> the spot's direction in the rock's own frame; null: not on the rock, or on a
@@ -742,7 +754,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (const o of seen.values()) {
       for (const L of o.rock.lumps) { if (L.show == null) L.show = L.ore; L.show += (L.ore - L.show) * Math.min(1, dt * 3.2); }
       if (H && o === H.o) { if (S !== 'breakUp') glowOf(o, o.pos, o.q, 1.15); }
-      else { const far = o.pos.distanceTo(eyeAt), px = ROCK_R / Math.max(1, far) * glow.material.uniforms.uPx.value / (renderer.getPixelRatio() || 1); glowOf(o, o.pos, o.q, 1, far < 150, Math.max(1, Math.min(8, GLOW_PX / Math.max(0.5, px)))); }
+      else { const far = o.pos.distanceTo(eyeAt); o.far = far; glowOf(o, o.pos, o.q, 1, far < 150, bigOf(far)); }
     }
     const A = glow.geometry.attributes; glow.geometry.setDrawRange(0, glowN); for (const k of ['position', 'aC', 'aCol', 'aSize', 'aR']) A[k].needsUpdate = true;
     stepChips(dt);
@@ -800,7 +812,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     }
     V.eyed = eyed ? eyed.rock.id : null;
     eyeEl.hidden = !eyed;
-    if (eyed) { proj(eyed.pos, scr); const r = Math.max(15, pxOf(eyed.pos, ROCK_R * 1.5) * 1.2); eyeEl.style.transform = `translate(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px)`; const b = eyeEl.firstChild; b.style.width = b.style.height = (r * 2).toFixed(0) + 'px'; }
+    if (eyed) { proj(eyed.pos, scr); const r = Math.max(15, shownPx(eyed) * 1.15); eyeEl.style.transform = `translate(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px)`; const b = eyeEl.firstChild; b.style.width = b.style.height = (r * 2).toFixed(0) + 'px'; }
     scanEl.hidden = !show || V.stage === 'arrive';
     scanEl.disabled = !eyed || eyed.rock.scanned;
     const words = !eyed ? 'Look at a rock to scan it' : eyed.rock.scanned ? 'Scanned' : 'Scan this rock';
@@ -812,7 +824,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       const t = readOf(o), on = show && o.mesh.visible;
       proj(o.pos, scr); const vis = on && scr.z < 1 && scr.x > -40 && scr.x < innerWidth + 40 && scr.y > 40 && scr.y < innerHeight + 40;
       t.hidden = !vis; if (!vis) continue;
-      const r = Math.max(12, pxOf(o.pos, ROCK_R * 1.5)), w = t.offsetWidth || 110, h = t.offsetHeight || 40;
+      const r = Math.max(12, shownPx(o) * 1.15), w = t.offsetWidth || 110, h = t.offsetHeight || 40;
       const x = Math.max(4, Math.min(innerWidth - w - 4, scr.x + r + 8 + w > innerWidth - 4 ? scr.x - r - 8 - w : scr.x + r + 8)); let y = Math.max(62, Math.min(innerHeight - h - 4, scr.y - h / 2));
       for (const b of placed) if (x < b.x + b.w + 4 && x + w + 4 > b.x && y < b.y + b.h + 3 && y + h + 3 > b.y) y = b.y + b.h + 3;
       placed.push({ x, y, w, h });
@@ -832,7 +844,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   // (the rigs: what is where on the screen; a careful driller's next spot among those that can be seen and tapped)
   const rig = {
-    rocks: () => [...seen.values()].filter((o) => !(H && H.o === o)).map((o) => { proj(o.pos, scr); return { id: o.rock.id, shape: o.rock.shape, weight: o.rock.weight, metals: { ...o.rock.metals }, ore: +o.rock.lumps.reduce((s, L) => s + L.ore, 0).toFixed(3), sells: rockSells(o.rock), scanned: o.rock.scanned, far: +o.pos.distanceTo(here.p).toFixed(1), x: Math.round(scr.x), y: Math.round(scr.y), z: +scr.z.toFixed(4), r: Math.round(pxOf(o.pos, ROCK_R)) }; }),
+    rocks: () => [...seen.values()].filter((o) => !(H && H.o === o)).map((o) => { proj(o.pos, scr); return { id: o.rock.id, shape: o.rock.shape, weight: o.rock.weight, metals: { ...o.rock.metals }, ore: +o.rock.lumps.reduce((s, L) => s + L.ore, 0).toFixed(3), sells: rockSells(o.rock), scanned: o.rock.scanned, far: +o.pos.distanceTo(here.p).toFixed(1), x: Math.round(scr.x), y: Math.round(scr.y), z: +scr.z.toFixed(4), r: Math.round(shownPx(o)) }; }),
     // the spots facing the eye: [{ x, y, worth, dir }] best first
     spots(n = 400) {
       if (!H) return [];

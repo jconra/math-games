@@ -77,7 +77,9 @@ test('a hole: all of a lump on its line, less and less out to its reach, nothing
     assert.ok(holeWorth(r, b.dir) < 0.5 * worth, `${holeWorth(r, b.dir)} left near a hole that took ${worth}`);
     // a hole takes no more than there is room for: the rest stays in the rock
     const r2 = makeRock(seed(s)), h2 = drillHole(r2, bestHole(r2).dir, 0.1);
-    assert.ok(h2.took <= 0.1 + 1e-9 && h2.took >= 0.1 - 0.01 * Object.keys(r2.metals).length - 1e-9, String(h2.took)); assert.ok(near(oreLeft(r2), r2.ore0 - h2.took));
+    assert.ok(near(h2.took, 0.1), String(h2.took)); assert.ok(near(oreLeft(r2), r2.ore0 - 0.1));
+    // ... down to the last hundredth of a tonne of room, whatever metals lie near the hole
+    const r3 = makeRock(seed(s)), h3 = drillHole(r3, bestHole(r3).dir, 0.01); assert.ok(near(h3.took, 0.01), String(h3.took)); assert.equal(h3.bare, false);
   }
   // a hole in bare rock gives nothing, and still uses one of the rock's holes
   const r = makeRock(seed(11)); let bare = null;
@@ -114,14 +116,16 @@ test('the field is a place: thirty rocks, each where it lies, none on top of the
     const F = makeField(seed(s));
     assert.equal(F.length, DRILL.field); assert.equal(new Set(F.map((r) => r.id)).size, F.length);
     for (const r of F) {
-      const out = Math.hypot(r.pos[0], r.pos[2]);
-      assert.ok(out >= DRILL.near - 0.01 && out <= DRILL.wide + 0.01, `seed ${s}: ${out} m out`); assert.ok(Math.abs(r.pos[1]) <= DRILL.thick / 2 + 0.01);
+      // (within the field, whose middle is ahead of where the ship arrives; none on top of the ship)
+      const out = Math.hypot(r.pos[0], r.pos[2] - DRILL.ahead);
+      assert.ok(out <= DRILL.wide + 0.01 && Math.hypot(...r.pos) >= DRILL.near - 0.01, `seed ${s}: ${out} m out`); assert.ok(Math.abs(r.pos[1]) <= DRILL.thick / 2 + 0.01);
       for (const [m, t] of Object.entries(r.metals)) tonnes[m] = (tonnes[m] || 0) + t;
     }
     for (let i = 0; i < F.length; i++) for (let j = i + 1; j < F.length; j++) assert.ok(far(F[i].pos, F[j].pos) >= DRILL.apart - 0.01, `seed ${s}: two rocks ${far(F[i].pos, F[j].pos).toFixed(1)} m apart`);
-    // near ones and far ones, all round the ship; small ones and big ones; several metals, and rocks of more than one
-    const outs = F.map((r) => Math.hypot(r.pos[0], r.pos[2])); assert.ok(Math.min(...outs) < 140 && Math.max(...outs) > 170, `seed ${s}`);
-    assert.ok(F.some((r) => r.pos[2] > 0) && F.some((r) => r.pos[2] < 0) && F.some((r) => r.pos[0] > 0) && F.some((r) => r.pos[0] < 0));
+    // near ones and far ones, to the left and to the right, most of them ahead; small ones and big ones; several
+    // metals, and rocks of more than one
+    const outs = F.map((r) => Math.hypot(...r.pos)); assert.ok(Math.min(...outs) < 130 && Math.max(...outs) > 250, `seed ${s}: ${Math.min(...outs)} to ${Math.max(...outs)}`);
+    assert.ok(F.some((r) => r.pos[0] > 0) && F.some((r) => r.pos[0] < 0)); assert.ok(F.filter((r) => r.pos[2] > 0).length >= 24, 'ahead of the ship');
     assert.ok(new Set(F.map((r) => r.ore0)).size >= 3, `seed ${s}: sizes`);
     assert.ok(new Set(F.flatMap((r) => Object.keys(r.metals))).size >= 4, `seed ${s}: ${[...new Set(F.flatMap((r) => Object.keys(r.metals)))]}`);
     assert.ok(F.some((r) => Object.keys(r.metals).length >= 2), `seed ${s}: a rock of two metals`);

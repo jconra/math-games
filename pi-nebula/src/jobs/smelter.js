@@ -669,8 +669,7 @@ export const MAKERS = {
       // THE WHOLE HAUL'S PAY (once a haul; then slips from the log): the smelter's equipment has the whole haul, all its
       // canisters wherever they are (the game's maker, 2026-11-16: "if the player goes to the smelter room to calculate
       // the payout then it should be able to access the entire haul"): its ore, then the part of the ore that is metal,
-      // then what that pays. (Who is paid what share of it is the contract's, src/missions.js; a haul a crew flew, and
-      // a rich rock's double pay, are that haul's own facts: haulOf.)
+      // then what that pays. (Who is paid what share of it is the contract's, src/missions.js.)
       const H = live ? haulOf(live.round) : null;
       // A HAUL THE PLAYER WENT OUT FOR: what ONE METAL of its store pays, each metal once: its tonnes times what a tonne
       // of it sells for (the payout's own sum, metal by metal). The line under the right answer says what the whole

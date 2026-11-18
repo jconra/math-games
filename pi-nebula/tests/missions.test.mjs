@@ -257,7 +257,7 @@ test('the payout card shows the plain sum (each metal, its tonnes, its price, th
       const rows = o.lines, lots = P.lots;
       assert.equal(rows.length, lots.length + 3, why);
       lots.forEach((L, i) => { assert.equal(rows[i][0].toLowerCase(), L.metal); assert.ok(rows[i][1].includes(`× ${sayN(L.price)} = ${sayN(L.pay)}`) && rows[i][1].includes(String(L.tonnes)), `${why}: ${rows[i]}`); });
-      assert.equal(rows[lots.length][0], 'The haul sold for'); assert.equal(rows[lots.length + 1][0], 'Your share'); assert.ok(rows[lots.length + 1][1].includes(form === 'part' ? '/' : `${P.share}%`)); assert.equal(rows[lots.length + 2][0], 'Your pay');
+      assert.equal(rows[lots.length][0], 'Sold for'); assert.equal(rows[lots.length + 1][0], 'Your share'); assert.ok(rows[lots.length + 1][1].includes(form === 'part' ? '/' : `${P.share}%`)); assert.equal(rows[lots.length + 2][0], 'Your pay');
       // (the number asked for is a "?" on the slip; every other one is written out)
       assert.equal(rows[lots.length][1], form === 'add' ? '?' : `${sayN(P.sold)} credits`); assert.equal(rows[lots.length + 2][1], form === 'count' ? `${sayN(P.pay)} credits` : '?');
       // the right answer: the canisters (the four on one side for the youngest), what it sold for, or the pay itself

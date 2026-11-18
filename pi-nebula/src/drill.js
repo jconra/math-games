@@ -40,7 +40,7 @@
 //   - WHAT THE LOAD SELLS FOR: each metal's tonnes times what a tonne of it sells for, added up (src/jobs/smelter.js
 //     sellsFor, the one price list).
 //   - THE FIELD is a place: thirty rocks scattered through the planet's rings, each where it is (pos, metres from where
-//     the ship comes out of its jump), a different field every trip. Which metals are in a rock is drawn by how common
+//     the ship comes out of its jump, at the field's near edge with the rocks ahead of it), a different field every trip. Which metals are in a rock is drawn by how common
 //     each is (ODDS): iron most, gold least. So rocks differ by themselves, and now and then one holds a lot of a dear
 //     metal; nothing says so but its glow. A rock worked is gone. Should the rocks ever run low, there are more further
 //     out (the rings do not run out).
@@ -54,7 +54,7 @@ export const DRILL = {
   reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.1,                // within this of the line, all of a lump
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
-  wide: 240, near: 34, thick: 46, apart: 16,   // the field: metres out from the middle, the nearest a rock lies to where the ship arrives, top to bottom, the least between two rocks
+  wide: 200, ahead: 170, near: 34, thick: 46, apart: 16,   // the field: metres out from its middle, how far ahead of where the ship arrives its middle is, the nearest a rock lies to the ship's place, top to bottom, the least between two rocks
 };
 // A ROCK'S SHAPE: the box that just holds it (metres: long, wide, high), how it is drawn (its three half-lengths, of a
 // round rock's), and the holes it stands. A long rock's long way is its own z, which is the way the claw's hand holds
@@ -182,12 +182,16 @@ export function drillHole(rock, dir, room = Infinity) {
   const d = norm(dir), parts = rock.lumps.map((L) => L.ore * take(offLine(L.p, d))), near = {};
   rock.lumps.forEach((L, i) => { if (parts[i] > 0) near[L.metal] = (near[L.metal] || 0) + parts[i]; });
   const worth = Object.values(near).reduce((a, b) => a + b, 0), k = worth > room ? room / worth : 1, by = {}, keep = {};
+  // (whole hundredths of each metal; a hole that the store's room cuts short takes exactly the room there is, the
+  // odd hundredths going to the metals with the most left over)
+  const want = Object.entries(near).map(([m, t]) => ({ m, t, n: Math.floor(t * k * 100 + 1e-7), rest: t * k * 100 - Math.floor(t * k * 100 + 1e-7) }));
+  if (k < 1) { let short = Math.round(room * 100) - want.reduce((a, w) => a + w.n, 0); for (const w of [...want].sort((a, b) => b.rest - a.rest)) { if (short <= 0) break; if ((w.n + 1) / 100 <= w.t + 1e-9) { w.n++; short--; } } }
   let h = 0;      // (hundredths of a tonne taken, all metals)
-  for (const [m, t] of Object.entries(near)) { const n = Math.floor(t * k * 100 + 1e-7); keep[m] = n / 100 / t; if (n > 0) { by[m] = n / 100; h += n; } }
+  for (const w of want) { keep[w.m] = w.n / 100 / w.t; if (w.n > 0) { by[w.m] = w.n / 100; h += w.n; } }
   rock.lumps.forEach((L, i) => { if (parts[i] > 0) L.ore -= parts[i] * keep[L.metal]; });
   rock.made.push(d); rock.left--;
   if (rock.left <= 0) rock.broken = true;
-  return { took: h / 100, by, bare: h < 3, left: rock.left, broke: rock.broken };
+  return { took: h / 100, by, bare: worth < 0.03, left: rock.left, broke: rock.broken };
 }
 // the best spot to drill now, of `n` tried all round the rock (the tests' careful driller, the rigs, the crew's own
 // driller); worth(dir): how good a spot is (else the tonnes it would take)
@@ -201,17 +205,19 @@ export function bestHole(rock, n = 240, worth = (d) => holeWorth(rock, d)) {
 }
 
 // THE FIELD: its rocks, each in a place of its own (pos: metres from where the ship comes out of its jump, x across,
-// y up out of the rings' plane, z ahead). A flat round slab of them, none nearer than DRILL.near to the ship's place,
-// no two closer than DRILL.apart. Drawn afresh each time: a different field every trip.
-//   n: how many; from, to: how far out they lie (the first field: DRILL.near to DRILL.wide); others: rocks to keep clear of
-export function makeField(rand = Math.random, { n = DRILL.field, from = DRILL.near, to = DRILL.wide, others = [] } = {}) {
+// y up out of the rings' plane, z ahead). A flat round slab of them, its middle DRILL.ahead in front of the ship's
+// place, so the ship arrives at its near edge looking into it; none nearer than DRILL.near to the ship's place, no two
+// closer than DRILL.apart. Drawn afresh each time: a different field every trip.
+//   n: how many; from, to: how far out from the field's middle they lie (the first field: 0 to DRILL.wide); others:
+//   rocks to keep clear of
+export function makeField(rand = Math.random, { n = DRILL.field, from = 0, to = DRILL.wide, others = [] } = {}) {
   const rocks = [], far = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   for (let i = 0; i < n; i++) {
     const rock = makeRock(rand);
     for (let tries = 0; tries < 80; tries++) {
       const a = rand() * Math.PI * 2, d = Math.sqrt(from * from + rand() * (to * to - from * from));
-      rock.pos = [r2(Math.sin(a) * d), r2((rand() - 0.5) * DRILL.thick), r2(Math.cos(a) * d)];
-      if ([...rocks, ...others].every((o) => far(o.pos, rock.pos) >= DRILL.apart)) break;
+      rock.pos = [r2(Math.sin(a) * d), r2((rand() - 0.5) * DRILL.thick), r2(DRILL.ahead + Math.cos(a) * d)];
+      if (far(rock.pos, [0, 0, 0]) >= DRILL.near && [...rocks, ...others].every((o) => far(o.pos, rock.pos) >= DRILL.apart)) break;
     }
     rocks.push(rock);
   }

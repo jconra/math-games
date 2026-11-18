@@ -186,7 +186,7 @@ const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ meta
 export function payoutLines(P, ask = null) {
   const lots = lotsOf(P);
   return [...lots.map((L) => [cap(L.metal), `${tonnesWords(L.tonnes)} × ${say(L.price)} = ${say(L.pay)}`]),
-    ['The haul sold for', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+    ['Sold for', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
 }
 export function payoutOrder(m, grade = 0, rand = Math.random) {
   const P = m.payout, form = payoutForm(grade), who = rolesWords(m.roles), tenths = P.share / 10, lots = lotsOf(P);

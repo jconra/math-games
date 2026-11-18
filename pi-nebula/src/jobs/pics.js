@@ -325,16 +325,23 @@ export function navMap(o) { return o.dark == null ? drawMap(o) : themed(o.dark, 
 function drawMap({ hi = 7, quad = 4, points = [], course = null, size = 150, ring = 2.6, numbers = true, ask = '', lit = 0, marks = [] }) {
   const { lo, pad, S, u } = mapFrame({ hi, quad, size, numbers }), span = hi - lo;
   const X = (x) => pad + (x - lo) * u, Y = (y) => S - pad - (y - lo) * u, f = (v) => v.toFixed(1), night = K === NIGHT;
+  const num = (x, y, k) => `<text x="${f(x)}" y="${f(y)}" font-size="8" font-weight="700" fill="${K.INK}" stroke="${K.CARD}" stroke-width="2.4" paint-order="stroke" text-anchor="middle" font-family="system-ui, sans-serif">${k}</text>`;
+  let nums = '';
   let s = `<rect x="0" y="0" width="${S}" height="${S + (ask ? 18 : 0)}" fill="${K.CARD}"/><clipPath id="m${quad}${hi}${S}"><rect x="${pad}" y="${pad}" width="${S - 2 * pad}" height="${S - 2 * pad}"/></clipPath>`;
   for (let k = lo; k <= hi; k++) {
     const axis = k === 0, w = axis ? 1.5 : night ? 0.7 : 0.5, c = axis ? K.INK : K.GRID;
     s += `<path d="M${f(X(k))} ${f(Y(lo))}V${f(Y(hi))}M${f(X(lo))} ${f(Y(k))}H${f(X(hi))}" stroke="${c}" stroke-width="${w}"/>`;
-    if (numbers && (span <= 8 || k % 2 === 0 || lit) && !(k === 0 && quad !== 1) && !(lit && k < 0)) s += text(X(k), lit ? Y(0) + 9 : S - 4, String(k), { size: 8, fill: K.SOFT, weight: 600 }) + text(lit ? X(0) - 6 : 6, Y(k) + 3, String(k), { size: 8, fill: K.SOFT, weight: 600 });
+    // (a map with one quarter lit has its numbers along the two axes, written after the planet so that it does not hide them)
+    if (numbers && (span <= 8 || k % 2 === 0 || lit) && !(k === 0 && quad !== 1) && !(lit && k < 0)) {
+      if (lit) nums += num(X(k), Y(0) + 9, k) + num(X(0) - 6, Y(k) + 3, k);
+      else s += text(X(k), S - 4, String(k), { size: 8, fill: K.SOFT, weight: 600 }) + text(6, Y(k) + 3, String(k), { size: 8, fill: K.SOFT, weight: 600 });
+    }
   }
   // (only the upper right quarter bright: the other three are there, dimmed)
   if (lit) s += `<path d="M${f(X(lo))} ${f(Y(hi))}H${f(X(0))}V${f(Y(0))}H${f(X(hi))}V${f(Y(lo))}H${f(X(lo))}Z" fill="${K.CARD}" opacity="0.62"/>`;
   // the planet and its rings (clipped to the grid: in the corner on a one-quarter map)
   s += `<g clip-path="url(#m${quad}${hi}${S})"><ellipse cx="${f(X(0))}" cy="${f(Y(0))}" rx="${f(ring * u)}" ry="${f(ring * u * 0.42)}" fill="none" stroke="${K.RING}" stroke-width="${f(Math.max(2, u * 0.5))}" opacity="0.85"/><circle cx="${f(X(0))}" cy="${f(Y(0))}" r="${f(Math.max(4, u * 1.15))}" fill="${K.PLANET}" stroke="${K.INK}" stroke-width="1"/></g>`;
+  s += nums;
   if (course) {
     s += `<path d="M${course.map(([x, y]) => `${f(X(x))} ${f(Y(y))}`).join('L')}" fill="none" stroke="${K.SHIP}" stroke-width="2" stroke-dasharray="5 3"/>`;
     for (const [x, y] of course.slice(1, -1)) s += `<circle cx="${f(X(x))}" cy="${f(Y(y))}" r="2.6" fill="${K.PAPER}" stroke="${K.SHIP}" stroke-width="1.4"/>`;
