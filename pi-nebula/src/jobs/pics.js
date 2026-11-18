@@ -385,7 +385,7 @@ Object.assign(DRAW, {
 // ── THE DRILL OPERATOR'S SCAN (src/jobs/drill.js): a rock with the ore the scan lights up inside it, its holes, the
 // box the scan measures it by ────────────────────────────────────────────────────────────────────────────────────────
 const ROCKC = '#4a4640', ROCKE = '#2c2925';
-const rockShape = (cx, cy, rx, ry) => { let d = ''; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, k = 1 + 0.09 * Math.sin(i * 2.7 + 1) + 0.06 * Math.cos(i * 4.1); d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * rx * k).toFixed(1)} ${(cy + Math.sin(a) * ry * k).toFixed(1)}`; } return `<path d="${d}Z" fill="${ROCKC}" stroke="${ROCKE}" stroke-width="2" stroke-linejoin="round"/>`; };
+const rockShape = (cx, cy, rx, ry) => { let d = ''; for (let i = 0; i < 22; i++) { const a = i / 22 * Math.PI * 2, k = 1 + 0.05 * Math.sin(i * 2.7 + 1) + 0.04 * Math.cos(i * 4.1) + 0.1 * Math.abs(Math.sin(a * 2)) ; d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * rx * k).toFixed(1)} ${(cy + Math.sin(a) * ry * k).toFixed(1)}`; } return `<path d="${d}Z" fill="${ROCKC}" stroke="${ROCKE}" stroke-width="2" stroke-linejoin="round"/>`; };
 // a lump of ore glowing in the rock, in the metal's own colour
 const lump = (x, y, r, glow) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r * 1.7).toFixed(1)}" fill="${glow}" opacity="0.28"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${glow}" stroke="#fff" stroke-width="0.8"/>`;
 Object.assign(DRAW, {
