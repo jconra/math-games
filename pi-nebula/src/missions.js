@@ -13,40 +13,27 @@
 // and they are only selecting to be a pilot, then it should drastically cut down the amount of time the mission takes
 // (to just 2 minutes). So the whole 'drilling asteroids' and 'engineering problems' can be skipped. Maybe there can
 // just be a short cut-scene of the ship doing the work and then it will be giving you a problem to calculate the jump
-// to get back to the station. Then you only get 10% from the contract." And: "I like the idea of sometimes finding
-// really rich asteroids that pay out double, but only 20% of the time."
+// to get back to the station. Then you only get 10% from the contract."
 //
 // A MISSION IS DATA (MISSIONS): its captain and ship, its roles and their shares, one plain line on how it pays, and
 // its steps in order. Each KIND of step has one runner in src/trip.js ('leave', 'jump', 'work', 'land'); a step names
 // the role that does it, and a role whose game is not made yet (ROLES: `ready`) is done by the captain's own crew. So
 // another captain's trip is another entry here with its own steps, and a new role's game switches on with its flag.
 //
-// THE MONEY. A haul sells for what the smelter's slips say it pays (src/jobs/smelter.js haulOf: 3,000 credits for
-// each tonne of its ore, twice that from a rich rock). The crew member's pay is their roles' shares of that, added
-// up: the pilot's 10% of an 18,000 credit haul is 1,800 credits. The cards on a run are not paid one by one: the
-// share is the pay for all the work of the run.
-// HOW THE MATH COUNTS (kept simple, and never harsh): each of the three cards of the jump OUT answered right at the
-// first pick lights its lamp green and leaves the crew more time at the rocks, so more ore comes home in the eight
-// canisters: 7 tonnes for three green lamps, 6 for two, 5 for one or none (ORE_BY_CLEAN). A card answered right after a
-// miss still lights its lamp (amber) and the jump still fires. The jump home changes nothing: home is home.
-// ONE ROCK IN FIVE IS A RICH ONE (RICH): its ore is titanium, which pays double. It is a fact of that haul.
-// THE DRILL OPERATOR (src/drill.js, src/drillview.js): signed for, the work at the rocks is the crew member's own: they
-// pick the rocks and drill them until the eight canisters are full. The field is a mix of metals, and THE HAUL SELLS
-// FOR WHAT IS IN IT: each canister comes home holding the ore of one metal (land's `load`: the metal in each), and a
-// tonne of each metal's ore has its own price (src/jobs/smelter.js ORE_PRICE: iron 1,600 credits, nickel 2,400,
-// copper 3,200, cobalt 4,000, gold 8,000). So which rocks they choose changes the pay, and every share is a share of
-// that. The jump out still sets how many tonnes of ore a canister holds. THE RICH ROCK: one trip in five has one at
-// the field (rolled once a trip, src/trip.js); with the crew's own driller it is always the one worked and the whole
-// haul pays double, as it always did; with the crew member at the drill ITS OWN CANISTERS PAY DOUBLE (titanium ore
-// sells for 6,000 credits a tonne, twice a usual haul's 3,000) and the rest of the load sells as what it is. With
-// the pilot's seat left to the crew, the jump out counts as two green lamps (CREW_CLEAN).
+// THE MONEY (the game's maker, 2026-11-18: "It's as simple as add up what they came back with and multiply each type
+// of metal with what it is worth and that's what you get paid"). What comes home is a STORE: so many tonnes of each
+// metal (src/drill.js: the crew member's own drilling, or the captain's own driller working the same field by the
+// same rules). It sells for each metal's tonnes times what a tonne of it sells for, added up (src/jobs/smelter.js
+// sellsFor, the one price list). The crew member's pay is their roles' shares of that, added up: the pilot's 10% of
+// an 18,000 credit haul is 1,800 credits. NOTHING ELSE ENTERS IT: no answer to any card changes what comes home or
+// what it sells for. The jump's three lamps only show where the pilot is in the jump (green for a card right at the
+// first pick, amber after a miss). The cards on a run are not paid one by one: the share is the pay for all the work
+// of the run.
 //
 // KEPT WITH THE CREW MEMBER (save.js keeps any field): crew.mission, one at a time:
 //   { id, captain, roles: [...], state: 'signed', signed }                the contract signed, the run not flown yet
-//   { ..., state: 'payout', payout: { n, canisters, ore, oreTonnes, metal, price, yield, rich, clean, sold, share,
-//     pay, at, mix } }                                                    home: the share waiting at the smelter's controls
-//     (mix: a haul the crew member drilled, its lots [{ metal, canisters, each (what a canister of it sold for),
-//     pay }], the most canisters first; then `metal` is the first lot's and price and yield are null)
+//   { ..., state: 'payout', payout: { n, canisters, tonnes, lots: [{ metal, tonnes, price, pay }] (the plain sum,
+//     metal by metal, the most tonnes first), sold, share, pay, at } }   home: the share waiting at the smelter's controls
 // A reload in the middle of a trip finds the contract still signed. Collected, the mission is cleared and the captain
 // asks again.
 //
@@ -59,7 +46,7 @@
 //   missions.on(fn) / onGo(fn)       fn(captain, yes) after each (src/mission.js opens the contract, starts the trip)
 //   missions.ready(id)               whether that captain's mission can be flown (its data is here)
 import { ownOrder, earn, jobTally } from './jobs/engine.js';
-import { haulOf, flownHaul, lotsWords, CARRIES, ORE_SELLS, ORE_PRICE } from './jobs/smelter.js';
+import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords } from './jobs/smelter.js';
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
@@ -70,16 +57,10 @@ export const ROLES = {
 };
 export const CARDS = 3;      // the cards of a jump (its three lamps: distance, charge, go)
 export const LAMPS = ['Distance', 'Charge', 'Go'];
-export const RICH = 0.2;     // one rock in five is a rich one
-// the jump out flown by the captain's own pilot (the crew member signed for the drill only): an ordinary jump, two
-// lamps' worth of time at the rocks, so the haul is the middle one (6 tonnes of ore)
-export const CREW_CLEAN = 2;
-// tonnes of ore in each of the eight canisters, by the lamps of the jump out lit green (0 to 3): [a, d] of a tonne
-export const ORE_BY_CLEAN = [[5, 8], [5, 8], [3, 4], [7, 8]];
 
 // ── the missions ──
 // steps: { id, kind, role (who does it), ... }; kinds: 'leave' (out of the hangar on autopilot), 'jump' (the jump
-// computer: `cards` cards, then the jump `to` the field or home; `counts`: its green lamps set the time at the rocks),
+// computer: `cards` cards, then the jump `to` the field or home),
 // 'work' (at the field: the roles that work there, and how long the crew takes when the player has none of them),
 // 'land' (home on autopilot, the haul aboard)
 export const MISSIONS = {
@@ -88,7 +69,7 @@ export const MISSIONS = {
     paid: 'You are paid your share of what the haul sells for, at the smelter\'s controls, when you are back.',
     steps: [
       { id: 'out', kind: 'leave', secs: 4 },
-      { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'field', counts: true },
+      { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'field' },
       { id: 'field', kind: 'work', roles: ['drill', 'engineer'], secs: 18 },
       { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
       { id: 'home', kind: 'land', secs: 5 },
@@ -130,15 +111,11 @@ export function stepsFor(M, mine) {
   });
 }
 
-// ── the haul a crew flew ──
-// the tonnes of ore in each canister for so many green lamps on the jump out, [a, d] of a tonne
-export const oreFor = (clean) => ORE_BY_CLEAN[Math.max(0, Math.min(CARDS, Math.floor(Number(clean) || 0)))];
-// is this rock a rich one? (rand: 0..1)
-export const isRich = (rand = Math.random) => rand() < RICH;
-// what a run would bring home, before it has a haul's number: its ore in tonnes, what it sells for, the pay of a share
-export function forecast({ clean = CARDS, rich = false, roles = ['pilot'] } = {}) {
-  const [a, d] = oreFor(clean), oreTonnes = CARRIES * a / d, sold = oreTonnes * ORE_SELLS * (rich ? 2 : 1), share = shareOf(roles);
-  return { ore: [a, d], oreTonnes, sold, share, pay: payOf(sold, share) };
+// ── what a run brings home ──
+// what a store would sell for, and the pay of a share of it (the plain sum; the tests, the notes, the contract's card)
+export function forecast({ store = {}, roles = ['pilot'] } = {}) {
+  const S = sellsFor(store), share = shareOf(roles);
+  return { tonnes: S.tonnes, lots: S.lots, sold: S.pay, share, pay: payOf(S.pay, share) };
 }
 
 // ── kept with the crew member ──
@@ -161,26 +138,17 @@ export function sign(crew, missionId, roleIds, now = Date.now()) {
   crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now };
   return crew.mission;
 }
-// home from the run: the haul's facts set for every slip about it (flownHaul), and the crew member's share of what it
-// sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); clean: the green lamps of
-// the jump out; rich: the rock was a rich one; load: the crew member drilled it, the metal in each canister (src/drill.js
-// R.load()). -> the payout, or null (no contract signed)
-export function land(crew, { n = 0, clean = CARDS, rich = false, load = null, now = Date.now() } = {}) {
+// home from the run: the haul's facts set for every slip about it (flownHaul: its store), and the crew member's share
+// of what it sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); store: the
+// tonnes of each metal that came home. -> the payout, or null (no contract signed)
+export function land(crew, { n = 0, store = {}, now = Date.now() } = {}) {
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
-  flownHaul(n, { ore: oreFor(clean), rich, ...(load ? { load } : {}) });
+  flownHaul(n, { store });
   const H = haulOf(n), share = shareOf(m.roles);
   m.state = 'payout';
-  m.payout = { n: H.n, canisters: H.canisters, ore: [H.ore.n, H.ore.d], oreTonnes: H.oreTonnes, metal: H.metal.name, price: H.mix ? null : H.metal.price, yield: H.yield, rich: H.rich,
-    clean: Math.max(0, Math.min(CARDS, Math.floor(Number(clean) || 0))), sold: H.pay, share, pay: payOf(H.pay, share), at: now,
-    ...(H.mix ? { mix: H.mix.map((L) => ({ metal: L.metal.name, canisters: L.canisters, each: L.each, pay: L.pay })) } : {}) };
+  m.payout = { n: H.n, canisters: H.canisters, tonnes: H.tonnes, lots: H.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: H.pay, share, pay: payOf(H.pay, share), at: now };
   return m.payout;
-}
-// what a load the crew member drilled would sell for, and the pay of a share of it (the tests, the notes): load, the
-// metal in each canister
-export function forecastLoad({ clean = CARDS, load = [], roles = ['drill'] } = {}) {
-  const [a, d] = oreFor(clean), sold = load.reduce((sum, m) => sum + (ORE_PRICE[m] || 0) * a / d, 0), share = shareOf(roles);
-  return { ore: [a, d], oreTonnes: CARRIES * a / d, sold, share, pay: payOf(sold, share) };
 }
 // the share collected: the credits arrive as a job's pay does (the crew member's credits, a tally of its own), and the
 // mission is done. -> { pay, credits } or null (nothing waiting)
@@ -196,36 +164,43 @@ export function collect(crew) {
 // (the contract given up before the run: the rigs and the tests)
 export function tearUp(crew) { if (crew) delete crew.mission; }
 
-// ── THE PAYOUT CARD, at the smelter's controls: the crew member works out (or, for the youngest, counts) something of
-// this haul that suits their own level there, and the pay arrives with the right answer. A miss never loses the pay.
+// ── THE PAYOUT CARD, at the smelter's controls. It shows the plain sum, as a slip: each metal that came home, its
+// tonnes, what a tonne of it sells for and what that comes to; what the haul sold for; the crew member's share. Under
+// it the crew member works out (or, for the youngest, counts) something of this haul that suits their own level
+// there, and the pay arrives with the right answer. A miss never loses the pay.
 //   grade   the school-guide point of the smelter level they are on (0 starting kindergarten .. 80 eighth grade):
 //           under 20   COUNT: the canisters the crew brought home (the youngest: the four on one side of the Miner)
-//           20 to 43   TIMES: so many tonnes of ore at 3,000 credits a tonne of ore: what the haul sold for (a haul
-//                      the crew member drilled, sorted by metal: so many canisters of one metal's ore at so much a
-//                      canister, what that ore sold for; the line under the right answer says what the whole sold for)
+//           20 to 43   ADD: what each metal sold for, added up: what the haul sold for (one metal only: its tonnes
+//                      times what a tonne sold for)
 //           44 to 57   A PART: their share as tenths of what it sold for (1/10 of 18,000)
 //           58 on      PERCENT: their share's percent of what it sold for (10% of 18,000)
 //   m: the crew member's mission as kept, its payout waiting (contractOf)
 //   -> an order in the job panel's own shape (engine.js ownOrder), with `payout` (the pay it brings) and `form`
 const CREDIT = ['credit', 'credits'], CAN = ['canister', 'canisters'];
 const N = (n, unit) => ({ v: n, big: say(n), small: n === 1 ? unit[0] : unit[1], label: `${say(n)} ${n === 1 ? unit[0] : unit[1]}` });
-export const payoutForm = (grade) => (grade < 20 ? 'count' : grade < 44 ? 'times' : grade < 58 ? 'part' : 'percent');
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+export const payoutForm = (grade) => (grade < 20 ? 'count' : grade < 44 ? 'add' : grade < 58 ? 'part' : 'percent');
+// a payout's lots (one kept before the store was one: its one metal's ore, sold by the tonne)
+const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ metal: P.metal || 'iron', tonnes: P.oreTonnes || 6, price: Math.round((P.sold || 0) / (P.oreTonnes || 6)), pay: P.sold || 0 }]);
+// the slip's rows: the plain sum. ask: which row is the one asked for ('sold' or 'pay': shown as "?"), or none
+export function payoutLines(P, ask = null) {
+  const lots = lotsOf(P);
+  return [...lots.map((L) => [cap(L.metal), `${tonnesWords(L.tonnes)} × ${say(L.price)} = ${say(L.pay)}`]),
+    ['The haul sold for', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+}
 export function payoutOrder(m, grade = 0, rand = Math.random) {
-  const P = m.payout, form = payoutForm(grade), who = rolesWords(m.roles), tenths = P.share / 10;
-  // (a haul the crew member drilled: its lots, "5 canisters of copper ore, 2 of iron ore and 1 of gold ore")
-  const lots = Array.isArray(P.mix) && P.mix.length ? P.mix : null;
-  const rock = P.rich && !lots ? 'a rich rock' : null, what = `${P.metal} ore`;
-  const top = { from: P.rich ? 'Your share: a rich rock' : 'Your share' };
+  const P = m.payout, form = payoutForm(grade), who = rolesWords(m.roles), tenths = P.share / 10, lots = lotsOf(P);
+  const top = { from: 'Your share' };
   const done = (o) => Object.assign(o, { payout: P.pay, form });
   // (what the right answer's line says: the pay, in every form)
   const paid = `Your share, ${P.share}%, is ${say(P.pay)} credits.`;
+  const home = `Your crew is home with ${lotsWords(lots)}`;
   if (form === 'count') {
     // (the youngest: one side of the Miner, four canisters; a little older: all eight)
     const side = grade < 6, n = side ? P.canisters / 2 : P.canisters;
     return done(ownOrder({
       key: `payout:count:${side ? 'side' : 'all'}`,
-      story: lots ? `Your crew is home with ${lotsWords(lots)}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`
-        : `Your crew is home with ${say(P.canisters)} canisters of ${what}${rock ? ` from ${rock}` : ''}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
+      story: `${home}. It sold for ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
       ask: side ? 'How many canisters are on this side of the Miner?' : 'How many canisters did your crew bring home?',
       right: N(n, CAN),
       slips: [
@@ -234,49 +209,50 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
         { ...N(n + 2, CAN), slip: 'off', why: 'Too many. Count again, touching each one once.' },
       ],
       rightWhy: `${say(n)} canisters. ${paid}`,
-      lines: [['The haul sold for', `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', `${say(P.pay)} credits`]],
+      lines: payoutLines(P),
       picFirst: true, help: { title: 'Count them', pic: { kind: 'cans', place: side ? 'row' : 'ship', slots: Array(n).fill('full') }, line: 'Touch each canister once as you count: 1, 2, 3 ...' },
       own: { strand: 'number', at: side ? 0 : 6 }, facts: { ...top, form, n, pay: P.pay },
     }, rand, 3));
   }
-  if (form === 'times' && lots) {
-    // (one lot of it: the roundest price a canister, then the most canisters; two or more canisters where there are)
-    const round = (L) => (L.each % 1000 === 0 ? 0 : L.each % 500 === 0 ? 1 : 2);
-    const L = [...lots].sort((a, b) => (a.canisters < 2) - (b.canisters < 2) || round(a) - round(b) || b.canisters - a.canisters)[0], n = L.canisters, per = L.each, ore = `${L.metal} ore`;
+  if (form === 'add' && lots.length > 1) {
+    // (what each metal sold for, added up)
+    const pays = lots.map((L) => L.pay), step = Math.max(...lots.map((L) => L.price));
+    const chain = pays.slice(1).map((p, i) => ({ op: 'add', a: pays.slice(0, i + 1).reduce((x, y) => x + y, 0), b: p, say: i ? 'Then the next' : 'First two of them' }));
     return done(ownOrder({
-      key: 'payout:times:lot',
-      story: `Your crew brought home ${lotsWords(lots)}. Each canister of ${ore} sold for ${say(per)} credits.`,
-      ask: `How many credits did the ${ore} sell for?`,
-      right: N(L.pay, CREDIT),
-      slips: [
-        ...(n > 1 ? [{ ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is what one canister sold for. There are ${say(n)} of ${ore}.` }] : []),
-        { ...N(per + n, CREDIT), slip: 'added', why: `That adds the canisters to the price. Every canister sold for ${say(per)} credits: ${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}.` },
-        ...(P.sold !== L.pay ? [{ ...N(P.sold, CREDIT), slip: 'whole', why: `That is what the whole haul sold for, every metal in it. The question is the ${ore}.` }] : []),
-        { ...N((n + 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(n + 1)} canisters. There ${n === 1 ? 'is' : 'are'} ${say(n)} of ${ore}.` },
-        ...(n > 1 ? [{ ...N((n - 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(n - 1)} ${n === 2 ? 'canister' : 'canisters'}. There are ${say(n)} of ${ore}.` }] : []),
-      ],
-      rightWhy: `${say(n)} × ${say(per)} = ${say(L.pay)} credits. The whole haul sold for ${say(P.sold)} credits. ${paid}`, sum: { op: 'mul', a: n, b: per },
-      lines: [[`${L.metal[0].toUpperCase() + L.metal.slice(1)} ore`, `${say(n)} ${n === 1 ? 'canister' : 'canisters'}`], ['A canister of it sold for', `${say(per)} credits`], [`The ${ore} sold for`, '?']],
-      help: { title: 'Canister by canister', line: `Every canister of ${ore} sold for ${say(per)} credits: ${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}.`, steps: [`${say(n)} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}: ${say(n)} × ${say(per)}`] },
-      own: { strand: 'words', at: 26 }, facts: { ...top, form, n, per, metal: L.metal, lot: L.pay, pay: P.pay },
-    }, rand));
-  }
-  if (form === 'times') {
-    const t = P.oreTonnes, per = P.sold / t;
-    return done(ownOrder({
-      key: 'payout:times',
-      story: `Your crew brought home ${say(t)} tonnes of ${what}${rock ? ` from ${rock}` : ''}. Each tonne of ore sold for ${say(per)} credits.`,
+      key: 'payout:add',
+      story: `${home}.`,
       ask: 'How many credits did the haul sell for?',
       right: N(P.sold, CREDIT),
       slips: [
-        { ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is what one tonne sold for. There are ${say(t)} tonnes.` },
-        { ...N(per + t, CREDIT), slip: 'added', why: `That adds the tonnes to the price. Every tonne sold for ${say(per)} credits: ${say(t)} lots of ${say(per)}.` },
-        { ...N((t + 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(t + 1)} tonnes. There are ${say(t)}.` },
-        { ...N((t - 1) * per, CREDIT), slip: 'groupOff', why: `That is ${say(t - 1)} tonnes. There are ${say(t)}.` },
+        { ...N(pays[0], CREDIT), slip: 'part', why: `That is only the ${lots[0].metal}. Add what the ${lots.length === 2 ? lots[1].metal : 'others'} sold for.` },
+        { ...N(P.sold - pays[pays.length - 1], CREDIT), slip: 'part', why: `That leaves out the ${lots[lots.length - 1].metal}. Add every metal.` },
+        { ...N(P.sold + step, CREDIT), slip: 'off', why: 'That is too much. Add them again, the thousands first.' },
+        { ...N(P.sold + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Add them again, the thousands first.' },
+        ...(P.sold > 1000 ? [{ ...N(P.sold - 1000, CREDIT), slip: 'off', why: 'A thousand short. Add them again, the thousands first.' }] : []),
+      ],
+      rightWhy: `${pays.map(say).join(' + ')} = ${say(P.sold)} credits. ${paid}`, sum: chain.length === 1 ? chain[0] : chain,
+      lines: payoutLines(P, 'sold'),
+      help: { title: 'Metal by metal', line: 'The haul sold for what each of its metals sold for, added up.', steps: [pays.map(say).join(' + ')] },
+      own: { strand: 'add', at: 30 }, facts: { ...top, form, sold: P.sold, pay: P.pay }, size: Math.min(3, lots.length - 1),
+    }, rand));
+  }
+  if (form === 'add') {
+    // (one metal: its tonnes times what a tonne of it sold for)
+    const L = lots[0], t = L.tonnes, per = L.price, whole = Number.isInteger(t);
+    return done(ownOrder({
+      key: 'payout:times',
+      story: `${home}. Each tonne of ${L.metal} sold for ${say(per)} credits.`,
+      ask: 'How many credits did the haul sell for?',
+      right: N(P.sold, CREDIT),
+      slips: [
+        { ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is what one tonne sold for. There are ${tonnesWords(t)}.` },
+        { ...N(per + Math.round(t), CREDIT), slip: 'added', why: `That adds the tonnes to the price. Every tonne sold for ${say(per)} credits: multiply.` },
+        { ...N(P.sold + per, CREDIT), slip: 'groupOff', why: `That is a tonne too many. There are ${tonnesWords(t)}.` },
+        ...(P.sold - per > 0 ? [{ ...N(P.sold - per, CREDIT), slip: 'groupOff', why: `That is a tonne short. There are ${tonnesWords(t)}.` }] : []),
       ],
       rightWhy: `${say(t)} × ${say(per)} = ${say(P.sold)} credits. ${paid}`, sum: { op: 'mul', a: t, b: per },
-      lines: [['Ore', `${say(t)} tonnes`], ['A tonne of ore sold for', `${say(per)} credits`], ['The haul sold for', '?']],
-      help: { title: 'Tonne by tonne', pic: { kind: 'tonnes', n: t, price: per }, line: `Every tonne of ore sold for ${say(per)} credits: ${say(t)} lots of ${say(per)}.`, steps: [`${say(t)} lots of ${say(per)}: ${say(t)} × ${say(per)}`] },
+      lines: payoutLines(P, 'sold'),
+      help: { title: 'Tonne by tonne', ...(whole && t <= 8 ? { pic: { kind: 'tonnes', n: t, price: per } } : {}), line: `Every tonne of ${L.metal} sold for ${say(per)} credits: ${say(t)} lots of ${say(per)}.`, steps: [`${say(t)} lots of ${say(per)}: ${say(t)} × ${say(per)}`] },
       own: { strand: 'words', at: 26 }, facts: { ...top, form, t, per, pay: P.pay },
     }, rand));
   }
@@ -294,10 +270,11 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
         { ...N(P.sold / 100, CREDIT), slip: 'tooSmall', why: `That cuts the ${say(P.sold)} credits into 100 parts. ${half ? 'A half is 2 equal parts.' : 'Tenths are 10 equal parts.'}` },
         { ...N(half ? P.sold / 4 : P.pay + one, CREDIT), slip: 'partOff', why: half ? 'That is a quarter. A half is one of 2 equal parts.' : `That is ${tenths + 1} tenths. Your share is ${tenths}.` },
         { ...N(P.sold - 10, CREDIT), slip: 'subtracted', why: `That takes 10 away. Cut the ${say(P.sold)} credits into ${half ? 2 : 10} equal parts instead.` },
-      ],
+        { ...N(P.pay + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Work it out again.' },
+      ].filter((s) => Number.isInteger(s.v)),
       rightWhy: half ? `${say(P.sold)} ÷ 2 = ${say(P.pay)} credits` : tenths === 1 ? `${say(P.sold)} ÷ 10 = ${say(P.pay)} credits` : `One tenth is ${say(P.sold)} ÷ 10 = ${say(one)}; ${tenths} tenths are ${tenths} × ${say(one)} = ${say(P.pay)} credits`,
       sum: half ? { op: 'div', a: P.sold, b: 2 } : tenths === 1 ? { op: 'div', a: P.sold, b: 10 } : [{ op: 'div', a: P.sold, b: 10, say: 'First one tenth of it' }, { op: 'mul', a: one, b: tenths, say: `Then ${tenths} tenths` }],
-      lines: [['The haul sold for', `${say(P.sold)} credits`], ['Your share', `${frac} of it`], ['Your pay', '?']],
+      lines: [...payoutLines(P, 'pay').slice(0, -2), ['Your share', `${frac} of it`], ['Your pay', '?']],
       help: { title: 'Cut into equal parts', pic: { kind: 'sharebar', whole: P.sold, n: half ? 1 : tenths, d: half ? 2 : 10 },
         line: half ? `A half means the ${say(P.sold)} credits cut into 2 equal parts, and one of them yours.` : `${frac} means the ${say(P.sold)} credits cut into 10 equal parts, and ${tenths === 1 ? 'one of them' : `${tenths} of them`} yours.`,
         steps: half ? [`One of the 2 equal parts: ${say(P.sold)} ÷ 2`] : tenths === 1 ? [`One of the 10 equal parts: ${say(P.sold)} ÷ 10`] : [`First one tenth: ${say(P.sold)} ÷ 10`, `Then ${tenths} tenths: that × ${tenths}`] },
@@ -315,10 +292,11 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
       ...(tenths > 1 ? [{ ...N(one, CREDIT), slip: 'tenOnly', why: `${say(one)} credits is 10%. ${P.share}% is ${tenths} lots of that.` }] : [{ ...N(P.sold / 100, CREDIT), slip: 'onePercent', why: `That is 1%: one part in 100. 10% is one part in 10.` }]),
       { ...N(P.pay + one, CREDIT), slip: 'tenOff', why: `That is 10% too much: ${P.share + 10}%.` },
       { ...N(P.pay / 2, CREDIT), slip: 'half', why: `That is ${P.share / 2}%, half of your share.` },
-    ],
+      { ...N(P.pay + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Work it out again.' },
+    ].filter((s) => Number.isInteger(s.v)),
     rightWhy: tenths === 1 ? `10% of ${say(P.sold)} is ${say(P.sold)} ÷ 10 = ${say(P.pay)} credits` : `10% of ${say(P.sold)} is ${say(one)}, so ${P.share}% is ${tenths} × ${say(one)} = ${say(P.pay)} credits`,
     sum: tenths === 1 ? { op: 'div', a: P.sold, b: 10, say: '10% is a tenth of it' } : [{ op: 'div', a: P.sold, b: 10, say: 'First 10%: a tenth of it' }, { op: 'mul', a: one, b: tenths, say: `Then ${P.share}% is ${tenths} lots of 10%` }],
-    lines: [['The haul sold for', `${say(P.sold)} credits`], ['Your share', `${who}: ${P.share}%`], ['Your pay', '?']],
+    lines: [...payoutLines(P, 'pay').slice(0, -2), ['Your share', `${who}: ${P.share}%`], ['Your pay', '?']],
     help: { title: 'Ten percent first', pic: { kind: 'sharebar', whole: P.sold, n: tenths, d: 10, pct: true },
       line: `10% is one part in ten. Find 10% of the ${say(P.sold)} credits${tenths === 1 ? '' : `, then take ${tenths} lots of it`}.`,
       steps: tenths === 1 ? [`10% of it: ${say(P.sold)} ÷ 10`] : [`First 10%: ${say(P.sold)} ÷ 10`, `Then ${P.share}%: that × ${tenths}`] },

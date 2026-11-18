@@ -7,7 +7,7 @@
 // taken up (src/mission.js).
 //
 //   const C = openContract(root, { mission, captain, onSign(roleIds), onLater() })   C.close(), C.el, C.state()
-import { rolesOf, shareOf, payOf, RICH } from './missions.js';
+import { rolesOf, shareOf, payOf } from './missions.js';
 
 const CSS = `
 .pmc { position: fixed; inset: 0; z-index: 26; display: grid; place-items: center; padding: 12px; background: rgba(4, 6, 10, 0.45); opacity: 0; transition: opacity 0.2s ease;
@@ -70,7 +70,7 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
       <p class="pmc-note">${roles.some((r) => !r.open) ? `${esc(roles.filter((r) => !r.open).map((r) => r.crew).join(' and '))} of ${esc(captain)}'s own crew ${roles.filter((r) => !r.open).length === 1 ? 'does the other job' : 'do the other jobs'} this trip.` : ''}${pick ? ' Tap a job to take it or leave it to the crew.' : ''}</p>
       <div class="pmc-pay"><b>Your share: ${share}% of what the haul sells for</b>
         <p>${esc(M.paid)}</p>
-        <p>A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits. One rock in ${Math.round(1 / RICH)} is a rich one and pays double.</p></div>
+        <p>A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits.</p></div>
       <div class="pmc-btns"><button type="button" class="pmc-sign">Sign<kbd>E</kbd></button><button type="button" class="pmc-later">Not now<kbd>Esc</kbd></button></div>
     </section>`;
     el.querySelector('.pmc-sign').addEventListener('click', sign);

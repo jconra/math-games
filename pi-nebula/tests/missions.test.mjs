@@ -6,10 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
-import { missions, ROLES, MISSIONS, CARDS, RICH, ORE_BY_CLEAN } from '../src/missions.js';
-import { JOB as pilot, pickAsk } from '../src/jobs/pilot.js';
-import { JOB as smelter, haulOf, flownHaul, forget, CARRIES, LOADS, ORE_SELLS, RICH_METAL, METALS } from '../src/jobs/smelter.js';
-import { helpPicture } from '../src/jobs/pics.js';
+import { missions, ROLES, MISSIONS, CARDS } from '../src/missions.js';
+import { JOB as pilot, pickAsk, plotJudge } from '../src/jobs/pilot.js';
+import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, priceOf, CARRIES, LOADS, METALS, CHART, PRICE_TIMES, HOLD } from '../src/jobs/smelter.js';
+import { crewLoad, seeded as seed } from '../src/drill.js';
+import { helpPicture, navMap, mapSpot, PALE, NIGHT } from '../src/jobs/pics.js';
 import { CAPTAINS } from '../src/lines.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
@@ -23,6 +24,7 @@ const rightOf = (o) => num(o.coins.find((c) => c.good).label);
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 const endOf = (x) => (x.op === 'add' ? x.a + x.b : x.op === 'sub' ? x.a - x.b : x.op === 'mul' ? x.a * x.b : x.a / x.b);
 const MINING = MISSIONS.mining;
+const smelterAll = await import('../src/jobs/smelter.js');
 
 // ── the contract ─────────────────────────────────────────────────────────────────────────────────────────────────
 test('the contract: the three roles and their shares, as the game\'s maker gave them', () => {
@@ -80,8 +82,8 @@ test('the mission\'s steps: out, the jump, the field, the jump home, home; a pil
   for (const s of S.filter((x) => x.kind === 'jump')) assert.equal(s.cards, 3);
   assert.equal(CARDS, 3); assert.equal(MS.LAMPS.length, CARDS);
   assert.deepEqual(S.filter((s) => s.kind === 'jump').map((s) => s.to), ['field', 'home']);
-  // only the jump out counts toward the haul; the crew's own drilling is a short scene (15 to 25 seconds)
-  assert.equal(S.find((s) => s.id === 'jumpOut').counts, true); assert.ok(!S.find((s) => s.id === 'jumpHome').counts);
+  // no jump counts toward the haul; the crew's own drilling is a short scene (15 to 25 seconds)
+  assert.ok(!S.find((s) => s.id === 'jumpOut').counts && !S.find((s) => s.id === 'jumpHome').counts);
   const work = S.find((s) => s.kind === 'work'); assert.ok(work.secs >= 15 && work.secs <= 25, String(work.secs));
   // the parts of a pilot-only run that are not cards come to well under a minute, so the run is about two minutes
   const fixed = S.reduce((t, s) => t + (s.secs || 0), 0);
@@ -89,76 +91,102 @@ test('the mission\'s steps: out, the jump, the field, the jump home, home; a pil
 });
 
 // ── the haul and the money ───────────────────────────────────────────────────────────────────────────────────────
-test('the haul a crew flew: more green lamps on the jump out bring more ore home, never harshly', () => {
-  // three green lamps: 7 tonnes; two: 6; one or none: 5 (eight canisters, a part of a tonne of ore in each)
-  assert.deepEqual([3, 2, 1, 0].map((c) => MS.forecast({ clean: c }).oreTonnes), [7, 6, 5, 5]);
-  for (const [a, d] of ORE_BY_CLEAN) assert.ok(a < d && Number.isInteger(CARRIES * a / d));
-  assert.deepEqual(MS.oreFor(9), ORE_BY_CLEAN[3]); assert.deepEqual(MS.oreFor(-1), ORE_BY_CLEAN[0]);
-  // never harshly: every card missed still brings home five sevenths of the best haul
-  assert.ok(MS.forecast({ clean: 0 }).sold / MS.forecast({ clean: 3 }).sold > 0.7);
-  // what it sells for: 3,000 credits a tonne of ore; the pilot's tenth
-  assert.deepEqual([3, 2, 1].map((c) => MS.forecast({ clean: c }).sold), [21000, 18000, 15000]);
-  assert.deepEqual([3, 2, 1].map((c) => MS.forecast({ clean: c }).pay), [2100, 1800, 1500]);
+// (three loads to try: the game's maker's own example, a load of one metal, and one of odd amounts)
+const LOADS3 = [{ iron: 3, nickel: 1.5, titanium: 1.5 }, { copper: 6 }, { iron: 2.37, nickel: 0.82, cobalt: 1.4, gold: 0.41, copper: 1 }];
+const ROLE_MIXES = [['pilot'], ['drill'], ['engineer'], ['pilot', 'drill'], ['pilot', 'engineer'], ['drill', 'engineer'], ['pilot', 'drill', 'engineer']];
+
+test('one price list: the game\'s maker\'s chart, every price the same number of times it', () => {
+  assert.deepEqual(CHART, { iron: 20, nickel: 30, copper: 40, cobalt: 50, titanium: 60, gold: 80 });
+  assert.deepEqual(METALS.map((m) => m.name), Object.keys(CHART));
+  // the proportions are his, exactly: one number multiplies them all
+  for (const m of METALS) { assert.equal(m.price, CHART[m.name] * PRICE_TIMES); assert.equal(m.price / METALS[0].price, CHART[m.name] / CHART.iron); assert.equal(priceOf(m.name), m.price); }
+  assert.ok(Number.isInteger(PRICE_TIMES) && PRICE_TIMES > 0); assert.equal(priceOf('cheese'), 0);
+  // a hundredth of a tonne of any metal sells for whole credits, so the plain sum never has a part of a credit in it
+  for (const m of METALS) assert.ok(Number.isInteger(m.price / 100), m.name);
+  // there is no other list: nothing else in the smelter's file or the missions' prices anything
+  for (const gone of ['ORE_PRICE', 'ORE_SELLS', 'RICH_METAL']) assert.ok(!(gone in (smelterAll)), gone);
 });
 
-test('the money is the size the game\'s maker asked: about 2,000 for the pilot, about 8,300 for all three roles, double for a rich rock', () => {
-  // the pilot alone, a usual rock: 1,500 to 2,100; counting the one rich rock in five, about 2,000 a run
-  const mean = (clean, roles) => { const usual = MS.forecast({ clean, roles }).pay, rich = MS.forecast({ clean, roles, rich: true }).pay; return usual * (1 - RICH) + rich * RICH; };
-  for (const c of [1, 2, 3]) assert.ok(mean(c, ['pilot']) >= 1700 && mean(c, ['pilot']) <= 2600, `${c} green: ${mean(c, ['pilot'])}`);
-  assert.ok(Math.abs(mean(2, ['pilot']) - 2000) < 250, String(mean(2, ['pilot'])));
-  // all three roles (when their games are made), a usual rock: 7,500 to 10,500, his 8,300 inside it
-  const all = [1, 2, 3].map((c) => MS.forecast({ clean: c, roles: MINING.roles }).pay);
-  assert.deepEqual(all, [7500, 9000, 10500]);
-  assert.ok(all[0] < 8300 && all[2] > 8300);
-  // a rich rock: exactly double
-  for (const c of [0, 1, 2, 3]) assert.equal(MS.forecast({ clean: c, rich: true }).pay, 2 * MS.forecast({ clean: c }).pay);
+test('the pay is the plain sum: each metal\'s tonnes times what a tonne of it sells for, added up; and each mix of jobs its share of that', () => {
+  assert.equal(HOLD, 6);
+  const want = [19500, 24000, 21480];
+  LOADS3.forEach((store, i) => {
+    const S = sellsFor(store), plain = Object.entries(store).reduce((a, [m, t]) => a + t * CHART[m] * PRICE_TIMES, 0);
+    assert.ok(near(S.pay, plain)); assert.equal(S.pay, want[i]); assert.equal(S.tonnes, 6);
+    assert.deepEqual(S.lots.map((L) => [L.metal.name, L.tonnes, L.price, L.pay]).sort(), Object.entries(store).map(([m, t]) => [m, t, priceOf(m), Math.round(t * priceOf(m))]).sort());
+    for (let k = 1; k < S.lots.length; k++) assert.ok(S.lots[k].tonnes <= S.lots[k - 1].tonnes, 'the most tonnes first');
+    for (const roles of ROLE_MIXES) {
+      const F = MS.forecast({ store, roles }), share = MS.shareOf(roles);
+      assert.equal(F.sold, plain); assert.equal(F.share, share); assert.equal(F.pay, plain * share / 100); assert.ok(Number.isInteger(F.pay));
+    }
+    // the shares add up: the three jobs together are half the haul
+    assert.equal(MINING.roles.reduce((a, id) => a + MS.forecast({ store, roles: [id] }).pay, 0), MS.forecast({ store, roles: MINING.roles }).pay);
+    assert.equal(MS.forecast({ store, roles: MINING.roles }).pay, plain / 2);
+  });
+  // what the three loads pay each mix of jobs (the notes' table)
+  assert.deepEqual(ROLE_MIXES.map((r) => MS.forecast({ store: LOADS3[0], roles: r }).pay), [1950, 3900, 3900, 5850, 5850, 7800, 9750]);
+  // an empty store sells for nothing; a metal the smelter does not pour is not in it
+  assert.equal(sellsFor({}).pay, 0); assert.deepEqual(sellsFor({ cheese: 2, iron: 1 }).lots.map((L) => L.metal.name), ['iron']);
 });
 
-test('the rich rock: one in five', () => {
-  assert.equal(RICH, 0.2);
-  const rand = seeded(77); let rich = 0; const N = 20000;
-  for (let k = 0; k < N; k++) if (MS.isRich(rand)) rich++;
-  assert.ok(rich / N > 0.185 && rich / N < 0.215, `${rich} of ${N}`);
-  assert.equal(MS.isRich(() => 0.19), true); assert.equal(MS.isRich(() => 0.2), false);
+test('the money is the size the game\'s maker asked: an ordinary mixed load 17,000 to 20,000, about 2,000 for the pilot, 8,500 to 10,000 for all three jobs', () => {
+  // (an ordinary load: what the captain's own driller brings home, working the nearest rocks of many fields)
+  let sum = 0; const N = 300;
+  for (let s = 1; s <= N; s++) sum += sellsFor(crewLoad(seed(s))).pay;
+  const sold = sum / N;
+  assert.ok(sold >= 17000 && sold <= 20000, `an ordinary load sells for ${Math.round(sold)}`);
+  assert.ok(Math.abs(sold * 0.1 - 2000) < 300, `the pilot's tenth: ${Math.round(sold * 0.1)}`);
+  assert.ok(sold * 0.2 >= 3400 && sold * 0.2 <= 4000, `the drill's fifth: ${Math.round(sold * 0.2)}`);
+  assert.ok(sold * 0.5 >= 8300 && sold * 0.5 <= 10000, `all three jobs: ${Math.round(sold * 0.5)}`);
 });
 
-test('a flown haul is one haul on every slip: its ore, its weight, its metal, what it sells for; a rich rock is titanium and pays double', () => {
+test('no answer changes the haul: what comes home is the store, whatever the lamps showed and whatever was answered', () => {
+  // nothing in a mission's steps counts answers; the missions keep no rule of lamps, clean jumps or rich rocks
+  for (const s of MINING.steps) assert.ok(!('counts' in s), s.id);
+  for (const gone of ['RICH', 'isRich', 'ORE_BY_CLEAN', 'oreFor', 'CREW_CLEAN', 'forecastLoad']) assert.ok(!(gone in MS), gone);
+  // the same store lands the same payout, whatever else is said of the run
+  const store = LOADS3[2], pays = [];
+  for (const extra of [{}, { clean: 0 }, { clean: 3 }, { rich: true }, { lamps: ['late', 'late', 'late'] }, { first: false }]) {
+    const crew = crewOf(); MS.sign(crew, 'mining', ['pilot', 'drill']); flownHaul(9, null);
+    const P = MS.land(crew, { n: 9, store, now: 5, ...extra }); pays.push(JSON.stringify(P));
+    assert.deepEqual(Object.keys(P).sort(), ['at', 'canisters', 'lots', 'n', 'pay', 'share', 'sold', 'tonnes']);
+    assert.equal(P.sold, 21480); assert.equal(P.pay, 6444);
+  }
+  assert.equal(new Set(pays).size, 1); flownHaul(9, null);
+});
+
+test('a haul the player went out for is one haul on every slip: its store, its canisters\' weight, what it sells for', () => {
   const rand = seeded(5), M = smelter.makers;
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,
     steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 } });
-  for (let n = 1; n <= 40; n++) for (const clean of [0, 1, 2, 3]) for (const rich of [false, true]) {
+  for (let n = 1; n <= 40; n++) for (const store of LOADS3) {
     forget(); flownHaul(n, null);
     const before = haulOf(n);
     const crew = crewOf(); MS.sign(crew, 'mining', ['pilot']);
-    const P = MS.land(crew, { n, clean, rich, now: 5 }), H = haulOf(n);
-    assert.equal(H.flown, true); assert.equal(H.rich, rich); assert.equal(H.n, n); assert.equal(H.canisters, CARRIES);
-    // the ore the crew had time to cut, in every canister; whole tonnes in all
-    assert.deepEqual([H.ore.n, H.ore.d], ORE_BY_CLEAN[clean]); assert.equal(H.oreTonnes, MS.forecast({ clean }).oreTonnes);
-    // its canisters weigh the haul's own weight or the next heavy enough to hold that ore and a tenth of a tonne of slag
-    assert.ok(LOADS.includes(H.fill) && H.ore.n / H.ore.d <= H.fill / 10 - 0.1 + 1e-9, `haul ${n}: ${H.ore.n}/${H.ore.d} in ${H.fill / 10}`);
-    if (before.ore.n / before.ore.d >= H.ore.n / H.ore.d) assert.equal(H.fill, before.fill);
-    // a rich rock is titanium; a usual one the haul's own metal; a tonne of ore sells for 3,000, a rich rock's 6,000
-    assert.equal(H.metal.name, rich ? RICH_METAL : before.metal.name); assert.ok(METALS.includes(H.metal));
-    assert.equal(H.pay, H.oreTonnes * ORE_SELLS * (rich ? 2 : 1));
-    assert.ok(Number.isInteger(H.metal10) && near(H.pay, H.metal10 / 10 * H.metal.price));
+    const P = MS.land(crew, { n, store, now: 5 }), H = haulOf(n), S = sellsFor(store);
+    assert.equal(H.flown, true); assert.equal(H.n, n); assert.equal(H.canisters, CARRIES); assert.deepEqual(H.store, store);
+    // every canister holds 3/4 of a tonne of metal, six tonnes in all; no yield: it sells by the tonne of metal
+    assert.deepEqual(H.ore, { n: 3, d: 4 }); assert.equal(H.oreTonnes, 6); assert.equal(H.tonnes, 6); assert.equal(H.yield, null); assert.equal(H.metal10, null);
+    // its canisters weigh the haul's own weight or the next heavy enough to hold their metal and a tenth of a tonne of slag
+    assert.ok(LOADS.includes(H.fill) && 0.75 <= H.fill / 10 - 0.1 + 1e-9, `haul ${n}: 3/4 in ${H.fill / 10}`);
+    if (before.fill / 10 - 0.1 >= 0.75 - 1e-9) assert.equal(H.fill, before.fill);
+    assert.equal(H.pay, S.pay); assert.equal(H.metal.name, S.lots[0].metal.name, 'named by the metal there is most of');
     // the payout is that haul's: what it sold for, the pilot's tenth
-    assert.deepEqual(P, { n, canisters: CARRIES, ore: ORE_BY_CLEAN[clean], oreTonnes: H.oreTonnes, metal: H.metal.name, price: H.metal.price, yield: H.yield, rich, clean, sold: H.pay, share: 10, pay: H.pay / 10, at: 5 });
-    assert.deepEqual(P, { ...P, ...MS.forecast({ clean, rich }) , ore: P.ore });
+    assert.deepEqual(P, { n, canisters: CARRIES, tonnes: 6, lots: S.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: S.pay, share: 10, pay: S.pay / 10, at: 5 });
+    assert.deepEqual([P.sold, P.share, P.pay], [MS.forecast({ store }).sold, 10, MS.forecast({ store }).pay]);
     if (n % 7) { flownHaul(n, null); continue; }
-    // ... and the smelter's own slips about that haul say the same: its ore, its whole pay slip, its canisters' weight
-    const ore = M.ore.make(1, { rand, live: live(n) }), pay = M.pay.make(2, { rand, live: live(n) }), load = M.weigh.make(2, { rand, live: { ...live(n), docked: [], fullOnShip: 0, phase: 'load' } });
-    const top = rich ? 'This haul: a rich rock' : 'This haul';
-    assert.equal(ore.facts.kind, 'haul'); assert.equal(ore.facts.from, top); assert.equal(rightOf(ore), H.oreTonnes); assert.ok(ore.story.includes(`${H.metal.name} ore`), ore.story);
-    assert.equal(pay.facts.from, top); assert.ok(near(rightOf(pay), P.sold), `${pay.story} -> ${pay.answer}`);
-    assert.ok(pay.story.includes(`${H.yield}% of the ore is ${H.metal.name}`) && pay.story.includes(`${H.metal.price.toLocaleString('en-US')} credits a tonne`), pay.story);
-    assert.equal(load.facts.kind, 'load'); assert.equal(load.facts.w, H.fill); assert.equal(load.facts.from, top);
+    // ... and the smelter's own slips about that haul say the same
+    const ore = M.ore.make(1, { rand, live: live(n) }), load = M.weigh.make(2, { rand, live: { ...live(n), docked: [], fullOnShip: 0, phase: 'load' } });
+    assert.equal(ore.facts.kind, 'haul'); assert.equal(ore.facts.from, 'This haul'); assert.equal(rightOf(ore), 6); assert.ok(ore.story.includes('3/4 of a tonne of metal in each'), ore.story);
+    let sum = 0; for (let k = 0; k < S.lots.length; k++) { const pay = M.pay.make(2, { rand, live: live(n) }); assert.equal(pay.facts.from, 'This haul'); assert.ok(pay.facts.lot, pay.story); sum += rightOf(pay); assert.ok(pay.story.includes(`${priceOf(pay.facts.metal).toLocaleString('en-US')} credits a tonne`), pay.story); }
+    assert.ok(near(sum, P.sold), `the slips add up to ${sum}, the payout says ${P.sold}`);
+    assert.equal(load.facts.kind, 'load'); assert.equal(load.facts.w, H.fill); assert.equal(load.facts.from, 'This haul');
     flownHaul(n, null);
   }
   forget();
-  // a haul nobody the player knows flew is as it was: never rich, its own ore
-  assert.equal(flownHaul(3), null); assert.equal(haulOf(3).flown, false);
-  assert.throws(() => flownHaul(3, { ore: [1, 3] }), /whole tonnes/);
-  assert.throws(() => flownHaul(3, { ore: [9, 8] }));
+  // a haul nobody the player knows flew is as it was: one metal's ore, its yield
+  assert.equal(flownHaul(3), null); assert.equal(haulOf(3).flown, false); assert.ok(haulOf(3).yield > 0);
+  assert.throws(() => flownHaul(3, { store: {} }), /its store/); assert.throws(() => flownHaul(3, { ore: [3, 4] }), /its store/);
 });
 
 // ── what is kept with the crew member ────────────────────────────────────────────────────────────────────────────
@@ -174,16 +202,16 @@ test('kept with the crew member: the contract through a reload, the payout throu
   assert.equal(MS.contractOf(back).state, 'signed'); assert.equal(MS.collect(back), null, 'nothing to collect before the run is flown');
   // home: the payout waits, through a reload too
   flownHaul(4, null);
-  const P = MS.land(back, { n: 4, clean: 3, rich: true, now: 999 });
-  assert.equal(MS.contractOf(back).state, 'payout'); assert.equal(P.pay, 4200);
+  const P = MS.land(back, { n: 4, store: { gold: 3, iron: 3 }, now: 999 });
+  assert.equal(MS.contractOf(back).state, 'payout'); assert.equal(P.sold, 30000); assert.equal(P.pay, 3000);
   assert.equal(E.credits(back), 450, 'not paid until it is collected');
   back = reload(back);
   assert.deepEqual(MS.contractOf(back).payout, P);
   assert.equal(MS.land(back, { n: 5 }), null, 'one run, one payout');
   assert.equal(MS.sign(back, 'mining', ['pilot']), null, 'no new contract while a share waits');
   // collected: the credits arrive as a job's pay does, in whole credits; the mission is done
-  assert.deepEqual(MS.collect(back), { pay: 4200, credits: 4650 });
-  assert.equal(E.credits(back), 4650); assert.equal(back.jobs.mining.earned, 4200); assert.equal(back.jobs.mining.n, 1);
+  assert.deepEqual(MS.collect(back), { pay: 3000, credits: 3450 });
+  assert.equal(E.credits(back), 3450); assert.equal(back.jobs.mining.earned, 3000); assert.equal(back.jobs.mining.n, 1);
   assert.equal(back.mission, undefined); assert.equal(MS.contractOf(back), null); assert.equal(MS.collect(back), null);
   assert.ok(MS.sign(back, 'mining', ['pilot']), 'and the captain can be signed with again');
   // something kept that this build does not know is left alone, not taken for a contract
@@ -202,39 +230,47 @@ test('the captain\'s offer for a crew member: new, asked, then by their contract
   MS.sign(crew, 'mining', ['pilot']); assert.equal(missions.state('ruiz', crew), 'signed');
   assert.equal(missions.state('vega', crew), 'new', 'another captain is not this contract\'s');
   missions.go(cap, true); assert.deepEqual(went, [['ruiz', true]]);
-  flownHaul(2, null); MS.land(crew, { n: 2 }); assert.equal(missions.state('ruiz', crew), 'payout');
+  flownHaul(2, null); MS.land(crew, { n: 2, store: { iron: 6 } }); assert.equal(missions.state('ruiz', crew), 'payout');
   MS.collect(crew); assert.equal(missions.state('ruiz', crew), 'declined', 'collected: this visit\'s answer again, and he asks afresh');
   assert.equal(missions.state('ruiz', crewOf()), 'declined'); assert.equal(missions.state('hale'), 'new');
   flownHaul(2, null);
 });
 
 // ── the payout card ──────────────────────────────────────────────────────────────────────────────────────────────
-test('the payout card: a question about this haul for every level, the same pay with each, its picture and its sums', () => {
+test('the payout card shows the plain sum (each metal, its tonnes, its price, the total, the share) and asks a question of this haul for every level; the same pay with each', () => {
   const rand = seeded(9);
-  assert.deepEqual([0, 5, 6, 19, 20, 43, 44, 57, 58, 80].map(MS.payoutForm), ['count', 'count', 'count', 'count', 'times', 'times', 'part', 'part', 'percent', 'percent']);
-  const haulFor = (roles, clean, rich, n) => { const crew = crewOf(); flownHaul(n, null); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 }; MS.land(crew, { n, clean, rich }); return crew; };
-  for (const roles of [['pilot'], ['pilot', 'drill'], ['drill', 'engineer'], ['pilot', 'drill', 'engineer']]) for (const clean of [0, 2, 3]) for (const rich of [false, true]) {
-    const crew = haulFor(roles, clean, rich, 6), P = crew.mission.payout;
+  assert.deepEqual([0, 5, 6, 19, 20, 43, 44, 57, 58, 80].map(MS.payoutForm), ['count', 'count', 'count', 'count', 'add', 'add', 'part', 'part', 'percent', 'percent']);
+  const haulFor = (roles, store, n) => { const crew = crewOf(); flownHaul(n, null); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 }; MS.land(crew, { n, store }); return crew; };
+  const sayN = (n) => n.toLocaleString('en-US');
+  for (const roles of [['pilot'], ['drill'], ['pilot', 'drill'], ['drill', 'engineer'], ['pilot', 'drill', 'engineer']]) for (const store of LOADS3) {
+    const crew = haulFor(roles, store, 6), P = crew.mission.payout;
     assert.equal(P.pay, P.sold * MS.shareOf(roles) / 100);
     for (const grade of [0, 6, 16, 20, 30, 44, 50, 58, 76]) {
-      const o = MS.payoutOrder(crew.mission, grade, rand), form = MS.payoutForm(grade), why = `${roles} ${clean} ${rich} at ${grade}`;
+      const o = MS.payoutOrder(crew.mission, grade, rand), form = MS.payoutForm(grade), why = `${roles} ${JSON.stringify(store)} at ${grade}`;
       assert.equal(o.form, form); assert.equal(o.payout, P.pay, why);
       assert.equal(o.coins.filter((c) => c.good).length, 1, why); assert.ok(o.coins.length >= 3, why);
       assert.equal(new Set(o.coins.map((c) => c.label)).size, o.coins.length, why);
-      for (const c of o.coins) { assert.ok(/^[\d,]+$/.test(c.big), c.big); if (!c.good) assert.ok(c.why && c.why.length > 15 && num(c.label) !== rightOf(o), `${why}: ${c.label}`); }
+      for (const c of o.coins) { assert.ok(/^[\d,]+$/.test(c.big), `${why}: ${c.big}`); if (!c.good) assert.ok(c.why && c.why.length > 15 && num(c.label) !== rightOf(o), `${why}: ${c.label}`); }
       const text = `${o.story} ${o.ask} ${o.coins.map((c) => `${c.label} ${c.why}`).join(' ')} ${o.rightWhy} ${(o.lines || []).flat().join(' ')} ${o.help.line} ${(o.help.steps || []).join(' ')}`;
-      assert.ok(!/NaN|undefined|Infinity|\[object/.test(text), text);
+      assert.ok(!/NaN|undefined|Infinity|\[object|rich|double|clean/i.test(text), text);
+      // THE SLIP: a row for each metal (its tonnes × its price = what it sold for), then the total, the share, the pay
+      const rows = o.lines, lots = P.lots;
+      assert.equal(rows.length, lots.length + 3, why);
+      lots.forEach((L, i) => { assert.equal(rows[i][0].toLowerCase(), L.metal); assert.ok(rows[i][1].includes(`× ${sayN(L.price)} = ${sayN(L.pay)}`) && rows[i][1].includes(String(L.tonnes)), `${why}: ${rows[i]}`); });
+      assert.equal(rows[lots.length][0], 'The haul sold for'); assert.equal(rows[lots.length + 1][0], 'Your share'); assert.ok(rows[lots.length + 1][1].includes(form === 'part' ? '/' : `${P.share}%`)); assert.equal(rows[lots.length + 2][0], 'Your pay');
+      // (the number asked for is a "?" on the slip; every other one is written out)
+      assert.equal(rows[lots.length][1], form === 'add' ? '?' : `${sayN(P.sold)} credits`); assert.equal(rows[lots.length + 2][1], form === 'count' ? `${sayN(P.pay)} credits` : '?');
       // the right answer: the canisters (the four on one side for the youngest), what it sold for, or the pay itself
-      const want = form === 'count' ? (grade < 6 ? 4 : 8) : form === 'times' ? P.sold : P.pay;
+      const want = form === 'count' ? (grade < 6 ? 4 : 8) : form === 'add' ? P.sold : P.pay;
       assert.equal(rightOf(o), want, `${why}: ${o.story} ${o.ask}`);
       // the card always says what the share comes to, or asks for it: the pay is never a surprise
-      assert.ok(form === 'part' || form === 'percent' || `${o.story} ${o.rightWhy}`.includes(`${P.pay.toLocaleString('en-US')} credits`), why);
-      assert.equal(o.facts.from, rich ? 'Your share: a rich rock' : 'Your share');
-      // Help: a picture (the youngest count theirs on the card; the others show a "?"), and sums that end on the answer
+      assert.ok(form === 'part' || form === 'percent' || `${o.story} ${o.rightWhy}`.includes(`${sayN(P.pay)} credits`), why);
+      assert.equal(o.facts.from, 'Your share');
+      // Help: one click away, with its line; a picture where one helps (the youngest count theirs on the card)
       const pic = helpPicture(o);
-      assert.ok(pic.svg.startsWith('<svg') && !/NaN|undefined/.test(pic.svg), why);
-      if (form === 'count') { assert.equal(o.picFirst, true); assert.equal(o.help.pic.slots.length, want); continue; }
-      assert.ok(pic.svg.includes('?'), why);
+      assert.ok(o.help.line.length > 20 && !/NaN|undefined/.test(pic.svg), why);
+      if (form === 'count') { assert.equal(o.picFirst, true); assert.equal(o.help.pic.slots.length, want); assert.ok(pic.svg.startsWith('<svg')); continue; }
+      if (form !== 'add' || lots.length === 1) assert.ok(pic.svg.includes('?'), why);
       const chain = o.sum.chain || [o.sum];
       for (const x of chain) assert.doesNotThrow(() => workOf(x), JSON.stringify(x));
       chain.slice(1).forEach((x) => assert.ok(x.carried, `${why}: ${JSON.stringify(chain)}`));
@@ -242,6 +278,9 @@ test('the payout card: a question about this haul for every level, the same pay 
     }
     flownHaul(6, null);
   }
+  // a payout kept from before the store was one (a crew member who had not collected yet) still makes a card, and pays
+  const old = { id: 'mining', captain: 'ruiz', roles: ['pilot'], state: 'payout', payout: { n: 2, canisters: 8, ore: [3, 4], oreTonnes: 6, metal: 'copper', price: 15000, yield: 20, rich: false, clean: 2, sold: 18000, share: 10, pay: 1800, at: 1 } };
+  for (const grade of [0, 30, 50, 70]) { const o = MS.payoutOrder(old, grade, rand); assert.equal(o.payout, 1800); assert.equal(o.coins.filter((c) => c.good).length, 1); assert.ok(!/NaN|undefined/.test(JSON.stringify(o))); }
 });
 
 // ── the pilot's ladder ───────────────────────────────────────────────────────────────────────────────────────────
@@ -276,13 +315,18 @@ test('every level of the pilot\'s ladder deals good cards about navigating: one 
       assert.ok(!/NaN|undefined|Infinity|\[object/.test(text), `${L.id}: ${text}`);
       assert.ok(!WEST.test(`${o.story} ${o.ask}`), `${L.id}: the west got in: ${o.story} ${o.ask}`);
       assert.ok(NAV.test(`${o.story} ${o.ask}`), `${L.id}: not about navigating: ${o.story} ${o.ask}`);
-      for (const c of o.coins.filter((x) => !x.good)) assert.ok(c.why && c.why.length > 12, `${L.id}: ${c.label} has no line why`);
-      // an answer is a number with its unit, a yes or no, a point, a heading, or a picture (a map, a diagram with its equation)
-      for (const c of o.coins) assert.ok(c.svg ? c.svg.startsWith('<svg') && !/NaN|undefined/.test(c.svg) : /^([\d,]+(\.\d{1,2})?°?|Yes|No|\(-?\d, -?\d\))$/.test(c.big), `${L.id}: ${c.big}`);
+      // (a card answered by a tap on its map: "another spot" gets its line when it is tapped)
+      for (const c of o.coins.filter((x) => !x.good && !(o.tap && x.v === 'else'))) assert.ok(c.why && c.why.length > 12, `${L.id}: ${c.label} has no line why`);
+      // an answer is a number with its unit, a yes or no, a point, a heading, or a picture (a diagram with its equation)
+      for (const c of o.coins) assert.ok(c.svg ? c.svg.startsWith('<svg') && !/NaN|undefined/.test(c.svg) : (o.tap && c.v === 'else') || /^([\d,]+(\.\d{1,2})?°?|Yes|No|\(-?\d, -?\d\))$/.test(c.big), `${L.id}: ${c.big}`);
       if (o.lead) assert.ok(o.lead.startsWith('<svg') && o.lead.includes('?') && !/NaN|undefined/.test(o.lead), `${L.id}/${o.key}: its map`);
       // Help: a picture for this card
-      const pic = helpPicture(o);
+      const pic = helpPicture(o, { dark: true });
       assert.ok(pic.svg.startsWith('<svg') && !/NaN|undefined/.test(pic.svg), `${L.id}/${o.key}: no picture`);
+      // EVERY PICTURE IS DARK, with light lines: the card's own map, an answer's diagram, and Help's (one of this
+      // game's own: none of the pale card's colours; one of Mathwood's own: handed to the panel to turn dark)
+      for (const s of [o.lead || '', ...o.coins.map((c) => c.svg || ''), pic.flip ? '' : pic.svg]) for (const pale of [PALE.CARD, PALE.INK, PALE.FILL, PALE.FILL2, 'fill="#fff"']) assert.ok(!s.includes(pale), `${L.id}/${o.key}: a pale colour, ${pale}`);
+      assert.ok(pic.flip || pic.dark, `${L.id}/${o.key}`);
       assert.ok(q.worth.pay >= E.PAY.min && q.worth.pay <= E.PAY.max && q.worth.secs > 4 && q.worth.secs < 60, `${L.id}: ${q.worth.pay} for ${q.worth.secs} s`);
     }
     assert.ok(keys.size >= 2, `${L.id}: only ${[...keys]}`);
@@ -327,11 +371,14 @@ test('the pilot\'s own makers are right: the hops, the fuel, the map, the headin
     // the map: a point in one quarter, a point anywhere, a course round the rings
     for (const step of [1, 2]) {
       const o = M.plot.make(step, { rand }), f = o.facts, P = `(${f.x}, ${f.y})`;
-      assert.equal(o.coins.length, 4, o.story);
-      if (step === 1) assert.ok(f.x >= 1 && f.x <= 6 && f.y >= 1 && f.y <= 6 && f.x !== f.y); else assert.ok(Math.abs(f.x) <= 8 && Math.abs(f.y) <= 8 && f.x * f.y !== 0 && (f.x < 0 || f.y < 0), P);
+      if (step === 1) assert.ok(f.x >= 1 && f.x <= 6 && f.y >= 1 && f.y <= 6 && f.x !== f.y); else assert.ok(Math.abs(f.x) <= 7 && Math.abs(f.y) <= 7 && f.x * f.y !== 0 && (f.x < 0 || f.y < 0), P);
       assert.ok(good(o).label.endsWith(P), `${o.story}: ${good(o).label}`);
-      if (f.form === 'mark') { assert.ok(o.story.includes(P)); for (const c of o.coins) assert.ok(c.svg, 'four small maps'); assert.ok(o.coins.some((c) => c.label.endsWith(`(${f.y}, ${f.x})`)), 'across and up swapped is one of them'); }
-      else { assert.ok(o.lead && !o.story.includes(P)); assert.ok(!o.lead.includes(P), 'the map does not write the answer'); }
+      if (f.form === 'tap') {
+        // plotted by a tap on one map, the planet in the middle: the card says the point, the map does not
+        assert.ok(o.story.includes(P)); assert.equal(o.ask, 'Tap that spot on the map.'); assert.deepEqual(o.tap.at, [f.x, f.y]); assert.equal(o.tap.map.quad, 4); assert.ok(o.tap.map.hi >= 7); assert.equal(typeof o.tap.judge, 'function');
+        assert.ok(o.coins.every((c) => !c.svg), 'no small maps to pick from'); assert.ok(o.coins.some((c) => c.label.endsWith(`(${f.y}, ${f.x})`)), 'across and up swapped is one of the known slips'); assert.ok(o.coins.some((c) => c.v === 'else'));
+        assert.ok(!navMap({ ...o.tap.map, dark: true }).includes(`>${P}<`));
+      } else { assert.equal(o.coins.length, 4, o.story); assert.ok(o.lead && !o.story.includes(P)); assert.ok(!o.lead.includes(P), 'the map does not write the answer'); }
       assert.ok(helpPicture(o).svg.includes('?'));
     }
     const c3 = M.plot.make(3, { rand }), f3 = c3.facts;
@@ -372,6 +419,39 @@ test('the pilot\'s own makers are right: the hops, the fuel, the map, the headin
       assert.ok(helpPicture(o).svg.includes('?') && o.help.steps.length >= 2);
     }
   }
+});
+
+test('the map\'s tap: the right spot is right, a tap a little off the lines is still that crossing, any other spot is wrong and says why', () => {
+  const M = pilot.makers, rand = seeded(33);
+  let taps = 0;
+  for (let k = 0; k < 400; k++) for (const step of [1, 2]) {
+    const o = M.plot.make(step, { rand }); if (!o.tap) continue; taps++;
+    const [x, y] = o.tap.at, hi = o.tap.map.hi, said = (p) => `(${p[0]}, ${p[1]})`, coin = (J) => o.coins[J.i];
+    // the right spot, dead on, and anywhere nearer to it than to the next crossing: right
+    for (const [dx, dy] of [[0, 0], [0.45, 0], [-0.45, 0.45], [0.3, -0.49], [-0.49, -0.49]]) { const J = plotJudge(o, x + dx, y + dy); assert.deepEqual(J.at, [x, y]); assert.equal(J.right, true, `${said([x, y])} tapped at ${x + dx}, ${y + dy}`); assert.equal(coin(J).good, true); }
+    // a tap nearer the next crossing is that crossing: wrong, and the line says where it fell and how to count
+    for (const [dx, dy] of [[0.55, 0], [0, -0.55], [1, 1], [-0.6, 0.6]]) {
+      const J = plotJudge(o, x + dx, y + dy), at = [Math.round(x + dx), Math.round(y + dy)];
+      if (Math.abs(at[0]) > hi || Math.abs(at[1]) > hi) continue;
+      assert.deepEqual(J.at, at); assert.equal(J.right, false); assert.ok(coin(J).why.includes(said(at)), coin(J).why); assert.ok(coin(J).why.length > 30);
+    }
+    // the slips children make, each with its own line: across and up swapped, a sign lost
+    const sw = plotJudge(o, y, x); assert.equal(sw.right, false); assert.match(coin(sw).why, /first number is how far across/);
+    if (step === 2) { const s1 = plotJudge(o, -x, y); assert.equal(s1.right, false); assert.match(coin(s1).why, /minus|first number/); assert.equal(plotJudge(o, -x, -y).right, false); }
+    // the planet itself, a far corner, a tap off the map's edge (it counts as the edge): wrong
+    for (const [gx, gy] of [[0, 0], [hi, -hi], [hi + 3, y]]) { const J = plotJudge(o, gx, gy); assert.equal(J.right, false); assert.ok(coin(J).why.length > 30); assert.ok(Math.abs(J.at[0]) <= hi && Math.abs(J.at[1]) <= hi); }
+    // every crossing of the map is judged, and only one of them is right
+    let rights = 0; for (let gx = -hi; gx <= hi; gx++) for (let gy = -hi; gy <= hi; gy++) if (plotJudge(o, gx, gy).right) rights++;
+    assert.equal(rights, 1);
+    // where a tap on the picture falls on the map: the picture's own frame (the panel hands the judge these)
+    const S = o.tap.map.size, pad = 16, u = (S - 2 * pad) / (2 * hi), g = mapSpot(o.tap.map, (pad + (x + hi) * u) / S, (S - pad - (y + hi) * u) / S);
+    assert.ok(near(g[0], x) && near(g[1], y), `${g} for ${said([x, y])}`);
+    // the map is dark, with light lines, the planet in the middle; the level with no minus numbers lights one quarter
+    const map = navMap({ ...o.tap.map, dark: true, marks: [{ x, y, kind: 'field' }, { x: y, y: x, kind: 'miss' }, { x: 1, y: 1, kind: 'aim' }] });
+    assert.ok(map.includes(NIGHT.CARD) && map.includes(NIGHT.INK) && !map.includes(PALE.CARD) && !map.includes(PALE.INK)); assert.equal(o.tap.map.lit, step === 1 ? 1 : 0);
+    assert.ok(step === 2 ? map.includes('>-6<') : !map.includes('>-2<'), 'minus numbers only on the whole map');
+  }
+  assert.ok(taps > 150, String(taps));
 });
 
 test('where the jump is going: the cards of the way out speak of the rocks, the cards of the way home of the station', () => {

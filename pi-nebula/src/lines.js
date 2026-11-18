@@ -55,22 +55,18 @@ export const CAPTAINS = {
 export const RUN_TALK = {
   mining: {
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
-    clean: ['A clean jump! Right on the rocks. More time to dig.', 'Three green lamps! That gives us more time at the rocks.'],
-    wide: ['A little wide, but we\'re here. Less time to dig.', 'We came out a bit wide. We\'ll dig what we have time for.'],
+    there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
     field: ['Kestrel, bring that one in. Okafor, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
-    rich: ['Look at that! A rich one: titanium all through it!', 'Titanium! That rock pays double!'],
-    full: ['Eight canisters, {tonnes} tonnes of {ore} ore. Take us home, pilot.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, {player}.'],
+    full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
     home: ['There\'s the station. The autopilot has the landing.', 'Home. The autopilot takes her in.'],
     landed: ['Good flying, {player}. Your share is at the smelter\'s controls.'],
     // (the crew member at the drill, src/drillview.js; and the lines for a run whose pilot is the captain's own)
     crewOut: ['We\'re clear of the station. Juno has the jump.', 'Clear of the station. Juno is working out the jump.'],
     crewJump: ['Juno has us at the rocks. The drill is yours, {player}.', 'Here we are. Find us a good rock, {player}.'],
-    drillField: ['Look for the glow, {player}. More glow, more ore.', 'The scan is up. Pick us a good one.'],
-    pick: ['Going in for that one.', 'Juno, take us over.', 'That one it is.'],
-    tuned: ['Good scan!', 'Spot on. Set the drill.'],
-    richAboard: ['Titanium in the canisters! Those pay double.'],
+    drillField: ['Look for the glow, {player}. More glow, more ore.', 'The scan is up. Find us a good one.'],
+    pick: ['Going in for that one.', 'That one it is.'],
     broke: ['That one\'s done. Find us another.', 'She\'s all in pieces. Next rock!'],
-    fullCrew: ['Eight canisters, {tonnes} tonnes of {ore} ore. Juno, take us home.', 'That\'s the load: {tonnes} tonnes of {ore} ore. Home, Juno.'],
+    fullCrew: ['Eight canisters full. Juno, take us home.', 'That\'s the load. Home, Juno.'],
     landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],
   },
 };

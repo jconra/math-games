@@ -289,7 +289,7 @@ export function ownOrder(core, rand = Math.random, coins = 4) {
     id: Math.floor(rand() * 1e9).toString(36), key: core.key, story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`,
     coins: all, answer: R.label, pic: core.pic || null, picFirst: !!core.picFirst, rightWhy: core.rightWhy, sum: core.sum ? sumOf(core.sum) : null,
     help: core.help || null, own: core.own, credit: core.credit || [], facts: core.facts || null, size: core.size || 1, lines: core.lines || null,
-    ...(core.lead ? { lead: core.lead } : {}),
+    ...(core.lead ? { lead: core.lead } : {}), ...(core.tap ? { tap: core.tap } : {}),
   };
 }
 

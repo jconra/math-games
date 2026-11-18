@@ -1,86 +1,84 @@
-// THE DRILL OPERATOR'S GAME, the plain part: the rocks of the field, the ore inside each, what a hole takes, how many
-// holes a rock stands, and the canisters filling. No page and no three.js, so node can test it
+// THE DRILL OPERATOR'S GAME, the plain part: the rocks of the field, the metal inside each, what a hole takes, how many
+// holes a rock stands, and the store filling. No page and no three.js, so node can test it
 // (pi-nebula/tests/drill.test.mjs). src/drillview.js draws it and takes the taps; src/jobs/drill.js is the question
-// asked as a rock is scanned; src/trip.js runs it at the asteroid field for a crew member who signed for the drill
-// (src/missions.js), and pi-nebula/labs/drill/ runs it by itself.
+// asked when a rock is in the claw; src/trip.js runs it at the asteroid field for a crew member who signed for the
+// drill (src/missions.js), and pi-nebula/labs/drill/ runs it by itself.
 //
-// THE GAME'S MAKER (2026-11-17): "you get a holographic overlay of asteroids around you, you get to pick one ... The
-// pilot approaches it. It asks a math question about the ore fraction or estimated weight as it scans it. Then you
-// point at the spots on the asteroid and the claw grabs it and wherever you click on it the drill makes a hole and it
-// starts filling up your canisters ... You press a button when done and then click another asteroid ... The process
-// repeats until your canisters are full." And: "I think finding the right asteroid should be fun, like 'Oh, a lot of
-// copper in that one' and not be a math question." "It would be cool to be able to rotate the asteroid with the claw
-// and then point at the area to drill. We don't necessarily need to deform the asteroid. But we should reduce the
-// amount of the glowing ore inside from that area. Small rocks should probably float away from the drilling point.
-// And eventually the rock should crumble to pieces. So you want to try to drill it in a smart spot so you can get the
-// most out of it before it crumbles." "sometimes finding really rich asteroids that pay out double, but only 20% of
-// the time." And once it could be played: "It seems like it would be more interesting with more types of ore in the
-// rocks." "It is exciting to think you might get lucky with that big titanium rock."
+// THE GAME'S MAKER (2026-11-18, the whole game in his words): "The game should be you arrive at the asteroid field, and
+// you find juicy asteroids that have metal that you want. You drill it, and it starts filling up your canisters. You
+// answer questions, if you get it wrong it just teaches you. You keep finding ore and the canisters all fill as a
+// collective. If you fill them with 50% iron and 25% nickel and 25% titanium then you have 4 canisters with iron and 2
+// with nickel and 2 with titanium. You don't have to calculate the first one has 87% Iron and 5% nickel and 8% titanium
+// or anything. Just treat the storage as one." "I think every bit should count. 1/8 Nickel, 1/4 copper, 5/8 Iron for
+// example." "the canister is sold for the value of each metal that it contains." "Let them see a rock with a bunch of
+// what they want and let them get excited. Don't tell them to get excited." "I'd prefer it if you could fly around and
+// find them, instead of being presented with 7 in the same way each time." And (2026-11-17): "We don't necessarily
+// need to deform the asteroid. But we should reduce the amount of the glowing ore inside from that area. Small rocks
+// should probably float away from the drilling point. And eventually the rock should crumble to pieces. So you want to
+// try to drill it in a smart spot so you can get the most out of it before it crumbles."
 //
-// THE RULES, IN NUMBERS (DRILL below):
-//   - A ROCK is a ball one unit across its radius (the picture scales it). Its ore lies in VEINS: each a string of
-//     LUMPS, each lump a point inside the rock holding so much ore, counted in CANISTERS (1 fills one canister).
-//     A small rock holds 0.7 to 1.1 canisters of ore in 1 or 2 veins, a middling one 1.1 to 1.7 in 2 or 3, a big one
-//     1.7 to 2.4 in 2 to 4; times how rich it is: thin 0.7, fair 1, thick 1.35. The glow says both: a lump's glow is
-//     as big and bright as the ore left in it.
-//   - A HOLE goes from the tapped spot straight in to the rock's middle. It takes ore from every lump near its line:
-//     all of a lump within 0.1 of the line, less and less out to 0.34, nothing past that (take()). So a hole down
-//     the thick of a vein fills a lot, and a hole in bare rock wastes one.
-//   - A ROCK STANDS SO MANY HOLES: small 4, middling 5, big 6. After the last it breaks up and is gone.
-//   - THE SCAN'S QUESTION (src/jobs/drill.js), right at the first try: the drill is set just right for this rock, and
-//     every lump in it gives a quarter more (DRILL.bonus). A miss changes nothing.
-//   - A FIELD IS A MIX OF METALS (FIELD): of every 100 usual rocks 32 are iron, 26 nickel, 21 copper, 14 cobalt and 7
-//     gold. The dearer the metal, the rarer its rocks, and the smaller and thinner-veined they are: iron comes in any
-//     size and is often big and thick, gold only in small rocks, thin or fair. So choosing is "a lot of iron in that
-//     one" against "a little gold in that one". Each rock has its own glow colour and its tag. The seven in reach
-//     always show three metals or more, never more than three rocks of one, and something dearer than nickel.
-//   - A STREAK: one usual rock in four also carries one short vein of a DEARER metal than its own (a streak of gold in
-//     an iron rock), a third to half a canister of it, glowing in its own colour: its tag names both ("Fe Iron + Au").
-//     A hole takes whatever lies near its line, so where the hole goes decides which metal comes out.
-//   - THE CANISTERS: 8 (the Miner's). The run is over when they are full; ore past that stays in the rock. THE DRILL
-//     SORTS THE ORE BY METAL as it comes, the dearest first along the row of canisters, and A CANISTER IS SOLD AS THE
-//     METAL THERE IS MOST OF IN IT (canistersOf). So half a canister or more of a metal makes a canister of it, and a
-//     little of a metal that never comes to half a canister is lost in its neighbour. The row of canisters on the
-//     screen is exactly this: each canister's colours are what is in it.
-//   - WHAT THE LOAD SELLS FOR is what is in it (src/jobs/smelter.js ORE_PRICE: a tonne of iron ore 1,600 credits,
-//     nickel 2,400, copper 3,200, cobalt 4,000, gold 8,000; the rich rock's titanium 6,000). How many tonnes of ore
-//     a canister holds is the jump out's, as before (src/missions.js).
-//   - THE RICH ROCK: one field in five has one (src/missions.js RICH; rolled once a trip), a big thick rock of
-//     titanium, with its own glow. ITS OWN CANISTERS PAY DOUBLE: a canister of titanium sells for twice what a
-//     canister of a usual haul's ore does (6,000 credits a tonne against 3,000), and only the canisters filled from
-//     it; the rest of the load sells as what it is.
-import { METALS, CARRIES, RICH_METAL, ORE_PRICE } from './jobs/smelter.js';
+// THE RULES, IN NUMBERS (DRILL, SHAPES and KINDS below). There is nothing here but these: no answer to any question
+// changes what a rock gives or what comes home.
+//   - A ROCK has real numbers of its own, and they are the same wherever they are said (the scan's readout, the card
+//     asked when it is in the claw, the store): the box that just holds it (so long, wide and high, in metres), what a
+//     cubic metre of it weighs, its WEIGHT in tonnes (half its box, times that: a lumpy rock fills about half the box
+//     round it), the PART OF IT THAT IS ORE (a half, a quarter, a fifth or a tenth), and so the tonnes of ore in it,
+//     always a whole number of tonnes, of one, two or three metals, a whole number of tonnes of each.
+//   - ITS ORE LIES IN VEINS: each vein is one metal's, a string of LUMPS (the same number in every vein of a rock),
+//     each lump a point inside the rock holding so much of that metal. The glow is the lumps: a lump's colour is its
+//     metal, and it is as big and bright as the metal left in it.
+//   - A HOLE goes from the tapped spot straight in to the rock's middle. It takes metal from every lump near its line:
+//     all of a lump within 0.1 of the line (the rock's radius is 1), less and less out to 0.34, nothing past that
+//     (take()). So a hole down the thick of a vein fills a lot, and a hole in bare rock gives nothing. What it takes
+//     of each metal is weighed in as whole hundredths of a tonne (ten kilograms); any less than that stays in the
+//     rock. So the rock, the store and the payout all count the same exact amounts, and no rounding is ever needed.
+//   - A ROCK STANDS SO MANY HOLES: a flat one 4, a round one 5, a long one 6. After the last it crumbles and is gone.
+//   - THE STORE: the Miner's 8 canisters are one store of 6 tonnes (each holds 3/4 of a tonne). The game keeps how many
+//     tonnes of each metal are aboard, every bit of it. The run is over when the store is full; metal past that stays
+//     in the rock. THE ROW OF 8 on the screen is only a picture of the store: coloured in proportion, a metal at a time
+//     (half iron, a quarter nickel and a quarter titanium shows 4, 2 and 2: rowOf).
+//   - WHAT THE LOAD SELLS FOR: each metal's tonnes times what a tonne of it sells for, added up (src/jobs/smelter.js
+//     sellsFor, the one price list).
+//   - THE FIELD is a place: thirty rocks scattered through the planet's rings, each where it is (pos, metres from where
+//     the ship comes out of its jump), a different field every trip. Which metals are in a rock is drawn by how common
+//     each is (ODDS): iron most, gold least. So rocks differ by themselves, and now and then one holds a lot of a dear
+//     metal; nothing says so but its glow. A rock worked is gone. Should the rocks ever run low, there are more further
+//     out (the rings do not run out).
+import { METALS, CARRIES, CAN_HOLDS, HOLD, priceOf, sellsFor, tidyStore } from './jobs/smelter.js';
 
 export const DRILL = {
-  cans: CARRIES,            // canisters to fill
-  field: 7,                 // rocks in reach to choose from, at a time
-  reach: 0.34,              // how far from a hole's line ore is taken (the rock's radius is 1)
+  cans: CARRIES,            // canisters, one store
+  hold: HOLD,               // tonnes of metal the store holds
+  can: CAN_HOLDS[0] / CAN_HOLDS[1],   // tonnes a canister holds
+  field: 30,                // rocks in a field
+  reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.1,                // within this of the line, all of a lump
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
-  bonus: 1.25,              // the scan's question right at the first try: every lump gives this much
-  sizes: {
-    small: { r: 0.82, holes: 4, veins: [1, 2], ore: [0.7, 1.1] },
-    medium: { r: 1.0, holes: 5, veins: [2, 3], ore: [1.1, 1.7] },
-    big: { r: 1.24, holes: 6, veins: [2, 4], ore: [1.7, 2.4] },
-  },
-  grades: { thin: 0.7, fair: 1, thick: 1.35 },
-  rich: { size: 'big', grade: 'thick', more: 1.15 },
-  streak: { chance: 0.25, ore: [0.34, 0.5], lumps: [3, 4] },   // a short vein of a dearer metal in a usual rock
+  wide: 240, near: 34, thick: 46, apart: 16,   // the field: metres out from the middle, the nearest a rock lies to where the ship arrives, top to bottom, the least between two rocks
 };
-// THE FIELD'S USUAL METALS: how often each is a rock's metal (of 100), and the rocks it comes in (a size and a grade
-// picked from each list). The dearer the metal, the rarer, the smaller and the thinner.
-export const FIELD = {
-  iron: { often: 32, sizes: ['small', 'medium', 'big', 'big'], grades: ['thin', 'fair', 'fair', 'thick'] },
-  nickel: { often: 26, sizes: ['small', 'medium', 'medium', 'big'], grades: ['thin', 'fair', 'fair', 'thick'] },
-  copper: { often: 21, sizes: ['small', 'medium', 'medium', 'big'], grades: ['thin', 'thin', 'fair', 'thick'] },
-  cobalt: { often: 14, sizes: ['small', 'small', 'medium'], grades: ['thin', 'fair', 'fair'] },
-  gold: { often: 7, sizes: ['small'], grades: ['thin', 'thin', 'fair'] },
+// A ROCK'S SHAPE: the box that just holds it (metres: long, wide, high), how it is drawn (its three half-lengths, of a
+// round rock's), and the holes it stands. A long rock's long way is its own z, which is the way the claw's hand holds
+// it (along the hand); a flat rock's thin way is its own x (across the hand, so the fingers shut on its two faces).
+export const SHAPES = {
+  flat: { box: [2, 2, 1], sq: [0.52, 1, 1], holes: 4, word: 'a flat rock' },
+  round: { box: [2, 2, 2], sq: [1, 1, 1], holes: 5, word: 'a round rock' },
+  long: { box: [3, 2, 2], sq: [1, 1, 1.5], holes: 6, word: 'a long rock' },
 };
-export const USUAL = Object.keys(FIELD);
-// (a metal's place in the row of canisters: the dearest ore first)
-const dearFirst = (a, b) => ORE_PRICE[b] - ORE_PRICE[a] || USUAL.indexOf(b) - USUAL.indexOf(a);
-const byOften = (rand, names) => { const all = names.reduce((sum, m) => sum + FIELD[m].often, 0); let x = rand() * all; for (const m of names) { x -= FIELD[m].often; if (x < 0) return m; } return names[names.length - 1]; };
-// each metal's glow (the game's maker's picture: gold amber, platinum white, copper teal) and its symbol for the tag
+// THE KINDS OF ROCK there are: [shape, tonnes a cubic metre of it weighs, the part of it that is ore (one part in so
+// many), how common]. Its weight is half its box times what a cubic metre weighs; its ore is that part of its weight.
+// Only kinds whose ore is a whole number of tonnes, and whose part is as easy said as a fraction or as a percent.
+//   flat (box 4 cubic metres)    4 t: 1 or 2 of ore; 6 t: 3; 8 t: 2; 10 t: 1 or 2
+//   round (box 8)                8 t: 2 or 4; 12 t: 3; 16 t: 4; 20 t: 2, 4 or 5
+//   long (box 12)                12 t: 3; 24 t: 6; 30 t: 3 or 6
+export const KINDS = [
+  ['flat', 2, 4, 5], ['flat', 5, 10, 5], ['flat', 2, 2, 2], ['flat', 4, 4, 4], ['flat', 5, 5, 4], ['flat', 3, 2, 1],
+  ['round', 2, 4, 5], ['round', 5, 10, 5], ['round', 3, 4, 5], ['round', 4, 4, 3], ['round', 5, 5, 3], ['round', 2, 2, 1], ['round', 5, 4, 1],
+  ['long', 2, 4, 4], ['long', 5, 10, 4], ['long', 4, 4, 1], ['long', 5, 5, 1],
+];
+// HOW COMMON EACH METAL IS in the field's rocks (of 100 tonnes of ore): the dearer, the rarer
+export const ODDS = { iron: 48, nickel: 25, copper: 14, cobalt: 7, titanium: 4, gold: 2 };
+export const NAMES = METALS.map((m) => m.name);
+// each metal's glow (the game's maker's picture: gold amber, copper teal) and its symbol
 export const ORE = {
   iron: { sym: 'Fe', glow: '#ff4a36' }, nickel: { sym: 'Ni', glow: '#a4f36a' }, copper: { sym: 'Cu', glow: '#2fe3cf' },
   cobalt: { sym: 'Co', glow: '#5a8cff' }, titanium: { sym: 'Ti', glow: '#d6ccff' }, gold: { sym: 'Au', glow: '#ffc233' },
@@ -97,54 +95,67 @@ const whole = (rand, [lo, hi]) => lo + Math.floor(rand() * (hi - lo + 1));
 const unit = (rand) => { const z = rand() * 2 - 1, a = rand() * Math.PI * 2, s = Math.sqrt(Math.max(0, 1 - z * z)); return [s * Math.cos(a), z, s * Math.sin(a)]; };
 const len = (v) => Math.hypot(v[0], v[1], v[2]);
 const norm = (v) => { const l = len(v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const byWeight = (rand, list, w) => { let x = rand() * list.reduce((s, k) => s + w(k), 0); for (const k of list) { x -= w(k); if (x < 0) return k; } return list[list.length - 1]; };
+const r2 = (x) => Math.round(x * 100) / 100;
 
 let made = 0;
-// A ROCK: { id, size, grade, metal, also (the metal of its streak, or null), rich, r (its radius as drawn, of a
-// middling rock's), holes (it stands), left (holes left), lumps: [{ p: [x, y, z], ore, ore0, vein, metal }], ore0
-// (what it held at first, canisters, its streak with it), made: [[x, y, z]] (its holes), tuned (the scan's question
-// was right at the first try), broken, shape (a number for its look) }
-// also: the metal of a streak to put in it (one short vein more, of that metal)
-export function makeRock(rand = Math.random, { metal = 'iron', size = null, grade = null, rich = false, also = null } = {}) {
-  if (rich) { size = DRILL.rich.size; grade = DRILL.rich.grade; metal = RICH_METAL; also = null; }
-  size = size || ['small', 'medium', 'medium', 'big'][Math.floor(rand() * 4)];
-  grade = grade || ['thin', 'fair', 'fair', 'thick'][Math.floor(rand() * 4)];
-  const S = DRILL.sizes[size], total = between(rand, S.ore) * DRILL.grades[grade] * (rich ? DRILL.rich.more : 1);
-  const lumps = [], nv = whole(rand, S.veins);
+// A ROCK: { id, shape, box [long, wide, high], vol (its box, cubic metres), per (tonnes a cubic metre of it weighs),
+// weight (tonnes), part (one part in so many of it is ore), ore0 (tonnes of ore at first), metals ({ iron: 2, gold: 1 }:
+// tonnes of each at first), veins [{ metal, tonnes, lumps }], each (lumps in every vein), holes (it stands), left
+// (holes left), lumps: [{ p: [x, y, z], ore, ore0, vein, metal }], made: [[x, y, z]] (its holes), broken, look (a
+// number for its look), pos ([x, y, z]: where it lies in the field), scanned (the full scan has read it) }
+//   kind: one of KINDS (else drawn by how common); metals: { name: whole tonnes } to put in it (else drawn by ODDS)
+export function makeRock(rand = Math.random, { kind = null, metals = null } = {}) {
+  const [shape, per, part] = kind || byWeight(rand, KINDS, (k) => k[3]), S = SHAPES[shape];
+  const vol = S.box[0] * S.box[1] * S.box[2], weight = vol / 2 * per, total = weight / part;
+  // its metals: one, two or three, a whole number of tonnes of each
+  let M = metals ? { ...metals } : null;
+  if (!M) {
+    const x = rand(), k = Math.min(total, x < 0.45 ? 1 : x < 0.85 ? 2 : 3), names = [];
+    while (names.length < k) { const m = byWeight(rand, NAMES.filter((n) => !names.includes(n)), (n) => ODDS[n]); names.push(m); }
+    const t = names.map(() => 1); for (let left = total - k; left > 0; left--) t[Math.floor(rand() * k)]++;
+    // (the most of it first)
+    M = Object.fromEntries(names.map((m, i) => [m, t[i]]).sort((a, b) => b[1] - a[1]));
+  }
+  // its veins: the first metal in two veins, the others in one each or two (five veins at the most), a vein's tonnes
+  // in tenths; a metal in two veins lies in two unlike amounts, neither a whole number of tonnes
+  const names = Object.keys(M), veins = [];
+  names.forEach((m, i) => {
+    const t10 = Math.round(M[m] * 10), room = 5 - veins.length - (names.length - 1 - i), two = room >= 2 && (i === 0 || rand() < 0.4);
+    if (!two) { veins.push({ metal: m, tonnes: t10 / 10 }); return; }
+    let a = 3; for (let tries = 0; tries < 30; tries++) { a = whole(rand, [3, t10 - 3]); if (a % 10 && (t10 - a) % 10 && a !== t10 - a) break; }
+    veins.push({ metal: m, tonnes: Math.max(a, t10 - a) / 10 }, { metal: m, tonnes: Math.min(a, t10 - a) / 10 });
+  });
+  const each = whole(rand, [3, 5]), lumps = [];
   // a vein: a string of lumps from a point inside the rock, wandering, kept inside it
-  const vein = (v, n, of) => {
+  veins.forEach((V, v) => {
+    V.lumps = each;
     let d = unit(rand), p = d.map((x) => x * between(rand, [0.2, 0.62]));
     d = unit(rand);
-    for (let i = 0; i < n; i++) {
-      lumps.push({ p: [...p], w: between(rand, [0.6, 1.4]), vein: v, metal: of });
+    const mine = [];
+    for (let i = 0; i < each; i++) {
+      mine.push({ p: [...p], w: between(rand, [0.6, 1.4]), vein: v, metal: V.metal });
       const j = unit(rand); d = norm([d[0] + j[0] * 0.45, d[1] + j[1] * 0.45, d[2] + j[2] * 0.45]);
       let q = [p[0] + d[0] * 0.2, p[1] + d[1] * 0.2, p[2] + d[2] * 0.2];
       if (len(q) > 0.72) { const c = norm(q); d = norm([d[0] - 1.6 * c[0], d[1] - 1.6 * c[1], d[2] - 1.6 * c[2]]); q = [p[0] + d[0] * 0.2, p[1] + d[1] * 0.2, p[2] + d[2] * 0.2]; if (len(q) > 0.72) q = norm(q).map((x) => x * 0.72); }
       p = q;
     }
-  };
-  for (let v = 0; v < nv; v++) vein(v, whole(rand, [4, 6]), metal);
-  const sum = lumps.reduce((s, L) => s + L.w, 0);
-  for (const L of lumps) { L.ore = L.ore0 = total * L.w / sum; delete L.w; }
-  // (its streak: one short vein more, of the dearer metal)
-  let more = 0;
-  if (also && also !== metal) {
-    const at = lumps.length; more = between(rand, DRILL.streak.ore); vein(nv, whole(rand, DRILL.streak.lumps), also);
-    const mine = lumps.slice(at), ws = mine.reduce((s, L) => s + L.w, 0);
-    for (const L of mine) { L.ore = L.ore0 = more * L.w / ws; delete L.w; }
-  } else also = null;
-  return { id: ++made, size, grade, metal, also, rich: !!rich, r: S.r, holes: S.holes, left: S.holes, lumps, ore0: total + more, made: [], tuned: false, broken: false, shape: Math.floor(rand() * 1e6) };
+    const sum = mine.reduce((s, L) => s + L.w, 0);
+    for (const L of mine) { L.ore = L.ore0 = V.tonnes * L.w / sum; delete L.w; lumps.push(L); }
+  });
+  return { id: ++made, shape, box: [...S.box], vol, per, weight, part, ore0: total, metals: M, veins, each, holes: S.holes, left: S.holes, lumps, made: [], broken: false, look: Math.floor(rand() * 1e6), pos: [0, 0, 0], scanned: false };
 }
 export const oreLeft = (rock) => rock.lumps.reduce((s, L) => s + L.ore, 0);
-// the ore left in a rock, metal by metal: { copper: 1.2, gold: 0.4 }
-export const oreBy = (rock) => { const by = {}; for (const L of rock.lumps) { const m = L.metal || rock.metal; by[m] = (by[m] || 0) + L.ore; } return by; };
-// A USUAL ROCK OF THE FIELD: its metal by how often each comes (or the one asked for), its size and grade from that
-// metal's own, and one time in four a streak of a dearer metal
-export function fieldRock(rand = Math.random, { metal = null, streak = true } = {}) {
-  const m = metal || byOften(rand, USUAL), F = FIELD[m] || FIELD.iron, dearer = USUAL.filter((x) => ORE_PRICE[x] > ORE_PRICE[m]);
-  const size = F.sizes[Math.floor(rand() * F.sizes.length)], grade = F.grades[Math.floor(rand() * F.grades.length)];
-  const also = streak && dearer.length && rand() < DRILL.streak.chance ? byOften(rand, dearer) : null;
-  return makeRock(rand, { metal: m, size, grade, also });
+// the metal left in a rock, metal by metal, in tonnes: { copper: 1.2, gold: 0.4 }
+export const oreBy = (rock) => { const by = {}; for (const L of rock.lumps) by[L.metal] = (by[L.metal] || 0) + L.ore; return by; };
+// THE FULL SCAN'S READOUT: exactly how many tonnes of each metal the rock holds now, the most first (to the hundredth
+// of a tonne: a rock nobody has drilled reads its whole tonnes)
+export function scanOf(rock) {
+  const by = oreBy(rock);
+  return NAMES.filter((m) => r2(by[m] || 0) > 0).map((m) => ({ metal: m, tonnes: r2(by[m]) })).sort((a, b) => b.tonnes - a.tonnes || priceOf(b.metal) - priceOf(a.metal));
 }
+// what the metal in a rock would sell for, all of it (the one price list)
+export const rockSells = (rock) => sellsFor(oreBy(rock)).pay;
 
 // how far a point is from a hole's line (the hole from the spot `dir` on the surface, a unit direction, straight in)
 function offLine(p, dir) {
@@ -156,129 +167,140 @@ export function take(dist) {
   const { reach, core } = DRILL;
   return dist <= core ? 1 : dist >= reach ? 0 : (reach - dist) / (reach - core);
 }
-// what a hole at `dir` WOULD take from the rock as it is now, in canisters (nothing changes)
+// what a hole at `dir` WOULD take from the rock as it is now, in tonnes (nothing changes)
 export function holeWorth(rock, dir) {
   const d = norm(dir); let s = 0;
   for (const L of rock.lumps) s += L.ore * take(offLine(L.p, d));
   return s;
 }
-// A HOLE DRILLED at `dir` (a direction from the rock's middle; any length). room: the canisters' room left (ore past
-// it stays in the rock). -> { took (canisters), wasted (it found next to nothing), left (holes left), broke } or null
-// (the rock stands no more holes)
-// (and `by`: what it took metal by metal, { iron: 0.4, gold: 0.2 })
+// A HOLE DRILLED at `dir` (a direction from the rock's middle; any length). room: the store's room left, in tonnes
+// (metal past it stays in the rock). What it takes of each metal is whole hundredths of a tonne; the rest of what
+// lay near its line stays in the rock's lumps. -> { took (tonnes), by (metal by metal: { iron: 0.4, gold: 0.2 }),
+// bare (it found next to nothing), left (holes left), broke } or null (the rock stands no more holes)
 export function drillHole(rock, dir, room = Infinity) {
   if (rock.broken || rock.left <= 0) return null;
-  const d = norm(dir), worth = holeWorth(rock, d), k = worth > room ? room / worth : 1, by = {};
-  let took = 0;
-  for (const L of rock.lumps) { const t = L.ore * take(offLine(L.p, d)) * k; if (t <= 0) continue; L.ore -= t; took += t; const m = L.metal || rock.metal; by[m] = (by[m] || 0) + t; }
+  const d = norm(dir), parts = rock.lumps.map((L) => L.ore * take(offLine(L.p, d))), near = {};
+  rock.lumps.forEach((L, i) => { if (parts[i] > 0) near[L.metal] = (near[L.metal] || 0) + parts[i]; });
+  const worth = Object.values(near).reduce((a, b) => a + b, 0), k = worth > room ? room / worth : 1, by = {}, keep = {};
+  let h = 0;      // (hundredths of a tonne taken, all metals)
+  for (const [m, t] of Object.entries(near)) { const n = Math.floor(t * k * 100 + 1e-7); keep[m] = n / 100 / t; if (n > 0) { by[m] = n / 100; h += n; } }
+  rock.lumps.forEach((L, i) => { if (parts[i] > 0) L.ore -= parts[i] * keep[L.metal]; });
   rock.made.push(d); rock.left--;
   if (rock.left <= 0) rock.broken = true;
-  return { took, by, wasted: worth < 0.05, left: rock.left, broke: rock.broken };
+  return { took: h / 100, by, bare: h < 3, left: rock.left, broke: rock.broken };
 }
-// the scan's question answered: right at the first try, every lump gives a quarter more
-export function tune(rock, first) {
-  if (rock.tuned || !first) return false;
-  rock.tuned = true;
-  for (const L of rock.lumps) L.ore *= DRILL.bonus;
-  return true;
-}
-// what a canister of each metal's ore sells for, when each canister holds a/d of a tonne of ore
-export const canPrice = (metal, [a, d] = [3, 4]) => (ORE_PRICE[metal] || 0) * a / d;
-// what a load sells for (its canisters by metal's name, each a/d of a tonne of ore): the same sum as the smelter's
-export const loadSells = (load, ore = [3, 4]) => load.reduce((sum, m) => sum + canPrice(m, ore), 0);
-// the best spot to drill now, of `n` tried all round the rock (the tests' careful driller, the rigs, the lab's hint)
-export function bestHole(rock, n = 240) {
+// the best spot to drill now, of `n` tried all round the rock (the tests' careful driller, the rigs, the crew's own
+// driller); worth(dir): how good a spot is (else the tonnes it would take)
+export function bestHole(rock, n = 240, worth = (d) => holeWorth(rock, d)) {
   let best = null, top = -1;
   for (let i = 0; i < n; i++) {
-    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), a = i * 2.399963229728653, d = [r * Math.cos(a), y, r * Math.sin(a)], w = holeWorth(rock, d);
+    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), a = i * 2.399963229728653, d = [r * Math.cos(a), y, r * Math.sin(a)], w = worth(d);
     if (w > top) { top = w; best = d; }
   }
   return { dir: best, worth: top };
 }
 
-// THE FIELD: the rocks in reach, each in a place of its own (slot 0 .. DRILL.field - 1: the picture knows where each
-// is). A mix of metals (FIELD): three metals or more among the seven, never more than three rocks of one, and
-// something dearer than nickel to tempt. rich: this field has the rich rock (it is among the first in reach, never
-// in the nearest place). A rock worked is gone, and another drifts into its place (makeRun).
-// metal: every usual rock of that one metal, no streaks (the Drill Lab's "only": the field as it was at first).
-export function makeField(rand = Math.random, { metal = null, rich = false } = {}) {
-  const rocks = [], richAt = rich ? 1 + Math.floor(rand() * (DRILL.field - 1)) : -1;
-  if (metal) {
-    // (a spread of sizes and grades, so there is always something to choose between)
-    const SIZES = ['small', 'medium', 'big', 'medium', 'small', 'big', 'medium'], GRADES = ['fair', 'thin', 'fair', 'thick', 'fair', 'thin', 'thick'], turn = Math.floor(rand() * 7);
-    for (let i = 0; i < DRILL.field; i++) rocks.push(i === richAt ? makeRock(rand, { rich: true }) : makeRock(rand, { metal, size: SIZES[(i + turn) % 7], grade: GRADES[(i * 3 + turn) % 7] }));
-  } else {
-    // (the metals first, drawn until the seven are a fair spread; then a rock of each)
-    let names = [];
-    for (let tries = 0; tries < 60; tries++) {
-      names = Array.from({ length: DRILL.field }, () => byOften(rand, USUAL));
-      const count = {}; for (const m of names) count[m] = (count[m] || 0) + 1;
-      if (Object.keys(count).length >= 3 && Math.max(...Object.values(count)) <= 3 && names.some((m) => ORE_PRICE[m] > ORE_PRICE.nickel)) break;
-      if (tries === 59) names = ['iron', 'nickel', 'copper', 'iron', 'cobalt', 'nickel', 'copper'];
+// THE FIELD: its rocks, each in a place of its own (pos: metres from where the ship comes out of its jump, x across,
+// y up out of the rings' plane, z ahead). A flat round slab of them, none nearer than DRILL.near to the ship's place,
+// no two closer than DRILL.apart. Drawn afresh each time: a different field every trip.
+//   n: how many; from, to: how far out they lie (the first field: DRILL.near to DRILL.wide); others: rocks to keep clear of
+export function makeField(rand = Math.random, { n = DRILL.field, from = DRILL.near, to = DRILL.wide, others = [] } = {}) {
+  const rocks = [], far = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let i = 0; i < n; i++) {
+    const rock = makeRock(rand);
+    for (let tries = 0; tries < 80; tries++) {
+      const a = rand() * Math.PI * 2, d = Math.sqrt(from * from + rand() * (to * to - from * from));
+      rock.pos = [r2(Math.sin(a) * d), r2((rand() - 0.5) * DRILL.thick), r2(Math.cos(a) * d)];
+      if ([...rocks, ...others].every((o) => far(o.pos, rock.pos) >= DRILL.apart)) break;
     }
-    for (let i = 0; i < DRILL.field; i++) rocks.push(i === richAt ? makeRock(rand, { rich: true }) : fieldRock(rand, { metal: names[i] }));
+    rocks.push(rock);
   }
-  rocks.forEach((rock, i) => { rock.slot = i; });
   return rocks;
 }
 
-// THE CANISTERS, from the ore aboard metal by metal ({ copper: 2.6, gold: 0.7 }, in canisters): the drill sorts the
-// ore by metal, the dearest first along the row, and each canister is sold as the metal there is most of in it (of
-// two the same, the dearer). -> [{ fill (0 .. 1), parts: [[metal, how much], ...] (dearest first), metal (the most
-// of it, or null: empty) }], DRILL.cans of them
-export function canistersOf(ore, n = DRILL.cans) {
-  const order = Object.keys(ore).filter((m) => ore[m] > 1e-9).sort(dearFirst), out = [];
-  let k = 0, used = 0;      // (the metal being poured, and how much of it is in canisters already)
+// A STORE, tidied for saying and selling: each metal's tonnes to the hundredth of a tonne, the hundredths shared so
+// that they add up to the whole. (The game's own store is whole hundredths already: drillHole. This is for a store
+// from anywhere else.)
+export function storeOf(ore) {
+  const names = NAMES.filter((m) => (ore[m] || 0) > 1e-9), total = Math.round(names.reduce((s, m) => s + ore[m], 0) * 100);
+  const parts = names.map((m) => ({ m, h: Math.floor(ore[m] * 100 + 1e-7), rest: ore[m] * 100 - Math.floor(ore[m] * 100 + 1e-7) }));
+  let short = total - parts.reduce((s, p) => s + p.h, 0);
+  for (const p of [...parts].sort((a, b) => b.rest - a.rest)) { if (short <= 0) break; p.h++; short--; }
+  return tidyStore(Object.fromEntries(parts.map((p) => [p.m, p.h / 100])));
+}
+// THE ROW OF CANISTERS, a picture of the store (tonnes of each metal): the store's metals laid along the row a metal
+// at a time, in the chart's order, each as long as its share of the store.
+// -> [{ fill (0 .. 1), parts: [[metal, how much of this canister], ...] }], DRILL.cans of them
+export function rowOf(ore, n = DRILL.cans, can = DRILL.can) {
+  const order = NAMES.filter((m) => (ore[m] || 0) > 1e-9), out = [];
+  let k = 0, used = 0;      // (the metal being laid, and how much of it is laid already, in tonnes)
   for (let i = 0; i < n; i++) {
-    const parts = []; let room = 1;
+    const parts = []; let room = can;
     while (room > 1e-9 && k < order.length) {
       const m = order[k], left = ore[m] - used, t = Math.min(room, left);
-      if (t > 1e-9) { parts.push([m, t]); room -= t; used += t; }
+      if (t > 1e-9) { parts.push([m, t / can]); room -= t; used += t; }
       if (ore[m] - used <= 1e-9) { k++; used = 0; }
     }
-    let top = null; for (const [m, t] of parts) if (!top || t > top[1] + 1e-9) top = [m, t];
-    out.push({ fill: Math.min(1, 1 - room), parts, metal: top ? top[0] : null });
+    out.push({ fill: Math.min(1, 1 - room / can), parts });
   }
   return out;
 }
+// how many whole canisters of each metal the row shows, by the canister's most: { iron: 4, nickel: 2, titanium: 2 }
+// (only a way of saying the picture; nothing is sold by it)
+export function rowCount(ore) {
+  const count = {};
+  for (const c of rowOf(ore)) { if (c.fill < 0.5) continue; const top = [...c.parts].sort((a, b) => b[1] - a[1])[0]; if (top) count[top[0]] = (count[top[0]] || 0) + 1; }
+  return count;
+}
 
-// A RUN OF THE GAME: the field, the rock in the claw, the canisters.
-//   const R = makeRun({ rand, metal, rich })       metal: a field of that one metal only (else the mix)
-//   R.stage    'look' (choosing a rock) | 'scan' (a rock in the claw, its question up) | 'drill' | 'full' (done)
-//   R.pick(id) -> the rock (look -> scan);  R.scanned(first) -> tuned? (scan -> drill)
-//   R.drill(dir) -> what drillHole gives, with { cans, full, done } (the rock broken or the canisters full: on to
-//                   'look' or 'full' by itself);  R.letGo() the rock let go early (drill -> look)
-//   R.cans (ore aboard, in canisters, 0 .. 8), R.full (whole canisters full), R.ore (the ore aboard metal by metal),
-//   R.row() (the canisters as they are: canistersOf), R.load() (the metal each canister is sold as, by name: the
-//   haul's facts once full), R.rich (ore of the rich rock is aboard), R.rocks (in reach), R.held,
-//   R.stats { rocks, holes, wasted, tuned }
-export function makeRun({ rand = Math.random, metal = null, rich = false } = {}) {
-  const R = { stage: 'look', cans: 0, ore: {}, rich: false, richField: !!rich, metal, rocks: makeField(rand, { metal, rich }), held: null, stats: { rocks: 0, holes: 0, wasted: 0, tuned: 0 } };
+// A RUN OF THE GAME: the field, the rock in the claw, the store.
+//   const R = makeRun({ rand })
+//   R.stage    'look' (finding a rock) | 'ask' (a rock in the claw, its question up) | 'drill' | 'full' (done)
+//   R.pick(id) -> the rock (look -> ask);  R.asked() (ask -> drill: the question is over, however it was answered)
+//   R.drill(dir) -> what drillHole gives, with { aboard, full, done } (the rock crumbled or the store full: on to
+//                   'look' or 'full' by itself);  R.letGo() the rock let go early (ask or drill -> look)
+//   R.ore (the store: tonnes of each metal, every bit), R.aboard (tonnes in all, 0 .. 6), R.full (canisters' worth
+//   aboard, 0 .. 8), R.store() (the store to the hundredth of a tonne), R.row() (the row's picture of it), R.sells()
+//   (what the store would sell for now), R.rocks (the field), R.held, R.stats { rocks, holes, bare }
+export function makeRun({ rand = Math.random } = {}) {
+  const R = { stage: 'look', aboard: 0, ore: {}, rocks: makeField(rand), held: null, stats: { rocks: 0, holes: 0, bare: 0 } };
   const EPS = 1e-6;
-  Object.defineProperty(R, 'full', { get: () => Math.min(DRILL.cans, Math.floor(R.cans + EPS)) });
-  R.row = () => canistersOf(R.ore);
-  R.load = () => R.row().map((c) => c.metal);
+  let rings = 0;
+  Object.defineProperty(R, 'full', { get: () => Math.min(DRILL.cans, Math.floor(R.aboard / DRILL.can + EPS)) });
+  R.store = () => storeOf(R.ore);
+  R.row = () => rowOf(R.ore);
+  R.sells = () => sellsFor(R.store()).pay;
   function gone(rock) {
-    // (its place taken by another: one drifts in)
-    const i = R.rocks.indexOf(rock); if (i < 0) return;
-    const next = metal ? makeRock(rand, { metal }) : fieldRock(rand); next.slot = rock.slot; next.fresh = true; R.rocks[i] = next;
+    const i = R.rocks.indexOf(rock); if (i >= 0) R.rocks.splice(i, 1);
+    // (the rings do not run out: with few rocks left, there are more further out)
+    if (R.rocks.length < 8) { rings++; R.rocks.push(...makeField(rand, { n: 12, from: DRILL.wide * (0.6 + 0.4 * rings), to: DRILL.wide * (1 + 0.4 * rings), others: R.rocks })); }
   }
-  R.pick = (id) => { if (R.stage !== 'look') return null; const rock = R.rocks.find((r) => r.id === id); if (!rock) return null; R.held = rock; R.stage = 'scan'; R.stats.rocks++; return rock; };
-  R.scanned = (first = false) => { if (R.stage !== 'scan') return false; const t = tune(R.held, !!first); if (t) R.stats.tuned++; R.stage = 'drill'; return t; };
-  R.letGo = () => { if (R.stage !== 'drill' && R.stage !== 'scan') return false; gone(R.held); R.held = null; R.stage = 'look'; return true; };
+  R.pick = (id) => { if (R.stage !== 'look') return null; const rock = R.rocks.find((r) => r.id === id); if (!rock) return null; R.held = rock; R.stage = 'ask'; R.stats.rocks++; return rock; };
+  R.asked = () => { if (R.stage !== 'ask') return false; R.stage = 'drill'; return true; };
+  R.letGo = () => { if (R.stage !== 'drill' && R.stage !== 'ask') return false; gone(R.held); R.held = null; R.stage = 'look'; return true; };
   R.drill = (dir) => {
     if (R.stage !== 'drill' || !R.held) return null;
-    const rock = R.held, h = drillHole(rock, dir, DRILL.cans - R.cans); if (!h) return null;
-    R.cans = Math.min(DRILL.cans, R.cans + h.took); R.stats.holes++; if (h.wasted) R.stats.wasted++;
-    for (const [m, t] of Object.entries(h.by)) R.ore[m] = (R.ore[m] || 0) + t;
-    if (rock.rich && h.took > 0.01) R.rich = true;
-    const done = R.cans >= DRILL.cans - EPS;
-    if (done) {
-      // (the last hair's breadth made up, so the canisters are exactly full)
-      const sum = Object.values(R.ore).reduce((a, b) => a + b, 0); if (sum > 0) for (const m of Object.keys(R.ore)) R.ore[m] *= DRILL.cans / sum;
-      R.cans = DRILL.cans; R.stage = 'full';
-    } else if (h.broke) { gone(rock); R.held = null; R.stage = 'look'; }
-    return { ...h, cans: R.cans, full: R.full, done, rock };
+    const rock = R.held, h = drillHole(rock, dir, Math.round((DRILL.hold - R.aboard) * 100) / 100); if (!h) return null;
+    R.stats.holes++; if (h.bare) R.stats.bare++;
+    // (whole hundredths of a tonne, added as such: the store is exact)
+    for (const [m, t] of Object.entries(h.by)) R.ore[m] = Math.round(((R.ore[m] || 0) + t) * 100) / 100;
+    R.aboard = Math.min(DRILL.hold, Math.round(Object.values(R.ore).reduce((a, b) => a + b, 0) * 100) / 100);
+    const done = R.aboard >= DRILL.hold - EPS;
+    if (done) { R.aboard = DRILL.hold; R.stage = 'full'; } else if (h.broke) { gone(rock); R.held = null; R.stage = 'look'; }
+    return { ...h, aboard: R.aboard, full: R.full, done, rock };
   };
   return R;
+}
+
+// THE CREW'S OWN DRILLER (the captain's, when the player did not sign for the drill): the same game by the same
+// rules, worked plainly: the nearest rock each time, a hole in the best spot each time, until the store is full.
+// -> the store that comes home
+export function crewLoad(rand = Math.random) {
+  const R = makeRun({ rand }); let at = [0, 0, 0];
+  for (let guard = 0; guard < 400 && R.stage !== 'full'; guard++) {
+    if (R.stage === 'look') { const next = [...R.rocks].sort((a, b) => len([a.pos[0] - at[0], a.pos[1] - at[1], a.pos[2] - at[2]]) - len([b.pos[0] - at[0], b.pos[1] - at[1], b.pos[2] - at[2]]))[0]; at = next.pos; R.pick(next.id); R.asked(); }
+    const b = bestHole(R.held, 160);
+    if (b.worth < 0.03) R.letGo(); else R.drill(b.dir);
+  }
+  return R.store();
 }

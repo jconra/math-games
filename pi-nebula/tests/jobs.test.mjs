@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
 import { JOB as galley } from '../src/jobs/galley.js';
 import { JOB as medical } from '../src/jobs/medical.js';
-import { JOB as smelter, STEADY, CARRIES, METALS, LOADS, ORE_SELLS, forget, haulOf } from '../src/jobs/smelter.js';
+import { JOB as smelter, STEADY, CARRIES, METALS, LOADS, CHART, PRICE_TIMES, forget, haulOf } from '../src/jobs/smelter.js';
 import { parseFrac, value } from '../../mathwood-valley/labs/fishing/frac.js';
 import { SPOTS } from '../src/life.js';
 import { readFileSync } from 'node:fs';
@@ -265,13 +265,12 @@ test('the smelter: the haul is the same haul on every slip about it, its ore aga
     const q = H.ore.n / H.ore.d;
     assert.ok([2, 4, 8].includes(H.ore.d) && q < 1 && q <= H.fill / 10 - 0.1 + 1e-9, `haul ${r}: ${H.ore.n}/${H.ore.d} of a tonne in ${H.fill / 10}`);
     assert.ok(Number.isInteger(H.oreTonnes) && near(H.oreTonnes, CARRIES * q));
-    // (the metal in tenths of a tonne: at the least 0.3 of a tonne, a cobalt haul's tenth of 3 tonnes of ore)
-    assert.ok(Number.isInteger(H.metal10) && H.metal10 >= 3 && Number.isInteger(H.pay) && near(H.pay, H.metal10 / 10 * H.metal.price));
+    // (the metal in tenths of a tonne: at the least 0.6 of a tonne, a cobalt haul's fifth of 3 tonnes of ore)
+    assert.ok(Number.isInteger(H.metal10) && H.metal10 >= 6 && Number.isInteger(H.pay) && near(H.pay, H.metal10 / 10 * H.metal.price));
     assert.ok(METALS.includes(H.metal));
-    // every usual haul's ore sells for the same, whatever its metal: 3,000 credits a tonne of ore (the dearer the
-    // metal, the less of the ore it is); so a haul sells for 9,000 to 21,000 credits
-    assert.equal(H.pay, H.oreTonnes * ORE_SELLS, `haul ${r}: ${H.metal.name}`);
-    assert.ok(H.pay >= 9000 && H.pay <= 21000); assert.equal(H.flown, false); assert.equal(H.rich, false);
+    // the dearer the metal, the less of the ore it is; the metal sells at the one price list's price
+    assert.equal(H.yield, { iron: 50, nickel: 40, copper: 30, cobalt: 20 }[H.metal.name]); assert.equal(H.metal.price, CHART[H.metal.name] * PRICE_TIMES);
+    assert.equal(H.flown, false); assert.equal(H.store, undefined); assert.equal(H.lots, undefined);
   }
   const rand = seeded(61), M = smelter.makers;
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,

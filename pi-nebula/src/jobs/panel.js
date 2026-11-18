@@ -29,10 +29,15 @@
 //   Such an object may also bring a card of its own in place of one of the level's: card() -> null, or a question
 //   ready made ({ order, level: { id, grade }, worth, misses: 0, picked: new Set(), done: false, answer(q, i, { ms,
 //   helped }) -> what engine.js answer gives }): the share of a run waiting at the smelter's controls (src/mission.js).
+//   A CARD ANSWERED BY A TAP ON A MAP (the pilot's "plot this point": order.tap = { map, at, judge(x, y) }): the map
+//   is drawn on the card, large, in place of the answer buttons. The crossing under the finger is lit while it is
+//   down (slide to it, lift to answer), so a small screen is fair; a click answers at once. A wrong tap shakes the
+//   map, leaves a small cross where it fell and says why in the line; the right one marks the spot. Keys do not answer it.
+//   A job with `dark: true` has its pictures drawn dark with light lines (src/jobs/pics.js).
 //   pay: false: the job's cards pay nothing by themselves (the pilot's seat on a captain's run, whose share is the pay
 //   for all of it: src/trip.js); the level and the kinds of math hear them as ever.
 import * as E from './engine.js';
-import { helpPicture } from './pics.js';
+import { helpPicture, navMap, mapSpot } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
 import { workOf, sumWords } from '../../../mathwood-valley/src/math/longwork.js';
 import { openJobLevels } from '../ui/levels.js';
@@ -50,6 +55,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
   const el = document.createElement('div');
   el.className = 'pnj';
   el.dataset.job = job.id;   // (a job's own styles: the dock's, src/jobs/dock.css)
+  const dark = !!job.dark; el.classList.toggle('is-dark', dark);
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', job.name);
   el.innerHTML = `<section class="pnj-panel">
@@ -146,18 +152,20 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     ? `<dl class="pnj-chart is-slip">${o.lines.map(([k, v]) => `<div${v === '?' ? ' class="is-ask"' : ''}><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`
     : `<p class="pnj-story">${esc(o.story)}</p>`);
   function draw(o) {
-    const pic = o.picFirst ? helpPicture(o) : null;
-    // (a job's own question may bring its picture with it, drawn: o.lead, the dock's panel with its gap)
-    const lead = o.lead || (pic && pic.svg) || '';
+    const pic = o.picFirst ? helpPicture(o, { dark }) : null;
+    // (a job's own question may bring its picture with it, drawn: o.lead, the dock's panel with its gap; a card
+    // answered by a tap has its map)
+    const lead = o.tap ? navMap({ ...o.tap.map, dark }) : o.lead || (pic && pic.svg) || '';
     el.dataset.key = o.key || '';   // (which maker made the card: a job's props may draw for it, the crane game's grid)
     card.innerHTML = `${sceneHtml(o)}
       ${storyHtml(o)}
-      ${lead ? `<div class="pnj-pic is-lead">${lead}</div>` : ''}
+      ${lead ? `<div class="pnj-pic is-lead${o.tap ? ' is-tap' : ''}${pic && pic.flip && !o.lead ? ' is-flip' : ''}">${lead}</div>` : ''}
       <p class="pnj-ask">${esc(o.ask)}</p>`;
     answers.innerHTML = '';
     answers.classList.toggle('is-wide', o.coins.some((c) => String(c.big).length > 7));
     // (answers that are pictures, the panes the dock offers: the picture on the button, its words for a screen reader)
     answers.classList.toggle('is-pics', o.coins.some((c) => c.svg));
+    answers.classList.toggle('is-tap', !!o.tap);
     o.coins.forEach((c, i) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'pnj-coin'; b.dataset.i = String(i);
@@ -169,7 +177,35 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     line.textContent = ''; line.className = 'pnj-line';
     // (a job's own way of answering, in place of the buttons: the dock's squares to brace, which pick when all are)
     if (own && own.play) own.play(o, { card, answers, line, pick });
+    if (o.tap) mountTap(o);
     waitReady();
+  }
+  // the map of a card answered by a tap: the crossing under the finger lit, the tap judged by the card's own rule
+  function mountTap(o) {
+    const box = card.querySelector('.pnj-pic.is-tap'); if (!box) return;
+    const marks = []; let aim = null, down = false;
+    const paint = () => { box.innerHTML = navMap({ ...o.tap.map, dark, marks: [...marks, ...(aim ? [{ x: aim[0], y: aim[1], kind: 'aim' }] : [])] }); };
+    const spot = (e) => {
+      const svg = box.querySelector('svg'), m = svg && svg.getScreenCTM(); if (!m) return null;
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse()), S = o.tap.map.size;
+      return mapSpot(o.tap.map, p.x / S, p.y / S);
+    };
+    const aimAt = (e) => { const g = spot(e), J = g && o.tap.judge(g[0], g[1]), was = aim; aim = J ? J.at : null; if (String(was) !== String(aim)) paint(); return g; };
+    box.addEventListener('pointerdown', (e) => { if (busy || q.done) return; down = true; try { box.setPointerCapture(e.pointerId); } catch (er) { /* a rig's made-up pointer */ } aimAt(e); e.preventDefault(); });
+    box.addEventListener('pointermove', (e) => { if (busy || q.done) return; if (down || e.pointerType === 'mouse') aimAt(e); });
+    box.addEventListener('pointerleave', () => { if (!down && aim) { aim = null; paint(); } });
+    box.addEventListener('pointercancel', () => { down = false; aim = null; paint(); });
+    box.addEventListener('pointerup', (e) => {
+      if (!down) return; down = false;
+      const g = aimAt(e); aim = null;
+      if (!g || busy || q.done) { paint(); return; }
+      const J = o.tap.judge(g[0], g[1]), btn = answers.children[J.i]; if (btn) btn.classList.remove('is-dull');
+      const r = pick(J.i, true);
+      if (r) { marks.push({ x: J.at[0], y: J.at[1], kind: r.right ? 'field' : 'miss' }); if (!r.right) { box.classList.remove('is-wrong'); void box.offsetWidth; box.classList.add('is-wrong'); setTimeout(() => box.classList.remove('is-wrong'), PANEL.shakeMs); } }
+      paint();
+    });
+    // (the rigs: a tap at a place given in the map's own units)
+    box._tap = (gx, gy) => { const J = o.tap.judge(gx, gy), btn = answers.children[J.i]; if (btn) btn.classList.remove('is-dull'); const r = pick(J.i, true); if (r) marks.push({ x: J.at[0], y: J.at[1], kind: r.right ? 'field' : 'miss' }); paint(); return r; };
   }
   // (a job joined to its props may need them in place before a card can be answered: the crane operator job's crane
   // getting to where the card starts. Its answers wait, dimmed, with a line saying why; live.ready() -> true, or
@@ -282,8 +318,10 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
   }
 
   // ── an answer ─────────────────────────────────────────────────────────────────────────────────────────────────
-  function pick(i) {
+  function pick(i, tapped = false) {
     if (busy || !q || q.done || closed || answers.classList.contains('is-waiting')) return null;
+    // (a card answered by a tap on its map: only the map answers it, never a key)
+    if (q.order.tap && !tapped) return null;
     // (a question answered by doing, the dock's squares to brace: picked by the job once it is done, never by a key)
     if (q.order.play && !q.order.played) return null;
     const btn = answers.children[i];
@@ -340,10 +378,11 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
   };
   function fillHelp() {
     if (!q) return;
-    const o = q.order, pic = helpPicture(o);
+    const o = q.order, pic = helpPicture(o, { dark });
     $('.pnj-htitle').textContent = pic.title || 'Help';
     // (a picture already on the card, the things to count, isn't drawn twice)
     $('.pnj-pic:not(.is-lead)').innerHTML = o.picFirst ? '' : pic.svg || '';
+    $('.pnj-pic:not(.is-lead)').classList.toggle('is-flip', !!pic.flip);
     $('.pnj-hline').textContent = pic.line || '';
     const st = stepsOf(o);
     $('.pnj-steps').innerHTML = st.map((s) => `<li>${esc(s.text)}</li>`).join('');
@@ -403,7 +442,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
   return {
     el, close, pick, help, step,
     state: () => ({ job: job.id, level: q && q.level.id, levelN: E.level(crew, job), story: q && q.order.story, ask: q && q.order.ask, coins: q ? q.order.coins.map((c) => ({ label: c.label, good: c.good })) : [],
-      key: q && q.order.key, facts: q && q.order.facts,
+      key: q && q.order.key, facts: q && q.order.facts, tap: q && q.order.tap ? { map: q.order.tap.map, at: q.order.tap.at } : null,
       right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, waiting: answers.classList.contains('is-waiting'), help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet }),
   };
 }

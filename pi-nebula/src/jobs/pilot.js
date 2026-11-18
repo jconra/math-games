@@ -16,9 +16,11 @@
 // shared out and the ratio tables through SETTING (engine.js). The hops, the fuel against the way, the map, the
 // headings, the speeds and times and the "which sum fits" cards are this job's own makers (MAKERS below): Mathwood's
 // speed stories are told with wagons in miles and have no hook for another world, and it has no maps or headings.
-// A POINT ON THE MAP is answered by picking, of four small maps, the one with the field marked in the right place (or
-// by reading the point off the map on the card). A tap on one big map is the better answer and is not built yet:
-// ~/pw/space-math/MINING_1.md says what it would take.
+// A POINT ON THE MAP is answered by a TAP on the spot, on one map (the game's maker, 2026-11-18: "tapping the spot
+// would be better. Please make it a dark graph too, with light lines"): the card's `tap` ({ map, at }), which the panel
+// draws and takes the taps on (src/jobs/panel.js), and plotJudge here says which crossing a tap is and whether it is
+// the one. The other way round, a point read off the map, is answered with the answer buttons. EVERY PICTURE of this
+// job is drawn dark with light lines (JOB.dark; src/jobs/pics.js NIGHT).
 //
 // THE JUMP'S THREE LAMPS (distance, charge, go: src/trip.js): a jump is three cards. Where a level has a card that
 // suits the lamp being lit (an Ask's `lamp`), that one is dealt: where and how far for DISTANCE, the fuel for CHARGE,
@@ -440,10 +442,10 @@ export const MAKERS = {
 
   // ── POINTS ON THE MAP (the game's maker: "We have authorization to mine at -8, 3, can you plot that on our map? And it
   // can show the planet in the middle with the rings around it. Or if it is on the far side of the planet it could be
-  // a 2 step problem to plot a course around the rings"). A point is found by picking the map that has it marked (four
-  // small maps), or read off the map on the card. ─────────────────────────────────────────────────────────────────
-  // step 1  one quarter of the map: (4, 3)
-  // step 2  the whole map, with negatives: (-8, 3)
+  // a 2 step problem to plot a course around the rings"). A point is plotted by tapping its spot on the map, or read
+  // off the map on the card. The map always has the planet in the middle with its rings round it. ─────────────────
+  // step 1  the upper right quarter of the map, the only part lit and numbered: (4, 3)
+  // step 2  the whole map, with negatives: (-7, 3)
   // step 3  a course round the rings to a field on the planet's far side: how long is it
   plot: {
     strand: 'geo', at: (step) => [30, 50, 62][Math.max(1, Math.min(3, step)) - 1],
@@ -464,15 +466,15 @@ export const MAKERS = {
           ],
           rightWhy: `Up ${h}, across ${a} + ${b} = ${across}, down ${h}: ${h} + ${across} + ${h} = ${u(ans, UNIT)}`,
           sum: [{ op: 'add', a, b, say: `First across: from ${-a} to 0, and on to ${b}` }, { op: 'add', a: across, b: h, say: 'Then the way up' }, { op: 'add', a: across + h, b: h, say: 'Then the way down' }],
-          lead: navMap({ hi: 9, quad: 4, points: pts, course, size: 190, ask: 'the course: ? units' }),
+          lead: navMap({ hi: 9, quad: 4, points: pts, course, size: 190, ask: 'the course: ? units', dark: true }),
           help: { title: 'Leg by leg', pic: { kind: 'map', hi: 9, quad: 4, points: pts, course, ask: `up ${h}, across ?, down ${h}` }, line: `Three legs. The one across goes from ${-a} to ${b}: count the units to 0, then the units beyond it.`, steps: [`Across: ${a} + ${b}`, `Up and down: ${h} and ${h} more`, 'Then add the legs'] },
           own: { strand: 'geo', at: 62 }, credit: [{ strand: 'add', at: 30, weight: 0.5 }], facts: { form: 'course', a, b, h, ans }, size: 3,
         }, rand);
       }
-      const whole = step === 2, hi = whole ? 9 : 7, quad = whole ? 4 : 1;
+      const whole = step === 2, hi = whole ? 8 : 7, quad = 4, lit = whole ? 0 : 1;
       let x = 1, y = 2;
       for (let tries = 0; tries < 60; tries++) {
-        x = whole ? t.int(-8, 8) : t.int(1, 6); y = whole ? t.int(-8, 8) : t.int(1, 6);
+        x = whole ? t.int(-7, 7) : t.int(1, 6); y = whole ? t.int(-7, 7) : t.int(1, 6);
         if (Math.abs(x) !== Math.abs(y) && x !== 0 && y !== 0 && (!whole || (Math.max(Math.abs(x), Math.abs(y)) >= 4 && (x < 0 || y < 0)))) break;
       }
       const said = (p) => `(${p[0]}, ${p[1]})`, here = [x, y];
@@ -482,15 +484,19 @@ export const MAKERS = {
         : [[[y, x], 'swapped', 'the first number is how far across, the second how far up'], [[x + 1 > 6 ? x - 1 : x + 1, y], 'off', `count ${x} lines across from the planet`], [[x, y + 1 > 6 ? y - 1 : y + 1], 'off', `count ${y} lines up from the planet`]];
       const pt = (p) => [{ x: p[0], y: p[1], kind: 'field' }];
       if (t.chance(0.5)) {
-        // which map has it marked
-        const M = (p) => ({ v: said(p), big: said(p), small: '', label: `the map with the field at ${said(p)}`, svg: navMap({ hi, quad, points: pt(p), size: 132, numbers: true }) });
-        return ownOrder({
-          key: `plot:mark:${whole ? 'whole' : 'quarter'}`, story: `We have authorization to mine at ${said(here)}. The planet is at (0, 0).`, ask: 'Which map has the field marked in the right place?',
-          right: M(here), slips: wrongs.map(([p, slip, why]) => ({ ...M(p), slip, why: `That map has it at ${said(p)}: ${why}.` })),
+        // plot it: a tap on the spot. Its answers are the right crossing, the crossings children pick by a known slip
+        // (each with its own line why), and any other crossing (its line is written when it is tapped: plotJudge)
+        const M = (p) => ({ v: said(p), big: said(p), small: '', label: `the spot ${said(p)}` });
+        const o = ownOrder({
+          key: `plot:tap:${whole ? 'whole' : 'quarter'}`, story: `We have authorization to mine at ${said(here)}. The planet is at (0, 0).`, ask: 'Tap that spot on the map.',
+          right: M(here), slips: [...wrongs.map(([p, slip, why]) => ({ ...M(p), slip, why: `That spot is ${said(p)}: ${why}.` })), { v: 'else', big: 'another spot', small: '', label: 'another spot', slip: 'else', why: '' }],
           rightWhy: `${said(here)}: ${Math.abs(x)} ${x < 0 ? 'to the left' : 'across'}, then ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}`,
-          help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, points: [], ask: `${said(here)}: ${Math.abs(x)} ${x < 0 ? 'left' : 'across'}, ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}. Where?` }, line: `Start at the planet, (0, 0). The first number is how far across${whole ? ' (minus: to the left)' : ''}; the second is how far up${whole ? ' (minus: down)' : ''}.`, steps: [`Across: ${x}`, `Then up: ${y}`] },
-          own: { strand: 'geo', at: whole ? 50 : 30 }, facts: { form: 'mark', x, y, whole }, size: 1,
-        }, rand);
+          help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, lit, points: [], ask: `${said(here)}: ${Math.abs(x)} ${x < 0 ? 'left' : 'across'}, ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}. Where?` }, line: `Start at the planet, (0, 0). The first number is how far across${whole ? ' (minus: to the left)' : ''}; the second is how far up${whole ? ' (minus: down)' : ''}.`, steps: [`Across: ${x}`, `Then up: ${y}`] },
+          own: { strand: 'geo', at: whole ? 50 : 30 }, facts: { form: 'tap', x, y, whole }, size: 1,
+          tap: { map: { hi, quad, lit, size: 300 }, at: here },
+        }, rand, 8);
+        o.tap.judge = (gx, gy) => plotJudge(o, gx, gy);
+        return o;
       }
       // read it off the map
       const T2 = (p) => ({ v: said(p), big: said(p), small: '', label: said(p) });
@@ -498,8 +504,8 @@ export const MAKERS = {
         key: `plot:read:${whole ? 'whole' : 'quarter'}`, story: 'The scan has found an asteroid field. It is marked on our map. The planet is at (0, 0).', ask: 'Where is the field?',
         right: T2(here), slips: wrongs.map(([p, slip, why]) => ({ ...T2(p), slip, why: `Not ${said(p)}: ${why}.` })),
         rightWhy: `${Math.abs(x)} ${x < 0 ? 'to the left' : 'across'} and ${Math.abs(y)} ${y < 0 ? 'down' : 'up'}: ${said(here)}`,
-        lead: navMap({ hi, quad, points: pt(here), size: 190, ask: 'the field is at (?, ?)' }),
-        help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, points: pt(here), ask: 'across first, then up: (?, ?)' }, line: `Count the lines from the planet across to the field${whole ? ' (to the left is minus)' : ''}: that is the first number. Then count up${whole ? ' (down is minus)' : ''}: the second.`, steps: ['First how far across', 'Then how far up'] },
+        lead: navMap({ hi, quad, lit, points: pt(here), size: 190, ask: 'the field is at (?, ?)', dark: true }),
+        help: { title: 'Across, then up', pic: { kind: 'map', hi, quad, lit, points: pt(here), ask: 'across first, then up: (?, ?)' }, line: `Count the lines from the planet across to the field${whole ? ' (to the left is minus)' : ''}: that is the first number. Then count up${whole ? ' (down is minus)' : ''}: the second.`, steps: ['First how far across', 'Then how far up'] },
         own: { strand: 'geo', at: whole ? 50 : 30 }, facts: { form: 'read', x, y, whole }, size: 1,
       }, rand);
     },
@@ -608,7 +614,7 @@ export const MAKERS = {
     strand: 'geo', at: (step) => (step <= 1 ? 80 : 84),
     make(step, { rand = Math.random } = {}) {
       const t = kit(rand), km = (v) => `${say(Math.round(v))} kilometres`;
-      const coin = (kind, eq, o, v) => ({ v, big: eq, small: '', label: eq, svg: methodPic(kind, { ...o, eq }) });
+      const coin = (kind, eq, o, v) => ({ v, big: eq, small: '', label: eq, svg: methodPic(kind, { ...o, eq, dark: true }) });
       if (step <= 1) {
         const P = t.int(10, 20) * 10000, F = t.int(2, 8) * 5000, far = t.chance(0.6);
         if (far) {
@@ -695,13 +701,13 @@ export const PLACE = {
     { id: 'kEqual', title: 'Equal jumps', line: '3 jumps of 5 kilometres', strand: 'words', gen: { mix: [M('hops', 4, 2, 'distance'), M('fuel', 3, 1, 'charge')] } },
     { id: 'jumps', title: 'Jumps, fuel and totals', line: '4 jumps of 6 kilometres; 15 kilometres and 18 more; 30 fuel cells, 12 used', gen: { mix: [W(1, ['groups', 'parts'])] } },
     { id: 'share', title: 'Sharing a distance out', line: '24 kilometres in 4 equal jumps', gen: { mix: [W(2, ['share'], 2), W(1, ['groups'])] } },
-    { id: 'plot1', title: 'Points on the map', line: 'One quarter of the map: mine at (4, 3)', gen: { mix: [M('plot', 1, 2, 'distance'), W(2, ['share'])] } },
+    { id: 'plot1', title: 'Points on the map', line: 'The upper right quarter of the map: tap the spot (4, 3)', gen: { mix: [M('plot', 1, 2, 'distance'), W(2, ['share'])] } },
     { id: 'turn', title: 'Headings and turns', line: 'Nose at 40°, the field at 70°: how far to turn', gen: { mix: [M('heading', 1, 2, 'go'), M('plot', 1, 1, 'distance')] } },
     { id: 'speed', title: 'Speed and time: how far', line: '6 kilometres a second for 5 seconds', gen: { mix: [M('rate', 1, 2, 'distance'), M('heading', 1, 1, 'go')] } },
     { id: 'fast', title: 'How fast, how long', line: '45 kilometres in 9 seconds; 40 kilometres at 8 kilometres a second', gen: { mix: [M('rate', 2, 2, 'go'), M('rate', 1, 1, 'distance')] } },
     { id: 'sensor', title: 'The sensor\'s angle', line: 'A signal 30° right of a sensor pointed 45° left of the nose', gen: { mix: [M('heading', 2, 2, 'go'), M('rate', 2)] } },
     { id: 'minutes', title: 'Bigger trips, by the minute', line: '360 kilometres at 40 kilometres a minute', gen: { mix: [M('rate', 3, 2), M('heading', 2, 1, 'go')] } },
-    { id: 'plot4', title: 'The whole map', line: 'With negatives: mine at (-8, 3)', gen: { mix: [M('plot', 2, 2, 'distance'), M('rate', 3)] } },
+    { id: 'plot4', title: 'The whole map', line: 'With negatives: tap the spot (-7, 3)', gen: { mix: [M('plot', 2, 2, 'distance'), M('rate', 3)] } },
     { id: 'round', title: 'Round the compass', line: 'Nose at 320°, a turn of 70° right; the heading for home', gen: { mix: [M('heading', 3, 2, 'go'), M('plot', 2, 1, 'distance')] } },
     { id: 'table', title: 'Fuel by the jump', line: '3 fuel cells for every 2 jumps; for 10 jumps?', gen: { mix: [M('ratio', 3, 2, 'charge'), M('heading', 3, 1, 'go')] } },
     { id: 'course', title: 'A course round the rings', line: 'From (-6, 0) round to (7, 0): up 5, across, down 5', gen: { mix: [M('plot', 3, 2, 'distance'), M('rate', 4)] } },
@@ -711,6 +717,23 @@ export const PLACE = {
     { id: 'span', title: 'Which sum fits: an angle and a distance', line: 'A rock 10° wide at 2,000 kilometres: which equation gives its length', gen: { mix: [M('method', 2, 2, 'distance'), M('method', 1)] } },
   ],
 };
+
+// A TAP ON THE MAP, judged (a card with `tap`: { map: { hi, quad, lit, size }, at: [x, y] }). gx, gy: where the tap
+// fell, in the map's own units, not rounded (src/jobs/pics.js mapSpot). It counts as the crossing of lines nearest to
+// it, so a tap a little off the lines is still that crossing: fair to a finger. -> { at: [x, y] (the crossing), i (which
+// of the card's answers that is: the right one, a named slip with its line why, or 'another spot', whose line is
+// written here), right }
+export function plotJudge(o, gx, gy) {
+  const { map, at } = o.tap, hi = map.hi, lo = map.quad === 1 ? 0 : -hi, snap = (v) => Math.max(lo, Math.min(hi, Math.round(v)));
+  const x = snap(gx), y = snap(gy), v = `(${x}, ${y})`;
+  let i = o.coins.findIndex((c) => c.v === v);
+  if (i < 0) {
+    i = o.coins.findIndex((c) => c.v === 'else');
+    const [X, Y] = at;
+    o.coins[i].why = `That spot is ${v}. Start at the planet, (0, 0): count ${Math.abs(X)} ${X < 0 ? 'to the left' : 'across'}, then ${Math.abs(Y)} ${Y < 0 ? 'down' : 'up'}.`;
+  }
+  return { at: [x, y], i, right: !!o.coins[i].good };
+}
 
 // the card for the lamp being lit: one of the level's that suits it, by weight (not the one asked last when there is
 // another); none suits: null, and the level's own pick is used (engine.js make)
@@ -733,4 +756,5 @@ export const JOB = {
   spot: null, sign: 'Pilot\'s seat', hint: 'Work out the jump',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'jump',
+  dark: true,      // its pictures are drawn dark, with light lines (src/jobs/pics.js NIGHT)
 };

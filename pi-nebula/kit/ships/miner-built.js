@@ -700,6 +700,14 @@ export function palmOf(built, over = null) {
   const palm = armPose(ARMS.claw, armAngles(ARMS.design, ARMS.claw, 0, 1, 1, 0, over && over[ARMS.claw]), ARMS.design).palm;
   return new THREE.Matrix4().multiplyMatrices(claw.leaves[0].M, palm);
 }
+// where the cutter's wheel is (its middle, a point in the built ship's own frame) with its arm on the rock, for joint
+// angles given outright (over: { [its side]: { yaw, shoulder, elbow, wrist } }): for whoever moves the cutter along a
+// rock of their own (the drill operator's game works the joints out from where the wheel must be)
+export function wheelOf(built, over = null) {
+  const D = built.doors.find((q) => q.piece === 'mbArm' && armLeaves(q).side !== ARMS.claw); if (!D) return null;
+  const side = armLeaves(D).side, P = armPose(side, armAngles('cutter', side, 0, 1, 0, 0, over && over[side]), ARMS.design, ARMS.cutter);
+  return wheelAt(side, CUTTERS[ARMS.cutter]).clone().applyMatrix4(P.hand).applyMatrix4(D.leaves[0].M);
+}
 // WORKING A ROCK: what each tool's arm adds to the reaching pose to bring the claw onto a rock held ahead of the nose
 // (every claw holds it in the same place, its middle on the ship's middle line 2.9 m up and 2 m past the nose, so it
 // stands in the pilot's view and one cutter pose serves them all), and the cutter's wheel down onto the top of that
@@ -723,7 +731,7 @@ export const WORK = {
 //               that line, so it stays where it is, under the cutter. Any amount: the wrist is a drum.
 //   over.hold   the fingers' angles shut on the rock that is really in the hand ([[first part, second], ...], from
 //               gripOn), where the rock is not the stand-in
-//   over.loose  0 to 1: the fingers eased open that far from shut (the hand shifting its hold)
+// The fingers only open and close, to take a rock and to let it go; the wrist's turn is the hand's only other move.
 export function armAngles(tool, side, fold = 0, work = 0, grip = 0, spin = 0, over = null) {
   // (a cutter wheel of another size has its own way and work pose where it needs one: 'cutter-<size>')
   const own = (O) => (tool === 'cutter' && O['cutter-' + ARMS.cutter] ? O['cutter-' + ARMS.cutter] : O[tool]);
@@ -732,11 +740,11 @@ export function armAngles(tool, side, fold = 0, work = 0, grip = 0, spin = 0, ov
   const [ky, ks, ke, kw] = K.way ? wayAt([[0, 0, 0, 0, 0], ...K.way, [1, K.yaw, K.shoulder, K.elbow, K.wrist]], e) : [K.yaw * e, K.shoulder * e, K.elbow * e, K.wrist * e];
   const q = { yaw: ky, shoulder: fs + ks, elbow: fe + ke, wrist: fw + kw, pan: (K.pan || 0) * e, roll: (K.roll || 0) * e + ((over && over.turn) || 0), spin };
   if (tool !== 'cutter') {
-    const D = CLAWS[tool], curl = keyed(F.curl, u), G = (over && over.hold) || gripOf(tool, side === 'port'), eg = ease(grip) * (1 - ((over && over.loose) || 0));
+    const D = CLAWS[tool], curl = keyed(F.curl, u), G = (over && over.hold) || gripOf(tool, side === 'port'), eg = ease(grip);
     q.fingers = D.knuckles.map((_, i) => D.open.map((o, k) => (o + (G[i][k] - o) * eg) * (1 - curl) + D.stow[k] * curl));
   }
   if (!over) return q;
-  const { turn, hold, loose, ...joints } = over;
+  const { turn, hold, ...joints } = over;
   return { ...q, ...joints };
 }
 

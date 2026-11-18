@@ -224,3 +224,14 @@
   .pnj[data-job="pilot"] .pnj-pic.is-lead svg { max-height: 180px; }
   .pnj[data-job="pilot"] .pnj-panel { max-height: 78vh; }
 }
+
+/* A JOB WHOSE PICTURES ARE DARK, with light lines (a job's `dark: true`: the pilot's jump computer, the drill's cards;
+   src/jobs/pics.js NIGHT). One of Mathwood Valley's own drawings is turned dark here as it is shown (is-flip). */
+.pnj.is-dark .pnj-pic { background: #0b1118; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.26); }
+.pnj.is-dark .pnj-pic.is-flip svg { filter: invert(1) hue-rotate(180deg); }
+.pnj.is-dark .pnj-coinpic { background: #0b1118; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.2); }
+/* a card answered by a tap on its map: the map large, no answer buttons */
+.pnj-answers.is-tap { display: none; }
+.pnj .pnj-pic.is-tap { touch-action: none; cursor: crosshair; padding: 4px; user-select: none; -webkit-user-select: none; }
+.pnj .pnj-pic.is-lead.is-tap svg { max-height: none; width: min(100%, 380px); margin: 0 auto; pointer-events: none; }
+.pnj-pic.is-tap.is-wrong { animation: pnj-shake 0.4s ease; box-shadow: inset 0 0 0 2px var(--bad); }
