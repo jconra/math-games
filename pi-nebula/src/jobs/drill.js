@@ -130,7 +130,9 @@ export const MAKERS = {
         }
         const all = Math.max(3, Math.min(8, rock.holes || 5)), used = t.int(1, all - 1), n = all - used;
         return ownOrder({
-          key: 'veins:holes', story: `This rock stands ${all} holes before it breaks up. The cutter has drilled ${used}.`, ask: 'How many holes are left?', right: C(n, HOLE),
+          // (a rock just taken in the claw has no holes yet: asked as what will be)
+          key: 'veins:holes', story: live && live.rock ? `This rock stands ${all} holes before it breaks up.` : `This rock stands ${all} holes before it breaks up. The cutter has drilled ${used}.`,
+          ask: live && live.rock ? `After ${u(used, HOLE)}, how many will be left?` : 'How many holes are left?', right: C(n, HOLE),
           slips: [
             ...(used !== n ? [{ ...C(used, HOLE), slip: 'gone', why: `${used} is how many are drilled. Count the rings still open.` }] : []),
             { ...C(all, HOLE), slip: 'all', why: `${all} is all the holes the rock stands. Some are drilled already.` },
@@ -145,7 +147,9 @@ export const MAKERS = {
       const now = live && live.cans && Number.isInteger(live.cans.full) && live.cans.full >= 1 && live.cans.full < CARRIES ? live.cans.full : null;
       const full = now != null ? now : t.int(1, CARRIES - 1), n = CARRIES - full;
       return ownOrder({
-        key: 'veins:cans', story: `The Miner carries ${CARRIES} canisters. ${full} of them ${full === 1 ? 'is' : 'are'} full of ${ore}.`, ask: 'How many canisters are still to fill?', right: C(n, CAN),
+        // (the canisters as they are, where some are full and some are not; else asked as what will be)
+        key: 'veins:cans', story: live && now == null ? `The Miner carries ${CARRIES} canisters.` : `The Miner carries ${CARRIES} canisters. ${full} of them ${full === 1 ? 'is' : 'are'} full of ${ore}.`,
+        ask: live && now == null ? `When ${full} of them ${full === 1 ? 'is' : 'are'} full, how many will still be to fill?` : 'How many canisters are still to fill?', right: C(n, CAN),
         slips: [
           ...(full !== n ? [{ ...C(full, CAN), slip: 'gone', why: `${full} is how many are full. Count the dark ones: they are still empty.` }] : []),
           { ...C(CARRIES, CAN), slip: 'all', why: `${CARRIES} is all of them. Some are full already.` },

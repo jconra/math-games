@@ -76,8 +76,8 @@ const CSS = `
   clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px); animation: pmt-pop 0.5s ease; }
 .pmt-rich small { display: block; font-size: 14px; letter-spacing: 0.04em; }
 @keyframes pmt-pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } }
-.pmt.is-drill .pmt-say { top: 150px; }
-@media (max-width: 640px) { .pmt.is-drill .pmt-say { top: 204px; } }
+.pmt.is-drill .pmt-say { top: 160px; right: auto; left: max(14px, 2vw); max-width: min(280px, 40vw); }
+@media (max-width: 640px) { .pmt.is-drill .pmt-say { top: auto; bottom: 150px; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { top: 204px; bottom: auto; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-rich { font-size: 18px; top: 30%; } .pmt-fade p { font-size: 17px; } .pmt-count b { font-size: 22px; } }
 `;
 
@@ -302,7 +302,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
         onDone: (r) => { T.rich = !!r.rich; T.drillStats = r.stats; T.drillSecs = r.secs; if (T.rich) T.metal = RICH_METAL; T.ore = forecast({ clean: T.clean, rich: T.rich, roles }); T.phase = 'drillDone'; T.t = 0; say(iPilot ? 'full' : 'fullCrew', { tonnes: T.ore.oreTonnes, ore: T.metal }); } });
       drillOn = true; el.classList.add('is-drill'); T.phase = 'drill'; T.t = 0; T.fadeTo = 0; say('drillField');
     }
-    if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; }
+    if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
     if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.fadeTo = 1; fadeWords('Back to your seat ...'); }
     if (T.phase === 'fromDrill' && T.fade >= 1) { endDrill(); T.fadeTo = 0; next(); }
   }

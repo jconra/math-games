@@ -41,28 +41,34 @@ test('the contract: the three roles and their shares, as the game\'s maker gave 
   assert.equal(missions.ready('vega'), false); assert.equal(missions.ready('hale'), false);
 });
 
-test('the contract: only the pilot can be signed for now; the drill and the engineer are his crew\'s, and each switches on with one flag', () => {
+test('the contract: the pilot and the drill can be signed for, alone or together; the engineer is his crew\'s, and switches on with one flag', () => {
   const R = MS.rolesOf(MINING);
-  assert.deepEqual(R.map((r) => [r.id, r.open]), [['pilot', true], ['drill', false], ['engineer', false]]);
-  assert.deepEqual(MS.openRoles(MINING), ['pilot']);
+  assert.deepEqual(R.map((r) => [r.id, r.open]), [['pilot', true], ['drill', true], ['engineer', false]]);
+  assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill']);
   const crew = crewOf();
   // asking for more than is open signs for what is open
   const m = MS.sign(crew, 'mining', ['pilot', 'drill', 'engineer'], 1000);
-  assert.deepEqual(m, { id: 'mining', captain: 'ruiz', roles: ['pilot'], state: 'signed', signed: 1000 });
-  assert.equal(MS.sign(crewOf(), 'mining', ['drill']), null, 'nothing open among those asked: no contract');
+  assert.deepEqual(m, { id: 'mining', captain: 'ruiz', roles: ['pilot', 'drill'], state: 'signed', signed: 1000 });
+  assert.equal(MS.sign(crewOf(), 'mining', ['engineer']), null, 'nothing open among those asked: no contract');
   assert.equal(MS.sign(crew, 'mining', ['pilot']), null, 'one mission at a time');
+  // each alone
+  assert.deepEqual(MS.sign(crewOf(), 'mining', ['pilot']).roles, ['pilot']); assert.deepEqual(MS.sign(crewOf(), 'mining', ['drill']).roles, ['drill']);
+  // the drill and not the pilot: the field is the crew member's, the jumps the crew's own pilot's (the short version)
+  const S = MS.stepsFor(MINING, ['drill']);
+  assert.deepEqual(S.map((s) => [s.id, s.mine]), [['out', false], ['jumpOut', false], ['field', true], ['jumpHome', false], ['home', false]]);
+  assert.deepEqual(MS.stepsFor(MINING, ['pilot', 'drill']).filter((s) => s.mine).map((s) => s.id), ['jumpOut', 'field', 'jumpHome']);
   // who does what on the trip: the crew member their own role, the captain's crew the rest
   assert.deepEqual(MS.crewFor(MINING, ['pilot'], 'Maya').map((c) => c.name), ['Maya', 'Miner Kestrel', 'Engineer Okafor']);
   assert.equal(MS.rolesWords(['pilot']), 'Pilot'); assert.equal(MS.rolesWords(['pilot', 'drill', 'engineer']), 'Pilot, drill operator and engineer');
-  // the drill's game made: one flag, and it can be signed for, its step is the crew member's, its share is added
-  ROLES.drill.ready = true;
+  // the engineer's game made: one flag, and it can be signed for, its step is the crew member's, its share is added
+  ROLES.engineer.ready = true;
   try {
-    assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill']);
-    const two = MS.sign(crewOf(), 'mining', ['drill', 'pilot']);
-    assert.deepEqual(two.roles, ['pilot', 'drill']); assert.equal(MS.shareOf(two.roles), 30);
-    assert.equal(MS.stepsFor(MINING, ['drill']).find((s) => s.id === 'field').mine, true);
-    assert.equal(MS.stepsFor(MINING, ['drill']).find((s) => s.id === 'jumpOut').mine, false, 'the crew\'s pilot flies it');
-  } finally { ROLES.drill.ready = false; }
+    assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill', 'engineer']);
+    const all = MS.sign(crewOf(), 'mining', ['engineer', 'drill', 'pilot']);
+    assert.deepEqual(all.roles, ['pilot', 'drill', 'engineer']); assert.equal(MS.shareOf(all.roles), 50);
+    assert.equal(MS.stepsFor(MINING, ['engineer']).find((s) => s.id === 'field').mine, true);
+    assert.equal(MS.stepsFor(MINING, ['engineer']).find((s) => s.id === 'jumpOut').mine, false, 'the crew\'s pilot flies it');
+  } finally { ROLES.engineer.ready = false; }
 });
 
 // ── the trip's steps ─────────────────────────────────────────────────────────────────────────────────────────────

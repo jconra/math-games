@@ -65,10 +65,12 @@ const T = { arrive: 1.3, fly: 2.3, turn: 0.45, cut: 0.95, breakUp: 1.7, release:
 const CAM_RATE = 2.4, SUN_K = 1.7, TRUE_R = 1.1;
 
 const CSS = `
-.pdr { position: fixed; inset: 0; z-index: 21; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; cursor: default;
+.pdr { position: fixed; inset: 0; z-index: 21; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; cursor: default;
   font: 400 16px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: #eef1f4; overflow: hidden; }
 .pdr * { box-sizing: border-box; }
-.pdr-cans { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); padding: 8px 12px 9px; background: rgba(13, 17, 23, 0.84); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.34); pointer-events: none;
+.pdr-touch { position: absolute; inset: 58px 0 0 0; pointer-events: auto; touch-action: none; }
+.pdr-done { pointer-events: auto; }
+.pdr-cans { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(64px, calc(env(safe-area-inset-top) + 64px)); padding: 8px 12px 9px; background: rgba(13, 17, 23, 0.84); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.34); pointer-events: none;
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
 .pdr-cans small { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a7b0ba; }
 .pdr-cans b { font-size: 22px; font-weight: 800; }
@@ -80,7 +82,7 @@ const CSS = `
 .pdr-rock b { font-size: 22px; font-weight: 800; } .pdr-rock span { font-size: 14px; color: #cfd8e2; margin-left: 5px; }
 .pdr-hint { position: absolute; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: min(560px, calc(100vw - 24px)); padding: 9px 18px 10px; text-align: center; font-size: 17px; font-weight: 600; background: rgba(13, 17, 23, 0.86); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.3); pointer-events: none; text-wrap: balance;
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
-.pdr-hint:empty, .pdr [hidden] { display: none; }
+.pdr-hint:empty, .pdr [hidden], .pdr.has-panel .pdr-hint { display: none; }
 .pdr-done { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); height: 48px; padding: 0 18px; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #06202b; background: #6ee1ff; border: 0; cursor: pointer;
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
 .pdr-big { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); padding: 10px 22px; text-align: center; white-space: nowrap; font-size: 22px; font-weight: 800; letter-spacing: 0.05em; color: #1c1205; background: #ffc83c; pointer-events: none; animation: pdr-pop 0.5s ease;
@@ -99,7 +101,7 @@ const CSS = `
   .pdr-hint { font-size: 15px; padding: 8px 12px 9px; bottom: max(14px, env(safe-area-inset-bottom)); }
   .pdr-done { bottom: max(92px, calc(env(safe-area-inset-bottom) + 92px)); right: 50%; transform: translateX(50%); white-space: nowrap; }
   .pdr-cans { top: max(108px, calc(env(safe-area-inset-top) + 108px)); } .pdr-rock { top: max(108px, calc(env(safe-area-inset-top) + 108px)); }
-  .pdr-big { font-size: 18px; top: 30%; } .pdr-cans b, .pdr-rock b { font-size: 19px; }
+  .pdr-big { font-size: 18px; top: 290px; white-space: normal; width: max-content; max-width: calc(100vw - 20px); } .pdr-cans b, .pdr-rock b { font-size: 19px; }
 }
 .pdr.is-lab .pdr-cans, .pdr.is-lab .pdr-rock { top: calc(var(--pdr-top, 48px) + 8px); }
 @media (min-width: 641px) { .pdr.has-panel .pdr-big { left: 30%; } }
@@ -154,7 +156,7 @@ void main() {
   vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const ROCK_FRAG = `
-uniform vec3 uSun; uniform vec3 uTint; uniform float uSunK;
+uniform vec3 uSun; uniform vec3 uTint; uniform float uSunK; uniform float uLamp;
 #ifdef HELD
 uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 uGlow; uniform vec3 uSq; uniform float uScan;
 #endif
@@ -164,6 +166,7 @@ void main() {
   float d = max(dot(n, uSun), 0.0);
   vec3 base = uTint * (0.72 + 0.56 * vF.x);
   vec3 c = base * (0.06 + uSunK * d) + base * vec3(0.16, 0.2, 0.27) * max(0.45 - 0.55 * dot(n, uSun), 0.0);
+  c += base * uLamp * pow(max(dot(n, normalize(cameraPosition - vW)), 0.0), 1.5);      // (the scan's own lamp: a rock's facets read from every side)
   #ifdef HELD
   float e = min(vB.x, min(vB.y, vB.z)), w = fwidth(e);
   float crack = (1.0 - smoothstep(w * 0.7, w * 2.0, e)) * step(vF.y, uCrack);
@@ -175,7 +178,6 @@ void main() {
     c = mix(c, vec3(0.003), h) + uGlow * smoothstep(0.972, 0.984, a) * (1.0 - h) * 0.7;
   }
   float band = 1.0 - smoothstep(0.0, 0.07, abs(vL.y - (uScan * 2.6 - 1.3)));
-  c += base * 1.25 * pow(max(dot(n, normalize(cameraPosition - vW)), 0.0), 1.5);      // (the scan's own lamp: its facets read from every side)
   c += vec3(0.25, 0.85, 1.0) * band * step(0.001, uScan) * 0.8;
   #endif
   gl_FragColor = vec4(c, 1.0);
@@ -218,10 +220,10 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const was = { near: camera.near, far: camera.far, fov: camera.fov };
 
   // ── the rocks' materials: the ones in reach and far off; the one in the claw (its holes, its cracks, the scan) ──
-  const uni = () => ({ uSun: { value: sunW }, uTint: { value: new THREE.Color(0.082, 0.076, 0.071) }, uSunK: { value: SUN_K } });
-  const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
+  const uni = (lamp) => ({ uSun: { value: sunW }, uTint: { value: new THREE.Color(0.082, 0.076, 0.071) }, uSunK: { value: SUN_K }, uLamp: { value: lamp } });
+  const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(0.45), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   const heldMat = new THREE.ShaderMaterial({ defines: { HELD: '' }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG,
-    uniforms: { ...uni(), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
+    uniforms: { ...uni(1.25), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
 
   // ── far rocks and pebbles, one batch (the field is in the planet's rings: plenty of them, none to be reached) ──
   const far = (() => {
@@ -344,7 +346,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   // ── the picture over it: the canisters, the rock in the claw, the hint, the button, a tag for each rock in reach ──
   const el = document.createElement('div'); el.className = 'pdr' + (lab ? ' is-lab' : '');
-  el.innerHTML = `<div class="pdr-tags"></div><div class="pdr-cans"><small>Canisters full</small><b></b><div class="pdr-row">${'<i></i>'.repeat(DRILL.cans)}</div></div>
+  el.innerHTML = `<div class="pdr-touch"></div><div class="pdr-tags"></div><div class="pdr-cans"><small>Canisters full</small><b></b><div class="pdr-row">${'<i></i>'.repeat(DRILL.cans)}</div></div>
     <div class="pdr-rock" hidden><small></small><b></b><span></span></div><div class="pdr-big" hidden></div><div class="pdr-hint"></div><button type="button" class="pdr-done" hidden>Done with this rock</button>`;
   root.appendChild(el);
   const $ = (s) => el.querySelector(s), tagsEl = $('.pdr-tags'), cansB = $('.pdr-cans b'), cansI = [...el.querySelectorAll('.pdr-row i')], rockEl = $('.pdr-rock'), hintEl = $('.pdr-hint'), doneEl = $('.pdr-done'), bigEl = $('.pdr-big');
@@ -439,9 +441,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     _q.setFromAxisAngle(up, dx * 0.0085); H.o.q.premultiply(_q); _q.setFromAxisAngle(right, dy * 0.0085); H.o.q.premultiply(_q); H.o.q.normalize();
   }
   let down = null;
-  function onDown(e) { if (panel) return; down = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, lx: e.clientX, ly: e.clientY }; try { el.setPointerCapture(e.pointerId); } catch (er) { /* a rig's made-up pointer */ } }
+  function onDown(e) { if (panel) return; down = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, lx: e.clientX, ly: e.clientY }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) { /* a rig's made-up pointer */ } }
   function onMove(e) {
-    if (!down || down.id !== e.pointerId) { if (V.stage === 'look' && e.pointerType === 'mouse') { const o = rockUnder(e.clientX, e.clientY); V.hot = o ? o.rock.id : null; el.style.cursor = o ? 'pointer' : 'default'; } return; }
+    if (!down || down.id !== e.pointerId) { if (V.stage === 'look' && e.pointerType === 'mouse') { const o = rockUnder(e.clientX, e.clientY); V.hot = o ? o.rock.id : null; e.currentTarget.style.cursor = o ? 'pointer' : 'default'; } return; }
     if (!down.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 9) down.moved = true;
     if (down.moved && V.stage === 'drill' && !V.sub) turnBy(e.clientX - down.lx, e.clientY - down.ly);
     down.lx = e.clientX; down.ly = e.clientY;
@@ -458,7 +460,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const k = { ArrowLeft: [-40, 0], ArrowRight: [40, 0], ArrowUp: [0, -40], ArrowDown: [0, 40] }[e.key];
     if (k) { e.preventDefault(); turnBy(k[0], k[1]); }
   }
-  el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', () => { down = null; });
+  // (the taps and drags are taken below the game's own row of buttons along the top)
+  const pad = el.querySelector('.pdr-touch');
+  pad.addEventListener('pointerdown', onDown); pad.addEventListener('pointermove', onMove); pad.addEventListener('pointerup', onUp); pad.addEventListener('pointercancel', () => { down = null; });
   addEventListener('keydown', onKey);
   const onSize = () => { for (const o of seen.values()) place(o); };
   addEventListener('resize', onSize);
@@ -562,7 +566,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     shownCans += (run.cans - shownCans) * Math.min(1, dt * 2.5); if (Math.abs(run.cans - shownCans) < 0.004) shownCans = run.cans;
     cansB.textContent = `${run.full} of ${DRILL.cans}`;
     cansI.forEach((c, i) => c.style.setProperty('--f', Math.round(Math.max(0, Math.min(1, shownCans - i)) * 100) + '%'));
-    if (H && (S === 'grab' || S === 'drill')) { rockEl.hidden = false; rockEl.querySelector('small').textContent = `${(ORE[H.rock.metal] || {}).sym || ''} ${cap(H.rock.metal)}`; rockEl.querySelector('b').textContent = String(H.rock.left); rockEl.querySelector('span').textContent = H.rock.left === 1 ? 'hole left' : 'holes left'; }
+    if (H && (V.stage === 'grab' || V.stage === 'drill')) { rockEl.hidden = false; rockEl.querySelector('small').textContent = `${(ORE[H.rock.metal] || {}).sym || ''} ${cap(H.rock.metal)}`; rockEl.querySelector('b').textContent = String(H.rock.left); rockEl.querySelector('span').textContent = H.rock.left === 1 ? 'hole left' : 'holes left'; }
   }
   // the rock breaks into pieces that float off
   function breakUp() {
