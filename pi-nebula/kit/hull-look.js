@@ -43,6 +43,8 @@ export const SETTINGS = [
   num('vary', 'colours', 'Plate to plate', 0.06, 0, 0.3, 0.01, '%', 'How much one plate differs from the next'),
   colour('windowColour', 'colours', 'Window light', '#cfeeff', 'The colour of the lit windows'),
   num('windowBright', 'colours', 'Window brightness', 2, 0, 6, 0.1, '', 'How bright the windows are'),
+  num('windowGlass', 'colours', 'Glass texture', 0.5, 0, 1, 0.01, '%', 'Slats, a sheen and room-to-room differences on the panes'),
+  num('windowStars', 'colours', 'Stars in the glass', 0.6, 0, 1, 0.01, '%', 'Stars mirrored in the panes; they slide as you move'),
 
   num('plateW', 'plates', 'Width', 7, 1, 12, 0.1, 'm', 'How wide a plate is'),
   num('plateH', 'plates', 'Height', 3, 0.6, 6, 0.1, 'm', 'How tall a plate is'),
@@ -81,7 +83,7 @@ export const HULL_LOOKS = {
   // like the game's maker's own pictures of the station: dark greys, darker trim, heavy bevelled plates with cut
   // corners, dark seams, a soft brushed sheen, very little wear
   'dark armour': {
-    grey: '#474c54', grey2: '#3b3f46', trim: '#191b1f', vary: 0.08, windowColour: '#a9dcff', windowBright: 2,
+    grey: '#474c54', grey2: '#3b3f46', trim: '#191b1f', vary: 0.08, windowColour: '#a9dcff', windowBright: 2, windowGlass: 0.5, windowStars: 0.6,
     plateW: 7, plateH: 3, lap: 0, bevel: 0.35, gap: 0.05, cut: 0.45, shift: 0, uneven: 0.6, unevenRows: 0.6,
     ...finish('band', 'brushed', { strength: 0.35, angle: 0, shine: 0.25, rough: 0.6 }),
     ...finish('tiers', 'brushed', { strength: 0.3, angle: 90, shine: 0.25, rough: 0.62 }),
@@ -91,7 +93,7 @@ export const HULL_LOOKS = {
   },
   // closer to the station's insides: pale painted plates between dark seams and trim
   'pale plates, dark seams': {
-    grey: '#aeb0ad', grey2: '#9a9c9b', trim: '#2b2e33', vary: 0.04, windowColour: '#fff1d6', windowBright: 2,
+    grey: '#aeb0ad', grey2: '#9a9c9b', trim: '#2b2e33', vary: 0.04, windowColour: '#fff1d6', windowBright: 2, windowGlass: 0.4, windowStars: 0.5,
     plateW: 5, plateH: 3, lap: 0, bevel: 0.12, gap: 0.08, cut: 0.25, shift: 0, uneven: 0, unevenRows: 0,
     ...finish('band', 'mottled', { strength: 0.3, shine: 0.08, rough: 0.62 }),
     ...finish('tiers', 'plain', { shine: 0.08, rough: 0.6 }),
@@ -101,7 +103,7 @@ export const HULL_LOOKS = {
   },
   // the older, run-down station of later in the story: lapped plates, heat-stained, pitted, streaked
   'old and worn': {
-    grey: '#56575b', grey2: '#47484c', trim: '#1c1b1b', vary: 0.16, windowColour: '#ffd39a', windowBright: 1.4,
+    grey: '#56575b', grey2: '#47484c', trim: '#1c1b1b', vary: 0.16, windowColour: '#ffd39a', windowBright: 1.4, windowGlass: 0.7, windowStars: 0.4,
     plateW: 4.6, plateH: 2.2, lap: 0.3, bevel: 0.2, gap: 0.08, cut: 0.2, shift: 0.5, uneven: 0.7, unevenRows: 0.5,
     ...finish('band', 'mottled', { strength: 0.5, shine: 0.45, rough: 0.56 }),
     ...finish('tiers', 'tempered', { strength: 0.6, edges: 0.7, shine: 0.55, rough: 0.45 }),
@@ -114,7 +116,7 @@ export const LOOK_NAMES = Object.keys(HULL_LOOKS);
 // THE STATION'S OWN LOOK: the settings the game's maker made in the Hull Lab and copied out (2026-11-17), as copied.
 // The real station's hull is to be built with these (STATION_LOOK below reads them); the lab shows them at ?look=station.
 const STATION_TEXT = {
-  grey: '#555b77', grey2: '#52576f', trim: '#353e40', vary: 0.14, windowColour: '#7295a7', windowBright: 0.6,
+  grey: '#555b77', grey2: '#52576f', trim: '#353e40', vary: 0.14, windowColour: '#7295a7', windowBright: 0.6, windowGlass: 0.5, windowStars: 0.6,
   plateW: 8.1, plateH: 4.1, lap: 0, bevel: 0.32, cut: 0.01, gap: 0, shift: 0.5, uneven: 0, unevenRows: 0.01,
   bandFinish: 'mottled', bandStrength: 0.59, bandAngle: 88, bandSpacing: 0.12, bandEdges: 0.5, bandShine: 0.38, bandRough: 0.21,
   tiersFinish: 'mottled', tiersStrength: 0.56, tiersAngle: 0, tiersSpacing: 0.12, tiersEdges: 0.7, tiersShine: 0.55, tiersRough: 0.45,

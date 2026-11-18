@@ -284,7 +284,7 @@ async function pasteLook() {
 }
 function coloursWin() {
   return [sec('The plates', row(colour('grey'), colour('grey2')), setting('vary')), sec('The trim', row(colour('trim'))),
-    sec('The windows', row(colour('windowColour')), setting('windowBright'))];
+    sec('The windows', row(colour('windowColour')), setting('windowBright'), setting('windowGlass'), setting('windowStars'))];
 }
 function platesWin() {
   const n = hull ? hull.stats.plates : null;

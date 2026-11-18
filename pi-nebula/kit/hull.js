@@ -140,6 +140,34 @@ export function hullMaterials(look, opts = {}) {
     uVary: { value: 0 }, uTile: { value: 1 / TILE }, uHeat: { value: HEAT.map((h) => new THREE.Color(h)) } };
   const M = { windows: new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true }) };
   M.windows.name = 'hull:windows';
+  // THE GLASS (the game's maker, 2026-11-17: "I feel like the windows need some kind of texture too. It would be cool if
+  // the reflected the stars also, when you moved around (even if it's not accurate)"): worked out in the pane's own
+  // place in the world, so it needs no picture and no extra draw: fine slats and a slanting sheen, each room a little
+  // brighter or dimmer than the next, and points of light mirrored in the glass that slide as the eye moves (made-up
+  // stars, not the sky's own).
+  const glass = { uGlass: { value: 0.5 }, uStars: { value: 0.6 } };
+  M.windows.userData.glass = glass;
+  M.windows.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, glass);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vHW;').replace('#include <project_vertex>', '#include <project_vertex>\nvHW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vHW; uniform float uGlass, uStars;
+      float hHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      {
+        vec3 hn = normalize(cross(dFdx(vHW), dFdy(vHW))), hv = normalize(vHW - cameraPosition);
+        if (dot(hn, hv) > 0.0) hn = -hn;
+        float along = vHW.x * abs(hn.z) + vHW.z * abs(hn.x) + (vHW.x + vHW.z) * 0.5 * abs(hn.y);
+        float slat = 0.5 + 0.5 * sin(vHW.y * 24.0), room = hHash(floor(vec3(along * 0.5, vHW.y * 0.4, 3.0)));
+        float sl = fract(along * 0.31 + vHW.y * 0.42), sheen = smoothstep(0.38, 0.5, sl) * (1.0 - smoothstep(0.5, 0.62, sl));
+        diffuseColor.rgb *= mix(1.0, (0.74 + 0.26 * slat) * (0.7 + 0.6 * room), uGlass);
+        diffuseColor.rgb += uGlass * 0.07 * sheen;
+        vec3 hr = reflect(hv, hn), d = hr * 42.0, c = floor(d), f = fract(d) - 0.5;
+        float h = hHash(c), star = step(0.8, h) * smoothstep(0.2, 0.0, length(f + (vec3(hHash(c + 1.7), hHash(c + 5.1), hHash(c + 9.3)) - 0.5) * 0.5)) * (0.4 + 0.6 * fract(h * 57.0));
+        float fres = pow(1.0 - max(dot(-hv, hn), 0.0), 3.0);
+        diffuseColor.rgb = diffuseColor.rgb * (1.0 - uStars * 0.45 * fres) + uStars * (star * 1.5 + fres * vec3(0.04, 0.06, 0.11));
+      }`);
+  };
   for (const g of GROUPS) M[g] = plateMaterial(g, shared);
   const wear = picture(wearPixels({ size })); shared.uWear.value = wear;
   // the finish pictures drawn so far, one a kind (two groups with the same finish share it; a kind is drawn the first
@@ -166,6 +194,7 @@ export function hullMaterials(look, opts = {}) {
     }
     for (const kind of [...onCard]) if (!GROUPS.some((g) => L[g + 'Finish'] === kind)) { drawn.get(kind).dispose(); onCard.delete(kind); }
     M.windows.color.set(L.windowColour).multiplyScalar(L.windowBright);
+    glass.uGlass.value = L.windowGlass; glass.uStars.value = L.windowStars;
   }
   set(look);
   return {
