@@ -153,7 +153,7 @@ export const MAKERS = {
         ask: live && now == null ? `When ${full} of them ${full === 1 ? 'is' : 'are'} full, how many will still be to fill?` : 'How many canisters are still to fill?', right: C(n, CAN),
         slips: [
           ...(full !== n ? [{ ...C(full, CAN), slip: 'gone', why: `${full} is how many are full. Count the dark ones: they are still empty.` }] : []),
-          { ...C(CARRIES, CAN), slip: 'all', why: `${CARRIES} is all of them. Some are full already.` },
+          { ...C(CARRIES, CAN), slip: 'all', why: `${CARRIES} is all of them. Take away the ${full} full ${full === 1 ? 'one' : 'ones'}.` },
           { ...C(n + 1, CAN), slip: 'off', why: 'One too many. Count the dark ones again.' },
           { ...C(n - 1, CAN), slip: 'off', why: 'One short. Count the dark ones again.' },
         ],
@@ -342,7 +342,7 @@ export const PLACE = {
     { id: 'fill', title: 'Canisters from the ore', line: '6 tonnes of ore into canisters of 1/2 a tonne', gen: { mix: [M('fill', 1, 2), M('weigh', 1)] } },
     { id: 'weight', title: 'The rock\'s weight from its box', line: '4 by 3 by 2 metres, 3 tonnes to the cubic metre', gen: { mix: [M('box', 2, 2), M('fill', 1)] } },
     { id: 'percent', title: 'The percent that is ore', line: '25% of the 12 tonnes is ore', gen: { mix: [M('percent', 1, 2), M('box', 2)] } },
-    { id: 'fillParts', title: 'Canisters of 3/4 of a tonne', line: '6 tonnes of ore into canisters of 3/4 of a tonne', gen: { mix: [M('fill', 2, 2), M('percent', 1)] } },
+    { id: 'fillParts', title: 'Canisters of several parts of a tonne', line: '6 tonnes of ore into canisters of 3/4 of a tonne', gen: { mix: [M('fill', 2, 2), M('percent', 1)] } },
     { id: 'anyPercent', title: 'Any percent', line: '35% of the 20 tonnes is ore', gen: { mix: [M('percent', 2, 2), M('fill', 2)] } },
     { id: 'ball', title: 'A rock that is a ball', line: 'About 6 m across: half its box, 3 tonnes to the cubic metre', gen: { mix: [M('box', 3, 2), M('percent', 2)] } },
     { id: 'credits', title: 'What the ore is worth', line: '2.8 tonnes of ore at 3,000 credits a tonne', gen: { mix: [M('pay', 1, 2), M('box', 3)] } },

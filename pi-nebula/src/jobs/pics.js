@@ -419,7 +419,7 @@ Object.assign(DRAW, {
       s += done ? `<circle cx="${x}" cy="60" r="12" fill="#0d0b09" stroke="${SOFT}" stroke-width="1.5"/><path d="M${x - 6} 54l12 12M${x + 6} 54l-12 12" stroke="${SOFT}" stroke-width="2"/>`
         : `<circle cx="${x}" cy="60" r="12" fill="none" stroke="${glow}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
     }
-    s += text(W / 2, 130, 'The crossed holes are drilled. Count the rings still open.', { size: 12.5, fill: ASK, weight: 800 });
+    s += text(W / 2, 130, 'Crossed: drilled. Count the open rings.', { size: 13, fill: ASK, weight: 800 });
     return { svg: svg(140, s), line: '' };
   },
   // the box the scan measures a rock by: so long, so wide, so high; per: what a cubic metre weighs; ball: the rock a
