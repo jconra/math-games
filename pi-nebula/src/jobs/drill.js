@@ -45,14 +45,14 @@ export const SETTING = {
   ],
   share: [
     { key: 'veins', thing: TONNE, box: VEIN, story: ({ total, groups }) => `The scan finds ${total} tonnes of ore in this rock, spread evenly over ${groups} veins.`, ask: 'How many tonnes are in each vein?' },
-    { key: 'cans', thing: TONNE, box: CAN, story: ({ total, groups }) => `The cutter brought in ${total} tonnes of ore. It goes evenly into ${groups} canisters.`, ask: 'How many tonnes go in each canister?' },
+    { key: 'rocks', thing: TONNE, box: ['rock', 'rocks'], story: ({ total, groups }) => `The scan finds ${total} tonnes of ore in ${groups} rocks of the same size, the same in each.`, ask: 'How many tonnes of ore are in each rock?' },
   ],
   crates: [
     { key: 'canisters', box: CAN, story: ({ total, per }) => `The scan finds ${total} tonnes of ore in this rock. A canister holds ${per} tonnes.`, ask: 'How many canisters are needed so all the ore fits?' },
   ],
   partsLeft: [
     { key: 'plain', unit: TONNE, story: ({ a, b }) => `The scan says this rock weighs ${a} tonnes. ${b} tonnes of it is ore.`, ask: 'How many tonnes of it is plain rock?' },
-    { key: 'taken', unit: TONNE, story: ({ a, b }) => `The scan found ${a} tonnes of ore in this rock. The cutter has taken ${b} tonnes of it.`, ask: 'How many tonnes of ore are still in the rock?' },
+    { key: 'taken', unit: TONNE, story: ({ a, b }) => `The scan finds ${a} tonnes of ore in this rock. The first holes should take ${b} tonnes of it.`, ask: 'How many tonnes of ore will be left in the rock?' },
   ],
   partsTogether: [
     { key: 'veins', unit: TONNE, story: ({ a, b }) => `The scan finds ${a} tonnes of ore in one vein and ${b} tonnes in another.`, ask: 'How many tonnes of ore is that in all?' },
@@ -77,8 +77,9 @@ function tellOf(rock) {
     weigh: {
       add: ({ a, b }) => [`The scan reads ${a} tonnes of ${ore} in one vein of this rock and ${b} tonnes in another.`],
       both: 'That takes one from the other. Both veins count: add them.',
-      left: ({ a, b }) => ({ story: `The scan found ${a} tonnes of ${ore} in this rock. The cutter has taken ${b} tonnes of it so far.`, ask: 'How many tonnes of ore are still in the rock?',
-        added: 'Drilling leaves less in the rock: take away.', part: `${b} tonnes is what the cutter has taken. The question is what is still in the rock.` }),
+      // (a rock just taken in the claw has lost nothing yet: asked as what the first hole will leave)
+      left: ({ a, b }) => ({ story: `The scan finds ${a} tonnes of ${ore} in this rock. The first hole should take ${b} tonnes of it.`, ask: 'How many tonnes of ore will be left in the rock?',
+        added: 'Drilling leaves less in the rock: take away.', part: `${b} tonnes is what the hole takes. The question is what is left in the rock.` }),
     },
     pay: ({ w }) => { const price = ORE_SELLS * (rock.rich ? 2 : 1); return { m: { name: 'ore', price }, story: `The scan finds ${w} tonnes of ${ore} in this rock. ${rock.rich ? 'Ore from a rich rock' : 'Ore'} sells for ${say(price)} credits a tonne.`, ask: 'How many credits is the ore in this rock worth?' }; },
   };
@@ -337,7 +338,7 @@ export const PLACE = {
     { id: 'part', title: 'A part of the rock', line: '1/4 of the 12 tonnes is ore', gen: { mix: [M('part', 1, 2), W(3, ['groups', 'share', 'parts'])] } },
     { id: 'parts', title: 'Several parts', line: '3/4 of the 12 tonnes is plain rock', gen: { mix: [M('part', 2, 2), W(3, ['groups', 'share'])] } },
     { id: 'box', title: 'The box round the rock', line: '4 m long, 3 m wide, 2 m high: how many cubic metres', gen: { mix: [M('box', 1, 2), M('part', 2)] } },
-    { id: 'tenths', title: 'Weights in tenths', line: '2.4 tonnes in one vein and 1.8 in another; 2.3 tonnes with 0.8 taken', gen: { mix: [M('weigh', 1, 2), M('box', 1)] } },
+    { id: 'tenths', title: 'Weights in tenths', line: '2.4 tonnes in one vein and 1.8 in another; 2.3 tonnes, a hole takes 0.8', gen: { mix: [M('weigh', 1, 2), M('box', 1)] } },
     { id: 'fill', title: 'Canisters from the ore', line: '6 tonnes of ore into canisters of 1/2 a tonne', gen: { mix: [M('fill', 1, 2), M('weigh', 1)] } },
     { id: 'weight', title: 'The rock\'s weight from its box', line: '4 by 3 by 2 metres, 3 tonnes to the cubic metre', gen: { mix: [M('box', 2, 2), M('fill', 1)] } },
     { id: 'percent', title: 'The percent that is ore', line: '25% of the 12 tonnes is ore', gen: { mix: [M('percent', 1, 2), M('box', 2)] } },

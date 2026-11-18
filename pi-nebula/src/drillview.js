@@ -27,7 +27,8 @@
 //     as the ore left in it, so a hole visibly thins it.
 //   - DRILLING: the claw holds the rock, the cutter stands on its top. Drag to turn the rock in the claw. Tap a spot:
 //     the rock turns to bring that spot under the cutter (the arm cannot reach round the rock; this is the honest way),
-//     the cutter comes down, chips drift away from the hole, the glow near it fades and the canisters fill. The rock
+//     the cutter comes down, chips drift away from the hole, the glow near it fades and the canisters fill, and the
+//     claw turns the rock back as it was, so the hole is seen where it was tapped. The rock
 //     keeps its shape; each hole is a dark spot, and cracks spread along its facets hole by hole. After its last hole
 //     it breaks into pieces that float off.
 //   - CHEAP: the ship as built (39 draws); each rock in reach one small mesh; the far rocks and pebbles one batch; the
@@ -484,7 +485,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const cutting = V.stage === 'drill' && V.sub === 'cut';
     spin += dt * MB.ARMS.spin * (cutting ? 2.6 : 0.5);
     MB.armStep(built, armsWant, dt, { spin });
-    if (V.stage === 'drill' && V.sub === 'turn' && cutD) { cutD.work = Math.max(0.8, cutD.work - dt * 1.5); MB.armShow(built, spin); }
+    if (V.stage === 'drill' && (V.sub === 'turn' || V.sub === 'turnBack') && cutD) { cutD.work = Math.max(0.8, cutD.work - dt * 1.5); MB.armShow(built, spin); }
     standIn();
     const gripped = clawD ? (clawD.grip || 0) >= 1 : true, onRock = cutD ? (cutD.work || 0) >= 1 : true;
 
@@ -513,7 +514,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
           const h = run.drill(V.dir); V.sub = 'cut'; V.subT = 0; V.hole = h; V.lastHole = h ? { took: +h.took.toFixed(3), wasted: h.wasted, left: h.left } : null;
           if (h) {
             const U = heldMat.uniforms, n = H.rock.made.length; U.uHoles.value[Math.min(7, n - 1)].set(...H.rock.made[n - 1]); U.uHoleN.value = Math.min(8, n);
-            V.crackTo = Math.min(1, (n / H.rock.holes) * 0.9);
+            V.crackTo = Math.min(1, n / H.rock.holes) * 0.62;
             hint(HOLE_WORDS(h.took, h.wasted), 2.2);
             if (H.rock.rich && run.rich && !V.richSaid) { V.richSaid = true; big('Titanium aboard!<small>This haul pays double.</small>'); onSay('richAboard'); }
           }
@@ -523,10 +524,15 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
         // chips drift away from the hole
         if (Math.random() < dt * 16) { const p = heldPos.clone().addScaledVector(cutDir, H.R * 0.95), v = cutDir.clone().multiplyScalar(0.7 + Math.random() * 1.1).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(1.3)); chip(p, v, 0.05 + Math.random() * 0.09, 1.6 + Math.random() * 1.6); }
         if (V.subT >= T.cut) {
-          const h = V.hole; V.sub = ''; V.hole = null;
+          const h = V.hole; V.sub = 'turnBack'; V.subT = 0; V.hole = null;
           if (h && h.done) { go('full'); armsWant = 'stowed'; doneEl.hidden = true; rockEl.hidden = true; big(`All ${DRILL.cans} canisters are full!`, T.full); onSay('full'); }
           else if (h && h.broke) { go('breakUp'); armsWant = 'reach'; doneEl.hidden = true; rockEl.hidden = true; breakUp(); }
         }
+      }
+      else if (V.sub === 'turnBack') {
+        // (the claw turns the rock back as it was: the hole is seen where it was tapped, the glow round it thinner)
+        V.subT += dt; H.o.q.slerpQuaternions(H.turnTo, H.turnFrom, ease(V.subT / T.turn));
+        if (V.subT >= T.turn) V.sub = '';
       }
       const U = heldMat.uniforms; if (V.crackTo != null) U.uCrack.value += (V.crackTo - U.uCrack.value) * Math.min(1, dt * 4);
     } else if (S === 'breakUp') { hint(HINTS.breakUp); if (V.t > T.breakUp) { dropHeld(); go('back'); } }
