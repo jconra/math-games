@@ -144,7 +144,7 @@ function lookFrom(at, to) {
 }
 const VIEWS = {
   whole: { name: 'Whole piece', at: [27, 8.6, -35], to: [-9, 4, -5] },
-  wall: { name: 'The wall by the door', at: [23, 4.4, -29], to: [-2.6, 4.3, -18] },
+  wall: { name: 'The wall by the door', at: [15, 9, -37], to: [-3.5, 4.2, -20.5] },
   door: { name: 'The door', at: [35, 6, 7], to: [0, 4.6, -1] },
   plates: { name: 'Plates close up', at: [7.2, 5.4, -28.5], to: [-3.6, 4.4, -22.4] },
   end: { name: 'The bevelled end', at: [18, 13, -62], to: [-10, 4, -24] },

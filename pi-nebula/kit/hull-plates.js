@@ -37,9 +37,10 @@
 //              lower plates of a row (so a lower plate with a seam at each end carries two upper ones).
 //              { cover: how much of each lower plate an upper one covers, from the seam (0.4 of its width, a
 //                little more or less from plate to plate, never as much as half),
-//                step: how far an upper plate's foot stands above the lower plates' tops (0.2 m),
+//                step: how far an upper plate's foot stands above the lower plates' tops (0.3 m),
 //                margin: how far it stops short of its row's foot and top, as a part of the row's height (0.1),
-//                bevel, cut: its own bevel and corner cut (the look's, if not given) }
+//                heavier: its bevel, as so many times the look's (1.4), or bevel: its bevel in metres,
+//                cut: its corner cut (the look's, if not given) }
 //   slab       A BIG RAISED PLATE on every flat stretch at least `over` long or tall (10 m) and at least `least`
 //              the other way (4 m): one slab `inset` in from the stretch's edges, standing `proud` of the wall, its
 //              bevel `bevel` wide and deep, its corners cut by `cut`; the wall's own plates are laid round it.
@@ -314,7 +315,7 @@ function doorsIn(plan, st) {
 
 export const WINDOWS = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09, cut: 0.3, lit: 0.5, seed: 11 };
 // the shapes' own sizes, where a part does not give them (metres)
-export const STACK = { cover: 0.4, step: 0.2, margin: 0.1 };
+export const STACK = { cover: 0.4, step: 0.3, margin: 0.1, heavier: 1.4 };
 export const SLAB = { over: 10, least: 4, inset: 1.4, proud: 0.3, bevel: 0.45, cut: 0 };
 export const RECESS = { inset: 1.9, depth: 0.5, cut: 0.5 };
 export const SHOULDERS = { least: 3, w: 4.2, inset: 0.35, foot: 0.36, top: 1, proud: 0.7, bevel: 0.55, cut: 0.9 };
@@ -352,7 +353,7 @@ export function hullArrays(plan, sizes) {
       if (q[1][0] - q[0][0] < 0.8 || q[3][1] - q[0][1] < 0.5) continue;
       // (it stands on the lower plates' tops: their bevel is as deep as it is wide, less on a small plate)
       const under = Math.min(P.bevel, wide(a) * 0.3, wide(b) * 0.3, (v1 - v0) * 0.3), before = G[group].plates;
-      plate(G[group], st, q, PLAIN, { gap: 0, bevel: K.bevel ?? P.bevel, cut: K.cut ?? o.cut ?? P.cut, proud: under + K.step,
+      plate(G[group], st, q, PLAIN, { gap: 0, bevel: K.bevel ?? P.bevel * K.heavier, cut: K.cut ?? o.cut ?? P.cut, proud: under + K.step,
         tone: [(a.row + a.col + 1) % 2, hash(salt, a.row, a.col, 22) * 2 - 1, 1], slide: [hash(salt, a.row, a.col, 23) * 8, hash(salt, a.row, a.col, 24) * 8] });
       made.stacked += G[group].plates - before;
     }

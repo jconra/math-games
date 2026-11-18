@@ -421,13 +421,15 @@ test('stacked plates: a raised plate over every seam of a row, sitting on the tw
   // twelve lower plates in three rows of four: three seams a row, nine upper plates
   assert.equal(A.stats.shapes.stacked, 9); assert.equal(g.plates, 21);
   assert.equal(g.triangles, 12 * 10 + 9 * 18, 'an upper plate: a top (2), four bevels (8), four walls down to the backing (8)');
-  const low = F.filter((f) => near(f.x, 0.2, 1e-6)), up = F.filter((f) => f.x > 0.21);
+  // (an upper plate's bevel is heavier than the look's: 1.4 times it)
+  const low = F.filter((f) => near(f.x, 0.2, 1e-6)), up = F.filter((f) => f.x > 0.21), UB = 0.2 * STACK.heavier;
+  assert.ok(STACK.heavier > 1 && STACK.step >= 0.2);
   assert.equal(low.length, 12); assert.equal(up.length, 9);
   for (const u of up) {
     // its top stands a step above the lower plates' tops, and its own bevel above that
-    assert.ok(near(u.x, 0.2 + STACK.step + 0.2, 1e-6), 'an upper plate\'s top is ' + u.x + ' m off the wall');
+    assert.ok(near(u.x, 0.2 + STACK.step + UB, 1e-6), 'an upper plate\'s top is ' + u.x + ' m off the wall');
     // its middle is on a seam (z = 3, 6 or 9), and it lies on both the plates that meet there: never as much as half of either
-    const mid = (u.z0 + u.z1) / 2, half = (u.z1 - u.z0) / 2 + 0.2;                          // (the rim: the top and its bevel)
+    const mid = (u.z0 + u.z1) / 2, half = (u.z1 - u.z0) / 2 + UB;                           // (the rim: the top and its bevel)
     assert.ok([3, 6, 9].some((z) => near(mid, z, 1e-6)), 'an upper plate\'s middle at z = ' + mid);
     assert.ok(half >= 3 * 0.3 && half < 3 * 0.5, 'it covers ' + half + ' m of each 3 m plate');
     // it stays inside its row, short of the row's foot and top
@@ -437,14 +439,16 @@ test('stacked plates: a raised plate over every seam of a row, sitting on the tw
   for (const l of low.filter((f) => f.z0 > 1 && f.z1 < 11)) assert.equal(up.filter((u) => u.y0 > l.y0 - 0.3 && u.y1 < l.y1 + 0.3 && u.z1 > l.z0 && u.z0 < l.z1).length, 2);
   soundOut(A, 'stacked');
   // every upper plate is inside the wall, and nothing reaches further out than its top
-  for (let i = 0; i < g.position.length; i += 3) assert.ok(g.position[i] >= -1e-6 && g.position[i] <= 0.6 + 1e-6 && g.position[i + 1] >= -1e-6 && g.position[i + 1] <= 6 + 1e-6 && g.position[i + 2] >= -1e-6 && g.position[i + 2] <= 12 + 1e-6);
+  for (let i = 0; i < g.position.length; i += 3) assert.ok(g.position[i] >= -1e-6 && g.position[i] <= 0.2 + STACK.step + UB + 1e-6 && g.position[i + 1] >= -1e-6 && g.position[i + 1] <= 6 + 1e-6 && g.position[i + 2] >= -1e-6 && g.position[i + 2] <= 12 + 1e-6);
   // rows slid along: the upper plates follow the seams. Rows lapped like roof tiles carry none
   const slid = hullArrays(wallOf(12, 6, { stack: true }), { ...SIZES, shift: 0.5 });
   assert.equal(slid.stats.shapes.stacked, 3 + 4 + 3); soundOut(slid, 'stacked, slid');
   assert.equal(hullArrays(wallOf(12, 6, { stack: true }), { ...SIZES, lap: 0.4 }).stats.shapes.stacked, 0);
   // its own sizes can be given: a bigger step stands further out
   const tall = faces(hullArrays(wallOf(12, 6, { stack: { step: 0.5, cover: 0.2 } }), SIZES).groups.band).filter((f) => f.x > 0.21);
-  for (const u of tall) assert.ok(near(u.x, 0.2 + 0.5 + 0.2, 1e-6) && near((u.z1 - u.z0) / 2 + 0.2, 3 * 0.2, 0.13));
+  for (const u of tall) assert.ok(near(u.x, 0.2 + 0.5 + UB, 1e-6) && near((u.z1 - u.z0) / 2 + UB, 3 * 0.2, 0.13));
+  // its bevel can be given in metres
+  for (const u of faces(hullArrays(wallOf(12, 6, { stack: { bevel: 0.1 } }), SIZES).groups.band).filter((f) => f.x > 0.21)) assert.ok(near(u.x, 0.2 + STACK.step + 0.1, 1e-6));
   // the same wall stacks the same way every time
   assert.deepEqual(hullArrays(wallOf(12, 6, { stack: true }), SIZES).groups.band.position, g.position);
 });
