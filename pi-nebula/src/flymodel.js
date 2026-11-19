@@ -289,7 +289,8 @@ export function planLand(S, solid = null) {
   // (already on the door's own line, between the gate and the door: straight on in)
   const lined = !legs.length && S.p[0] > DOOR.face + 12 && S.p[0] < gate[0] + 5 && Math.abs(S.p[2] - P[2]) < 7 && Math.abs(S.p[1] - y) < 5;
   if (!lined) { for (const w of wayRound(from, gate)) legs.push({ to: w, speed: FEEL.speed.forward, near: 6, stop: true }); const last = legs[legs.length - 1]; last.stop = false; last.then = 14; }
-  legs.push({ to: [DOOR.face + 18, y, P[2]], face: [-1, 0, 0], speed: 14, near: 2, stop: true });
+  // (up to the door on its middle line, nose in; slow by then, not stopped)
+  legs.push({ to: [DOOR.face + 18, y, P[2]], face: [-1, 0, 0], speed: 14, near: 2, then: 6 });
   legs.push({ to: [P[0], y, P[2]], face: [-1, 0, 0], speed: 6, near: 0.6, stop: true });
   legs.push(over, down);
   return legs;

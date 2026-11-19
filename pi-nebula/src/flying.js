@@ -21,7 +21,9 @@
 // THE MOUSE: in flight it points the nose. The game holds it (pointer lock) when the browser lets it, never under a
 // test rig (navigator.webdriver: a page holding the mouse there has run the machine out of memory before); not held,
 // the nose turns toward wherever the pointer is from the middle of the screen. F gives the mouse back as an ordinary
-// pointer for the buttons (the ship then holds its heading), and F again takes it.
+// pointer for the buttons (the ship then holds its heading), and F again takes it. Lifting off by a key takes the
+// mouse by itself only if the browser gives it to the game; otherwise it stays a pointer until F (or a click on the
+// view) asks for it, so the nose never swings off toward a pointer left on a button.
 //
 //   const F = startFlying({ W, boarding, crane, outside }, { cfg, pilot, goal, settings, flier, on... })
 //     goal        'leave' (out of the hangar and clear of the station) | 'land' (in and down on the pad) | 'free' (the lab)
@@ -56,7 +58,7 @@ const CSS = `
 .pfl-help li.is-word { color: #ffd560; font-weight: 700; }
 .pfl-helptab { display: block; margin: 0 0 5px; height: 28px; padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #cfd8e2 !important; background: rgba(13, 17, 23, 0.84) !important; box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.32); }
 .pfl-help.is-shut ul { display: none; }
-.pfl-btns { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: min(560px, 60vw); }
+.pfl-btns { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: min(680px, 62vw); }
 .pfl-b { height: 44px; min-width: 60px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px !important; font-weight: 700 !important; letter-spacing: 0.04em; background: rgba(15, 19, 25, 0.88) !important; box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.45);
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
 .pfl-b[hidden] { display: none; }
@@ -143,12 +145,12 @@ export function startFlying(ctx, opts = {}) {
   inv.checked = set.invertY;
   inv.addEventListener('change', () => { set.invertY = inv.checked; if (opts.onSettings) opts.onSettings({ ...set }); });
   let helpShut = null;      // (the help corner: open on a wide screen, behind its tab on a phone, until it is asked for or put away)
-  // (a button is pressed as the finger or the mouse comes up on it, not by the browser's own click: a second finger,
-  // tapping a button while the first holds a stick, makes no click at all; a click with no press before it is a key
-  // pressed on the button, and is taken too)
+  // (a button is pressed as a finger touches it, or as the mouse comes up on it, not by the browser's own click: a
+  // second finger, tapping a button while the first holds a stick, makes no click at all; a click with no press before
+  // it is a key pressed on the button, and is taken too)
   for (const b of $$('[data-do]')) {
     let down = false, at = 0;
-    b.addEventListener('pointerdown', (e) => { down = true; if (e.pointerType === 'touch') setTouch(true); });
+    b.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') { setTouch(true); at = performance.now(); e.preventDefault(); press(b.dataset.do); return; } down = true; });
     b.addEventListener('pointerup', (e) => { if (!down) return; down = false; at = performance.now(); e.preventDefault(); press(b.dataset.do); b.blur(); });
     b.addEventListener('pointercancel', () => { down = false; }); b.addEventListener('pointerleave', () => { down = false; });
     b.addEventListener('click', (e) => { e.preventDefault(); if (performance.now() - at < 600) return; press(b.dataset.do); b.blur(); });
@@ -180,7 +182,16 @@ export function startFlying(ctx, opts = {}) {
     } catch (e) { /* not allowed now: the pointer's place flies it instead */ }
   }
   function setMouse(m) { if (touch && m === 'fly') m = 'pointer'; mouse = m; pend.dx = pend.dy = 0; hadLock = false; capture(m === 'fly'); painted = ''; }
-  const onLock = () => { captured = document.pointerLockElement === canvas; if (captured) hadLock = true; else if (hadLock && mouse === 'fly') { mouse = 'pointer'; hadLock = false; painted = ''; } };
+  // (lifting off by a key, the mouse starts to fly only once the browser has given it to the game: not held, it would
+  // turn the nose at once toward wherever the pointer happened to be, a button in a corner. F asks for that outright.)
+  let liftLock = 0;
+  const onLock = () => {
+    captured = document.pointerLockElement === canvas;
+    if (captured && mouse !== 'fly') { if (liftLock > 0 && pilot && !auto && !S.landed) { mouse = 'fly'; pend.dx = pend.dy = 0; } else { capture(false); return; } }
+    liftLock = 0;
+    if (captured) hadLock = true; else if (hadLock && mouse === 'fly') { mouse = 'pointer'; hadLock = false; }
+    painted = '';
+  };
   const looking = () => view === 'behind' && (held.has('look') || rightDown);
   function onMove(e) {
     if (e.pointerType === 'touch' || closed || !on) return;
@@ -225,7 +236,7 @@ export function startFlying(ctx, opts = {}) {
     if (a === 'power') { if (!S.landed) return false; M.setPower(S, !S.power); painted = ''; return true; }
     if (a === 'autopilot') {
       auto = !auto; plan = auto ? planFor() : null;
-      if (auto) setMouse('pointer'); else if (!S.landed && !touch) setMouse('fly');
+      if (auto) setMouse('pointer'); else if (!S.landed && !touch && canLock) { liftLock = 1.5; capture(true); }
       painted = ''; return true;
     }
     if (a === 'mouse') { if (auto || touch) return false; setMouse(mouse === 'fly' ? 'pointer' : 'fly'); return true; }
@@ -375,7 +386,8 @@ export function startFlying(ctx, opts = {}) {
       pend.dx = pend.dy = 0;
       const was = S.landed;
       M.stepShip(S, C, dt, solid);
-      if (was && !S.landed) { if (liftMouse && pilot && !auto) setMouse('fly'); liftMouse = false; painted = ''; }
+      if (was && !S.landed) { if (liftMouse && pilot && !auto && canLock) { liftLock = 1.5; capture(true); } liftMouse = false; painted = ''; }
+      if (liftLock > 0) liftLock -= dt;
       if (!was && S.landed) { setMouse('pointer'); auto = !pilot; plan = null; painted = ''; pose(dt); if (opts.onLanded) opts.onLanded(); if (closed || !on) return; }
       const clear = !S.landed && M.clearOf(S.p, offered);
       if (clear !== offered) { offered = clear; painted = ''; if (clear && !everClear) { everClear = true; if (opts.onClear) opts.onClear(); if (closed || !on) return; } }
@@ -420,7 +432,7 @@ export function startFlying(ctx, opts = {}) {
     press, hold(a, v = true) { if (v) held.add(a); else held.delete(a); }, stick(k, x, y) { sticks[k].x = x; sticks[k].y = y; }, setTouch,
     pointer(x, y) { mx = x; my = y; },
     state: () => ({ on, view, auto, mouse, captured, canLock, locked, offered, everClear, goal, pilot, touch, mode: modeNow(), power: S.power, landed: S.landed, settling: !!S.settle, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(3)), speed: +M.speedOf(S).toFixed(2), bump: +S.bump.toFixed(3), legs: plan ? plan.length : 0, invertY: set.invertY,
-      help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => b.textContent.trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: +M.boxDist(S.p).toFixed(1) }),
+      help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => [...b.childNodes].filter((n) => !n.hidden).map((n) => n.textContent).join('').trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: +M.boxDist(S.p).toFixed(1) }),
     close() {
       if (closed) return; closed = true;
       removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('blur', onBlur);

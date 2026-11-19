@@ -21,7 +21,8 @@
 //     hull round the port, and is as it was).
 //   - SEEN FROM OUTSIDE (a ship flown out): the rooms drawn are the ones behind each real opening that faces the
 //     camera (the three hangars from the hangar side, the terminal from its window's side, ...), and the flown ship's
-//     own hangar always (its thruster pods and canisters are drawn with it).
+//     own hangar always (its thruster pods and canisters are drawn with it). That is the best quality only; at the
+//     others (a phone's) the flown ship's hangar alone is drawn and the other openings get plain stand-ins (below).
 //
 //   const outside = addOutside(W, { seed })
 //   outside.update(camera)      once a frame, before W.frame
@@ -30,6 +31,7 @@
 //   outside.triangles()         the hull's and the gear's triangles as plain lists (what a flying ship bumps into)
 import * as THREE from 'three';
 import { hullMaterials } from '../kit/hull.js';
+import { shieldMaterial } from '../kit/materials.js';
 import { buildOutside } from '../kit/outside.js';
 import { STATION_LOOK } from '../kit/hull-look.js';
 import { OPENINGS } from '../kit/outside-plan.js';
@@ -87,9 +89,41 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
 
   // the room behind each real opening, and the way the opening faces
   const _p = new THREE.Vector3();
-  const openings = OPENINGS.map((o) => { const z = W.zoneAt(_p.set(o.at[0] - o.out[0] * 1.5, o.at[1] + Math.min(1, o.h / 2), o.at[2] - o.out[2] * 1.5)); return { at: new THREE.Vector3(o.at[0], o.at[1] + o.h / 2, o.at[2]), out: new THREE.Vector3(...o.out), room: z ? z.id : null }; }).filter((o) => o.room);
+  const openings = OPENINGS.map((o) => { const z = W.zoneAt(_p.set(o.at[0] - o.out[0] * 1.5, o.at[1] + Math.min(1, o.h / 2), o.at[2] - o.out[2] * 1.5)); return { src: o, at: new THREE.Vector3(o.at[0], o.at[1] + o.h / 2, o.at[2]), out: new THREE.Vector3(...o.out), room: z ? z.id : null }; }).filter((o) => o.room);
   const hangars = new Set(W.built.zones.filter((z) => /^hangar/.test(z.id)).map((z) => z.id));
   const wanted = new Set();
+
+  // SEEN FROM OUTSIDE ON A PHONE (any quality but 'high'): only the flown ship's own hangar is drawn. Behind every other
+  // real opening that faces the camera stands something plain: a dim room and a shield for a hangar door, a dark pane
+  // for a window. (All three hangars and their ships at once are 2.1 million triangles, two and a half times the most
+  // the game draws walking about: ~/pw/space-math/FLYING_1.md.)
+  const cheap = W.quality !== 'high', standIns = [];
+  const stand = new THREE.Group(); stand.name = 'outside:stand-ins'; stand.visible = false; out.group.add(stand);
+  const owned = [];
+  if (cheap) {
+    const dim = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }), shield = shieldMaterial(); owned.push(dim, shield);
+    const lin = (hex) => new THREE.Color(hex).toArray();
+    const mesh = (quads, mat) => {
+      const pos = [], col = [], uv = [], idx = [];
+      quads.forEach(([pts, c], k) => { for (const [i, p] of pts.entries()) { pos.push(...p); col.push(...c); uv.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0); } idx.push(k * 4, k * 4 + 1, k * 4 + 2, k * 4, k * 4 + 2, k * 4 + 3); });
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      owned.push(g); return new THREE.Mesh(g, mat);
+    };
+    for (const o of openings) {
+      const O = o.src, [ox, , oz] = O.out, ax = oz ? 1 : 0, az = ox ? 1 : 0, y0 = O.at[1], y1 = O.at[1] + O.h;
+      // a point of the opening: s along it (-1..1 of half its width), d metres in from its face
+      const at = (s, y, d, half = O.w / 2) => [O.at[0] + ax * s * half - ox * d, y, O.at[2] + az * s * half - oz * d];
+      const g = new THREE.Group(), door = O.w > 10;
+      if (door) {
+        const h = O.w / 2 + 2.8, top = 10.9, deep = 39, wall = lin(0x1b2027), floor = lin(0x2b313a);
+        g.add(mesh([[[at(-1, 0, 0.4, h), at(1, 0, 0.4, h), at(1, 0, deep, h), at(-1, 0, deep, h)], floor], [[at(-1, top, 0.4, h), at(1, top, 0.4, h), at(1, top, deep, h), at(-1, top, deep, h)], wall],
+          [[at(-1, 0, 0.4, h), at(-1, 0, deep, h), at(-1, top, deep, h), at(-1, top, 0.4, h)], wall], [[at(1, 0, 0.4, h), at(1, 0, deep, h), at(1, top, deep, h), at(1, top, 0.4, h)], wall],
+          [[at(-1, 0, deep, h), at(1, 0, deep, h), at(1, top, deep, h), at(-1, top, deep, h)], lin(0x12161c)]], dim));
+        const sh = mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], [1, 1, 1]]], shield); sh.renderOrder = 5; g.add(sh);
+      } else g.add(mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], lin(0x0c131b)]], dim));
+      g.visible = false; stand.add(g); standIns.push({ o, g });
+    }
+  }
   const api = {
     group: out.group, seed, flying: null, out: false, shown: true, off: false, mats,      // (off: put away, for the cost rigs' before and after)
     ms: 0,
@@ -100,11 +134,13 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       // (a flown ship's camera, out past the hull: in none of the hangars' own boxes)
       let outThere = false;
       if (shown && api.flying) { outThere = true; for (const z of W.built.zones) if (hangars.has(z.id) && z.box.containsPoint(camera.position)) { outThere = false; break; } }
-      api.out = outThere;
+      api.out = outThere; stand.visible = outThere && cheap;
       if (outThere) {
         wanted.clear();
-        for (const o of openings) if (_p.copy(camera.position).sub(o.at).dot(o.out) > 0.5) wanted.add(o.room);
         const mine = W.room(api.flying); for (const w of (mine && mine.with) || []) wanted.add(w);
+        const facing = (o) => _p.copy(camera.position).sub(o.at).dot(o.out) > 0.5;
+        if (!cheap) { for (const o of openings) if (facing(o)) wanted.add(o.room); }
+        else for (const s of standIns) s.g.visible = !wanted.has(s.o.room) && facing(s.o);
       }
     },
     triangles() {
@@ -112,7 +148,7 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       out.group.traverse((o) => { if (o.isMesh && o.geometry.index && /^(hull:(band|tiers|trim)|outside:(gear|glow))$/.test(o.name)) lists.push({ position: o.geometry.attributes.position.array, index: o.geometry.index.array }); });
       return lists;
     },
-    dispose() { W.rooms = null; out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
+    dispose() { W.rooms = null; for (const o of owned) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
   };
   // the last word on which rooms are drawn: the stand-in walls put away under the hull; from out in space, the rooms
   // behind the openings that face the camera
