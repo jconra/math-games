@@ -364,8 +364,8 @@ export function outsidePlans(opts = {}) {
 }
 
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
-// plain boxes, rods, balls and rings in one list of triangles, each corner carrying its colour; and a second list of
-// the things that glow by themselves
+// plain boxes, rods, balls and rings in one list of triangles, each corner carrying its colour; a second list of the
+// things that glow by themselves; and a third, the radiators' heat pipes, which glow and pulse together
 export const GIRDER = { x: 40, y: 4.4, half: 2.5, runs: [[-31.2, -105], [85.8, 159.6]], wings: [30, 58], wingW: 22, wingFrom: 6, wingTo: 40 };
 // (the paint on the containers and the cargo deck: made-up marks, the station's own sign and a number, no company's name)
 export const MARKS = [
@@ -415,16 +415,32 @@ class Tris {
 //   inside   true: for the game (the real rooms are there). Otherwise a plain dim room is put behind each hangar door,
 //            so that the door's shield has something behind it where the hangars are not built
 export function outsideGear(opts = {}) {
-  const G = new Tris(), L = new Tris(), X = SPIRE.x, Z = SPIRE.z;
+  const G = new Tris(), L = new Tris(), H = new Tris(), X = SPIRE.x, Z = SPIRE.z;
   const steel = lin('#59606b'), dark = lin('#2c3038'), gold = lin('#a8843a'), cell = lin('#16234f'), frame = lin('#3a3320'), pale = lin('#8f96a0'), yellow = lin('#c9a232');
-  const red = lin('#ff3a24', 2.2), white = lin('#f2f5ff', 1.6), hot = lin('#ff7a1c', 1.5), teal = lin('#58e0d0', 1.5);
+  const red = lin('#ff3a24', 2.2), white = lin('#f2f5ff', 1.6), teal = lin('#58e0d0', 1.5);
   // the spire's mast and beacon
   G.drum([X, SPIRE_TOP + 6.5, Z], 0.45, 13, steel, 8); L.ball([X, SPIRE_TOP + 15, Z], 2.2, white, 14); L.ball([X, SPIRE_TOP + 17.9, Z], 0.6, red, 8);
-  // the keel: four radiators round it, each with its hot face; the reactor ball under it in its ring, four struts, a mast
+  // the keel: four radiators round it; the reactor ball under it in its ring, four struts, a mast
+  // THE RADIATORS (the game's maker, 2026-11-19, of the flat orange faces they had: "the radiator needs some work. It
+  // looks like a cartoon. I was thinking it would be black and glowing red like hot metal, maybe pulsing."): each is a
+  // black panel with heat pipes across both its faces, glowing hottest where they leave the keel and cooling through dull
+  // red to black well before the tip, the outer pipes a little cooler than the middle ones. The pipes are a list of their own (`heat`),
+  // so that they can pulse together (kit/outside.js).
+  const black = lin('#0b0c0f'), HEAT = [[0, lin('#ffa040', 1.6)], [0.12, lin('#ff4a10', 1.4)], [0.3, lin('#c01c08', 1.0)], [0.55, lin('#5e0d04', 0.9)], [0.8, lin('#220503', 0.8)], [1, lin('#0c0303', 0.8)]];
+  const heatAt = (t) => { let i = 1; while (i < HEAT.length - 1 && HEAT[i][0] < t) i++; const [t0, c0] = HEAT[i - 1], [t1, c1] = HEAT[i], k = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); return c0.map((v, j) => v + (c1[j] - v) * k); };
+  const PIPES = { n: 13, y0: -36.95, pitch: 1.55, tall: 0.95, from: 5.5, to: 23.5, pieces: 9, proud: 0.34 };
   for (const a of [45, 135, 225, 315]) {
     const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180), out = [c, 0, s], side = [-s, 0, c];
-    G.box([X + c * 14.5, -27, Z + s * 14.5], [9.5, 10.5, 0.3], dark, out, [0, 1, 0], side);
-    L.box([X + c * 10.6, -27, Z + s * 10.6], [4.6, 9.4, 0.38], hot, out, [0, 1, 0], side);
+    G.box([X + c * 14.5, -27, Z + s * 14.5], [9.5, 10.5, 0.3], black, out, [0, 1, 0], side);
+    for (const f of [-1, 1]) for (let r = 0; r < PIPES.n; r++) {
+      const y0 = PIPES.y0 + r * PIPES.pitch, y1 = y0 + PIPES.tall, cool = 0.14 * Math.abs(r - (PIPES.n - 1) / 2) / ((PIPES.n - 1) / 2);
+      const at = (u, y) => [X + c * u + side[0] * f * PIPES.proud, y, Z + s * u + side[2] * f * PIPES.proud];
+      for (let k = 0; k < PIPES.pieces; k++) {
+        const u0 = PIPES.from + (PIPES.to - PIPES.from) * k / PIPES.pieces, u1 = PIPES.from + (PIPES.to - PIPES.from) * (k + 1) / PIPES.pieces;
+        const c0 = heatAt(Math.min(1, k / PIPES.pieces + cool)), c1 = heatAt(Math.min(1, (k + 1) / PIPES.pieces + cool)), b = H.count;
+        H.vert(at(u0, y0), c0); H.vert(at(u1, y0), c1); H.vert(at(u1, y1), c1); H.vert(at(u0, y1), c0); H.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      }
+    }
     G.rod([X + c * 4.6, KEEL_FOOT + 0.6, Z + s * 4.6], [X + c * 9.2, -49.5, Z + s * 9.2], 0.7, steel);
   }
   G.ball([X, -49.5, Z], 7.5, pale, 16); L.ring([X, -49.5, Z], 9.2, 0.45, teal);
@@ -500,7 +516,7 @@ export function outsideGear(opts = {}) {
     G.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], floorC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
     G.quad([[x0, 0, z0], [x0, y1, z0], [x0, y1, z1], [x0, 0, z1]], wallC); G.quad([[x0, 0, z0], [x1, 0, z0], [x1, y1, z0], [x0, y1, z0]], wallC); G.quad([[x0, 0, z1], [x1, 0, z1], [x1, y1, z1], [x0, y1, z1]], wallC);
   }
-  return { lit: G.arrays(), glow: L.arrays() };
+  return { lit: G.arrays(), glow: L.arrays(), heat: H.arrays() };
 }
 // where each painted mark goes: its lower left corner, the way it reads (U) and its top (V), its width and height
 export function outsideMarks() {

@@ -96,7 +96,7 @@ test('outside: in the game no plate stands inside a room', () => {
     assert.ok(!(c && Math.abs(x - c.x) < 0.99 && Math.abs(z - c.z) < 0.99 && y > 0.02 && y < c.h - 0.02), `a plate at ${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)} is inside the ${c && c.room}`);
   }
   const g = outsideGear({ inside: true });
-  for (const a of [g.lit, g.glow]) for (let i = 0; i < a.position.length; i += 3) {
+  for (const a of [g.lit, g.glow, g.heat]) for (let i = 0; i < a.position.length; i += 3) {
     const [x, y, z] = [a.position[i], a.position[i + 1], a.position[i + 2]], c = CELLS.get(Math.round(x / 2) + ',' + Math.round(z / 2));
     assert.ok(!(c && Math.abs(x - c.x) < 0.99 && Math.abs(z - c.z) < 0.99 && y > 0.02 && y < c.h - 0.02), 'a girder or a container inside the ' + (c && c.room));
   }
@@ -211,7 +211,7 @@ test('outside: girders with solar wings out of both ends, radiators and the reac
   assert.ok(south[0] - Math.max(...zs) < 1.5 && south[1] > south[0] + 50, 'a girder out of the medical end');
   assert.equal(GIRDER.wings.length, 2);
   const g = outsideGear();
-  for (const a of [g.lit, g.glow]) { assert.ok(a.triangles > 0); for (const v of a.position) assert.ok(Number.isFinite(v)); for (const v of a.color) assert.ok(v >= 0 && Number.isFinite(v)); for (const i of a.index) assert.ok(i < a.position.length / 3); }
+  for (const a of [g.lit, g.glow, g.heat]) { assert.ok(a.triangles > 0); for (const v of a.position) assert.ok(Number.isFinite(v)); for (const v of a.color) assert.ok(v >= 0 && Number.isFinite(v)); for (const i of a.index) assert.ok(i < a.position.length / 3); }
   // the cargo slots: low on the dock (west) side, some with a container and one empty
   assert.ok(SLOTS.x < 0 && SLOTS.foot < -2 && SLOTS.z.length === 4 && SLOTS.full.length === 3);
   // the paint: the station's own sign and numbers, never a real company's name
@@ -222,8 +222,8 @@ test('outside: girders with solar wings out of both ends, radiators and the reac
 
 test('outside: cheap: under 50,000 triangles and 12 draws in the station\'s own look (and no look runs away)', () => {
   for (const look of [STATION_LOOK, ...Object.values(HULL_LOOKS)]) {
-    const A = build({}, look), g = outsideGear(), all = A.stats.triangles.all + g.lit.triangles + g.glow.triangles + outsideMarks().length * 2;
-    const draws = ['band', 'tiers', 'trim'].filter((k) => A.groups[k].index.length).length + (A.windows.index.length ? 1 : 0) + (A.shields.index.length ? 1 : 0) + 3;
+    const A = build({}, look), g = outsideGear(), all = A.stats.triangles.all + g.lit.triangles + g.glow.triangles + g.heat.triangles + outsideMarks().length * 2;
+    const draws = ['band', 'tiers', 'trim'].filter((k) => A.groups[k].index.length).length + (A.windows.index.length ? 1 : 0) + (A.shields.index.length ? 1 : 0) + 4;
     // (a look that cuts every plate's corners and lays small plates, "old and worn", is the dearest: about 77,000)
     assert.ok(all < (look === STATION_LOOK ? 50000 : 100000), all + ' triangles'); assert.ok(draws <= 12, draws + ' draws');
   }

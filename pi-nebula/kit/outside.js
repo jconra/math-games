@@ -13,7 +13,8 @@
 //   out.dispose()
 // WHAT IT COSTS: the plated hull is the kit's five draws at most (three groups of plates, the glass, the shields); the
 // girders, wings, radiators, reactor, masts and containers are ONE mesh (each corner carries its colour), the things
-// that glow by themselves a second, the painted marks a third (one small picture drawn in code).
+// that glow by themselves a second, the radiators' heat pipes a third (they pulse slowly together: that mesh's own
+// colour is turned up and down, nothing else), the painted marks a fourth (one small picture drawn in code).
 import * as THREE from 'three';
 import { buildHull } from './hull.js';
 import { outsidePlans, outsideGear, outsideMarks } from './outside-plan.js';
@@ -53,14 +54,18 @@ export function buildOutside(look, mats, opts = {}) {
   };
   make(gear.lit, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.62, metalness: 0.35, side: THREE.DoubleSide, fog }), 'gear');
   make(gear.glow, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog }), 'glow');
+  // (the game's maker, 2026-11-19, of the radiators: "black and glowing red like hot metal, maybe pulsing": about one
+  // slow breath every six seconds, between a little over half and the whole of their glow)
+  const heatMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog }), heat = make(gear.heat, heatMat, 'heat');
+  heat.onBeforeRender = () => { heatMat.color.setScalar(0.8 + 0.2 * Math.sin(performance.now() / 1000 * 1.05)); };
   const marks = marksMesh(fog); group.add(marks.mesh); own.push(marks.mesh.geometry, marks.mesh.material, marks.mesh.material.map);
-  const gearBytes = gear.lit.position.byteLength * 2 + gear.lit.index.byteLength + gear.glow.position.byteLength * 2 + gear.glow.index.byteLength;
+  const gearBytes = gear.lit.position.byteLength * 2 + gear.lit.index.byteLength + gear.glow.position.byteLength * 2 + gear.glow.index.byteLength + gear.heat.position.byteLength * 2 + gear.heat.index.byteLength;
   return {
     group, relay,
     get hull() { return hull; },
     get stats() {
-      const s = hull.stats, extra = { gear: gear.lit.triangles, glow: gear.glow.triangles, marks: marks.triangles };
-      return { ...s, extra, triangles: { ...s.triangles, hull: s.triangles.all, all: s.triangles.all + extra.gear + extra.glow + extra.marks }, draws: s.draws + 3, meshBytes: s.meshBytes + gearBytes, marksBytes: marks.bytes };
+      const s = hull.stats, extra = { gear: gear.lit.triangles, glow: gear.glow.triangles, heat: gear.heat.triangles, marks: marks.triangles };
+      return { ...s, extra, triangles: { ...s.triangles, hull: s.triangles.all, all: s.triangles.all + extra.gear + extra.glow + extra.heat + extra.marks }, draws: s.draws + 4, meshBytes: s.meshBytes + gearBytes, marksBytes: marks.bytes };
     },
     dispose() { if (hull) hull.dispose(); for (const o of own) o.dispose(); group.removeFromParent(); },
   };
