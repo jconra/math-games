@@ -1,5 +1,6 @@
 // The drill operator's game (src/drill.js: a rock's own numbers, what a hole takes, the holes it stands, the field as
-// a place, the full scan's readout, the store and the row's picture of it), what a store sells for and each share of
+// a place, the full scan's readout, the eight canisters, one metal to each, and heading home early with their levels
+// rounded to eighths), what a store sells for and each share of
 // it (src/missions.js), the smelter's slips about a haul the player went out for agreeing with the payout
 // (src/jobs/smelter.js), and every level of the drill operator's ladder, every card of it true of the rock in the claw
 // (src/jobs/drill.js).
@@ -10,9 +11,9 @@ import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
 import * as DR from '../src/drill.js';
 import { MISSIONS } from '../src/missions.js';
-import { DRILL, ORE, SHAPES, KINDS, ODDS, NAMES, makeRock, makeField, makeRun, drillHole, holeWorth, bestHole, take, oreLeft, oreBy, scanOf, rockSells, storeOf, rowOf, rowCount, crewLoad, seeded as seed } from '../src/drill.js';
+import { DRILL, ORE, SHAPES, KINDS, ODDS, NAMES, makeRock, makeField, makeRun, drillHole, holeWorth, bestHole, take, oreLeft, oreBy, scanOf, rockSells, emptyCans, stow, roomFor, storeOf, roundCans, crewLoad, seeded as seed } from '../src/drill.js';
 import { JOB as drill, SHARE } from '../src/jobs/drill.js';
-import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, aboutStore, priceOf, METALS, CARRIES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
+import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, lotsWords, tonnesWords, eighthsText, priceOf, METALS, CARRIES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
 import { helpPicture, PALE } from '../src/jobs/pics.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PLACE } from '../../mathwood-valley/src/levels/places.js';
@@ -34,14 +35,14 @@ test('a rock has real numbers of its own: its box, its weight (half its box at s
     assert.ok(S && often > 0); assert.ok([2, 4, 5, 10].includes(part), `1 in ${part}`); assert.ok(Number.isInteger(weight / part) && weight / part >= 1 && weight / part <= HOLD, `${shape} ${per}: ${weight} / ${part}`);
   }
   assert.deepEqual(Object.keys(SHAPES), ['flat', 'round', 'long']); assert.deepEqual(Object.values(SHAPES).map((S) => S.holes), [4, 5, 6]);
-  const shapes = new Set(), totals = new Set();
+  const shapes = new Set(), totals = new Set(), counts = {};
   for (let s = 1; s <= 400; s++) {
     const r = makeRock(seed(s)), S = SHAPES[r.shape]; shapes.add(r.shape); totals.add(r.ore0);
     assert.deepEqual(r.box, S.box); assert.equal(r.vol, r.box[0] * r.box[1] * r.box[2]); assert.equal(r.weight, r.vol / 2 * r.per); assert.equal(r.ore0, r.weight / r.part);
     assert.ok(Number.isInteger(r.weight) && Number.isInteger(r.ore0) && r.ore0 >= 1);
-    // its metals: one, two or three, a whole number of tonnes of each, the most first, adding up to its ore
-    const ms = Object.entries(r.metals);
-    assert.ok(ms.length >= 1 && ms.length <= 3); for (const [m, t] of ms) assert.ok(NAMES.includes(m) && Number.isInteger(t) && t >= 1, `${m} ${t}`);
+    // its metals: one, two, three or four, a whole number of tonnes of each, the most first, adding up to its ore
+    const ms = Object.entries(r.metals); counts[ms.length] = (counts[ms.length] || 0) + 1;
+    assert.ok(ms.length >= 1 && ms.length <= 4); if (ms.length === 4) assert.ok(r.ore0 >= 4, 'four metals only in a rock with four tonnes of ore or more'); for (const [m, t] of ms) assert.ok(NAMES.includes(m) && Number.isInteger(t) && t >= 1, `${m} ${t}`);
     assert.equal(sumOf(r.metals), r.ore0); for (let i = 1; i < ms.length; i++) assert.ok(ms[i][1] <= ms[i - 1][1]);
     // its veins: two to five, each one metal's, their tonnes (in tenths) adding up to that metal's; the first metal in
     // two unlike veins, neither a whole number of tonnes; the same number of lumps in every vein
@@ -53,6 +54,11 @@ test('a rock has real numbers of its own: its box, its weight (half its box at s
     assert.ok(near(oreLeft(r), r.ore0)); assert.equal(r.holes, S.holes); assert.equal(r.left, r.holes); assert.deepEqual(r.made, []); assert.equal(r.broken, false); assert.equal(r.scanned, false);
   }
   assert.deepEqual([...shapes].sort(), ['flat', 'long', 'round']); assert.ok(totals.size >= 5, 'small rocks and big ones');
+  // SOME ROCKS HOLD FOUR METALS (the game's maker: "I want to be able to drill a rock that has 4 different ores in it
+  // and get them all"): about one rock in seventeen, and most fields of thirty have one or two
+  assert.deepEqual(Object.keys(counts), ['1', '2', '3', '4']); assert.ok(counts[4] >= 12 && counts[4] <= 40, `rocks of four metals: ${counts[4]} of 400`);
+  let fields = 0; for (let s = 1; s <= 100; s++) if (makeField(seed(s)).some((x) => Object.keys(x.metals).length === 4)) fields++;
+  assert.ok(fields >= 65, `fields with a rock of four metals: ${fields} of 100`);
   // a rock asked for by its kind and its metals
   const r = makeRock(seed(3), { kind: ['round', 3, 4], metals: { iron: 2, gold: 1 } });
   assert.deepEqual([r.shape, r.weight, r.part, r.ore0], ['round', 12, 4, 3]); assert.deepEqual(r.metals, { iron: 2, gold: 1 });
@@ -75,11 +81,15 @@ test('a hole: all of a lump on its line, less and less out to its reach, nothing
     assert.ok(near(sumOf(h.by), h.took)); const by1 = oreBy(r); for (const m of Object.keys(by0)) assert.ok(near((by1[m] || 0) + (h.by[m] || 0), by0[m]), m);
     // the same spot again finds almost nothing
     assert.ok(holeWorth(r, b.dir) < 0.5 * worth, `${holeWorth(r, b.dir)} left near a hole that took ${worth}`);
-    // a hole takes no more than there is room for: the rest stays in the rock
-    const r2 = makeRock(seed(s)), h2 = drillHole(r2, bestHole(r2).dir, 0.1);
-    assert.ok(near(h2.took, 0.1), String(h2.took)); assert.ok(near(oreLeft(r2), r2.ore0 - 0.1));
-    // ... down to the last hundredth of a tonne of room, whatever metals lie near the hole
-    const r3 = makeRock(seed(s)), h3 = drillHole(r3, bestHole(r3).dir, 0.01); assert.ok(near(h3.took, 0.01), String(h3.took)); assert.equal(h3.bare, false);
+    // a hole takes no more of a metal than the canisters have room for: exactly the room, down to the last hundredth
+    // of a tonne, and the rest stays in the rock
+    for (const room of [0.05, 0.01]) {
+      const r2 = makeRock(seed(s)), d2 = bestHole(r2).dir, m = Object.entries(drillHole(makeRock(seed(s)), d2).by).sort((p, q) => q[1] - p[1])[0][0];
+      const cans = emptyCans().map(() => ({ metal: m, t: 1 })); cans[5].t = 1 - room;
+      const h2 = drillHole(r2, d2, cans);
+      assert.ok(near(h2.took, room), `${h2.took} for a room of ${room}`); assert.deepEqual(Object.keys(h2.by), [m]); assert.equal(h2.bare, false);
+      assert.ok(near(oreLeft(r2), r2.ore0 - room)); assert.ok(cans.every((c) => c.metal === m && near(c.t, 1)), 'and the canister is full');
+    }
   }
   // a hole in bare rock gives nothing, and still uses one of the rock's holes
   const r = makeRock(seed(11)); let bare = null;
@@ -138,7 +148,7 @@ test('the field is a place: thirty rocks, each where it lies, none on top of the
   for (let i = 1; i < NAMES.length; i++) { assert.ok(ODDS[NAMES[i]] < ODDS[NAMES[i - 1]], NAMES[i]); assert.ok(priceOf(NAMES[i]) > priceOf(NAMES[i - 1])); assert.ok(tonnes[NAMES[i]] < tonnes[NAMES[i - 1]], `${NAMES[i]}: ${tonnes[NAMES[i]]}`); }
   // nothing marks a rock out: a rock with a lot of a dear metal is a rock like any other
   for (const r of makeField(seed(3))) assert.deepEqual(Object.keys(r).sort(), ['box', 'broken', 'each', 'holes', 'id', 'left', 'look', 'lumps', 'made', 'metals', 'ore0', 'part', 'per', 'pos', 'scanned', 'shape', 'veins', 'vol', 'weight']);
-  assert.ok(!('RICH' in MS) && !('isRich' in MS) && !('tune' in DR) && !('canistersOf' in DR), 'no rich rock, no bonus, no sorting by canister');
+  assert.ok(!('RICH' in MS) && !('isRich' in MS) && !('tune' in DR) && !('purge' in DR) && !('rowOf' in DR), 'no rich rock, no bonus, no purging a canister, no store shared by all the canisters');
 });
 
 test('the full scan\'s numbers are the rock\'s own: exactly the tonnes of each metal in it, before and after a hole', () => {
@@ -154,62 +164,150 @@ test('the full scan\'s numbers are the rock\'s own: exactly the tonnes of each m
   }
 });
 
-// ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────────
-test('the store is one: every bit of every metal drilled is aboard, to the full eight tonnes (a tonne to a canister) and never more', () => {
+// ── the canisters ─────────────────────────────────────────────────────────────────────────────────────────────────
+// THE GAME'S MAKER (2026-11-18): "the canisters don't mix ore. So if you collect 3 metals then it will dedicate 3
+// canisters to that type. If one fills up, like iron, then it gets another canister. Once each canister is designated
+// then you can't except any new types of ore. ... If they go back early ... round the level to the nearest 1/8th"
+// (what is always true of the eight)
+function checkCans(cans, why = '') {
+  assert.equal(cans.length, 8, why);
+  for (const c of cans) {
+    assert.ok(c.metal === null || NAMES.includes(c.metal), why); assert.ok(c.t >= 0 && c.t <= 1 + 1e-9, `${why}: ${c.t}`);
+    // one metal to a canister; an empty one is no metal's
+    assert.equal(c.metal === null, c.t === 0, `${why}: ${JSON.stringify(c)}`);
+  }
+  // a metal has one part-full canister at the most: it goes into its own before it is given another
+  for (const m of NAMES) assert.ok(cans.filter((c) => c.metal === m && c.t < 1 - 1e-9).length <= 1, `${why}: two part-full canisters of ${m}`);
+}
+const C8 = (list) => list.map(([metal, t]) => ({ metal, t }));
+// a player at the drill, for these tests: the nearest rock that holds a metal the canisters have room for (choose: one
+// of the six nearest instead), a hole each time where the most would come aboard; rocks: heads home when so many rocks
+// are worked (not given: plays until all eight canisters are full)
+function playRun(s, { rocks = Infinity, choose = null, each = null } = {}) {
+  const R = makeRun({ rand: seed(s) }); let at = [0, 0, 0], g = 0;
+  const far = (r) => Math.hypot(r.pos[0] - at[0], r.pos[1] - at[1], r.pos[2] - at[2]);
+  const wanted = (r) => Object.entries(oreBy(r)).some(([m, t]) => t >= 0.03 && R.roomFor(m) > 1e-6);
+  while (!R.done && g++ < 20000) {
+    if (R.stage === 'look') {
+      if (R.stats.rocks >= rocks && R.home()) break;
+      const order = [...R.rocks].sort((a, b) => far(a) - far(b)), next = choose ? choose(order.slice(0, 6)) : order.find(wanted) || order[0];
+      at = next.pos; R.pick(next.id); R.asked();
+    }
+    const b = bestHole(R.held, 160, (d) => holeWorth(R.held, d, R.cans));
+    if (b.worth < 0.005) { R.letGo(); continue; }
+    const rock = R.held, before = oreBy(rock), h = R.drill(b.dir);
+    if (each) each(R, h, rock, before);
+  }
+  return R;
+}
+
+test('the canisters do not mix ore: a canister is given to a metal the first time it comes aboard, and never holds two', () => {
   // one canister holds one tonne: eight canisters, eight tonnes (no slip tells tonnes and canisters together)
   assert.equal(DRILL.cans, 8); assert.equal(CAN_TONNES, 1); assert.equal(DRILL.hold, 8); assert.equal(HOLD, 8); assert.equal(DRILL.can, 1);
-  for (let s = 1; s <= 40; s++) {
-    const rand = seed(s), R = makeRun({ rand }), took = {}, pick = seed(s + 50); let guard = 0, out = 0;
-    while (R.stage !== 'full' && guard++ < 900) {
-      if (R.stage === 'look') { R.pick(R.rocks[Math.floor(pick() * R.rocks.length)].id); R.asked(); }
-      const rock = R.held, before = oreLeft(rock), h = R.drill(s % 2 ? bestHole(rock).dir : randDir(pick));
-      assert.ok(near(oreLeft(rock), before - h.took)); out += h.took;
-      for (const [m, t] of Object.entries(h.by)) took[m] = (took[m] || 0) + t;
-      // every bit that left a rock is in the store, metal by metal, and nothing else is
-      assert.deepEqual(Object.keys(R.ore).sort(), Object.keys(took).sort()); for (const m of Object.keys(took)) assert.ok(near(R.ore[m], took[m], 1e-9), m);
-      assert.ok(near(R.aboard, Math.min(DRILL.hold, out), 1e-6)); assert.ok(R.aboard <= DRILL.hold + 1e-9); assert.equal(R.full, Math.min(8, Math.floor(R.aboard + 1e-6)));
-      // the store is whole hundredths of a tonne, exactly: what is said and sold is what is aboard, with no rounding
-      const st = R.store(); assert.equal(Math.round(sumOf(st) * 100), Math.round(R.aboard * 100)); for (const [m, t] of Object.entries(st)) { assert.equal(t, R.ore[m], m); assert.ok(near(t * 100, Math.round(t * 100), 1e-6), `${m}: ${t}`); }
-      assert.equal(R.sells(), sellsFor(st).pay);
+  const cans = emptyCans(); assert.deepEqual(cans, Array(8).fill({ metal: null, t: 0 }));
+  // his own example: three metals collected, three canisters, one each
+  assert.deepEqual(stow(cans, { iron: 0.4, nickel: 0.25, titanium: 0.1 }), { by: { iron: 0.4, nickel: 0.25, titanium: 0.1 }, stays: {} });
+  assert.deepEqual(cans.slice(0, 4), C8([['iron', 0.4], ['nickel', 0.25], ['titanium', 0.1], [null, 0]]));
+  // more of a metal goes into its own canister, not into a new one
+  stow(cans, { nickel: 0.3 }); assert.deepEqual(cans[1], { metal: 'nickel', t: 0.55 }); assert.equal(cans.filter((c) => c.metal).length, 3);
+  // "If one fills up, like iron, then it gets another canister": the next empty one, with what the first had no room for
+  assert.deepEqual(stow(cans, { iron: 0.9 }), { by: { iron: 0.9 }, stays: {} });
+  assert.deepEqual(cans.slice(0, 5), C8([['iron', 1], ['nickel', 0.55], ['titanium', 0.1], ['iron', 0.3], [null, 0]]));
+  assert.deepEqual(storeOf(cans), { iron: 1.3, nickel: 0.55, titanium: 0.1 }); checkCans(cans);
+  // a big find fills canister after canister
+  const big = emptyCans(); stow(big, { copper: 2.5 }); assert.deepEqual(big.slice(0, 4), C8([['copper', 1], ['copper', 1], ['copper', 0.5], [null, 0]]));
+  // the room there is for a metal: its own part-full canister, and every empty one
+  assert.ok(near(roomFor(cans, 'iron'), 0.7 + 4)); assert.ok(near(roomFor(cans, 'gold'), 4)); assert.ok(near(roomFor(emptyCans(), 'gold'), 8));
+  // any finds at all, in any order: never two metals in a canister, never two part-full canisters of one metal, and
+  // every bit found is either aboard or left behind
+  for (let s = 1; s <= 200; s++) {
+    const rand = seed(s), C = emptyCans(), got = {};
+    for (let i = 0; i < 40; i++) {
+      const found = {}; for (const m of NAMES) if (rand() < 0.3) found[m] = Math.ceil(rand() * 90) / 100;
+      const before = C.map((c) => c.metal), { by, stays } = stow(C, found);
+      for (const m of Object.keys(found)) assert.ok(near((by[m] || 0) + (stays[m] || 0), found[m]), `seed ${s}: ${m}`);
+      for (const [m, t] of Object.entries(by)) got[m] = (got[m] || 0) + t;
+      // a canister once given to a metal is that metal's for good
+      C.forEach((c, k) => { if (before[k]) assert.equal(c.metal, before[k], `seed ${s}: canister ${k} changed its metal`); });
+      checkCans(C, `seed ${s}`);
+      // what is left behind is only ever for want of room: that metal's canisters are full and no empty one is left
+      for (const m of Object.keys(stays)) assert.ok(roomFor(C, m) < 1e-9, `seed ${s}: ${m} left behind with room for it`);
     }
-    assert.equal(R.stage, 'full', `seed ${s}`); assert.equal(R.aboard, 8); assert.equal(R.full, 8); assert.ok(near(sumOf(R.ore), 8, 1e-6)); assert.equal(Math.round(sumOf(R.store()) * 100), 800);
-    assert.equal(R.drill([0, 1, 0]), null, 'full is full');
+    const st = storeOf(C); assert.deepEqual(Object.keys(st).sort(), Object.keys(got).sort()); for (const m of Object.keys(got)) assert.ok(near(st[m], got[m], 1e-6), `seed ${s}: ${m}`);
+    assert.ok(Object.values(st).reduce((a, b) => a + b, 0) <= 8 + 1e-9);
   }
-  // rounding loses nothing: the hundredths are shared so that they add up
-  assert.deepEqual(storeOf({ iron: 1.003, nickel: 2.005, gold: 2.992 }), { iron: 1, nickel: 2.01, gold: 2.99 });
-  assert.deepEqual(storeOf({ iron: 3, nickel: 1.5, titanium: 1.5 }), { iron: 3, nickel: 1.5, titanium: 1.5 });
-  assert.deepEqual(storeOf({}), {});
 });
 
-test('the row of eight is only a picture of the store: coloured in proportion, a metal at a time', () => {
-  // the game's maker's own two examples
-  assert.deepEqual(rowCount({ iron: 4, nickel: 2, titanium: 2 }), { iron: 4, nickel: 2, titanium: 2 }, 'half iron, a quarter nickel, a quarter titanium: 4, 2 and 2');
-  assert.deepEqual(rowCount({ nickel: 1, copper: 2, iron: 5 }), { iron: 5, nickel: 1, copper: 2 }, '1/8 nickel, 1/4 copper, 5/8 iron: 1, 2 and 5');
-  const none = rowOf({}); assert.equal(none.length, 8); assert.ok(none.every((c) => c.fill === 0 && c.parts.length === 0));
-  // a store half full fills four canisters; each metal as long as its share, in the chart's order, nothing lost
-  const row = rowOf({ gold: 0.8, iron: 3.2 });
-  assert.deepEqual(row.map((c) => +c.fill.toFixed(3)), [1, 1, 1, 1, 0, 0, 0, 0]);
-  assert.deepEqual(row.slice(0, 4).map((c) => c.parts.map(([m, f]) => [m, +f.toFixed(3)])), [[['iron', 1]], [['iron', 1]], [['iron', 1]], [['iron', 0.2], ['gold', 0.8]]]);
-  for (let s = 1; s <= 30; s++) {
-    const rand = seed(s), ore = {}; let left = 8 * rand();
-    for (const m of NAMES) { if (rand() < 0.5) { const t = left * rand(); ore[m] = t; left -= t; } }
-    const R = rowOf(ore), by = {}; for (const c of R) for (const [m, f] of c.parts) by[m] = (by[m] || 0) + f * CAN_TONNES;
-    for (const m of Object.keys(ore)) assert.ok(near(by[m] || 0, ore[m], 1e-6), `${m}: ${by[m]} drawn for ${ore[m]}`);
-    assert.ok(near(R.reduce((a, c) => a + c.fill, 0) * CAN_TONNES, sumOf(ore), 1e-6));
-    const order = R.flatMap((c) => c.parts.map((p) => p[0])).filter((m, i, a) => a.indexOf(m) === i); assert.deepEqual(order, NAMES.filter((m) => ore[m] > 1e-9), 'a metal at a time');
+test('with every canister given out no new metal is taken: it stays in the rock; and a metal whose canisters are full takes no more', () => {
+  // all eight given out, five metals aboard, three canisters part-full
+  const cans = C8([['iron', 1], ['iron', 1], ['iron', 0.6], ['nickel', 1], ['nickel', 0.2], ['copper', 0.5], ['cobalt', 1], ['titanium', 1]]);
+  const was = JSON.stringify(cans);
+  // gold is new, and no canister is empty: none of it is taken, and nothing aboard changes
+  assert.deepEqual(stow(cans, { gold: 0.4 }), { by: {}, stays: { gold: 0.4 } }); assert.equal(JSON.stringify(cans), was);
+  assert.equal(roomFor(cans, 'gold'), 0); assert.equal(roomFor(cans, 'cobalt'), 0); assert.ok(near(roomFor(cans, 'copper'), 0.5));
+  // a metal with a canister of its own still tops it off, to the brim exactly: the rest is left
+  assert.deepEqual(stow(cans, { gold: 0.2, copper: 0.7, cobalt: 0.3 }), { by: { copper: 0.5 }, stays: { copper: 0.2, cobalt: 0.3, gold: 0.2 } });
+  assert.deepEqual(cans[5], { metal: 'copper', t: 1 }); checkCans(cans);
+  // the last empty canister, and two metals new in one hole: the one the hole found more of gets it (two alike: the
+  // chart's order)
+  const last = C8([['iron', 1], ['iron', 1], ['iron', 1], ['iron', 1], ['iron', 1], ['iron', 1], ['iron', 1], [null, 0]]);
+  assert.deepEqual(stow(last.map((c) => ({ ...c })), { gold: 0.2, cobalt: 0.5 }), { by: { cobalt: 0.5 }, stays: { gold: 0.2 } });
+  assert.deepEqual(stow(last.map((c) => ({ ...c })), { gold: 0.3, cobalt: 0.3 }), { by: { cobalt: 0.3 }, stays: { gold: 0.3 } });
+  // IN A ROCK: the hole is made, the iron it found tops off iron's canister, and the gold it found stays in the rock:
+  // the scan reads every bit of it afterwards
+  for (let s = 1; s <= 40; s++) {
+    const rock = makeRock(seed(s), { kind: ['round', 4, 4], metals: { gold: 2, iron: 2 } }), R = makeRun({ rand: seed(s) });
+    R.cans = C8([['iron', 1], ['iron', 0.4], ['nickel', 1], ['nickel', 1], ['copper', 1], ['cobalt', 1], ['titanium', 1], ['titanium', 0.5]]);
+    R.rocks.push(rock); R.pick(rock.id); R.asked();
+    assert.equal(R.given, 8); assert.equal(R.full, 6);
+    const dir = bestHole(rock).dir, would = drillHole(makeRock(seed(s), { kind: ['round', 4, 4], metals: { gold: 2, iron: 2 } }), dir).by;
+    assert.ok(near(holeWorth(rock, dir, R.cans), Math.min(0.6, would.iron || 0)), 'what would come aboard is the iron there is room for');
+    const h = R.drill(dir);
+    assert.deepEqual(Object.keys(h.by).filter((m) => m !== 'iron'), [], `seed ${s}: only iron comes aboard`); assert.ok(near(h.by.iron || 0, Math.min(0.6, would.iron || 0)), `seed ${s}: ${h.by.iron} of ${would.iron}`);
+    if (would.gold) { assert.ok(near(h.stays.gold, would.gold), `seed ${s}: the gold found stays`); assert.equal(h.bare, false); }
+    assert.ok(near(oreBy(rock).gold, 2), `seed ${s}: the rock keeps its gold`); assert.equal(scanOf(rock).find((x) => x.metal === 'gold').tonnes, 2);
+    assert.equal(h.left, rock.holes - 1, 'the hole is made all the same'); assert.ok(!R.cans.some((c) => c.metal === 'gold')); checkCans(R.cans);
+    assert.ok(near(h.took, h.by.iron || 0)); assert.ok(near(oreLeft(rock), 4 - h.took));
   }
+});
+
+test('a rock of four metals: all four come aboard, each into a canister of its own', () => {
+  for (let s = 1; s <= 40; s++) {
+    const R = makeRun({ rand: seed(s) }), rock = makeRock(seed(s + 500), { kind: ['round', 4, 4], metals: { iron: 1, nickel: 1, cobalt: 1, gold: 1 } });
+    assert.equal(rock.ore0, 4); assert.equal(Object.keys(rock.metals).length, 4);
+    R.rocks.push(rock); R.pick(rock.id); R.asked();
+    // a hole straight at each metal's biggest lump (four holes; a round rock stands five)
+    for (const m of Object.keys(rock.metals)) {
+      const lump = rock.lumps.filter((L) => L.metal === m).sort((a, b) => b.ore - a.ore)[0], h = R.drill(lump.p);
+      assert.ok(h.by[m] > 0, `seed ${s}: the hole at the ${m} takes some`); assert.deepEqual(h.stays, {}, `seed ${s}: nothing is left for want of a canister`);
+    }
+    assert.deepEqual(Object.keys(R.store()).sort(), ['cobalt', 'gold', 'iron', 'nickel'], `seed ${s}`);
+    assert.equal(R.given, 4, 'four canisters, one for each metal'); assert.deepEqual(R.cans.slice(0, 4).map((c) => c.metal).sort(), ['cobalt', 'gold', 'iron', 'nickel']); checkCans(R.cans);
+    for (const c of R.cans.slice(4)) assert.deepEqual(c, { metal: null, t: 0 });
+    // every bit that left the rock is aboard
+    assert.ok(near(R.aboard + oreLeft(rock), 4, 1e-6));
+  }
+  // and rocks the field makes by itself hold four: the first one found in these fields, drilled where its ore is thick
+  let seen = 0;
+  for (let s = 1; s <= 40 && seen < 5; s++) {
+    const R = makeRun({ rand: seed(s) }), rock = R.rocks.find((r) => Object.keys(r.metals).length === 4); if (!rock) continue;
+    seen++; R.pick(rock.id); R.asked(); while (R.stage === 'drill' && R.held === rock) R.drill(bestHole(rock, 240, (d) => holeWorth(rock, d, R.cans)).dir);
+    assert.ok(Object.keys(R.store()).length >= 3 && R.given === Object.keys(R.store()).length, `seed ${s}: ${JSON.stringify(R.store())}`); checkCans(R.cans);
+  }
+  assert.equal(seen, 5);
 });
 
 // ── a run ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-test('a run: find a rock, its question, drill, let go or crumble, on to the next, until the store is full; the question changes nothing', () => {
+test('a run: find a rock, its question, drill, let go or crumble, on to the next; the question changes nothing', () => {
   const R = makeRun({ rand: seed(3) });
-  assert.equal(R.stage, 'look'); assert.equal(R.aboard, 0); assert.equal(R.full, 0); assert.equal(R.rocks.length, DRILL.field);
+  assert.equal(R.stage, 'look'); assert.equal(R.aboard, 0); assert.equal(R.full, 0); assert.equal(R.given, 0); assert.equal(R.rocks.length, DRILL.field); checkCans(R.cans);
   assert.equal(R.drill([0, 1, 0]), null, 'nothing in the claw'); assert.equal(R.letGo(), false);
   const first = R.rocks[2]; assert.equal(R.pick(first.id), first); assert.equal(R.stage, 'ask'); assert.equal(R.pick(R.rocks[0].id), null, 'one rock at a time');
   // the question is over, however it was answered: the rock is exactly as it was
   const before = JSON.stringify(first);
   assert.equal(R.asked.length, 0, 'it takes no answer'); assert.equal(R.asked(), true); assert.equal(R.stage, 'drill'); assert.equal(JSON.stringify(first), before);
-  const h = R.drill(bestHole(first).dir); assert.ok(h.took > 0 && near(R.aboard, h.took)); assert.equal(h.rock, first);
+  const h = R.drill(bestHole(first).dir); assert.ok(h.took > 0 && near(R.aboard, h.took)); assert.equal(h.rock, first); assert.deepEqual(h.stays, {});
+  assert.deepEqual([...new Set(R.cans.filter((c) => c.metal).map((c) => c.metal))].sort(), Object.keys(h.by).sort(), 'canisters for the metals the first hole found, and no others'); assert.ok(R.given >= Object.keys(h.by).length);
   assert.equal(R.letGo(), true); assert.equal(R.stage, 'look'); assert.equal(R.held, null);
   assert.ok(!R.rocks.includes(first), 'a rock worked is gone'); assert.equal(R.rocks.length, DRILL.field - 1, 'and no other is put in its place');
   // the last hole crumbles the rock, and the run is back to looking
@@ -217,97 +315,162 @@ test('a run: find a rock, its question, drill, let go or crumble, on to the next
   let last = null; while (R.stage === 'drill') last = R.drill(randDir(seed(R.stats.holes + 4)));
   assert.ok(last.broke || last.done); if (!last.done) { assert.equal(R.stage, 'look'); assert.ok(!R.rocks.includes(second)); }
   assert.equal(R.stats.rocks, 2);
-  // two runs alike but for the rocks' questions (asked at once, or put away a while): the same store
-  const play = (wait) => { const X = makeRun({ rand: seed(21) }), pick = seed(5); let g = 0; while (X.stage !== 'full' && g++ < 500) { if (X.stage === 'look') { X.pick(X.rocks[Math.floor(pick() * X.rocks.length)].id); if (wait) X.asked(); else X.asked(); } X.drill(bestHole(X.held).dir); } return X.store(); };
+  // two runs alike but for the rocks' questions (asked at once, or put away a while): the same canisters
+  const play = (wait) => { const X = makeRun({ rand: seed(21) }), pick = seed(5); let g = 0; while (!X.done && g++ < 300) { if (X.stage === 'look') { X.pick(X.rocks[Math.floor(pick() * X.rocks.length)].id); if (wait) X.asked(); else X.asked(); } X.drill(bestHole(X.held).dir); } return X.cans; };
   assert.deepEqual(play(true), play(false));
+  // a driller who only ever lets rocks go uses the field up, and there is always more of it
+  const B = makeRun({ rand: seed(2) }); let g = 0;
+  while (g++ < 400) { B.pick(B.rocks[0].id); B.asked(); B.letGo(); assert.ok(B.rocks.length >= 7, 'more rocks further out'); }
+  assert.equal(B.aboard, 0); assert.equal(B.canHome(), false, 'nothing aboard: nothing to head home with'); assert.equal(B.home(), false); assert.equal(B.stage, 'look');
 });
 
-test('every run fills its store: a careful driller from a few rocks, a careless one from more; and the rocks never run out', () => {
-  let careful = 0, careless = 0; const N = 30;
+test('the run is over by itself when all eight canisters are full: every bit drilled is aboard, exactly, and nothing is rounded', () => {
+  let rocks = 0; const N = 30;
   for (let s = 1; s <= N; s++) {
-    for (const smart of [true, false]) {
-      const rand = seed(s), R = makeRun({ rand }), pick = seed(s + 7); let guard = 0;
-      while (R.stage !== 'full' && guard++ < 2000) { if (R.stage === 'look') { R.pick(R.rocks[Math.floor(pick() * R.rocks.length)].id); R.asked(); } R.drill(smart ? bestHole(R.held).dir : randDir(pick)); assert.ok(R.rocks.length >= 7, 'more rocks further out'); }
-      assert.equal(R.stage, 'full', `seed ${s}`); assert.equal(R.full, 8);
-      if (smart) careful += R.stats.rocks; else careless += R.stats.rocks;
-    }
+    const took = {};
+    const R = playRun(s, { each(X, h, rock, before) {
+      // metal by metal: what left the rock is what came aboard, in whole hundredths of a tonne; what stayed is still in it
+      const after = oreBy(rock);
+      for (const m of Object.keys(before)) assert.ok(near(before[m] - (after[m] || 0), h.by[m] || 0, 1e-9), `seed ${s}: ${m}`);
+      for (const [m, t] of Object.entries(h.by)) { took[m] = (took[m] || 0) + t; assert.ok(near(t * 100, Math.round(t * 100), 1e-6)); }
+      checkCans(X.cans, `seed ${s}`);
+      for (const c of X.cans) assert.ok(near(c.t * 100, Math.round(c.t * 100), 1e-6), `seed ${s}: a level of ${c.t}`);
+      const st = X.store(); assert.deepEqual(Object.keys(st).sort(), Object.keys(took).sort()); for (const m of Object.keys(took)) assert.ok(near(st[m], took[m], 1e-6), `seed ${s}: ${m}`);
+      assert.ok(near(X.aboard, sumOf(st), 1e-6)); assert.equal(X.full, X.cans.filter((c) => c.t === 1).length); assert.equal(X.sells(), sellsFor(st).pay);
+      assert.equal(h.done, X.cans.every((c) => c.t === 1)); assert.equal(X.stage === 'full', h.done);
+    } });
+    // all eight full: each a tonne of one metal, so the store is whole tonnes of each, eight in all
+    assert.equal(R.stage, 'full', `seed ${s}`); assert.equal(R.done, true); assert.equal(R.early, false); assert.equal(R.aboard, 8); assert.equal(R.full, 8); assert.equal(R.given, 8);
+    for (const c of R.cans) assert.ok(NAMES.includes(c.metal) && c.t === 1);
+    const st = R.store(); assert.equal(sumOf(st), 8); for (const t of Object.values(st)) assert.ok(Number.isInteger(t) && t >= 1);
+    assert.deepEqual(R.load(), { store: st, cans: R.cans }); assert.notEqual(R.load().cans, R.cans);
+    assert.equal(R.drill([0, 1, 0]), null, 'full is full'); assert.equal(R.canHome(), false); assert.equal(R.home(), false, 'and there is no heading home early from a full load');
+    rocks += R.stats.rocks;
   }
-  assert.ok(careful / N >= 2 && careful / N <= 5, `a careful driller: ${careful / N} rocks`);
-  assert.ok(careless / N > careful / N + 1.5 && careless / N <= 12, `a careless one: ${careless / N} rocks`);
-  // a driller who only ever hits bare rock uses the field up, and there is always more of it
-  const R = makeRun({ rand: seed(2) }); let g = 0;
-  while (g++ < 400) { R.pick(R.rocks[0].id); R.asked(); R.letGo(); }
-  assert.ok(R.rocks.length >= 7); assert.equal(R.aboard, 0);
+  assert.ok(rocks / N >= 3 && rocks / N <= 30, `rocks worked to fill all eight: ${rocks / N}`);
 });
 
-test('the captain\'s own driller works the same game by the same rules: a full store, an ordinary mixed load', () => {
+test('heading home early: each part-full canister is rounded to the nearest 1/8 of a tonne, and that rounded load is what comes home', () => {
+  // full ones stay full; 0.43 is nearest 3/8; 0.06 rounds to nothing (the canister comes home empty, no metal's);
+  // 0.07 to 1/8; 0.94 to a full one; a half stays a half; 0.19 to 1/4
+  assert.deepEqual(roundCans(C8([['iron', 1], ['iron', 0.43], ['nickel', 0.06], ['copper', 0.07], ['gold', 0.94], ['cobalt', 0.5], [null, 0], ['titanium', 0.19]])),
+    C8([['iron', 1], ['iron', 0.375], [null, 0], ['copper', 0.125], ['gold', 1], ['cobalt', 0.5], [null, 0], ['titanium', 0.25]]));
+  assert.equal(DRILL.eighths, 8);
+  for (let h = 0; h <= 100; h++) { const [c] = roundCans([{ metal: 'iron', t: h / 100 }]); assert.ok(near(c.t * 8, Math.round(c.t * 8)) && Math.abs(c.t - h / 100) <= 1 / 16 + 1e-9, `${h} hundredths -> ${c.t}`); }
+  let early = 0, parted = 0;
+  for (let s = 1; s <= 60; s++) for (const rocks of [1, 2, 4]) {
+    // (a few rocks, then home; the canisters as they were at that moment are kept to compare)
+    let was = null;
+    const R = playRun(s, { rocks, each(X) { was = X.cans.map((c) => ({ ...c })); } });
+    if (R.stage === 'full') continue;
+    early++; assert.equal(R.stage, 'home'); assert.equal(R.early, true); assert.equal(R.done, true);
+    R.cans.forEach((c, i) => {
+      const b = was[i];
+      if (b.t === 1) assert.deepEqual(c, b, 'a full canister is not touched');
+      assert.ok(near(c.t * 8, Math.round(c.t * 8), 1e-9), `seed ${s}: a level of ${c.t}`); assert.ok(Math.abs(c.t - b.t) <= 1 / 16 + 1e-9, `seed ${s}: ${b.t} -> ${c.t}`);
+      assert.equal(c.t, Math.round(b.t * 8) / 8, `seed ${s}: ${b.t} to the nearest eighth`); assert.equal(c.metal, c.t > 0 ? b.metal : null);
+      if (b.t > 0 && b.t < 1) parted++;
+    });
+    checkCans(R.cans, `seed ${s}`);
+    // the rounded load is what comes home and what is sold: each metal's tonnes, in eighths, times its price, added up
+    const { store, cans } = R.load(), by = {}; for (const c of cans) if (c.metal) by[c.metal] = (by[c.metal] || 0) + c.t;
+    assert.deepEqual(Object.fromEntries(Object.entries(store).sort()), Object.fromEntries(Object.entries(by).sort()));
+    for (const t of Object.values(store)) assert.ok(near(t * 8, Math.round(t * 8), 1e-9) && t > 0);
+    const plain = Object.entries(store).reduce((a, [m, t]) => a + t * priceOf(m), 0);
+    assert.equal(R.sells(), plain); assert.equal(sellsFor(store).pay, plain); assert.ok(Number.isInteger(plain / 125), `seed ${s}: ${plain}`);
+    // the run is over: no more drilling, no second rounding
+    assert.equal(R.pick(R.rocks[0].id), null); assert.equal(R.drill([0, 1, 0]), null); assert.equal(R.home(), false); assert.deepEqual(R.load().cans, cans);
+  }
+  assert.ok(early > 100 && parted > 150, `${early} runs headed home early, ${parted} part-full canisters rounded`);
+  // with a rock in the claw too: it is let be, and the run is over
+  const R = makeRun({ rand: seed(9) }), rock = R.rocks[0]; R.pick(rock.id); R.asked(); R.drill(bestHole(rock).dir);
+  assert.equal(R.canHome(), R.cans.some((c) => c.t >= 0.07)); if (R.canHome()) { assert.equal(R.home(), true); assert.equal(R.stage, 'home'); assert.equal(R.letGo(), false); }
+  // under a sixteenth of a tonne aboard rounds to nothing: there is nothing to head home with yet
+  const T = makeRun({ rand: seed(9) }); T.cans[0] = { metal: 'iron', t: 0.06 }; assert.equal(T.canHome(), false); assert.equal(T.home(), false); assert.equal(T.stage, 'look');
+  T.cans[0].t = 0.07; assert.equal(T.canHome(), true);
+});
+
+test('the captain\'s own driller works the same game by the same rules: all eight canisters full, one metal to each, an ordinary mixed load', () => {
   const sold = [];
-  for (let s = 1; s <= 200; s++) { const st = crewLoad(seed(s)); assert.equal(Math.round(sumOf(st) * 100), 800, `seed ${s}`); for (const m of Object.keys(st)) assert.ok(NAMES.includes(m)); sold.push(sellsFor(st).pay); }
+  for (let s = 1; s <= 200; s++) {
+    const { store, cans } = crewLoad(seed(s));
+    checkCans(cans, `seed ${s}`); for (const c of cans) assert.ok(NAMES.includes(c.metal) && c.t === 1, `seed ${s}: ${JSON.stringify(c)}`);
+    assert.equal(sumOf(store), 8, `seed ${s}`); for (const [m, t] of Object.entries(store)) { assert.ok(NAMES.includes(m) && Number.isInteger(t)); assert.equal(t, cans.filter((c) => c.metal === m).length); }
+    sold.push(sellsFor(store).pay);
+  }
   const mean = sold.reduce((a, b) => a + b, 0) / sold.length;
-  // an ordinary mixed load of eight tonnes sells for about 24,000 to 27,000 credits. (It was 17,000 to 20,000 while
-  // the store was six tonnes: the prices are as they were, the store is a third bigger. Whether the prices should come
-  // down for it is the game's maker's to say: src/jobs/smelter.js PRICE_TIMES.)
+  // an ordinary mixed load of eight tonnes sells for about 24,000 to 27,000 credits, as it did while the canisters
+  // filled as one store (25,800 then; the prices are as they were, and whether they should come down is the game's
+  // maker's to say: src/jobs/smelter.js PRICE_TIMES)
   assert.ok(mean >= 24000 && mean <= 27000, `an ordinary load sells for ${Math.round(mean)}`);
   assert.ok(Math.min(...sold) >= HOLD * priceOf('iron') && Math.max(...sold) <= HOLD * priceOf('gold'));
-  assert.ok(new Set(sold).size > 100, 'loads differ');
+  for (const x of sold) assert.ok(Number.isInteger(x / 1000), 'whole canisters sell for whole thousands');
+  assert.ok(new Set(sold).size > 15, 'loads differ');
 });
 
 // ── the money ─────────────────────────────────────────────────────────────────────────────────────────────────────
 test('choosing well is worth it: a driller who goes for the dear metals brings home visibly more than one who takes any rock', () => {
-  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  const play = (s, choose) => { const R = makeRun({ rand: seed(s) }); let at = [0, 0, 0], g = 0; while (R.stage !== 'full' && g++ < 500) { if (R.stage === 'look') { const six = [...R.rocks].sort((a, b) => dist(a.pos, at) - dist(b.pos, at)).slice(0, 6), next = choose(six); at = next.pos; R.pick(next.id); R.asked(); } const b = bestHole(R.held); if (b.worth < 0.03) R.letGo(); else R.drill(b.dir); } return R.sells(); };
+  // (eight rocks each, then home with what is aboard)
   let any = 0, choosy = 0; const N = 120;
-  for (let s = 1; s <= N; s++) { any += play(s, (six) => six[0]); choosy += play(s, (six) => [...six].sort((a, b) => rockSells(b) - rockSells(a))[0]); }
+  for (let s = 1; s <= N; s++) { any += playRun(s, { rocks: 8, choose: (six) => six[0] }).sells(); choosy += playRun(s, { rocks: 8, choose: (six) => [...six].sort((a, b) => rockSells(b) - rockSells(a))[0] }).sells(); }
   assert.ok(choosy / any > 1.12 && choosy / any < 2, `choosy ${Math.round(choosy / N)} against ${Math.round(any / N)}`);
 });
 
-test('home from a run at the drill: the store is one haul on every slip, the smelter\'s slips about it are told round and say so, and the share waiting is the contract\'s part of the plain sum', () => {
+test('home from a run at the drill: the load is one haul on every slip, the payout is each metal\'s tonnes times its price added up, and the smelter\'s slip about it tells the same amounts', () => {
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,
     steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 } });
-  const M = smelter.makers, rand = seeded(17);
-  for (let s = 1; s <= 12; s++) for (const roles of [['drill'], ['pilot', 'drill'], ['pilot', 'drill', 'engineer']]) {
-    const n = 20 + s; forget(); flownHaul(n, null);
-    const R = makeRun({ rand: seed(s) }), pick = seed(s + 3); let g = 0;
-    while (R.stage !== 'full' && g++ < 900) { if (R.stage === 'look') { R.pick(R.rocks[Math.floor(pick() * R.rocks.length)].id); R.asked(); } R.drill(bestHole(R.held).dir); }
-    const store = R.store(), crew = crewOf(); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 };
-    const P = MS.land(crew, { n, store }), H = haulOf(n);
-    // the haul's facts are the store, eight tonnes in the eight canisters, and what it sells for is the plain sum
-    assert.equal(H.flown, true); assert.deepEqual(H.store, store); assert.equal(H.tonnes, 8); assert.equal(H.canisters, 8);
+  const M = smelter.makers, rand = seeded(17); let fullRuns = 0, earlyRuns = 0, fracs = 0;
+  // (runs played until all eight are full, and runs that head home after one, two or three rocks)
+  for (let s = 1; s <= 16; s++) for (const rocks of [Infinity, 1, 2, 3]) {
+    const roles = [['drill'], ['pilot', 'drill'], ['pilot', 'drill', 'engineer']][s % 3], n = 20 + s; forget(); flownHaul(n, null);
+    const R = playRun(s, { rocks }), { store } = R.load(), crew = crewOf(); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 };
+    const full = R.stage === 'full', total = Math.round(sumOf(store) * 1000) / 1000; if (full) fullRuns++; else earlyRuns++;
+    const P = MS.land(crew, { n, store }), H = haulOf(n), why0 = `seed ${s}, ${rocks} rocks: ${JSON.stringify(store)}`;
+    // the haul's facts are the load: the tonnes of each metal in the Miner's eight canisters
+    assert.equal(H.flown, true); assert.deepEqual(H.store, store); assert.equal(H.tonnes, total); assert.equal(H.canisters, 8); if (full) assert.equal(H.tonnes, 8);
     for (const gone of ['ore', 'fill', 'yield', 'oreTonnes', 'metal10']) assert.ok(!(gone in H), `a haul has no ${gone}`);
-    const plain = Object.entries(store).reduce((a, [m, t]) => a + Math.round(t * 100) * priceOf(m) / 100, 0);
-    assert.equal(H.pay, plain); assert.equal(P.sold, plain); assert.equal(P.share, MS.shareOf(roles)); assert.equal(P.pay, Math.round(plain * MS.shareOf(roles) / 100));
-    assert.deepEqual(P.lots.map((L) => [L.metal, L.tonnes]).sort(), Object.entries(store).sort()); for (const L of P.lots) { assert.equal(L.price, priceOf(L.metal)); assert.ok(near(L.pay, L.tonnes * L.price, 1e-6)); }
+    // THE PAYOUT IS THE PLAIN SUM: each metal's tonnes times what a tonne of it sells for, added up; and the share of it
+    const plain = Object.entries(store).reduce((a, [m, t]) => a + t * priceOf(m), 0);
+    assert.equal(H.pay, plain, why0); assert.equal(P.sold, plain); assert.equal(P.tonnes, total); assert.equal(P.share, MS.shareOf(roles)); assert.equal(P.pay, Math.round(plain * MS.shareOf(roles) / 100));
+    assert.deepEqual(P.lots.map((L) => [L.metal, L.tonnes]).sort(), Object.entries(store).sort()); for (const L of P.lots) { assert.equal(L.price, priceOf(L.metal)); assert.equal(L.pay, L.tonnes * L.price); assert.ok(Number.isInteger(L.pay)); }
     assert.equal(P.lots.reduce((a, L) => a + L.pay, 0), P.sold);
-    // THE PAYOUT SLIP keeps the true amounts: a row for each metal, its tonnes times its price
+    // THE PAYOUT SLIP: a row for each metal, its tonnes times its price; an eighth is a fraction, never 0.125
     const rows = MS.payoutLines(P);
-    P.lots.forEach((L, i) => assert.equal(rows[i][1], `${L.tonnes} ${L.tonnes === 1 ? 'tonne' : 'tonnes'} × ${L.price.toLocaleString('en-US')} = ${L.pay.toLocaleString('en-US')}`));
-    // THE SMELTER'S SLIPS about this haul read by the same pattern (each metal's tonnes at its price, added up), its
-    // amounts told round: whole tonnes on the two-step rung, tenths on the top rung, with "about"; once at each
-    for (const [step, unit] of [[2, 1], [3, 0.1]]) {
-      const o = M.pay.make(step, { rand, live: live(n) }), told = aboutStore(store, unit), f = o.facts, why = `${JSON.stringify(store)} at step ${step}: ${o.story}`;
-      assert.equal(f.from, 'Your crew\'s haul'); assert.equal(f.mine, true); assert.equal(f.haul, n); assert.equal(f.sold, P.sold);
-      assert.deepEqual(f.load.parts.map((p) => [p.metal, p.amt]), told.map((x) => [x.metal.name, x.tonnes]), why);
-      // (round: every amount a whole tonne, or a whole tenth of one; together the store's own eight tonnes)
-      for (const x of told) assert.ok(near(x.tonnes / unit, Math.round(x.tonnes / unit), 1e-6) && x.tonnes > 0, why);
-      assert.ok(near(told.reduce((a, x) => a + x.tonnes, 0), 8, 1e-6), why);
-      for (const x of told) assert.ok(Math.abs(x.tonnes - store[x.metal.name]) < unit + 1e-9, `${why}: ${x.metal.name} is within one step of its true amount`);
-      const want = told.reduce((a, x) => a + Math.round(x.tonnes * x.metal.price), 0);
-      assert.ok(near(rightOf(o), want, 1e-6), `${why} -> ${o.answer}`); assert.equal(f.ans, want);
+    P.lots.forEach((L, i) => {
+      assert.equal(rows[i][1], `${eighthsText(L.tonnes)} ${L.tonnes <= 1 ? 'tonne' : 'tonnes'} × ${L.price.toLocaleString('en-US')} = ${L.pay.toLocaleString('en-US')}`);
+      assert.ok(!/\d\.\d/.test(rows[i][1]), rows[i][1]); if (!Number.isInteger(L.tonnes)) { fracs++; assert.ok(/\d\/[248] tonnes? ×/.test(rows[i][1]), rows[i][1]); }
+    });
+    assert.ok(!/\d\.\d/.test(lotsWords(P.lots)), lotsWords(P.lots));
+    // THE SMELTER'S SLIP about this haul reads by the same pattern (each metal's tonnes at its price, added up), its
+    // amounts exactly as they came home, and its answer is what the payout says the haul sold for; once at each rung
+    for (const step of [2, 3]) {
+      const o = M.pay.make(step, { rand, live: live(n) }), f = o.facts, why = `${why0} at step ${step}: ${o.story}`;
+      assert.equal(f.from, 'Your crew\'s haul'); assert.equal(f.mine, true); assert.equal(f.haul, n); assert.equal(f.ans, P.sold); assert.equal(rightOf(o), P.sold, why);
+      assert.deepEqual(Object.fromEntries(f.load.parts.map((p) => [p.metal, p.amt])), store, why); assert.equal(f.load.total, total);
+      for (let i = 1; i < f.load.parts.length; i++) assert.ok(f.load.parts[i].amt <= f.load.parts[i - 1].amt, 'the most first');
       assert.equal(o.coins.filter((c) => c.good).length, 1); assert.ok(o.coins.length >= 3, why); assert.ok(!/NaN|undefined/.test(JSON.stringify(o)));
-      // it says "about" wherever an amount was rounded, and its line under the right answer gives the true sum
-      if (!told.exact) { assert.ok(/about/.test(o.story) && /^About/.test(o.ask) && o.lines.every(([k, v]) => /about/.test(k + v)), why); assert.ok(o.rightWhy.includes(`The true amounts sold for ${P.sold.toLocaleString('en-US')} credits`), o.rightWhy); }
-      // tonnes only, by the chart of what a tonne sells for; no canisters, and nothing of a canister's 3/4
+      // nothing is told round any more, and nothing says "about"
       const text = `${o.story} ${o.ask} ${o.lines.flat().join(' ')} ${o.coins.map((c) => `${c.label} ${c.why}`).join(' ')} ${o.rightWhy} ${o.help.line}`;
-      assert.ok(/tonne/.test(text) && !/canister|3\/4|slag|yield/.test(text), text); assert.equal(o.chart.title, 'A tonne sells for');
-      assert.deepEqual(o.lines.slice(0, -1).map(([k]) => k.toLowerCase().replace(', about', '')), told.map((x) => x.metal.name)); assert.equal(o.lines[o.lines.length - 1][1], '?');
+      assert.ok(!/about/i.test(text), text); assert.equal(o.ask, 'What is the total sale price?');
+      // tonnes only, by the chart of what a tonne sells for; no canisters; an eighth as a fraction
+      assert.ok(/tonne/.test(text) && !/canister|slag|yield|\d\.\d/.test(text), text); assert.equal(o.chart.title, 'A tonne sells for');
+      assert.ok(o.story.startsWith('Your crew came home with ') && o.story.includes(tonnesWords(f.load.parts[0].amt, true)), o.story);
+      assert.deepEqual(o.lines.slice(0, -1).map(([k, v]) => [k.toLowerCase(), v]), f.load.parts.map((p) => [p.metal, tonnesWords(p.amt, true)])); assert.deepEqual(o.lines[o.lines.length - 1], ['Sold for', '?']);
+      // its sums are whole-number sums that end on the answer: a part of a tonne is what one part sells for, then so many of them
+      const chain = o.sum.chain || [o.sum]; for (const x of chain) assert.ok(Number.isInteger(x.a) && Number.isInteger(x.b), `${why}: ${JSON.stringify(x)}`);
+      const end = chain[chain.length - 1], ends = end.op === 'add' ? end.a + end.b : end.op === 'mul' ? end.a * end.b : end.a / end.b; assert.equal(ends, P.sold, why);
       assert.notEqual(M.pay.make(step, { rand, live: live(n) }).facts.mine, true, 'once a haul at each rung: then slips from the log');
     }
-    // its shares are not round, so the slips that ask a share of the haul in the hangar are from the log
+    // the slips that ask a share of the haul in the hangar are from the log (its shares need not be quarters of the load)
     for (const o of [M.each.make(1, { rand, live: live(n) }), M.part.make(1, { rand, live: live(n) }), M.part.make(2, { rand, live: live(n) })]) assert.equal(o.facts.live, false, o.story);
+    // a haul that did not come home with all eight full is not said to have: the slip that counts the canisters "still
+    // on the Miner" of 8 full ones is from the log
+    if (H.tonnes < 8) for (let k = 0; k < 6; k++) { const o = M.count.make(2, { rand, live: live(n) }); assert.notEqual(o.facts.live, true, o.story); }
     // collected: the credits are up by exactly the share
     crew.credits = 500; const got = MS.collect(crew); assert.deepEqual(got, { pay: P.pay, credits: 500 + P.pay });
     flownHaul(n, null);
   }
+  assert.ok(fullRuns >= 16 && earlyRuns >= 30 && fracs >= 30, `${fullRuns} full runs, ${earlyRuns} early ones, ${fracs} rows with a part of a tonne`);
   forget();
 });
 

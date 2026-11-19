@@ -68,6 +68,8 @@ export const RUN_TALK = {
     pick: ['Going in for that one.', 'That one it is.'],
     broke: ['That one\'s done. Find us another.', 'She\'s all in pieces. Next rock!'],
     fullCrew: ['Eight canisters full. Juno, take us home.', 'That\'s the load. Home, Juno.'],
+    // (the crew member at the drill headed home before all eight were full)
+    early: ['That\'s the load. Home, {player}.'], earlyCrew: ['That\'s the load. Home, Juno.'],
     landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],
   },
 };

@@ -160,6 +160,29 @@ test('the next haul starts from what this one left: the rack\'s drained canister
   let p = plan; for (let n = 0; n < 3; n++) { p = planCycle(site, p.next); assert.ok(Math.abs(p.length - plan.length) < 30, 'every round about the same length'); }
 });
 
+test('a haul that came home early: part-full and empty canisters on the ship, each as full as it came home; the round still ends done', () => {
+  // (how kit/crane.js starts the round for such a haul: the standard start, the ship's canisters as full as they are)
+  for (const fills of [[1, 1, 1, 0.625, 0.5, 0, 0, 0], [0.125, 0, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0.375, 1, 0, 0.75, 0], [0, 0, 0, 0, 1, 1, 1, 1], [1, 1, 1, 1, 0, 0, 0, 0], [0.875, 0.875, 0.875, 0.875, 0.875, 0.875, 0.875, 0.875]]) {
+    const S = startOf(site); for (const q of S.cans) if (q.where === 'mount') q.fill = fills[q.i];
+    let p; try { p = planFrom(site, S); } catch (e) { assert.fail(`${fills}: ${e.message}`); }
+    fills.forEach((f, i) => { const a = canAt(p, i, 0); assert.deepEqual([a.where, a.i], ['mount', i]); assert.equal(fillAt(p, i, 0), f); });
+    const L0 = loadAt(p, 0); assert.equal(L0.onShip, 8); assert.equal(L0.fullOnShip, fills.filter((f) => f > 0.5).length); assert.equal(L0.onRack, 8); assert.equal(L0.docked.length, 0);
+    // every canister with metal in it goes to the wall and drains from where its level is, in that part of the time
+    fills.forEach((f, i) => {
+      if (!f) return;
+      const dock = p.docks.find((d) => d.c === i), drain = p.cans[i].fill[p.cans[i].fill.length - 1];
+      assert.ok(dock, `${fills}: canister ${i} never docked`); assert.equal(drain.a, f); assert.equal(drain.b, 0); assert.ok(Math.abs((drain.t1 - drain.t0) - f * SPEED.drain) < 1e-6);
+    });
+    // never two canisters in one place on the way
+    for (let t = 0; t < p.length; t += 2) { const seen = new Set(); p.cans.forEach((_, c) => { const a = canAt(p, c, t); if (a.where === 'held') return; const k = a.where + a.i; assert.ok(!seen.has(k), `${fills}: two canisters at ${k}, t ${t}`); seen.add(k); }); }
+    // the end: the wall clear, eight empties on the ship and eight on the rack, no metal left in any of them
+    const L = loadAt(p, p.length);
+    assert.equal(L.phase, 'done'); assert.equal(L.docked.length, 0); assert.equal(L.onShip, 8); assert.equal(L.fullOnShip, 0); assert.equal(L.onRack, 8);
+    p.cans.forEach((_, c) => assert.equal(fillAt(p, c, p.length), 0, `${fills}: canister ${c}`));
+    assert.ok(p.next.onMount.every((c) => c >= 0) && p.next.inBay.every((c) => c >= 0), 'and the next haul starts from there');
+  }
+});
+
 test('the round taken up from any arrangement of the sixteen canisters ends done, everything in its place', () => {
   let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   for (let n = 0; n < 150; n++) {

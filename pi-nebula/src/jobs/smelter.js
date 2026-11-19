@@ -35,18 +35,21 @@
 //
 // THE HAUL (haulOf below): one for each landing of the Miner (src/crane.js's round: the hangar is set out afresh and the
 // Miner lands again when the player leaves the area and comes back). The smelter's equipment reads the WHOLE haul, all
-// its canisters, wherever they are. A haul is its STORE: so many tonnes of each metal, eight tonnes in the eight
-// canisters. A haul is a pure function of its number, so every slip about the same haul tells the same haul.
+// its canisters, wherever they are. A haul is its STORE: so many tonnes of each metal in the Miner's eight canisters, a
+// canister holding a tonne of ONE metal (the game's maker, 2026-11-18: "the canisters don't mix ore ... each canister
+// holds a tonne, so we could use them interchangeably"; src/drill.js). A haul is a pure function of its number, so
+// every slip about the same haul tells the same haul.
 //   - A haul nobody the player knows flew (the Miner's own rounds while the player is about the station) is one of
-//     HAULS: whole canisters of each metal, in quarters of the load, so that its shares are as easily said as
-//     fractions (1/2, 1/4) as percents (50%, 25%).
+//     HAULS: eight full canisters, so many of each metal, in quarters of the load, so that its shares are as easily
+//     said as fractions (1/2, 1/4) as percents (50%, 25%).
 //   - A HAUL THE PLAYER WENT OUT FOR (src/missions.js: they signed a captain's contract and went on the run, at the
-//     drill or in the pilot's seat) is what they came home with, to the hundredth of a tonne (flownHaul's `store`:
-//     { iron: 4.67, nickel: 2.9, copper: 0.43 }). The game's maker (2026-11-18): "the canisters all fill as a
-//     collective ... Just treat the storage as one", "every bit should count", "It's as simple as add up what they
-//     came back with and multiply each type of metal with what it is worth and that's what you get paid." Its payout
-//     slip (src/missions.js) is that plain sum, with its true amounts. A slip here about it tells the amounts ROUND
-//     and says "about" (aboutStore), and its line under the right answer gives what the true amounts sold for.
+//     drill or in the pilot's seat) is what they came home with (flownHaul's `store`): whole tonnes of each metal when
+//     all eight canisters came home full ({ iron: 4, nickel: 3, copper: 1 }), and eighths of a tonne when they headed
+//     home early ("round the level to the nearest 1/8th to make the math easier": { iron: 2.625, copper: 0.75 }).
+//     "It's as simple as add up what they came back with and multiply each type of metal with what it is worth and
+//     that's what you get paid." Its payout slip (src/missions.js) is that plain sum. A slip here about it tells the
+//     same amounts, exactly (nothing is told round any more: the amounts are round as they come), in tonnes, an
+//     eighth as a fraction (2 5/8 tonnes, never 2.625).
 // haulOf gives a haul as its lots (`lots`: each metal, its tonnes, what a tonne of it sells for, what that comes to)
 // and its pay as their plain sum. Who is paid what share of it is the contract's (src/missions.js), and the share is
 // collected at this job's controls (its payout card, src/missions.js payoutOrder).
@@ -109,45 +112,34 @@ const list = (w) => (w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} 
 //   haulOf(n) -> { n, canisters, flown, store, lots, tonnes, pay }
 //     canisters  all the haul's canisters (CARRIES), wherever they are now: on the ship, at the wall, on the rack
 //     flown      the player went out for this haul (flownHaul); else one of the Miner's own (HAULS)
-//     store      { iron: 4, nickel: 2, titanium: 2 }: the tonnes of each metal in it (a haul the player went out for:
-//                to the hundredth of a tonne)
+//     store      { iron: 4, nickel: 2, titanium: 2 }: the tonnes of each metal in it (a haul the player went out for
+//                and headed home early with: in eighths of a tonne)
 //     lots       [{ metal, tonnes, price, pay }], the most tonnes first: the plain sum, metal by metal
 //     tonnes     all of it; pay: what it sells for, in credits (the lots' pay added up)
-// THE MINER'S OWN HAULS: the tonnes of each metal in its eight canisters (a canister holds a tonne, so these are whole
-// canisters too), every one in quarters of the load. The first is the game's maker's own example.
+// THE MINER'S OWN HAULS: the tonnes of each metal in its eight canisters. A canister holds a tonne of one metal, so
+// each is a load that came from canisters by metal: so many full canisters of each, eight in all, every one in
+// quarters of the load. The first is the game's maker's own example.
 const HAULS = [
   { iron: 4, nickel: 2, titanium: 2 }, { iron: 4, nickel: 4 }, { iron: 6, copper: 2 }, { iron: 2, nickel: 2, copper: 2, cobalt: 2 },
   { nickel: 4, iron: 2, copper: 2 }, { iron: 6, nickel: 2 }, { iron: 4, copper: 4 }, { iron: 4, nickel: 2, cobalt: 2 },
   { nickel: 6, iron: 2 }, { iron: 4, nickel: 2, copper: 2 }, { iron: 4, copper: 2, cobalt: 2 }, { iron: 6, cobalt: 2 },
 ];
 
-// a store tidied: only metals the smelter pours, each to the hundredth of a tonne, none empty
-const hundredths = (t) => Math.round(Number(t) * 100);
+// a store tidied: only metals the smelter pours, each to the thousandth of a tonne (so the hundredths a run counts in
+// and the eighths a load headed home early is rounded to are both kept exactly), none empty
+const thousandths = (t) => Math.round(Number(t) * 1000);
 export function tidyStore(store) {
   const out = {};
-  for (const M of METALS) { const h = hundredths((store || {})[M.name] || 0); if (h > 0) out[M.name] = h / 100; }
+  for (const M of METALS) { const k = thousandths((store || {})[M.name] || 0); if (k > 0) out[M.name] = k / 1000; }
   return out;
 }
 // THE PLAIN SUM: what a store sells for. Each metal's tonnes times what a tonne of it sells for, added up.
 // -> { lots: [{ metal: { name, price }, tonnes, price, pay }] (the most tonnes first), tonnes, pay }
 export function sellsFor(store) {
   const S = tidyStore(store);
-  const lots = METALS.filter((M) => S[M.name]).map((M) => ({ metal: M, tonnes: S[M.name], price: M.price, pay: hundredths(S[M.name]) * M.price / 100 }))
+  const lots = METALS.filter((M) => S[M.name]).map((M) => ({ metal: M, tonnes: S[M.name], price: M.price, pay: thousandths(S[M.name]) * M.price / 1000 }))
     .sort((p, q) => q.tonnes - p.tonnes || q.price - p.price);
-  return { lots, tonnes: lots.reduce((sum, L) => sum + hundredths(L.tonnes), 0) / 100, pay: lots.reduce((sum, L) => sum + L.pay, 0) };
-}
-// A STORE TOLD ROUND, for a slip about a haul the player went out for: each metal's tonnes to the nearest `step` (1:
-// whole tonnes; 0.1: tenths of a tonne), the roundings shared so that they add up to the store's own total, rounded;
-// a metal that rounds to nothing is left out. The most first, and of two alike the cheaper first (the chart's order).
-// -> [{ metal: { name, price }, tonnes }] (round), with .exact: nothing had to be rounded
-export function aboutStore(store, step = 1) {
-  const S = sellsFor(store), k = Math.round(1 / step), total = Math.max(1, Math.round(S.tonnes * k));
-  const parts = S.lots.map((L) => ({ metal: L.metal, x: L.tonnes * k, n: Math.floor(L.tonnes * k + 1e-9) }));
-  let short = total - parts.reduce((a, p) => a + p.n, 0);
-  for (const p of [...parts].sort((a, b) => (b.x - b.n) - (a.x - a.n))) { if (short <= 0) break; p.n++; short--; }
-  const out = parts.filter((p) => p.n > 0).map((p) => ({ metal: p.metal, tonnes: p.n / k })).sort((a, b) => b.tonnes - a.tonnes || a.metal.price - b.metal.price);
-  out.exact = parts.every((p) => Math.abs(p.x - p.n) < 1e-9);
-  return out;
+  return { lots, tonnes: lots.reduce((sum, L) => sum + thousandths(L.tonnes), 0) / 1000, pay: lots.reduce((sum, L) => sum + L.pay, 0) };
 }
 
 // THE HAULS THE PLAYER WENT OUT FOR, by their number: { store }
@@ -170,10 +162,17 @@ export function haulOf(n = 0) {
   const k = haulNo(n), F = FLOWN.get(k) || null, store = F ? { ...F.store } : { ...HAULS[k % HAULS.length] }, S = sellsFor(store);
   return { n: k, canisters: CARRIES, flown: !!F, store, lots: S.lots, tonnes: S.tonnes, pay: S.pay };
 }
-// tonnes as they are said: "3 tonnes", "1 tonne", "1.5 tonnes", "0.75 of a tonne"
-export const tonnesWords = (t) => { const h = hundredths(t), w = dec(h, 2, { trim: true }); return h === 100 ? '1 tonne' : h < 100 ? `${w} of a tonne` : `${w} tonnes`; };
-// "3 tonnes of iron, 1.5 tonnes of nickel and 1.5 tonnes of titanium" (a store's lots, or [{ metal, tonnes }] by name)
-export const lotsWords = (lots) => list(lots.map((L) => `${tonnesWords(L.tonnes)} of ${L.metal.name || L.metal}`));
+// EIGHTHS ARE SAID AS FRACTIONS (2 5/8 tonnes, never 2.625): a load that came home in whole tonnes and eighths of a
+// tonne, as every load does now (all eight canisters full, or headed home early and rounded). Amounts in hundredths
+// (the scan of a rock that has been drilled; a payout kept from before the canisters) stay decimals.
+export const inEighths = (lots) => lots.every((L) => thousandths(L.tonnes) % 125 === 0);
+export const eighthsOf = (t) => simplest(fr(Math.round(thousandths(t) / 125), 8));   // 2.625 -> 21/8; 0.75 -> 3/4
+export const eighthsText = (t) => fracText(eighthsOf(t));   // "2 5/8", "3/4", "3"
+// tonnes as they are said: "3 tonnes", "1 tonne", "1.5 tonnes", "0.75 of a tonne"; eighths: "2 5/8 tonnes", "3/4 of
+// a tonne"
+export const tonnesWords = (t, eighths = false) => { if (eighths) return ofT(eighthsOf(t)); const h = Math.round(Number(t) * 100), w = dec(h, 2, { trim: true }); return h === 100 ? '1 tonne' : h < 100 ? `${w} of a tonne` : `${w} tonnes`; };
+// "3 tonnes of iron, 2 5/8 tonnes of nickel and 3/4 of a tonne of titanium" (a store's lots, or [{ metal, tonnes }] by name)
+export const lotsWords = (lots) => { const e = inEighths(lots); return list(lots.map((L) => `${tonnesWords(L.tonnes, e)} of ${L.metal.name || L.metal}`)); };
 
 // ── fractions of a tonne (Mathwood's own fractions: labs/fishing/frac.js) ───────────────────────────────────────
 // in a sentence: "3/4 of a tonne", "1 tonne", "3 3/4 tonnes"; on an answer button: "3 3/4" big, "tonnes" small
@@ -268,10 +267,12 @@ let pending = null;
 export const forget = () => { asked.clear(); pending = null; };   // (the tests start each case afresh)
 // what a slip about the whole haul says it is about, on its top
 const fromOf = (H) => (H.flown ? 'Your crew\'s haul' : 'This haul');
-// (which of the Miner's canisters are still full at the top of a round: all the ones on it while it is being unloaded)
-const unloading = (live) => !!live && live.phase === 'unload';
-// the Miner's own haul in the hangar, where a slip may be about it (not one the player went out for: its amounts are
-// not round), once a haul for each kind of slip
+// (which of the Miner's canisters are still full at the top of a round: all the ones on it while it is being unloaded,
+// where it came in with all eight full: a haul headed home early has part-full and empty ones among them)
+const unloading = (live) => !!live && live.phase === 'unload' && haulOf(live.round).tonnes >= HOLD;
+// the Miner's own haul in the hangar, where a slip may be about its shares (not one the player went out for: its
+// shares need not come out as quarters of the load, 3 canisters of 8 are 37.5%; it has a slip of its own, the pay's),
+// once a haul for each kind of slip
 const ownHaul = (live, what, n = 0) => { if (!live) return null; const H = haulOf(live.round); if (H.flown || !isNew(live, what, n)) return null; used(live, what, n); return H; };
 
 // a part of x as a sum the worked sheet can do: x ÷ b; or, where whole numbers would not share out evenly (12 ÷ 10
@@ -332,8 +333,8 @@ function loadOf(t, { ks = [2, 3], kinds = ['cans8', 'cans', 'tonnes'] } = {}) {
 // the Miner's own haul in the hangar as a load: its eight canisters, the most first, of two alike the cheaper first
 const haulLoad = (H) => ({ unit: CAN, total: H.canisters, haul: H.n,
   parts: H.lots.map((L) => ({ m: L.metal, pct: Math.round(L.tonnes / H.tonnes * 100), amt: Math.round(L.tonnes / CAN_TONNES) })).sort((a, b) => b.amt - a.amt || a.m.price - b.m.price) });
-// an amount as it is said: "4 canisters", "1.5 tonnes", "0.5 of a tonne"
-const amtWords = (x, unit) => (unit === CAN ? u(x, CAN) : tonnesWords(x));
+// an amount as it is said: "4 canisters", "1.5 tonnes", "0.5 of a tonne"; of a load in eighths: "2 5/8 tonnes"
+const amtWords = (x, unit, eighths = false) => (unit === CAN ? u(x, CAN) : tonnesWords(x, eighths));
 // A LOAD IN WORDS, by its shares (the game's maker's own sentence: "The 8 canisters contain a total of 50% iron, 25%
 // nickel and 25% titanium."; "... collected 30 tonnes of ore. 80% is iron, 10% is nickel ...") or by its amounts ("Of
 // the 8 canisters of this load, 4 hold iron, 2 hold nickel and 2 hold titanium."). W: whose crew it was, if anyone's.
@@ -390,11 +391,21 @@ function amountsLine(L) {
   return `${cap(list(cut))} of the ${T} ${units}. For the other shares find 10% first: ${T} ÷ 10. Each is so many 10%s${five}. ${whole}`;
 }
 // each metal's amount at its price, then all of them added up. by: the steps that found the amounts (amountSteps),
-// where the slip had them worked out first
+// where the slip had them worked out first. A load in eighths (L.eighths): a metal with a part of a tonne is worked
+// in two whole-number sums, what one part of a tonne sells for and then so many of them (2 5/8 tonnes of iron: 2,000
+// ÷ 8, then 21 of those)
 function saleSteps(L, pays, by = null) {
-  const ps = L.parts, steps = ps.map((p) => ({ op: 'mul', a: p.amt, b: p.m.price, say: by ? `The ${p.m.name}: its ${L.unit[1]} at ${credits(p.m.price)} credits each` : `The ${p.m.name}: ${amtWords(p.amt, L.unit)} at ${credits(p.m.price)} credits`, ...(by && by.get(p.pct) ? { uses: { a: by.get(p.pct) } } : {}) }));
-  let sum = pays[0], last = steps[0];
-  for (let i = 1; i < ps.length; i++) { const add = { op: 'add', a: sum, b: pays[i], say: i === 1 ? 'Then the first two together' : `And the ${ps[i].m.name}`, uses: { a: last, b: steps[i] } }; steps.push(add); sum += pays[i]; last = add; }
+  const ps = L.parts, steps = [], found = [];      // (found: the step that gives each metal's own sale)
+  ps.forEach((p, i) => {
+    const f = L.eighths ? eighthsOf(p.amt) : null;
+    if (f && f.d > 1) {
+      const one = { op: 'div', a: p.m.price, b: f.d, say: `The ${p.m.name}: first what 1/${f.d} of a tonne sells for` };
+      steps.push(one, { op: 'mul', a: f.n, b: p.m.price / f.d, say: `Then ${tonnesWords(p.amt, true)} ${f.n === 1 ? 'is one of those' : `${p.amt > 1 ? 'are' : 'is'} ${f.n} of those`}`, uses: { b: one } });
+    } else steps.push({ op: 'mul', a: p.amt, b: p.m.price, say: by ? `The ${p.m.name}: its ${L.unit[1]} at ${credits(p.m.price)} credits each` : `The ${p.m.name}: ${amtWords(p.amt, L.unit, !!L.eighths)} at ${credits(p.m.price)} credits`, ...(by && by.get(p.pct) ? { uses: { a: by.get(p.pct) } } : {}) });
+    found[i] = steps[steps.length - 1];
+  });
+  let sum = pays[0], last = found[0];
+  for (let i = 1; i < ps.length; i++) { const add = { op: 'add', a: sum, b: pays[i], say: i === 1 ? 'Then the first two together' : `And the ${ps[i].m.name}`, uses: { a: last, b: found[i] } }; steps.push(add); sum += pays[i]; last = add; }
   return steps;
 }
 // A SLIP'S SUMS MARKED AS ITS STEPS SAY: which of a step's numbers is an earlier step's answer, carried in (the worked
@@ -445,33 +456,33 @@ function eachCard(L, { t, rand, who = null, W, key = 'each', H = null }) {
   }, rand), sums), who);
 }
 // STEP TWO: THE TOTAL SALE PRICE. The load by its amounts, as a slip's rows, and the chart of what each metal sells
-// for beside it: each metal's amount times its price, added up. mine: a haul the player went out for ({ sold: what
-// its true amounts sold for, exact: nothing of it had to be rounded }): told as their crew's, round, with "about".
-function totalCard(L, { t, rand, who = null, W, key = 'pay:total', H = null, mine = null, at = 70 }) {
-  const T = L.total, unit = L.unit, units = unit[1], ps = L.parts, k = ps.length, last = k - 1;
-  const pays = ps.map((p) => Math.round(p.amt * p.m.price)), sold = pays.reduce((a, b) => a + b, 0), about = !!mine && !mine.exact, ab = about ? 'about ' : '';
-  const worked = k === 1 ? `${nf(ps[0].amt)} × ${credits(ps[0].m.price)} = ${credits(sold)} credits` : `${ps.map((p, i) => `${nf(p.amt)} × ${credits(p.m.price)} = ${credits(pays[i])}`).join('; ')}; together ${credits(sold)} credits`;
+// for beside it: each metal's amount times its price, added up. mine: a haul the player went out for, told as their
+// crew's, its amounts exactly as they came home (L.eighths: whole tonnes and eighths of a tonne, said as fractions).
+function totalCard(L, { t, rand, who = null, W, key = 'pay:total', H = null, mine = false, at = 70 }) {
+  const T = L.total, unit = L.unit, units = unit[1], ps = L.parts, k = ps.length, last = k - 1, E = !!L.eighths, am = (x) => (E ? eighthsText(x) : nf(x));
+  const pays = ps.map((p) => Math.round(p.amt * p.m.price)), sold = pays.reduce((a, b) => a + b, 0), parted = ps.some((p) => !Number.isInteger(p.amt));
+  const worked = k === 1 ? `${am(ps[0].amt)} × ${credits(ps[0].m.price)} = ${credits(sold)} credits` : `${ps.map((p, i) => `${am(p.amt)} × ${credits(p.m.price)} = ${credits(pays[i])}`).join('; ')}; together ${credits(sold)} credits`;
   const slips = t.shuffle([
-    ...(k > 1 ? [{ ...P(T * ps[0].m.price), slip: 'onePrice', why: `That sells all ${nf(T)} ${units} at ${ps[0].m.name}'s price. Each metal has its own price on the chart.` },
+    ...(k > 1 ? [{ ...P(T * ps[0].m.price), slip: 'onePrice', why: `That sells all ${am(T)} ${units} at ${ps[0].m.name}'s price. Each metal has its own price on the chart.` },
       { ...P(ps.reduce((s, p) => s + p.m.price, 0)), slip: 'pricesOnly', why: `That adds up the prices of one ${unit[0]} of each metal. Multiply each metal's ${units} by its price first.` },
-      { ...P(sold - pays[last]), slip: 'part', why: `That leaves out the ${ps[last].m.name}. Every metal in the load is sold: add them all.` }] : [{ ...P(ps[0].m.price), slip: 'oneTonne', why: `${credits(ps[0].m.price)} credits is what one ${unit[0]} sells for. There are ${nf(T)}.` }]),
-    ...(ps.some((p) => !Number.isInteger(p.amt)) ? [{ ...P(ps.reduce((s, p) => s + Math.floor(p.amt) * p.m.price, 0)), slip: 'wholeOnly', why: 'That sells only the whole tonnes. A part of a tonne sells for its part of the price: half a tonne for half the price.' }] : []),
+      { ...P(sold - pays[last]), slip: 'part', why: `That leaves out the ${ps[last].m.name}. Every metal in the load is sold: add them all.` }] : [{ ...P(ps[0].m.price), slip: 'oneTonne', why: `${credits(ps[0].m.price)} credits is what one ${unit[0]} sells for. ${E ? `There ${T <= 1 ? 'is' : 'are'} ${amtWords(T, unit, true)}` : `There are ${nf(T)}`}.` }]),
+    ...(parted ? [{ ...P(ps.reduce((s, p) => s + Math.floor(p.amt) * p.m.price, 0)), slip: 'wholeOnly', why: 'That sells only the whole tonnes. A part of a tonne sells for its part of the price: half a tonne for half the price.' }] : []),
     { ...P(sold + ps[0].m.price), slip: 'groupOff', why: `That is a ${unit[0]} of ${ps[0].m.name} too many.` },
     { ...P(sold * 10), slip: 'pointLost', why: 'That is ten times too much. Count the zeros again.' },
   ]);
   const sums = saleSteps(L, pays);
-  const story = mine ? `Your crew came home with ${ab}${list(ps.map((p) => `${tonnesWords(p.amt)} of ${p.m.name}`))}.` : toldLoad(L, W, 'amounts');
+  const story = mine ? `Your crew came home with ${list(ps.map((p) => `${tonnesWords(p.amt, E)} of ${p.m.name}`))}.` : toldLoad(L, W, 'amounts');
   return madeBy(carriedBy(ownOrder({
-    key: `${key}:${unit === CAN ? 'cans' : 'tonnes'}:${k}`, story, ask: about ? 'About how many credits is the total sale price?' : 'What is the total sale price?',
+    key: `${key}:${unit === CAN ? 'cans' : 'tonnes'}:${k}`, story, ask: 'What is the total sale price?',
     right: P(sold), slips,
-    rightWhy: about ? `${worked}, about. The true amounts sold for ${credits(mine.sold)} credits.` : worked,
+    rightWhy: worked,
     sum: sums, chart: chartOf(unit),
-    // (its rows, as the payout slip's: a metal and its amount; "about" with the metal's name, so the amount stays short beside the chart)
-    lines: [...ps.map((p) => [about ? `${cap(p.m.name)}, about` : cap(p.m.name), amtWords(p.amt, unit)]), [about ? 'Sold for, about' : 'Sold for', '?']],
-    help: { title: 'Each metal at its own price', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${nf(p.amt)} × ${credits(p.m.price)}`, () => '= ?'), op: k > 1 ? '+' : '', ask: `the load = ${ab}? credits` },
-      line: `A ${unit[0]} of each metal sells for that metal's price on the chart.${k > 1 ? ' Work each metal out, then add them up.' : ''}` },
+    // (its rows, as the payout slip's: a metal and its amount)
+    lines: [...ps.map((p) => [cap(p.m.name), amtWords(p.amt, unit, E)]), ['Sold for', '?']],
+    help: { title: 'Each metal at its own price', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${am(p.amt)} × ${credits(p.m.price)}`, () => '= ?'), op: k > 1 ? '+' : '', ask: 'the load = ? credits' },
+      line: `A ${unit[0]} of each metal sells for that metal's price on the chart.${E && parted ? ' A part of a tonne sells for that part of the price.' : ''}${k > 1 ? ' Work each metal out, then add them up.' : ''}` },
     own: { strand: 'money', at }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }],
-    facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct ?? null, amt: p.amt })) }, ans: sold, step: 'total', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}), ...(mine ? { mine: true, about, sold: mine.sold } : {}) }, size: Math.min(3, k + (k > 1 ? 1 : 0)),
+    facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct ?? null, amt: p.amt })) }, ans: sold, step: 'total', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}), ...(mine ? { mine: true } : {}) }, size: Math.min(3, k + (k > 1 ? 1 : 0)),
   }, rand), sums), who);
 }
 // THE WHOLE PAY SLIP IN ONE GO (the top rung, for older kids, with Work it out): the load by its shares and the chart;
@@ -521,9 +532,9 @@ export const MAKERS = {
         const got = now.length ? t.pick(now) : null, k = got ? got.k : t.pick(KINDS), n = got ? got.n : t.int(1, 5);
         if (got) used(live, 'count:' + k.key, n);
         // (drawn as they are: at the wall a drained canister's lights have gone blue; the ones on the ship are the
-        // empties once the full ones are off)
+        // full ones, and the empties once those are off, or both of a haul that came home early)
         const slots = got && k.key === 'wall' ? live.docked.map((d) => (d.percent > 0 ? 'full' : 'empty'))
-          : got && k.key === 'ship' ? Array(n).fill(live.fullOnShip > 0 ? 'full' : 'empty') : Array(n).fill(k.look);
+          : got && k.key === 'ship' ? [...Array(Math.min(n, live.fullOnShip)).fill('full'), ...Array(Math.max(0, n - live.fullOnShip)).fill('empty')] : Array(n).fill(k.look);
         return ownOrder({
           key: `count:${k.key}`, story: got ? 'The smelter\'s screen shows the hangar as it is right now.' : 'Look at this pay slip from the log.', ask: k.ask,
           right: C(n, CAN),
@@ -866,7 +877,7 @@ export const MAKERS = {
   // step 1  one metal: its tonnes times what a tonne of it sells for (2.8 tonnes of cobalt at 5,000 credits a tonne)
   // step 2  THE TWO STEPS, two slips about one load: how much of each metal (eachCard), then the total sale price by
   //         the chart (totalCard). Once a haul the first load is the Miner's own haul in the hangar; a haul the player
-  //         went out for is told round, with "about", on one slip (its amounts are known: there is no first step)
+  //         went out for is told by its amounts as they came home, on one slip (they are known: there is no first step)
   // step 3  the whole pay slip in one go: the shares and the chart (slipCard)
   pay: {
     strand: 'dec', at: (step) => (step <= 1 ? 66 : step === 2 ? 70 : 76),
@@ -896,12 +907,13 @@ export const MAKERS = {
         throw new Error('smelter pay: nothing made');
       }
       const H = live ? haulOf(live.round) : null;
-      // A HAUL THE PLAYER WENT OUT FOR, once at each of these rungs: its amounts told round (whole tonnes; on the top
-      // rung tenths), by the payout slip's own pattern: each metal's tonnes at its price, added up
+      // A HAUL THE PLAYER WENT OUT FOR, once at each of these rungs, by the payout slip's own pattern: each metal's
+      // tonnes at its price, added up. Its amounts are told as they came home: whole tonnes when all eight canisters
+      // were full, eighths of a tonne (as fractions) when the crew headed home early
       if (H && H.flown && isNew(live, 'pay:mine', step)) {
         used(live, 'pay:mine', step);
-        const told = aboutStore(H.store, step === 2 ? 1 : 0.1), L = { unit: TONNE, total: r2(told.reduce((s, x) => s + x.tonnes, 0)), haul: H.n, parts: told.map((x) => ({ m: x.metal, amt: x.tonnes })) };
-        return totalCard(L, { t, rand, W, key: 'pay:mine', H, mine: { sold: H.pay, exact: told.exact }, at: step === 2 ? 70 : 76 });
+        const L = { unit: TONNE, total: H.tonnes, haul: H.n, eighths: inEighths(H.lots), parts: H.lots.map((x) => ({ m: x.metal, amt: x.tonnes })).sort((p, q) => q.amt - p.amt || p.m.price - q.m.price) };
+        return totalCard(L, { t, rand, W, key: 'pay:mine', H, mine: true, at: step === 2 ? 70 : 76 });
       }
       if (step === 2) {
         // (a load left waiting from another haul's slip is put away: its slip would say "this haul" of the wrong one)

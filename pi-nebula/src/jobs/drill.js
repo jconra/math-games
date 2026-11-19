@@ -163,7 +163,7 @@ export const MAKERS = {
             { ...C(T - 1, TONNE), slip: 'off', why: 'One short. Add them again.' },
             { ...C(T + 2, TONNE), slip: 'off', why: 'Too many. Add them again.' },
           ],
-          rightWhy: `${ms.map((x) => x.t).join(' + ')} = ${u(T, TONNE)}`, sum: ms.length === 2 ? { op: 'add', a: ms[0].t, b: ms[1].t } : [{ op: 'add', a: ms[0].t, b: ms[1].t, say: 'First two of them' }, { op: 'add', a: ms[0].t + ms[1].t, b: ms[2].t, say: 'Then the third' }],
+          rightWhy: `${ms.map((x) => x.t).join(' + ')} = ${u(T, TONNE)}`, sum: ms.length === 2 ? { op: 'add', a: ms[0].t, b: ms[1].t } : ms.slice(1).map((x, i) => ({ op: 'add', a: ms.slice(0, i + 1).reduce((q, y) => q + y.t, 0), b: x.t, say: ['First two of them', 'Then the third', 'Then the fourth'][i] })),
           help: { title: 'All the ore together', pic: { kind: 'boxes', boxes: ms.map((x) => ({ top: x.m, mid: u(x.t, TONNE), glow: glowOf(x.m) })), op: '+', ask: 'all the ore = ? tonnes' }, line: 'Every metal in the rock is ore. Add their tonnes.', steps: [ms.map((x) => x.t).join(' + ')] },
           own: { strand: 'words', at: 20 }, credit: [{ strand: 'add', at: 12, weight: 0.5 }], facts: { form, T },
         }, rand);
@@ -456,7 +456,7 @@ export const MAKERS = {
       const found = list(ms.map((x) => `${u(x.t, TONNE)} of ${x.m}`)), prices = ms.length === 1 ? `${cap(ms[0].m)} sells for ${say(ms[0].price)} credits a tonne` : `${cap(list(ms.map((x, i) => `${x.m} ${i ? 'for' : 'sells for'} ${say(x.price)}`)))} credits a tonne`;
       const boxes = ms.map((x) => ({ top: x.m, mid: `${x.t} × ${say(x.price)}`, bot: '= ?', glow: glowOf(x.m) }));
       const chain = [...ms.map((x) => ({ op: 'mul', a: x.t, b: x.price, say: `The ${x.m}: ${u(x.t, TONNE)} at ${say(x.price)} credits` })),
-        ...(ms.length >= 2 ? [{ op: 'add', a: lots[0], b: lots[1], say: 'Then the metals together' }] : []), ...(ms.length >= 3 ? [{ op: 'add', a: lots[0] + lots[1], b: lots[2], say: 'And the third' }] : [])];
+        ...(ms.length >= 2 ? [{ op: 'add', a: lots[0], b: lots[1], say: 'Then the metals together' }] : []), ...(ms.length >= 3 ? [{ op: 'add', a: lots[0] + lots[1], b: lots[2], say: 'And the third' }] : []), ...(ms.length >= 4 ? [{ op: 'add', a: lots[0] + lots[1] + lots[2], b: lots[3], say: 'And the fourth' }] : [])];
       const worked = ms.length === 1 ? `${ms[0].t} × ${say(ms[0].price)} = ${say(sold)} credits` : `${ms.map((x, i) => `${x.t} × ${say(x.price)} = ${say(lots[i])}`).join('; ')}; together ${say(sold)} credits`;
       if (step <= 1) {
         return ownOrder({

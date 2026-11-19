@@ -33,12 +33,15 @@
 //   - THE CAPTAIN'S WORDS come up in a bubble on his side of the cockpit (he is not drawn in the other seat yet).
 //   - THE DRILL OPERATOR'S GAME (src/drillview.js, loaded only for a crew member who signed for the drill): at the
 //     field the view goes outside the ship, behind a short fade, and the crew member finds the rocks and drills them
-//     until the eight canisters are full. What comes home is the store: the tonnes of each metal (land's `store`).
+//     until the eight canisters are full, or heads home early with what is aboard (each part-full canister then
+//     rounded to the nearest 1/8 of a tonne). What comes home is the store: the tonnes of each metal (land's `store`),
+//     in the canisters as they are (the hangar's crane is told how full each came home).
 //     That view has a Miner of its own, built for outside (legs up, its arms live), far from the parked one, of which
 //     nothing is drawn meanwhile. With the pilot's seat left to the crew the jumps are the short version (the lamps
 //     light by themselves) and the crew member rides in the other seat.
 //   - THE CREW'S OWN DRILLING (the drill not signed for) is watched through the glass as before; what it brings home
-//     is the same game worked by the captain's driller (src/drill.js crewLoad).
+//     is the same game worked by the captain's driller (src/drill.js crewLoad: one metal to a canister, all eight
+//     filled).
 //   - NO ANSWER CHANGES THE HAUL. The jump's lamps show where the pilot is in the jump, and nothing else.
 //
 //   const T = startTrip(ctx, { mission, roles, from, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
@@ -52,7 +55,7 @@ import { buildRoom } from '../kit/layout.js';
 import * as MB from '../kit/ships/miner-built.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
-import { CARRIES, sellsFor, lotsWords } from './jobs/smelter.js';
+import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/smelter.js';
 import { crewLoad } from './drill.js';
 import { stepsFor, land, LAMPS, ROLES } from './missions.js';
 import { RUN_TALK } from './lines.js';
@@ -131,7 +134,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => openCards());
 
-  const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, fade: 0, fadeTo: 0, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, log: [] };
+  const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, fade: 0, fadeTo: 0, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, cans: null, early: false, log: [] };
   // (signed for which: the pilot's seat, the drill)
   const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill');
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
@@ -296,7 +299,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       if (!T.phase) {
         // (what the captain's own driller brings home: the same game by the same rules, src/drill.js)
         T.phase = 'reach'; T.filled = 0; armsWant = 'work'; cutT = 0; words('At the rocks');
-        T.store = crewLoad(ctx.rand || Math.random);
+        const load = crewLoad(ctx.rand || Math.random); T.store = load.store; T.cans = load.cans;
       }
       const gripped = arms.doors.some((D) => (D.grip || 0) >= 1), cutting = arms.doors.every((D) => (D.work || 0) >= 1);
       if (T.phase === 'reach' && T.t > 2.6 && !T.saidField) { T.saidField = true; say('field'); }
@@ -316,10 +319,11 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       if (!T.phase) { T.phase = 'fly'; T.landed = false; if (!fl) { console.error('trip: nothing to fly home in'); abort(); return; } }
       if (T.phase === 'fly' && T.landed) {
         fl.close(); fl = null; api.fly = null;
-        T.n = crane.arrive({ flown: true });
+        // (the hangar's canisters are the ones that came home: how full each is; the payout is their plain sum)
+        T.n = crane.arrive({ flown: true, fills: T.cans ? T.cans.map((c) => c.t) : null });
         T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
-        try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][Math.round(T.payout.tonnes)] || String(T.payout.tonnes) }); } catch (e) { /* no news */ }
+        try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Down on the pad'); say(iPilot ? 'landed' : 'landedCrew');
         T.phase = 'down'; T.t = 0;
       }
@@ -328,11 +332,12 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     },
   };
   // THE DRILL OPERATOR'S GAME at the field (src/drillview.js): a short fade, the view outside the ship, the game until
-  // the eight canisters are full, a fade back to the seat. The store it filled is what comes home.
+  // the eight canisters are full or the crew member heads home early, a fade back to the seat. What it filled is what
+  // comes home.
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
   function runDrill(dt, st) {
     if (!T.phase) {
-      T.phase = 'toDrill'; T.filled = 0; T.store = null; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
+      T.phase = 'toDrill'; T.filled = 0; T.store = null; T.cans = null; T.early = false; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
     }
     if (T.phase === 'toDrill' && T.fade >= 1) {
       if (drillErr) { abort(); return; }
@@ -342,9 +347,9 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, rand: ctx.rand || Math.random,
         // (who flies the ship over to a rock: the captain's pilot, or the autopilot for a crew member with the pilot's seat too)
         flier: iPilot ? 'The autopilot' : 'Pilot Juno', pilot: iPilot,
-        onSay: (key, more) => { if (TALK[key] && key !== 'full') say(key, more); },
-        // (the store comes home: the tonnes of each metal, the haul's facts when it lands)
-        onDone: (r) => { T.store = r.store; T.drillStats = r.stats; T.drillSecs = r.secs; T.phase = 'drillDone'; T.t = 0; say(iPilot ? 'full' : 'fullCrew'); } });
+        onSay: (key, more) => { if (TALK[key] && key !== 'full' && key !== 'early') say(key, more); },
+        // (the store comes home: the tonnes of each metal, in the canisters as they are; the haul's facts when it lands)
+        onDone: (r) => { T.store = r.store; T.cans = r.cans; T.early = !!r.early; T.drillStats = r.stats; T.drillSecs = r.secs; T.phase = 'drillDone'; T.t = 0; say(r.early ? (iPilot ? 'early' : 'earlyCrew') : iPilot ? 'full' : 'fullCrew'); } });
       drillOn = true; el.classList.add('is-drill'); T.phase = 'drill'; T.t = 0; T.fadeTo = 0; say('drillField');
     }
     if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
@@ -409,7 +414,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
     state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n,
-      fly: fl ? fl.state() : null, drill: drill ? drill.state() : null, store: T.store || null, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
+      fly: fl ? fl.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;

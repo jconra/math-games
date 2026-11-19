@@ -43,7 +43,8 @@ test('every card of every job pays from PAY.min to PAY.max, in tens, with its fa
       for (let k = 0; k < 12; k++) {
         const w = E.workOf(cardAt(job, L, rand), L);
         assert.ok(w.pay >= E.PAY.min && w.pay <= E.PAY.max && w.pay % 10 === 0, `${job.id}/${L.id}: ${w.pay}`);
-        assert.ok(w.secs > 4 && w.secs < 80, `${job.id}/${L.id}: ${w.secs} s`);
+        // (the longest card there is: the drill operator's share of a rock of four metals, eight small sums, just under 90 s)
+        assert.ok(w.secs > 4 && w.secs < 90, `${job.id}/${L.id}: ${w.secs} s`);
         assert.ok(Math.abs(Object.values(w.parts).reduce((a, b) => a + b, 0) - w.secs) < 0.3, 'the parts add up to the time');
       }
     });

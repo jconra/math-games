@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Drill Lab</title>
-<meta name="description" content="A space station lab: the drill operator's game by itself. Look round the asteroid field, find a rock by the glow of the ore inside it, fly over, answer its question, turn it in the claw and drill where the ore is thick, until the Miner's eight canisters are full.">
+<meta name="description" content="A space station lab: the drill operator's game by itself. Look round the asteroid field, find a rock by the glow of the ore inside it, fly over, answer its question, turn it in the claw and drill where the ore is thick. Each of the Miner's eight canisters holds one metal: fill all eight, or head home early with what is aboard.">
 <meta name="theme-color" content="#05070b">
 <link rel="icon" href="data:,">
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
@@ -34,6 +34,6 @@
 </div>
 <div id="loading">Unfolding the arms…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=3').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=4').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>

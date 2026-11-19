@@ -1,42 +1,61 @@
 // THE DRILL OPERATOR'S GAME, the plain part: the rocks of the field, the metal inside each, what a hole takes, how many
-// holes a rock stands, and the store filling. No page and no three.js, so node can test it
+// holes a rock stands, and the canisters filling. No page and no three.js, so node can test it
 // (pi-nebula/tests/drill.test.mjs). src/drillview.js draws it and takes the taps; src/jobs/drill.js is the question
 // asked when a rock is in the claw; src/trip.js runs it at the asteroid field for a crew member who signed for the
 // drill (src/missions.js), and pi-nebula/labs/drill/ runs it by itself.
 //
-// THE GAME'S MAKER (2026-11-18, the whole game in his words): "The game should be you arrive at the asteroid field, and
-// you find juicy asteroids that have metal that you want. You drill it, and it starts filling up your canisters. You
-// answer questions, if you get it wrong it just teaches you. You keep finding ore and the canisters all fill as a
-// collective. If you fill them with 50% iron and 25% nickel and 25% titanium then you have 4 canisters with iron and 2
-// with nickel and 2 with titanium. You don't have to calculate the first one has 87% Iron and 5% nickel and 8% titanium
-// or anything. Just treat the storage as one." "I think every bit should count. 1/8 Nickel, 1/4 copper, 5/8 Iron for
-// example." "the canister is sold for the value of each metal that it contains." "Let them see a rock with a bunch of
-// what they want and let them get excited. Don't tell them to get excited." "I'd prefer it if you could fly around and
-// find them, instead of being presented with 7 in the same way each time." And (2026-11-17): "We don't necessarily
-// need to deform the asteroid. But we should reduce the amount of the glowing ore inside from that area. Small rocks
-// should probably float away from the drilling point. And eventually the rock should crumble to pieces. So you want to
-// try to drill it in a smart spot so you can get the most out of it before it crumbles."
+// THE GAME'S MAKER (2026-11-18, the game in his words): "The game should be you arrive at the asteroid field, and you
+// find juicy asteroids that have metal that you want. You drill it, and it starts filling up your canisters. You
+// answer questions, if you get it wrong it just teaches you." "the canister is sold for the value of each metal that
+// it contains." "Let them see a rock with a bunch of what they want and let them get excited. Don't tell them to get
+// excited." "I'd prefer it if you could fly around and find them, instead of being presented with 7 in the same way
+// each time." And (2026-11-17): "We don't necessarily need to deform the asteroid. But we should reduce the amount of
+// the glowing ore inside from that area. Small rocks should probably float away from the drilling point. And
+// eventually the rock should crumble to pieces. So you want to try to drill it in a smart spot so you can get the most
+// out of it before it crumbles."
+//
+// THE CANISTERS DO NOT MIX ORE (his words of 2026-11-18, later the same day; they replace that morning's "the canisters
+// all fill as a collective ... Just treat the storage as one"): "we could make it so the canisters don't mix ore. So
+// if you collect 3 metals then it will dedicate 3 canisters to that type. If one fills up, like iron, then it gets
+// another canister. Once each canister is designated then you can't except any new types of ore. At that point the
+// player would want to top off all the canisters to finish the mission. If they go back early (I think that should be
+// an option) and the canisters aren't all the way full, then I think we should round the level to the nearest 1/8th to
+// make the math easier. I feel like the math would be a lot more straightforward if we said each canister holds a
+// tonne, so we could use them interchangeably." And his go-ahead: "Yeah it replaces "the canisters all fill as a
+// collective". My main goal with that train of thought is that I want to be able to drill a rock that has 4 different
+// ores in it and get them all. ... I think it might make it easier to do the math questions if each canister gets
+// designated per metal. If there are no canisters empty then yes a new metal cannot be accepted, unless we add an
+// option to purge a canister. But I'd say it should stay in the rock or float out as small derbies." (No purge is
+// made: he only mentioned it.)
 //
 // THE RULES, IN NUMBERS (DRILL, SHAPES and KINDS below). There is nothing here but these: no answer to any question
 // changes what a rock gives or what comes home.
 //   - A ROCK has real numbers of its own, and they are the same wherever they are said (the scan's readout, the card
-//     asked when it is in the claw, the store): the box that just holds it (so long, wide and high, in metres), what a
-//     cubic metre of it weighs, its WEIGHT in tonnes (half its box, times that: a lumpy rock fills about half the box
-//     round it), the PART OF IT THAT IS ORE (a half, a quarter, a fifth or a tenth), and so the tonnes of ore in it,
-//     always a whole number of tonnes, of one, two or three metals, a whole number of tonnes of each.
+//     asked when it is in the claw, the canisters): the box that just holds it (so long, wide and high, in metres),
+//     what a cubic metre of it weighs, its WEIGHT in tonnes (half its box, times that: a lumpy rock fills about half
+//     the box round it), the PART OF IT THAT IS ORE (a half, a quarter, a fifth or a tenth), and so the tonnes of ore
+//     in it, always a whole number of tonnes, of one, two, three or four metals, a whole number of tonnes of each.
 //   - ITS ORE LIES IN VEINS: each vein is one metal's, a string of LUMPS (the same number in every vein of a rock),
 //     each lump a point inside the rock holding so much of that metal. The glow is the lumps: a lump's colour is its
 //     metal, and it is as big and bright as the metal left in it.
-//   - A HOLE goes from the tapped spot straight in to the rock's middle. It takes metal from every lump near its line:
+//   - A HOLE goes from the tapped spot straight in to the rock's middle. It finds metal in every lump near its line:
 //     all of a lump within 0.1 of the line (the rock's radius is 1), less and less out to 0.34, nothing past that
-//     (take()). So a hole down the thick of a vein fills a lot, and a hole in bare rock gives nothing. What it takes
+//     (take()). So a hole down the thick of a vein finds a lot, and a hole in bare rock finds nothing. What it finds
 //     of each metal is weighed in as whole hundredths of a tonne (ten kilograms); any less than that stays in the
-//     rock. So the rock, the store and the payout all count the same exact amounts, and no rounding is ever needed.
+//     rock. So the rock, the canisters and the payout all count the same exact amounts.
 //   - A ROCK STANDS SO MANY HOLES: a flat one 4, a round one 5, a long one 6. After the last it crumbles and is gone.
-//   - THE STORE: the Miner's 8 canisters are one store of 8 tonnes (a canister holds one tonne). The game keeps how many
-//     tonnes of each metal are aboard, every bit of it. The run is over when the store is full; metal past that stays
-//     in the rock. THE ROW OF 8 on the screen is only a picture of the store: coloured in proportion, a metal at a time
-//     (half iron, a quarter nickel and a quarter titanium shows 4, 2 and 2: rowOf).
+//   - THE CANISTERS: the Miner carries 8, and a canister holds one tonne of ONE metal (stow()). A canister is given to
+//     a metal the first time that metal comes aboard. A metal goes into its own part-full canister; when that one is
+//     full and more of the metal comes, the next empty canister is given to it. With no empty canister left, a metal
+//     with no room in a canister of its own is not taken: IT STAYS IN THE ROCK (the plainer of his two ways as the
+//     code stood: the lumps near the hole keep it, and their glow stays). A hole that finds more of a metal than
+//     there is room for takes exactly the room. When one hole finds two metals that both want the last empty canister,
+//     the one it found more of gets it. THE ROW OF 8 on the screen is the canisters themselves, each its metal's
+//     colour at its own level.
+//   - THE RUN IS OVER BY ITSELF WHEN ALL EIGHT ARE FULL. Nothing is rounded then, or at any time during the run.
+//   - HEADING HOME EARLY (home()): with what is aboard. Each part-full canister's level is rounded to the nearest 1/8
+//     of a tonne, and that rounded load is what comes home: the payout, the hangar's canisters and the smelter's slips
+//     all count it. A canister that rounds to nothing comes home empty.
 //   - WHAT THE LOAD SELLS FOR: each metal's tonnes times what a tonne of it sells for, added up (src/jobs/smelter.js
 //     sellsFor, the one price list).
 //   - THE FIELD is a place: thirty rocks scattered through the planet's rings, each where it is (pos, metres from where
@@ -44,13 +63,15 @@
 //     each is (ODDS): iron most, gold least. So rocks differ by themselves, and now and then one holds a lot of a dear
 //     metal; nothing says so but its glow. A rock worked is gone. Should the rocks ever run low, there are more further
 //     out (the rings do not run out).
-import { METALS, ORE, CARRIES, CAN_TONNES, HOLD, priceOf, sellsFor, tidyStore } from './jobs/smelter.js';
+import { METALS, ORE, CARRIES, CAN_TONNES, HOLD, priceOf, sellsFor } from './jobs/smelter.js';
 
 export const DRILL = {
-  cans: CARRIES,            // canisters, one store
-  hold: HOLD,               // tonnes of metal the store holds
+  cans: CARRIES,            // canisters, each one metal's
+  hold: HOLD,               // tonnes of metal they hold together
   can: CAN_TONNES,          // tonnes a canister holds: one
+  eighths: 8,               // heading home early, a part-full canister's level is rounded to the nearest 1/8 of a tonne
   field: 30,                // rocks in a field
+  four: 1 / 3,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
   reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.1,                // within this of the line, all of a lump
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
@@ -106,10 +127,11 @@ let made = 0;
 export function makeRock(rand = Math.random, { kind = null, metals = null } = {}) {
   const [shape, per, part] = kind || byWeight(rand, KINDS, (k) => k[3]), S = SHAPES[shape];
   const vol = S.box[0] * S.box[1] * S.box[2], weight = vol / 2 * per, total = weight / part;
-  // its metals: one, two or three, a whole number of tonnes of each
+  // its metals: one, two or three (never more metals than it has tonnes of ore); a rock with four tonnes of ore or
+  // more holds FOUR one time in three (DRILL.four). A whole number of tonnes of each
   let M = metals ? { ...metals } : null;
   if (!M) {
-    const x = rand(), k = Math.min(total, x < 0.45 ? 1 : x < 0.85 ? 2 : 3), names = [];
+    const x = rand(), k = total >= 4 && rand() < DRILL.four ? 4 : Math.min(total, x < 0.45 ? 1 : x < 0.85 ? 2 : 3), names = [];
     while (names.length < k) { const m = byWeight(rand, NAMES.filter((n) => !names.includes(n)), (n) => ODDS[n]); names.push(m); }
     const t = names.map(() => 1); for (let left = total - k; left > 0; left--) t[Math.floor(rand() * k)]++;
     // (the most of it first)
@@ -165,31 +187,79 @@ export function take(dist) {
   const { reach, core } = DRILL;
   return dist <= core ? 1 : dist >= reach ? 0 : (reach - dist) / (reach - core);
 }
-// what a hole at `dir` WOULD take from the rock as it is now, in tonnes (nothing changes)
-export function holeWorth(rock, dir) {
-  const d = norm(dir); let s = 0;
-  for (const L of rock.lumps) s += L.ore * take(offLine(L.p, d));
-  return s;
+// ── THE CANISTERS: [{ metal: null | 'iron' ..., t: tonnes in it, 0 .. 1 }], DRILL.cans of them. One metal to a canister.
+// During a run a level is whole hundredths of a tonne; home early, whole eighths (roundCans) ──
+const EPS = 1e-6, h100 = (t) => Math.round(t * 100);
+export const emptyCans = (n = DRILL.cans) => Array.from({ length: n }, () => ({ metal: null, t: 0 }));
+const isFull = (c) => c.t >= DRILL.can - EPS;
+// WHAT THE CANISTERS TAKE of what a hole found (found: { iron: 0.4, gold: 0.2 }, whole hundredths of a tonne). Each
+// metal into its own part-full canister; that one full, the next empty canister is given to it; no empty one left,
+// the rest of it is not taken. The metal there is most of first (of two alike, the chart's order), so of two metals
+// that both want the last empty canister the one the hole found more of gets it. The canisters are changed.
+// -> { by: what came aboard ({ iron: 0.4 }), stays: what did not, for want of a canister ({ gold: 0.2 }) }
+export function stow(cans, found) {
+  const by = {}, stays = {};
+  const order = Object.keys(found).filter((m) => h100(found[m]) > 0).sort((p, q) => h100(found[q]) - h100(found[p]) || NAMES.indexOf(p) - NAMES.indexOf(q));
+  for (const m of order) {
+    const all = h100(found[m]); let n = all;
+    while (n > 0) {
+      const c = cans.find((q) => q.metal === m && !isFull(q)) || cans.find((q) => !q.metal);
+      if (!c) break;
+      const k = Math.min(n, h100(DRILL.can) - h100(c.t));
+      c.metal = m; c.t = (h100(c.t) + k) / 100; n -= k;
+    }
+    if (all - n > 0) by[m] = (all - n) / 100;
+    if (n > 0) stays[m] = n / 100;
+  }
+  return { by, stays };
 }
-// A HOLE DRILLED at `dir` (a direction from the rock's middle; any length). room: the store's room left, in tonnes
-// (metal past it stays in the rock). What it takes of each metal is whole hundredths of a tonne; the rest of what
-// lay near its line stays in the rock's lumps. -> { took (tonnes), by (metal by metal: { iron: 0.4, gold: 0.2 }),
-// bare (it found next to nothing), left (holes left), broke } or null (the rock stands no more holes)
-export function drillHole(rock, dir, room = Infinity) {
-  if (rock.broken || rock.left <= 0) return null;
-  const d = norm(dir), parts = rock.lumps.map((L) => L.ore * take(offLine(L.p, d))), near = {};
+// how much of a metal the canisters could take now, in tonnes: the room in its own part-full canister, and every
+// empty canister
+export const roomFor = (cans, metal) => cans.reduce((s, c) => s + (!c.metal ? DRILL.can : c.metal === metal ? DRILL.can - c.t : 0), 0);
+// THE TONNES OF EACH METAL ABOARD: its canisters added up, in the chart's order ({ iron: 2.4, gold: 0.6 })
+export function storeOf(cans) {
+  const by = {};
+  for (const c of cans) if (c.metal && c.t > EPS) by[c.metal] = (by[c.metal] || 0) + c.t;
+  return Object.fromEntries(NAMES.filter((m) => by[m]).map((m) => [m, Math.round(by[m] * 1000) / 1000]));
+}
+// HOME EARLY: each part-full canister's level rounded to the nearest 1/8 of a tonne (a full one stays full; one that
+// rounds to nothing is empty, and no metal's). -> new canisters
+export function roundCans(cans) {
+  const n = DRILL.eighths;
+  return cans.map((c) => { const t = c.metal ? Math.round(c.t * n + EPS) / n : 0; return t > 0 ? { metal: c.metal, t } : { metal: null, t: 0 }; });
+}
+
+// what a hole at `dir` finds near its line in the rock as it is now, metal by metal, in tonnes (nothing changes)
+function holeFinds(rock, d) {
+  const parts = rock.lumps.map((L) => L.ore * take(offLine(L.p, d))), near = {};
   rock.lumps.forEach((L, i) => { if (parts[i] > 0) near[L.metal] = (near[L.metal] || 0) + parts[i]; });
-  const worth = Object.values(near).reduce((a, b) => a + b, 0), k = worth > room ? room / worth : 1, by = {}, keep = {};
-  // (whole hundredths of each metal; a hole that the store's room cuts short takes exactly the room there is, the
-  // odd hundredths going to the metals with the most left over)
-  const want = Object.entries(near).map(([m, t]) => ({ m, t, n: Math.floor(t * k * 100 + 1e-7), rest: t * k * 100 - Math.floor(t * k * 100 + 1e-7) }));
-  if (k < 1) { let short = Math.round(room * 100) - want.reduce((a, w) => a + w.n, 0); for (const w of [...want].sort((a, b) => b.rest - a.rest)) { if (short <= 0) break; if ((w.n + 1) / 100 <= w.t + 1e-9) { w.n++; short--; } } }
+  return { parts, near };
+}
+// ... in whole hundredths of a tonne of each metal (any less of one stays in the rock)
+const weighed = (near) => { const out = {}; for (const [m, t] of Object.entries(near)) { const n = Math.floor(t * 100 + 1e-7); if (n > 0) out[m] = n / 100; } return out; };
+// what a hole at `dir` WOULD take from the rock as it is now, in tonnes (nothing changes). cans: the canisters as
+// they are (then: what of it would come aboard); none: all that is near its line
+export function holeWorth(rock, dir, cans = null) {
+  const d = norm(dir);
+  if (!cans) { let s = 0; for (const L of rock.lumps) s += L.ore * take(offLine(L.p, d)); return s; }
+  return Object.values(stow(cans.map((c) => ({ ...c })), weighed(holeFinds(rock, d).near)).by).reduce((a, b) => a + b, 0);
+}
+// A HOLE DRILLED at `dir` (a direction from the rock's middle; any length). cans: the canisters (stow: what they
+// take comes aboard, and they are changed; what they do not take stays in the rock); none: all of it is taken. What
+// it takes of each metal is whole hundredths of a tonne; the rest of what lay near its line stays in the rock's
+// lumps. -> { took (tonnes), by (metal by metal: { iron: 0.4, gold: 0.2 }), stays (found, and not taken for want of a
+// canister: { cobalt: 0.3 }), bare (it found next to nothing), left (holes left), broke } or null (the rock stands no
+// more holes)
+export function drillHole(rock, dir, cans = null) {
+  if (rock.broken || rock.left <= 0) return null;
+  const d = norm(dir), { parts, near } = holeFinds(rock, d), found = weighed(near);
+  const worth = Object.values(near).reduce((a, b) => a + b, 0), { by, stays } = cans ? stow(cans, found) : { by: found, stays: {} }, keep = {};
   let h = 0;      // (hundredths of a tonne taken, all metals)
-  for (const w of want) { keep[w.m] = w.n / 100 / w.t; if (w.n > 0) { by[w.m] = w.n / 100; h += w.n; } }
+  for (const [m, t] of Object.entries(near)) { keep[m] = (by[m] || 0) / t; h += h100(by[m] || 0); }
   rock.lumps.forEach((L, i) => { if (parts[i] > 0) L.ore -= parts[i] * keep[L.metal]; });
   rock.made.push(d); rock.left--;
   if (rock.left <= 0) rock.broken = true;
-  return { took: h / 100, by, bare: worth < 0.03, left: rock.left, broke: rock.broken };
+  return { took: h / 100, by, stays, bare: worth < 0.03, left: rock.left, broke: rock.broken };
 }
 // the best spot to drill now, of `n` tried all round the rock (the tests' careful driller, the rigs, the crew's own
 // driller); worth(dir): how good a spot is (else the tonnes it would take)
@@ -222,58 +292,31 @@ export function makeField(rand = Math.random, { n = DRILL.field, from = 0, to = 
   return rocks;
 }
 
-// A STORE, tidied for saying and selling: each metal's tonnes to the hundredth of a tonne, the hundredths shared so
-// that they add up to the whole. (The game's own store is whole hundredths already: drillHole. This is for a store
-// from anywhere else.)
-export function storeOf(ore) {
-  const names = NAMES.filter((m) => (ore[m] || 0) > 1e-9), total = Math.round(names.reduce((s, m) => s + ore[m], 0) * 100);
-  const parts = names.map((m) => ({ m, h: Math.floor(ore[m] * 100 + 1e-7), rest: ore[m] * 100 - Math.floor(ore[m] * 100 + 1e-7) }));
-  let short = total - parts.reduce((s, p) => s + p.h, 0);
-  for (const p of [...parts].sort((a, b) => b.rest - a.rest)) { if (short <= 0) break; p.h++; short--; }
-  return tidyStore(Object.fromEntries(parts.map((p) => [p.m, p.h / 100])));
-}
-// THE ROW OF CANISTERS, a picture of the store (tonnes of each metal): the store's metals laid along the row a metal
-// at a time, in the chart's order, each as long as its share of the store.
-// -> [{ fill (0 .. 1), parts: [[metal, how much of this canister], ...] }], DRILL.cans of them
-export function rowOf(ore, n = DRILL.cans, can = DRILL.can) {
-  const order = NAMES.filter((m) => (ore[m] || 0) > 1e-9), out = [];
-  let k = 0, used = 0;      // (the metal being laid, and how much of it is laid already, in tonnes)
-  for (let i = 0; i < n; i++) {
-    const parts = []; let room = can;
-    while (room > 1e-9 && k < order.length) {
-      const m = order[k], left = ore[m] - used, t = Math.min(room, left);
-      if (t > 1e-9) { parts.push([m, t / can]); room -= t; used += t; }
-      if (ore[m] - used <= 1e-9) { k++; used = 0; }
-    }
-    out.push({ fill: Math.min(1, 1 - room / can), parts });
-  }
-  return out;
-}
-// how many whole canisters of each metal the row shows, by the canister's most: { iron: 4, nickel: 2, titanium: 2 }
-// (only a way of saying the picture; nothing is sold by it)
-export function rowCount(ore) {
-  const count = {};
-  for (const c of rowOf(ore)) { if (c.fill < 0.5) continue; const top = [...c.parts].sort((a, b) => b[1] - a[1])[0]; if (top) count[top[0]] = (count[top[0]] || 0) + 1; }
-  return count;
-}
-
-// A RUN OF THE GAME: the field, the rock in the claw, the store.
+// A RUN OF THE GAME: the field, the rock in the claw, the canisters.
 //   const R = makeRun({ rand })
-//   R.stage    'look' (finding a rock) | 'ask' (a rock in the claw, its question up) | 'drill' | 'full' (done)
+//   R.stage    'look' (finding a rock) | 'ask' (a rock in the claw, its question up) | 'drill' | 'full' (all eight
+//              canisters full: done) | 'home' (headed home early: done)
 //   R.pick(id) -> the rock (look -> ask);  R.asked() (ask -> drill: the question is over, however it was answered)
-//   R.drill(dir) -> what drillHole gives, with { aboard, full, done } (the rock crumbled or the store full: on to
-//                   'look' or 'full' by itself);  R.letGo() the rock let go early (ask or drill -> look)
-//   R.ore (the store: tonnes of each metal, every bit), R.aboard (tonnes in all, 0 .. 8), R.full (canisters' worth
-//   aboard, 0 .. 8), R.store() (the store to the hundredth of a tonne), R.row() (the row's picture of it), R.sells()
-//   (what the store would sell for now), R.rocks (the field), R.held, R.stats { rocks, holes, bare }
+//   R.drill(dir) -> what drillHole gives, with { aboard, full, done } (the rock crumbled or the canisters all full:
+//                   on to 'look' or 'full' by itself);  R.letGo() the rock let go early (ask or drill -> look)
+//   R.canHome() / R.home()   heading home early with what is aboard (there is something aboard to take): each
+//                   part-full canister rounded to the nearest 1/8 of a tonne (-> 'home'; R.early says so)
+//   R.cans (the canisters: [{ metal, t }]), R.aboard (tonnes in all, 0 .. 8), R.full (canisters full, 0 .. 8), R.given
+//   (canisters given to a metal), R.ore and R.store() (the tonnes of each metal aboard), R.roomFor(metal), R.load()
+//   (what comes home: { store, cans }), R.sells() (what it would sell for now), R.rocks (the field), R.held, R.stats
+//   { rocks, holes, bare }
 export function makeRun({ rand = Math.random } = {}) {
-  const R = { stage: 'look', aboard: 0, ore: {}, rocks: makeField(rand), held: null, stats: { rocks: 0, holes: 0, bare: 0 } };
-  const EPS = 1e-6;
+  const R = { stage: 'look', cans: emptyCans(), early: false, rocks: makeField(rand), held: null, stats: { rocks: 0, holes: 0, bare: 0 } };
   let rings = 0;
-  Object.defineProperty(R, 'full', { get: () => Math.min(DRILL.cans, Math.floor(R.aboard / DRILL.can + EPS)) });
-  R.store = () => storeOf(R.ore);
-  R.row = () => rowOf(R.ore);
+  Object.defineProperty(R, 'aboard', { get: () => Math.round(R.cans.reduce((s, c) => s + c.t, 0) * 1000) / 1000 });
+  Object.defineProperty(R, 'full', { get: () => R.cans.filter(isFull).length });
+  Object.defineProperty(R, 'given', { get: () => R.cans.filter((c) => c.metal).length });
+  Object.defineProperty(R, 'ore', { get: () => storeOf(R.cans) });
+  Object.defineProperty(R, 'done', { get: () => R.stage === 'full' || R.stage === 'home' });
+  R.store = () => storeOf(R.cans);
+  R.load = () => ({ store: storeOf(R.cans), cans: R.cans.map((c) => ({ ...c })) });
   R.sells = () => sellsFor(R.store()).pay;
+  R.roomFor = (metal) => roomFor(R.cans, metal);
   function gone(rock) {
     const i = R.rocks.indexOf(rock); if (i >= 0) R.rocks.splice(i, 1);
     // (the rings do not run out: with few rocks left, there are more further out)
@@ -284,27 +327,32 @@ export function makeRun({ rand = Math.random } = {}) {
   R.letGo = () => { if (R.stage !== 'drill' && R.stage !== 'ask') return false; gone(R.held); R.held = null; R.stage = 'look'; return true; };
   R.drill = (dir) => {
     if (R.stage !== 'drill' || !R.held) return null;
-    const rock = R.held, h = drillHole(rock, dir, Math.round((DRILL.hold - R.aboard) * 100) / 100); if (!h) return null;
+    const rock = R.held, h = drillHole(rock, dir, R.cans); if (!h) return null;
     R.stats.holes++; if (h.bare) R.stats.bare++;
-    // (whole hundredths of a tonne, added as such: the store is exact)
-    for (const [m, t] of Object.entries(h.by)) R.ore[m] = Math.round(((R.ore[m] || 0) + t) * 100) / 100;
-    R.aboard = Math.min(DRILL.hold, Math.round(Object.values(R.ore).reduce((a, b) => a + b, 0) * 100) / 100);
-    const done = R.aboard >= DRILL.hold - EPS;
-    if (done) { R.aboard = DRILL.hold; R.stage = 'full'; } else if (h.broke) { gone(rock); R.held = null; R.stage = 'look'; }
+    const done = R.cans.every(isFull);
+    if (done) R.stage = 'full'; else if (h.broke) { gone(rock); R.held = null; R.stage = 'look'; }
     return { ...h, aboard: R.aboard, full: R.full, done, rock };
   };
+  // (home early: only with something aboard that comes home, an eighth of a tonne of some metal or more)
+  R.canHome = () => !R.done && roundCans(R.cans).some((c) => c.metal);
+  R.home = () => { if (!R.canHome()) return false; R.cans = roundCans(R.cans); R.early = true; R.stage = 'home'; return true; };
   return R;
 }
 
 // THE CREW'S OWN DRILLER (the captain's, when the player did not sign for the drill): the same game by the same
-// rules, worked plainly: the nearest rock each time, a hole in the best spot each time, until the store is full.
-// -> the store that comes home
+// rules, worked plainly: the nearest rock that holds a metal the canisters have room for (none in sight: the nearest
+// of all, let go again, until the rings bring more), a hole each time where the most would come aboard, until all
+// eight canisters are full. -> what comes home: { store (the tonnes of each metal), cans (the canisters) }
 export function crewLoad(rand = Math.random) {
   const R = makeRun({ rand }); let at = [0, 0, 0];
-  for (let guard = 0; guard < 400 && R.stage !== 'full'; guard++) {
-    if (R.stage === 'look') { const next = [...R.rocks].sort((a, b) => len([a.pos[0] - at[0], a.pos[1] - at[1], a.pos[2] - at[2]]) - len([b.pos[0] - at[0], b.pos[1] - at[1], b.pos[2] - at[2]]))[0]; at = next.pos; R.pick(next.id); R.asked(); }
-    const b = bestHole(R.held, 160);
-    if (b.worth < 0.03) R.letGo(); else R.drill(b.dir);
+  const far = (r) => len([r.pos[0] - at[0], r.pos[1] - at[1], r.pos[2] - at[2]]);
+  const wanted = (r) => Object.entries(oreBy(r)).some(([m, t]) => t >= 0.03 && R.roomFor(m) > EPS);
+  for (let guard = 0; guard < 20000 && R.stage !== 'full'; guard++) {
+    if (R.stage === 'look') { const near = [...R.rocks].sort((a, b) => far(a) - far(b)), next = near.find(wanted) || near[0]; at = next.pos; R.pick(next.id); R.asked(); if (!wanted(next)) { R.letGo(); continue; } }
+    const b = bestHole(R.held, 160, (d) => holeWorth(R.held, d, R.cans));
+    if (b.worth < 0.005) R.letGo(); else R.drill(b.dir);
   }
-  return R.store();
+  // (never met in the tests' thousands of fields; were the rings ever to give it nothing: home with what is aboard)
+  if (R.stage !== 'full') R.home();
+  return R.load();
 }

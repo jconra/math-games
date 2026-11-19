@@ -19,7 +19,8 @@
 //     depart(): the Miner is out with the player aboard; what was left of the round is finished out of sight (nobody
 //     waits for the crane), and nothing here moves or lands by itself (mode 'out'). arrive(): home, down on its pad
 //     at once (the trip's fade hides it), the next haul aboard, the round from its top, the nozzle still hot;
-//     `haul.flown` says a crew the player was on brought it. back(): the run given up, the Miner parked as it was.
+//     `haul.flown` says a crew the player was on brought it, and `fills` how full each of its canisters came home
+//     (a run headed home early: part-full and empty ones among them, src/drill.js). back(): the run given up, the Miner parked as it was.
 //     As it lands (the game's maker, 2026-11-17: "It should use the maneuvering thrusters ... They should turn and shoot
 //     out flames. If it was a really cool pilot they could be spinning around as they were traveling in. Also, I'd expect
 //     the main engine to be glowing, even if it is only just idling ... some wind and blasts of air shooting down"): it
@@ -49,7 +50,7 @@
 //   crane.update(dt, { eyes, player, people })   once a frame, before the picture
 //   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away'
 //                                  | 'out': away with the player aboard)
-//   crane.depart() / crane.arrive({ flown }) -> the haul's number / crane.back()   a run the player crews (above)
+//   crane.depart() / crane.arrive({ flown, fills }) -> the haul's number / crane.back()   a run the player crews (above)
 //   crane.fly(D, dt, how)          while it is out: the Miner drawn where it has been flown to (src/flying.js)
 //   crane.awayHeld                 true: the Miner stays on its pad when the player leaves the area (a contract signed)
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
@@ -380,13 +381,14 @@ export function makeCrane({ W, walls, boarding = null }) {
       return true;
     },
     // home: down on its pad at once (nobody sees it come: the trip's fade, or the hangar out of sight), the next haul
-    // aboard and the round from its top, its nozzle still hot. flown: a crew the player was on brought it.
+    // aboard and the round from its top, its nozzle still hot. flown: a crew the player was on brought it. fills: how
+    // full each of its canisters came home (0 .. 1, by mount; not given: all full)
     // -> the haul's number
-    arrive({ flown = false } = {}) {
+    arrive({ flown = false, fills = null } = {}) {
       if (mode === 'live' || mode === 'handover' || mode === 'leaving') return null;
       if (mode === 'landing') landed();
       aloft = false;
-      L.reset(); t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
+      L.reset(fills); t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
       C.haul = { n: L.round, landed: true, at: performance.now(), flown: !!flown };
       shipAt(null); L.pose(0); posePieces(L.state(0), 0);
       if (boarding && boarding.hold) boarding.hold('miner', false);

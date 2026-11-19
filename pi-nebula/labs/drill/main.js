@@ -66,7 +66,7 @@ function start() {
   if (view) view.close();
   const rand = st.seed != null ? seeded(st.seed + st.n) : Math.random; st.n++;
   view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, lab: true, flier: 'The pilot',
-    onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load: ${lotsWords(sellsFor(r.store).lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.bare} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
+    onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load${r.early ? " (home early, each part-full canister rounded to the nearest 1/8)" : ""}: ${lotsWords(sellsFor(r.store).lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.bare} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
   window.DRILLLAB.view = view;
 }
 $('new').addEventListener('click', () => { note(''); start(); });

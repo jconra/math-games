@@ -12,7 +12,9 @@
 //   L.poseState(S)                      everything as a state says (crane-plan.js stateAt's shape)
 //   L.state(t), L.clean(t)              the round's state at t; the next moment nothing is half done
 //   L.resume(S)                         the round taken up from a state (crane-plan.js planFrom), from its time 0
-//   L.reset()                           the next haul: full canisters on the ship, empties on the rack, the crane home
+//   L.reset(fills)                      the next haul: full canisters on the ship, empties on the rack, the crane home
+//                                       (fills: how full each of the ship's canisters came home, 0 .. 1 by mount, where
+//                                       they are not all full: a run headed home early, src/drill.js)
 //   L.site                              the places and the parts' sizes (for the timetable and kit/crane-drive.js)
 //   L.load(t), L.steady(t), L.gate(t, ahead)   the load in plain numbers and how long each stays so; the patch of
 //                                       floor it is working over (crane-plan.js)
@@ -189,12 +191,20 @@ export function makeOreLine(built, opts = {}) {
   const pose = (t) => poseState(stateAt(plan, t, scratch));
 
   // the next haul: the Miner back with its canisters full, the rack's empties as the last round left them, the crane
-  // home (whatever was where, it all starts again from the standard start)
-  function reset() {
+  // home (whatever was where, it all starts again from the standard start). fills: how full each of the ship's
+  // canisters came home (0 .. 1, by mount), where they are not all full (a run headed home early: part-full ones
+  // drain from where they are, empty ones have nothing to give the wall): the round is then worked out from there
+  // (planFrom), as it is after the crane has been driven by hand
+  function reset(fills = null) {
     if (plan.next && plan.next.onMount && plan.next.onMount.every((c) => c >= 0) && plan.next.inBay.every((c) => c >= 0)) {
       const N = plan.next; slot = [...N.onMount.map((c) => slot[c]), ...N.inBay.map((c) => slot[c])];
     } else slot = cans.map((_, i) => i);
-    plan = planCycle(site, {}, speed); round++;
+    if (Array.isArray(fills) && fills.some((f) => f < 1)) {
+      const from = startOf(site, {});
+      for (const q of from.cans) if (q.where === 'mount') q.fill = Math.max(0, Math.min(1, Number(fills[q.i] ?? 1)));
+      plan = planFrom(site, from, speed);
+    } else plan = planCycle(site, {}, speed);
+    round++;
     for (const C of cans) C.key = '';
     for (const m of mounts) m.trayAt = undefined;
     for (const q of sockets) { q.irisAt = -1; q.litAt = -1; q.shown = null; q.ringWas = null; }

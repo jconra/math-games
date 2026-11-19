@@ -1,5 +1,5 @@
 // THE DRILL OPERATOR'S GAME, drawn and played (src/drill.js is the plain part: the rocks, the metal in them, the holes,
-// the store; src/jobs/drill.js the question asked when a rock is in the claw). Used by a captain's run at the asteroid
+// the canisters; src/jobs/drill.js the question asked when a rock is in the claw). Used by a captain's run at the asteroid
 // field (src/trip.js, for a crew member who signed for the drill) and by itself in pi-nebula/labs/drill/. Nothing here
 // is built or loaded until one of them asks.
 //
@@ -15,7 +15,14 @@
 // same control." And of the claw: "it has a wrist with 3 claws right? So it is a machine, it's wrist is not limited
 // like a human wrist. it's wrist can spin around on a single axis as much as it needs to. the claws just open and
 // close." "The only part that shouldn't be able to be drilled is right where the claws join. But you should be able to
-// drill pretty close, in between the claws."
+// drill pretty close, in between the claws." And of the canisters (2026-11-18, later that day; these words replace
+// "the canisters all fill as a collective"): "the canisters don't mix ore. So if you collect 3 metals then it will
+// dedicate 3 canisters to that type. If one fills up, like iron, then it gets another canister. Once each canister is
+// designated then you can't except any new types of ore. At that point the player would want to top off all the
+// canisters to finish the mission. If they go back early (I think that should be an option) and the canisters aren't
+// all the way full, then I think we should round the level to the nearest 1/8th to make the math easier." "If there
+// are no canisters empty then yes a new metal cannot be accepted ... it should stay in the rock or float out as small
+// derbies."
 //
 // HOW IT IS DONE, plainly:
 //   - THE FIELD IS A PLACE. Its rocks lie where src/drill.js put them, each at its true size, and the Miner (built
@@ -37,18 +44,24 @@
 //     the rock drills there: the wrist turns the spot round to the cutter's side, the cutter's arm moves its wheel
 //     along the rock to the spot (its joints worked out from where the wheel must be), cuts, and lifts; the wrist
 //     turns the rock back, so the hole is seen where it was tapped. The glow near the hole fades, what was there goes
-//     into the store, chips drift off, cracks spread along the rock's facets, the holes left count down, and after the
+//     into the canisters (a metal no canister has room for stays in the rock, its glow with it, and the line along
+//     the bottom says so), chips drift off, cracks spread along the rock's facets, the holes left count down, and after the
 //     last the rock crumbles. A tap on a finger is not a tap on the rock. The patch at the palm, where the fingers
 //     join, cannot be seen and so cannot be drilled.
-//   - THE STORE, top left: the row of eight canisters is a picture of it (src/drill.js rowOf), with the tonnes of each
-//     metal aboard under it.
+//   - THE CANISTERS, top left: the row of eight is the canisters as they are (src/drill.js: one metal to a canister).
+//     Each has its metal's colour, on its rim from the moment it is given to that metal and inside it up to its own
+//     level; one not yet given to any metal is plain. Under the row, the tonnes of each metal aboard.
+//   - HEAD HOME, under them: the button that ends the run early with what is aboard (while looking for a rock or
+//     holding one, once an eighth of a tonne or more would come home). Each part-full canister's level is then
+//     rounded to the nearest 1/8 of a tonne, the row shows the rounded levels, and that is what comes home.
 //   - CHEAP: the ship as built (39 draws); each rock one small mesh; far rocks and pebbles one batch each; the glow one
 //     batch of points; chips and pieces one batch. No lamps of its own but one sun.
 //
 //   const ship = await buildShip()                      the Miner, for outside (once; kept by whoever asked)
 //   const V = makeDrillView({ scene, camera, renderer, root, ship, at, crew, save, rand, ask, flier, onDone, onSay })
 //       flier: who flies the ship over to a rock, in words ('Pilot Juno', 'The autopilot')
-//       onDone({ store (tonnes of each metal), sells, stats, secs })
+//       onDone({ store (tonnes of each metal), cans (the canisters: [{ metal, t }]), early (headed home before all
+//                eight were full: the store is the rounded one), sells, stats, secs })
 //   V.update(dt); V.aim(camera, dt)   each frame;   V.close()   put away (the ship is the caller's to keep or dispose)
 //   V.run (src/drill.js makeRun), V.state() and V.rig (the rigs: where things are on the screen)
 import * as THREE from 'three';
@@ -57,8 +70,8 @@ import { makeMaterials } from '../kit/materials.js';
 import * as MB from '../kit/ships/miner-built.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as SCAN } from './jobs/drill.js';
-import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, rowOf, scanOf, rockSells } from './drill.js';
-import { sellsFor, lotsWords, tonnesWords } from './jobs/smelter.js';
+import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, scanOf, rockSells } from './drill.js';
+import { sellsFor, lotsWords, tonnesWords, eighthsText } from './jobs/smelter.js';
 import { priceChart } from './pricechart.js';
 import { DIR } from '../world/sky.js';
 
@@ -97,7 +110,9 @@ const CSS = `
 .pdr-box small { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a7b0ba; }
 .pdr-cans b { font-size: 22px; font-weight: 800; }
 .pdr-row { display: flex; gap: 4px; margin-top: 4px; }
-.pdr-row i { width: 15px; height: 24px; border: 1.5px solid #9fb2c4; border-radius: 3px; background: rgba(255, 255, 255, 0.04); }
+.pdr-row i { width: 16px; height: 28px; border: 1.5px solid rgba(159, 178, 196, 0.6); border-radius: 3px; background: rgba(255, 255, 255, 0.04); }
+.pdr-row i.is-given { border-color: var(--c); background: linear-gradient(to top, var(--c) var(--at), rgba(255, 255, 255, 0.04) var(--at)); }
+.pdr .pdr-home { display: block; margin-top: 8px; height: 36px; padding: 0 14px; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #e9f6ff; background: rgba(40, 47, 56, 0.92); box-shadow: inset 0 0 0 1.5px rgba(110, 225, 255, 0.6); clip-path: var(--oct); white-space: nowrap; }
 .pdr-store { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 2px 10px; max-width: 160px; font-size: 12.5px; color: #dfe6ee; }
 .pdr-store:empty { display: none; }
 .pdr-store span { white-space: nowrap; } .pdr-store i, .pdr-chart i, .pdr-read i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; background: var(--c); box-shadow: 0 0 6px var(--c); }
@@ -240,10 +255,12 @@ void main() {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const listOf = (w) => (w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const say = (n) => Math.round(n).toLocaleString('en-US');
 // tonnes on the screen, short: "3 t", "0.75 t"
-const tons = (t) => `${Math.round(t * 100) / 100} t`;
+// (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
+const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
 export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onDone = () => {}, onSay = () => {} }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
@@ -457,21 +474,21 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // round the rock looked at, a readout by each rock the full scan has read ──
   const el = document.createElement('div'); el.className = 'pdr' + (lab ? ' is-lab' : '');
   el.innerHTML = `<div class="pdr-touch"></div><div class="pdr-reads"></div><div class="pdr-eye" hidden><i></i></div>
-    <div class="pdr-side"><div class="pdr-box pdr-cans"><small>Canisters full</small><b></b><div class="pdr-row">${'<i></i>'.repeat(DRILL.cans)}</div><p class="pdr-store"></p></div>
+    <div class="pdr-side"><div class="pdr-box pdr-cans"><small>Canisters full</small><b></b><div class="pdr-row">${'<i></i>'.repeat(DRILL.cans)}</div><p class="pdr-store"></p><button type="button" class="pdr-home" hidden>Head home</button></div>
       <div class="pdr-box pdr-chart">${priceChart()}</div>
       <div class="pdr-box pdr-holes" hidden><b></b><span></span></div></div>
     <div class="pdr-big" hidden></div><div class="pdr-hint"></div>
     <button type="button" class="pdr-btn pdr-scan" hidden>Scan this rock<kbd>S</kbd></button><button type="button" class="pdr-btn pdr-done" hidden>Done with this rock</button>
     <button type="button" class="pdr-btn pdr-fly" hidden>Fly manually</button>`;
   root.appendChild(el);
-  const $ = (s) => el.querySelector(s), readsEl = $('.pdr-reads'), eyeEl = $('.pdr-eye'), cansB = $('.pdr-cans b'), cansI = [...el.querySelectorAll('.pdr-row i')], storeEl = $('.pdr-store'), holesEl = $('.pdr-holes'), hintEl = $('.pdr-hint'), doneEl = $('.pdr-done'), scanEl = $('.pdr-scan'), bigEl = $('.pdr-big');
+  const $ = (s) => el.querySelector(s), readsEl = $('.pdr-reads'), eyeEl = $('.pdr-eye'), cansB = $('.pdr-cans b'), cansI = [...el.querySelectorAll('.pdr-row i')], storeEl = $('.pdr-store'), homeEl = $('.pdr-home'), holesEl = $('.pdr-holes'), hintEl = $('.pdr-hint'), doneEl = $('.pdr-done'), scanEl = $('.pdr-scan'), bigEl = $('.pdr-big');
   const sideEls = [...el.querySelectorAll('.pdr-side .pdr-box')];      // (the boxes at the side: a readout keeps clear of them)
   // (the "fly manually" button's place: FLY_BY_HAND above)
   const flyEl = $('.pdr-fly'); flyEl.hidden = !(FLY_BY_HAND && pilot);
   // (the line along the bottom: what to do now; or, for a few seconds, what just happened)
   let hintFor = '', hintT = 0;
   const hint = (w, secs = 0) => { if (secs) { hintT = secs; hintEl.textContent = w; } else { hintFor = w; if (hintT <= 0 && hintEl.textContent !== w) hintEl.textContent = w; } };
-  let bigT = 0; const shownOre = {};
+  let bigT = 0; const shownT = Array(DRILL.cans).fill(0);      // (each canister's level as drawn, easing up to what is in it)
   const big = (html, secs = 3.2) => { bigEl.innerHTML = html; bigEl.hidden = false; bigT = secs; };
 
   // ── the game's state ──
@@ -553,6 +570,20 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   doneEl.addEventListener('pointerdown', (e) => e.stopPropagation());
   doneEl.addEventListener('pointerup', (e) => { e.stopPropagation(); letGo(); });
   doneEl.addEventListener('click', (e) => { e.stopPropagation(); letGo(); });
+  // HEADING HOME EARLY, with what is aboard (while looking for a rock, or holding one with the cutter still): each
+  // part-full canister's level rounded to the nearest 1/8 of a tonne (src/drill.js home), a rock in the claw let go
+  const canHome = () => !panel && (V.stage === 'look' || V.stage === 'back' || (V.stage === 'drill' && !V.sub)) && run.canHome();
+  function headHome() {
+    if (!canHome() || !run.home()) return false;
+    // (the line along the bottom says what happens to the levels, at once: whatever the last hole's words were)
+    hintT = 0; go('full'); armsWant = 'stowed'; doneEl.hidden = true; holesEl.hidden = true; scanEl.hidden = true; homeEl.hidden = true;
+    big(`Heading home<small>${esc(cap(lotsWords(sellsFor(run.store()).lots)))}</small>`, T.full); onSay('early');
+    return true;
+  }
+  let homeAt = 0;
+  homeEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+  homeEl.addEventListener('pointerup', (e) => { e.stopPropagation(); homeAt = performance.now(); headHome(); });
+  homeEl.addEventListener('click', (e) => { e.stopPropagation(); if (performance.now() - homeAt > 600) headHome(); });
 
   // ── where things are on the screen ──
   // (p: a place in the field's frame)
@@ -635,14 +666,19 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   const flierMid = /^The /.test(flier) ? 'the ' + flier.slice(4) : flier;
   const HINTS = { arrive: 'The scan shows the ore inside each rock, in its metal\'s colour. More glow is more ore.', look: `Drag to look round. Tap a rock and ${flierMid} flies you to it.`, fly: `${flier} flies you over.`, grab: 'The claw takes the rock.', ask: 'Scanning the rock.',
-    drill: 'Drag to turn the rock in the claw. Tap a spot to drill there.', breakUp: 'The rock crumbles.', release: 'The claw lets the rock go.', back: 'Look for the next rock.', full: '' };
-  // (what a hole found: the metal there was most of, and any other worth a word)
+    drill: 'Drag to turn the rock in the claw. Tap a spot to drill there.', breakUp: 'The rock crumbles.', release: 'The claw lets the rock go.', back: 'Look for the next rock.', full: '',
+    early: 'Each part-full canister is rounded to the nearest 1/8 of a tonne.' };
+  // (what a hole found: the metal there was most of, and any other worth a word; and a metal it found that no
+  // canister had room for, which stays in the rock)
   const HOLE_WORDS = (h) => {
     if (h.bare) return 'Bare rock. Nothing there.';
-    const by = Object.entries(h.by || {}).sort((a, b) => b[1] - a[1]), [m, t] = by[0] || ['', h.took], more = by[1] && by[1][1] >= 0.05 ? ` And some ${by[1][0]}.` : '';
-    return (t < 0.2 ? `A little ${m}.` : t < 0.5 ? `Good ${m} ore.` : `A thick vein of ${m}!`) + more;
+    // (said when a twentieth of a tonne or more stayed, or the hole brought nothing aboard: not for every crumb)
+    const stays = Object.keys(h.stays || {}), crumbs = Object.values(h.stays || {}).reduce((a, b) => a + b, 0) < 0.05 && h.took > 0, none = stays.length && !crumbs ? `No canister has room for the ${listOf(stays)}. It stays in the rock.` : '';
+    const by = Object.entries(h.by || {}).sort((a, b) => b[1] - a[1]);
+    if (!by.length) return none || 'Next to nothing there.';
+    const [m, t] = by[0], more = by[1] && by[1][1] >= 0.05 ? ` And some ${by[1][0]}.` : '';
+    return (t < 0.2 ? `A little ${m}.` : t < 0.5 ? `Good ${m} ore.` : `A thick vein of ${m}!`) + more + (none ? ' ' + none : '');
   };
-  HINTS.full = '';
   const lerpQ = (a, b, k) => Object.fromEntries(JOINTS.map((j) => [j, a[j] + (b[j] - a[j]) * k]));
 
   // the ship flying over to the rock it was sent to; and any other rock in its way eased aside
@@ -701,11 +737,11 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
         V.subT += dt; cutQ = lerpQ(H.cut.from, H.cut.to, ease(V.subT / T.down));
         if (V.subT >= T.down) {
           // the hole is made: the metal near it goes into the store
-          const h = run.drill(V.dir); V.sub = 'cut'; V.subT = 0; V.hole = h; V.lastHole = h ? { took: +h.took.toFixed(3), by: h.by, bare: h.bare, left: h.left, boom: +H.cut.to.miss.toFixed(3) } : null;
+          const h = run.drill(V.dir); V.sub = 'cut'; V.subT = 0; V.hole = h; V.lastHole = h ? { took: +h.took.toFixed(3), by: h.by, stays: h.stays, bare: h.bare, left: h.left, boom: +H.cut.to.miss.toFixed(3) } : null;
           if (h) {
             const U = heldMat.uniforms, n = H.rock.made.length; U.uHoles.value[Math.min(7, n - 1)].set(...H.rock.made[n - 1]); U.uHoleN.value = Math.min(8, n);
             V.crackTo = Math.min(1, n / H.rock.holes) * 0.62;
-            hint(HOLE_WORDS(h), 2.2);
+            { const w = HOLE_WORDS(h); hint(w, w.length > 60 ? 4 : 2.2); }
           }
         }
       } else if (V.sub === 'cut') {
@@ -733,9 +769,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       if (V.t > T.release) { dropHeld(); go('back'); }
     } else if (S === 'back') { hint(HINTS.back); syncSeen(); if (V.t > T.back) go('look'); }
     else if (S === 'full') {
-      hint(HINTS.full);
+      hint(run.early ? HINTS.early : HINTS.full);
       if (H && V.t > 0.6) H.centre.copy(heldPos).addScaledVector(wristAxis, H.off).addScaledVector(AWAY, ease((V.t - 0.6) / 1.4) * 14);
-      if (V.t > T.full && !V.ended) { V.ended = true; const store = run.store(); onDone({ store, sells: sellsFor(store).pay, stats: { ...run.stats }, secs: V.clock }); }
+      if (V.t > T.full && !V.ended) { V.ended = true; const { store, cans } = run.load(); onDone({ store, cans, early: run.early, sells: sellsFor(store).pay, stats: { ...run.stats }, secs: V.clock }); }
     }
 
     // the rocks of the field, each where it lies, turning slowly; the one in the claw where the hand has it
@@ -762,19 +798,19 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const A = glow.geometry.attributes; glow.geometry.setDrawRange(0, glowN); for (const k of ['position', 'aC', 'aCol', 'aSize', 'aR']) A[k].needsUpdate = true;
     stepChips(dt);
 
-    // the store: the row of canisters is its picture (a metal at a time, each as long as its share), and under it
-    // the tonnes of each metal aboard
-    for (const m of Object.keys(run.ore)) { const a = shownOre[m] || 0, b = run.ore[m]; shownOre[m] = Math.abs(b - a) < 0.004 ? b : a + (b - a) * Math.min(1, dt * 2.5); }
-    const row = rowOf(S === 'full' ? run.ore : shownOre);
+    // the canisters: the row is the eight as they are, each its metal's colour (its rim from the moment it is given
+    // to that metal, and inside it up to its own level); under it the tonnes of each metal aboard; and the button
+    // that heads home early
     cansB.textContent = `${run.full} of ${DRILL.cans}`;
     cansI.forEach((c, i) => {
-      const k = row[i]; let up = 0; const stops = [];
-      for (const [m, t] of k.parts) { const col = (ORE[m] || ORE.copper).glow, to = Math.min(100, up + t * 100); stops.push(`${col} ${up.toFixed(1)}% ${to.toFixed(1)}%`); up = to; }
-      const bg = stops.length ? `linear-gradient(to top, ${stops.join(', ')}, rgba(255, 255, 255, 0.04) ${up.toFixed(1)}%)` : '';
-      if (c._bg !== bg) { c._bg = bg; c.style.background = bg; }
+      const k = run.cans[i], a = shownT[i], b = k.t; shownT[i] = S === 'full' || Math.abs(b - a) < 0.004 ? b : a + (b - a) * Math.min(1, dt * 2.5);
+      const key = k.metal ? `${k.metal} ${(shownT[i] * 100).toFixed(1)}%` : '';
+      if (c._k === key) return; c._k = key;
+      c.classList.toggle('is-given', !!k.metal); c.style.setProperty('--c', k.metal ? (ORE[k.metal] || ORE.copper).glow : ''); c.style.setProperty('--at', `${(shownT[i] * 100).toFixed(1)}%`);
     });
-    const st = Object.entries(run.store()).map(([m, t]) => `<span><i style="--c: ${(ORE[m] || ORE.copper).glow}"></i>${tons(t)}</span>`).join('');
+    const st = Object.entries(run.store()).map(([m, t]) => `<span><i style="--c: ${(ORE[m] || ORE.copper).glow}"></i>${tons(t, run.early)}</span>`).join('');
     if (storeEl._t !== st) { storeEl._t = st; storeEl.innerHTML = st; }
+    homeEl.hidden = !canHome();
     const holes = !!H && (V.stage === 'grab' || V.stage === 'drill' || V.stage === 'breakUp'); holesEl.hidden = !holes;
     if (holes) { holesEl.querySelector('b').textContent = String(H.rock.left); holesEl.querySelector('span').textContent = H.rock.left === 1 ? 'hole left' : 'holes left'; }
   }
@@ -853,7 +889,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // (the rigs: what is where on the screen; a careful driller's next spot among those that can be seen and tapped)
   const rig = {
     rocks: () => [...seen.values()].filter((o) => !(H && H.o === o)).map((o) => { proj(o.pos, scr); return { id: o.rock.id, shape: o.rock.shape, weight: o.rock.weight, metals: { ...o.rock.metals }, ore: +o.rock.lumps.reduce((s, L) => s + L.ore, 0).toFixed(3), sells: rockSells(o.rock), scanned: o.rock.scanned, far: +o.pos.distanceTo(here.p).toFixed(1), x: Math.round(scr.x), y: Math.round(scr.y), z: +scr.z.toFixed(4), r: Math.round(shownPx(o)) }; }),
-    // the spots facing the eye: [{ x, y, worth, dir }] best first
+    // the spots facing the eye: [{ x, y, worth (the tonnes that would come aboard: what the canisters have room for), dir }] best first
     spots(n = 400) {
       if (!H) return [];
       const out = [], S = H.o.S, inv = _m.copy(G.matrix).invert(), toEye = camera.position.clone().applyMatrix4(inv).sub(H.centre).normalize();
@@ -863,11 +899,11 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
         if (g.clone().normalize().dot(toEye) < 0.5) continue;
         const w = g.add(H.centre).applyMatrix4(G.matrix).project(camera), x = Math.round((w.x * 0.5 + 0.5) * innerWidth), yy = Math.round((-w.y * 0.5 + 0.5) * innerHeight), s = spotAt(x, yy);
         if (!s || s.claw) continue;      // (not behind a finger)
-        out.push({ x, y: yy, worth: +holeWorth(H.rock, s).toFixed(4), dir: s });
+        out.push({ x, y: yy, worth: +holeWorth(H.rock, s, run.cans).toFixed(4), dir: s });
       }
       return out.sort((p, q) => q.worth - p.worth);
     },
-    pick, scan, drillAt, letGo, turnBy, spotAt, lookTo: (yaw, pitch = 0) => { look.yaw = yaw; look.pitch = pitch; cam.fresh = true; },
+    pick, scan, drillAt, letGo, headHome, turnBy, spotAt, lookTo: (yaw, pitch = 0) => { look.yaw = yaw; look.pitch = pitch; cam.fresh = true; },
     hand: () => (H ? { turn: +H.turn.toFixed(3), axis: wristAxis.toArray().map((x) => +x.toFixed(3)), sign: wristSign, cut: cutDir.toArray().map((x) => +x.toFixed(3)), at: H.centre.toArray().map((x) => +x.toFixed(2)), grip: H.grip, gripMs: +(H.gripMs || 0).toFixed(2), cutter: cutQ ? { ...cutQ } : null, wait: { ...cutWait } } : null),
     // how near the cutter's wheel gets to spots all round the rock: [{ from (degrees round from the far end of the rock,
     // 0, to the palm, 180), miss (metres short) }]
@@ -878,8 +914,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     reach: (dir) => { if (!H) return null; const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return +cutterTo(H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE)).miss.toFixed(3); },
   };
   return { el, run, update, aim, close, rig, get panel() { return panel; }, get stage() { return V.stage; },
-    state: () => ({ stage: V.stage, sub: V.sub, t: +V.t.toFixed(2), clock: +V.clock.toFixed(2), aboard: +run.aboard.toFixed(3), full: run.full, store: run.store(), sells: run.sells(), stats: { ...run.stats }, lastHole: V.lastHole, eyed: V.eyed,
+    state: () => ({ stage: V.stage, sub: V.sub, t: +V.t.toFixed(2), clock: +V.clock.toFixed(2), aboard: +run.aboard.toFixed(3), full: run.full, given: run.given, cans: run.cans.map((c) => ({ ...c })), early: run.early, store: run.store(), sells: run.sells(), stats: { ...run.stats }, lastHole: V.lastHole, eyed: V.eyed,
       ship: { p: here.p.toArray().map((x) => +x.toFixed(1)), yaw: +here.yaw.toFixed(3) }, look: { yaw: +look.yaw.toFixed(3), pitch: +look.pitch.toFixed(3) }, rocks: run.rocks.length,
       held: H ? { id: H.rock.id, shape: H.rock.shape, metals: { ...H.rock.metals }, weight: H.rock.weight, left: H.rock.left, holes: H.rock.holes, ore: +H.rock.lumps.reduce((s, L) => s + L.ore, 0).toFixed(3) } : null,
-      panel: panel ? panel.state() : null, hint: hintEl.textContent, done: !doneEl.hidden, scan: scanEl.hidden ? null : scanEl.textContent, glow: glowN, chips: bits.length, arms: armDoors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })), log: V.log.slice(-14) }) };
+      panel: panel ? panel.state() : null, hint: hintEl.textContent, done: !doneEl.hidden, home: !homeEl.hidden, scan: scanEl.hidden ? null : scanEl.textContent, glow: glowN, chips: bits.length, arms: armDoors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })), log: V.log.slice(-14) }) };
 }

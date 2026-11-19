@@ -323,14 +323,15 @@ test('the smelter: the haul is the same haul on every slip about it: eight tonne
 // every slip of every level, over many seeds, from the log and about the haul in the hangar (one of the Miner's own,
 // and one the player went out for)
 function everySlip(fn, each = 60) {
-  const flown = { iron: 4.67, nickel: 2.9, copper: 0.43 };
+  // (the player's: one that came home with all eight canisters full, and one that headed home early, in eighths of a tonne)
+  const flown = [{ iron: 4, nickel: 3, copper: 1 }, { iron: 2.625, nickel: 1, copper: 0.75, gold: 0.125 }];
   smelter.place.levels.forEach((L, i) => {
     for (let k = 0; k < each; k++) {
       const crew = crewOf(); setLevelAt(crew, 'smelter', L.id);
       // (a third from the log, a third with one of the Miner's own hauls in the hangar, a third with the player's)
       const way = k % 3, round = 30 + (k % 12);
       if (k % 6 === 0) forget();
-      flownHaul(round, way === 2 ? { store: flown } : null);
+      flownHaul(round, way === 2 ? { store: flown[Math.floor(k / 3) % 2] } : null);
       const q = E.deal(crew, smelter, { rand: seeded(1000 * (i + 1) + k), live: way ? hangar({ round }) : null });
       fn(q.order, L, way);
       flownHaul(round, null);
