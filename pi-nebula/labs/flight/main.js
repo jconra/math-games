@@ -8,7 +8,11 @@
 //   - the Jump button, offered once the ship is clear of the station as in the game, has nowhere to jump to here: it
 //     puts the ship where the jump home would (outside, in sight of the station);
 //   - the autopilot leaves the station from the pad and comes in to land from outside;
-//   - "flip up and down" is kept in this browser (in the game it is kept with the crew member).
+//   - "flip up and down" is kept in this browser (in the game it is kept with the crew member);
+//   - the landing guide (the small model and its blue hologram, and the lit keys) is up whenever the ship is in
+//     flight, so a hop about the hangar is enough to try it (in the game it is up coming home);
+//   - set down by hand the ship stands where it was put, as in the game; there is nobody here to get up out of the
+//     seat. "Back on the pad" parks it properly again.
 //
 // Address switches: ?q=low|medium|high  the picture's quality; ?view=behind  start in the view from behind;
 // ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a screenshot; ?seed=N  which of the
@@ -16,7 +20,7 @@
 import * as THREE from 'three';
 import { loadStation } from '../../src/station.js';
 import { makeWalls } from '../../src/walls.js';
-import { makeBoarding } from '../../src/boarding.js';
+import { makeBoarding, FLOWN } from '../../src/boarding.js';
 import { makeCrane } from '../../src/crane.js';
 import { addOutside } from '../../src/outside.js';
 import { startFlying } from '../../src/flying.js';
@@ -30,7 +34,7 @@ const kept = (() => { try { return JSON.parse(localStorage.getItem(KEEP)) || {};
 const keep = (s) => { try { localStorage.setItem(KEEP, JSON.stringify(s)); } catch (e) { /* blocked: not kept */ } };
 
 const W = LAB.W = await loadStation({ canvas, quality: q.get('q'), rig: q.has('rig') || HOLD, say: (f, words) => { loading.textContent = words + '…'; } });
-const walls = makeWalls(W.built, { portals: W.R.portals });
+const walls = makeWalls(W.built, { portals: W.R.portals, apart: FLOWN });
 for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);
 for (const D of W.built.glides || []) D.use = null;
 const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
@@ -48,8 +52,10 @@ function begin() {
   const sp = boarding.spots(MINER.id); body.pos.set(...sp.rooms.cockpit);
   crane.depart();
   F = LAB.F = startFlying({ W, boarding, crane, outside }, {
-    cfg: MINER, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept,
+    cfg: MINER, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept, guide: 'always',
     onSettings: (s) => keep(s), words: (w) => { note.textContent = w; },
+    // (the stand-in for the crew member stays in the seat of the ship as it stands)
+    onStand: (moved) => { body.pos.applyMatrix4(moved); },
     // (nowhere to jump to here: where the jump home would bring it out)
     onJump: () => F.arrive(), onLanded: () => { F.goal = 'free'; },
   });

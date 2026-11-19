@@ -102,7 +102,8 @@ const wayOf = (axis, d) => WAY[axis][d >= 0 ? 0 : 1];
 export function mountName(site, i) {
   const M = site.mounts, m = M[i], mx = M.reduce((q, a) => q + a.at[0], 0) / M.length, mz = M.reduce((q, a) => q + a.at[2], 0) / M.length;
   const nose = site.nose || 1;
-  return `${m.upper ? 'Upper' : 'Lower'}-${(m.at[0] - mx) * nose > 0 ? 'Forward' : 'Aft'}-${(m.at[2] - mz) * nose < 0 ? 'Port' : 'Starboard'}`;
+  // (fore, port: its own, kept from where the ship is parked (src/crane.js), so a ship set down crooked names them the same)
+  return `${m.upper ? 'Upper' : 'Lower'}-${(m.fore ?? ((m.at[0] - mx) * nose > 0)) ? 'Forward' : 'Aft'}-${(m.port ?? ((m.at[2] - mz) * nose < 0)) ? 'Port' : 'Starboard'}`;
 }
 // a place, where the crane goes for it: the hook's point there (a canister's middle at rest; a mount's tray slid out),
 // the way a canister lies there, and in words

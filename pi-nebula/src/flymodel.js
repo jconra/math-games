@@ -12,19 +12,38 @@
 // Told to him and not objected to: the ship steadies itself (let go of the keys and it slows to a stop; it never
 // drifts off for ever); bumping the station or the door frame does no damage (it stops or slides along).
 //
+// AND OF LANDING (2026-11-18, later, when asked whether the ship should turn itself round as it sets down): "I don't wan
+// the ship taking over. That will annoy me. ... There should be some kind of guidance that appears on the hanger floor
+// or just in midair that should request you to find the correct heading and shows you how far forward/back/left/right
+// you are from being centered. ... it could be a small model and a hologram as the goal in the same space, so you try
+// to make both of them match. That could also help for being centered when coming in the hanger. Anyway, if the pilot
+// sets down and is still crooked then I would hope the crane can just compensate for it. ... Even if they just come
+// straight in and land it nose-in, that should be okay (as long as the ship is not upside down). ... If they do have
+// the ship rolled over to much for a landing (like upside down) then it shouldn't allow them out of the seat until they
+// have corrected it. One thing that could be helpful is to show the keys that would correct the ship to a preferred
+// landing position. There could be a qweasad grid in the corner and arrows for the mouse that could light up keys to
+// orient the ship correctly. The could glow brightly when a lot of input is needed and dim once they are close."
+//
 // NO RULES OF ITS OWN: no fuel, no damage, no timer, no score. Where something had to be decided, the plainest thing:
 //   - THE POWER is a switch on the pad. It comes on by itself with the first key that flies, so it is never in the way.
-//   - LOW AND SLOW OVER ITS PAD, the ship sets itself down: it turns its nose to the door and settles exactly where it
-//     is parked (the cabin, the lift and the crane all know only that one place).
+//   - NOTHING SETS THE SHIP DOWN FOR A PILOT FLYING BY HAND. Brought down onto its own hangar's floor, wherever and
+//     whichever way round, it stands there on its legs (LAND): its legs take the floor, so it stops sliding and whatever
+//     lean is left goes as its weight comes onto them; leaning further than LAND.tilt ("like upside down") its legs do
+//     not take the floor and it is not down. Where it stands is where it stays: the cabin, the lift and the crane are
+//     told (standOf), and the next lift-off is from there.
 //   - THE AUTOPILOT presses the same controls a pilot would, so what it does is seen to happen, and it can be switched
-//     on and off anywhere.
+//     on and off anywhere. It alone asks the ship to set itself down (SETTLE: over its own pad the ship turns its nose
+//     to the door and settles exactly where it is parked); switched off, that stops at once.
+//   - THE GUIDE (guideOf) only asks: the goal is the ship in its proper parking place, nose out; how far the ship is
+//     from it, and which keys would bring it there, brightly when a lot is needed and dimly when it is close. Nothing
+//     is scored and nothing is required but the hangar's floor and its legs under it.
 //
 // A SHIP is S = makeShip(cfg): where it is (S.p: the point of it that stands on the pad's middle), how it is turned
 // (S.q: a quaternion; none: parked, nose out of the bay door), its speed (S.v, the station's frame), its turning
 // (S.w, its own frame). Its own frame here: [ahead, up, right]. cfg is the ship's own facts (MINER below): another
-// ship is another cfg.
+// ship is another cfg. makeShip(cfg, at): standing where it was last set down ({ p, q }: standOf), not on its pad.
 import { OUTSIDE_BOX, DOOR, HANGARS } from '../kit/outside-plan.js';
-import { SKIN } from './flysolid.js';
+import { SKIN, bayOf } from './flysolid.js';
 
 // ── the keys, as he said them (KeyboardEvent.code -> what it does) ──
 export const KEYS = {
@@ -47,9 +66,24 @@ export const FEEL = {
 export const AREA = { out: 120, back: 105 };
 // coming home: where the ship comes out of its jump, metres out from its own bay door, a little above its line, nose in
 export const ARRIVE = { out: 300, up: 9 };
-// low and slow over its pad it sets itself down: within `reach` of the pad's middle, its feet under `low`, moving across the floor slower than
+// THE AUTOPILOT'S OWN WAY DOWN (never a hand pilot's): low and slow over its pad the ship sets itself down while the
+// autopilot asks it to: within `reach` of the pad's middle, its feet under `low`, moving across the floor slower than
 // `slow`; it turns no faster than `turn` and comes down at `down`
 export const SETTLE = { reach: 4.5, low: 1.2, slow: 3, level: 0.94, hold: 1.0, turn: 0.9, move: 2.2, down: 0.85 };
+// SET DOWN BY HAND, on its own hangar's floor:
+//   tilt    degrees. Leaning further than this (rolled, or its nose up or down) is "rolled over too much for a landing":
+//           its legs do not take the floor, and the seat does not let the pilot out until it is corrected
+//   touch   its lowest point this near the floor is on it (m)
+//   grip    on its legs it stops sliding, at this many m/s each second
+//   level   ... and its legs bring it level, at up to this many radians a second (a lean of 30 degrees in a third of a second)
+//   still   slower than this (m/s), and level: it is down
+export const LAND = { tilt: 30, touch: 0.08, grip: 9, level: 1.6, still: 0.05 };
+// THE GUIDE: `near`: within this of the pad's middle (m, across the floor) the heading asked for is the parking one,
+// nose out; further off it is simply the way to the pad. Each hint is dark inside its first number and at its
+// brightest from its second: across the floor (m), up and down (m), the nose's turn (degrees), the roll (degrees).
+// `space`: the small model and its hologram share one small space, drawn smaller the further apart they are: so many
+// metres apart is half way to its edge (src/flying.js draws it).
+export const GUIDE = { near: 12, move: [0.3, 8], rise: [0.2, 4], turn: [4, 50], roll: [3, 30], dim: 0.25, lift: 0.6, space: 16 };
 
 // ── THE MINER'S OWN FACTS ──
 const box = (a0, a1, r, u1) => { const out = []; for (const u of [0, u1]) for (const s of [-r, r]) for (const a of [a0, a0 / 2, 0, a1 / 2, a1]) out.push([a, u, s]); out.push([a1, u1 / 2, 0], [a0, u1 / 2, 0], [0, 0, 0], [0, u1, 0]); return out; };
@@ -71,6 +105,15 @@ export const MINER = {
   behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
   // the speed's screen, on the sill in front of the pilot: its middle, its size (m), how far it leans back (radians)
   screen: { at: [0.5, 3.47, 5.36], size: [0.34, 0.15], lean: 0.45 },
+  // ITS BAY (src/flysolid.js: what it bumps into in there; its floor is the hangar's floor)
+  bay: bayOf(HANGARS[0].z),
+  // THE FLOOR IT CAN BE UNLOADED ON: the part of its hangar's floor where the crane can get at every canister of a
+  // ship standing any way round (all of the ship must stand inside it). Toward the door the crane's rails end 2.1 m
+  // short of the door's line (the hook goes no further than x = 56.9: the station file's place `crane`, less its end
+  // stops); by the wall of sockets and the rack of empties (z = -15.7, the rack's front) a tray slid out needs 0.8 m
+  // clear; on the other side a cart stands in the bay's edge (z = 5.2 on). A test holds these to the crane's own
+  // places (tests/flying.test.mjs).
+  floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.6] },
 };
 
 // ── small sums ──
@@ -109,6 +152,8 @@ export function controlsOf(held) {
   return { move: [h('forward') - h('reverse'), h('up') - h('down'), h('right') - h('left')], roll: h('rollRight') - h('rollLeft'), turn: [0, 0], nudge: [0, 0] };
 }
 export const noControls = () => ({ move: [0, 0, 0], roll: 0, turn: [0, 0], nudge: [0, 0] });
+// (the autopilot's: marked as its own, so a ship it flies low is never taken for one being landed by hand)
+const autoControls = () => ({ ...noControls(), auto: true });
 // the mouse, held by the game: so many pixels moved -> how far the nose turns [up, right] (radians). Up the screen is
 // nose up; with "invert up and down" it is the other way (pull back to climb)
 export function mouseTurn(dx, dy, set = {}, k = FEEL.mouse) { return [clamp((set.invertY ? dy : -dy) * k, -FEEL.nudge, FEEL.nudge), clamp(dx * k, -FEEL.nudge, FEEL.nudge)]; }
@@ -133,18 +178,52 @@ export function arrival(cfg = MINER) { return { p: [DOOR.face + ARRIVE.out, cfg.
 const inBay = (p, cfg) => p[0] < DOOR.face + 11 && p[0] > cfg.pad[0] - 22 && Math.abs(p[2] - cfg.pad[2]) < DOOR.w / 2 + 1 && p[1] > cfg.pad[1] - 1 && p[1] < cfg.pad[1] + 3.6;
 
 // ── A SHIP ──
-export function makeShip(cfg = MINER) {
-  return { cfg, p: [...cfg.pad], q: [0, 0, 0, 1], v: [0, 0, 0], w: [0, 0, 0], power: false, landed: true, settle: null, engine: 0, acc: [0, 0, 0], spin: 0, bump: 0, t: 0 };
+export function makeShip(cfg = MINER, at = null) {
+  return park({ cfg, p: [...cfg.pad], q: [0, 0, 0, 1], v: [0, 0, 0], w: [0, 0, 0], power: false, landed: true, settle: null, engine: 0, acc: [0, 0, 0], spin: 0, bump: 0, t: 0, on: false, tilt: 0 }, at);
 }
+// exactly where it is parked, nose out?
+export const onPad = (S) => S.landed && S.q[3] === 1 && S.p[0] === S.cfg.pad[0] && S.p[1] === S.cfg.pad[1] && S.p[2] === S.cfg.pad[2];
+// where it stands, to be kept ({ p, q }); none: on its pad as parked, or not down at all
+export const standOf = (S) => (S.landed && !onPad(S) ? { p: [...S.p], q: [...S.q] } : null);
 export const speedOf = (S) => len(S.v);
 // "24 m/s": the speed as the cockpit's screen shows it (a plain number)
 export const speedWords = (S) => `${Math.round(speedOf(S))} m/s`;
 export function place(S, p, q = [0, 0, 0, 1]) { S.p = [...p]; S.q = [...q]; S.v = [0, 0, 0]; S.w = [0, 0, 0]; S.landed = false; S.settle = null; S.power = true; return S; }
-export function park(S) { S.p = [...S.cfg.pad]; S.q = [0, 0, 0, 1]; S.v = [0, 0, 0]; S.w = [0, 0, 0]; S.landed = true; S.settle = null; S.acc = [0, 0, 0]; S.spin = 0; return S; }
+// down and still: on its pad as it is parked, or (at: { p, q }, standOf) standing where it was last set down, level on
+// its legs, turned whichever way it was left
+export function park(S, at = null) {
+  S.p = [...S.cfg.pad]; S.q = [0, 0, 0, 1];
+  if (at) { const f = turn(qUnit(at.q), [1, 0, 0]); S.p = [at.p[0], floorAt(S.cfg, at.p) ?? at.p[1], at.p[2]]; S.q = facing([f[0], 0, f[2]]); }
+  S.v = [0, 0, 0]; S.w = [0, 0, 0]; S.landed = true; S.settle = null; S.acc = [0, 0, 0]; S.spin = 0; S.on = false; S.tilt = 0; return S;
+}
 // the power's switch: on the pad only (in flight it stays on: a ship never drifts off dead)
 export function setPower(S, on) { if (S.landed) S.power = !!on; return S.power; }
 // the ship's own points, in the station's frame
 export const pointsOf = (S) => S.cfg.points.map((pt) => add(S.p, turn(S.q, pt)));
+// ── its own hangar's floor ──
+// the floor's height under a point of its bay (none: not over it)
+function floorAt(cfg, p) { const B = cfg.bay; return B && p[0] > B.x0 && p[0] < B.x1 && p[2] > B.z0 && p[2] < B.z1 ? B.y0 : null; }
+export const floorUnder = (S) => floorAt(S.cfg, S.p);
+// how high its lowest point is (the station's frame), and how far it leans from upright (degrees)
+const lowest = (S) => { let low = Infinity; for (const pt of S.cfg.points) { const y = S.p[1] + turn(S.q, pt)[1]; if (y < low) low = y; } return low; };
+export const tiltOf = (S) => Math.acos(clamp(turn(S.q, [0, 1, 0])[1], -1, 1)) * 180 / Math.PI;
+// WHERE A SHIP THAT IS DOWN STANDS: 'pad' (exactly as it is parked), 'floor' (anywhere else on its hangar's floor that
+// its crane can unload it: every foot of it inside cfg.floor), 'edge' (on the hangar's floor, but too near the door or
+// a wall for the crane); null: not down
+export function standing(S) {
+  if (!S.landed) return null;
+  if (onPad(S)) return 'pad';
+  const F = S.cfg.floor; if (!F) return 'floor';
+  for (const pt of S.cfg.points) { if (pt[1] > 0.01) continue; const w = add(S.p, turn(S.q, pt)); if (w[0] < F.x[0] || w[0] > F.x[1] || w[2] < F.z[0] || w[2] > F.z[1]) return 'edge'; }
+  return 'floor';
+}
+// may the pilot get out of the seat? Down on its hangar's floor where the crane can unload it. Why not, when not:
+// 'over' (on the floor but rolled over too much: its legs are not under it), 'edge' (down, but too near the door or a
+// wall), or null (simply not down)
+export const canGetUp = (S) => { const w = standing(S); return w === 'pad' || w === 'floor'; };
+export const whyNot = (S) => (S.landed ? (standing(S) === 'edge' ? 'edge' : null) : S.on && S.tilt > LAND.tilt ? 'over' : null);
+// which edge a ship down at the edge is over: 'door' (toward the bay door: the crane's rails end short of it) or 'wall'
+export function edgeOf(S) { const F = S.cfg.floor; return F && S.cfg.points.some((pt) => pt[1] <= 0.01 && S.p[0] + turn(S.q, pt)[0] > F.x[1]) ? 'door' : 'wall'; }
 
 // one step of `dt` seconds with these controls; solid: what it bumps into (src/flysolid.js), or none
 export function stepShip(S, input, dt, solid = null) {
@@ -159,6 +238,8 @@ export function stepShip(S, input, dt, solid = null) {
     if (!(flies && S.power && S.engine > 0.1)) return S;
     S.landed = false;
   }
+  // (the autopilot's own way down goes on only while the autopilot asks for it: switched off, the pilot has the ship)
+  if (S.settle && !C.settle) S.settle = null;
   if (S.settle) { settle(S, dt, solid); return S; }
   const vb0 = unturn(S.q, S.v), wy0 = S.w[1];
   // (the mouse held by the game turns the nose outright)
@@ -181,10 +262,26 @@ export function stepShip(S, input, dt, solid = null) {
   const vb1 = unturn(S.q, S.v);
   S.acc = mul(sub(vb1, vb0), 1 / dt); S.spin = (S.w[1] - wy0) / dt;
   S.engine += ((0.15 + 0.85 * Math.max(0, C.move[0])) - S.engine) * Math.min(1, dt * 2.5);
-  // low and slow over its own pad: it sets itself down
+  // its own hangar's floor: its lowest point never under it (with or without a solid to bump into)
+  const fy = floorUnder(S); S.on = false; S.tilt = tiltOf(S);
+  if (fy != null) { const low = lowest(S); if (low < fy) { S.p[1] += fy - low; if (S.v[1] < 0) S.v[1] = 0; } S.on = low - fy <= LAND.touch; }
   const P = S.cfg.pad, up = turn(S.q, [0, 1, 0])[1];
-  if (C.move[1] <= 0 && Math.hypot(S.p[0] - P[0], S.p[2] - P[2]) < SETTLE.reach && S.p[1] - P[1] < SETTLE.low && Math.hypot(S.v[0], S.v[2]) < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 };
+  // THE AUTOPILOT, low and slow over the ship's own pad, asks it to set itself down
+  if (C.settle) { if (C.move[1] <= 0 && Math.hypot(S.p[0] - P[0], S.p[2] - P[2]) < SETTLE.reach && S.p[1] - P[1] < SETTLE.low && Math.hypot(S.v[0], S.v[2]) < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 }; }
+  // A PILOT'S OWN LANDING: on the floor, not held up off it, and not rolled over too much: its legs take the floor
+  else if (S.on && C.move[1] <= 0 && S.tilt <= LAND.tilt && !C.auto) legs(S, dt, fy);
   return S;
+}
+// on its legs on the floor: it stops sliding, what lean is left goes, and once it is still and level it is down, where
+// and whichever way round the pilot put it (nothing is moved or turned for them)
+function legs(S, dt, fy) {
+  const sp = Math.hypot(S.v[0], S.v[2]), k = sp > 1e-9 ? Math.max(0, sp - LAND.grip * dt) / sp : 0;
+  S.v = [S.v[0] * k, 0, S.v[2] * k]; S.w = [0, 0, 0];
+  const f = turn(S.q, [1, 0, 0]), flat = facing([f[0], 0, f[2]]), e = vOf(qMul(flat, qConj(S.q))), ang = len(e), step = LAND.level * dt;
+  if (ang > step) { S.q = qUnit(qMul(qOf(mul(e, step / ang)), S.q)); S.p[1] += fy - lowest(S); return; }
+  S.q = flat; S.p[1] = fy;
+  if (sp * k >= LAND.still) return;
+  S.v = [0, 0, 0]; S.acc = [0, 0, 0]; S.spin = 0; S.settle = null; S.landed = true; S.justLanded = true; S.tilt = 0;
 }
 // eased back out of whatever it has come too near, keeping the speed that runs along it
 const _n = [0, 0, 0];
@@ -284,7 +381,7 @@ export function planLeave(S, solid = null) {
 export function planLand(S, solid = null) {
   const c = S.cfg, P = c.pad, y = P[1] + c.hover;
   const over = { to: [P[0], P[1] + c.low, P[2]], face: [1, 0, 0], speed: 3, near: 0.3, stop: true }, down = { down: true };
-  if (S.landed) return [];
+  if (onPad(S)) return [];
   if (inBay(S.p, c)) return [{ to: [S.p[0], Math.min(Math.max(S.p[1], P[1] + c.low), y), P[2]], face: unit([turn(S.q, [1, 0, 0])[0] || 1, 0, 0]), speed: 3, near: 0.4, stop: true }, over, down];
   const gate = [DOOR.face + 90, y, P[2]], legs = backOff(S, solid), from = legs.length ? legs[0].to : S.p;
   // (already on the door's own line, between the gate and the door: straight on in)
@@ -300,11 +397,13 @@ export function planLand(S, solid = null) {
 export function fly(S, plan, dt = 1 / 60) {
   while (plan.length) {
     const L = plan[0];
-    // (on its pad: a landing is done; a leaving starts by lifting off, as Space does)
-    if (S.landed) { if (L.down || plan.every((l) => l.down)) { plan.length = 0; break; } const C = noControls(); C.move[1] = 0.3; return C; }
+    // (on its pad: a landing is done; a leaving starts by lifting off, as Space does, and so does a landing begun from
+    // where the ship was set down by hand, anywhere else on the floor)
+    if (S.landed) { if (onPad(S) && (L.down || plan.every((l) => l.down))) { plan.length = 0; break; } const C = autoControls(); C.move[1] = 0.3; return C; }
     if (L.down) {
-      if (S.settle) return noControls();
-      const C = noControls(), P = S.cfg.pad;
+      // (settle: the autopilot asks the ship to set itself down; a hand pilot's controls never do)
+      if (S.settle) return { ...autoControls(), settle: true };
+      const C = { ...autoControls(), settle: true }, P = S.cfg.pad;
       // (over the pad and level: down; the ship sets itself down from there)
       const off = [P[0] - S.p[0], 0, P[2] - S.p[2]], b = unturn(S.q, mul(off, 1.2));
       C.move = [clamp(b[0] / 3, -1, 1), S.p[1] - P[1] > SETTLE.low - 0.25 ? -0.25 : 0, clamp(b[2] / 3, -1, 1)];
@@ -316,7 +415,7 @@ export function fly(S, plan, dt = 1 / 60) {
     // (a leg ends stopped (stop), or no faster than the next one wants (then), or just flown through)
     const then = L.stop ? 0 : L.then ?? null;
     if (d < near && (then == null || len(S.v) < then + 1.2) && (!L.face || aErr < 0.06)) { plan.shift(); continue; }
-    const C = noControls(); level(S, C, f);
+    const C = autoControls(); level(S, C, f);
     // (along the way: only as fast as it can still stop; turning to face a long way first, it crawls)
     const ahead = turn(S.q, [1, 0, 0]), aligned = L.face ? 1 : clamp((dot(ahead, dir) - 0.5) / 0.45, 0, 1);
     const top = (L.speed || 10) * (L.face ? 1 : 0.12 + 0.88 * aligned), slow = then == null && plan.length === 1 ? 0 : then, sp = slow == null ? top : Math.min(top, Math.sqrt(2 * BRAKE * Math.max(0, d - near * 0.3) + slow * slow) + 0.4);
@@ -333,16 +432,53 @@ function level(S, C, f) {
   return len(e);
 }
 
+// ── THE GUIDE: the goal, how far the ship is from it, and the keys that would bring it there ──
+// The goal is the ship in its proper parking place, nose out. -> {
+//   to      the goal from the ship, in the ship's own frame [ahead, up, right], metres (what W S, Space C and A D move it along)
+//   turn    how far the nose is from the heading asked for [up, right] and the roll from level (to the right +), radians
+//   near    within GUIDE.near of the pad's middle: the heading asked for is the parking one, nose out (further off it
+//           is simply the way to the pad, so that a pilot far out is never told to turn their back on the door)
+//   keys    how brightly each control is lit, 0 (dark: nothing needed) .. 1, by the control's own name: forward, reverse,
+//           left, right, up, down, rollLeft, rollRight (the keys), noseUp, noseDown, noseLeft, noseRight
+//   mouse   the same four turns as the mouse (or the right stick) makes them: up, down, left, right (with "flip up and
+//           down" on, pulling back raises the nose, so the arrows swap)
+//   stick   the left stick's push that would do what W S A D would: [x to the right, y down the screen], and how brightly
+//   done    nothing is lit: the ship is on its goal }
+// A ship that is down where the seat cannot let the pilot out lights Space as well: it has to lift off first.
+const glow = (err, [off, full]) => (err <= off ? 0 : Math.min(1, GUIDE.dim + (1 - GUIDE.dim) * (err - off) / (full - off)));
+export function guideOf(S, set = {}) {
+  const P = S.cfg.pad, G = GUIDE, deg = 180 / Math.PI, to = unturn(S.q, sub(P, S.p));
+  const flat = Math.hypot(P[0] - S.p[0], P[2] - S.p[2]), near = flat < G.near;
+  const e = vOf(qMul(qConj(S.q), facing(near ? [1, 0, 0] : [P[0] - S.p[0], 0, P[2] - S.p[2]])));
+  // (as the autopilot's own sums have them: the roll about the nose, the nose up about its right, the nose right about its up)
+  let roll = e[0], up = e[2], right = -e[1];
+  // (straight behind it, either way round is as near: to the right, so the arrow does not flicker)
+  if (Math.abs(Math.abs(right) - Math.PI) < 0.05) right = Math.PI;
+  const k = { forward: glow(to[0], G.move), reverse: glow(-to[0], G.move), right: glow(to[2], G.move), left: glow(-to[2], G.move), up: glow(to[1], G.rise), down: glow(-to[1], G.rise),
+    rollRight: glow(roll * deg, G.roll), rollLeft: glow(-roll * deg, G.roll), noseUp: glow(up * deg, G.turn), noseDown: glow(-up * deg, G.turn), noseRight: glow(right * deg, G.turn), noseLeft: glow(-right * deg, G.turn) };
+  if (S.landed) { for (const n in k) k[n] = 0; if (!canGetUp(S)) { const w = guideOf({ ...S, landed: false }, set).keys; for (const n of ['forward', 'reverse', 'left', 'right']) k[n] = w[n]; k.up = G.lift; } }
+  const mouse = { up: set.invertY ? k.noseDown : k.noseUp, down: set.invertY ? k.noseUp : k.noseDown, left: k.noseLeft, right: k.noseRight };
+  const sx = k.right - k.left, sy = k.reverse - k.forward, sl = Math.hypot(sx, sy);
+  return { to, turn: [up, right], roll, flat, near, keys: k, mouse, stick: { x: sl > 1e-6 ? sx / sl : 0, y: sl > 1e-6 ? sy / sl : 0, k: Math.min(1, Math.max(k.right, k.left, k.reverse, k.forward)) }, done: Object.values(k).every((v) => v === 0) };
+}
+// where a point of the station is drawn in the guide's small space: the ship's own frame [ahead, up, right], shrunk the
+// more the further off it is (1: the edge of the space, never reached); close by, true to the small model's own size
+export function guideAt(S, p) { const r = unturn(S.q, sub(p, S.p)), d = len(r), g = d > 1e-9 ? 1 / (d + GUIDE.space) : 0; return [r[0] * g, r[1] * g, r[2] * g]; }
+// how the goal is turned as the ship sees it: its nose, its top and its right, each in the ship's own frame
+export function guideTurn(S) { return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => unturn(S.q, v)); }
+
 // ── the help corner: what the keys do, by mode ──
 // mode: 'seat' (on the pad), 'fly' (the mouse flies), 'pointer' (the mouse is a pointer), 'watch' (the autopilot has
 // it, or a crew member who is not the pilot). -> [[key, words], ...]
 // touch: a phone has no keys: each line names the button or the stick on the screen instead
-export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false } = {}) {
+// getUp: the ship is down where the seat lets them out (the seat's own prompt says so too)
+export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false, getUp = false } = {}) {
   const view = [touch ? 'View' : 'V', behind ? 'See from the cockpit' : 'See from behind'], look = behind && !touch ? [['R', 'Hold: look round the ship']] : [];
-  if (!pilot) return [['', 'The crew\'s pilot is flying'], view, ...look];
+  const out = getUp ? [[touch ? 'Get up' : 'E', 'Get up out of the seat']] : [];
+  if (!pilot) return [['', 'The crew\'s pilot is flying'], ...out, view, ...look];
   const autoLine = [touch ? 'Autopilot' : 'T', auto ? 'Autopilot off: fly it yourself' : 'Autopilot: it flies for you'], jump = canJump ? [[touch ? 'Jump' : 'J', 'Jump']] : [];
   if (auto) return [['', 'The autopilot is flying'], autoLine, view, ...look, ...jump];
-  if (mode === 'seat') return touch ? [['Power', 'Switch the ship on or off'], ['Lift off', 'Hold it: up off the pad'], autoLine, view] : [['P', 'Power'], ['Space', 'Lift off'], autoLine, view];
+  if (mode === 'seat') return touch ? [...out, ['Power', 'Switch the ship on or off'], ['Lift off', 'Hold it: up off the floor'], autoLine, view] : [...out, ['P', 'Power'], ['Space', 'Lift off'], autoLine, view];
   if (touch) return [['Fly', 'Left stick: forward, back, left, right'], ['Nose', 'Right stick: point the nose'], ['Up Down', 'Hold: up, down'], ['Roll', 'Hold: roll'], autoLine, view, ...jump];
   const keys = [['W S', 'Forward, back'], ['A D', 'Left, right'], ['Space C', 'Up, down'], ['Q E', 'Roll']];
   const mouse = mode === 'pointer' ? [['F', 'Fly with the mouse']] : [['Mouse', 'Point the nose'], ['F', 'Free the mouse for the buttons']];

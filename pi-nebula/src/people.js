@@ -25,7 +25,10 @@
 // little more, and say hello in a bubble as the player passes, their very first hello spoken in their own voice
 // (voices.js, quietly, from where they stand). A CAPTAIN (a yellow marker over their head) stops and offers the player
 // a place on their crew: who they are and what for, and the question at the bottom of the screen (missions.js gets the
-// answer). TWO TALKING (at a talking spot, or side by side at a table) share a conversation from the line bank in
+// answer). A CONTRACT SIGNED, the captain says so and walks to their ship to wait by its way in (MEET below; the game's
+// maker, 2026-11-18: "once you agree to a contract with the captain then they will say "Glad to have you, I will meet
+// you at the ship". Then they will start walking to the ship and wait by the door. You can walk with them or run there
+// and get in the pilots seat or go eat a burrito and then go meet them"). TWO TALKING (at a talking spot, or side by side at a table) share a conversation from the line bank in
 // bubbles over their heads (chatter.js, lines.js, news.js), the speaker's hands moving, the listener nodding, both
 // shifting their weight (moves.js). THE BIG SCANNER glides only with someone on its bed: now and then a patient comes
 // with a medic, lies down on it, and is scanned (SCAN below).
@@ -219,39 +222,51 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const level = (x, z) => { const i = Math.floor((x - X0) / 0.25), k = Math.floor((z - Z0) / 0.25); return i >= 0 && k >= 0 && i < NX && k < NZ ? keepOff[k * NX + i] : 0; };
   const noGo = (x, z) => level(x, z) >= 1;          // (for the ways and the spots: the patches and their margins)
   const onPatch = (x, z) => level(x, z) >= 2;       // (for walking and the alarms: the patches themselves)
-  // job spots: their rings
-  for (const s of jobs?.spots || []) markDisc(s.pos.x, s.pos.z, KEEP_OFF.job, 'job:' + s.job.id);
-  // a parked ship's ways in: the patch each comes down on (its leaves' box when down, as boarding.js keeps clear)
+  // ALL OF THEM MARKED, and marked again whenever a ship stands somewhere else than it did (the Miner set down by hand
+  // anywhere on its hangar's floor, boarding.js stand: its lift's patch and the crane's patches go with it) or the
+  // crane's round is one with other places in it
   const wayFeet = [], _im = new THREE.Matrix4(), _b = new THREE.Box3(), ONE = [null];
-  for (const s of boarding?.ships || []) for (const D of s.ways || []) {
-    const t0 = D.t, box = new THREE.Box3();
-    ONE[0] = D; setDoors(ONE, 1);
-    for (const leaf of D.leaves) for (const im of leaf.meshes || []) { if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); box.union(_b.copy(im.geometry.boundingBox).applyMatrix4(_im)); }
-    ONE[0] = D; setDoors(ONE, t0);
-    if (box.isEmpty()) continue;
-    const w = KEEP_OFF.way; wayFeet.push({ D, box: box.clone() });
-    mark(box.min.x - w, box.min.z - w, box.max.x + w, box.max.z + w, 'way:' + s.id);
-  }
-  // a ship's lift (the Miner's belly lift, boarding.js LIFTS): the floor under its platform, where it comes down (it
-  // moves straight up and down, so its platform's box as it stands, across the floor)
-  for (const s of boarding?.ships || []) for (const Lf of s.lifts || []) {
-    const D = Lf.D; if (!D) continue;
-    const box = new THREE.Box3(), any = new THREE.Box3();
-    for (const leaf of D.leaves) for (const im of leaf.meshes || []) {
-      if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); _b.copy(im.geometry.boundingBox).applyMatrix4(_im);
-      any.union(_b); if (/platform/.test(im.name)) box.union(_b);
+  let markedFor = null;
+  const marksKey = () => (boarding?.stands ?? 0) + ':' + (crane?.on && crane.L ? crane.L.round + ':' + crane.L.length.toFixed(1) : '');
+  function markAll() {
+    markedFor = marksKey();
+    keepOff.fill(0); patches.length = 0; wayFeet.length = 0;
+    // job spots: their rings
+    for (const s of jobs?.spots || []) markDisc(s.pos.x, s.pos.z, KEEP_OFF.job, 'job:' + s.job.id);
+    // a parked ship's ways in: the patch each comes down on (its leaves' box when down, as boarding.js keeps clear)
+    for (const s of boarding?.ships || []) for (const D of s.ways || []) {
+      const t0 = D.t, box = new THREE.Box3();
+      ONE[0] = D; setDoors(ONE, 1);
+      for (const leaf of D.leaves) for (const im of leaf.meshes || []) { if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); box.union(_b.copy(im.geometry.boundingBox).applyMatrix4(_im)); }
+      ONE[0] = D; setDoors(ONE, t0);
+      if (box.isEmpty()) continue;
+      const w = KEEP_OFF.way; wayFeet.push({ D, box: box.clone(), ship: s });
+      mark(box.min.x - w, box.min.z - w, box.max.x + w, box.max.z + w, 'way:' + s.id);
     }
-    const B = box.isEmpty() ? any : box; if (B.isEmpty()) continue;
-    const w = KEEP_OFF.way; wayFeet.push({ D, box: B.clone() });
-    mark(B.min.x - w, B.min.z - w, B.max.x + w, B.max.z + w, 'lift:' + s.id);
+    // a ship's lift (the Miner's belly lift, boarding.js LIFTS): the floor under its platform, where it comes down (it
+    // moves straight up and down, so its platform's box as it stands, across the floor; the box is kept where the ship
+    // is parked, and the patch is marked where the ship stands: the square that holds it, turned)
+    for (const s of boarding?.ships || []) for (const Lf of s.lifts || []) {
+      const D = Lf.D; if (!D) continue;
+      const box = new THREE.Box3(), any = new THREE.Box3();
+      for (const leaf of D.leaves) for (const im of leaf.meshes || []) {
+        if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); im.getMatrixAt(leaf.index, _im); _b.copy(im.geometry.boundingBox).applyMatrix4(_im);
+        any.union(_b); if (/platform/.test(im.name)) box.union(_b);
+      }
+      const B = box.isEmpty() ? any : box; if (B.isEmpty()) continue;
+      const w = KEEP_OFF.way; wayFeet.push({ D, box: B.clone(), ship: s });
+      const Bw = s.moved ? _b.copy(B).applyMatrix4(s.D) : B;
+      mark(Bw.min.x - w, Bw.min.z - w, Bw.max.x + w, Bw.max.z + w, 'lift:' + s.id);
+    }
+    // under the crane: every patch it works over in a round
+    if (crane?.on && crane.L) {
+      const seen = new Set(), m = (crane.RULES?.margin ?? 0.9) + (KEEP_OFF.crane - 0.9);
+      for (let t = 0; t < crane.L.length; t += 0.5) { const g = crane.L.gate(t, 0); if (!g) continue; const k = [g.x, g.z, g.hx, g.hz].join(); if (seen.has(k)) continue; seen.add(k); mark(g.x - g.hx - m, g.z - g.hz - m, g.x + g.hx + m, g.z + g.hz + m, 'crane'); }
+    }
+    // what glides by itself (the big scanner's ring)
+    for (const D of W.built.glides || []) if (D.sweep && !D.sweep.isEmpty()) mark(D.sweep.min.x - KEEP_OFF.glide, D.sweep.min.z - KEEP_OFF.glide, D.sweep.max.x + KEEP_OFF.glide, D.sweep.max.z + KEEP_OFF.glide, 'scanner');
   }
-  // under the crane: every patch it works over in a round
-  if (crane?.on && crane.L) {
-    const seen = new Set(), m = (crane.RULES?.margin ?? 0.9) + (KEEP_OFF.crane - 0.9);
-    for (let t = 0; t < crane.L.length; t += 0.5) { const g = crane.L.gate(t, 0); if (!g) continue; const k = [g.x, g.z, g.hx, g.hz].join(); if (seen.has(k)) continue; seen.add(k); mark(g.x - g.hx - m, g.z - g.hz - m, g.x + g.hx + m, g.z + g.hz + m, 'crane'); }
-  }
-  // what glides by itself (the big scanner's ring)
-  for (const D of W.built.glides || []) if (D.sweep && !D.sweep.isEmpty()) mark(D.sweep.min.x - KEEP_OFF.glide, D.sweep.min.z - KEEP_OFF.glide, D.sweep.max.x + KEEP_OFF.glide, D.sweep.max.z + KEEP_OFF.glide, 'scanner');
+  markAll();
 
   // ── the spots ────────────────────────────────────────────────────────────────────────────────────────────────
   // (each group's spots, as people can stand there: snapped to the floor, off every patch kept off)
@@ -468,10 +483,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     // stand or post: a spot of the group (a post's own one, by its number)
     const L = groups[group] || [];
-    const freeS = n != null ? (L[n] && (!L[n].who || L[n].who === P) ? [L[n]] : []) : L.filter((s) => s && !s.who && s.bad < 2 && !crowded(s.pos, P));
+    // (never a spot a ship now stands on, or one on a patch that has come to lie there: the Miner set down by hand)
+    const clear = (s) => !shipsMoved() || (!noGo(s.pos.x, s.pos.z) && walls.free(s.pos.x, s.pos.y, s.pos.z, 0.26));
+    const freeS = n != null ? (L[n] && (!L[n].who || L[n].who === P) ? [L[n]] : []) : L.filter((s) => s && !s.who && s.bad < 2 && !crowded(s.pos, P) && clear(s));
     if (!freeS.length) return null;
     const s = pick(freeS); P.claim = s; s.who = P; taken.set(P, [s.pos]); return { kind, step, spot: s };
   }
+  const shipsMoved = () => (boarding?.ships || []).some((s) => s.moved);
   function release(P) {
     const c = P.claim; taken.delete(P);
     endTalk(P);
@@ -644,6 +662,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     zoneClock -= dt;
     const findZones = zoneClock <= 0; if (findZones) zoneClock = 0.4;
     playerNow = player;
+    // (a ship stands somewhere else, or the crane's round has other places in it: the patches marked again, and anyone
+    // left standing on one, or inside the ship, goes on with their day from there)
+    if (markedFor !== marksKey()) {
+      markAll(); stillV++;
+      for (const P of list) { if (P.hidden || P.away || P.walking || P.scripted || !P.act || P.act.kind === 'walk' || ['sat', 'sitting', 'rising'].includes(P.act.phase)) continue; if (onPatch(P.pos.x, P.pos.z) || !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.22)) { if (P.cap && P.cap.busy) endOffer(P); next(P); } }
+    }
     planning();
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
     news.update(dt);
@@ -794,6 +818,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // what a person does this moment
   function think(P, dt) {
+    if (P.cap && P.cap.meet && !P.cap.busy && !P.cap.walking && !P.fleeing) meetStep(P);
     const a = P.act; if (!a) { next(P); return; }
     a.t += dt;
     if (P.cap && P.cap.walking) return;      // (a captain stepping up to the player: their offer moves them, captain())
@@ -868,6 +893,23 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // whoever comes up)
     if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
     if (a.t > a.len && !(P.cap && P.cap.busy)) next(P);
+  }
+
+  // ── MEET: a captain gone to their ship to wait for the player (the top of this file) ─────────────────────────
+  // K.meet(): where to wait, as it is now ({ pos, heading }), or null (nowhere just now: their ship is in the air).
+  // They walk there as anyone walks (a way worked out, round whoever stands in it), wait there for as long as it takes,
+  // go to it again if it moves (the ship set down somewhere else) or if they are moved (a ship coming down sends them
+  // running: flee), and with nowhere to wait they stand where they are until there is.
+  const meetAct = (s) => ({ kind: 'stand', meet: true, step: { do: 'stand', for: [1e9, 1e9] }, spot: { pos: s.pos.clone(), heading: s.heading ?? null } });
+  function meetStep(P) {
+    const K = P.cap, a = P.act, s = K.meet();
+    if (a && a.meet) { if (s && !P.req && a.spot.pos.distanceTo(s.pos) > 0.6) { release(P); begin(P, meetAct(s)); } return; }
+    // (seated: up first, as anyone gets up)
+    if (a && ['sat', 'sitting', 'rising'].includes(a.phase)) { if (a.phase === 'sat') a.len = 0; return; }
+    if (a && (a.kind === 'scan' || a.kind === 'scanMedic')) return;
+    if (!s) { if (a && a.kind === 'wait' && a.meetWait) a.t = 0; else { release(P); if (P.req) { P.req.dropped = true; P.req = null; } P.way = null; P.walking = false; P.act = { kind: 'wait', until: 3, t: 0, meetWait: true }; stillV++; } return; }
+    release(P); if (P.req) { P.req.dropped = true; P.req = null; }
+    begin(P, meetAct(s));
   }
 
   // ── TALK: two people sharing a conversation from the line bank, in bubbles over their heads ──────────────────
@@ -993,8 +1035,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return;
     }
     if (K.state === 'answered') { if (K.t > (K.hold || 3.5)) { K.state = 'idle'; K.busy = false; K.hold = 0; } return; }
-    // (never while the player is at a job, answering its questions)
-    if (!pl || P.away || !P.shown || K.cool > 0 || bubbles.asking || (jobs && jobs.busy && jobs.busy())) return;
+    // (never while the player is at a job, answering its questions; nor while they are on their way to their ship, or
+    // waiting by it, to meet the player: the contract is signed, there is nothing to ask)
+    if (!pl || P.away || !P.shown || K.cool > 0 || K.meet || bubbles.asking || (jobs && jobs.busy && jobs.busy())) return;
     if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
     const d = pl.pos.distanceTo(P.pos);
     if (d > FRIENDLY.offer || Math.abs(pl.pos.y - P.pos.y) > 1.2) return;
@@ -1012,9 +1055,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function offerNow(P) {
     const K = P.cap, st = missions.state(K.id, crew());
     K.state = 'offer'; K.t = 0; K.nudged = false;
-    // (a contract signed with this captain, src/missions.js: shall we go now? Home, the share not collected yet: where
-    // it is)
-    if (st === 'signed') { goAsk(P); return; }
+    // (a contract signed with this captain, src/missions.js: they will be at the ship. Home, the share not collected
+    // yet: where it is)
+    if (st === 'signed') { const w = lineOf(K.signed); if (w) { bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; } K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'payout') { const w = K.payout || K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4.5 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'interested' && !missions.ready(K.id)) { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
@@ -1043,26 +1086,24 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (made) K.hold = 60;
     missions.answer({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
   }
-  // SHALL WE GO NOW? (a contract signed: the run starts "by talking to the captain or clicking on the pilot seat")
-  function goAsk(P) {
-    const K = P.cap, words = K.go || 'Ready to go?';
-    K.state = 'offer'; K.t = 0; K.nudged = true; K.busy = true;
-    bubbles.say(P, words, { kind: 'captain', secs: Math.max(5, READ(words) + 2) }); P.talkUntil = clock + Math.min(3, READ(words));
-    K.ask = bubbles.ask({ who: K.name, what: K.goWhat || 'Start the mission now?', yes: 'Let\'s go', no: 'Not yet', onYes: () => goAnswer(P, true), onNo: () => goAnswer(P, false) });
-  }
-  function goAnswer(P, yes) {
-    const K = P.cap, words = yes ? K.goYes : K.goNo; counts.answers++;
-    if (words) { bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words)); }
-    K.ask = null; K.state = 'answered'; K.t = 0; K.hold = 0; K.cool = yes ? FRIENDLY.answered : 12; P.smileUntil = clock + 5;
-    missions.go({ id: K.id, name: K.name, ship: K.ship, mission: K.mission }, yes);
-  }
-  // (for src/mission.js: a captain kept with the player while their contract's card is up; a word from them; shall we
-  // go, asked at once where they stand together; let go again)
+  // (a captain's line: plain words, or a recorded clip's own words, { clip })
+  const lineOf = (x) => (x && typeof x === 'object' ? (VOICE_CLIPS[x.clip] || {}).words || '' : x || '');
+  // (for src/mission.js: a captain kept with the player while their contract's card is up; a word from them, spoken in
+  // their own voice where it has a clip; off to their ship to meet the player (MEET above), or no longer; let go again)
   const capOf = (id) => list.find((P) => P.cap && P.cap.id === id) || null;
   const captainApi = {
     hold(id, secs = 60) { const P = capOf(id); if (!P) return false; const K = P.cap; K.state = 'answered'; K.t = 0; K.hold = secs; K.busy = true; return true; },
-    say(id, words, secs = null) { const P = capOf(id); if (!P || P.away || !words) return false; bubbles.say(P, words, { kind: 'captain', secs: secs ?? Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words)); return true; },
-    askGo(id) { const P = capOf(id), pl = playerNow; if (!P || P.away || !pl || pl.pos.distanceTo(P.pos) > FRIENDLY.leave || bubbles.asking) return false; goAsk(P); return true; },
+    say(id, line, secs = null) {
+      const P = capOf(id), words = lineOf(line); if (!P || P.away || !words) return false;
+      if (line && line.clip) { const K = P.cap; if (K.voice) K.voice.stop(); lastVoice = -99; K.voice = speak(P, line.clip, 0.8); }
+      bubbles.say(P, words, { kind: 'captain', secs: secs ?? Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words)); return true;
+    },
+    meet(id, where = null) {
+      const P = capOf(id); if (!P) return false; const K = P.cap;
+      if (!where) { if (K.meet) { K.meet = null; if (P.act && (P.act.meet || P.act.meetWait)) next(P); } return true; }
+      K.meet = where; return true;
+    },
+    meeting(id) { const P = capOf(id); return P && P.cap.meet ? { walking: !!P.walking, planning: !!P.req, there: !!(P.act && P.act.meet && P.act.phase === 'do'), act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, away: !!P.away, pos: P.pos.toArray().map((v) => +v.toFixed(2)), to: P.act && P.act.meet ? P.act.spot.pos.toArray().map((v) => +v.toFixed(2)) : null } : null; },
     release(id, cool = FRIENDLY.answered) { const P = capOf(id); if (!P) return false; const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; } K.state = 'answered'; K.t = 0; K.hold = 2.5; K.cool = cool; return true; },
     at(id) { const P = capOf(id); return P ? { pos: P.pos, away: !!P.away } : null; },
     // (a captain's line picked on a jobs board: the player is being led to them; null: no longer)
@@ -1434,8 +1475,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // ── for the station: who the doors open for, who a ship's way waits for (only those about the player) ────────
   const eyeList = [];
   function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && !P.away && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
+  const _wp = new THREE.Vector3();
   function onWays(out) {
-    for (const P of list) { if (P.hidden || P.away) continue; for (const w of wayFeet) if (P.pos.x > w.box.min.x - 0.5 && P.pos.x < w.box.max.x + 0.5 && P.pos.z > w.box.min.z - 0.5 && P.pos.z < w.box.max.z + 0.5) { out.push(P.pos); break; } }
+    for (const P of list) { if (P.hidden || P.away) continue; for (const w of wayFeet) { const q = w.ship && w.ship.moved ? _wp.copy(P.pos).applyMatrix4(w.ship.Di) : P.pos; if (q.x > w.box.min.x - 0.5 && q.x < w.box.max.x + 0.5 && q.z > w.box.min.z - 0.5 && q.z < w.box.max.z + 0.5) { out.push(P.pos); break; } } }
     return out;
   }
 
@@ -1473,7 +1515,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (the voices' clips fetched now, made ready to play once the player touches the page: sound.js)
   for (const def of ROSTER) {
     const V = def.voice && VOICES[def.voice]; if (V) for (const id of V.hellos) sound.load(id, clipUrl(id));
-    const K = CAPTAINS[def.id]; if (def.captain && K) for (const x of [K.offer, K.yes, K.hello]) if (x && x.clip) sound.load(x.clip, clipUrl(x.clip));
+    const K = CAPTAINS[def.id]; if (def.captain && K) for (const x of [K.offer, K.yes, K.hello, K.signed]) if (x && x.clip) sound.load(x.clip, clipUrl(x.clip));
   }
   // where each comes aboard: their first spot (a post's own, or the first free spot of their day), placed there at once
   for (const def of ROSTER) {
@@ -1508,19 +1550,24 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // maker: "If people are in the way then they should start to run away"): anyone standing or walking within r of
   // (x, z) drops what they are doing and hurries off to a free spot at least `away` metres from there (the way-finder's
   // way, keeping off the patches), then goes on with their day. -> the people sent
-  function flee(x, z, r = 2, away = 4.5) {
+  // (inside(pos): a patch of any shape instead of the ring of r, a ship coming down by hand (src/flying.js): whoever is
+  // on it goes to the nearest free spot off it, `away` and more from its edge)
+  function flee(x, z, r = 2, away = 4.5, { inside = null } = {}) {
     const sent = [];
     for (const P of list) {
       // (someone away is out of sight and out of the crane's way; the scanner's patient is on its bed)
       if (P.hidden || P.away || P.fleeing || P.scripted || !P.act) continue;
       if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
       const dx = P.pos.x - x, dz = P.pos.z - z, d = Math.hypot(dx, dz);
-      if (d > r || P.pos.y > 2.4) continue;
+      if ((inside ? !inside(P.pos) : d > r) || P.pos.y > 2.4) continue;
       const a0 = d > 0.05 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
       let to = null;
-      for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
-        const a = a0 + da, L = away + r, p = walls.snap(x + Math.sin(a) * L, P.pos.y + 0.4, z + Math.cos(a) * L, 0.8);
-        if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body)) { to = p; break; }
+      for (const L of inside ? [d + away, d + away + 2.5, d + away + 5, d + away + 8] : [away + r]) {
+        for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
+          const a = a0 + da, p = walls.snap(x + Math.sin(a) * L, P.pos.y + 0.4, z + Math.cos(a) * L, 0.8);
+          if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body) && !(inside && inside(p))) { to = p; break; }
+        }
+        if (to) break;
       }
       if (!to) continue;
       // (a talk, or a captain's offer, left off: running comes first)

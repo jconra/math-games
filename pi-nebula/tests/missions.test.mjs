@@ -262,15 +262,16 @@ test('kept with the crew member: the contract through a reload, the payout throu
 
 test('the captain\'s offer for a crew member: new, asked, then by their contract', () => {
   const crew = crewOf(), cap = { id: 'ruiz', name: 'Captain Ruiz', ship: 'Miner', mission: 'mining' };
-  const heard = [], went = [];
-  missions.on((c, yes) => heard.push([c.id, yes])); missions.onGo((c, yes) => went.push([c.id, yes]));
+  const heard = [];
+  missions.on((c, yes) => heard.push([c.id, yes]));
+  // (no "shall we go now": a contract signed, the captain walks to the ship and the run starts from its seat)
+  assert.equal(missions.go, undefined); assert.equal(missions.onGo, undefined);
   missions.asked('ruiz'); assert.equal(missions.state('ruiz', crew), 'asked');
   missions.answer(cap, true); assert.equal(missions.state('ruiz', crew), 'interested'); assert.deepEqual(heard, [['ruiz', true]]);
   // the card put away unsigned: the offer stays open
   missions.declined('ruiz'); assert.equal(missions.state('ruiz', crew), 'declined'); assert.equal(MS.contractOf(crew), null);
   MS.sign(crew, 'mining', ['pilot']); assert.equal(missions.state('ruiz', crew), 'signed');
   assert.equal(missions.state('vega', crew), 'new', 'another captain is not this contract\'s');
-  missions.go(cap, true); assert.deepEqual(went, [['ruiz', true]]);
   flownHaul(2, null); MS.land(crew, { n: 2, store: { iron: 6 } }); assert.equal(missions.state('ruiz', crew), 'payout');
   MS.collect(crew); assert.equal(missions.state('ruiz', crew), 'declined', 'collected: this visit\'s answer again, and he asks afresh');
   assert.equal(missions.state('ruiz', crewOf()), 'declined'); assert.equal(missions.state('hale'), 'new');

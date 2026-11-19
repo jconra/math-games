@@ -27,7 +27,7 @@ import { drawLooks, drawn, storedReady, storedInfo } from './portraits.js';
 import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
-import { makeBoarding } from './boarding.js';
+import { makeBoarding, FLOWN } from './boarding.js';
 import { makeCrane } from './crane.js';
 import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
@@ -83,7 +83,9 @@ async function boot() {
   // ── where a person can walk ──────────────────────────────────────────────────────────────────────────────────
   progress(0.84, 'Checking the doors');
   await new Promise((go) => setTimeout(go, 0));
-  const walls = makeWalls(W.built, { portals: W.R.portals });
+  // (the parked Miner's own room is felt as a part of its own: flown in by hand it stands wherever it was set down,
+  // and its hull and legs with it: walls.js `apart`, boarding.js stand)
+  const walls = makeWalls(W.built, { portals: W.R.portals, apart: FLOWN });
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
   // (the big scanner glides only with someone on its bed: parked until the station's people put a patient there)

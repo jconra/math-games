@@ -14,6 +14,8 @@
 //   W.rooms = fn             a last word on which rooms are drawn: fn(room, drawn) -> drawn (src/outside.js); null: none
 //   W.seenFrom = point       a view from outside (the dock's bridge job): the rooms drawn are those seen from this point
 //                            inside the station, not from the camera out in space (null: from the camera, as always)
+//   W.after                  a Set of fn(renderer): each is called once the frame's picture is drawn, to draw something
+//                            small of its own over it (the landing guide's small model and hologram: src/flying.js)
 //
 // NOTHING HERE KNOWS A COORDINATE. Rooms, doors, views and spots are found by name through the station file, which
 // is being rebuilt; the game's own markers are in spots.js, keyed by those names.
@@ -163,7 +165,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // station itself and not on a room, are put away with the rest and brought back as they were)
   // (W.rooms: a last word on which rooms are drawn, fn(room, drawn) -> drawn; the station's outside has it: the white
   // stand-in walls it covers are put away, and a ship flown outside is seen from out there, src/outside.js)
-  const W0 = { seenFrom: null, alone: null, hidden: null, rooms: null };
+  const W0 = { seenFrom: null, alone: null, hidden: null, rooms: null, after: new Set() };
   function setAlone(ids) {
     if (W0.hidden) { for (const [o, v] of W0.hidden) o.visible = v; W0.hidden = null; }
     W0.alone = ids ? new Set(ids) : null;
@@ -191,10 +193,11 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     // (what glides by itself, the big scanner's ring: by the clock, and only in a room that is being drawn)
     updateGlides(built, now);
     draw(dt);
+    for (const f of W0.after) f(renderer);
   }
 
   return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
     get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; },
     get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); },
-    get rooms() { return W0.rooms; }, set rooms(fn) { W0.rooms = fn || null; }, sees: SEES, pmrem };
+    get rooms() { return W0.rooms; }, set rooms(fn) { W0.rooms = fn || null; }, after: W0.after, sees: SEES, pmrem };
 }

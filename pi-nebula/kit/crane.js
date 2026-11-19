@@ -26,6 +26,16 @@
 //   L.places(lights)                    the ship's and the rack's place lights: [{ kind: 'mount' | 'bay', i, look }]
 //   L.swing(ax, az)                     the load's swing (radians about x and z), drawn only
 //   L.ship(M)                           where the Miner is (a matrix from parked: landing), or null (parked)
+//   L.restand(M, S)                     THE MINER STOOD SOMEWHERE ELSE than it is parked (set down by hand: the game's
+//                                       maker, 2026-11-18, "if the pilot sets down and is still crooked then I would hope
+//                                       the crane can just compensate for it. That is kind of the reason why I wanted the
+//                                       crane to have full motion across the entire hanger. And it also has a head on it
+//                                       that can tilt to any angle needed"): M, from where it is parked to where it
+//                                       stands (a turn about straight up and a move across the floor; null: parked).
+//                                       The site's mounts (where each canister lies, the way it lies, the way its tray
+//                                       slides) are then the ship's as it stands, so the timetable and the crane worked
+//                                       by hand go to them there. S: the round taken up from this state, its canisters
+//                                       on the ship turned with it; none: the round is left for the next L.reset
 //   L.meshes, L.doors                   what it moves: the kit's instanced meshes and doors (the game hangs the meshes
 //                                       on the hangar's room, and tells its walls about the doors)
 import * as THREE from 'three';
@@ -103,6 +113,9 @@ export function makeOreLine(built, opts = {}) {
     dims: { R: CANISTER_AT.R, grip: { ...CRANE.grip }, arc: { ...CRANE.arc }, arms: ARMS.map((a) => ({ ...a })), cable: { x: CRANE.cable.x, z: CRANE.cable.z }, cableTop: Tr.y0, hookTop: CRANE.hookTop,
       trolley: { ...Tr }, girder: { ...Gd }, block: { ...CRANE.block },
       sock: { deep: SOCKET.deep, bore: SOCKET.bore, mouth: SOCKET.mouth, out: SOCKET.out }, trayShare: TRAY_LIFT.share } };
+  // (the mounts as the ship is parked: restand works the site's out again from these)
+  const parked = site.mounts.map((m) => ({ at: [...m.at], yaw: m.yaw, out: [...m.out] }));
+  let standYaw = 0;
   // the canisters themselves: the mounts' first, then the rack's; `slot[c]` is which of them the timetable's canister c is
   const cans = [...mounts.map((m) => m.can), ...bays.map((b) => b.can)];
   let slot = cans.map((_, i) => i), plan = planCycle(site, {}, speed), round = 0;
@@ -218,6 +231,21 @@ export function makeOreLine(built, opts = {}) {
     for (const q of sockets) { q.irisAt = -1; q.litAt = -1; q.shown = null; q.ringWas = null; }
     return plan;
   }
+  // the Miner stood somewhere else than it is parked (the top of this file)
+  function restand(M = null, S = null) {
+    const a = M ? Math.atan2(M.elements[8], M.elements[0]) : 0, turned = a - standYaw; standYaw = a;
+    site.mounts.forEach((m, i) => {
+      const b = parked[i]; _v.set(...b.at); _w.set(b.out[0], 0, b.out[1]);
+      if (M) { _v.applyMatrix4(M); const len = _w.length(); _w.transformDirection(M).multiplyScalar(len); }
+      m.at = _v.toArray(); m.out = [_w.x, _w.z]; m.yaw = Math.atan2(Math.sin(b.yaw + a), Math.cos(b.yaw + a));
+    });
+    if (S) { for (const q of S.cans) if (q.where === 'mount') q.yaw = (q.yaw ?? 0) + turned; plan = planFrom(site, S, speed); }
+    for (const C of cans) C.key = '';
+    for (const m of mounts) m.trayAt = undefined;
+    for (const q of sockets) { q.irisAt = -1; q.litAt = -1; q.shown = null; q.ringWas = null; }
+    plKey = '';
+    return plan;
+  }
   const meshes = new Set(), doors = [craneD, ...live('mbCanister'), ...live('oreSocket'), ...live('oreCan')];
   for (const D of doors) for (const leaf of D.leaves) for (const im of leaf.meshes) meshes.add(im);
 
@@ -249,7 +277,7 @@ export function makeOreLine(built, opts = {}) {
   let lamp = null, aidKey = '', blinkC = -1, blinkK = -1;
   const L = {
     site, mounts, sockets, bays, cans, get plan() { return plan; }, get length() { return plan.length; }, get round() { return round; }, get slot() { return slot; },
-    pose, poseState, reset, resume, state: (t) => stateAt(plan, t), clean: (t, ahead) => cleanAt(plan, t, ahead), start: () => startOf(site, {}),
+    pose, poseState, reset, resume, restand, state: (t) => stateAt(plan, t), clean: (t, ahead) => cleanAt(plan, t, ahead), start: () => startOf(site, {}),
     load: (t) => loadAt(plan, t), steady: (t, ahead) => steadyAt(plan, t, ahead), gate: (t, ahead = 0) => gateAt(plan, t, ahead),
     hook(t) { const T2 = plan.T; return new THREE.Vector3(valueAt(T2.x, t), valueAt(T2.hoist, t), valueAt(T2.z, t)); },
     beacon(on) { if (on === lamp) return; lamp = on; if (P.beacon) tint(P.beacon, on ? GLOWS.beaconOn : GLOWS.beaconOff, GLOWS.beaconOff); aidKey = ''; },

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Flight Lab</title>
-<meta name="description" content="A space station lab: flying by hand, by itself. The Miner on its pad, the station's outside, and the game's own flight controls, with no contract to sign. Lift off, fly out through the bay door, round the station, back in, and set down.">
+<meta name="description" content="A space station lab: flying by hand, by itself. The Miner on its pad, the station's outside, and the game's own flight controls, with no contract to sign. Lift off, fly out through the bay door, round the station, back in, and set down by hand with the landing guide.">
 <meta name="theme-color" content="#05070b">
 <link rel="icon" href="data:,">
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
@@ -31,6 +31,6 @@
 </div>
 <div id="loading">Warming the engine…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=2').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>

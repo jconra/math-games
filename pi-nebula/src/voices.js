@@ -28,6 +28,8 @@ export const CLIPS = {
   'ruiz-hello': { voice: 'ruiz', words: 'Hey there!' },
   'ruiz-pitch': { voice: 'ruiz', words: 'Hey! I\'m Captain Ruiz of the Miner. I need crew for a mining run. Interested?' },
   'ruiz-ready': { voice: 'ruiz', words: 'Great! Come find me when you\'re ready.' },
+  // (a contract signed with him: said, and then he walks to the Miner and waits by its lift)
+  'ruiz-meet': { voice: 'ruiz', words: 'Glad to have you! I\'ll meet you at the ship.' },
   'hale-hello': { voice: 'hale', words: 'Oh, hello again!' },
   'hale-pitch': { voice: 'hale', words: 'Hello! I\'m Captain Hale of the Medic. We need crew for a rescue mission. Interested?' },
   'hale-ready': { voice: 'hale', words: 'Wonderful. Come and find me when you\'re ready.' },

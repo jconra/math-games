@@ -217,31 +217,206 @@ test('the autopilot can be switched on and off in flight', () => {
   assert.ok(L.landed && L.p.every((v, i) => v === M.MINER.pad[i]), 'it still ends on the pad');
 });
 
-test('flown in by hand: low and slow over its pad, it sets itself down where it is parked', () => {
-  // in nose first by keys, as a child would: forward, down, stop over the pad
+// ── LANDING BY HAND (the game's maker, 2026-11-18: "I don't wan the ship taking over ... Even if they just come straight
+// in and land it nose-in, that should be okay (as long as the ship is not upside down)") ──
+const yawOf = (S) => Math.atan2(-nose(S)[2], nose(S)[0]) * 180 / Math.PI;      // (0: nose out of the door; 180: nose in)
+const leaning = (deg, about = [1, 0, 0], f = [1, 0, 0]) => { const h = deg * Math.PI / 360, s = Math.sin(h); return M.qMul(M.facing(f), [about[0] * s, about[1] * s, about[2] * s, Math.cos(h)]); };
+// brought down by C from where it hangs; -> seconds until it is down (or `most`)
+function setDown(S, most = 12) { let t = 0; while (!S.landed && t < most) { M.stepShip(S, keys('down'), DT, SOLID); t += DT; } return t; }
+
+test('nothing sets the ship down for a pilot flying by hand: it lands where and whichever way they put it', () => {
+  // in nose first by keys, as a child would: forward, stop over the pad
   const S = M.makeShip(); M.place(S, [DOOR.face + 40, 3, -4], M.facing([-1, 0, 0]));
   let t = 0, bumps = 0;
-  // (W tapped as a child taps it: on while it is slower than the way left to go wants, off otherwise)
   while ((S.p[0] > M.MINER.pad[0] + 0.8 || M.speedOf(S) > 0.4) && t < 60) { const left = S.p[0] - M.MINER.pad[0]; M.stepShip(S, keys(...(left > 0.8 && M.speedOf(S) < Math.min(6, left * 0.7) ? ['forward'] : [])), DT, SOLID); if (S.bump) bumps++; t += DT; }
-  assert.ok(Math.hypot(S.p[0] - M.MINER.pad[0], S.p[2] - M.MINER.pad[2]) < M.SETTLE.reach, `stopped over the pad, near enough (${(S.p[0] - M.MINER.pad[0]).toFixed(1)} m along, ${(S.p[2] - M.MINER.pad[2]).toFixed(1)} m across)`);
-  assert.equal(S.settle, null, 'hovering at 3 m it does not land by itself');
-  while (!S.landed && t < 80) { M.stepShip(S, S.settle ? M.noControls() : keys('down'), DT, SOLID); if (S.bump) bumps++; t += DT; }
-  assert.ok(S.landed, 'C brings it down and it sets itself down');
-  assert.deepEqual(S.p, M.MINER.pad, 'exactly on the pad');
-  assert.deepEqual(S.q, [0, 0, 0, 1], 'turned nose out to the door, though it came in nose first');
-  assert.equal(bumps, 0, 'touching nothing');
-  // with someone standing on the pad it waits over it, and comes down once they have gone
+  // low and slow over its own pad, level, hands off: exactly where the old self set-down took over
+  // (C tapped: let go, the ship still sinks a little as it slows)
+  while (S.p[1] > 0.9) M.stepShip(S, S.v[1] > -0.6 ? keys('down') : keys(), DT, SOLID);
+  hold(S, 2, []);
+  assert.ok(Math.hypot(S.p[0] - M.MINER.pad[0], S.p[2] - M.MINER.pad[2]) < M.SETTLE.reach && S.p[1] < M.SETTLE.low && M.speedOf(S) < 0.01, 'low, slow and level over its own pad');
+  const was = { p: [...S.p], q: [...S.q] };
+  hold(S, 8, []);
+  assert.equal(S.settle, null, 'nothing begins to set it down');
+  assert.ok(!S.landed, 'it is not down');
+  assert.deepEqual(S.p.map((v) => +v.toFixed(4)), was.p.map((v) => +v.toFixed(4)), 'it has not been moved');
+  assert.deepEqual(S.q.map((v) => +v.toFixed(5)), was.q.map((v) => +v.toFixed(5)), 'nor turned');
+  // C brings it down onto the floor: there, as it is
+  setDown(S);
+  assert.ok(S.landed && S.p[1] === 0, 'C brings it down: it stands on the floor');
+  assert.ok(Math.abs(S.p[0] - was.p[0]) < 1e-6 && Math.abs(S.p[2] - was.p[2]) < 1e-6, 'where the pilot put it, not on its parking place');
+  assert.ok(Math.abs(Math.abs(yawOf(S)) - 180) < 0.01, 'still nose in: it has not been turned round');
+  assert.ok(!M.onPad(S) && M.standing(S) === 'floor' && M.canGetUp(S), 'and the pilot may get up');
+  assert.equal(bumps, 0, 'touching nothing on the way');
+  // W on the floor does nothing, as on the pad; Space lifts it off again to be shuffled
+  const at = [...S.p]; hold(S, 2, ['forward', 'left']);
+  assert.deepEqual(S.p, at, 'down, W and A do nothing');
+  hold(S, 1.2, ['up']); assert.ok(!S.landed && S.p[1] > 0.8, 'Space lifts it off again');
+});
+
+test('any heading on the hangar\'s floor counts as landed', () => {
+  const F = M.MINER.floor;
+  for (const [x, z, yaw] of [[42.3, -5, 37], [42.3, -5, 90], [36, -5, -135], [34, -9, 180], [45, -8, 12], [35, -4, -90]]) {
+    const r = yaw * Math.PI / 180, S = M.makeShip(); M.place(S, [x, 1.2, z], M.facing([Math.cos(r), 0, -Math.sin(r)]));
+    const secs = setDown(S);
+    assert.ok(S.landed, `turned ${yaw} degrees at ${x}, ${z}: it is down (${secs.toFixed(1)} s)`);
+    assert.ok(Math.abs(S.p[0] - x) < 1e-6 && Math.abs(S.p[2] - z) < 1e-6 && S.p[1] === 0, 'where it was put, on the floor');
+    assert.ok(Math.abs(((yawOf(S) - yaw + 540) % 360) - 180) < 0.01, `still turned ${yaw} degrees (${yawOf(S).toFixed(2)})`);
+    assert.equal(M.standing(S), 'floor'); assert.ok(M.canGetUp(S), 'the pilot may get up');
+    assert.deepEqual(M.standOf(S), { p: S.p, q: S.q }, 'where it stands is kept');
+  }
+  // on its own parking place exactly, it is simply parked
+  assert.equal(M.standOf(M.makeShip()), null); assert.equal(M.standing(M.makeShip()), 'pad');
+  assert.ok(F.x[0] < M.MINER.pad[0] - 9 && F.x[1] > M.MINER.pad[0] + 6.8 && F.z[0] < M.MINER.pad[2] - 3.3 && F.z[1] > M.MINER.pad[2] + 3.3, 'its parking place is on that floor');
+});
+
+test('a small lean goes as its legs take the floor; rolled over too far it is not down', () => {
+  // leaning 20 degrees (rolled), and nose down 15: its legs bring it level
+  for (const [deg, about, words] of [[20, [1, 0, 0], 'rolled 20 degrees'], [-8, [0, 0, 1], 'its nose 8 degrees off level'], [8, [0, 0, 1], 'its nose 8 degrees off level the other way'], [M.LAND.tilt - 2, [1, 0, 0], 'just inside the limit']]) {
+    const S = M.makeShip(); M.place(S, [40, 2.5, -3], leaning(deg, about, [-1, 0, 0]));
+    assert.ok(Math.abs(M.tiltOf(S) - Math.abs(deg)) < 0.01);
+    const secs = setDown(S);
+    assert.ok(S.landed, `${words}: it is down (${secs.toFixed(1)} s)`);
+    assert.ok(M.tiltOf(S) < 1e-6 && S.p[1] === 0, 'level on its legs, its feet on the floor');
+    assert.ok(Math.abs(Math.abs(yawOf(S)) - 180) < 0.5, 'facing the way it was');
+  }
+  // rolled over too far: on the floor, but not down, and the seat keeps the pilot in
+  assert.equal(M.LAND.tilt, 30, 'the number for "too much": 30 degrees from upright');
+  for (const deg of [M.LAND.tilt + 3, 60, 90, 180]) {
+    // (hung just clear of the floor, however it is rolled: the bay is only 8.4 m high inside)
+    // (and brought onto it by whichever key now pushes it down: the keys follow the ship, however it is rolled)
+    const q = leaning(deg), S = M.makeShip(); M.place(S, [40, 0.3 - Math.min(...M.MINER.points.map((pt) => M.turn(q, pt)[1])), -3], q); hold(S, 3, [deg === 90 ? 'right' : deg === 180 ? 'up' : 'down']);
+    assert.ok(!S.landed && S.on, `rolled ${deg} degrees: it lies on the floor but is not down`);
+    assert.ok(!M.canGetUp(S) && M.whyNot(S) === 'over', 'the seat does not let the pilot out');
+    assert.ok(Math.abs(M.tiltOf(S) - deg) < 0.5, 'and nothing rights it for them: it stays as it was rolled');
+    assert.ok(Math.min(...M.pointsOf(S).map((p) => p[1])) > -1e-6, 'none of it under the floor');
+    // the guide lights the roll that would right it; rolled back by the pilot, it is down
+    const g = M.guideOf(S); assert.ok(g.keys.rollLeft > 0.9 && g.keys.rollRight === 0, 'the guide lights Q, brightly');
+    let t = 0; while (!S.landed && t < 8) { M.stepShip(S, keys('rollLeft', 'down'), DT, SOLID); t += DT; }
+    assert.ok(S.landed && M.canGetUp(S), `rolled back with Q, it is down (${t.toFixed(1)} s)`);
+  }
+});
+
+test('down too near the door or a wall for the crane, the seat does not let the pilot out', () => {
+  // its nose still in the doorway: on the hangar's floor, but the crane's rails end short of the door
+  const S = M.makeShip(); M.place(S, [52.5, 1, -5], M.facing([1, 0, 0])); setDown(S);
+  assert.ok(S.landed, 'it is down on the floor');
+  assert.equal(M.standing(S), 'edge'); assert.ok(!M.canGetUp(S) && M.whyNot(S) === 'edge', 'not where it can be unloaded');
+  const g = M.guideOf(S);
+  assert.ok(g.keys.up > 0 && g.keys.reverse > 0 && g.keys.forward === 0, 'the guide lights Space, to lift off, and S, the way to go');
+  // against the wall of sockets
+  const T = M.makeShip(); M.place(T, [40, 1, -11.8], M.facing([1, 0, 0])); hold(T, 4, ['left']); setDown(T);
+  assert.ok(T.landed && M.standing(T) === 'edge', `hard against the bay's side (z = ${T.p[2].toFixed(1)}): too near the rack and the sockets`);
+  // outside the hangar there is no floor of its own to stand on
+  const O = M.makeShip(); M.place(O, [120, 2, -5], M.facing([-1, 0, 0])); hold(O, 6, ['down']);
+  assert.ok(!O.landed && !O.on && M.floorUnder(O) == null && !M.canGetUp(O) && M.whyNot(O) == null, 'out in space: never down');
+});
+
+test('the floor it may be unloaded on: every tray is within the crane\'s reach, clear of the rack and the sockets', () => {
+  // (the crane's places as the game finds them: tests/crane.test.mjs SITE; the mounts in the ship's own frame:
+  // kit/ships/miner-built.hull.js CANISTER_AT, x to port and z to the nose, a tray sliding 1 m out sideways)
+  const rail = { x: [21.1, 56.9], z: [-17.65, 7.65] }, can = { half: 1.088, arm: 0.57 };
+  const rackFront = STATION.places.emptiesStack[2] + can.half, docked = STATION.places.sockets[0][2] + 2 * can.half - 0.4;
+  const trays = []; for (const side of [-1, 1]) for (const a of [-1.722, -4.158]) trays.push([a, 3, side * (2.208 + 1.0)]);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let n = 0;
+  for (let i = 0; i < 4000; i++) {
+    const F = M.MINER.floor, yaw = rnd() * Math.PI * 2, S = M.makeShip();
+    M.place(S, [F.x[0] + rnd() * (F.x[1] - F.x[0]), 0, F.z[0] + rnd() * (F.z[1] - F.z[0])], M.facing([Math.cos(yaw), 0, Math.sin(yaw)])); S.landed = true;
+    if (M.standing(S) !== 'floor') continue;
+    n++;
+    for (const t of trays) {
+      const q = M.turn(S.q, t), x = S.p[0] + q[0], z = S.p[2] + q[2];
+      assert.ok(x >= rail.x[0] && x <= rail.x[1] && z >= rail.z[0] && z <= rail.z[1], `the hook reaches a tray at ${x.toFixed(1)}, ${z.toFixed(1)}`);
+      // (the canister lying on it, along the ship, and the cradle's arms round it)
+      for (const e of [-can.half, 0, can.half]) { const w = M.turn(S.q, [t[0] + e, t[1], t[2]]); assert.ok(S.p[2] + w[2] - can.arm > Math.max(rackFront, docked), 'clear of the rack of empties and the docked canisters'); }
+    }
+  }
+  assert.ok(n > 400, `${n} landings tried, every way round`);
+  // and the whole of that floor is inside its own bay
+  const B = M.MINER.bay, F = M.MINER.floor;
+  assert.ok(F.x[0] >= B.x0 && F.x[1] < DOOR.x && F.z[0] > B.z0 && F.z[1] < B.z1);
+});
+
+test('the autopilot still parks it exactly, and only while it is switched on', () => {
+  const auto = { ...M.noControls(), auto: true, settle: true };
+  // low over its pad with someone standing on it: it waits over it, and comes down once they have gone
   const W = M.makeShip(); M.place(W, [M.MINER.pad[0] + 0.5, 1.1, -5], M.facing([1, 0, 0])); W.padBusy = true;
-  hold(W, 6, []);
+  hold(W, 6, auto);
   assert.ok(!W.landed && W.settle && W.p[1] >= M.SETTLE.hold - 0.01, `someone on the pad: it waits ${W.p[1].toFixed(2)} m over it`);
-  W.padBusy = false; hold(W, 4, []);
-  assert.ok(W.landed, 'the pad clear: down it comes');
-  // off the pad's middle, or fast, or far, it does not
-  const F = M.makeShip(); M.place(F, [M.MINER.pad[0] + 9, 0.6, -5], M.facing([1, 0, 0])); hold(F, 3, []);
-  assert.ok(!F.landed && !F.settle, 'nine metres from the pad\'s middle is not over it');
+  W.padBusy = false; hold(W, 4, auto);
+  assert.ok(W.landed && M.onPad(W), 'the pad clear: down it comes, exactly as parked');
+  // switched off half way through setting itself down: the pilot has it at once, where it is
+  const X = M.makeShip(); M.place(X, [M.MINER.pad[0] + 2, 1.1, -4], M.facing([-1, 0, 0]));
+  hold(X, 1.5, auto); assert.ok(X.settle && !X.landed, 'the autopilot is setting it down');
+  const at = [...X.p]; hold(X, 5, []);
+  assert.equal(X.settle, null); assert.ok(!X.landed, 'switched off: nothing goes on setting it down');
+  assert.ok(Math.hypot(X.p[0] - at[0], X.p[2] - at[2]) < 0.3 && Math.abs(Math.abs(yawOf(X)) - 180) > 1, 'it stays where it had got to, part turned');
   // lifting off is never caught by it
   const U = M.makeShip(); hold(U, 4, ['up']);
   assert.ok(!U.landed && !U.settle && U.p[1] > 2, 'holding Space, it goes up');
+  // from where a pilot left it standing crooked, the autopilot lifts it off and parks it properly
+  const C = M.makeShip(); M.place(C, [38, 1, -4], M.facing([-0.6, 0, 0.8])); setDown(C);
+  const stood = M.standOf(C); assert.ok(stood && !M.onPad(C) && M.standing(C) === 'floor');
+  const again = M.makeShip(M.MINER, stood);
+  assert.ok(again.landed && !M.onPad(again) && again.p[0] === stood.p[0] && again.p[2] === stood.p[2], 'the next flight starts from where it stands');
+  const r = autofly(again, M.planLand(again));
+  assert.ok(again.landed && M.onPad(again), `the autopilot parks it in its proper place (${r.secs.toFixed(0)} s)`);
+  // and leaves the hangar from there, touching nothing
+  const D = M.makeShip(M.MINER, stood), r2 = autofly(D, M.planLeave(D));
+  assert.ok(M.clearOf(D.p) && r2.bumps === 0, `or flies it out from there (${r2.secs.toFixed(0)} s)`);
+});
+
+test('the guide: the keys that would bring the ship to its parking place, bright far off and dim close by', () => {
+  const at = (p, f = [1, 0, 0], set) => { const S = M.makeShip(); M.place(S, p, M.facing(f)); return M.guideOf(S, set); };
+  const lit = (g) => Object.entries(g.keys).filter(([, v]) => v > 0).map(([k]) => k).sort().join(' ');
+  const P = M.MINER.pad;
+  // on its parking place, nose out, a hair off the floor: nothing is lit
+  assert.equal(lit(at([P[0], 0.1, P[2]])), ''); assert.ok(at([P[0], 0.1, P[2]]).done);
+  // each key alone, the ship facing as it parks: the pad ahead is W, behind is S, to the left A, to the right D
+  assert.equal(lit(at([P[0] - 5, 0, P[2]])), 'forward'); assert.equal(lit(at([P[0] + 5, 0, P[2]])), 'reverse');
+  assert.equal(lit(at([P[0], 0, P[2] + 5])), 'left', 'the pad is to its left (toward -z, the ship facing +x)');
+  assert.equal(lit(at([P[0], 0, P[2] - 5])), 'right');
+  assert.equal(lit(at([P[0], 3, P[2]])), 'down', 'over it: C');
+  // they follow the ship's own nose, as the keys do: turned nose in, the same place is the other key
+  const g180 = at([P[0] + 5, 0, P[2]], [-1, 0, 0]);
+  assert.ok(g180.keys.forward > 0 && g180.keys.reverse === 0, 'nose in, the pad ahead: W');
+  assert.ok(g180.keys.noseRight > 0.99 || g180.keys.noseLeft > 0.99, 'and the heading asked for is nose out: the mouse\'s arrow is at its brightest');
+  // really: holding what is lit brings it nearer
+  const S = M.makeShip(); M.place(S, [P[0] + 7, 2, P[2] + 4], M.facing([-1, 0, 0.3]));
+  const d0 = Math.hypot(S.p[0] - P[0], S.p[1] - P[1], S.p[2] - P[2]);
+  for (let t = 0; t < 3; t += DT) { const k = M.guideOf(S).keys; M.stepShip(S, keys(...['forward', 'reverse', 'left', 'right', 'up', 'down'].filter((n) => k[n] > 0)), DT, null); }
+  assert.ok(Math.hypot(S.p[0] - P[0], S.p[1] - P[1], S.p[2] - P[2]) < d0 * 0.5, 'holding the lit keys brings it toward its place');
+  // and turning as the arrows say brings the nose round to the heading asked for
+  const R = M.makeShip(); M.place(R, [P[0] + 1, 2, P[2]], M.facing([0.2, 0, 1]));
+  for (let t = 0; t < 6; t += DT) { const k = M.guideOf(R).keys; M.stepShip(R, { ...M.noControls(), turn: [k.noseUp - k.noseDown, k.noseRight - k.noseLeft], roll: k.rollRight - k.rollLeft }, DT, null); }
+  assert.ok(nose(R)[0] > 0.99, `the arrows bring the nose out toward the door (${nose(R).map((v) => v.toFixed(2))})`);
+  // brightly when a lot is needed, dimly when it is close, dark when it is there
+  const far = at([P[0] - 20, 0, P[2]]).keys.forward, mid = at([P[0] - 4, 0, P[2]]).keys.forward, close = at([P[0] - 0.5, 0, P[2]]).keys.forward, there = at([P[0] - 0.2, 0, P[2]]).keys.forward;
+  assert.ok(far === 1 && mid < far && close < mid && close >= M.GUIDE.dim && there === 0, `W: ${far}, ${mid.toFixed(2)}, ${close.toFixed(2)}, ${there}`);
+  let last = 2; for (let d = 30; d >= 0; d -= 0.5) { const v = at([P[0] - d, 0, P[2]]).keys.forward; assert.ok(v <= last + 1e-9, 'never brighter as it comes nearer'); last = v; }
+  { const T = M.makeShip(); M.place(T, [P[0], 2, P[2]], leaning(25)); const k = M.guideOf(T).keys; assert.ok(k.rollLeft > 0.8 && k.rollRight === 0, 'rolled to the right: Q, brightly'); M.place(T, [P[0], 2, P[2]], leaning(5)); assert.ok(M.guideOf(T).keys.rollLeft < 0.4 && M.guideOf(T).keys.rollLeft > 0, 'nearly level: dimly'); }
+  const lvl = at([P[0], 2, P[2]]); assert.equal(lvl.keys.rollLeft + lvl.keys.rollRight, 0, 'level: neither');
+  // far out, coming home: the heading asked for is the way in (never "turn round" out there), W is bright, and off the
+  // door's middle line the key that brings it back onto it is lit
+  const A = M.arrival(), home = M.makeShip(); M.place(home, A.p, A.q);
+  const gh = M.guideOf(home);
+  assert.ok(!gh.near && gh.keys.forward === 1 && gh.keys.noseLeft === 0 && gh.keys.noseRight === 0, 'where the jump home brings it out: W, and the nose is right as it is');
+  assert.ok(gh.keys.down > 0, 'a little high for the door: C');
+  const off = at([DOOR.face + 60, 2, P[2] + 6], [-1, 0, 0]);
+  assert.ok(off.keys.right > 0 && off.keys.left === 0, 'to one side of the door\'s middle line, flying in: D brings it back onto it');
+  // "flip up and down": the mouse's arrows follow the setting; left and right never flip
+  const dn = M.makeShip(); M.place(dn, [P[0] + 60, 3, P[2]], M.qMul(M.facing([-1, 0, 0]), [0, 0, Math.sin(-0.15), Math.cos(-0.15)]));
+  const plain = M.guideOf(dn), flipped = M.guideOf(dn, { invertY: true });
+  assert.ok(plain.keys.noseUp > 0 && plain.mouse.up > 0 && plain.mouse.down === 0, 'nose low: the mouse\'s up arrow');
+  assert.ok(flipped.mouse.down > 0 && flipped.mouse.up === 0, 'flipped: its down arrow (pull back to climb)');
+  // on a phone the same hint as one push of the left stick
+  const st = at([P[0] - 6, 0, P[2] - 6]).stick;
+  assert.ok(st.y < -0.5 && st.x > 0.5 && st.k > 0.5, 'the pad ahead and to the right: the stick pushed up and to the right');
+  // the small space the model and its hologram share: true to size close by, never past its edge far off
+  const m = M.makeShip(); M.place(m, [P[0] - 300, 0, P[2]], M.facing([1, 0, 0]));
+  assert.ok(M.guideAt(m, P)[0] > 0.9 && M.guideAt(m, P)[0] < 1, 'far off, the goal is near the edge, ahead');
+  M.place(m, [P[0] - 1, 0, P[2]], M.facing([1, 0, 0]));
+  assert.ok(Math.abs(M.guideAt(m, P)[0] - 1 / (1 + M.GUIDE.space)) < 1e-9);
 });
 
 test('the help corner changes with the mode, in plain words', () => {

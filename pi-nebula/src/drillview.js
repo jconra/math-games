@@ -63,6 +63,11 @@
 //       onDone({ store (tonnes of each metal), cans (the canisters: [{ metal, t }]), early (headed home before all
 //                eight were full: the store is the rounded one), sells, stats, secs })
 //   V.update(dt); V.aim(camera, dt)   each frame;   V.close()   put away (the ship is the caller's to keep or dispose)
+//   V.glideFrom({ eye, look, fov }, secs)   THE EYE'S WAY OUT OF THE SEAT (src/trip.js; the game's maker, 2026-11-18: "I
+//       defiantly don't want a dark screen with words"): the eye starts there, in the ship's own frame (the crew
+//       member's eyes in their seat), rises out of the ship and glides back to this view's own place over `secs`.
+//   V.glideTo({ eye, look, fov }, secs)     ... and back: from wherever it is, forward over the ship and down into the
+//       seat, where it stays; V.glided says when it is there
 //   V.run (src/drill.js makeRun), V.state() and V.rig (the rigs: where things are on the screen)
 import * as THREE from 'three';
 import { buildRoom, updateDoors, loadRoom } from '../kit/layout.js';
@@ -496,6 +501,11 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   let panel = null, closeIn = -1, armsWant = 'reach', spin = 0, scanT = 0, closed = false, cutQ = null;
   const look = { yaw: 0, pitch: 0 };      // the eye turned by the player's drag, while looking for a rock
   const cam = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46, fresh: true }, want = { eye: new THREE.Vector3(), look: new THREE.Vector3(), fov: 46 };
+  // (the eye's glide out of the seat, or back into it: the top of this file)
+  let glide = null;
+  const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  function glideFrom({ eye, look, fov }, secs = 2) { glide = { out: true, t: 0, secs, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; cam.fresh = false; cam.eye.copy(glide.eye); cam.look.copy(glide.look); cam.fov = fov; }
+  function glideTo({ eye, look, fov }, secs = 1.5) { glide = { out: false, t: 0, secs, eye0: cam.eye.clone(), look0: cam.look.clone(), fov0: cam.fov, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; }
   const go = (stage) => { V.stage = stage; V.t = 0; V.sub = ''; V.subT = 0; V.log.push(stage); };
   const looking = () => V.stage === 'look' || V.stage === 'arrive' || V.stage === 'back';
 
@@ -836,7 +846,16 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       // (clear of the job panel: it covers the right of a wide screen and the bottom of a tall one)
       if (tall()) { want.look.y -= 2.7; want.fov = P.fov + 8; } else { _v.subVectors(want.look, want.eye).normalize(); _v2.crossVectors(_v, _s.set(0, 1, 0)).normalize(); want.look.addScaledVector(_v2, 2.9); want.fov = P.fov + 6; }
     }
-    if (cam.fresh) { cam.eye.copy(want.eye); cam.look.copy(want.look); cam.fov = want.fov; cam.fresh = false; }
+    if (glide) {
+      // (out of the seat: up through the canopy first, then back behind the ship; into it: forward over the ship
+      // first, then down. So the eye passes over the hull, not along it)
+      glide.t += dt;
+      const k = ease(glide.t / glide.secs), a = glide.out ? glide.eye : glide.eye0, b = glide.out ? want.eye : glide.eye, ky = glide.out ? 1 - (1 - k) * (1 - k) : k * k;
+      cam.eye.set(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * ky, a.z + (b.z - a.z) * k);
+      cam.look.lerpVectors(glide.out ? glide.look : glide.look0, glide.out ? want.look : glide.look, k);
+      cam.fov = (glide.out ? glide.fov : glide.fov0) + ((glide.out ? want.fov : glide.fov) - (glide.out ? glide.fov : glide.fov0)) * k;
+      if (glide.t >= glide.secs) { if (glide.out) glide = null; else glide.done = true; }
+    } else if (cam.fresh) { cam.eye.copy(want.eye); cam.look.copy(want.look); cam.fov = want.fov; cam.fresh = false; }
     else { const k = far && down && down.moved ? 1 : 1 - Math.exp(-CAM_RATE * dt); cam.eye.lerp(want.eye, k); cam.look.lerp(want.look, k); cam.fov += (want.fov - cam.fov) * k; }
     cameraIn.position.copy(cam.eye).applyMatrix4(G.matrix); cameraIn.up.set(0, 1, 0); cameraIn.lookAt(_v.copy(cam.look).applyMatrix4(G.matrix));
     if (Math.abs(cameraIn.fov - cam.fov) > 0.01 || cameraIn.far !== 3200) { cameraIn.fov = cam.fov; cameraIn.near = 0.3; cameraIn.far = 3200; cameraIn.aspect = innerWidth / innerHeight; cameraIn.updateProjectionMatrix(); }
@@ -913,7 +932,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     target: (dir) => { const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE).toArray(); },
     reach: (dir) => { if (!H) return null; const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return +cutterTo(H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE)).miss.toFixed(3); },
   };
-  return { el, run, update, aim, close, rig, get panel() { return panel; }, get stage() { return V.stage; },
+  return { el, run, update, aim, close, rig, glideFrom, glideTo, get glided() { return !!(glide && glide.done); }, get gliding() { return !!glide; }, get panel() { return panel; }, get stage() { return V.stage; },
     state: () => ({ stage: V.stage, sub: V.sub, t: +V.t.toFixed(2), clock: +V.clock.toFixed(2), aboard: +run.aboard.toFixed(3), full: run.full, given: run.given, cans: run.cans.map((c) => ({ ...c })), early: run.early, store: run.store(), sells: run.sells(), stats: { ...run.stats }, lastHole: V.lastHole, eyed: V.eyed,
       ship: { p: here.p.toArray().map((x) => +x.toFixed(1)), yaw: +here.yaw.toFixed(3) }, look: { yaw: +look.yaw.toFixed(3), pitch: +look.pitch.toFixed(3) }, rocks: run.rocks.length,
       held: H ? { id: H.rock.id, shape: H.rock.shape, metals: { ...H.rock.metals }, weight: H.rock.weight, left: H.rock.left, holes: H.rock.holes, ore: +H.rock.lumps.reduce((s, L) => s + L.ore, 0).toFixed(3) } : null,

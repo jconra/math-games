@@ -45,8 +45,9 @@
 //                                    'interested' | 'declined' (this visit only), or from their contract: 'signed' |
 //                                    'payout'
 //   missions.answer(captain, yes)    the player's answer to a captain's offer (captain: { id, name, ship, mission })
-//   missions.go(captain, yes)        ... to "shall we go now?", once signed
-//   missions.on(fn) / onGo(fn)       fn(captain, yes) after each (src/mission.js opens the contract, starts the trip)
+//   missions.on(fn)                  fn(captain, yes) after it (src/mission.js opens the contract)
+//                                    (there is no "shall we go now": a contract signed, the captain walks to their ship,
+//                                    and the run starts when the crew member sits down in its seat)
 //   missions.ready(id)               whether that captain's mission can be flown (its data is here)
 import { ownOrder, earn, jobTally } from './jobs/engine.js';
 import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighthsText, eighthsOf } from './jobs/smelter.js';
@@ -332,7 +333,7 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
 
 // ── the captains' offers, this visit, and the crew member's own contract ──
 function makeMissions() {
-  const states = new Map(), fns = [], goFns = [];
+  const states = new Map(), fns = [];
   const tell = (list, captain, yes) => { for (const f of list) { try { f(captain, yes); } catch (e) { console.error(e); } } };
   return {
     state(id, crew = null) { const m = crew ? contractOf(crew) : null; return m && m.captain === id ? m.state : states.get(id) || 'new'; },
@@ -340,9 +341,7 @@ function makeMissions() {
     answer(captain, yes) { states.set(captain.id, yes ? 'interested' : 'declined'); tell(fns, captain, yes); },
     // (the contract's card put away unsigned: the offer stays open, and the captain asks again another time)
     declined(id) { states.set(id, 'declined'); },
-    go(captain, yes) { tell(goFns, captain, yes); },
     on(fn) { fns.push(fn); },
-    onGo(fn) { goFns.push(fn); },
     ready: (id) => !!missionOf(id),
   };
 }

@@ -144,8 +144,13 @@ function makePlanner(site, init, speed) {
   }
   // the cradle's turn for a canister at a place lying along `axis`, nearest the way it is now
   const turnFor = (axis) => alongNear(axis, T.yaw.last);
-  // (the patch of floor under a canister lying along x or along z, `wide` more across it and `long` more along it)
-  const gate = (t0, x, z, alongX, wide = 0, long = 0) => { const g = { t0, t1: t0, x, z, hx: alongX ? half + long : 0.5 + wide, hz: alongX ? 0.5 + wide : half + long }; gates.push(g); return g; };
+  // (the patch of floor under a canister lying along x or along z, `wide` more across it and `long` more along it;
+  // yaw: lying any other way, on a ship set down crooked: the square patch that holds it)
+  const gate = (t0, x, z, alongX, wide = 0, long = 0, yaw = null) => {
+    const g = { t0, t1: t0, x, z, hx: alongX ? half + long : 0.5 + wide, hz: alongX ? 0.5 + wide : half + long };
+    if (yaw != null) { const s = Math.abs(Math.sin(yaw)), c = Math.abs(Math.cos(yaw)); if (s > 0.02 && c > 0.02) { g.hx = s * (half + long) + c * (0.5 + wide); g.hz = c * (half + long) + s * (0.5 + wide); } }
+    gates.push(g); return g;
+  };
   const put = (c, t0, span) => cans[c].spans.push({ t0, ...span });
   // (a canister set down on a mount lies as its mount wants it, or end for end: the way it was carried)
   const mountYaw = (m, yaw) => (Math.cos(yaw - m.yaw) >= 0 ? m.yaw : near0(m.yaw + Math.PI));
@@ -158,7 +163,7 @@ function makePlanner(site, init, speed) {
     const arrive = upAndOver(Q[0], Q[1], yaw, P.t);
     // (its tray out as the crane comes, the patch under it kept clear from then until the tray is home again)
     const t0 = Math.max(P.t, T.tray[i].end), tT = seg(T.tray[i], Math.max(t0, arrive - S.tray), 1, S.tray, even);
-    const g = gate(Math.max(t0, arrive - S.tray) - 0.6, (m.at[0] + Q[0]) / 2, (m.at[2] + Q[1]) / 2, isAlongX(m.yaw), Math.hypot(m.out[0], m.out[1]) / 2);
+    const g = gate(Math.max(t0, arrive - S.tray) - 0.6, (m.at[0] + Q[0]) / 2, (m.at[2] + Q[1]) / 2, isAlongX(m.yaw), Math.hypot(m.out[0], m.out[1]) / 2, 0, m.yaw);
     return { m, at: Math.max(arrive, tT) + S.settle, g };
   }
   function fromMount(c, i) {

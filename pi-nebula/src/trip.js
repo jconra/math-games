@@ -14,7 +14,26 @@
 //     src/boarding.js) and the ship really lifts off its pad, goes out through the bay door and flies clear of the
 //     station, by hand or on autopilot; with the pilot's seat left to the crew, the captain's own pilot flies and the
 //     crew member rides and watches. Clear of the station the jump is offered (a button, and J). Home, the ship comes
-//     out of its jump outside the station, in sight of it, and is flown in through the door and set down on its pad.
+//     out of its jump outside the station, in sight of it, and is flown in through the door and set down in its hangar.
+//   - LANDING IS THE PILOT'S (2026-11-18, later: "I don't wan the ship taking over. That will annoy me. ... if the pilot
+//     sets down and is still crooked then I would hope the crane can just compensate for it ... Even if they just come
+//     straight in and land it nose-in, that should be okay (as long as the ship is not upside down). ... If they do have
+//     the ship rolled over to much for a landing (like upside down) then it shouldn't allow them out of the seat until
+//     they have corrected it"). Set down by hand the ship stands where and whichever way round the pilot put it, with a
+//     guide that only asks (src/flying.js, src/flymodel.js); the autopilot, and the crew's own pilot, still park it in
+//     its proper place. Down on the hangar's floor the seat's prompt comes up (Get up, E), not by itself, so the pilot
+//     can lift off again and shuffle it. GETTING UP IS WHAT ENDS THE FLIGHT: the haul is aboard the ship where it
+//     stands (crane.arrive: the crane takes the canisters off it there), the share is worked out, and the crew member
+//     is on their feet in the cockpit of the ship as it landed.
+//   - NO DARK SCREEN ANYWHERE BUT THE JUMP'S OWN FLASH (2026-11-18: "I defiantly don't want a dark screen with words",
+//     and "I want as little of black screen, magically appear in the game as possible. In fact please let me know if
+//     there is anything like that other than the jump"). The run starts only from the seat, by the crew member's own
+//     sitting down (there was a dark moment that put them there from the captain's "Let's go": gone, with the
+//     question). At the rocks the drill operator's view outside the ship is reached by moving the eye: as the jump's
+//     flash clears it is already rising out of the seat and gliding back to the drill's view behind the ship; when the
+//     drilling is done it glides back down into the seat, and there, the eye where the pilot's eyes are, the cockpit is
+//     round it again (that last moment is a plain cut: the drill's ship is a second one, built for outside, with no
+//     cabin in it).
 //   - AT THE ROCKS THE SHIP DOES NOT MOVE (as before): from the jump's flash out to the jump's flash home it stands
 //     where it is parked and the station is simply not drawn (W.alone: only the ship's own room; everything else hung
 //     on the scene is put away and brought back). The crossing itself is the streaks and the flash, as it was: the
@@ -32,7 +51,7 @@
 //   - THE CARDS PAY NOTHING BY THEMSELVES (the panel's pay: false): the share at the smelter is the pay.
 //   - THE CAPTAIN'S WORDS come up in a bubble on his side of the cockpit (he is not drawn in the other seat yet).
 //   - THE DRILL OPERATOR'S GAME (src/drillview.js, loaded only for a crew member who signed for the drill): at the
-//     field the view goes outside the ship, behind a short fade, and the crew member finds the rocks and drills them
+//     field the view goes outside the ship (the eye glides out of the seat: above) and the crew member finds the rocks and drills them
 //     until the eight canisters are full, or heads home early with what is aboard (each part-full canister then
 //     rounded to the nearest 1/8 of a tonne). What comes home is the store: the tonnes of each metal (land's `store`),
 //     in the canisters as they are (the hangar's crane is told how full each came home).
@@ -44,8 +63,8 @@
 //     filled).
 //   - NO ANSWER CHANGES THE HAUL. The jump's lamps show where the pilot is in the jump, and nothing else.
 //
-//   const T = startTrip(ctx, { mission, roles, from, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
-//       people, crew, save, body, put, onCredits }; from: 'seat' | 'captain'
+//   const T = startTrip(ctx, { mission, roles, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
+//       people, crew, save, body, put, onCredits }; the crew member is in the ship's cockpit
 //   T.update(dt) each frame; T.aim(camera, dt) after the game's own camera; T.late() just before the picture
 //   T.abort()   given up (the crew screen): back in the parked ship, the contract still signed
 //   T.fly       the flying, while there is one (src/flying.js): its own state, its keys by name (the rigs)
@@ -70,13 +89,12 @@ export const SEAT = MINER.seat;
 // the plain grey rocks beyond (the field's real look is to come): [x, y, z, radius] in the ship's frame, metres
 const ROCKS = [[-9, 5.5, 34, 2.6], [11, 1.5, 46, 3.4], [-20, -3, 62, 5], [5, 9, 70, 4], [24, 6, 84, 7], [-34, 8, 98, 8.5], [2, -9, 58, 3], [-6, 0.5, 104, 6]];
 export const JUMP = { secs: 2.6, flash: 1.5 };   // the jump's picture: how long, and when its flash is whitest
-const FADE = 0.55;                               // a fade to black, or back (s)
+// the eye's glide between the seat and the drill's view outside the ship: out (begun under the jump's flash), back in (s)
+export const GLIDE = { out: 2.4, back: 1.5 };
 const FILL = 1.15;                               // a canister filled, at the rocks (s each)
 
 const CSS = `
 .pmt { position: fixed; inset: 0; z-index: 22; pointer-events: none; font: 400 16px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: #eef1f4; user-select: none; -webkit-user-select: none; }
-.pmt-fade { position: absolute; inset: 0; background: #020305; opacity: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
-.pmt-fade p { margin: 0; max-width: 520px; font-size: 20px; font-weight: 600; color: #cfe6ff; text-wrap: balance; }
 .pmt-jump { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pmt-chip { position: absolute; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 8px; white-space: nowrap;
   font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: rgba(15, 19, 25, 0.86); box-shadow: inset 0 0 0 1.5px rgba(255, 205, 60, 0.7);
@@ -97,7 +115,7 @@ const CSS = `
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's button and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 178px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
-@media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-fade p { font-size: 17px; } .pmt-count b { font-size: 22px; } }
+@media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; max-width: 94vw; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 `;
 
 // a plain grey rock: a lumpy twenty-sided ball, lit from one side by a few sums of its own (no lamps in the scene)
@@ -118,15 +136,15 @@ function rockField(M) {
   return { group, update(dt) { for (const [m, a, b] of spins) { m.rotation.y += a * dt; m.rotation.x += b * dt; } }, dispose() { group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); mat.dispose(); } };
 }
 
-export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () => {} }) {
+export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   const { W, walls, boarding, crane, jobs, guide, crew, save } = ctx;
   if (!document.getElementById('pmt-css')) { const st = document.createElement('style'); st.id = 'pmt-css'; st.textContent = CSS; document.head.appendChild(st); }
   const S = boarding.ships.find((s) => s.id === M.ship);
   const steps = stepsFor(M, roles), TALK = RUN_TALK[M.id] || {};
   const el = document.createElement('div'); el.className = 'pmt';
-  el.innerHTML = '<canvas class="pmt-jump"></canvas><div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div><div class="pmt-fade"><p></p></div>';
+  el.innerHTML = '<canvas class="pmt-jump"></canvas><div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div>';
   document.body.appendChild(el);
-  const $ = (s) => el.querySelector(s), fadeEl = $('.pmt-fade'), sayEl = $('.pmt-say'), countEl = $('.pmt-count'), cv = $('.pmt-jump'), g2 = cv.getContext('2d');
+  const $ = (s) => el.querySelector(s), sayEl = $('.pmt-say'), countEl = $('.pmt-count'), cv = $('.pmt-jump'), g2 = cv.getContext('2d');
   $('.pmt-chip b').textContent = M.name;
   // (the seat's own prompt, when the jump computer has been put away for a moment)
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
@@ -134,7 +152,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => openCards());
 
-  const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, fade: 0, fadeTo: 0, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, cans: null, early: false, log: [] };
+  const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, cans: null, early: false, log: [] };
   // (signed for which: the pilot's seat, the drill)
   const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill');
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
@@ -146,7 +164,6 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   const pick = (L) => (L && L.length ? L[Math.floor(Math.random() * L.length)] : '');
   function say(key, more) { const w = fill(pick(TALK[key]), more); if (!w) return; $('.pmt-say small').textContent = ctx.captainName || 'The captain'; $('.pmt-say p').textContent = w; sayEl.classList.add('is-on'); sayT = Math.min(8, 2.4 + w.length * 0.06); T.log.push('says: ' + w); }
   const words = (w) => { $('.pmt-chip span').textContent = w; };
-  const fadeWords = (w) => { fadeEl.querySelector('p').textContent = w; };
   const P = () => ctx.body();
   const inShip = (v) => new THREE.Vector3(...v).applyMatrix4(S.M);
 
@@ -178,6 +195,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       MB.armStep(arms, 'stowed', 0);
       W.scene.add(arms.group);
     }
+    // (they are built where the ship is parked: drawn where it stands, if a pilot left it somewhere else)
+    arms.group.matrixAutoUpdate = false; arms.group.matrix.copy(S.D); arms.group.matrixWorldNeedsUpdate = true;
     if (!rocks) { rocks = rockField(S.M); W.scene.add(rocks.group); }
     arms.group.visible = false;
   }
@@ -227,19 +246,10 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     // or by itself for the crew's pilot.
     leave(dt, st) {
       if (!T.phase) {
-        // (started from the captain, somewhere else in the station: a short plain fade, and they are in the seat; the
-        // cabin is built as anyone comes into its hangar)
-        const there = S.state === 'in' && boarding.where(P().pos) === M.ship + '/cockpit';
-        T.phase = there ? 'sit' : 'dark'; if (!there) T.fadeTo = 1; words(''); fadeWords('');
-      }
-      if (T.phase === 'dark' && T.fade >= 1) {
-        if (S.state !== 'in') {
-          if (!T.sent) { T.sent = true; const e = W.R.places?.entrances?.[M.ship]; if (e) { const s = walls.snap(e[0] + 4, e[1] + 0.4, e[2], 4); if (s) ctx.put(s, Math.PI / 2); } }
-          if (T.t > 25) { console.error('trip: the ' + M.ship + '\'s cabin never came'); abort(); }
-          return;
-        }
-        if (boarding.where(P().pos) !== M.ship + '/cockpit') { const sp = boarding.spots(M.ship), c = sp.doorIn.cockpit || sp.rooms.cockpit, s = walls.snap(c[0], c[1] + 0.2, c[2], 1.2, 0.15); if (s) ctx.put(s, 0); }   // (just inside the cockpit's door, on the cabin's deck)
-        T.phase = 'sit'; T.fadeTo = 0;
+        // (only ever from the seat: the crew member walked to the ship, rode its lift up and sat down. Nobody is put
+        // there behind a dark screen)
+        if (S.state !== 'in' || boarding.where(P().pos) !== M.ship + '/cockpit') { console.error('trip: the crew member is not in the ' + M.ship + '\'s cockpit'); abort(); return; }
+        T.phase = 'sit'; words('');
       }
       if (T.phase === 'sit') {
         if (!flAsked) { flAsked = true; import('./flying.js').then((m) => { flMod = m; }).catch((e) => { flErr = e; console.error(e); if (window.oops) window.oops(e); }); }
@@ -250,10 +260,14 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
         build(); jobs.show(false); if (guide.active) guide.clear();
         // (the drill operator's game: fetched and its ship built now, so the field does not wait)
         if (iDrill && !drillKit) import('./drillview.js').then(async (m) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
-        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null) }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
           onClear: () => { T.clear = true; if (steps[T.i] && steps[T.i].kind === 'leave') say(iPilot ? 'out' : 'crewOut'); }, onJump: () => { T.jumpAsked = true; },
-          onLanded: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.landed = true; } });
+          onLanded: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.landed = true; },
+          // (the ship stands somewhere else than it did: the crew member's body, in its seat, goes with it)
+          onStand: (moved) => { if (!stand || !P()) return; stand.applyMatrix4(moved); const h = P().heading || 0, v = new THREE.Vector3(Math.sin(h), 0, Math.cos(h)).transformDirection(moved); ctx.put(stand, Math.atan2(v.x, v.z)); },
+          // (the seat's prompt: getting up is what ends the flight)
+          onGetUp: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.gotUp = true; } });
         api.fly = fl; T.sat = true; T.phase = 'fly'; T.t = 0;
       }
       // (clear of the station: on to the jump, when the pilot asks for it; the crew's own pilot goes straight on)
@@ -275,13 +289,18 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       }
       if (T.phase === 'jumping') {
         jumpT += dt;
+        // (the drill's view, begun under the flash: its own clock runs from then)
+        if (drill && drillOn) drill.update(dt);
         // (the flash at its whitest: it is somewhere else)
         if (!jumpDone && jumpT >= JUMP.flash) {
           jumpDone = true; T.inField = st.to === 'field';
           if (T.inField) {
-            // ARRIVING at the rocks: the ship stands where it is parked from here on, the station not drawn
+            // ARRIVING at the rocks: the ship stands where it stood from here on, the station not drawn
             if (fl) fl.away();
             space(true); arms.group.visible = true; rocks.group.visible = true; camFresh = true; say(st.mine ? 'there' : 'crewJump');
+            // (a crew member at the drill: its view outside the ship begins now, under the flash at its whitest, the
+            // eye in the seat; as the flash clears it is rising out of the seat and gliding back behind the ship)
+            if (iDrill && drillKit && !drillErr) openDrill();
           } else {
             // home: outside the station, in sight of it; the flying is back, to come in and land
             arms.group.visible = false; rocks.group.visible = false; arms.rockOn = false; arms.armsAs = null;
@@ -315,46 +334,59 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     },
     // home: flown in through the bay door and set down on its pad, by hand or on autopilot (src/flying.js); down, the
     // haul is aboard and the share is worked out
+    // (down on the hangar's floor the seat's prompt comes up, Get up, and nothing ends until it is pressed: the pilot
+    // may lift off again and set it down better. Got up: the ship stands where it was set down (the flying told the
+    // crane and the cabin as it came down), the haul is aboard it there, and the share is worked out)
     land(dt, st) {
-      if (!T.phase) { T.phase = 'fly'; T.landed = false; if (!fl) { console.error('trip: nothing to fly home in'); abort(); return; } }
-      if (T.phase === 'fly' && T.landed) {
+      if (!T.phase) { T.phase = 'fly'; T.landed = false; T.gotUp = false; if (!fl) { console.error('trip: nothing to fly home in'); abort(); return; } }
+      if (T.phase === 'fly' && T.gotUp && fl.S.landed) {
+        T.stood = !!crane.standing;
         fl.close(); fl = null; api.fly = null;
         // (the hangar's canisters are the ones that came home: how full each is; the payout is their plain sum)
         T.n = crane.arrive({ flown: true, fills: T.cans ? T.cans.map((c) => c.t) : null });
         T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
-        words('Down on the pad'); say(iPilot ? 'landed' : 'landedCrew');
-        T.phase = 'down'; T.t = 0;
+        words('Home'); say(iPilot ? 'landed' : 'landedCrew');
+        next();
       }
-      // (a moment in the seat, the engine winding down; then on their feet)
-      if (T.phase === 'down' && T.t > Math.max(1.6, st.secs - 3)) next();
     },
   };
-  // THE DRILL OPERATOR'S GAME at the field (src/drillview.js): a short fade, the view outside the ship, the game until
-  // the eight canisters are full or the crew member heads home early, a fade back to the seat. What it filled is what
-  // comes home.
+  // THE DRILL OPERATOR'S GAME at the field (src/drillview.js): the view outside the ship, the game until the eight
+  // canisters are full or the crew member heads home early, and back to the seat. What it filled is what comes home.
+  // NO DARK SCREEN AND NO WORDS between the seat and that view (the top of this file): the eye glides out of the seat
+  // and back (drill.glideFrom, glideTo). The view begins under the jump's flash (openDrill, from ARRIVING); if the
+  // drill's own ship was not built by then, from the seat as soon as it is.
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
+  // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship)
+  const seatEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640; return { eye: [iPilot ? SEAT.eye[0] : -SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]], look: tall ? SEAT.lookTall : SEAT.look, fov: tall ? SEAT.fovTall : SEAT.fov }; };
+  function openDrill() {
+    if (drill || !drillKit) return;
+    // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
+    W.alone = []; arms.group.visible = false; rocks.group.visible = false;
+    drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, rand: ctx.rand || Math.random,
+      // (who flies the ship over to a rock: the captain's pilot, or the autopilot for a crew member with the pilot's seat too)
+      flier: iPilot ? 'The autopilot' : 'Pilot Juno', pilot: iPilot,
+      onSay: (key, more) => { if (TALK[key] && key !== 'full' && key !== 'early') say(key, more); },
+      // (the store comes home: the tonnes of each metal, in the canisters as they are; the haul's facts when it lands)
+      onDone: (r) => { T.store = r.store; T.cans = r.cans; T.early = !!r.early; T.drillStats = r.stats; T.drillSecs = r.secs; T.phase = 'drillDone'; T.t = 0; say(r.early ? (iPilot ? 'early' : 'earlyCrew') : iPilot ? 'full' : 'fullCrew'); } });
+    drillOn = true; el.classList.add('is-drill');
+    drill.glideFrom(seatEye(), GLIDE.out);
+  }
   function runDrill(dt, st) {
     if (!T.phase) {
-      T.phase = 'toDrill'; T.filled = 0; T.store = null; T.cans = null; T.early = false; words('At the rocks'); T.fadeTo = 1; fadeWords('Out to the drill\'s own cameras ...');
+      T.filled = 0; T.store = null; T.cans = null; T.early = false; words('At the rocks');
+      if (drill) { T.phase = 'drill'; say('drillField'); } else T.phase = 'toDrill';
     }
-    if (T.phase === 'toDrill' && T.fade >= 1) {
+    if (T.phase === 'toDrill') {
       if (drillErr) { abort(); return; }
       if (!drillKit) { if (T.t > 40) { console.error('trip: the drill never came'); abort(); } return; }
-      // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
-      W.alone = []; arms.group.visible = false; rocks.group.visible = false;
-      drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, rand: ctx.rand || Math.random,
-        // (who flies the ship over to a rock: the captain's pilot, or the autopilot for a crew member with the pilot's seat too)
-        flier: iPilot ? 'The autopilot' : 'Pilot Juno', pilot: iPilot,
-        onSay: (key, more) => { if (TALK[key] && key !== 'full' && key !== 'early') say(key, more); },
-        // (the store comes home: the tonnes of each metal, in the canisters as they are; the haul's facts when it lands)
-        onDone: (r) => { T.store = r.store; T.cans = r.cans; T.early = !!r.early; T.drillStats = r.stats; T.drillSecs = r.secs; T.phase = 'drillDone'; T.t = 0; say(r.early ? (iPilot ? 'early' : 'earlyCrew') : iPilot ? 'full' : 'fullCrew'); } });
-      drillOn = true; el.classList.add('is-drill'); T.phase = 'drill'; T.t = 0; T.fadeTo = 0; say('drillField');
+      openDrill(); T.phase = 'drill'; T.t = 0; say('drillField');
     }
     if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
-    if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.fadeTo = 1; fadeWords('Back to your seat ...'); }
-    if (T.phase === 'fromDrill' && T.fade >= 1) { endDrill(); T.fadeTo = 0; next(); }
+    // (done: the eye glides back down into the seat, and there the cockpit is round it again)
+    if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.t = 0; drill.glideTo(seatEye(), GLIDE.back); }
+    if (T.phase === 'fromDrill' && (drill.glided || T.t > GLIDE.back + 1)) { endDrill(); next(); }
   }
   function endDrill() {
     if (!drill) return;
@@ -370,7 +402,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     space(false);
     if (arms) { W.scene.remove(arms.group); arms.dispose(); arms = null; }
     if (rocks) { W.scene.remove(rocks.group); rocks.dispose(); rocks = null; }
-    // (back on their feet where they stood, turned to the cabin behind the seats: the way out)
+    // (back on their feet where they stood in the cockpit, in the ship as it now stands, turned to the cabin behind the
+    // seats: the way out. Short and plain: they are not seen getting up)
     if (stand && P()) { const v = new THREE.Vector3(0, 0, -1).transformDirection(S.M); ctx.put(stand, Math.atan2(v.x, v.z)); }
   }
   function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock }); }
@@ -382,9 +415,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     fly: null,      // (the flying, while there is one: src/flying.js)
     update(dt) {
       T.clock += dt;
-      // (the captain's bubble and the last fade outlive the trip a moment)
+      // (the captain's bubble outlives the trip a moment)
       if (sayT > 0) { sayT -= dt; if (sayT <= 0) sayEl.classList.remove('is-on'); }
-      if (T.fade !== T.fadeTo) { T.fade = T.fadeTo > T.fade ? Math.min(T.fadeTo, T.fade + dt / FADE) : Math.max(T.fadeTo, T.fade - dt / FADE); fadeEl.style.opacity = String(T.fade); }
       if (T.done) { if (!T.aborted && (T.endT += dt) > 7 && el.parentNode) el.remove(); else if (!T.aborted) $('.pmt-chip').style.display = 'none'; return; }
       if (T.i < 0) next();
       T.t += dt;
@@ -409,13 +441,13 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
     // just before the picture: no haze out there (after the boarding's light has had its say)
     late() { if (fl && fl.on) fl.late(); else if (T.space && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; } },
     abort,
-    // (the rigs: the cut-scene and the fades hurried on)
+    // (the rigs: the cut-scene hurried on)
     skip(secs = 1) { T.t += secs; if (T.phase === 'cut') cutT += secs; },
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
     state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n,
       fly: fl ? fl.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
-      panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
+      panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;
 }

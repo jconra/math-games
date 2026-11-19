@@ -33,12 +33,12 @@ export const CAPTAINS = {
   ruiz: { ship: 'Miner', mission: 'mining', what: 'Join his crew for a mining run?',
     offer: { clip: 'ruiz-pitch' }, yes: { clip: 'ruiz-ready' }, hello: { clip: 'ruiz-hello' },
     no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!',
-    // (his mission is made, src/missions.js: contract: said as his contract's card comes up; signed: as it is signed;
-    // go, goWhat: shall we go now (the bubble, the question's small words); goYes, goNo: his answers; payout: home,
-    // the share still waiting. No recorded clips for these yet: bubbles only.)
-    contract: 'Great! Here is my contract. Have a look.', signed: 'Welcome aboard!',
-    go: 'The Miner is on her pad. Ready to head out?', goWhat: 'Start the mining run now?',
-    goYes: 'Then let\'s fly!', goNo: 'No rush. Find me, or start from the Miner\'s cockpit.',
+    // (his mission is made, src/missions.js: contract: said as his contract's card comes up; signed: as it is signed,
+    // in his own voice, and then he walks to his ship and waits by its way in (the game's maker, 2026-11-18: "once you
+    // agree to a contract with the captain then they will say "Glad to have you, I will meet you at the ship". Then
+    // they will start walking to the ship and wait by the door"; there is no "shall we go now": the run starts when the
+    // crew member sits down in the seat); payout: home, the share still waiting.)
+    contract: 'Great! Here is my contract. Have a look.', signed: { clip: 'ruiz-meet' },
     payout: 'Good work! Your share is waiting at the smelter\'s controls.' },
   hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
@@ -58,9 +58,10 @@ export const RUN_TALK = {
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
     field: ['Kestrel, bring that one in. Okafor, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
     full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
-    home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down on our pad.'],
+    home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
     homeCrew: ['There\'s the station. Juno has the landing.', 'Home. Juno takes her in.'],
-    landed: ['Good flying, {player}. Your share is at the smelter\'s controls.'],
+    // (as the crew member gets up; nothing in it weighs up the landing: nose in or crooked, it is down)
+    landed: ['We\'re home, {player}. Your share is at the smelter\'s controls.'],
     // (the crew member at the drill, src/drillview.js; and the lines for a run whose pilot is the captain's own)
     crewOut: ['We\'re clear of the station. Juno has the jump.', 'Clear of the station. Juno is working out the jump.'],
     crewJump: ['Juno has us at the rocks. The drill is yours, {player}.', 'Here we are. Find us a good rock, {player}.'],

@@ -1,9 +1,13 @@
 // A CAPTAIN'S RUN, joined to the game (src/missions.js is the plain part; src/contract.js the contract's card and
 // src/trip.js the trip itself, both loaded only when wanted, so the station costs what it did):
 //   - a captain's "Interested" brings up their contract (missions.on); signed, it is kept with the crew member, the
-//     Miner waits on its pad (crane.awayHeld), a line on the floor leads to it, and the captain asks whether to go now;
-//   - the run starts from the captain's "Let's go" (missions.onGo) or from the pilot's seat: in the ship's cockpit a
-//     prompt comes up, as at a job (Start, E);
+//     Miner waits on its pad (crane.awayHeld), a line on the floor leads to it, and the captain says so and walks to
+//     the ship to wait by its way in (the game's maker, 2026-11-18: "once you agree to a contract with the captain then
+//     they will say "Glad to have you, I will meet you at the ship". Then they will start walking to the ship and wait
+//     by the door. You can walk with them or run there and get in the pilots seat or go eat a burrito and then go meet
+//     them. But I want as little of black screen, magically appear in the game as possible");
+//   - the run starts from the pilot's seat and nowhere else: in the ship's cockpit a prompt comes up, as at a job (Sit
+//     down, E). There is no "shall we go now", and nobody is put in the seat behind a dark screen;
 //   - home, the share waits at the smelter's controls: the smelter job's first card there is the payout card
 //     (payoutCard: the panel's `card` hook), its prompt says so (hint), and a line on the floor leads to it; the right
 //     answer brings the pay, whatever was picked before it.
@@ -13,7 +17,7 @@
 //   mission.aim(camera, dt), mission.late()     the trip's camera and its last word on the picture
 //   mission.stop()                               the crew screen: a trip given up, a card put away
 //   mission.payoutCard(), mission.hint()         the smelter's controls
-//   mission.offer(id), mission.start(from), mission.state(), mission.trip   (the rigs)
+//   mission.offer(id), mission.start(), mission.state(), mission.trip   (the rigs)
 import * as THREE from 'three';
 import { missions, missionOf, contractOf, sign, collect, payoutOrder, MISSIONS } from './missions.js';
 import { CAPTAINS } from './lines.js';
@@ -23,7 +27,7 @@ import { JOB as smelter } from './jobs/smelter.js';
 const LINE = { miner: '#ffd560', payout: '#ff8a3a' };
 
 export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {} }) {
-  let card = null, trip = null, loading = false, askIn = -1, askWho = null, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
+  let card = null, trip = null, loading = false, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
   const nameOf = (id) => { const p = people(); const P = p && p.list.find((x) => x.id === id); return (P && P.name) || 'The captain'; };
   const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
 
@@ -33,8 +37,31 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
   const promptFor = (m) => { const pilot = m.roles.includes('pilot'); prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; prompt.querySelector('small').textContent = pilot ? 'Sit at the controls and fly the Miner out' : 'Sit down and ride out to the rocks with the crew'; };
   document.body.appendChild(prompt);
-  prompt.querySelector('.pnj-go').addEventListener('click', () => start('seat'));
-  addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start('seat'); } });
+  prompt.querySelector('.pnj-go').addEventListener('click', () => start());
+  addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start(); } });
+
+  // ── where the captain waits: by the Miner's way in (its belly lift), a step out from the ship's side beside the lift's
+  // foot, on the hangar's floor wherever the ship stands (off every patch the station's people keep off); nowhere
+  // while the ship is in the air. Worked out again only when the ship stands somewhere else. ──
+  const MEET = { nose: [1.4, 2.6, 3.8], port: [4.7, 5.4, 6.1] };      // (m from the ship's middle, in its own frame; its lift's foot is 2.6 m to port)
+  let meetKey = null, meetAt = null;
+  function meetSpot() {
+    if (crane.aloft) return null;
+    const key = String(boarding.stands ?? 0); if (key === meetKey) return meetAt;
+    meetKey = key; meetAt = null;
+    const at = W.R.places?.ships?.miner, pp = people(); if (!at || !at.at) return null;
+    const nose = at.nose === '-x' ? -1 : 1, D = crane.standing || null, e = W.R.places?.entrances?.miner;
+    for (const port of MEET.port) for (const fwd of MEET.nose) {
+      // (parked nose out along +x, its port side is toward -z)
+      const p = new THREE.Vector3(at.at[0] + nose * fwd, 0, at.at[2] - nose * port); if (D) p.applyMatrix4(D);
+      const s = walls.snap(p.x, 0.4, p.z, 0.5);
+      if (!s || s.y > 0.3 || (pp && pp.noGo(s.x, s.z))) continue;
+      // (facing the way people come into the hangar)
+      meetAt = { pos: s, heading: e ? Math.atan2(e[0] - s.x, e[2] - s.z) : 0 }; return meetAt;
+    }
+    return null;
+  }
+  const meet = (id) => { const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(id, meetSpot); };
 
   // ── the line on the floor: to the Miner with a contract signed, to the smelter's controls with a share waiting ──
   function lead(where) {
@@ -65,8 +92,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           const m = sign(c, M.id, roles); if (!m) return;
           save(c); crane.awayHeld = true;
           if (crane.mode === 'away') crane.arrive();      // (found parked and ready)
+          // (he says so, turned to the crew member while he says it, and then walks to his ship)
           const K = CAPTAINS[captain.id] || {}, pp = people();
-          if (pp) { pp.captain.say(captain.id, K.signed); pp.captain.hold(captain.id, 8); askIn = 1.6; askWho = captain.id; }
+          if (pp) { pp.captain.say(captain.id, K.signed); pp.captain.hold(captain.id, 3); }
+          meet(captain.id); meeting = captain.id;
           lead('miner');
         },
         onLater: () => { done(); missions.declined(captain.id); const pp = people(); if (pp) { pp.captain.say(captain.id, (CAPTAINS[captain.id] || {}).no); pp.captain.release(captain.id, 30); } } });
@@ -74,22 +103,25 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     return true;
   }
   missions.on((captain, yes) => { if (yes && missions.ready(captain.id)) offer(captain); });
-  missions.onGo((captain, yes) => { if (yes) start('captain'); });
 
-  // ── the trip ──
-  function start(from = 'seat') {
+  // ── the trip: from the seat, by the crew member's own sitting down ──
+  let meeting = null;
+  function start() {
     const c = crew(), m = c && contractOf(c);
     if (!m || m.state !== 'signed' || trip || loading || card || !body()) return false;
+    // (never from anywhere else: nobody is put in the seat without being seen to get there)
+    if (boarding.where(body().pos) !== MISSIONS[m.id].ship + '/cockpit') return false;
     loading = true; prompt.hidden = true;
     if (input) input.enabled = false;
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
       if (!playing) { if (input) input.enabled = false; return; }
-      trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles, from,
+      trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, people, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles,
         onEnd: (r) => {
           lastRun = r; crane.awayHeld = false;
           if (input) input.enabled = playing;
-          if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.stage && pp.groups && pp.groups.minerShip) { const s = pp.groups.minerShip.find((x) => x && !x.who); if (s) try { pp.stage.put(m.captain, s, 0, 40); } catch (e) { /* he stays where he is */ } } }
+          // (home: the share waits; the captain, who waited by the ship, goes on with his day from where he is)
+          if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(m.captain, null); meeting = null; }
           else crane.awayHeld = true;
         } });
       api.trip = trip;
@@ -117,9 +149,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   }
   const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
-  let synced = null, tail = null, tailT = 0;
+  let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
   const api = {
-    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, hint, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
+    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, hint, meetSpot, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P;
       const c = crew(), m = c ? contractOf(c) : null;
@@ -129,9 +161,14 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         crane.awayHeld = !!(m && m.state === 'signed');
         if (first && playing && m && !trip) lead(m.state === 'signed' ? 'miner' : 'payout');
       }
-      if (askIn >= 0) { askIn -= dt; if (askIn < 0) { const pp = people(); if (pp && playing && !trip) pp.captain.askGo(askWho); } }
-      // (the line reached the hangar: on to the lift's foot, once the ship's cabin is in)
+      // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
+      // station's people are aboard; any other state: he is not)
+      const want = m && m.state === 'signed' ? m.captain : null;
+      if (want !== meeting && people()) { if (meeting && people().captain.meet) people().captain.meet(meeting, null); meeting = want; if (want) meet(want); }
+      // (the line reached the hangar: on to the lift's foot, once the ship's cabin is in; the ship stood somewhere else
+      // (set back in its proper place while the crew member was away): the line to its lift where it is now)
       if (lineTo === 'hangar' && guide.active === 'mission' && boarding.spots('miner')) lead('miner');
+      if (stoodAt !== (boarding.stands ?? 0)) { stoodAt = boarding.stands ?? 0; if (lineTo === 'lift' && guide.active === 'mission' && !trip && playing) lead('miner'); }
       if (trip) {
         if (playing) trip.update(dt);
         // (done: the captain's last words stay up a few seconds more)
@@ -150,7 +187,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     late() { if (trip) trip.late(); },
     get seated() { return !!(trip && trip.seated); },
     stop() { if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
-    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null }),
+    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
+      meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),
   };
   return api;
 }
