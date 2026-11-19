@@ -295,24 +295,27 @@ test('a rammed ship is shoved along the floor and turned, slows by itself, stays
     assert.deepEqual([O.p, O.yaw, O.v, O.w, O.moved], [[o.at[0], o.at[2]], 0, [0, 0], 0, false]);
     assert.equal(M.otherElements(O), null, 'reset, it is exactly where it is parked');
   }
-  // NOBODY IS HIT: it stops dead rather than come over someone standing on that floor
-  {
-    const W = parkedOthers(), O = W.L[0], zc = O.cfg.at[2], who = [O.cfg.at[0] - 11.5, zc + 1], S = M.makeShip(); M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
-    for (let t = 0; t < 9; t += DT) { M.stepShip(S, keys('forward'), DT, W.solid); for (const q of W.L) M.stepOther(q, DT, q === O ? [who] : null); }
-    assert.ok(O.moved && O.held > 0 && M.otherStill(O), 'rammed toward someone standing behind it, it is shoved, and stopped');
-    assert.ok(O.p[0] < O.cfg.at[0] - 1 && M.insideOther(O, [who[0], 1, who[1]], M.SHOVE.person + 0.6), `just short of them (shoved ${(O.cfg.at[0] - O.p[0]).toFixed(1)} m)`);
-    assert.ok(!M.insideOther(O, [who[0], 1, who[1]], M.SHOVE.person - 0.01), `never nearer than ${M.SHOVE.person} m, let alone over them`);
-    assert.ok(M.speedOf(S) < 0.6 && !M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN - 0.1)), 'and the Miner, pressing on, is stopped behind it');
-    // they step away: it goes on to the wall
-    holdWith(S, 5, ['forward'], W); assert.ok(Math.min(...cornersOf(O).map((c) => c[0])) < who[0] - 0.3, 'they gone, it can be shoved on');
-    // someone standing under its wing, as people do when it is parked: it does not move at all until they have gone
-    // (a wing's tip is lower than a head)
-    const W2 = parkedOthers(), O2 = W2.L[0], wing = [O2.cfg.at[0] - 4, zc + 5.2]; M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
-    assert.ok(M.insideOther(O2, [wing[0], 1, wing[1]], 0), '(they stand under its wing)');
-    for (let t = 0; t < 6; t += DT) { M.stepShip(S, keys('forward'), DT, W2.solid); for (const q of W2.L) M.stepOther(q, DT, q === O2 ? [wing] : null); }
-    assert.ok(O2.hits > 0 && O2.held > 0 && O2.p[0] === O2.cfg.at[0] && O2.p[1] === O2.cfg.at[2] && O2.yaw === 0, 'with someone under its wing it is hit and does not move');
-    assert.ok(M.speedOf(S) < 0.6 && !M.pointsOf(S).some((p) => M.insideOther(O2, p, SKIN - 0.1)), 'the Miner stopped against it, as against a wall');
-    holdWith(S, 3, ['forward'], W2); assert.ok(O2.p[0] < O2.cfg.at[0] - 1, `they gone, it is shoved (${(O2.cfg.at[0] - O2.p[0]).toFixed(1)} m)`);
+  // IT WAITS FOR NOBODY (the game's maker, 2026-11-19: "Aren't they supposed to be running away? If they are just
+  // standing there then then maybe they deserve to be hit."): someone standing behind it, or under its wing, does not
+  // hold it; whoever it comes over is pushed out of its way, a little at each step, and it goes just as far
+  for (const [what, dx, dz] of [['behind it', -11.5, 1], ['under its wing', -4, 5.2]]) {
+    const ram = (stand) => {
+      const W = parkedOthers(), O = W.L[0], zc = O.cfg.at[2], S = M.makeShip(); M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
+      let who = stand ? [O.cfg.at[0] + dx, zc + dz] : null, pushes = 0; const from = who && who.slice();
+      if (what === 'under its wing' && who) assert.ok(M.insideOther(O, [who[0], 1, who[1]], 0), '(they stand under its wing)');
+      for (let t = 0; t < 9; t += DT) {
+        M.stepShip(S, keys('forward'), DT, W.solid); for (const q of W.L) M.stepOther(q, DT);
+        if (!who || M.otherStill(O)) continue;
+        const to = M.pushedTo(O, who); if (to) { who = to; pushes++; }
+        assert.ok(!M.insideOther(O, [who[0], 1, who[1]], M.SHOVE.person - 0.03), `${what}: pushed clear of it at every step`);
+      }
+      return { O, S, who, from, pushes };
+    };
+    const A = ram(true), B = ram(false), far = Math.hypot(A.who[0] - A.from[0], A.who[1] - A.from[1]);
+    assert.ok(A.O.moved && M.otherStill(A.O) && A.O.p[0] < A.O.cfg.at[0] - 1, `${what}: rammed, it is shoved all the same (${(A.O.cfg.at[0] - A.O.p[0]).toFixed(1)} m)`);
+    assert.deepEqual([A.O.p, A.O.yaw], [B.O.p, B.O.yaw], `${what}: it goes exactly as far as with nobody there`);
+    assert.ok(A.pushes > 0 && far > 0.3, `${what}: they are pushed out of its way (${A.pushes} steps, ${far.toFixed(1)} m)`);
+    assert.equal(M.pushedTo(A.O, A.who), null, `${what}: and left clear of it`);
   }
   // a gentle push moves it too, slowly: no ram is needed
   const W = parkedOthers(), O = W.L[0], S = M.makeShip(); M.place(S, [DOOR.x - 2, 2.6, O.cfg.at[2]], M.facing([-1, 0, 0]));

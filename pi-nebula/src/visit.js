@@ -22,11 +22,12 @@
 //     nothing casts a shadow. (The wash: seen from outside, a red pane across the door's opening; from inside, the
 //     whole picture, cockpit and all.) It turns slowly on purpose: a little over one pulse a second.
 //   - THE PEOPLE IN THAT HANGAR RUN ABOUT (src/people.js runAbout): each to another of the places people stand in on
-//     that floor, and on again when they get there. NOBODY IS HIT: they never choose a place under the flown ship or
-//     near the parked one (under its wings neither), never a way that passes under either, and whoever one of the
-//     two is over when the alarm starts, or the flown ship comes over, runs clear at once; and the parked ship does
-//     not move while anyone is within half a metre of any part of it, and stops dead rather than come that near
-//     anyone (flymodel.js stepOther). When the alarm stops they finish the run they are on and go on with their day.
+//     that floor, and on again when they get there. They never choose a place under the flown ship or near the parked
+//     one (under its wings neither), never a way that passes under either, and whoever one of the two is over when
+//     the alarm starts, or the flown ship comes over, runs clear at once. THE PARKED SHIP WAITS FOR NOBODY (the game's
+//     maker, 2026-11-19: "Aren't they supposed to be running away? If they are just standing there then then maybe
+//     they deserve to be hit."): rammed, it slides whoever is beside it, and whoever it comes over is pushed out of
+//     its way (flymodel.js pushedTo, people.js push). When the alarm stops they finish their run and go on with their day.
 //   - NO BANNER, NO SCORE, NO DAMAGE, NO TIMER: nothing else happens. The few words along the top (the flying's own)
 //     say whose hangar it is; the seat never lets the pilot out there.
 //
@@ -82,7 +83,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     // (drawn, told: where it was last drawn and last told to be; parked, as the station has it, nothing is touched)
     return { O, cfg, zone, hangar, meshes: [...mine].filter((im) => !shared.has(im)), D: new THREE.Matrix4(), drawn: keyOf(O), told: [O.p[0], O.p[1], O.yaw], tellT: 0, clearT: 0, home: M.makeOther(cfg) };
   }).filter((v) => v.zone && v.hangar);
-  const counts = { alarms: 0, stops: 0, resets: 0, waits: 0, tells: 0, ran: 0, soundAsked: 0, soundHeard: 0 };
+  const counts = { alarms: 0, stops: 0, resets: 0, waits: 0, tells: 0, ran: 0, pushed: 0, soundAsked: 0, soundHeard: 0 };
   let flying = null, alarm = null, siren = null, sirenFor = null, phase = 0, runT = 0, near = null;
   const focus = new THREE.Vector3(); let focusOn = false;
 
@@ -186,7 +187,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     return out;
   }
   // (under the flown ship, while it is low; and anywhere near the parked ship, under its wings too: while the alarm
-  // is on it may be shoved at any moment, and it does not move while anyone is that near it)
+  // is on it may be shoved at any moment)
   function avoidFor(S, v) {
     const low = S.p[1] < A.low;
     return (pos) => {
@@ -204,8 +205,8 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
       // the ships: sliding on, drawn where they are, told where they stand
       for (const v of views) {
         const O = v.O, was = M.otherStill(O);
-        // (it stops dead rather than come over anyone on that floor: nobody is hit)
-        if (!was) M.stepOther(O, dt, feetOn(v));
+        // (it waits for nobody: whoever it comes over as it slides is pushed out of its way)
+        if (!was) { M.stepOther(O, dt); const pp = people(); if (pp && pp.push) counts.pushed += pp.push(v.hangar.box, (pos) => M.pushedTo(O, [pos.x, pos.z])); }
         draw(v);
         if (M.otherStill(O)) tell(v); else if ((v.tellT -= dt) <= 0) { v.tellT = A.tell; tell(v); }
         // THE RESET: the flown ship out of this hangar, and the hangar not being drawn. (Never onto anyone: whoever

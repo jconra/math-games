@@ -1609,10 +1609,26 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // hear an alarm and red lights started spinning around in the hanger and people started running around"). Called a
   // couple of times a second for as long as it lasts: everyone on that hangar's floor runs to somewhere else on it,
   // and on again when they get there. avoid(pos): where nobody goes nor passes (under the flown ship, in a shoved
-  // one); anyone it comes over runs out from under it at once. Nobody is hit, and nothing else is done to them: when
-  // it is no longer called they finish their run and go on with their day. -> how many are running
+  // one); anyone it comes over runs out from under it at once. Nothing else is done to them: when it is no longer
+  // called they finish their run and go on with their day. -> how many are running
   // (where they run to: the hangar's own spots, the places its people stand in their day, by its crates and round its
   // ship: each is known to be somewhere a person can get to and stand; failing those, anywhere free on its floor)
+  // PUSHED OUT OF A SHOVED SHIP'S WAY (src/visit.js; the game's maker, 2026-11-19, of someone standing right beside a
+  // parked ship as it is rammed: "If they are just standing there then then maybe they deserve to be hit."). B: that
+  // hangar's box; to(pos) -> [x, z] where the ship pushes whoever stands at pos, or null where it is not over them.
+  // They are moved there if a person can stand there (never into a wall or a crate), and run on from where they are
+  // put. -> how many were pushed
+  function push(B, to) {
+    let n = 0;
+    for (const P of list) {
+      if (P.hidden || P.away || P.scripted || P.pos.y > 2.4) continue;
+      if (P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising')) continue;
+      if (P.pos.x < B.min.x || P.pos.x > B.max.x || P.pos.z < B.min.z || P.pos.z > B.max.z) continue;
+      const t = to(P.pos); if (!t || !walls.free(t[0], P.pos.y, t[1], 0.2)) continue;
+      P.pos.x = t[0]; P.pos.z = t[1]; n++;
+    }
+    return n;
+  }
   const _rb = new THREE.Vector3(), runSpots = new Map();
   function runAbout(zoneId, { avoid = null } = {}) {
     const Z = W.room(zoneId); if (!Z) return 0;
@@ -1693,7 +1709,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return true;
     },
   };
-  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
+  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };
   return api;
 }
