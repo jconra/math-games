@@ -68,8 +68,10 @@ export function bayWalls(B, r = SKIN) {
   ];
 }
 
-export function buildSolid(lists, { box = OUTSIDE_BOX, voxel = VOXEL, reach = REACH, pad = 4 } = {}) {
-  const t0 = Date.now();
+// the work itself, in steps (it gives way every so many triangles and patches), so that a page can spread its third of
+// a second over a second or two of frames instead of stopping for it: solidJob below
+function* solidSteps(lists, { box = OUTSIDE_BOX, voxel = VOXEL, reach = REACH, pad = 4, bay = null } = {}) {
+  const t0 = Date.now(); let work = 0;
   const min = box.min.map((v) => Math.floor(v - pad)), max = box.max.map((v) => Math.ceil(v + pad));
   const nx = Math.ceil((max[0] - min[0]) / voxel), ny = Math.ceil((max[1] - min[1]) / voxel), nz = Math.ceil((max[2] - min[2]) / voxel), N = nx * ny * nz;
   // ── the patches: for each cube a sample fell in, the sum of the samples and of the ways their triangles face ──
@@ -95,12 +97,14 @@ export function buildSolid(lists, { box = OUTSIDE_BOX, voxel = VOXEL, reach = RE
       ux /= A; uy /= A; uz /= A; tris++;
       const longest = Math.max(Math.hypot(ex, ey, ez), Math.hypot(fx, fy, fz), Math.hypot(fx - ex, fy - ey, fz - ez)), m = Math.max(1, Math.ceil(longest / (voxel * 0.45)));
       for (let p = 0; p <= m; p++) for (let q = 0; q <= m - p; q++) { const u = p / m, v = q / m; drop(ax + ex * u + fx * v, ay + ey * u + fy * v, az + ez * u + fz * v, ux, uy, uz, 1); }
+      if (++work % 1200 === 0) yield;
     }
   }
   // ── the distances: each patch marks the cubes round it ──
   const far = reach, D = new Uint8Array(N).fill(255), R = Math.ceil(reach / voxel), half = voxel * 0.75;
   for (let c = 0; c < N; c++) {
     const s = slot[c]; if (s < 0) continue;
+    if (++work % 600 === 0) yield;
     const o = s * 7, w = sum[o + 6], px = sum[o] / w, py = sum[o + 1] / w, pz = sum[o + 2] / w;
     let ux = sum[o + 3], uy = sum[o + 4], uz = sum[o + 5]; const L = Math.hypot(ux, uy, uz) || 1; ux /= L; uy /= L; uz /= L;
     // (a cube where faces meet at a corner has no one way to face: it is a point there, not a flat patch)
@@ -137,14 +141,22 @@ export function buildSolid(lists, { box = OUTSIDE_BOX, voxel = VOXEL, reach = RE
     for (let s = 0; s <= steps; s++) { const t = s / steps; if (dist(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t) < r) return Math.max(0, (s - 1) / steps); }
     return 1;
   }
-  return { dist, away, clear, min, max, size: [nx, ny, nz], voxel, reach, stats: { triangles: tris, patches: n, cubes: N, bytes: N, ms: Date.now() - t0 } };
+  return { dist, away, clear, bay, min, max, size: [nx, ny, nz], voxel, reach, stats: { triangles: tris, patches: n, cubes: N, bytes: N, ms: Date.now() - t0 } };
 }
+// the work as a job: job.run(ms) does up to so many milliseconds of it and gives the solid once it is done (else
+// null); job.finish() does whatever is left at once
+export function solidJob(lists, opts) {
+  const it = solidSteps(lists, opts); let solid = null;
+  const step = () => { const r = it.next(); if (r.done) solid = r.value; };
+  return { get done() { return !!solid; }, run(ms = 6) { const t = Date.now(); while (!solid && Date.now() - t < ms) step(); return solid; }, finish() { while (!solid) step(); return solid; } };
+}
+export const buildSolid = (lists, opts) => solidJob(lists, opts).finish();
 
 // THE STATION, for a ship whose bay is `bay` (bayOf): the outside's own triangles, the other openings capped, the bay
-export function stationSolid({ bay = null, lists = null, look = STATION_LOOK } = {}) {
+// (stationJob: the same as a job, to be done a little each frame)
+export function stationJob({ bay = null, lists = null, look = STATION_LOOK, reach = REACH } = {}) {
   const own = lists || outsideTriangles(look);
   const open = bay ? [DOOR.x + 0.02, (bay.z0 + bay.z1) / 2] : null;
-  const S = buildSolid([...own, ...capsOf(open), ...(bay ? bayWalls(bay) : [])]);
-  S.bay = bay;
-  return S;
+  return solidJob([...own, ...capsOf(open), ...(bay ? bayWalls(bay) : [])], { reach, bay });
 }
+export const stationSolid = (opts) => stationJob(opts).finish();

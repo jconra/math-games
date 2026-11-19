@@ -39,7 +39,7 @@
 //   F.close()
 import * as THREE from 'three';
 import * as M from './flymodel.js';
-import { stationSolid, bayOf } from './flysolid.js';
+import { stationJob, bayOf } from './flysolid.js';
 import { DOOR } from '../kit/outside-plan.js';
 
 export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3 };
@@ -87,9 +87,11 @@ const CSS = `
 .pfl-card input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: #ffd560; flex: 0 0 auto; }
 .pfl-card small { display: block; color: #a7b0ba; font-size: 13px; margin-top: 2px; }
 .pfl-x { position: absolute; right: 8px; top: 8px; width: 34px; height: 34px; font-size: 20px !important; background: transparent !important; color: #cfd8e2 !important; }
-.pfl.is-touch .pfl-help { left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom)); }
+.pfl.is-touch .pfl-help { left: 0; right: 0; max-width: none; bottom: max(10px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.pfl.is-touch .pfl-help ul { pointer-events: auto; }
 .pfl.is-touch .pfl-helptab { margin: 5px auto 0; }
-.pfl.is-touch .pfl-help ul { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); width: max-content; max-width: 86vw; }
+/* (on a phone the help opens as a card in the upper part of the screen, clear of the sticks and the buttons; a tap on it puts it away) */
+.pfl.is-touch .pfl-help ul { position: fixed; top: max(150px, 20vh); bottom: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: 90vw; background: rgba(13, 17, 23, 0.95); box-shadow: inset 0 0 0 2px rgba(255, 205, 60, 0.75); }
 .pfl.is-touch .pfl-btns { left: 0; right: 0; max-width: none; justify-content: center; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 210px); padding: 0 10px; }
 .pfl.is-touch.is-seat .pfl-btns, .pfl.is-touch.is-watch .pfl-btns { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 52px); }
 .pfl.is-touch .pfl-jump { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 270px); }
@@ -97,11 +99,12 @@ const CSS = `
 @media (max-width: 640px) { .pfl-help li { font-size: 13.5px; } .pfl-b { height: 46px; } }
 `;
 
-// what a ship of this bay bumps into, made once (about a third of a second)
+// what a ship of this bay bumps into, made once, as a job (about a third of a second's work on a desktop, more on a
+// phone: done a little each frame while the ship sits on its pad, and finished at once if it is wanted sooner)
 const SOLIDS = new Map();
 export function solidFor(cfg, outside = null) {
   const key = cfg.id;
-  if (!SOLIDS.has(key)) SOLIDS.set(key, stationSolid({ bay: bayOf(cfg.pad[2]), lists: outside ? outside.triangles() : null }));
+  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: bayOf(cfg.pad[2]), lists: outside ? outside.triangles() : null }));
   return SOLIDS.get(key);
 }
 
@@ -111,7 +114,7 @@ export function startFlying(ctx, opts = {}) {
   const B = boarding.ships.find((s) => s.id === cfg.id);
   if (!B || !B.M) throw new Error('flying: the ' + cfg.id + '\'s cabin is not in');
   if (!document.getElementById('pfl-css')) { const st = document.createElement('style'); st.id = 'pfl-css'; st.textContent = CSS; document.head.appendChild(st); }
-  const S = M.makeShip(cfg), solid = solidFor(cfg, outside);
+  const S = M.makeShip(cfg), job = solidFor(cfg, outside);
   const set = { invertY: !!(opts.settings && opts.settings.invertY) };
   const say = opts.words || (() => {});
   let goal = opts.goal || 'leave', auto = !pilot, plan = null, startIn = pilot ? 0 : 1.4, view = opts.view === 'behind' ? 'behind' : 'cockpit';
@@ -145,6 +148,7 @@ export function startFlying(ctx, opts = {}) {
   inv.checked = set.invertY;
   inv.addEventListener('change', () => { set.invertY = inv.checked; if (opts.onSettings) opts.onSettings({ ...set }); });
   let helpShut = null;      // (the help corner: open on a wide screen, behind its tab on a phone, until it is asked for or put away)
+  helpEl.querySelector('ul').addEventListener('pointerdown', (e) => { if (touch && e.pointerType === 'touch') { e.preventDefault(); press('help'); } });
   // (a button is pressed as a finger touches it, or as the mouse comes up on it, not by the browser's own click: a
   // second finger, tapping a button while the first holds a stick, makes no click at all; a click with no press before
   // it is a key pressed on the button, and is taken too)
@@ -225,7 +229,7 @@ export function startFlying(ctx, opts = {}) {
   addEventListener('pointermove', onMove); canvas.addEventListener('pointerdown', onDown); addEventListener('pointerup', onUp); canvas.addEventListener('contextmenu', onMenu);
   document.addEventListener('pointerlockchange', onLock);
 
-  const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, solid) : M.planLeave(S, solid));
+  const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, job.finish()) : M.planLeave(S, job.finish()));
   function press(a) {
     if (closed || !on) return false;
     if (a === 'controls') { card.hidden = !card.hidden; if (!card.hidden && mouse === 'fly') setMouse('pointer'); return true; }
@@ -335,7 +339,7 @@ export function startFlying(ctx, opts = {}) {
       // (let go, the look round the ship swings back behind it)
       if (!looking()) { const k = Math.exp(-VIEW.orbit.back * dt); orbit.yaw *= k; orbit.pitch *= k; if (Math.abs(orbit.yaw) > Math.PI) orbit.yaw -= Math.sign(orbit.yaw) * 2 * Math.PI; }
       _look.set(...bh.look).applyMatrix4(now);
-      const a = [_look.x, _look.y, _look.z];
+      const a = [_look.x, _look.y, _look.z], solid = job.finish();
       // (never through a wall: where it would be behind one (in the bay, under its roof) it follows lower, and failing
       // that is brought in along its line to the ship as far as is clear)
       let best = -1;
@@ -364,7 +368,7 @@ export function startFlying(ctx, opts = {}) {
   if (outside) outside.flying = cfg.room;
 
   const api = {
-    S, solid, cfg,
+    S, cfg, get solid() { return job.finish(); },
     get on() { return on && !closed; }, get view() { return view; }, get auto() { return auto; }, get mouse() { return mouse; }, get offered() { return offered; }, get goal() { return goal; }, set goal(g) { goal = g; painted = ''; },
     set panel(v) { panelUp = !!v; },
     update(dt) {
@@ -385,7 +389,9 @@ export function startFlying(ctx, opts = {}) {
       }
       pend.dx = pend.dy = 0;
       const was = S.landed;
-      M.stepShip(S, C, dt, solid);
+      S.padBusy = !!(crane.padBusy && crane.padBusy());
+      // (what it bumps into: a little of that work each frame on the pad, all that is left of it the moment it is off)
+      M.stepShip(S, C, dt, S.landed ? job.run(S.power ? 12 : 6) : job.finish());
       if (was && !S.landed) { if (liftMouse && pilot && !auto && canLock) { liftLock = 1.5; capture(true); } liftMouse = false; painted = ''; }
       if (liftLock > 0) liftLock -= dt;
       if (!was && S.landed) { setMouse('pointer'); auto = !pilot; plan = null; painted = ''; pose(dt); if (opts.onLanded) opts.onLanded(); if (closed || !on) return; }

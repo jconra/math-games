@@ -204,7 +204,8 @@ function settle(S, dt, solid) {
   const T = S.settle, P = S.cfg.pad, G = SETTLE; T.t += dt;
   const e = vOf(S.q), ang = len(e), off = Math.hypot(S.p[0] - P[0], S.p[2] - P[2]);
   // (turning, it keeps its feet clear of the floor)
-  const lined = ang < 0.012 && off < 0.05, wantY = lined ? P[1] : Math.max(P[1] + G.hold, Math.min(S.p[1], P[1] + G.low));
+  // (S.padBusy: someone is standing on the pad (the view says so): it waits over it until they have gone)
+  const lined = ang < 0.012 && off < 0.05 && !S.padBusy, wantY = lined ? P[1] : Math.max(P[1] + G.hold, Math.min(S.p[1], P[1] + G.low));
   const stepA = Math.min(ang, Math.max(0.05, Math.min(G.turn, ang * 3.5)) * dt);
   S.q = ang < 1e-6 ? [0, 0, 0, 1] : qUnit(qMul(qOf(mul(e, -stepA / ang)), S.q));
   const to = [P[0] - S.p[0], 0, P[2] - S.p[2]], stepM = Math.min(off, Math.max(0.05, Math.min(G.move, off * 2.2)) * dt);
@@ -261,7 +262,7 @@ function backOff(S, solid) {
   if (!solid || S.landed || inBay(S.p, S.cfg)) return [];
   let least = 99, at = null;
   for (const pt of pointsOf(S)) { const d = solid.dist(pt[0], pt[1], pt[2]); if (d < least) { least = d; at = pt; } }
-  if (least > SKIN + 4) return [];
+  if (least > Math.min(SKIN + 4, (solid.reach || 3) - 0.05)) return [];      // (nothing within the distances the solid keeps)
   const n = solid.away(at[0], at[1], at[2], [0, 0, 0]);
   return n[0] || n[1] || n[2] ? [{ to: add(S.p, mul(n, 14)), face: turn(S.q, [1, 0, 0]), speed: 5, near: 1.5, stop: true }] : [];
 }

@@ -414,6 +414,9 @@ export function makeCrane({ W, walls, boarding = null }) {
       return true;
     },
     get aloft() { return aloft; },
+    // is anyone standing on the Miner's pad? (a ship being flown down onto it waits over it, as the landing above does;
+    // not those aboard it: the crew member's own body stays in the parked seat while it flies)
+    padBusy: () => !!ship && eyesNow.some((e) => e.y < 2 && Math.hypot(e.x - ship.at.x, e.z - ship.at.z) < 7 && !(boarding && boarding.inside && boarding.inside(e))),
     landing: () => (mode === 'landing' ? Math.min(1, landT / LANDING.secs) : null),
     flight: () => (flight ? { pods: flight.pods.map((p) => ({ yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), end: p.end, thrust: +p.set.thrust.toFixed(3) })), engine: flight.main ? +flight.main.thrust.toFixed(3) : null, cool: +cool.toFixed(3), drawn: flight.drawn, air: air ? +air.disc.material.uniforms.strength.value.toFixed(3) : null } : null),
     voxels: () => voxels || (voxels = reachVoxels(W, L.site)),

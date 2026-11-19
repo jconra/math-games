@@ -230,6 +230,12 @@ test('flown in by hand: low and slow over its pad, it sets itself down where it 
   assert.deepEqual(S.p, M.MINER.pad, 'exactly on the pad');
   assert.deepEqual(S.q, [0, 0, 0, 1], 'turned nose out to the door, though it came in nose first');
   assert.equal(bumps, 0, 'touching nothing');
+  // with someone standing on the pad it waits over it, and comes down once they have gone
+  const W = M.makeShip(); M.place(W, [M.MINER.pad[0] + 0.5, 1.1, -5], M.facing([1, 0, 0])); W.padBusy = true;
+  hold(W, 6, []);
+  assert.ok(!W.landed && W.settle && W.p[1] >= M.SETTLE.hold - 0.01, `someone on the pad: it waits ${W.p[1].toFixed(2)} m over it`);
+  W.padBusy = false; hold(W, 4, []);
+  assert.ok(W.landed, 'the pad clear: down it comes');
   // off the pad's middle, or fast, or far, it does not
   const F = M.makeShip(); M.place(F, [M.MINER.pad[0] + 9, 0.6, -5], M.facing([1, 0, 0])); hold(F, 3, []);
   assert.ok(!F.landed && !F.settle, 'nine metres from the pad\'s middle is not over it');
