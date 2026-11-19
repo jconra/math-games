@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import * as M from '../src/flymodel.js';
 import { stationSolid, bayOf, SKIN, capsOf } from '../src/flysolid.js';
 import { OUTSIDE_BOX, DOOR, HANGARS, OPENINGS } from '../kit/outside-plan.js';
+import { standElements, frameOf, into, outOf, yawOf as turnOf, isParked } from '../src/standing.js';
+import { planCycle, valueAt, canAt, moveMounts } from '../kit/crane-plan.js';
 
 const STATION = JSON.parse(readFileSync(new URL('../kit/rooms/station.json', import.meta.url), 'utf8'));
 const SOLID = stationSolid({ bay: bayOf(M.MINER.pad[2]) });
@@ -396,6 +398,11 @@ test('the guide: the keys that would bring the ship to its parking place, bright
   let last = 2; for (let d = 30; d >= 0; d -= 0.5) { const v = at([P[0] - d, 0, P[2]]).keys.forward; assert.ok(v <= last + 1e-9, 'never brighter as it comes nearer'); last = v; }
   { const T = M.makeShip(); M.place(T, [P[0], 2, P[2]], leaning(25)); const k = M.guideOf(T).keys; assert.ok(k.rollLeft > 0.8 && k.rollRight === 0, 'rolled to the right: Q, brightly'); M.place(T, [P[0], 2, P[2]], leaning(5)); assert.ok(M.guideOf(T).keys.rollLeft < 0.4 && M.guideOf(T).keys.rollLeft > 0, 'nearly level: dimly'); }
   const lvl = at([P[0], 2, P[2]]); assert.equal(lvl.keys.rollLeft + lvl.keys.rollRight, 0, 'level: neither');
+  // rolled over and facing the wrong way: only the roll is asked for, by the right key, until it is the right way up
+  { const T = M.makeShip(); M.place(T, [P[0] + 2, 3, P[2]], leaning(70, [1, 0, 0], [-1, 0, 0])); const k = M.guideOf(T).keys;
+    assert.equal(Object.entries(k).filter(([, v]) => v > 0).map(([n]) => n).join(), 'rollLeft', 'rolled over, nose in and off its place: Q alone, of all the keys'); assert.equal(k.rollLeft, 1);
+    M.place(T, [P[0] + 2, 3, P[2]], leaning(-70, [1, 0, 0], [-1, 0, 0])); assert.ok(M.guideOf(T).keys.rollRight === 1 && M.guideOf(T).keys.rollLeft === 0, 'rolled the other way: E');
+    M.place(T, [P[0] + 2, 3, P[2]], leaning(20, [1, 0, 0], [-1, 0, 0])); const k2 = M.guideOf(T).keys; assert.ok(k2.rollLeft > 0 && (k2.noseRight === 1 || k2.noseLeft === 1), 'nearly the right way up: the roll, and the heading too'); }
   // far out, coming home: the heading asked for is the way in (never "turn round" out there), W is bright, and off the
   // door's middle line the key that brings it back onto it is lit
   const A = M.arrival(), home = M.makeShip(); M.place(home, A.p, A.q);
@@ -417,6 +424,82 @@ test('the guide: the keys that would bring the ship to its parking place, bright
   assert.ok(M.guideAt(m, P)[0] > 0.9 && M.guideAt(m, P)[0] < 1, 'far off, the goal is near the edge, ahead');
   M.place(m, [P[0] - 1, 0, P[2]], M.facing([1, 0, 0]));
   assert.ok(Math.abs(M.guideAt(m, P)[0] - 1 / (1 + M.GUIDE.space)) < 1e-9);
+});
+
+// ── EVERYTHING FOLLOWS THE SHIP AS IT LANDED (the game's maker, 2026-11-18: "if the pilot sets down and is still crooked
+// then I would hope the crane can just compensate for it ... Once they leave the hanger and come back then the ship
+// should be reset in it's proper parking spot") ──
+// a ship set down by hand, crooked and off its parking place, as the tests above set one down
+function crooked(at = [46.3, 1, -3.9], f = [-0.78, 0, 0.62]) { const S = M.makeShip(); M.place(S, at, M.facing(f)); setDown(S); assert.ok(S.landed && M.standing(S) === 'floor'); return S; }
+// the crane's places in the Miner's hangar, as the game finds them from its pieces (typed as in tests/crane.test.mjs)
+function craneSite() {
+  const Q = Math.PI / 2, mounts = [], sockets = [], bays = [];
+  for (const [z, out] of [[-7.208, -1], [-2.792, 1]]) for (const y of [3.764, 2.372]) for (const [x, yaw] of [[40.578, Q], [38.142, -Q]]) mounts.push({ at: [x, y, z], yaw, out: [0, out], upper: y > 3 });
+  for (const x of [29, 31.5, 34, 36.5]) for (const y of [0.75, 2.2]) sockets.push({ at: [x, y, -18.16], n: [0, 1], upper: y > 1.5 });
+  for (let j = 0; j < 8; j++) bays.push({ at: [46 + j * 1.15, 0.65, -16.8] });
+  return { carry: 6.28, rail: { y: 8.52, x: [21.1, 56.9], z: [-17.65, 7.65] }, home: [21.5, -5], mounts, sockets, bays, can: { half: 1.088, seat: 0.4, clear: 0.45, rise: 0.9, lift: 0.09 } };
+}
+
+test('where a ship stands is one move from where it is parked: its hull, its cabin and its walls are all moved by it', () => {
+  const S = crooked(), pad = M.MINER.pad, e = standElements(M.standOf(S), pad), fr = frameOf(e);
+  assert.equal(e.length, 16); assert.ok(!isParked(e));
+  // the point of it that stands on its pad's middle is where the pilot put it
+  const mid = outOf(fr, pad[0], pad[2]); assert.ok(Math.abs(mid[0] - S.p[0]) < 1e-9 && Math.abs(mid[1] - S.p[2]) < 1e-9 && Math.abs(fr.y) < 1e-12, 'the middle of it');
+  // every point of its hull as it is parked, moved, is that point of the ship as the flight model has it standing
+  const there = M.pointsOf(S);
+  M.MINER.points.forEach((pt, i) => { const w = outOf(fr, pad[0] + pt[0], pad[2] + pt[2]); assert.ok(Math.abs(w[0] - there[i][0]) < 1e-9 && Math.abs(w[1] - there[i][2]) < 1e-9, `hull point ${i}`); });
+  // a person in the cabin of the ship as it stands is felt where they would be in the cabin as it is parked, and back
+  for (const p of [[44.2, -4.1], [39.9, -6.6], [48, 2]]) { const q = into(fr, ...outOf(fr, ...p)); assert.ok(Math.abs(q[0] - p[0]) < 1e-9 && Math.abs(q[1] - p[1]) < 1e-9); }
+  // it is turned as the ship is turned, about straight up and no other way
+  assert.ok(Math.abs(turnOf(e) * 180 / Math.PI - yawOf(S)) < 1e-6, `turned ${yawOf(S).toFixed(1)} degrees`);
+  assert.deepEqual([e[1], e[4], e[5], e[6], e[9]], [0, 0, 1, 0, 0], 'never tipped');
+  assert.throws(() => standElements({ p: S.p, q: leaning(20) }, pad), /only turned about straight up/, 'a ship that leans is not standing');
+  // parked in its proper place there is no move at all
+  assert.equal(standElements(M.standOf(M.makeShip()), pad), null); assert.ok(isParked(null) && frameOf(null) === null);
+  assert.deepEqual(outOf(null, 3, 4), [3, 4]); assert.deepEqual(into(null, 3, 4), [3, 4]);
+  // the autopilot parks it exactly: nothing is left of the move
+  const A = M.makeShip(M.MINER, M.standOf(S)); autofly(A, M.planLand(A));
+  assert.equal(M.standOf(A), null, 'parked by the autopilot: its proper place again');
+});
+
+test('the crane\'s places on the ship follow it where it stands, and the whole round is worked there', () => {
+  const S = crooked(), pad = M.MINER.pad, e = standElements(M.standOf(S), pad);
+  const site = craneSite(), parked = site.mounts.map((m) => ({ ...m, at: [...m.at], out: [...m.out] }));
+  site.mounts = moveMounts(parked, e);
+  site.mounts.forEach((m, i) => {
+    const b = parked[i];
+    // each canister's middle and its tray slid out: the same point of the ship, as the flight model has the ship standing
+    for (const k of [0, 1]) { const w = M.turn(S.q, [b.at[0] + b.out[0] * k - pad[0], b.at[1], b.at[2] + b.out[1] * k - pad[2]]), at = [m.at[0] + m.out[0] * k, m.at[1], m.at[2] + m.out[1] * k]; assert.ok(Math.hypot(at[0] - S.p[0] - w[0], at[1] - w[1], at[2] - S.p[2] - w[2]) < 1e-9, `mount ${i}${k ? ', its tray out' : ''}`); }
+    // it still lies along the ship, and its tray still slides out sideways from it
+    const lie = [Math.sin(m.yaw), Math.cos(m.yaw)], n = nose(S);
+    assert.ok(Math.abs(Math.abs(lie[0] * n[0] + lie[1] * n[2]) - 1) < 1e-9, 'along the ship'); assert.ok(Math.abs(m.out[0] * n[0] + m.out[1] * n[2]) < 1e-9 && Math.abs(Math.hypot(...m.out) - 1) < 1e-9, 'its tray slides out sideways, as far as ever');
+    assert.equal(m.upper, b.upper);
+  });
+  // THE ROUND, worked on the ship where it stands
+  const plan = planCycle(site);
+  assert.deepEqual(plan.phases.map((p) => p.name), ['unload', 'load', 'clear', 'done']);
+  let off = 0;
+  plan.cans.forEach((can, c) => {
+    const first = can.spans.find((q) => q.where === 'held'), from = can.spans[0]; if (from.where !== 'mount') return;
+    const m = site.mounts[from.i], t = first.t0, hook = [valueAt(plan.T.x, t), valueAt(plan.T.hoist, t), valueAt(plan.T.z, t)];
+    // taken off its tray where the ship is, the cradle turned along it however it lies
+    assert.ok(Math.hypot(hook[0] - m.at[0] - m.out[0], hook[1] - m.at[1] - site.can.lift, hook[2] - m.at[2] - m.out[1]) < 1e-6, `canister ${c}: the cradle is on its tray`);
+    assert.ok(Math.abs(Math.sin(valueAt(plan.T.yaw, t) - m.yaw)) < 1e-6, 'turned along it'); assert.ok(valueAt(plan.T.tray[from.i], t) > 0.999, 'its tray out');
+    off++;
+  });
+  assert.equal(off, 8, 'all eight come off the ship');
+  // the hook never has to go where it cannot: every move of the round is inside the crane's reach
+  for (let t = 0; t < plan.length; t += 0.5) { const x = valueAt(plan.T.x, t), z = valueAt(plan.T.z, t); assert.ok(x >= site.rail.x[0] - 1e-9 && x <= site.rail.x[1] + 1e-9 && z >= site.rail.z[0] - 1e-9 && z <= site.rail.z[1] + 1e-9, `the hook at ${x.toFixed(1)}, ${z.toFixed(1)}`); }
+  // done: eight empties on the ship's mounts, where the ship stands, and the crane home
+  const end = plan.cans.map((_, c) => canAt(plan, c, plan.length));
+  assert.equal(end.filter((q) => q.where === 'mount').length, 8); assert.equal(end.filter((q) => q.where === 'bay').length, 8);
+  assert.ok(Math.abs(plan.T.x.last - site.home[0]) < 1e-9 && Math.abs(plan.T.z.last - site.home[1]) < 1e-9);
+  // nose in, across the bay, any way round on its floor: the same
+  for (const f of [[-1, 0, 0], [0, 0, 1], [0.5, 0, -0.87]]) { const T = crooked([40, 1, -5.2], f), st = craneSite(); st.mounts = moveMounts(parked, standElements(M.standOf(T), pad)); const p2 = planCycle(st); assert.equal(p2.phases.length, 4); for (let t = 0; t < p2.length; t += 1) { const x = valueAt(p2.T.x, t), z = valueAt(p2.T.z, t); assert.ok(x >= st.rail.x[0] - 1e-9 && x <= st.rail.x[1] + 1e-9 && z >= st.rail.z[0] - 1e-9 && z <= st.rail.z[1] + 1e-9); } }
+  // THE HANGAR SET OUT AFRESH (the player gone and come back): no move, and the mounts are exactly the parked ones
+  assert.deepEqual(moveMounts(site.mounts.length ? parked : [], null), parked, 'back in its proper parking place');
+  const again = craneSite(); again.mounts = moveMounts(parked, null);
+  assert.ok(Math.abs(planCycle(again).length - planCycle(craneSite()).length) < 1e-9, 'and the round is the usual one');
 });
 
 test('the help corner changes with the mode, in plain words', () => {

@@ -40,7 +40,7 @@
 //                                       on the hangar's room, and tells its walls about the doors)
 import * as THREE from 'three';
 import { setDoors } from './layout.js';
-import { planCycle, planFrom, stateAt, cleanAt, valueAt, gateAt, loadAt, steadyAt, startOf } from './crane-plan.js';
+import { planCycle, planFrom, stateAt, cleanAt, valueAt, gateAt, loadAt, steadyAt, startOf, moveMounts } from './crane-plan.js';
 import { CRANE, SOCKET, ARMS, GLOWS, DIGIT, GAUGE, craneSpan } from './smelter.js';
 import { MARKS_CAN } from './ships/miner-built.js';
 import { CANISTER_AT } from './ships/miner-built.hull.js';
@@ -234,11 +234,8 @@ export function makeOreLine(built, opts = {}) {
   // the Miner stood somewhere else than it is parked (the top of this file)
   function restand(M = null, S = null) {
     const a = M ? Math.atan2(M.elements[8], M.elements[0]) : 0, turned = a - standYaw; standYaw = a;
-    site.mounts.forEach((m, i) => {
-      const b = parked[i]; _v.set(...b.at); _w.set(b.out[0], 0, b.out[1]);
-      if (M) { _v.applyMatrix4(M); const len = _w.length(); _w.transformDirection(M).multiplyScalar(len); }
-      m.at = _v.toArray(); m.out = [_w.x, _w.z]; m.yaw = Math.atan2(Math.sin(b.yaw + a), Math.cos(b.yaw + a));
-    });
+    // (the mounts where the ship stands: kit/crane-plan.js, plain sums that node tests)
+    moveMounts(parked, M ? M.elements : null).forEach((to, i) => { const m = site.mounts[i]; m.at = to.at; m.out = to.out; m.yaw = to.yaw; });
     if (S) { for (const q of S.cans) if (q.where === 'mount') q.yaw = (q.yaw ?? 0) + turned; plan = planFrom(site, S, speed); }
     for (const C of cans) C.key = '';
     for (const m of mounts) m.trayAt = undefined;

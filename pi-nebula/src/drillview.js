@@ -66,8 +66,9 @@
 //   V.glideFrom({ eye, look, fov }, secs)   THE EYE'S WAY OUT OF THE SEAT (src/trip.js; the game's maker, 2026-11-18: "I
 //       defiantly don't want a dark screen with words"): the eye starts there, in the ship's own frame (the crew
 //       member's eyes in their seat), rises out of the ship and glides back to this view's own place over `secs`.
-//   V.glideTo({ eye, look, fov }, secs)     ... and back: from wherever it is, forward over the ship and down into the
-//       seat, where it stays; V.glided says when it is there
+//   V.glideTo({ eye, look, fov }, secs)     ... and back: from wherever it is (close on the claw, as a rule) round to
+//       this view's own place behind the ship first, then forward over the ship and down into the seat, the way it came
+//       out, where it stays; V.glided says when it is there
 //   V.run (src/drill.js makeRun), V.state() and V.rig (the rigs: where things are on the screen)
 import * as THREE from 'three';
 import { buildRoom, updateDoors, loadRoom } from '../kit/layout.js';
@@ -505,7 +506,10 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   let glide = null;
   const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   function glideFrom({ eye, look, fov }, secs = 2) { glide = { out: true, t: 0, secs, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; cam.fresh = false; cam.eye.copy(glide.eye); cam.look.copy(glide.look); cam.fov = fov; }
-  function glideTo({ eye, look, fov }, secs = 1.5) { glide = { out: false, t: 0, secs, eye0: cam.eye.clone(), look0: cam.look.clone(), fov0: cam.fov, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; }
+  function glideTo({ eye, look, fov }, secs = 1.5) {
+    const P = viewOf('look'), spot = (e, l, f) => ({ eye: new THREE.Vector3(...e), look: new THREE.Vector3(...l), fov: f });
+    glide = { out: false, t: 0, done: false, from: { eye: cam.eye.clone(), look: cam.look.clone(), fov: cam.fov }, legs: [{ to: spot(P.eye, P.look, P.fov), secs: secs * 0.7, down: false }, { to: spot(eye, look, fov), secs, down: true }] };
+  }
   const go = (stage) => { V.stage = stage; V.t = 0; V.sub = ''; V.subT = 0; V.log.push(stage); };
   const looking = () => V.stage === 'look' || V.stage === 'arrive' || V.stage === 'back';
 
@@ -850,11 +854,17 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       // (out of the seat: up through the canopy first, then back behind the ship; into it: forward over the ship
       // first, then down. So the eye passes over the hull, not along it)
       glide.t += dt;
-      const k = ease(glide.t / glide.secs), a = glide.out ? glide.eye : glide.eye0, b = glide.out ? want.eye : glide.eye, ky = glide.out ? 1 - (1 - k) * (1 - k) : k * k;
-      cam.eye.set(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * ky, a.z + (b.z - a.z) * k);
-      cam.look.lerpVectors(glide.out ? glide.look : glide.look0, glide.out ? want.look : glide.look, k);
-      cam.fov = (glide.out ? glide.fov : glide.fov0) + ((glide.out ? want.fov : glide.fov) - (glide.out ? glide.fov : glide.fov0)) * k;
-      if (glide.t >= glide.secs) { if (glide.out) glide = null; else glide.done = true; }
+      if (glide.out) {
+        const k = ease(glide.t / glide.secs), a = glide.eye, b = want.eye, ky = 1 - (1 - k) * (1 - k);
+        cam.eye.set(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * ky, a.z + (b.z - a.z) * k);
+        cam.look.lerpVectors(glide.look, want.look, k); cam.fov = glide.fov + (want.fov - glide.fov) * k;
+        if (glide.t >= glide.secs) glide = null;
+      } else if (!glide.done) {
+        const L = glide.legs[0], k = ease(glide.t / L.secs), a = glide.from, b = L.to, ky = L.down ? k * k : k;
+        cam.eye.set(a.eye.x + (b.eye.x - a.eye.x) * k, a.eye.y + (b.eye.y - a.eye.y) * ky, a.eye.z + (b.eye.z - a.eye.z) * k);
+        cam.look.lerpVectors(a.look, b.look, k); cam.fov = a.fov + (b.fov - a.fov) * k;
+        if (glide.t >= L.secs) { glide.from = L.to; glide.legs.shift(); glide.t = 0; if (!glide.legs.length) glide.done = true; }
+      }
     } else if (cam.fresh) { cam.eye.copy(want.eye); cam.look.copy(want.look); cam.fov = want.fov; cam.fresh = false; }
     else { const k = far && down && down.moved ? 1 : 1 - Math.exp(-CAM_RATE * dt); cam.eye.lerp(want.eye, k); cam.look.lerp(want.look, k); cam.fov += (want.fov - cam.fov) * k; }
     cameraIn.position.copy(cam.eye).applyMatrix4(G.matrix); cameraIn.up.set(0, 1, 0); cameraIn.lookAt(_v.copy(cam.look).applyMatrix4(G.matrix));

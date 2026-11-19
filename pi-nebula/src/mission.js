@@ -43,23 +43,28 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // ── where the captain waits: by the Miner's way in (its belly lift), a step out from the ship's side beside the lift's
   // foot, on the hangar's floor wherever the ship stands (off every patch the station's people keep off); nowhere
   // while the ship is in the air. Worked out again only when the ship stands somewhere else. ──
-  const MEET = { nose: [1.4, 2.6, 3.8], port: [4.7, 5.4, 6.1] };      // (m from the ship's middle, in its own frame; its lift's foot is 2.6 m to port)
-  let meetKey = null, meetAt = null;
-  function meetSpot() {
-    if (crane.aloft) return null;
-    const key = String(boarding.stands ?? 0); if (key === meetKey) return meetAt;
-    meetKey = key; meetAt = null;
-    const at = W.R.places?.ships?.miner, pp = people(); if (!at || !at.at) return null;
-    const nose = at.nose === '-x' ? -1 : 1, D = crane.standing || null, e = W.R.places?.entrances?.miner;
-    for (const port of MEET.port) for (const fwd of MEET.nose) {
-      // (parked nose out along +x, its port side is toward -z)
-      const p = new THREE.Vector3(at.at[0] + nose * fwd, 0, at.at[2] - nose * port); if (D) p.applyMatrix4(D);
-      const s = walls.snap(p.x, 0.4, p.z, 0.5);
-      if (!s || s.y > 0.3 || (pp && pp.noGo(s.x, s.z))) continue;
-      // (facing the way people come into the hangar)
-      meetAt = { pos: s, heading: e ? Math.atan2(e[0] - s.x, e[2] - s.z) : 0 }; return meetAt;
+  // (its port side first, where the lift's open side is; a ship set down hard by a wall on that side: the other side.
+  // skip: the n-th place that can be stood on, for a captain who found no way to an earlier one)
+  const MEET = { nose: [1.4, 2.6, 3.8], port: [4.7, 5.4, -4.7, -5.4] };      // (m from the ship's middle, in its own frame; its lift's foot is 2.6 m to port)
+  let meetKey = null, meetAll = [];
+  function meetSpot(skip = 0) {
+    // (in the air: nowhere to wait by it. Down again, wherever, there is: the pilot may still be in the seat)
+    const fl = trip && trip.fly; if (fl ? !fl.S.landed : crane.aloft) return null;
+    const key = String(boarding.stands ?? 0);
+    if (key !== meetKey) {
+      meetKey = key; meetAll = [];
+      const at = W.R.places?.ships?.miner, pp = people(); if (!at || !at.at) return null;
+      const nose = at.nose === '-x' ? -1 : 1, D = crane.standing || null, e = W.R.places?.entrances?.miner;
+      for (const port of MEET.port) for (const fwd of MEET.nose) {
+        // (parked nose out along +x, its port side is toward -z)
+        const p = new THREE.Vector3(at.at[0] + nose * fwd, 0, at.at[2] - nose * port); if (D) p.applyMatrix4(D);
+        const s = walls.snap(p.x, 0.4, p.z, 0.5);
+        if (!s || s.y > 0.3 || (pp && pp.noGo(s.x, s.z))) continue;
+        // (facing the way people come into the hangar)
+        meetAll.push({ pos: s, heading: e ? Math.atan2(e[0] - s.x, e[2] - s.z) : 0 });
+      }
     }
-    return null;
+    return meetAll.length ? meetAll[skip % meetAll.length] : null;
   }
   const meet = (id) => { const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(id, meetSpot); };
 

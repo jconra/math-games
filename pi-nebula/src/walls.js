@@ -47,6 +47,7 @@
 // whole box it glides through stops a person, always.
 import * as THREE from 'three';
 import { makeVoxels } from '../kit/bake.js';
+import { frameOf } from './standing.js';
 
 export const BODY = {
   r: 0.28,                       // a person's half width (m)
@@ -182,6 +183,12 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
     return false;
   }
   // doorsOpen: walk as if every door that can open were open (for working out a way)
+  // (the frame of a part stood somewhere else that a person is in or beside, if any: `turned` says whether any part is)
+  let turned = false;
+  function frameAt(p) {
+    for (const L of extra) { const fr = L.fr; if (!fr) continue; const dx = p.x - fr.x, dz = p.z - fr.z, lx = fr.c * dx - fr.s * dz, lz = fr.s * dx + fr.c * dz; if (lx >= L.box.min.x && lx <= L.box.max.x && lz >= L.box.min.z && lz <= L.box.max.z) return fr; }
+    return null;
+  }
   function move(pos, dx, dz, r = BODY.r, doorsOpen = false) {
     const dist = Math.hypot(dx, dz); if (dist < 1e-6) return 0;
     // (somewhere no person can stand, as when a ship's ramp has come down where they were: out to the nearest spot)
@@ -189,8 +196,12 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
     const n = Math.max(1, Math.ceil(dist / BODY.stride)), sx = dx / n, sz = dz / n, x0 = pos.x, z0 = pos.z;
     for (let i = 0; i < n; i++) {
       if (tryStep(pos, sx, sz, r, doorsOpen)) continue;
-      // a wall: slide along it (the station's walls run along x and z)
-      const a = Math.abs(sx) > 1e-6 && tryStep(pos, sx, 0, r, doorsOpen), b = Math.abs(sz) > 1e-6 && tryStep(pos, 0, sz, r, doorsOpen);
+      // a wall: slide along it (the station's walls run along x and z; in a part stood somewhere else, a ship set down
+      // crooked, they run along that part's own two ways, so a person slides along its cabin's walls as ever)
+      const fr = turned ? frameAt(pos) : null;
+      let a, b;
+      if (fr) { const l0 = fr.c * sx - fr.s * sz, l1 = fr.s * sx + fr.c * sz; a = Math.abs(l0) > 1e-6 && tryStep(pos, fr.c * l0, -fr.s * l0, r, doorsOpen); b = Math.abs(l1) > 1e-6 && tryStep(pos, fr.s * l1, fr.c * l1, r, doorsOpen); }
+      else { a = Math.abs(sx) > 1e-6 && tryStep(pos, sx, 0, r, doorsOpen); b = Math.abs(sz) > 1e-6 && tryStep(pos, 0, sz, r, doorsOpen); }
       if (a || b) continue;
       // head on into a door's frame, a little off its middle: eased sideways into the opening (a narrow ship's door
       // needs a person lined up within a hand's width, too fine for a thumb on a stick)
@@ -558,7 +569,7 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   function drop(key) {
     const L = parts.get(key); if (!L) return false;
     for (const e of L.doors) { const i = doors.indexOf(e); if (i >= 0) doors.splice(i, 1); }
-    parts.delete(key); extra = [...parts.values()];
+    parts.delete(key); extra = [...parts.values()]; turned = extra.some((X) => X.fr);
     return true;
   }
   // A PART STOOD SOMEWHERE ELSE: M turns it about straight up and moves it (a Matrix4; null, or no move at all: where it
@@ -567,9 +578,10 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
     const L = parts.get(key); if (!L) return false;
     const e = M ? M.elements : null, still = !e || (Math.abs(e[0] - 1) < 1e-9 && Math.abs(e[8]) < 1e-9 && Math.abs(e[12]) < 1e-9 && Math.abs(e[13]) < 1e-9 && Math.abs(e[14]) < 1e-9);
     if (e && (Math.abs(e[5] - 1) > 1e-6 || Math.abs(e[1]) > 1e-6 || Math.abs(e[4]) > 1e-6)) throw new Error('walls.place: ' + key + ' may only be turned about straight up and moved');
-    L.fr = still ? null : { c: e[0], s: e[8], x: e[12], y: e[13], z: e[14] };
+    L.fr = still ? null : frameOf(e);      // (src/standing.js: the sums every follower of a ship shares)
     L.wbox = still ? L.box : L.box.clone().applyMatrix4(M);
     for (const d of doors) if (d.part === key) d.fr = L.fr;
+    turned = extra.some((X) => X.fr);
     return true;
   }
   // A MOVING FLOOR: the part moved to dy (m, up from where it was made); whoever stands on its floors moves with it.

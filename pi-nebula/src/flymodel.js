@@ -111,9 +111,10 @@ export const MINER = {
   // ship standing any way round (all of the ship must stand inside it). Toward the door the crane's rails end 2.1 m
   // short of the door's line (the hook goes no further than x = 56.9: the station file's place `crane`, less its end
   // stops); by the wall of sockets and the rack of empties (z = -15.7, the rack's front) a tray slid out needs 0.8 m
-  // clear; on the other side a cart stands in the bay's edge (z = 5.2 on). A test holds these to the crane's own
-  // places (tests/flying.test.mjs).
-  floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.6] },
+  // clear; on the other side a cart stands in the bay's edge (from z = 5.0 on, about x 32.3 to 34.3: felt out in the
+  // game's own walls), and a canister in the cradle beside the ship there reaches 0.5 m past the ship's side. A test
+  // holds these to the crane's own places (tests/flying.test.mjs).
+  floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
 };
 
 // ── small sums ──
@@ -449,13 +450,22 @@ const glow = (err, [off, full]) => (err <= off ? 0 : Math.min(1, GUIDE.dim + (1 
 export function guideOf(S, set = {}) {
   const P = S.cfg.pad, G = GUIDE, deg = 180 / Math.PI, to = unturn(S.q, sub(P, S.p));
   const flat = Math.hypot(P[0] - S.p[0], P[2] - S.p[2]), near = flat < G.near;
-  const e = vOf(qMul(qConj(S.q), facing(near ? [1, 0, 0] : [P[0] - S.p[0], 0, P[2] - S.p[2]])));
-  // (as the autopilot's own sums have them: the roll about the nose, the nose up about its right, the nose right about its up)
-  let roll = e[0], up = e[2], right = -e[1];
+  // each asked for by itself, so that a ship rolled over and facing the wrong way is not told three things at once:
+  //   the roll that would bring its top up, its nose staying where it points;
+  //   the nose up or down to level;
+  //   the nose round to the heading asked for, across the floor, toward its own right or left.
+  // Rolled more than half way onto its side, only the roll is asked for, of all the keys: until it is the right way
+  // up, "right" and "up" would mean something else to the pilot than to the ship.
+  const F = turn(S.q, [1, 0, 0]), U = turn(S.q, [0, 1, 0]), R = turn(S.q, [0, 0, 1]), want = unit(near ? [1, 0, 0] : [P[0] - S.p[0], 0, P[2] - S.p[2]]);
+  const roll = Math.atan2(R[1], U[1]), upright = Math.cos(roll) > 0.7;
+  const fh = unit([F[0], 0, F[2]]), rh = cross(fh, [0, 1, 0]);
+  let up = upright ? -Math.asin(clamp(F[1], -1, 1)) : 0, right = upright && len(fh) > 0.5 && len(want) > 0.5 ? Math.atan2(dot(want, rh), dot(want, fh)) : 0;
   // (straight behind it, either way round is as near: to the right, so the arrow does not flicker)
   if (Math.abs(Math.abs(right) - Math.PI) < 0.05) right = Math.PI;
   const k = { forward: glow(to[0], G.move), reverse: glow(-to[0], G.move), right: glow(to[2], G.move), left: glow(-to[2], G.move), up: glow(to[1], G.rise), down: glow(-to[1], G.rise),
     rollRight: glow(roll * deg, G.roll), rollLeft: glow(-roll * deg, G.roll), noseUp: glow(up * deg, G.turn), noseDown: glow(-up * deg, G.turn), noseRight: glow(right * deg, G.turn), noseLeft: glow(-right * deg, G.turn) };
+  // (not the right way up: the roll alone, by its own key)
+  if (!upright) for (const n in k) if (n !== 'rollLeft' && n !== 'rollRight') k[n] = 0;
   if (S.landed) { for (const n in k) k[n] = 0; if (!canGetUp(S)) { const w = guideOf({ ...S, landed: false }, set).keys; for (const n of ['forward', 'reverse', 'left', 'right']) k[n] = w[n]; k.up = G.lift; } }
   const mouse = { up: set.invertY ? k.noseDown : k.noseUp, down: set.invertY ? k.noseUp : k.noseDown, left: k.noseLeft, right: k.noseRight };
   const sx = k.right - k.left, sy = k.reverse - k.forward, sl = Math.hypot(sx, sy);

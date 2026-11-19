@@ -8,7 +8,11 @@
 //   people.onWays(out)  pushes anyone standing on a parked ship's way in (it waits for them; people never call a ship's
 //                  way down: they do not board yet)
 //   people.noGo(x, z)   a patch of floor no person goes onto (job spots, ships' ways in, under the crane, the scanner)
-//   people.flee(x, z, r)  anyone within r of a point hurries off (the crane by hand, a load low over them)
+//   people.flee(x, z, r)  anyone within r of a point hurries off (the crane by hand, a load low over them); with
+//                  { inside(pos) }: anyone on a patch of any shape (under a ship coming down by hand: src/flying.js)
+//   people.captain.meet(id, where)  a captain gone to wait by their ship (MEET, below); meet(id, null): no longer
+//   (the patches kept off, the ways and the spots all follow a ship that stands somewhere else than it is parked, set
+//   down by hand: they are marked and worked out again whenever boarding.stands changes)
 //   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson, onPatch
 //   people.plan()  everyone's spots and ways, for the plan from above (the rigs)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
@@ -229,6 +233,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   let markedFor = null;
   const marksKey = () => (boarding?.stands ?? 0) + ':' + (crane?.on && crane.L ? crane.L.round + ':' + crane.L.length.toFixed(1) : '');
   function markAll() {
+    const t0 = performance.now();
     markedFor = marksKey();
     keepOff.fill(0); patches.length = 0; wayFeet.length = 0;
     // job spots: their rings
@@ -265,6 +270,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     // what glides by itself (the big scanner's ring)
     for (const D of W.built.glides || []) if (D.sweep && !D.sweep.isEmpty()) mark(D.sweep.min.x - KEEP_OFF.glide, D.sweep.min.z - KEEP_OFF.glide, D.sweep.max.x + KEEP_OFF.glide, D.sweep.max.z + KEEP_OFF.glide, 'scanner');
+    // (how often, and how long the last one took: for the rigs)
+    counts.marks = (counts.marks || 0) + 1; counts.marksMs = +(performance.now() - t0).toFixed(2);
   }
   markAll();
 
@@ -590,6 +597,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       else {
         alarms.planFailed++;
         if (P.act && P.act.spot) P.act.spot.bad = (P.act.spot.bad || 0) + 1;
+        if (P.act && P.act.meet && P.cap) P.cap.meetSkip = (P.cap.meetSkip || 0) + 1;      // (no way to that place by the ship: the next one)
         console.info('people: no way for ' + P.id + ' to ' + (P.act?.spot?.name || P.act?.kind) + (w ? ' (' + w.short + ' m short)' : ''));
         // (the scanner's two: once more after a moment, before the scan is given up)
         if (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic') && !P.act.retried) { P.act.retried = true; P.act.phase = 'go'; P.act.delay = rnd(1, 2); P.walking = false; continue; }
@@ -667,6 +675,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (markedFor !== marksKey()) {
       markAll(); stillV++;
       for (const P of list) { if (P.hidden || P.away || P.walking || P.scripted || !P.act || P.act.kind === 'walk' || ['sat', 'sitting', 'rising'].includes(P.act.phase)) continue; if (onPatch(P.pos.x, P.pos.z) || !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.22)) { if (P.cap && P.cap.busy) endOffer(P); next(P); } }
+      // (and anyone on their way across that ship's hangar: their way worked out again round the ship where it now is,
+      // or, their spot now under it, something else to do)
+      const hangars = new Set((boarding?.ships || []).filter((s) => s.lifts && s.lifts.length).map((s) => s.hangar));
+      for (const P of list) {
+        if (P.hidden || P.away || P.scripted || P.fleeing || !(P.walking || P.req) || !P.act || !P.act.spot || !P.zone || !hangars.has(P.zone.id)) continue;
+        const to = P.act.spot.pos;
+        if (P.act.kind === 'stand' && !P.act.meet && (noGo(to.x, to.z) || !walls.free(to.x, to.y, to.z, 0.26))) next(P); else route(P, to);
+      }
     }
     planning();
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
@@ -896,13 +912,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
 
   // ── MEET: a captain gone to their ship to wait for the player (the top of this file) ─────────────────────────
-  // K.meet(): where to wait, as it is now ({ pos, heading }), or null (nowhere just now: their ship is in the air).
+  // K.meet(n): where to wait, as it is now ({ pos, heading }), or null (nowhere just now: their ship is in the air);
+  // n: the n-th such place, for a captain who found no way to an earlier one (K.meetSkip, counted in planning()).
   // They walk there as anyone walks (a way worked out, round whoever stands in it), wait there for as long as it takes,
   // go to it again if it moves (the ship set down somewhere else) or if they are moved (a ship coming down sends them
   // running: flee), and with nowhere to wait they stand where they are until there is.
   const meetAct = (s) => ({ kind: 'stand', meet: true, step: { do: 'stand', for: [1e9, 1e9] }, spot: { pos: s.pos.clone(), heading: s.heading ?? null } });
   function meetStep(P) {
-    const K = P.cap, a = P.act, s = K.meet();
+    const K = P.cap, a = P.act, s = K.meet(K.meetSkip || 0);
     if (a && a.meet) { if (s && !P.req && a.spot.pos.distanceTo(s.pos) > 0.6) { release(P); begin(P, meetAct(s)); } return; }
     // (seated: up first, as anyone gets up)
     if (a && ['sat', 'sitting', 'rising'].includes(a.phase)) { if (a.phase === 'sat') a.len = 0; return; }
@@ -1101,7 +1118,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     meet(id, where = null) {
       const P = capOf(id); if (!P) return false; const K = P.cap;
       if (!where) { if (K.meet) { K.meet = null; if (P.act && (P.act.meet || P.act.meetWait)) next(P); } return true; }
-      K.meet = where; return true;
+      K.meet = where; K.meetSkip = 0; return true;
     },
     meeting(id) { const P = capOf(id); return P && P.cap.meet ? { walking: !!P.walking, planning: !!P.req, there: !!(P.act && P.act.meet && P.act.phase === 'do'), act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, away: !!P.away, pos: P.pos.toArray().map((v) => +v.toFixed(2)), to: P.act && P.act.meet ? P.act.spot.pos.toArray().map((v) => +v.toFixed(2)) : null } : null; },
     release(id, cool = FRIENDLY.answered) { const P = capOf(id); if (!P) return false; const K = P.cap; if (K.ask) { K.ask.close(); K.ask = null; } K.state = 'answered'; K.t = 0; K.hold = 2.5; K.cool = cool; return true; },
@@ -1565,7 +1582,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       for (const L of inside ? [d + away, d + away + 2.5, d + away + 5, d + away + 8] : [away + r]) {
         for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
           const a = a0 + da, p = walls.snap(x + Math.sin(a) * L, P.pos.y + 0.4, z + Math.cos(a) * L, 0.8);
-          if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body) && !(inside && inside(p))) { to = p; break; }
+          // (off a ship's patch: and off every patch and its margin, where a way can end)
+          if (p && !onPatch(p.x, p.z) && !someoneAt(p, P, LIFE.body) && !(inside && (inside(p) || noGo(p.x, p.z)))) { to = p; break; }
         }
         if (to) break;
       }

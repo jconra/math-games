@@ -90,7 +90,7 @@ export const SEAT = MINER.seat;
 const ROCKS = [[-9, 5.5, 34, 2.6], [11, 1.5, 46, 3.4], [-20, -3, 62, 5], [5, 9, 70, 4], [24, 6, 84, 7], [-34, 8, 98, 8.5], [2, -9, 58, 3], [-6, 0.5, 104, 6]];
 export const JUMP = { secs: 2.6, flash: 1.5 };   // the jump's picture: how long, and when its flash is whitest
 // the eye's glide between the seat and the drill's view outside the ship: out (begun under the jump's flash), back in (s)
-export const GLIDE = { out: 2.4, back: 1.5 };
+export const GLIDE = { out: 2.4, back: 1.6 };
 const FILL = 1.15;                               // a canister filled, at the rocks (s each)
 
 const CSS = `
@@ -115,7 +115,7 @@ const CSS = `
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's button and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 178px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
-@media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; max-width: 94vw; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
+@media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; left: 3vw; right: 3vw; transform: none; margin: 0 auto; width: fit-content; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; column-gap: 8px; row-gap: 0; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 `;
 
 // a plain grey rock: a lumpy twenty-sided ball, lit from one side by a few sums of its own (no lamps in the scene)
@@ -305,6 +305,8 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
             // home: outside the station, in sight of it; the flying is back, to come in and land
             arms.group.visible = false; rocks.group.visible = false; arms.rockOn = false; arms.armsAs = null;
             space(false);
+            // (the haul is in its canisters from here on: it is seen flown home with them as full as they came)
+            if (crane.aboard) crane.aboard(T.cans ? T.cans.map((c) => c.t) : null);
             if (fl) fl.arrive();
             say(iPilot ? 'home' : 'homeCrew');
           }
@@ -386,7 +388,7 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
     if (drill && drillOn) { drill.update(dt); T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
     // (done: the eye glides back down into the seat, and there the cockpit is round it again)
     if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.t = 0; drill.glideTo(seatEye(), GLIDE.back); }
-    if (T.phase === 'fromDrill' && (drill.glided || T.t > GLIDE.back + 1)) { endDrill(); next(); }
+    if (T.phase === 'fromDrill' && (drill.glided || T.t > GLIDE.back * 2 + 2)) { endDrill(); next(); }
   }
   function endDrill() {
     if (!drill) return;

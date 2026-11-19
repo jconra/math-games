@@ -38,8 +38,8 @@
 //     with all that rides on it, its cabin, lift and walls are told (boarding.stand), and the crane's own places on it
 //     (each mount, the way its canister lies, the way its tray slides: L.restand) are worked out again, so the round
 //     that follows takes the canisters off the ship where it stands, the cradle turned to however each lies. What
-//     stands within the crane's reach (for the crane worked by hand) is marked again with the ship where it is, the
-//     next time someone takes the controls. With the player gone from the hangar's area and it out of sight, the Miner
+//     stands within the crane's reach (for the crane worked by hand) is kept in two parts, the hangar and the ship,
+//     and the ship's part is asked where the ship stands, so nothing is marked again. With the player gone from the hangar's area and it out of sight, the Miner
 //     is back in its proper parking place (whether it goes away on a run of its own or waits for a contract).
 //   - DRAWN WITH ITS ROOM. The moving parts are the kit's door leaves, hung on the hangar's own room, so they are drawn
 //     only when it is.
@@ -64,6 +64,8 @@
 //   crane.take() / crane.give()    the controls (crane.mode: 'round' | 'handover' | 'live' | 'leaving' | 'landing' | 'away'
 //                                  | 'out': away with the player aboard)
 //   crane.depart() / crane.arrive({ flown, fills }) -> the haul's number / crane.back()   a run the player crews (above)
+//   crane.aboard(fills)            the haul in the ship's canisters while it is still out (the jump home: src/trip.js),
+//                                  so it is seen flying home with them as full as they came, not filling as it lands
 //   crane.fly(D, dt, how)          while it is out: the Miner drawn where it has been flown to (src/flying.js)
 //   crane.stand(D), crane.standing where the Miner stands when it is not parked in its proper place (above); the
 //                                  Matrix4 it stands by, or null
@@ -134,7 +136,7 @@ export function makeCrane({ W, walls, boarding = null }) {
   const grid = (x, z) => toGrid(site, x, z);
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
-  const world = { solid: (x, y, z) => voxels.full(x, y, z), get eyes() { return eyesNow; } };
+  const world = { solid: (x, y, z) => reachNow().full(x, y, z), get eyes() { return eyesNow; } };
   const oreOf = () => CAN_TONNES;   // (tonnes of metal in a full canister: one, src/jobs/smelter.js; it only weighs on the hook, nothing asks about it)
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
 
@@ -223,7 +225,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     ship.pods = pods;
     return flight;
   }
-  let landT = 0, legsDown = false, aloft = false;
+  let landT = 0, legsDown = false, aloft = false, loaded = false;
   function beginLanding() {
     L.reset(); t = 0; mode = 'landing'; landT = 0; legsDown = false;
     C.haul = { n: L.round, landed: false, at: performance.now() };
@@ -373,7 +375,7 @@ export function makeCrane({ W, walls, boarding = null }) {
       if (mode === 'live') return true;
       if (mode === 'leaving') { live = makeDrive(L.site, live.state, world, { ore: oreOf }); mode = 'live'; return true; }
       if (mode === 'landing' || mode === 'away' || mode === 'out') return false;
-      if (!voxels) voxels = reachVoxels(W, L.site, REACH.voxel, movedNow());
+      reachNow();
       handAt = L.clean(t);
       if (handAt == null) handAt = t;
       mode = 'handover';
@@ -399,10 +401,12 @@ export function makeCrane({ W, walls, boarding = null }) {
       if (!D && !ship.stand) return true;
       if (mode === 'leaving') { L.resume(live.state); live = null; mode = 'round'; t = 0; }
       if (mode === 'handover') { mode = 'round'; handAt = null; }
-      const done = t >= L.length - 1e-6, at = done ? L.length : (L.clean(t) ?? t), S = L.state(at);
+      // (out with a haul aboard, the round on it not begun: taken up from its very start)
+      const done = t >= L.length - 1e-6, at = done ? L.length : loaded ? t : (L.clean(t) ?? t), S = L.state(at);
       ship.stand = D ? (ship.stand || new THREE.Matrix4()).copy(D) : null;
       L.restand(ship.stand, S);
-      t = done ? L.length : 0; voxels = null; rate = 1;
+      t = done ? L.length : 0; rate = 1;
+      if (ship.stand) standInv.copy(ship.stand).invert();
       if (boarding && boarding.stand) boarding.stand('miner', ship.stand);
       if (!aloft) { shipAt(null); L.pose(t); posePieces(L.state(t), 0); }
       console.info('crane: the Miner stands ' + (ship.stand ? 'where it was set down' : 'in its proper parking place'));
@@ -429,15 +433,21 @@ export function makeCrane({ W, walls, boarding = null }) {
       if (mode === 'live' || mode === 'handover' || mode === 'leaving') return null;
       if (mode === 'landing') landed();
       aloft = false;
-      L.reset(fills); t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
+      // (the haul is aboard already if the trip said so on its way home: aboard, below)
+      if (!loaded) L.reset(fills);
+      loaded = false; t = 0; mode = 'round'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
       C.haul = { n: L.round, landed: true, at: performance.now(), flown: !!flown };
       shipAt(null); L.pose(0); posePieces(L.state(0), 0);
       if (boarding && boarding.hold) boarding.hold('miner', false);
       if (flightFx()) { flight.rest(); cool = 1; settle = 0; wind = 0; air.hide(); }
       return L.round;
     },
+    // THE HAUL ABOARD while the ship is still out (src/trip.js, under the flash of the jump home): its canisters as full
+    // as each came home, by mount (none given: all full), drawn on it as it is flown in. The round on them starts with
+    // arrive(), where the ship then stands.
+    aboard(fills = null) { if (mode !== 'out') return false; L.reset(fills); loaded = true; t = 0; L.pose(0); posePieces(L.state(0), 0); return true; },
     // the run given up: the Miner on its pad as it was, its round done
-    back() { if (mode !== 'out') return false; if (aloft) C.fly(null); mode = 'round'; t = L.length; L.pose(t); posePieces(L.state(t), 0); return true; },
+    back() { if (mode !== 'out') return false; if (aloft) C.fly(null); loaded = false; mode = 'round'; t = L.length; L.pose(t); posePieces(L.state(t), 0); return true; },
     // FLOWN (src/flying.js), while it is out with the player aboard: the Miner drawn where it has been flown to. D: a
     // Matrix4, from where it is parked to where it is now (null: parked again, its thrusters at rest). how: how it is
     // moving, for its thrusters and the air it blows down (kit/ships/flight.js): { acc, spin, hold, engine, heat } and
@@ -462,11 +472,21 @@ export function makeCrane({ W, walls, boarding = null }) {
     padBusy: () => !!ship && eyesNow.some((e) => e.y < 2 && Math.hypot(e.x - ship.at.x, e.z - ship.at.z) < 7 && !(boarding && boarding.inside && boarding.inside(e))),
     landing: () => (mode === 'landing' ? Math.min(1, landT / LANDING.secs) : null),
     flight: () => (flight ? { pods: flight.pods.map((p) => ({ yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), end: p.end, thrust: +p.set.thrust.toFixed(3) })), engine: flight.main ? +flight.main.thrust.toFixed(3) : null, cool: +cool.toFixed(3), drawn: flight.drawn, air: air ? +air.disc.material.uniforms.strength.value.toFixed(3) : null } : null),
-    voxels: () => voxels || (voxels = reachVoxels(W, L.site, REACH.voxel, movedNow())),
+    voxels: () => reachNow(),
     oreOf, shipAt,
   };
-  // (the rooms of the station that stand somewhere else than they are built: the Miner set down by hand)
-  const movedNow = () => (ship && ship.stand ? { [ship.zone.id]: ship.stand } : null);
+  // WHAT STANDS WITHIN THE CRANE'S REACH, in two parts, each marked once (the first time someone takes the crane's
+  // controls): the hangar itself, and the Miner as it is parked. A point is asked of the hangar where it is, and of the
+  // Miner where the Miner would have it if it were parked (brought there by the move that undoes where it stands). So
+  // a ship set down somewhere else costs nothing to mark again.
+  const standInv = new THREE.Matrix4(), _rp = new THREE.Vector3();
+  function reachNow() {
+    if (voxels) return voxels;
+    const still = reachVoxels(W, L.site, REACH.voxel, { skip: ship ? [ship.zone.id] : null }), own = ship ? reachVoxels(W, L.site, REACH.voxel, { only: [ship.zone.id] }) : null;
+    voxels = { still, own, ms: still.ms + (own ? own.ms : 0), tris: still.tris + (own ? own.tris : 0), kept: still.kept + (own ? own.kept : 0), bricks: still.bricks + (own ? own.bricks : 0),
+      full(x, y, z) { if (still.full(x, y, z)) return true; if (!own) return false; if (!ship.stand) return own.full(x, y, z); _rp.set(x, y, z).applyMatrix4(standInv); return own.full(_rp.x, _rp.y, _rp.z); } };
+    return voxels;
+  }
   // the screens, the swing, the aimed-at canister, the place lights: the pieces drawn on top of the kit's
   function posePieces(S, dt) {
     poseScreens(S); swing(dt, S);
@@ -509,9 +529,9 @@ function loadOfState(S, site) {
 // WHAT STANDS STILL WITHIN THE CRANE'S REACH: the hangar's walls, the parked Miner, the rack, the sockets' collars, the
 // stairs and the catwalk (the station's merged meshes), up to the hook's highest, each marked into REACH.voxel cubes
 // (the kit's own voxels, kit/bake.js). The bridge crane reaches the whole hangar; the floor itself is left out (the
-// crane's own check knows where the floor is). moved: { room id: Matrix4 }: a room that stands somewhere else than it is
-// built (the Miner set down by hand, src/crane.js stand): its triangles are marked where it stands.
-export function reachVoxels(W, site, size = REACH.voxel, moved = null) {
+// crane's own check knows where the floor is). skip, only: [room id]: all but these rooms, or these rooms alone (the
+// Miner is kept apart from the hangar: it may stand somewhere else than it is parked, src/crane.js reachNow).
+export function reachVoxels(W, site, size = REACH.voxel, { skip = null, only = null } = {}) {
   const t0 = performance.now(), top = site.carry + site.dims.hookTop + 0.4;
   const pad = site.can.half + REACH.pad;
   const box = new THREE.Box3(new THREE.Vector3(site.rail.x[0] - pad, -0.1, site.rail.z[0] - pad), new THREE.Vector3(site.rail.x[1] + pad, top, site.rail.z[1] + pad));
@@ -520,16 +540,15 @@ export function reachVoxels(W, site, size = REACH.voxel, moved = null) {
   const tb = new THREE.Box3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   const st = size * 0.5, inv = 1 / size, mx = V.min.x, my = V.min.y, mz = V.min.z;
   for (const z of W.built.zones) for (const k of ['solid', 'floor', 'glass', 'shield']) {
+    if ((skip && skip.includes(z.id)) || (only && !only.includes(z.id))) continue;
     const g = z.merged && z.merged[k]; if (!g) continue;
-    const mv = moved && moved[z.id] ? moved[z.id] : null;
     if (!g.boundingBox) g.computeBoundingBox();
-    if (!box.intersectsBox(mv ? tb.copy(g.boundingBox).applyMatrix4(mv) : g.boundingBox)) continue;
+    if (!box.intersectsBox(g.boundingBox)) continue;
     const p = g.attributes.position.array, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.length / 3;
     for (let t = 0; t < n; t += 3) {
       tris++;
       const ia = (ix ? ix[t] : t) * 3, ib = (ix ? ix[t + 1] : t + 1) * 3, ic = (ix ? ix[t + 2] : t + 2) * 3;
       a.set(p[ia], p[ia + 1], p[ia + 2]); b.set(p[ib], p[ib + 1], p[ib + 2]); c.set(p[ic], p[ic + 1], p[ic + 2]);
-      if (mv) { a.applyMatrix4(mv); b.applyMatrix4(mv); c.applyMatrix4(mv); }
       // (the floor's own triangles: the crane knows where the floor is)
       if (a.y < 0.03 && b.y < 0.03 && c.y < 0.03) continue;
       tb.makeEmpty().expandByPoint(a).expandByPoint(b).expandByPoint(c);

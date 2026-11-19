@@ -77,6 +77,7 @@
 import * as THREE from 'three';
 import * as M from './flymodel.js';
 import { stationJob, bayOf } from './flysolid.js';
+import { standElements } from './standing.js';
 import { DOOR } from '../kit/outside-plan.js';
 
 export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3 };
@@ -178,8 +179,8 @@ const CSS = `
 .pfl-seat button kbd { margin-left: 8px; background: rgba(0, 0, 0, 0.18); color: #1c1205; }
 .pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 112px); }
 @media (max-width: 640px) {
-  .pfl-guide { top: max(108px, calc(env(safe-area-inset-top) + 104px)); left: max(8px, env(safe-area-inset-left)); width: 138px; }
-  .pfl-holo { height: 126px; } .pfl-holo small { font-size: 10px; bottom: 3px; }
+  .pfl-guide { top: max(136px, calc(env(safe-area-inset-top) + 132px)); left: max(8px, env(safe-area-inset-left)); width: 152px; }
+  .pfl-holo { height: 136px; } .pfl-holo small { font-size: 9.5px; bottom: 3px; white-space: nowrap; }
 }
 `;
 
@@ -201,7 +202,7 @@ export function startFlying(ctx, opts = {}) {
   // WHERE IT STANDS: its proper parking place, or wherever it was last set down by hand (boarding has it: B.D, from
   // where it is parked to where it stands). As the flight model has it ({ p, q }), and back as that matrix.
   const standNow = () => { if (!B.moved) return null; const p = new THREE.Vector3(...cfg.pad).applyMatrix4(B.D), q = new THREE.Quaternion().setFromRotationMatrix(B.D); return { p: p.toArray(), q: q.toArray() }; };
-  const matrixOf = (st) => (st ? new THREE.Matrix4().compose(new THREE.Vector3(...st.p), new THREE.Quaternion(...st.q), new THREE.Vector3(1, 1, 1)).multiply(new THREE.Matrix4().makeTranslation(-cfg.pad[0], -cfg.pad[1], -cfg.pad[2])) : null);
+  const matrixOf = (st) => (st ? new THREE.Matrix4().fromArray(standElements(st, cfg.pad)) : null);
   const S = M.makeShip(cfg, standNow()), job = solidFor(cfg, outside);
   const set = { invertY: !!(opts.settings && opts.settings.invertY) };
   const say = opts.words || (() => {});

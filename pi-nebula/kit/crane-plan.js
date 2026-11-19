@@ -46,6 +46,12 @@
 //   steadyAt(plan, t, ahead)          for how many seconds each of those numbers stays as it is
 //   gateAt(plan, t)                   the patch of floor the crane is working over (or about to), or null
 //   startOf(site, state)              the standard start: full canisters on the ship, empties on the rack
+//   moveMounts(parked, e)             the ship's mounts as the ship STANDS, set down somewhere else than it is parked
+//                                     (a turn about straight up and a move across the floor: e, a Matrix4's 16 numbers;
+//                                     null: parked). The game's maker, 2026-11-18: "if the pilot sets down and is still
+//                                     crooked then I would hope the crane can just compensate for it ... it also has a
+//                                     head on it that can tilt to any angle needed". Nothing else of a round needs to
+//                                     know: every trip goes to a mount where it is, the cradle turned as its canister lies
 export const SPEED = {
   bridge: { v: 2.0, a: 0.8 },      // the bridge along the hangar (x): metres a second, and how fast it gets there
   trolley: { v: 1.5, a: 0.8 },     // the trolley along the bridge (y on the grid, z in the station)
@@ -88,6 +94,13 @@ function lastAt(list, t) {
   list.i = i; return list[i];
 }
 export const near0 = (a) => { a = ((a % TAU) + TAU) % TAU; return a > Math.PI ? a - TAU : a; };   // an angle as -180..180 degrees
+// the ship's mounts where the ship stands (the top of this file): each canister's middle, the way it lies, the way its
+// tray slides, all moved and turned with the ship; everything else about a mount is its own
+export function moveMounts(parked, e) {
+  if (!e) return parked.map((m) => ({ ...m, at: [...m.at], out: [...m.out] }));
+  const c = e[0], s = e[8], a = Math.atan2(s, c);
+  return parked.map((m) => ({ ...m, at: [c * m.at[0] + s * m.at[2] + e[12], m.at[1] + e[13], -s * m.at[0] + c * m.at[2] + e[14]], out: [c * m.out[0] + s * m.out[1], -s * m.out[0] + c * m.out[1]], yaw: Math.atan2(Math.sin(m.yaw + a), Math.cos(m.yaw + a)) }));
+}
 // the turn of the cradle nearest `from` that lies along `axis` (either way: the cradle is the same end for end)
 export const alongNear = (axis, from) => { let a = axis + Math.round((from - axis) / Math.PI) * Math.PI; return a; };
 
