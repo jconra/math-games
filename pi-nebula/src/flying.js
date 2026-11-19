@@ -366,8 +366,11 @@ export function startFlying(ctx, opts = {}) {
   // ── the keys ──
   const typing = (e) => { const t = e.target; return !!(t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox'); };
   function onKey(e) {
-    if (closed || !on || locked || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
+    if (closed || !on || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
     const a = M.KEYS[e.code]; if (!a) return;
+    // (the controls put away, for the jump computer's cards and the jump itself: the two views can still be changed, so
+    // a jump can be watched from the cockpit or from behind)
+    if (locked) { if (a === 'view' && !e.repeat) { e.preventDefault(); press('view'); } return; }
     e.preventDefault();
     // (E, down where the seat lets them out: get up; never by an E still held from rolling as it came down)
     if (a === 'rollRight' && seatUp) { if (eArmed && !e.repeat) press('getup'); return; }
@@ -386,8 +389,8 @@ export function startFlying(ctx, opts = {}) {
     if (closed || !on) return false;
     if (a === 'controls') { card.hidden = !card.hidden; if (!card.hidden && mouse === 'fly') setMouse('pointer'); return true; }
     if (a === 'help') { helpShut = !helpEl.classList.contains('is-shut'); painted = ''; return true; }
-    if (locked) return false;
     if (a === 'view') { view = view === 'cockpit' ? 'behind' : 'cockpit'; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; return true; }
+    if (locked) return false;
     // (the seat's prompt: out of the seat, for the pilot and for a crew member riding alike)
     if (a === 'getup') { if (!seatUp) return false; letGo(); opts.onGetUp(); return true; }
     if (!pilot) return false;

@@ -2,7 +2,15 @@
 // src/jobs/drill.js; nothing here is a copy), under the game's own sky, so it can be tried on a phone without walking
 // through the station. A few plain switches along the top: a new field, the question on or off, the question's
 // level. Errors show on the page (shared/oops.js).
-//   ?seed=7 the same field each time; ?ask=0; ?level=percent; ?bloom=0; ?rig=1 (for pictures)
+// IN STEP WITH THE GAME'S FLYING AT THE ROCKS (the game's maker, 2026-11-18: "Either way, you should be able to click on
+// an asteroid to travel over to it (If you want to fly and you signed up to be a pilot, you can click a button to fly
+// manually if you want)", and "If you signed up for both there can be a button that lets you switch tasks"): whoever
+// is in the lab has both jobs, so the button "Fly manually" is here, with the game's own flying (src/flying.js, joined
+// to the drill's view by src/fieldfly.js): the same keys, sticks, two views and help corner, the rocks to bump into,
+// the claw taking a rock the nose is brought up to, and "Back to the drill". And each new field is come to as in the
+// game: out of the far end of the wormhole (src/wormhole.js), seen from the seat, then the eye glides out to the
+// drill's view (?arrive=0: straight to the drill's view).
+//   ?seed=7 the same field each time; ?ask=0; ?level=percent; ?bloom=0; ?rig=1 (for pictures); ?arrive=0
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -11,6 +19,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createSky } from '../../world/sky.js';
 import { buildShip, makeDrillView } from '../../src/drillview.js';
+import { startFlying } from '../../src/flying.js';
+import { makeFieldFlying } from '../../src/fieldfly.js';
+import { makeWormhole } from '../../src/wormhole.js';
 import { seeded } from '../../src/drill.js';
 import { JOB as SCAN } from '../../src/jobs/drill.js';
 import { lotsWords, sellsFor } from '../../src/jobs/smelter.js';
@@ -61,22 +72,33 @@ const note = (w) => { $('note').textContent = w; };
 // ── the game ──
 // (the ship stands turned so the planet and its rings are off to the left of the looking view)
 const AT = new THREE.Matrix4().makeRotationY(-0.62);
-let ship = null, view = null;
+let ship = null, view = null, FF = null;
+// (what the flying needs of a game: the picture, the scene, the camera)
+const LABW = { renderer, scene, camera, after: new Set(), dust: null, sees: 2400 };
+const hole = makeWormhole({ scene, quality: matchMedia('(pointer: coarse)').matches ? 'medium' : 'high' });
+const kept = (() => { try { return JSON.parse(localStorage.getItem('pi-nebula.flightlab')) || {}; } catch (e) { return {}; } })();
 function start() {
+  if (FF) { FF.close(); FF = null; }
   if (view) view.close();
   const rand = st.seed != null ? seeded(st.seed + st.n) : Math.random; st.n++;
-  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, lab: true, flier: 'The pilot',
+  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, lab: true, flier: 'The autopilot', pilot: true, onFly: () => { if (FF) FF.fly(); },
     onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load${r.early ? " (home early, each part-full canister rounded to the nearest 1/8)" : ""}: ${lotsWords(sellsFor(r.store).lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.bare} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
-  window.DRILLLAB.view = view;
+  // THE FLYING, KEPT AT THE ROCKS, as in the game: from the seat while the wormhole's far end opens on the field, then
+  // the eye glides out to the drill's view ("flip up and down" is the Flight Lab's own, kept in this browser)
+  FF = makeFieldFlying({ W: LABW, drill: view, startFlying, pilot: true, flier: 'The autopilot', settings: kept, onSettings: (set) => { try { localStorage.setItem('pi-nebula.flightlab', JSON.stringify(set)); } catch (e) { /* blocked: not kept */ } }, words: () => {} });
+  if (Q.get('arrive') === '0') { hole.stop(); FF.out(0.01); } else hole.arrive({ onDone: () => { if (FF) FF.out(2.4); } });
+  window.DRILLLAB.view = view; window.DRILLLAB.field = FF;
 }
 $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
 levelEl.addEventListener('change', () => { setLevel(levelEl.value); });
 paint();
 
-window.DRILLLAB = { ready: false, view: null, renderer, scene, camera, stats, crew, st, start, three: THREE,
+// one step of the game's clock: the drill's view, the flying, the wormhole, then the eye
+function tick(dt) { view.update(dt); FF.update(dt); hole.update(dt); FF.aim(camera, dt); if (hole.on) hole.place(camera, FF.matrix); }
+window.DRILLLAB = { ready: false, view: null, field: null, hole, renderer, scene, camera, stats, crew, st, start, three: THREE,
   // (a rig's own clock: so many seconds of the game at once, then one picture)
-  step(secs, dt = 1 / 30) { for (let t = 0; t < secs; t += dt) { view.update(dt); view.aim(camera, dt); } frame(0); } };
+  step(secs, dt = 1 / 30) { for (let t = 0; t < secs; t += dt) tick(dt); frame(0); } };
 
 let last = performance.now(), held = false;
 function frame(dt) {
@@ -89,7 +111,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (!view || held) return;
-  view.update(dt); view.aim(camera, dt); frame(dt);
+  tick(dt); frame(dt);
 }
 window.DRILLLAB.hold = (on) => { held = !!on; };
 

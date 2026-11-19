@@ -539,7 +539,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   function glideFrom({ eye, look, fov }, secs = 2, wait = false) { glide = { out: true, t: 0, secs, wait, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; cam.fresh = false; cam.eye.copy(glide.eye); cam.look.copy(glide.look); cam.fov = fov; }
   function glideGo() { if (glide) glide.wait = false; }
   // the eye taken up from wherever the camera is now (the flying's view): it eases to this view's own place from there
-  function eyeFrom(c) { _m.copy(G.matrix).invert(); cam.eye.copy(c.position).applyMatrix4(_m); c.getWorldDirection(_v).multiplyScalar(40).add(c.position); cam.look.copy(_v).applyMatrix4(_m); cam.fov = c.fov; cam.fresh = false; look.yaw = look.pitch = 0; }
+  function eyeFrom(c) { glide = null; _m.copy(G.matrix).invert(); cam.eye.copy(c.position).applyMatrix4(_m); c.getWorldDirection(_v).multiplyScalar(40).add(c.position); cam.look.copy(_v).applyMatrix4(_m); cam.fov = c.fov; cam.fresh = false; look.yaw = look.pitch = 0; }
   function glideTo({ eye, look, fov }, secs = 1.5) {
     const P = viewOf('look'), spot = (e, l, f) => ({ eye: new THREE.Vector3(...e), look: new THREE.Vector3(...l), fov: f });
     glide = { out: false, t: 0, done: false, from: { eye: cam.eye.clone(), look: cam.look.clone(), fov: cam.fov }, legs: [{ to: spot(P.eye, P.look, P.fov), secs: secs * 0.9, round: true }, { to: spot(eye, look, fov), secs, down: true }] };

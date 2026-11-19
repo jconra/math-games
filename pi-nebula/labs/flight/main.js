@@ -5,8 +5,10 @@
 //
 // THE GAME'S MAKER asked for it so the flying can be tried by itself. What is the lab's own:
 //   - "Back on the pad" and "Outside, coming home" put the ship at the two places a mining run flies from;
-//   - the Jump button, offered once the ship is clear of the station as in the game, has nowhere to jump to here: it
-//     puts the ship where the jump home would (outside, in sight of the station);
+//   - the Jump button, offered once the ship is clear of the station as in the game, has no cards to answer and nowhere
+//     else to go here: it opens the game's own wormhole (src/wormhole.js: the tear in front of the ship, the mouth, the
+//     colours all round, the far end opening), which brings the ship out where the jump home would, outside and in
+//     sight of the station. Each jump has its own colours;
 //   - the autopilot leaves the station from the pad and comes in to land from outside;
 //   - "flip up and down" is kept in this browser (in the game it is kept with the crew member);
 //   - the landing guide (the small model and its blue hologram, and the lit keys) is up whenever the ship is in
@@ -24,7 +26,7 @@
 //
 // Address switches: ?q=low|medium|high  the picture's quality; ?view=behind  start in the view from behind;
 // ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a screenshot; ?seed=N  which of the
-// outside's windows are lit. window.LAB: { ready, W, F (the flying), boarding, crane, outside, visit, step }.
+// outside's windows are lit. window.LAB: { ready, W, F (the flying), hole (the wormhole), boarding, crane, outside, visit, step }.
 import * as THREE from 'three';
 import { loadStation } from '../../src/station.js';
 import { makeWalls } from '../../src/walls.js';
@@ -35,6 +37,7 @@ import { addOutside } from '../../src/outside.js';
 import { startFlying } from '../../src/flying.js';
 import { MINER } from '../../src/flymodel.js';
 import { sound } from '../../src/sound.js';
+import { makeWormhole } from '../../src/wormhole.js';
 
 const KEEP = 'pi-nebula.flightlab';
 const q = new URLSearchParams(location.search), HOLD = q.has('hold');
@@ -59,6 +62,8 @@ const pad = new THREE.Vector3(...MINER.pad), body = { pos: pad.clone().add(new T
 const ship = boarding.ships.find((s) => s.id === MINER.id);
 W.camera.position.set(pad.x + 13, 3.2, pad.z + 11); W.camera.lookAt(pad.x, 2.6, pad.z);
 
+// (the jump's own picture, as in the game: one for the lab)
+const hole = LAB.hole = makeWormhole({ scene: W.scene, quality: W.quality });
 let F = null, now = 0;
 function begin() {
   const sp = boarding.spots(MINER.id); body.pos.set(...sp.rooms.cockpit);
@@ -68,8 +73,10 @@ function begin() {
     onSettings: (s) => keep(s), words: (w) => { note.textContent = w; },
     // (the stand-in for the crew member stays in the seat of the ship as it stands)
     onStand: (moved) => { body.pos.applyMatrix4(moved); },
-    // (nowhere to jump to here: where the jump home would bring it out)
-    onJump: () => F.arrive(), onLanded: () => { F.goal = 'free'; },
+    // (the wormhole, as in the game; there is nowhere else to go here, so its far end opens where the jump home would
+    // bring the ship out. The controls are put away from the tear until the far end has opened, as in the game)
+    onJump: () => { if (hole.on) return; F.lock(true); hole.begin({ onShut: () => { F.arrive(); F.lock(true); }, onDone: () => F.lock(false) }); },
+    onLanded: () => { F.goal = 'free'; },
   });
   loading.remove(); LAB.ready = true;
 }
@@ -79,13 +86,14 @@ document.getElementById('home').addEventListener('click', (e) => { if (F) F.arri
 function tick(dt) {
   now += dt;
   if (!F && ship && ship.state === 'in') begin();
-  if (F) { F.update(dt); F.aim(W.camera, dt); }
+  if (F) { F.update(dt); hole.update(dt); F.aim(W.camera, dt); }
   boarding.update(dt, { player: body, eyes, camera: W.camera });
   crane.update(dt, { eyes, player: body });
   if (F) F.late();
   visit.update(dt, W.camera);
   sound.ears(W.camera);      // (the alarm is heard as coming from the hangar it is in)
   outside.update(W.camera, dt);
+  if (F && hole.on) hole.place(W.camera, F.matrix);
   W.frame(dt, now, eyes);
 }
 let last = 0;

@@ -131,6 +131,7 @@ const CSS = `
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's button and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 178px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
+@media (max-width: 640px) { .pmt.has-panel .pmt-count { display: none; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; left: 3vw; right: 3vw; transform: none; margin: 0 auto; width: fit-content; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; column-gap: 8px; row-gap: 0; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 `;
 
@@ -315,7 +316,10 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
         countEl.querySelector('em').textContent = T.filled >= CARRIES ? lotsWords(sellsFor(T.store).lots) : '';
         if (T.filled >= CARRIES) { T.phase = 'full'; T.t = 0; armsWant = 'stowed'; say('full'); }
       }
-      if (T.phase === 'full' && T.t > 3.2) { countEl.hidden = true; next(); }
+      // (THE PILOT'S SEAT ALONE IS NO LONGER THAN IT WAS: the two wormholes take 1.8 s more between them than the old
+      // flashes did, so the wait here is that much shorter. The count and what the load is stay up while the jump
+      // home is worked out, until the jump itself)
+      if (T.phase === 'full' && T.t > 1.4) next();
     },
     // home: flown in through the bay door and set down on its pad, by hand or on autopilot (src/flying.js); down, the
     // haul is aboard and the share is worked out
@@ -341,16 +345,19 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   // are all round the place is changed, unseen; they go on until the place ahead is made; then the far end opens on it.
   function startJump(st) {
     const toField = st.to === 'field';
+    countEl.hidden = true;
     wh.begin({
       onShut() { T.inField = toField; if (toField) arriveField(); else arriveHome(); },
       // (out to the rocks, signed for the drill: the drill's own ship and field have to be there)
       ready: () => !toField || !iDrill || !!drill || !!drillErr,
-      onOpen() { say(toField ? (st.mine ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew'); },
+      onOpen() {
+        say(toField ? (st.mine ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
+        // (home: the flying at the station is the pilot's again as the far end opens on the station)
+        if (!toField && fl) fl.lock(false);
+      },
       onDone() {
         // (at the rocks, signed for the drill: now the eye glides out of the seat to the drill's view)
         if (toField && ff) ff.out(GLIDE.out);
-        // (home: the flying at the station is the pilot's again, now that the station is ahead)
-        if (!toField && fl) fl.lock(false);
         next();
       },
     });
@@ -385,6 +392,9 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
   // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship)
   const seatEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640; return { eye: [iPilot ? SEAT.eye[0] : -SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]], look: tall ? SEAT.lookTall : SEAT.look, fov: tall ? SEAT.fovTall : SEAT.fov }; };
+  // (the flying's own view from behind, in the same frame: where the eye goes back to for whoever came out to the rocks
+  // in that view, so the jump home is theirs to watch from behind too)
+  const behindEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, b = MINER.behind; return { eye: [b.look[0], b.up, -b.back], look: b.look, fov: tall ? b.fovTall : b.fov }; };
   function openDrill() {
     if (drill || !drillKit) return;
     // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
@@ -412,8 +422,9 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
     if (drill && drillOn) { T.filled = drill.run.full; el.classList.toggle('has-panel', !!drill.panel); }
     // (done: the eye glides back down into the seat, the seat of this same ship out at the rocks; there the flying's
     // own view from the seat has it, and the jump home is worked out and made from there)
-    if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.t = 0; if (ff.mode === 'hand') ff.drill(); drill.glideTo(seatEye(), GLIDE.back); }
-    if (T.phase === 'fromDrill' && (drill.glided || T.t > GLIDE.back * 2 + 2)) { ff.sit('cockpit'); el.classList.remove('has-panel'); next(); }
+    // (back to whichever of the flying's two views they came out to the rocks in: into the seat, or behind the ship)
+    if (T.phase === 'drillDone' && T.t > 2.6) { T.phase = 'fromDrill'; T.t = 0; if (ff.mode === 'hand') ff.drill(); drill.glideTo(T.view === 'behind' ? behindEye() : seatEye(), GLIDE.back); }
+    if (T.phase === 'fromDrill' && (drill.glided || T.t > GLIDE.back * 2 + 2)) { ff.sit(T.view === 'behind' ? 'behind' : 'cockpit'); el.classList.remove('has-panel'); next(); }
   }
   function endDrill() {
     if (ff) { ff.close(); ff = null; api.field = null; }
