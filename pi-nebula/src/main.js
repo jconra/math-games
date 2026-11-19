@@ -45,7 +45,7 @@ import { makeMission } from './mission.js';
 import { addOutside } from './outside.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
-const BUILD = 4;                 // shown small on the title; goes up with index.html's ?v=
+const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
 const q = new URLSearchParams(location.search);
 const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
 
@@ -141,7 +141,7 @@ async function boot() {
   const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
-  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
+  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────

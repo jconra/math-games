@@ -59,10 +59,11 @@ export const CARDS = 3;      // the cards of a jump (its three lamps: distance, 
 export const LAMPS = ['Distance', 'Charge', 'Go'];
 
 // ── the missions ──
-// steps: { id, kind, role (who does it), ... }; kinds: 'leave' (out of the hangar on autopilot), 'jump' (the jump
+// steps: { id, kind, role (who does it), ... }; kinds: 'leave' (flown out of the hangar and clear of the station, by
+// hand or on autopilot: src/flying.js), 'jump' (the jump
 // computer: `cards` cards, then the jump `to` the field or home),
 // 'work' (at the field: the roles that work there, and how long the crew takes when the player has none of them),
-// 'land' (home on autopilot, the haul aboard)
+// 'land' (home: flown in through the bay door and set down on the pad, the haul aboard)
 export const MISSIONS = {
   mining: {
     id: 'mining', captain: 'ruiz', ship: 'miner', name: 'Mining run', roles: ['pilot', 'drill', 'engineer'],

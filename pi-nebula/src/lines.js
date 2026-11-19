@@ -58,7 +58,8 @@ export const RUN_TALK = {
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
     field: ['Kestrel, bring that one in. Okafor, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
     full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
-    home: ['There\'s the station. The autopilot has the landing.', 'Home. The autopilot takes her in.'],
+    home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down on our pad.'],
+    homeCrew: ['There\'s the station. Juno has the landing.', 'Home. Juno takes her in.'],
     landed: ['Good flying, {player}. Your share is at the smelter\'s controls.'],
     // (the crew member at the drill, src/drillview.js; and the lines for a run whose pilot is the captain's own)
     crewOut: ['We\'re clear of the station. Juno has the jump.', 'Clear of the station. Juno is working out the jump.'],

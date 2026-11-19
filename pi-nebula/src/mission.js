@@ -8,7 +8,7 @@
 //     (payoutCard: the panel's `card` hook), its prompt says so (hint), and a line on the floor leads to it; the right
 //     answer brings the pay, whatever was picked before it.
 //
-//   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, people, crew, save, body, put })
+//   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people, crew, save, body, put })
 //   mission.update(dt, P, playing) -> true while a trip has the player (seated: no walking, the trip's camera)
 //   mission.aim(camera, dt), mission.late()     the trip's camera and its last word on the picture
 //   mission.stop()                               the crew screen: a trip given up, a card put away
@@ -22,16 +22,16 @@ import { JOB as smelter } from './jobs/smelter.js';
 
 const LINE = { miner: '#ffd560', payout: '#ff8a3a' };
 
-export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {} }) {
+export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {} }) {
   let card = null, trip = null, loading = false, askIn = -1, askWho = null, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
   const nameOf = (id) => { const p = people(); const P = p && p.list.find((x) => x.id === id); return (P && P.name) || 'The captain'; };
   const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
 
   // ── the seat's prompt (the job prompt's own look) and a word at the top when a share is waiting ──
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
-  prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Take the Miner out to the rocks</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Sit at the controls and fly the Miner out</small></div><button type="button" class="pnj-go">Sit down<kbd>E</kbd></button>';
   // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
-  const promptFor = (m) => { const pilot = m.roles.includes('pilot'); prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; prompt.querySelector('small').textContent = pilot ? 'Take the Miner out to the rocks' : 'Ride out to the rocks with the crew'; };
+  const promptFor = (m) => { const pilot = m.roles.includes('pilot'); prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; prompt.querySelector('small').textContent = pilot ? 'Sit at the controls and fly the Miner out' : 'Sit down and ride out to the rocks with the crew'; };
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => start('seat'));
   addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start('seat'); } });
@@ -85,7 +85,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
       if (!playing) { if (input) input.enabled = false; return; }
-      trip = startTrip({ W, walls, boarding, crane, jobs, guide, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles, from,
+      trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles, from,
         onEnd: (r) => {
           lastRun = r; crane.awayHeld = false;
           if (input) input.enabled = playing;

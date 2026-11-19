@@ -8,10 +8,21 @@
 // jump to get back to the station."
 //
 // HOW IT IS DONE, plainly (what a fuller version would take is in ~/pw/space-math/MINING_1.md):
-//   - THE SHIP NEVER MOVES. The crew member sits in the parked Miner's own cockpit (its real cabin, src/boarding.js),
-//     the camera at the pilot's eyes. Leaving and landing are a fade; out there, the station is simply not drawn
-//     (W.alone: only the ship's own room; everything else hung on the scene is put away and brought back), so the
-//     station is never seen from outside. The sky is the game's one sky.
+//   - LEAVING AND LANDING ARE FLOWN (src/flying.js; the game's maker, 2026-11-18: "I want to see everything. If flying
+//     by hand isn't made, then lets make it. If they want auto-pilot, then let it take off and leave automatically. I
+//     defiantly don't want a dark screen with words"). The crew member sits in the Miner's own cockpit (its real cabin,
+//     src/boarding.js) and the ship really lifts off its pad, goes out through the bay door and flies clear of the
+//     station, by hand or on autopilot; with the pilot's seat left to the crew, the captain's own pilot flies and the
+//     crew member rides and watches. Clear of the station the jump is offered (a button, and J). Home, the ship comes
+//     out of its jump outside the station, in sight of it, and is flown in through the door and set down on its pad.
+//   - AT THE ROCKS THE SHIP DOES NOT MOVE (as before): from the jump's flash out to the jump's flash home it stands
+//     where it is parked and the station is simply not drawn (W.alone: only the ship's own room; everything else hung
+//     on the scene is put away and brought back). The crossing itself is the streaks and the flash, as it was: the
+//     wormhole, arriving at the rocks and flying there are the next pieces (HOOKS below). The sky is the game's one sky.
+//   - HOOKS FOR THE NEXT PIECES: the jump's picture is drawJump (the wormhole goes there, between `jumping` and the
+//     moment `jumpDone`); arriving at the rocks is the line marked ARRIVING in RUN.jump (the flying is put away there
+//     with fl.away(): flying on at the rocks would keep it instead and give it the rocks to bump into); the flight
+//     itself knows nothing of a mission (src/flying.js: goal, onClear, onJump, onLanded).
 //   - THE STEPS are the mission's own data (MISSIONS[..].steps), one runner here for each kind: 'leave', 'jump' (the
 //     job panel with the pilot's cards, src/jobs/pilot.js: three lamps, one lit by each right answer, and the jump
 //     fires by itself after the third), 'work' (the crew's drilling watched through the glass: the Miner's own arms, a
@@ -34,6 +45,7 @@
 //       people, crew, save, body, put, onCredits }; from: 'seat' | 'captain'
 //   T.update(dt) each frame; T.aim(camera, dt) after the game's own camera; T.late() just before the picture
 //   T.abort()   given up (the crew screen): back in the parked ship, the contract still signed
+//   T.fly       the flying, while there is one (src/flying.js): its own state, its keys by name (the rigs)
 //   T.state()   for the rigs
 import * as THREE from 'three';
 import { buildRoom } from '../kit/layout.js';
@@ -42,10 +54,10 @@ import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
 import { CARRIES, sellsFor, lotsWords } from './jobs/smelter.js';
 import { crewLoad } from './drill.js';
-import { stepsFor, land, LAMPS } from './missions.js';
+import { stepsFor, land, LAMPS, ROLES } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
-import { MINER } from './flymodel.js';
+import { MINER, flyingOf, setFlying } from './flymodel.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
@@ -124,6 +136,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill');
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
   let panel = null, arms = null, rocks = null, hidden = null, stand = null, sayT = 0, jumpT = -1, jumpDone = null, fireIn = -1, spin = 0, armsWant = 'stowed', cutT = 0;
+  // (the flying, src/flying.js: fetched as the crew member sits down; it lives from the seat to the landing)
+  let fl = null, flMod = null, flErr = null, flAsked = false;
   const name = crew.name || 'pilot';
   const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, ...more }[k] ?? ''));
   const pick = (L) => (L && L.length ? L[Math.floor(Math.random() * L.length)] : '');
@@ -142,14 +156,13 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       const keep = new Set([W.sky.object, S.cabin && S.cabin.group, arms && arms.group, rocks && rocks.group, P() && P().c.root].filter(Boolean));
       hidden = W.scene.children.filter((o) => !o.isLight && !keep.has(o) && o !== W.built.group && o.visible);
       for (const o of hidden) o.visible = false;
-      jobs.show(false); if (guide.active) guide.clear();
     } else {
       W.alone = null;
       for (const o of hidden || []) o.visible = true; hidden = null;
-      jobs.show(true);
     }
   }
-  // the trip's own things, made once behind the first fade: the two arms (live, where the parked ones are) and the rocks
+  // the trip's own things, made once as the crew member sits down: the two arms (live, where the parked ones are) and
+  // the rocks; neither is drawn until the ship is at the rocks
   function build() {
     if (!arms) {
       const zd = W.R.rooms.find((r) => r.id === S.zone.id);
@@ -163,7 +176,7 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       W.scene.add(arms.group);
     }
     if (!rocks) { rocks = rockField(S.M); W.scene.add(rocks.group); }
-    arms.group.visible = true;
+    arms.group.visible = false;
   }
 
   // ── the jump computer: the job panel with the pilot's cards, its three lamps on the card's top ──
@@ -206,32 +219,48 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   // ── the steps ──
   function next() { T.i++; T.t = 0; T.phase = ''; if (T.i >= steps.length) { finish(); return; } T.log.push('step ' + steps[T.i].id); }
   const RUN = {
-    // out of the hangar on autopilot: a fade, and the station is behind us
+    // out of the hangar: the crew member at the controls (or riding, the captain's own pilot flying), the ship really
+    // flown out through the bay door and clear of the station (src/flying.js). Then the jump: the pilot's own button,
+    // or by itself for the crew's pilot.
     leave(dt, st) {
-      if (!T.phase) { T.phase = 'dark'; T.fadeTo = 1; words('Leaving the hangar'); fadeWords(''); }
+      if (!T.phase) {
+        // (started from the captain, somewhere else in the station: a short plain fade, and they are in the seat; the
+        // cabin is built as anyone comes into its hangar)
+        const there = S.state === 'in' && boarding.where(P().pos) === M.ship + '/cockpit';
+        T.phase = there ? 'sit' : 'dark'; if (!there) T.fadeTo = 1; words(''); fadeWords('');
+      }
       if (T.phase === 'dark' && T.fade >= 1) {
-        // (started from the captain, wherever that was: aboard first; the cabin is built as anyone comes into its hangar)
         if (S.state !== 'in') {
-          fadeWords('Walking out to the Miner ...');
           if (!T.sent) { T.sent = true; const e = W.R.places?.entrances?.[M.ship]; if (e) { const s = walls.snap(e[0] + 4, e[1] + 0.4, e[2], 4); if (s) ctx.put(s, Math.PI / 2); } }
           if (T.t > 25) { console.error('trip: the ' + M.ship + '\'s cabin never came'); abort(); }
           return;
         }
         if (boarding.where(P().pos) !== M.ship + '/cockpit') { const sp = boarding.spots(M.ship), c = sp.doorIn.cockpit || sp.rooms.cockpit, s = walls.snap(c[0], c[1] + 0.2, c[2], 1.2, 0.15); if (s) ctx.put(s, 0); }   // (just inside the cockpit's door, on the cabin's deck)
+        T.phase = 'sit'; T.fadeTo = 0;
+      }
+      if (T.phase === 'sit') {
+        if (!flAsked) { flAsked = true; import('./flying.js').then((m) => { flMod = m; }).catch((e) => { flErr = e; console.error(e); if (window.oops) window.oops(e); }); }
+        if (flErr) { abort(); return; }
+        if (!flMod) return;
         stand = P().pos.clone();
         if (!crane.depart()) { abort(); return; }
-        build(); space(true);
-        // (the drill operator's game: fetched and its ship built now, behind the fade, so the field does not wait)
+        build(); jobs.show(false); if (guide.active) guide.clear();
+        // (the drill operator's game: fetched and its ship built now, so the field does not wait)
         if (iDrill && !drillKit) import('./drillview.js').then(async (m) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
-        fadeWords('The Miner lifts off its pad and heads out through the bay door, on autopilot.');
-        T.phase = 'away'; T.t = 0;
+        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+          settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
+          onClear: () => { T.clear = true; if (steps[T.i] && steps[T.i].kind === 'leave') say(iPilot ? 'out' : 'crewOut'); }, onJump: () => { T.jumpAsked = true; },
+          onLanded: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.landed = true; } });
+        api.fly = fl; T.sat = true; T.phase = 'fly'; T.t = 0;
       }
-      if (T.phase === 'away' && T.t > Math.max(2.2, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'clear'; say(iPilot ? 'out' : 'crewOut'); }
-      if (T.phase === 'clear' && T.fade <= 0) next();
+      // (clear of the station: on to the jump, when the pilot asks for it; the crew's own pilot goes straight on)
+      if (T.phase === 'fly' && T.clear && (!iPilot || T.jumpAsked)) { T.jumpAsked = false; next(); }
     },
     // the jump computer: three cards, three lamps, and the jump fires by itself
     jump(dt, st) {
       if (!T.phase) {
+        // (the ship steadies itself and holds where it is while the jump is worked out: the flying's controls put away)
+        if (fl && fl.on) fl.lock(true);
         T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Juno plots the jump home' : 'Juno plots the jump'));
         if (st.mine) { T.phase = 'cards'; openCards(); } else T.phase = 'crew';
       }
@@ -243,7 +272,21 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       }
       if (T.phase === 'jumping') {
         jumpT += dt;
-        if (!jumpDone && jumpT >= JUMP.flash) { jumpDone = true; T.inField = st.to === 'field'; rocks.group.visible = T.inField; if (T.inField) say(st.mine ? 'there' : 'crewJump'); else { say('home'); arms.rockOn = false; arms.armsAs = null; } }
+        // (the flash at its whitest: it is somewhere else)
+        if (!jumpDone && jumpT >= JUMP.flash) {
+          jumpDone = true; T.inField = st.to === 'field';
+          if (T.inField) {
+            // ARRIVING at the rocks: the ship stands where it is parked from here on, the station not drawn
+            if (fl) fl.away();
+            space(true); arms.group.visible = true; rocks.group.visible = true; camFresh = true; say(st.mine ? 'there' : 'crewJump');
+          } else {
+            // home: outside the station, in sight of it; the flying is back, to come in and land
+            arms.group.visible = false; rocks.group.visible = false; arms.rockOn = false; arms.armsAs = null;
+            space(false);
+            if (fl) fl.arrive();
+            say(iPilot ? 'home' : 'homeCrew');
+          }
+        }
         if (jumpT >= JUMP.secs) { jumpT = -1; drawJump(); next(); }
       }
     },
@@ -267,20 +310,21 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       }
       if (T.phase === 'full' && T.t > 3.2) { countEl.hidden = true; next(); }
     },
-    // home on autopilot: a fade, and down on the pad with the haul aboard
+    // home: flown in through the bay door and set down on its pad, by hand or on autopilot (src/flying.js); down, the
+    // haul is aboard and the share is worked out
     land(dt, st) {
-      if (!T.phase) { T.phase = 'dark'; T.fadeTo = 1; words('Landing'); fadeWords(''); }
-      if (T.phase === 'dark' && T.fade >= 1) {
-        arms.group.visible = false; rocks.group.visible = false; space(false);
+      if (!T.phase) { T.phase = 'fly'; T.landed = false; if (!fl) { console.error('trip: nothing to fly home in'); abort(); return; } }
+      if (T.phase === 'fly' && T.landed) {
+        fl.close(); fl = null; api.fly = null;
         T.n = crane.arrive({ flown: true });
         T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][Math.round(T.payout.tonnes)] || String(T.payout.tonnes) }); } catch (e) { /* no news */ }
-        fadeWords('The autopilot brings the Miner in through the bay door. Down on the pad: legs down, nozzle still hot.');
+        words('Down on the pad'); say(iPilot ? 'landed' : 'landedCrew');
         T.phase = 'down'; T.t = 0;
       }
-      if (T.phase === 'down' && T.t > Math.max(2.4, st.secs - 2 * FADE)) { T.fadeTo = 0; T.phase = 'up'; say(iPilot ? 'landed' : 'landedCrew'); }
-      if (T.phase === 'up' && T.fade <= 0) next();
+      // (a moment in the seat, the engine winding down; then on their feet)
+      if (T.phase === 'down' && T.t > Math.max(1.6, st.secs - 3)) next();
     },
   };
   // THE DRILL OPERATOR'S GAME at the field (src/drillview.js): a short fade, the view outside the ship, the game until
@@ -314,6 +358,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
   }
   function cleanUp() {
     endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
+    if (fl) { fl.close(); fl = null; api.fly = null; }
+    jobs.show(true);
     if (panel) { panel.close(true); panel = null; }
     removeEventListener('keydown', onKey); prompt.remove();
     space(false);
@@ -327,7 +373,8 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
 
   const _eye = new THREE.Vector3(), _look = new THREE.Vector3(), camLook = new THREE.Vector3(); let camFresh = true;
   const api = {
-    get done() { return T.done; }, get seated() { return !T.done && T.i >= 0 && !(steps[T.i].kind === 'leave' && T.phase !== 'away' && T.phase !== 'clear'); },
+    get done() { return T.done; }, get seated() { return !T.done && !!T.sat; },
+    fly: null,      // (the flying, while there is one: src/flying.js)
     update(dt) {
       T.clock += dt;
       // (the captain's bubble and the last fade outlive the trip a moment)
@@ -338,12 +385,15 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       T.t += dt;
       RUN[steps[T.i].kind](dt, steps[T.i]);
       if (T.done) return;
+      if (fl) { fl.panel = !!panel; fl.update(dt); if (T.done) return; }
       if (arms && arms.group.visible) { spin += dt * MB.ARMS.spin; MB.armStep(arms, T.inField ? armsWant : 'stowed', dt, { spin }); if (rocks) rocks.update(dt); }
       if (jumpT >= 0) drawJump();
     },
     // the camera: the pilot's eyes, looking out over the nose (turned clear of the job panel while it is up)
     aim(camera, dt = 1 / 60) {
       if (drill && drillOn) { drill.aim(camera, dt); return; }
+      // (near the station: the flying's own two views)
+      if (fl && fl.on) { fl.aim(camera, dt); camFresh = true; return; }
       if (!api.seated || !S.M) return;
       const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, up = !!panel;
       _eye.copy(inShip(iPilot ? SEAT.eye : [-SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]])); _look.copy(inShip(tall ? (up ? SEAT.lookTallPanel : SEAT.lookTall) : up ? SEAT.lookPanel : SEAT.look));
@@ -352,14 +402,14 @@ export function startTrip(ctx, { mission: M, roles, from = 'seat', onEnd = () =>
       const fov = tall ? SEAT.fovTall : SEAT.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     },
     // just before the picture: no haze out there (after the boarding's light has had its say)
-    late() { if (T.space && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; } },
+    late() { if (fl && fl.on) fl.late(); else if (T.space && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; } },
     abort,
     // (the rigs: the cut-scene and the fades hurried on)
     skip(secs = 1) { T.t += secs; if (T.phase === 'cut') cutT += secs; },
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
     state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n,
-      drill: drill ? drill.state() : null, store: T.store || null, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
+      fly: fl ? fl.state() : null, drill: drill ? drill.state() : null, store: T.store || null, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, fade: +T.fade.toFixed(2), arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };
   return api;

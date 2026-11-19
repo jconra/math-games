@@ -52,6 +52,7 @@ const CSS = `
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
 .pfl-help li { display: flex; align-items: baseline; gap: 9px; padding: 2px 0; font-size: 14px; color: #dfe6ee; }
 .pfl-help li kbd { flex: 0 0 auto; min-width: 54px; text-align: center; }
+.pfl.is-touch .pfl-help li kbd { min-width: 70px; font-family: inherit; font-size: 12.5px; padding: 4px 6px; }
 .pfl-help li.is-word { color: #ffd560; font-weight: 700; }
 .pfl-helptab { display: block; margin: 0 0 5px; height: 28px; padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #cfd8e2 !important; background: rgba(13, 17, 23, 0.84) !important; box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.32); }
 .pfl-help.is-shut ul { display: none; }
@@ -121,7 +122,7 @@ export function startFlying(ctx, opts = {}) {
   // ── the buttons, the help corner, the sticks ──
   const el = document.createElement('div'); el.className = 'pfl';
   el.innerHTML = `<div class="pfl-ring" hidden></div>
-    <div class="pfl-help"><ul></ul><button type="button" class="pfl-helptab" data-do="help" aria-label="Show or hide what the keys do">Keys <kbd>H</kbd></button></div>
+    <div class="pfl-help"><ul></ul><button type="button" class="pfl-helptab" data-do="help" aria-label="Show or hide what the keys do"><span>Keys</span> <kbd>H</kbd></button></div>
     <div class="pfl-holds is-l" hidden><button type="button" class="pfl-b" data-hold="up">Up</button><button type="button" class="pfl-b" data-hold="down">Down</button></div>
     <div class="pfl-holds is-r" hidden><button type="button" class="pfl-b" data-hold="rollLeft" aria-label="Roll left">Roll &#8630;</button><button type="button" class="pfl-b" data-hold="rollRight" aria-label="Roll right">Roll &#8631;</button></div>
     <div class="pfl-stick is-l" hidden><small>Fly</small><i></i></div><div class="pfl-stick is-r" hidden><small>Nose</small><i></i></div>
@@ -142,7 +143,16 @@ export function startFlying(ctx, opts = {}) {
   inv.checked = set.invertY;
   inv.addEventListener('change', () => { set.invertY = inv.checked; if (opts.onSettings) opts.onSettings({ ...set }); });
   let helpShut = null;      // (the help corner: open on a wide screen, behind its tab on a phone, until it is asked for or put away)
-  for (const b of $$('[data-do]')) b.addEventListener('click', (e) => { e.preventDefault(); press(b.dataset.do); b.blur(); });
+  // (a button is pressed as the finger or the mouse comes up on it, not by the browser's own click: a second finger,
+  // tapping a button while the first holds a stick, makes no click at all; a click with no press before it is a key
+  // pressed on the button, and is taken too)
+  for (const b of $$('[data-do]')) {
+    let down = false, at = 0;
+    b.addEventListener('pointerdown', (e) => { down = true; if (e.pointerType === 'touch') setTouch(true); });
+    b.addEventListener('pointerup', (e) => { if (!down) return; down = false; at = performance.now(); e.preventDefault(); press(b.dataset.do); b.blur(); });
+    b.addEventListener('pointercancel', () => { down = false; }); b.addEventListener('pointerleave', () => { down = false; });
+    b.addEventListener('click', (e) => { e.preventDefault(); if (performance.now() - at < 600) return; press(b.dataset.do); b.blur(); });
+  }
   for (const b of $$('[data-hold]')) {
     const a = b.dataset.hold, off = () => held.delete(a);
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (locked) return; if (e.pointerType === 'touch') setTouch(true); held.add(a); try { b.setPointerCapture(e.pointerId); } catch (x) { /* gone */ } });
@@ -157,6 +167,9 @@ export function startFlying(ctx, opts = {}) {
     box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
   }
   function setTouch(v) { if (touch === v) return; touch = v; if (v) setMouse('pointer'); painted = ''; }
+  // everything held is let go: the keys, the sticks, the mouse's last move (whenever the controls are put away: a
+  // finger lifted while its stick is hidden must not leave the stick pushed)
+  function letGo() { held.clear(); pend.dx = pend.dy = 0; rightDown = false; liftMouse = false; for (const k of ['l', 'r']) { sticks[k].x = sticks[k].y = 0; sticks[k].id = null; $('.pfl-stick.is-' + k + ' i').style.transform = ''; } }
 
   // ── the mouse: flying, or an ordinary pointer ──
   function capture(want) {
@@ -195,13 +208,13 @@ export function startFlying(ctx, opts = {}) {
     if (!e.repeat) press(a);
   }
   const onKeyUp = (e) => { const a = M.KEYS[e.code]; if (a) held.delete(a); if (a === 'up' && S.landed) liftMouse = false; };
-  const onBlur = () => { held.clear(); rightDown = false; };
   let liftMouse = false;
+  const onBlur = () => letGo();
   addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('blur', onBlur);
   addEventListener('pointermove', onMove); canvas.addEventListener('pointerdown', onDown); addEventListener('pointerup', onUp); canvas.addEventListener('contextmenu', onMenu);
   document.addEventListener('pointerlockchange', onLock);
 
-  const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S) : M.planLeave(S));
+  const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, solid) : M.planLeave(S, solid));
   function press(a) {
     if (closed || !on) return false;
     if (a === 'controls') { card.hidden = !card.hidden; if (!card.hidden && mouse === 'fly') setMouse('pointer'); return true; }
@@ -272,6 +285,7 @@ export function startFlying(ctx, opts = {}) {
     const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch });
     helpEl.querySelector('ul').innerHTML = rows.map(([k, w]) => (k ? `<li><kbd>${k}</kbd><span>${w}</span></li>` : `<li class="is-word"><span>${w}</span></li>`)).join('');
     helpEl.classList.toggle('is-shut', helpShut == null ? touch : helpShut);
+    $('.pfl-helptab span').textContent = touch ? 'Help' : 'Keys';
     const b = (name) => $(`.pfl-btns [data-do="${name}"]`), flying = pilot && !auto && !S.landed;
     b('power').hidden = !(pilot && S.landed && !auto); b('power').classList.toggle('is-on', S.power);
     $('[data-lift]').hidden = !(pilot && S.landed && !auto);
@@ -281,6 +295,7 @@ export function startFlying(ctx, opts = {}) {
     for (const k of $$('.pfl kbd')) if (k.closest('.pfl-btns, .pfl-jump, .pfl-helptab')) k.hidden = touch;
     $('.pfl-jump').hidden = !canJump;
     for (const s of $$('.pfl-stick, .pfl-holds')) s.hidden = !(touch && flying);
+    if (!flying && (sticks.l.id != null || sticks.r.id != null || sticks.l.x || sticks.l.y || sticks.r.x || sticks.r.y)) letGo();
     $('.pfl-ring').hidden = !(mode === 'fly' && !captured);
     // a few words on what is happening
     const outThere = S.p[0] > DOOR.face + 2;
@@ -377,18 +392,18 @@ export function startFlying(ctx, opts = {}) {
       if (W.scene.fog && k > 0) { W.scene.fog.near += k * k * 1e4; W.scene.fog.far += k * k * 2e4; }
       if (W.dust) W.dust.visible = dustWas && !out;
     },
-    lock(v) { locked = !!v; held.clear(); if (locked) { setMouse('pointer'); card.hidden = true; } painted = ''; paint(); },
+    lock(v) { locked = !!v; letGo(); if (locked) { setMouse('pointer'); card.hidden = true; } painted = ''; paint(); },
     // the ship has jumped: parked again where the station's rooms have it, nothing of the flying drawn or heard
     away() {
       if (closed) return;
-      M.park(S); S.power = true; auto = !pilot; plan = null; offered = false; held.clear(); setMouse('pointer');
+      M.park(S); S.power = true; auto = !pilot; plan = null; offered = false; letGo(); setMouse('pointer');
       crane.fly(null); boarding.fly(cfg.id, null); parked = true; now.copy(B.M); rig.matrix.copy(now); rig.visible = false;
       on = false; el.hidden = true; if (outside) outside.flying = null; restoreCamera();
     },
     // out of the jump home: outside the station, in sight of it
     arrive() {
       if (closed) return;
-      const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15;
+      const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15; letGo();
       goal = 'land'; offered = false; auto = !pilot; plan = null; startIn = pilot ? 0 : 0.8; on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; painted = '';
       if (outside) outside.flying = cfg.room;
       pose(1 / 60); paint();
@@ -396,7 +411,7 @@ export function startFlying(ctx, opts = {}) {
     // (the lab: back on its pad with the power off, as when first sat down in)
     reset() {
       if (closed) return;
-      M.park(S); S.power = false; S.engine = 0; auto = !pilot; plan = null; offered = false; everClear = false; held.clear(); setMouse('pointer');
+      M.park(S); S.power = false; S.engine = 0; auto = !pilot; plan = null; offered = false; everClear = false; letGo(); setMouse('pointer');
       on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room;
       pose(1 / 60); painted = ''; paint();
     },

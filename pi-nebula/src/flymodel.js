@@ -35,8 +35,8 @@ export const HELD = ['forward', 'reverse', 'left', 'right', 'up', 'down', 'rollL
 
 // ── the feel: easy for a child, like other games that have flying ──
 export const FEEL = {
-  speed: { forward: 40, reverse: 14, side: 12, up: 10 },        // the most, metres a second
-  push: { forward: 9, reverse: 7, side: 7, up: 6 },             // picking up speed, m/s each second
+  speed: { forward: 40, reverse: 14, side: 12, up: 8 },         // the most, metres a second
+  push: { forward: 9, reverse: 7, side: 7, up: 5 },             // picking up speed, m/s each second
   stop: { ahead: 12, side: 9, up: 8 },                          // slowing by itself, keys let go
   turn: 1.1, roll: 1.2, ease: 7,                                // the most it turns and rolls (radians a second); how quickly its turning follows
   mouse: 0.0022,                                                // the mouse held by the game: radians a pixel
@@ -47,7 +47,7 @@ export const FEEL = {
 export const AREA = { out: 120, back: 105 };
 // coming home: where the ship comes out of its jump, metres out from its own bay door, a little above its line, nose in
 export const ARRIVE = { out: 300, up: 9 };
-// low and slow over its pad it sets itself down: within `reach` of the pad's middle, its feet under `low`, slower than
+// low and slow over its pad it sets itself down: within `reach` of the pad's middle, its feet under `low`, moving across the floor slower than
 // `slow`; it turns no faster than `turn` and comes down at `down`
 export const SETTLE = { reach: 4.5, low: 1.2, slow: 3, level: 0.94, hold: 1.0, turn: 0.9, move: 2.2, down: 0.85 };
 
@@ -59,7 +59,9 @@ export const MINER = {
   // its hull as points in its own frame [ahead, up, right] (it is 15.5 m long, 6.3 m wide and 5.1 m tall on its legs,
   // its middle 1.2 m ahead of the middle of its length)
   points: box(-9.0, 6.8, 3.3, 5.1),
-  hover: 3.0, low: 2.0,              // over the floor in the bay, and over its pad before it comes down (the game's own landing: src/crane.js LANDING)
+  // how high the autopilot carries it through the bay (its top then 1.3 m under the door's lintel and 0.7 m under the
+  // crane's rail), and over its pad before it comes down (the game's own landing is at 3 m and 2 m: src/crane.js LANDING)
+  hover: 2.6, low: 2.0,
   // THE TWO VIEWS, in the ship's own kit frame (x to port, y up from its ground line, z to the nose:
   // ~/pw/space-math/SHIP_miner_arms.md). seat: the pilot's eyes and where they look, wide and on a phone, with the job
   // panel up (it covers the right of a wide screen and the bottom of a phone's) and without; the other seat is the same
@@ -127,7 +129,8 @@ export function boxDist(p, B = OUTSIDE_BOX) { return Math.hypot(Math.max(B.min[0
 export const clearOf = (p, was = false) => boxDist(p) > (was ? AREA.back : AREA.out);
 // where a ship comes out of its jump home: out from its own bay door, nose toward it
 export function arrival(cfg = MINER) { return { p: [DOOR.face + ARRIVE.out, cfg.hover + ARRIVE.up, cfg.pad[2]], q: facing([-1, 0, 0]) }; }
-const inBay = (p, cfg) => p[0] < DOOR.face + 1.5 && p[0] > cfg.pad[0] - 22 && Math.abs(p[2] - cfg.pad[2]) < DOOR.w / 2 + 1 && p[1] > -1 && p[1] < 12;
+// in its bay, or any of it still in the doorway (its tail is 9 m behind its middle; higher than this it would not fit under the lintel)
+const inBay = (p, cfg) => p[0] < DOOR.face + 11 && p[0] > cfg.pad[0] - 22 && Math.abs(p[2] - cfg.pad[2]) < DOOR.w / 2 + 1 && p[1] > cfg.pad[1] - 1 && p[1] < cfg.pad[1] + 3.6;
 
 // ── A SHIP ──
 export function makeShip(cfg = MINER) {
@@ -180,7 +183,7 @@ export function stepShip(S, input, dt, solid = null) {
   S.engine += ((0.15 + 0.85 * Math.max(0, C.move[0])) - S.engine) * Math.min(1, dt * 2.5);
   // low and slow over its own pad: it sets itself down
   const P = S.cfg.pad, up = turn(S.q, [0, 1, 0])[1];
-  if (C.move[1] <= 0 && Math.hypot(S.p[0] - P[0], S.p[2] - P[2]) < SETTLE.reach && S.p[1] - P[1] < SETTLE.low && len(S.v) < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 };
+  if (C.move[1] <= 0 && Math.hypot(S.p[0] - P[0], S.p[2] - P[2]) < SETTLE.reach && S.p[1] - P[1] < SETTLE.low && Math.hypot(S.v[0], S.v[2]) < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 };
   return S;
 }
 // eased back out of whatever it has come too near, keeping the speed that runs along it
@@ -252,8 +255,18 @@ export function wayRound(a, b, B = grown()) {
   }
   return [...pts, ...(best ? best.way : [b])];
 }
-// out of the hangar and clear of the station
-export function planLeave(S) {
+// started close against something (taken over beside a wall): first straight away from it, without turning, so the
+// ship's ends do not swing into it
+function backOff(S, solid) {
+  if (!solid || S.landed || inBay(S.p, S.cfg)) return [];
+  let least = 99, at = null;
+  for (const pt of pointsOf(S)) { const d = solid.dist(pt[0], pt[1], pt[2]); if (d < least) { least = d; at = pt; } }
+  if (least > SKIN + 4) return [];
+  const n = solid.away(at[0], at[1], at[2], [0, 0, 0]);
+  return n[0] || n[1] || n[2] ? [{ to: add(S.p, mul(n, 14)), face: turn(S.q, [1, 0, 0]), speed: 5, near: 1.5, stop: true }] : [];
+}
+// out of the hangar and clear of the station (solid: what it bumps into, if a start beside a wall is to be looked after)
+export function planLeave(S, solid = null) {
   const c = S.cfg, P = c.pad, clear = OUTSIDE_BOX.max[0] + AREA.out + 30;
   if (S.landed || inBay(S.p, c)) return [
     { to: [Math.max(S.p[0], P[0]), P[1] + c.hover, P[2]], face: [1, 0, 0], speed: 2.5, near: 0.25, stop: true },
@@ -262,19 +275,20 @@ export function planLeave(S) {
   ];
   // (already outside: straight away from the station's middle, as far as its area's edge and a little more)
   const mid = [(OUTSIDE_BOX.min[0] + OUTSIDE_BOX.max[0]) / 2, (OUTSIDE_BOX.min[1] + OUTSIDE_BOX.max[1]) / 2, (OUTSIDE_BOX.min[2] + OUTSIDE_BOX.max[2]) / 2];
-  const dir = unit(sub(S.p, mid)), need = Math.max(0, AREA.out + 30 - boxDist(S.p));
-  return need > 0 ? [{ to: add(S.p, mul(dir, need + 20)), speed: FEEL.speed.forward, near: 4, stop: true }] : [];
+  const off = backOff(S, solid), from = off.length ? off[0].to : S.p;
+  const dir = unit(sub(from, mid)), need = Math.max(0, AREA.out + 30 - boxDist(from));
+  return need > 0 ? [...off, { to: add(from, mul(dir, need + 20)), speed: FEEL.speed.forward, near: 4, stop: true }] : off;
 }
 // in through the bay door and down on the pad
-export function planLand(S) {
+export function planLand(S, solid = null) {
   const c = S.cfg, P = c.pad, y = P[1] + c.hover;
   const over = { to: [P[0], P[1] + c.low, P[2]], face: [1, 0, 0], speed: 3, near: 0.3, stop: true }, down = { down: true };
   if (S.landed) return [];
-  if (inBay(S.p, c)) return [{ to: [S.p[0], Math.max(S.p[1], P[1] + c.low), P[2]], face: unit([turn(S.q, [1, 0, 0])[0] || 1, 0, 0]), speed: 3, near: 0.4, stop: true }, over, down];
-  const gate = [DOOR.face + 90, y, P[2]], legs = [];
+  if (inBay(S.p, c)) return [{ to: [S.p[0], Math.min(Math.max(S.p[1], P[1] + c.low), y), P[2]], face: unit([turn(S.q, [1, 0, 0])[0] || 1, 0, 0]), speed: 3, near: 0.4, stop: true }, over, down];
+  const gate = [DOOR.face + 90, y, P[2]], legs = backOff(S, solid), from = legs.length ? legs[0].to : S.p;
   // (already on the door's own line, between the gate and the door: straight on in)
-  const lined = S.p[0] > DOOR.face + 8 && S.p[0] < gate[0] + 5 && Math.abs(S.p[2] - P[2]) < 7 && Math.abs(S.p[1] - y) < 5;
-  if (!lined) { for (const w of wayRound(S.p, gate)) legs.push({ to: w, speed: FEEL.speed.forward, near: 6, stop: true }); const last = legs[legs.length - 1]; last.stop = false; last.then = 14; }
+  const lined = !legs.length && S.p[0] > DOOR.face + 12 && S.p[0] < gate[0] + 5 && Math.abs(S.p[2] - P[2]) < 7 && Math.abs(S.p[1] - y) < 5;
+  if (!lined) { for (const w of wayRound(from, gate)) legs.push({ to: w, speed: FEEL.speed.forward, near: 6, stop: true }); const last = legs[legs.length - 1]; last.stop = false; last.then = 14; }
   legs.push({ to: [DOOR.face + 18, y, P[2]], face: [-1, 0, 0], speed: 14, near: 2, stop: true });
   legs.push({ to: [P[0], y, P[2]], face: [-1, 0, 0], speed: 6, near: 0.6, stop: true });
   legs.push(over, down);
@@ -320,14 +334,15 @@ function level(S, C, f) {
 // ── the help corner: what the keys do, by mode ──
 // mode: 'seat' (on the pad), 'fly' (the mouse flies), 'pointer' (the mouse is a pointer), 'watch' (the autopilot has
 // it, or a crew member who is not the pilot). -> [[key, words], ...]
+// touch: a phone has no keys: each line names the button or the stick on the screen instead
 export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false } = {}) {
-  const view = ['V', behind ? 'See from the cockpit' : 'See from behind'], look = behind && !touch ? [['R', 'Hold: look round the ship']] : [];
+  const view = [touch ? 'View' : 'V', behind ? 'See from the cockpit' : 'See from behind'], look = behind && !touch ? [['R', 'Hold: look round the ship']] : [];
   if (!pilot) return [['', 'The crew\'s pilot is flying'], view, ...look];
-  const autoLine = ['T', auto ? 'Autopilot off: fly it yourself' : 'Autopilot: it flies for you'], jump = canJump ? [['J', 'Jump']] : [];
+  const autoLine = [touch ? 'Autopilot' : 'T', auto ? 'Autopilot off: fly it yourself' : 'Autopilot: it flies for you'], jump = canJump ? [[touch ? 'Jump' : 'J', 'Jump']] : [];
   if (auto) return [['', 'The autopilot is flying'], autoLine, view, ...look, ...jump];
-  if (mode === 'seat') return [['P', 'Power'], ['Space', 'Lift off'], autoLine, view];
+  if (mode === 'seat') return touch ? [['Power', 'Switch the ship on or off'], ['Lift off', 'Hold it: up off the pad'], autoLine, view] : [['P', 'Power'], ['Space', 'Lift off'], autoLine, view];
+  if (touch) return [['Fly', 'Left stick: forward, back, left, right'], ['Nose', 'Right stick: point the nose'], ['Up Down', 'Hold: up, down'], ['Roll', 'Hold: roll'], autoLine, view, ...jump];
   const keys = [['W S', 'Forward, back'], ['A D', 'Left, right'], ['Space C', 'Up, down'], ['Q E', 'Roll']];
-  if (touch) return [['', 'Left stick: fly. Right stick: turn the nose'], autoLine, view, ...jump];
   const mouse = mode === 'pointer' ? [['F', 'Fly with the mouse']] : [['Mouse', 'Point the nose'], ['F', 'Free the mouse for the buttons']];
   return [...mouse, ...keys, autoLine, view, ...look, ...jump];
 }
