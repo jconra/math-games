@@ -426,7 +426,8 @@ export function outsideGear(opts = {}) {
   // black panel with heat pipes across both its faces, glowing hottest where they leave the keel and cooling through dull
   // red to black well before the tip, the outer pipes a little cooler than the middle ones. The pipes are a list of their own (`heat`),
   // so that they can pulse together (kit/outside.js).
-  const black = lin('#0b0c0f'), HEAT = [[0, lin('#ffa040', 1.6)], [0.12, lin('#ff4a10', 1.4)], [0.3, lin('#c01c08', 1.0)], [0.55, lin('#5e0d04', 0.9)], [0.8, lin('#220503', 0.8)], [1, lin('#0c0303', 0.8)]];
+  const black = lin('#0b0c0f'), HEAT = [[0, lin('#ff6a22', 1.2)], [0.14, lin('#f0400e', 1.1)], [0.32, lin('#b81a08', 1.0)], [0.55, lin('#5e0d04', 0.9)], [0.8, lin('#220503', 0.8)], [1, lin('#0c0303', 0.8)]];
+  // (2026-11-19, later: "a little less bright at the center (It seems a bit too hot)": the hot end is a red-orange now, no longer a yellow)
   const heatAt = (t) => { let i = 1; while (i < HEAT.length - 1 && HEAT[i][0] < t) i++; const [t0, c0] = HEAT[i - 1], [t1, c1] = HEAT[i], k = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); return c0.map((v, j) => v + (c1[j] - v) * k); };
   const PIPES = { n: 13, y0: -36.95, pitch: 1.55, tall: 0.95, from: 5.5, to: 23.5, pieces: 9, proud: 0.34 };
   for (const a of [45, 135, 225, 315]) {

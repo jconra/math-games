@@ -16,8 +16,11 @@
 //   - THE ALARM SOUNDS, made by the game's own sound code (sound.alarm: two notes turn and turn about, no file), heard
 //     as coming from the middle of that hangar.
 //   - RED LIGHTS SPIN ROUND IN THAT HANGAR. Four beacons hang under its roof trusses (they are there, dark, all the
-//     time: a few triangles drawn with the hangar). Lit, each throws two red beams that turn, a red patch that sweeps
-//     the floor under it, and the whole hangar is washed red in time with them. All of it is drawn on top, glowing:
+//     time: a few triangles drawn with the hangar). Lit, each throws two red beams down to the floor that turn, each
+//     ending in a round red spot that sweeps the floor (the game's maker, 2026-11-19, of the fans of red that turned
+//     on the floor under each beacon: "the light on the floor looks like it should be radiating from a spot on the
+//     floor. I feel like the floor spots should be a circle that would be at the end of the beams from the ceiling"),
+//     and the whole hangar is washed red in time with them. All of it is drawn on top, glowing:
 //     no lamp is added to the scene, so the station's saved light, its materials and its files are untouched, and
 //     nothing casts a shadow. (The wash: seen from outside, a red pane across the door's opening; from inside, the
 //     whole picture, cockpit and all.) It turns slowly on purpose: a little over one pulse a second.
@@ -62,14 +65,15 @@ import { sound } from './sound.js';
 import { DOOR } from '../kit/outside-plan.js';
 
 // lamps: where the beacons hang, along the hangar from its back (x, under the trusses there) and either side of its
-// middle line (m); y: how high. turn: radians a second. beam: how long, how wide at its end, how far it dips. pool: the
-// red patch on the floor (its reach, m). wash: the least and the most of the red wash. sound: the alarm's own.
+// middle line (m); y: how high. turn: radians a second. spot: the round red spot each beam ends in on the floor: how far
+// out from under its beacon its middle is (m), how big round (m), how bright. beam: how bright, and how much of that
+// is left where it meets the floor. wash: the least and the most of the red wash. sound: the alarm's own.
 // run: how often the people are looked at (s). tell: how often a sliding ship's place is told to the cabin and the
 // walls (s). real: a phone's real hangar: how near its door (m out from the door's line) and how nearly on its line
 // (m to the side) the ship is when it is asked for, and when it is let go again. room, low: how much room round the
 // flown ship the people keep (m), and how low it has to be (m, its feet over the floor) for them to mind it.
 export const ALARM = {
-  lamps: { x: [33, 49], z: [-6, 6], y: 9.2 }, turn: 3.4, beam: { len: 15, r: 2.3, dip: 0.36, glow: 0.2 }, pool: { r: 11, glow: 0.2 }, wash: [0.015, 0.07], colour: 0xff2a14,
+  lamps: { x: [33, 49], z: [-6, 6], y: 9.2 }, turn: 3.4, spot: { reach: 5.5, r: 2, glow: 0.34 }, beam: { glow: 0.2, end: 0.3 }, wash: [0.015, 0.07], colour: 0xff2a14,
   sound: { volume: 0.55, near: 12, far: 160, notes: [640, 480], beat: 0.42 }, run: 0.4, tell: 0.3, real: { out: 38, side: 13, outGo: 48, sideGo: 16 }, room: 1.3, low: 3.6,
 };
 
@@ -119,7 +123,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); out.setIndex(idx); return own(out);
   })();
   const bodyMat = own(new THREE.MeshBasicMaterial({ vertexColors: true }));
-  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1);
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1);
   for (const v of views) {
     const L = lampAt(v.cfg), im = new THREE.InstancedMesh(bodyGeo, bodyMat, L.length); im.name = 'alarm beacons';
     L.forEach((p, i) => im.setMatrixAt(i, _m.makeTranslation(p[0], p[1], p[2])));
@@ -131,25 +135,23 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
   function makeLit() {
     const g = new THREE.Group(); g.name = 'alarm lights';
     const glowMat = (opacity) => own(new THREE.MeshBasicMaterial({ color: red, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
-    // a beam: a cone from the lamp along +x, bright at the lamp and fading to nothing at its end
-    const cone = own(new THREE.CylinderGeometry(A.beam.r, 0.14, A.beam.len, 14, 4, true).rotateZ(-Math.PI / 2).translate(A.beam.len / 2, 0, 0));
-    { const P = cone.attributes.position, c = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = Math.pow(Math.max(0, 1 - P.getX(i) / A.beam.len), 1.6); c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = k; } cone.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+    // a beam: a cone from the lamp along +x, one long and one wide at its end (each beam is stretched to reach its
+    // spot on the floor: light below), bright at the lamp and fainter down to where it meets the floor
+    const cone = own(new THREE.CylinderGeometry(1, 0.08, 1, 14, 4, true).rotateZ(-Math.PI / 2).translate(0.5, 0, 0));
+    { const P = cone.attributes.position, c = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = A.beam.end + (1 - A.beam.end) * Math.pow(Math.max(0, 1 - P.getX(i)), 1.6); c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = k; } cone.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
     const beams = new THREE.InstancedMesh(cone, glowMat(A.beam.glow), 8); beams.frustumCulled = false; beams.renderOrder = 6;
     // a dome, lit
     const dome = own(new THREE.SphereGeometry(0.27, 10, 6)); { const n = dome.attributes.position.count, c = new Float32Array(n * 3).fill(1); dome.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
     const domes = new THREE.InstancedMesh(dome, glowMat(0.95), 4); domes.frustumCulled = false; domes.renderOrder = 6;
-    // a patch on the floor: two fans of red, one under each beam, brightest part way out, nothing at their edges
+    // a spot on the floor, where a beam ends: a round patch of red, even across its middle and soft at its edge
     const pool = own((() => {
-      const pos = [], col = [], idx = [], rings = [[0.04, 0.2], [0.3, 1], [0.65, 0.55], [1, 0]], spans = [[-0.5, 0], [-0.25, 0.75], [0, 1], [0.25, 0.75], [0.5, 0]];
-      for (const side of [0, Math.PI]) {
-        const base = pos.length / 3;
-        for (const [a, ka] of spans) for (const [r, kr] of rings) { pos.push(Math.cos(side + a) * r * A.pool.r, 0, -Math.sin(side + a) * r * A.pool.r); const k = ka * kr; col.push(k, k, k); }
-        for (let i = 0; i + 1 < spans.length; i++) for (let j = 0; j + 1 < rings.length; j++) { const a = base + i * rings.length + j, b = a + rings.length; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-      }
+      const pos = [0, 0, 0], col = [1, 1, 1], idx = [], rings = [[0.55, 1], [0.82, 0.6], [1, 0]], seg = 24;
+      for (const [r, k] of rings) for (let i = 0; i < seg; i++) { const a = i / seg * Math.PI * 2; pos.push(Math.cos(a) * r * A.spot.r, 0, Math.sin(a) * r * A.spot.r); col.push(k, k, k); }
+      for (let i = 0; i < seg; i++) { const j = (i + 1) % seg; idx.push(0, 1 + j, 1 + i); for (let q = 0; q + 1 < rings.length; q++) { const a = 1 + q * seg + i, b = 1 + q * seg + j, c = a + seg, d = b + seg; idx.push(a, b, c, b, d, c); } }
       const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); out.setIndex(idx); return out;
     })());
-    const poolMat = glowMat(A.pool.glow); poolMat.polygonOffset = true; poolMat.polygonOffsetFactor = -2; poolMat.polygonOffsetUnits = -2;
-    const pools = new THREE.InstancedMesh(pool, poolMat, 4); pools.frustumCulled = false; pools.renderOrder = 5;
+    const poolMat = glowMat(A.spot.glow); poolMat.polygonOffset = true; poolMat.polygonOffsetFactor = -2; poolMat.polygonOffsetUnits = -2;
+    const pools = new THREE.InstancedMesh(pool, poolMat, 8); pools.frustumCulled = false; pools.renderOrder = 5;
     // the wash: a pane across the door's opening (seen from outside), and the whole picture (from inside)
     const paneMat = own(new THREE.MeshBasicMaterial({ color: red, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
     const pane = new THREE.Mesh(own(new THREE.PlaneGeometry(DOOR.w, DOOR.h).rotateY(Math.PI / 2)), paneMat); pane.renderOrder = 7;
@@ -158,16 +160,22 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     const all = new THREE.Mesh(own(new THREE.PlaneGeometry(2, 2)), allMat); all.frustumCulled = false; all.renderOrder = 9999;
     g.add(pools, beams, domes, pane, all);
     // (each glowing thing is drawn once, both its faces together: it only adds light; the pane or the whole picture, never both)
-    return { g, beams, domes, pools, pane, paneMat, all, allMat, tris: (cone.index.count / 3) * 8 + (dome.index.count / 3) * 4 + (pool.index.count / 3) * 4 + 2, draws: 4 };
+    return { g, beams, domes, pools, pane, paneMat, all, allMat, tris: (cone.index.count / 3) * 8 + (dome.index.count / 3) * 4 + (pool.index.count / 3) * 8 + 2, draws: 4 };
   }
   function light(v, camera) {
     if (!lit) lit = makeLit();
     if (lit.g.parent !== W.scene) W.scene.add(lit.g);
+    // (each beam leaves its beacon and ends on the floor A.spot.reach out from under it, and its spot lies there: the
+    // beam is as wide where it meets the floor as the spot is across the way it sweeps)
+    const floor = v.cfg.at[1];
     v.lamps.forEach((p, i) => {
-      const a = phase + i * 0.9;
-      for (const half of [0, 1]) lit.beams.setMatrixAt(i * 2 + half, _m.compose(_p.set(p[0], p[1], p[2]), _q.setFromEuler(_e.set(0, a + half * Math.PI, -A.beam.dip, 'YZX')), _one));
+      const a = phase + i * 0.9, h = p[1] - floor, len = Math.hypot(h, A.spot.reach), dip = Math.atan2(h, A.spot.reach), wide = A.spot.r * Math.sin(dip);
+      for (const half of [0, 1]) {
+        const t = a + half * Math.PI;
+        lit.beams.setMatrixAt(i * 2 + half, _m.compose(_p.set(p[0], p[1], p[2]), _q.setFromEuler(_e.set(0, t, -dip, 'YZX')), _s.set(len, wide, wide)));
+        lit.pools.setMatrixAt(i * 2 + half, _m.makeTranslation(p[0] + Math.cos(t) * A.spot.reach, floor + 0.05, p[2] - Math.sin(t) * A.spot.reach));
+      }
       lit.domes.setMatrixAt(i, _m.makeTranslation(p[0], p[1] + 0.02, p[2]));
-      lit.pools.setMatrixAt(i, _m.compose(_p.set(p[0], v.cfg.at[1] + 0.05, p[2]), _q.setFromEuler(_e.set(0, a, 0)), _one));
     });
     lit.beams.instanceMatrix.needsUpdate = true; lit.domes.instanceMatrix.needsUpdate = true; lit.pools.instanceMatrix.needsUpdate = true;
     // (the wash rises and falls as the beams come round: twice a turn)
