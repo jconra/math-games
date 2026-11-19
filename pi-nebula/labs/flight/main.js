@@ -20,11 +20,13 @@
 import * as THREE from 'three';
 import { loadStation } from '../../src/station.js';
 import { makeWalls } from '../../src/walls.js';
-import { makeBoarding, FLOWN } from '../../src/boarding.js';
+import { makeBoarding, STANDS_ANYWHERE } from '../../src/boarding.js';
+import { makeVisit } from '../../src/visit.js';
 import { makeCrane } from '../../src/crane.js';
 import { addOutside } from '../../src/outside.js';
 import { startFlying } from '../../src/flying.js';
 import { MINER } from '../../src/flymodel.js';
+import { sound } from '../../src/sound.js';
 
 const KEEP = 'pi-nebula.flightlab';
 const q = new URLSearchParams(location.search), HOLD = q.has('hold');
@@ -34,12 +36,14 @@ const kept = (() => { try { return JSON.parse(localStorage.getItem(KEEP)) || {};
 const keep = (s) => { try { localStorage.setItem(KEEP, JSON.stringify(s)); } catch (e) { /* blocked: not kept */ } };
 
 const W = LAB.W = await loadStation({ canvas, quality: q.get('q'), rig: q.has('rig') || HOLD, say: (f, words) => { loading.textContent = words + '…'; } });
-const walls = makeWalls(W.built, { portals: W.R.portals, apart: FLOWN });
+const walls = makeWalls(W.built, { portals: W.R.portals, apart: STANDS_ANYWHERE });
 for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);
 for (const D of W.built.glides || []) D.use = null;
 const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
 const crane = LAB.crane = makeCrane({ W, walls, boarding });
 const outside = LAB.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
+// (the other two hangars, for a Miner flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js)
+const visit = LAB.visit = makeVisit({ W, boarding, outside });
 
 // someone aboard: a stand-in for the crew member (no body to draw), in the Miner's hangar until its cabin is built,
 // then in its cockpit, where they stay
@@ -51,7 +55,7 @@ let F = null, now = 0;
 function begin() {
   const sp = boarding.spots(MINER.id); body.pos.set(...sp.rooms.cockpit);
   crane.depart();
-  F = LAB.F = startFlying({ W, boarding, crane, outside }, {
+  F = LAB.F = startFlying({ W, boarding, crane, outside, visit }, {
     cfg: MINER, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept, guide: 'always',
     onSettings: (s) => keep(s), words: (w) => { note.textContent = w; },
     // (the stand-in for the crew member stays in the seat of the ship as it stands)
@@ -71,7 +75,9 @@ function tick(dt) {
   boarding.update(dt, { player: body, eyes, camera: W.camera });
   crane.update(dt, { eyes, player: body });
   if (F) F.late();
-  outside.update(W.camera);
+  visit.update(dt, W.camera);
+  sound.ears(W.camera);      // (the alarm is heard as coming from the hangar it is in)
+  outside.update(W.camera, dt);
   W.frame(dt, now, eyes);
 }
 let last = 0;

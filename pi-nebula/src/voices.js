@@ -48,3 +48,19 @@ export const CLIPS = {
   'om-welcome': { voice: 'om', words: 'Welcome aboard.' },
 };
 export const clipUrl = (id) => new URL('../assets/sound/voices/' + id + '.mp3', import.meta.url).href;
+
+// THE SHIPS' OWN VOICES (2026-11-18; the game's maker: "we should get sounds for the ships too. Like a welcome message
+// from the ship to the pilot when it gets turned on (a robotic "Welcome aboard pilot, Systems Ready") and a "Warning,
+// pull up" message, and a "Reactor imbalance" voice for when you need to do the engineering questions. It would also be
+// cool if the different ships had different sound clips."). Each ship speaks in its own voice, so each ship's clips are
+// named by it: assets/sound/voices/ship-<ship>-<what>.mp3, beside the people's (as trimmed and levelled as they came;
+// how the Miner's voice was made: ~/pw/elevenlabs/ship-voice/HOW.md). Heard in the cockpit, from everywhere
+// (src/flying.js; when each is said: src/flymodel.js voiceStep). A ship with no clip for something says nothing.
+//   welcome   as its power first comes on with someone newly in the seat
+//   safety    again and again while it is in another ship's hangar ("it started saying "Safety Violation" over and
+//             over in your cockpit")
+// (Made and waiting for their own jobs, not in the game yet: ship-miner-pullup "Warning. Pull up." and
+// ship-miner-reactor "Reactor imbalance.")
+export const SHIP_CLIPS = {
+  miner: { welcome: { id: 'ship-miner-welcome', words: 'Welcome aboard, pilot. Systems ready.' }, safety: { id: 'ship-miner-safety', words: 'Safety violation.' } },
+};

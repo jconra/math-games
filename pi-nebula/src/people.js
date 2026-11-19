@@ -10,6 +10,10 @@
 //   people.noGo(x, z)   a patch of floor no person goes onto (job spots, ships' ways in, under the crane, the scanner)
 //   people.flee(x, z, r)  anyone within r of a point hurries off (the crane by hand, a load low over them); with
 //                  { inside(pos) }: anyone on a patch of any shape (under a ship coming down by hand: src/flying.js)
+//   people.runAbout(hangar, { avoid })  everyone on that hangar's floor kept running about it (the alarm when the Miner
+//                  is flown into another ship's hangar, src/visit.js: "people started running around")
+//   people.update's `focus`: the nearest people are counted from there instead of from the player on their feet (the
+//                  ship they are flying about the station)
 //   people.captain.meet(id, where)  a captain gone to wait by their ship (MEET, below); meet(id, null): no longer
 //   (the patches kept off, the ways and the spots all follow a ship that stands somewhere else than it is parked, set
 //   down by hand: they are marked and worked out again whenever boarding.stands changes)
@@ -246,7 +250,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       ONE[0] = D; setDoors(ONE, t0);
       if (box.isEmpty()) continue;
       const w = KEEP_OFF.way; wayFeet.push({ D, box: box.clone(), ship: s });
-      mark(box.min.x - w, box.min.z - w, box.max.x + w, box.max.z + w, 'way:' + s.id);
+      // (the box is kept where the ship is parked; the patch is marked where the ship stands: a ship shoved about its
+      // hangar by a flown one, src/visit.js)
+      const Bw = s.moved ? box.applyMatrix4(s.D) : box;
+      mark(Bw.min.x - w, Bw.min.z - w, Bw.max.x + w, Bw.max.z + w, 'way:' + s.id);
     }
     // a ship's lift (the Miner's belly lift, boarding.js LIFTS): the floor under its platform, where it comes down (it
     // moves straight up and down, so its platform's box as it stands, across the floor; the box is kept where the ship
@@ -664,7 +671,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const seen = [];
   let drawnMost = 12, farAt = 7;
   const bubbles = makeBubbles({ camera: W.camera, walls });
-  function update(dt, { player = null, camera, now = null }) {
+  // (focus: where the nearest people are counted from, if not the player on their feet: the ship they are flying about
+  // the station, src/visit.js)
+  function update(dt, { player = null, camera, now = null, focus = null }) {
     frame++; seen.length = 0;
     clock = now != null ? now : clock + dt;
     zoneClock -= dt;
@@ -677,7 +686,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       for (const P of list) { if (P.hidden || P.away || P.walking || P.scripted || !P.act || P.act.kind === 'walk' || ['sat', 'sitting', 'rising'].includes(P.act.phase)) continue; if (onPatch(P.pos.x, P.pos.z) || !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.22)) { if (P.cap && P.cap.busy) endOffer(P); next(P); } }
       // (and anyone on their way across that ship's hangar: their way worked out again round the ship where it now is,
       // or, their spot now under it, something else to do)
-      const hangars = new Set((boarding?.ships || []).filter((s) => s.lifts && s.lifts.length).map((s) => s.hangar));
+      const hangars = new Set((boarding?.ships || []).filter((s) => (s.lifts && s.lifts.length) || s.moved).map((s) => s.hangar));
       for (const P of list) {
         if (P.hidden || P.away || P.scripted || P.fleeing || !(P.walking || P.req) || !P.act || !P.act.spot || !P.zone || !hangars.has(P.zone.id)) continue;
         const to = P.act.spot.pos;
@@ -687,7 +696,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     planning();
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
     news.update(dt);
-    presence(dt, player ? player.pos : camera.position, camera);
+    presence(dt, focus || (player ? player.pos : camera.position), camera);
     for (const P of list) {
       const c = P.c;
       if (P.hidden) { P.shown = false; continue; }
@@ -1596,6 +1605,43 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     return sent;
   }
+  // RUNNING ABOUT (src/visit.js: the Miner flown into another ship's hangar; the game's maker, 2026-11-18: "you would
+  // hear an alarm and red lights started spinning around in the hanger and people started running around"). Called a
+  // couple of times a second for as long as it lasts: everyone on that hangar's floor runs to somewhere else on it,
+  // and on again when they get there. avoid(pos): where nobody goes nor passes (under the flown ship, in a shoved
+  // one); anyone it comes over runs out from under it at once. Nobody is hit, and nothing else is done to them: when
+  // it is no longer called they finish their run and go on with their day. -> how many are running
+  // (where they run to: the hangar's own spots, the places its people stand in their day, by its crates and round its
+  // ship: each is known to be somewhere a person can get to and stand; failing those, anywhere free on its floor)
+  const _rb = new THREE.Vector3(), runSpots = new Map();
+  function runAbout(zoneId, { avoid = null } = {}) {
+    const Z = W.room(zoneId); if (!Z) return 0;
+    const B = Z.box, passes = (a, b) => { const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.75)); for (let i = 1; i <= n; i++) { _rb.set(a.x + (b.x - a.x) * i / n, a.y, a.z + (b.z - a.z) * i / n); if (avoid(_rb)) return true; } return false; };
+    if (!runSpots.has(zoneId)) { const L = []; for (const g of Object.values(groups)) for (const s of g) if (s && s.pos && s.pos.y < 1 && s.pos.x > B.min.x && s.pos.x < B.max.x && s.pos.z > B.min.z && s.pos.z < B.max.z && !L.some((q) => q.distanceTo(s.pos) < 0.8)) L.push(s.pos); runSpots.set(zoneId, L); }
+    const spots = runSpots.get(zoneId);
+    let n = 0;
+    for (const P of list) {
+      if (P.hidden || P.away || P.scripted || !P.act || P.pos.y > 2.4) continue;
+      if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
+      if (P.pos.x < B.min.x || P.pos.x > B.max.x || P.pos.z < B.min.z || P.pos.z > B.max.z) continue;
+      const under = !!avoid && avoid(P.pos);
+      if (P.fleeing && !under) { n++; continue; }      // (running already, and not into trouble)
+      let to = null;
+      for (let i = 0; i < 14 && !to; i++) {
+        const p = i < 10 && spots.length ? pick(spots) : walls.snap(B.min.x + 2 + Math.random() * (B.max.x - B.min.x - 4), P.pos.y + 0.4, B.min.z + 2 + Math.random() * (B.max.z - B.min.z - 4), 0.8);
+        if (!p || Math.abs(p.y - P.pos.y) > 0.6 || Math.hypot(p.x - P.pos.x, p.z - P.pos.z) < (under ? 2.5 : 5) || noGo(p.x, p.z) || someoneAt(p, P, LIFE.body) || !walls.free(p.x, p.y, p.z, 0.26)) continue;
+        // (not under the ship, nor by a straight way that passes under it; someone already under it only has to get out)
+        if (avoid && (avoid(p) || (!under && passes(P.pos, p)))) continue;
+        to = p.clone();
+      }
+      if (!to) continue;
+      endTalk(P); if (P.cap && P.cap.busy) endOffer(P);
+      if (!P.fleeing) { P.fleeing = { was: P.speed }; P.speed = Math.max(P.speed, 1.2) * 1.9; }
+      begin(P, { kind: 'walk', step: { for: [0.3, 0.9] }, spot: { pos: to, heading: null }, list: [{ pos: to }], j: 0 });
+      n++;
+    }
+    return n;
+  }
   const stats = () => ({ people: list.length, quality, most: nearMost, about: list.filter((P) => !P.away && !P.hidden).length, walking: list.filter((P) => P.walking).length, shown: list.filter((P) => P.shown).length, far: list.filter((P) => P.shown && P.c.far).length,
     tris: list.reduce((a, P) => a + (P.shown ? P.c.tris() : 0), 0), planning: planQ.length, steps: walls.steps ? walls.steps() : null, counts: { ...counts }, talksNow: convos.size, scan: SCAN ? { busy: !!SCAN.busy, lying: !!(SCAN.busy && SCAN.busy.patient && SCAN.busy.patient.act && SCAN.busy.patient.act.phase === 'lying'), gliding: !!(scanD && scanD.use) } : null });
   // (the scanner's glide: SCAN.use, handed to its glide each frame (kit/layout.js updateGlides: parked while null))
@@ -1641,7 +1687,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return true;
     },
   };
-  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
+  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o) };
   return api;
 }

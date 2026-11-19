@@ -13,14 +13,20 @@
 // simply cannot come nearer than `r` to any surface, from either side, so it never gets through one (the ship's motion
 // is taken in steps shorter than that: src/flymodel.js).
 //
-// ADDED TO THE OUTSIDE'S OWN TRIANGLES (the real rooms are not part of the outside):
-//   - a flat cap across every real opening but the flown ship's own bay door: the other two hangars and the windows
-//     are shut to it (the plainest thing: nothing is built to fly into there);
-//   - THE BAY: the way in from the ship's door to its pad, a straight box as wide and as tall as the door (the crane's
-//     rail, the canister rack and the catwalk are all outside it, so none of them needs its own shape), with its floor
-//     the hangar's floor.
+// THE GAME'S MAKER (2026-11-18, later, asked whether the Miner should be able to fly in through the other two hangar
+// doors): "Lol, I'm sure kids will try to do this and it will make them laugh, so why not." So the other two hangars
+// are open to it as its own is (`bays`); the ships parked in them are not part of this field (they can be shoved
+// about: src/flymodel.js OTHERS, pushOthers).
 //
-//   const solid = stationSolid({ bay })           from the plan itself (the tests; the game too, in about a quarter second)
+// ADDED TO THE OUTSIDE'S OWN TRIANGLES (the real rooms are not part of the outside):
+//   - a flat cap across every real opening but the hangar doors a ship may fly in through (its own, and the other
+//     hangars given as `bays`): the windows, and any hangar not given, are shut to it;
+//   - THE BAYS: the way in from each such door to where a ship parks, a straight box as wide and as tall as the door
+//     (in the Miner's hangar the crane's rail, the canister rack and the catwalk are all outside it, and in the other
+//     two the crates, the stairs and the catwalk are, so none of them needs its own shape), with its floor the
+//     hangar's floor.
+//
+//   const solid = stationSolid({ bay, bays })     from the plan itself (the tests; the game too, in about a quarter second)
 //   const solid = buildSolid(triangleLists, { box, caps, bay })
 //   solid.dist(x, y, z)       metres to the nearest surface (REACH and more: REACH)
 //   solid.away(x, y, z, out)  the way that leads away from it, into out [x, y, z] (a unit; [0, 0, 0] where nothing is near)
@@ -47,11 +53,11 @@ export function outsideTriangles(look = STATION_LOOK) {
 
 // a flat four-cornered piece as two triangles
 const quad = (a, b, c, d) => ({ position: new Float32Array([...a, ...b, ...c, ...d]), index: new Uint32Array([0, 1, 2, 0, 2, 3]) });
-// the caps across the real openings (all but the one at `open`: [x, z] of its middle)
+// the caps across the real openings (all but those at `open`: one [x, z] of an opening's middle, or a list of them)
 export function capsOf(open = null) {
-  const out = [];
+  const out = [], opens = !open ? [] : typeof open[0] === 'number' ? [open] : open;
   for (const o of OPENINGS) {
-    if (open && Math.abs(o.at[0] - open[0]) < 0.5 && Math.abs(o.at[2] - open[1]) < 0.5) continue;
+    if (opens.some((p) => Math.abs(o.at[0] - p[0]) < 0.5 && Math.abs(o.at[2] - p[1]) < 0.5)) continue;
     const [x, y, z] = o.at, along = o.out[0] ? [0, 0, 1] : [1, 0, 0], h = o.w / 2;
     out.push(quad([x - along[0] * h, y, z - along[2] * h], [x + along[0] * h, y, z + along[2] * h], [x + along[0] * h, y + o.h, z + along[2] * h], [x - along[0] * h, y + o.h, z - along[2] * h]));
   }
@@ -152,11 +158,12 @@ export function solidJob(lists, opts) {
 }
 export const buildSolid = (lists, opts) => solidJob(lists, opts).finish();
 
-// THE STATION, for a ship whose bay is `bay` (bayOf): the outside's own triangles, the other openings capped, the bay
+// THE STATION, for a ship whose bay is `bay` (bayOf): the outside's own triangles, the other openings capped, the bay;
+// `bays`: the other hangars it may fly into as well, each open at its door and with its own bay
 // (stationJob: the same as a job, to be done a little each frame)
-export function stationJob({ bay = null, lists = null, look = STATION_LOOK, reach = REACH } = {}) {
-  const own = lists || outsideTriangles(look);
-  const open = bay ? [DOOR.x + 0.02, (bay.z0 + bay.z1) / 2] : null;
-  return solidJob([...own, ...capsOf(open), ...(bay ? bayWalls(bay) : [])], { reach, bay });
+export function stationJob({ bay = null, bays = [], lists = null, look = STATION_LOOK, reach = REACH } = {}) {
+  const own = lists || outsideTriangles(look), all = [bay, ...bays].filter(Boolean);
+  const open = all.map((b) => [DOOR.x + 0.02, (b.z0 + b.z1) / 2]);
+  return solidJob([...own, ...capsOf(open), ...all.flatMap((b) => bayWalls(b))], { reach, bay });
 }
 export const stationSolid = (opts) => stationJob(opts).finish();

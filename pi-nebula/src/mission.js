@@ -26,7 +26,7 @@ import { JOB as smelter } from './jobs/smelter.js';
 
 const LINE = { miner: '#ffd560', payout: '#ff8a3a' };
 
-export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {} }) {
+export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, visit = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {} }) {
   let card = null, trip = null, loading = false, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
   const nameOf = (id) => { const p = people(); const P = p && p.list.find((x) => x.id === id); return (P && P.name) || 'The captain'; };
   const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
@@ -121,7 +121,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
       if (!playing) { if (input) input.enabled = false; return; }
-      trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, people, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles,
+      trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, visit, people, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles,
         onEnd: (r) => {
           lastRun = r; crane.awayHeld = false;
           if (input) input.enabled = playing;

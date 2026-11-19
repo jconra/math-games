@@ -45,6 +45,23 @@
 //     It only asks. A ship set down crooked, or nose in, is down all the same. Nothing is scored and no word judges it.
 //   - ANYONE ON THE FLOOR under a ship coming down hurries out of its way (people.flee, as from the crane's load).
 //
+// THE OTHER TWO HANGARS, AND THE SHIP'S VOICE (2026-11-18, later still; asked whether the Miner should be able to fly
+// in through the other two hangar doors): "Lol, I'm sure kids will try to do this and it will make them laugh, so why
+// not. I think it would be good if people can go in and then you would hear an alarm and red lights started spinning
+// around in the hanger and people started running around and it started saying "Safety Violation" over and over in
+// your cockpit. It would even be appropriate for the other ship to get moved around if they rammed it. But it would be
+// reset the next time they entered into the other hanger. No need for damage or anything like that. By the way, since
+// I am thinking about sounds, we should get sounds for the ships too. Like a welcome message from the ship to the
+// pilot when it gets turned on (a robotic "Welcome aboard pilot, Systems Ready") ... It would also be cool if the
+// different ships had different sound clips."
+//   - The other two bays are open to it, and the ships parked in them give way to a bump (flymodel.js OTHERS,
+//     pushOthers; src/visit.js keeps them, draws them where they are and sets the alarm off: `ctx.visit`).
+//   - In another ship's hangar the ship can rest on the floor but is never down, so THE SEAT'S PROMPT NEVER COMES UP
+//     THERE; the words along the top say whose hangar it is and what to do.
+//   - ITS VOICE (src/voices.js SHIP_CLIPS, flymodel.js voiceStep): "Welcome aboard, pilot. Systems ready." once each
+//     time someone sits down and the power comes on; "Safety violation." over and over while it is in another hangar.
+//     Heard in the cockpit, from everywhere, in both views.
+//
 // HOW THE SHIP MOVES IN THE PICTURE: the parked ship is a room of the station (drawn with its hangar) and its cabin is
 // built where it stands (src/boarding.js). Flown, both are drawn moved by one matrix, from where it is parked to
 // where it is now (crane.fly, boarding.fly): the same ship, its own cockpit, its own thrusters (kit/ships/flight.js).
@@ -57,7 +74,8 @@
 // mouse by itself only if the browser gives it to the game; otherwise it stays a pointer until F (or a click on the
 // view) asks for it, so the nose never swings off toward a pointer left on a button.
 //
-//   const F = startFlying({ W, boarding, crane, outside, people }, { cfg, pilot, goal, settings, flier, on... })
+//   const F = startFlying({ W, boarding, crane, outside, people, visit }, { cfg, pilot, goal, settings, flier, on... })
+//     visit       the other two hangars' keeper (src/visit.js), or none: then nothing is parked in them
 //     goal        'leave' (out of the hangar and clear of the station) | 'land' (in and down in its hangar) | 'free' (the lab)
 //     pilot       false: the crew's pilot flies (the autopilot, and no way to switch it off)
 //     settings    { invertY }; onSettings(settings) when the crew member changes one
@@ -78,6 +96,8 @@ import * as THREE from 'three';
 import * as M from './flymodel.js';
 import { stationJob, bayOf } from './flysolid.js';
 import { standElements } from './standing.js';
+import { sound } from './sound.js';
+import { SHIP_CLIPS, clipUrl } from './voices.js';
 import { DOOR } from '../kit/outside-plan.js';
 
 export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3 };
@@ -189,14 +209,15 @@ const CSS = `
 // what a ship of this bay bumps into, made once, as a job (about a third of a second's work on a desktop, more on a
 // phone: done a little each frame while the ship sits on its pad, and finished at once if it is wanted sooner)
 const SOLIDS = new Map();
+// (its own bay, and the other hangars' bays it can fly into by hand: cfg.others)
 export function solidFor(cfg, outside = null) {
   const key = cfg.id;
-  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: bayOf(cfg.pad[2]), lists: outside ? outside.triangles() : null }));
+  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles() : null }));
   return SOLIDS.get(key);
 }
 
 export function startFlying(ctx, opts = {}) {
-  const { W, boarding, crane, outside = null, people = () => null } = ctx;
+  const { W, boarding, crane, outside = null, people = () => null, visit = null } = ctx;
   const cfg = opts.cfg || M.MINER, pilot = opts.pilot !== false, canvas = W.renderer.domElement;
   const B = boarding.ships.find((s) => s.id === cfg.id);
   if (!B || !B.M) throw new Error('flying: the ' + cfg.id + '\'s cabin is not in');
@@ -205,7 +226,19 @@ export function startFlying(ctx, opts = {}) {
   // where it is parked to where it stands). As the flight model has it ({ p, q }), and back as that matrix.
   const standNow = () => { if (!B.moved) return null; const p = new THREE.Vector3(...cfg.pad).applyMatrix4(B.D), q = new THREE.Quaternion().setFromRotationMatrix(B.D); return { p: p.toArray(), q: q.toArray() }; };
   const matrixOf = (st) => (st ? new THREE.Matrix4().fromArray(standElements(st, cfg.pad)) : null);
-  const S = M.makeShip(cfg, standNow()), job = solidFor(cfg, outside);
+  const S = M.makeShip(cfg, standNow()), job0 = solidFor(cfg, outside);
+  // WHAT IT BUMPS INTO: the station (the job above, worked a little at a time), and with it the ships parked in the
+  // other two hangars (src/visit.js keeps them: where each is, how it is sliding). They give way to a bump
+  // (flymodel.js pushOthers), and the camera that follows the ship is kept out of them too.
+  const others = visit ? visit.others : [];
+  let whole = null;
+  const withOthers = (s) => { if (!s) return null; if (!whole || whole.station !== s) whole = { ...s, station: s, push: (ship) => M.pushOthers(ship, others), clear: (a, b, r) => Math.min(s.clear(a, b, r), M.clearOfOthers(a, b, r ?? 0.8, others)) }; return whole; };
+  const job = { finish: () => withOthers(job0.finish()), run: (ms) => withOthers(job0.run(ms)) };
+  // ITS VOICE (src/voices.js SHIP_CLIPS, by the ship's own name; when each is said: flymodel.js voiceStep): heard in the
+  // cockpit, from everywhere, in both views. Never the browser's own speech: a ship with no clip says nothing.
+  const clips = SHIP_CLIPS[cfg.voice] || {}, voice = M.makeVoice(), heard = { welcome: 0, safety: 0 };
+  for (const c of Object.values(clips)) sound.load(c.id, clipUrl(c.id));
+  let saying = null, there = null;
   const set = { invertY: !!(opts.settings && opts.settings.invertY) };
   const say = opts.words || (() => {});
   let goal = opts.goal || 'leave', auto = !pilot, plan = null, startIn = pilot ? 0 : 1.4, view = opts.view === 'behind' ? 'behind' : 'cockpit';
@@ -516,7 +549,7 @@ export function startFlying(ctx, opts = {}) {
     const mode = modeNow(), canJump = offered && goal !== 'land' && pilot;
     // (home: where it stands, and why the seat does not let them out when it does not)
     const where = M.standing(S), why = M.whyNot(S), home = goal === 'land', edge = why === 'edge' ? M.edgeOf(S) : '';
-    const key = [mode, auto, view, canJump, S.power, S.landed, touch, goal, locked, helpShut, captured, S.settle ? 1 : 0, S.p[0] > DOOR.face + 2 ? 1 : 0, where, why, edge].join('|');
+    const key = [mode, auto, view, canJump, S.power, S.landed, touch, goal, locked, helpShut, captured, S.settle ? 1 : 0, S.p[0] > DOOR.face + 2 ? 1 : 0, where, why, edge, there ? there.id : ''].join('|');
     if (key === painted) return; painted = key;
     el.hidden = locked; el.classList.toggle('is-touch', touch); el.classList.toggle('is-seat', mode === 'seat'); el.classList.toggle('is-watch', mode === 'watch');
     // THE SEAT'S PROMPT: home, down where the crane can unload it. THE GUIDE: coming home, until then (the lab: whenever
@@ -547,6 +580,8 @@ export function startFlying(ctx, opts = {}) {
     say(home && where === 'pad' ? 'Down on your pad' : home && where === 'floor' ? 'Down on the hangar floor'
       : where === 'edge' ? (edge === 'door' ? 'Too near the door for the crane: lift off and set down further in' : 'Too near the wall for the crane: lift off and set down nearer the middle')
       : why === 'over' ? 'Rolled over too far to land: roll it level'
+      // (in another ship's hangar, flying by hand: whose it is, and that the seat only lets them out in their own)
+      : there && pilot && !auto ? (home ? `This is the ${there.name}'s hangar: fly out and set down in your own` : `This is the ${there.name}'s hangar: fly out through its bay door`)
       : !pilot ? `${opts.flier || 'The crew\'s pilot'} is flying` : auto ? (goal === 'land' || (goal === 'free' && everClear) ? 'Autopilot: in through the bay door, down on the pad' : 'Autopilot: out of the hangar, clear of the station')
       : S.landed ? 'At the controls' : goal === 'land' ? 'Fly in through the bay door and set down in your hangar' : canJump ? 'Clear of the station' : outThere ? 'Fly clear of the station' : 'Fly out through the bay door');
   }
@@ -628,9 +663,17 @@ export function startFlying(ctx, opts = {}) {
       if (was && !S.landed) { if (liftMouse && pilot && !auto && canLock) { liftLock = 1.5; capture(true); } liftMouse = false; painted = ''; }
       if (liftLock > 0) liftLock -= dt;
       if (!was && S.landed) { stood(); eArmed = !held.has('rollRight'); setMouse('pointer'); auto = !pilot; plan = null; painted = ''; pose(dt); if (opts.onLanded) opts.onLanded(); if (closed || !on) return; }
-      // (coming down low over its hangar's floor: anyone under it hurries out of its way, as from the crane's load)
+      // IN ANOTHER SHIP'S HANGAR, or not (the alarm there is src/visit.js); and what the ship itself says: its welcome
+      // as its power first comes on this sitting, "Safety violation" over and over while it is in there. (A clip asked
+      // for before the page may make a sound is tried again for a moment, then let go.)
+      there = M.visiting(S);
+      const clip = M.voiceStep(voice, S, dt, there);
+      if (clip && clips[clip]) saying = { what: clip, t: clip === 'welcome' ? 1.5 : 0.4 };
+      if (saying) { const h = sound.play(clips[saying.what].id, { volume: 0.95 }); if (h) { heard[saying.what]++; saying = null; } else if ((saying.t -= dt) <= 0) saying = null; }
+      // (coming down low over a hangar's floor, its own or another's: anyone under it hurries out of its way, as from
+      // the crane's load)
       underT -= dt;
-      if (underT <= 0 && !S.landed && S.v[1] < 0.3 && M.floorUnder(S) != null && S.p[1] - cfg.pad[1] < UNDER.low) { underT = UNDER.every; const pp = people(); if (pp && pp.flee) pp.flee(S.p[0], S.p[2], 12, UNDER.away, { inside: under }); }
+      if (underT <= 0 && !S.landed && S.v[1] < 0.3 && M.floorBelow(S) != null && S.p[1] - cfg.pad[1] < UNDER.low) { underT = UNDER.every; const pp = people(); if (pp && pp.flee) pp.flee(S.p[0], S.p[2], 12, UNDER.away, { inside: under }); }
       const clear = !S.landed && M.clearOf(S.p, offered);
       if (clear !== offered) { offered = clear; painted = ''; if (clear && !everClear) { everClear = true; if (opts.onClear) opts.onClear(); if (closed || !on) return; } }
       pose(dt);
@@ -666,6 +709,7 @@ export function startFlying(ctx, opts = {}) {
     reset() {
       if (closed) return;
       M.park(S); stood(); S.power = false; S.engine = 0; auto = !pilot; plan = null; offered = false; everClear = false; letGo(); setMouse('pointer');
+      voice.welcomed = false; voice.busy = 0; saying = null;      // (as newly sat down: its welcome again when the power comes on)
       on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room;
       pose(1 / 60); painted = ''; paint();
     },
@@ -676,6 +720,7 @@ export function startFlying(ctx, opts = {}) {
     getUp: () => press('getup'), get hints() { return hints; }, holo,
     // (the ship's place as a matrix, from where it is parked: for the rigs' own pictures)
     state: () => ({ on, view, auto, mouse, captured, canLock, locked, offered, everClear, goal, pilot, touch, mode: modeNow(), power: S.power, landed: S.landed, settling: !!S.settle, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(3)), speed: +M.speedOf(S).toFixed(2), bump: +S.bump.toFixed(3), legs: plan ? plan.length : 0, invertY: set.invertY,
+      visiting: there ? there.id : null, said: { ...voice.said }, heard: { ...heard },
       standing: M.standing(S), stands: !!B.moved, canGetUp: M.canGetUp(S), why: M.whyNot(S), tilt: +M.tiltOf(S).toFixed(1), touching: !!S.on, seat: seatUp, guide: guideOn, keys: keysOn, yaw: +(Math.atan2(-M.turn(S.q, [1, 0, 0])[2], M.turn(S.q, [1, 0, 0])[0]) * 180 / Math.PI).toFixed(1),
       lit: hints ? Object.fromEntries(Object.entries(hints.keys).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null, arrows: hints ? Object.fromEntries(Object.entries(hints.mouse).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null,
       help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => [...b.childNodes].filter((n) => !n.hidden).map((n) => n.textContent).join('').trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: +M.boxDist(S.p).toFixed(1) }),
@@ -686,8 +731,11 @@ export function startFlying(ctx, opts = {}) {
       document.removeEventListener('pointerlockchange', onLock); capture(false);
       crane.fly(null); boarding.fly(cfg.id, null);
       W.scene.remove(rig); screen.dispose(); holo.dispose(); el.remove(); if (outside) outside.flying = null; restoreCamera();
+      if (visit) visit.fly(null);
     },
   };
   screen.draw(M.speedWords(S), S.power); paint(); guide();
+  // (whoever keeps the other hangars is told there is a ship flying: the alarm in them is theirs, src/visit.js)
+  if (visit) visit.fly(api);
   return api;
 }

@@ -24,6 +24,28 @@
 // landing position. There could be a qweasad grid in the corner and arrows for the mouse that could light up keys to
 // orient the ship correctly. The could glow brightly when a lot of input is needed and dim once they are close."
 //
+// AND OF THE OTHER TWO HANGARS (2026-11-18, later still; asked "Should the Miner be able to fly in through the other two
+// hangar doors?" he chose "Let it fly in and look round (the ships parked in there would need to be things it bumps
+// into)"): "Lol, I'm sure kids will try to do this and it will make them laugh, so why not. I think it would be good if
+// people can go in and then you would hear an alarm and red lights started spinning around in the hanger and people
+// started running around and it started saying "Safety Violation" over and over in your cockpit. It would even be
+// appropriate for the other ship to get moved around if they rammed it. But it would be reset the next time they
+// entered into the other hanger. No need for damage or anything like that. By the way, since I am thinking about
+// sounds, we should get sounds for the ships too. Like a welcome message from the ship to the pilot when it gets turned
+// on (a robotic "Welcome aboard pilot, Systems Ready") and a "Warning, pull up" message, and a "Reactor imbalance" voice
+// for when you need to do the engineering questions. It would also be cool if the different ships had different sound
+// clips."
+// SO (OTHERS, visiting, pushOthers, stepOther, voiceStep below; the alarm itself is src/visit.js):
+//   - THE OTHER TWO BAYS are open to the ship as its own is, by hand. THE AUTOPILOT never plans a way into them, and
+//     switched on in one it first goes straight out through that hangar's own door.
+//   - THE SHIP PARKED IN EACH is something it bumps into, and a bump shoves it: it slides across the floor and turns,
+//     slows by itself and stops; its hangar's walls and its door's shield keep it in. Nothing tips, nothing breaks.
+//   - IN ANOTHER SHIP'S HANGAR (visiting: any of the ship past that door's line) the alarm is on, and off the moment
+//     all of it is out again. It can rest on that floor but is never down there: its legs take only its own hangar's
+//     floor, so the seat never lets the pilot out there.
+//   - THE SHIP'S OWN VOICE: "Welcome aboard, pilot. Systems ready." once each time someone sits down and its power comes
+//     on (not at every lift-off); "Safety violation." again and again, with a short gap, while it is in another hangar.
+//
 // NO RULES OF ITS OWN: no fuel, no damage, no timer, no score. Where something had to be decided, the plainest thing:
 //   - THE POWER is a switch on the pad. It comes on by itself with the first key that flies, so it is never in the way.
 //   - NOTHING SETS THE SHIP DOWN FOR A PILOT FLYING BY HAND. Brought down onto its own hangar's floor, wherever and
@@ -44,6 +66,7 @@
 // ship is another cfg. makeShip(cfg, at): standing where it was last set down ({ p, q }: standOf), not on its pad.
 import { OUTSIDE_BOX, DOOR, HANGARS } from '../kit/outside-plan.js';
 import { SKIN, bayOf } from './flysolid.js';
+import { standElements } from './standing.js';
 
 // ── the keys, as he said them (KeyboardEvent.code -> what it does) ──
 export const KEYS = {
@@ -115,7 +138,33 @@ export const MINER = {
   // game's own walls), and a canister in the cradle beside the ship there reaches 0.5 m past the ship's side. A test
   // holds these to the crane's own places (tests/flying.test.mjs).
   floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
+  // THE OTHER TWO HANGARS it can fly into by hand, and the ship parked in each (OTHERS, below)
+  others: null,
+  // ITS VOICE: its clips are named by it (src/voices.js SHIP_CLIPS: 'ship-miner-welcome', 'ship-miner-safety')
+  voice: 'miner',
 };
+
+// ── THE OTHER TWO HANGARS, AND THE SHIP PARKED IN EACH ──
+// Each: its hangar and its bay (as wide as its door, like the Miner's own: src/flysolid.js), where its ship is parked
+// (the station file's places.ships) and which way its nose points there (1: out of the bay door; -1: in), and the
+// ship's shape as a few boxes in its own frame: `a` from and to along it (metres ahead of the point of it that stands
+// on its pad's middle), `r` its half width there, `h` how tall (from the floor: nothing fits under a wing). Measured
+// from the game's own walls (~/pw/space-math/rigs/flying-3/shapes.cjs); a test holds them to the ships' own files.
+// mass: how heavy it is beside the flown ship (which is 1); gyr: how hard it is to turn (a radius, m).
+const other = (id, name, i, nose, boxes) => ({ id, name, room: 'ship-' + id, hangar: HANGARS[i].id, at: [42.3, 0, HANGARS[i].z], nose, boxes, bay: bayOf(HANGARS[i].z), mass: 2, gyr: 4 });
+export const OTHERS = [
+  // (its body with its two tail booms, the taper of its nose in two steps, its wings)
+  other('explorer', 'Explorer', 1, 1, [{ a: [-8.7, 4.0], r: 3.4, h: 6.3 }, { a: [4.0, 6.5], r: 2.4, h: 5.2 }, { a: [6.5, 8.7], r: 1.3, h: 3.8 }, { a: [-6.3, -1.7], r: 6.6, h: 2.7 }]),
+  // (its body, its tail fin, the pods on its sides by the ramps, its nose in two steps)
+  other('medic', 'Medic', 2, -1, [{ a: [-8.8, 4.5], r: 3.2, h: 6.3 }, { a: [-8.8, -6.0], r: 1.3, h: 7.5 }, { a: [-5.7, -2.9], r: 3.9, h: 2.7 }, { a: [4.5, 6.6], r: 2.6, h: 4.7 }, { a: [6.6, 8.75], r: 1.6, h: 3.8 }]),
+];
+MINER.others = OTHERS;
+// A SHOVED SHIP: the most it slides and turns (m/s, radians a second), how quickly it slows by itself (m/s and radians
+// a second, each second), how far in from its bay door's line it is kept (m: the shield holds it in), how near anyone on
+// the floor it may come (m: it stops rather than hit them)
+export const SHOVE = { most: 6, spin: 1.1, grip: 2.4, gripTurn: 0.6, door: 0.5, person: 0.5 };
+// THE SHIP'S VOICE: how long each clip is (s), and the gap between one "Safety violation." and the next
+export const VOICE = { welcome: 3.1, safety: 2.0, gap: 1.4 };
 
 // ── small sums ──
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
@@ -259,6 +308,9 @@ export function stepShip(S, input, dt, solid = null) {
     S.v = turn(S.q, vb);
     S.p = add(S.p, mul(S.v, h));
     if (solid) bump(S, solid);
+    // (and the ships parked in the other hangars, which give way: solid.push, pushOthers below; the station has the
+    // last word, so a ship pressed between one of them and a wall is never left in the wall)
+    if (solid && solid.push && solid.push(S)) bump(S, solid);
   }
   const vb1 = unturn(S.q, S.v);
   S.acc = mul(sub(vb1, vb0), 1 / dt); S.spin = (S.w[1] - wy0) / dt;
@@ -297,6 +349,168 @@ function bump(S, solid) {
     const into = dot(S.v, _n); if (into < 0) S.v = sub(S.v, mul(_n, into));
   }
 }
+
+// ── IN ANOTHER SHIP'S HANGAR ──
+// the other hangar a ship is in (its facts: OTHERS), or null: any of its hull past that hangar's door line. A ship
+// that is down is in its own hangar.
+export function visiting(S) {
+  const L = S.cfg.others; if (!L || S.landed || S.p[0] > DOOR.x + 12) return null;
+  for (const o of L) {
+    if (Math.abs(S.p[2] - o.at[2]) > DOOR.w / 2 + 12) continue;
+    for (const pt of S.cfg.points) { const w = add(S.p, turn(S.q, pt)); if (w[0] < DOOR.x && w[0] > o.bay.x0 - 2 && w[2] > o.bay.z0 - 1 && w[2] < o.bay.z1 + 1) return o; }
+  }
+  return null;
+}
+// the floor under a ship's middle, its own hangar's or another's (none: not over one): for whoever is under it
+export const floorBelow = (S) => floorAt(S.cfg, S.p) ?? ((S.cfg.others || []).some((o) => floorAt(o, S.p) != null) ? 0 : null);
+
+// A SHIP PARKED IN ANOTHER HANGAR, as something that can be shoved: O = makeOther(cfg). Where it is: O.p [x, z] (the
+// point of it that stands on its pad's middle) and O.yaw (how far it is turned from the way it is parked, radians about
+// straight up, as three.js turns: x' = c x + s z, z' = -s x + c z); how it is sliding and turning: O.v [x, z], O.w.
+// Its boxes are kept in its own parked frame (x and z as the station's, from O.p).
+export function makeOther(cfg) {
+  const boxes = cfg.boxes.map((b) => ({ x0: cfg.nose > 0 ? b.a[0] : -b.a[1], x1: cfg.nose > 0 ? b.a[1] : -b.a[0], r: b.r, h: b.h }));
+  // (the points of it that a flown ship's own hull is tried against: round each box, low down and near its top)
+  const pts = [];
+  for (const b of boxes) {
+    const nx = Math.max(1, Math.ceil((b.x1 - b.x0) / 1.8)), nz = Math.max(1, Math.ceil(2 * b.r / 1.8));
+    for (const y of [0.5, b.h - 0.15]) {
+      for (let i = 0; i <= nx; i++) for (const z of [-b.r, b.r]) pts.push([b.x0 + (b.x1 - b.x0) * i / nx, y, z]);
+      for (let k = 1; k < nz; k++) for (const x of [b.x0, b.x1]) pts.push([x, y, -b.r + 2 * b.r * k / nz]);
+    }
+  }
+  return { cfg, boxes, pts, p: [cfg.at[0], cfg.at[2]], yaw: 0, v: [0, 0], w: 0, moved: false, hit: 0, hits: 0 };
+}
+// back where it is parked, still
+export function resetOther(O) { O.p = [O.cfg.at[0], O.cfg.at[2]]; O.yaw = 0; O.v = [0, 0]; O.w = 0; O.moved = false; O.hit = 0; return O; }
+export const otherStill = (O) => !O.v[0] && !O.v[1] && !O.w;
+// where it stands, as the flight model says where a ship stands ({ p, q }; null: exactly as it is parked), and as the
+// one move from where it is parked that everything of it follows (src/standing.js: 16 numbers; null: no move at all)
+export const otherStand = (O) => (O.yaw === 0 && O.p[0] === O.cfg.at[0] && O.p[1] === O.cfg.at[2] ? null : { p: [O.p[0], O.cfg.at[1], O.p[1]], q: [0, Math.sin(O.yaw / 2), 0, Math.cos(O.yaw / 2)] });
+export const otherElements = (O) => standElements(otherStand(O), O.cfg.at);
+// a point of the station in its frame [x, y, z], and a way of its frame in the station's
+const intoOther = (O, w) => { const c = Math.cos(O.yaw), s = Math.sin(O.yaw), dx = w[0] - O.p[0], dz = w[2] - O.p[1]; return [c * dx - s * dz, w[1], s * dx + c * dz]; };
+const outOfOther = (O, v) => { const c = Math.cos(O.yaw), s = Math.sin(O.yaw); return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]]; };
+const inBox = (b, l, k) => l[0] > b.x0 - k && l[0] < b.x1 + k && Math.abs(l[2]) < b.r + k && l[1] < b.h + k;
+// is a point of the station inside the ship (within k of it)?
+export function insideOther(O, w, k = 0) { const l = intoOther(O, w); return O.boxes.some((b) => inBox(b, l, k)); }
+// the shortest way out of the ship for a point inside it (within k of it), in its own frame: { d, n } or null (not
+// inside). A way out that only leads into another of its boxes is no way out.
+function wayOut(O, l, k) {
+  let best = null, any = null;
+  for (const b of O.boxes) {
+    if (!inBox(b, l, k)) continue;
+    for (const [d, n] of [[l[0] - b.x0 + k, [-1, 0, 0]], [b.x1 + k - l[0], [1, 0, 0]], [l[2] + b.r + k, [0, 0, -1]], [b.r + k - l[2], [0, 0, 1]], [b.h + k - l[1], [0, 1, 0]]]) {
+      if (!any || d < any.d) any = { d, n };
+      if (best && d >= best.d) continue;
+      const e = [l[0] + n[0] * (d + 0.01), l[1] + n[1] * (d + 0.01), l[2] + n[2] * (d + 0.01)];
+      if (!O.boxes.some((q) => q !== b && inBox(q, e, k))) best = { d, n };
+    }
+  }
+  return best || any;
+}
+// the flown ship's own hull as one box in its own frame [ahead, up, right]
+const hullOf = (cfg) => cfg.hull || (cfg.hull = cfg.points.reduce((B, p) => ({ a0: Math.min(B.a0, p[0]), a1: Math.max(B.a1, p[0]), u1: Math.max(B.u1, p[1]), r: Math.max(B.r, Math.abs(p[2])) }), { a0: 0, a1: 0, u1: 0, r: 0 }));
+// where the flown ship and a parked one are deepest into each other: { d (m), n (the way the flown ship is eased back
+// out, a unit), at (the point, the station's frame) } or null. Tried both ways, so neither's corner slips between the
+// other's points: the flown ship's points against the parked one's boxes, the parked one's points against its hull.
+function touch(S, O) {
+  let best = null;
+  for (const pt of S.cfg.points) {
+    const w = add(S.p, turn(S.q, pt)), out = wayOut(O, intoOther(O, w), SKIN);
+    if (out && (!best || out.d > best.d)) best = { d: out.d, n: outOfOther(O, out.n), at: w };
+  }
+  const H = hullOf(S.cfg);
+  for (const pt of O.pts) {
+    const lw = outOfOther(O, pt), w = [lw[0] + O.p[0], pt[1], lw[2] + O.p[1]], l = unturn(S.q, sub(w, S.p));
+    if (l[0] <= H.a0 - SKIN || l[0] >= H.a1 + SKIN || l[1] <= -SKIN || l[1] >= H.u1 + SKIN || Math.abs(l[2]) >= H.r + SKIN) continue;
+    let d = Infinity, n = null;
+    for (const [e, m] of [[l[0] - H.a0 + SKIN, [-1, 0, 0]], [H.a1 + SKIN - l[0], [1, 0, 0]], [l[1] + SKIN, [0, -1, 0]], [H.u1 + SKIN - l[1], [0, 1, 0]], [l[2] + H.r + SKIN, [0, 0, -1]], [H.r + SKIN - l[2], [0, 0, 1]]]) if (e < d) { d = e; n = m; }
+    // (the way the parked ship's point would leave the hull; the flown ship is eased the other way)
+    if (!best || d > best.d) best = { d, n: mul(turn(S.q, n), -1), at: w };
+  }
+  return best;
+}
+// THE FLOWN SHIP AGAINST THE SHIPS PARKED IN THE OTHER HANGARS (each step of its motion, after the station itself): it
+// is eased back out of whichever it has come into, as out of a wall; and across the floor the two share the bump, so
+// the parked one is shoved along and turned by where it was hit (it is the heavier: cfg.mass), with no bounce.
+export function pushOthers(S, others) {
+  let touched = false;
+  for (const O of others) {
+    if (Math.abs(S.p[0] - O.p[0]) > 34 || Math.abs(S.p[2] - O.p[1]) > 34) continue;
+    for (let it = 0; it < 3; it++) {
+      const T = touch(S, O); if (!T || T.d < 0.02) break;
+      touched = true;
+      const n = T.n, L = Math.hypot(n[0], n[2]);
+      if (L > 0.3) {
+        const ux = n[0] / L, uz = n[2] / L, rx = T.at[0] - O.p[0], rz = T.at[2] - O.p[1];
+        // (how fast they are closing at the point, across the floor; the parked one's point moves as it slides and turns)
+        const rel = (S.v[0] - (O.v[0] + O.w * rz)) * ux + (S.v[2] - (O.v[1] - O.w * rx)) * uz;
+        if (rel < 0) {
+          const m = O.cfg.mass, I = m * O.cfg.gyr * O.cfg.gyr, tau = rz * ux - rx * uz, j = -rel / (1 + 1 / m + tau * tau / I);
+          S.v = [S.v[0] + j * ux, S.v[1], S.v[2] + j * uz];
+          O.v = [O.v[0] - j / m * ux, O.v[1] - j / m * uz]; O.w -= j * tau / I;
+          O.moved = true; O.hit = Math.max(O.hit, -rel); O.hits++;
+        }
+      } else { const into = dot(S.v, n); if (into < 0) S.v = sub(S.v, mul(n, into)); }
+      S.p = add(S.p, mul(n, T.d)); S.bump = Math.max(S.bump, T.d);
+    }
+  }
+  return touched;
+}
+// a shoved ship slides on and slows by itself; its hangar's walls and its door's shield keep it in.
+// NOBODY IS HIT: feet ([[x, z], ...]: where the people on that floor stand) stop it dead rather than let any part of
+// it come over someone it was not over already (SHOVE.person: how near). Someone standing under a wing, as people
+// do when it is parked, does not hold the wing; its body stops short of them all the same.
+export function stepOther(O, dt, feet = null) {
+  if (otherStill(O)) return O;
+  const over = (f) => { const l = intoOther(O, [f[0], 0, f[1]]); return O.boxes.map((b) => inBox(b, l, SHOVE.person)); };
+  const was = feet && feet.length ? { p: O.p, yaw: O.yaw, over: feet.map(over) } : null;
+  const G = SHOVE, sp = Math.hypot(O.v[0], O.v[1]), cap = sp > G.most ? G.most / sp : 1;
+  O.v = [O.v[0] * cap, O.v[1] * cap]; O.w = clamp(O.w, -G.spin, G.spin);
+  O.p = [O.p[0] + O.v[0] * dt, O.p[1] + O.v[1] * dt]; O.yaw += O.w * dt;
+  const s1 = Math.hypot(O.v[0], O.v[1]), k = s1 > 1e-9 ? Math.max(0, s1 - G.grip * dt) / s1 : 0;
+  O.v = [O.v[0] * k, O.v[1] * k]; O.w = Math.sign(O.w) * Math.max(0, Math.abs(O.w) - G.gripTurn * dt);
+  keepIn(O);
+  if (was && feet.some((f, i) => over(f).some((now, j) => now && !was.over[i][j]))) { O.p = was.p; O.yaw = was.yaw; O.v = [0, 0]; O.w = 0; O.held = (O.held || 0) + 1; return O; }
+  if (Math.hypot(O.v[0], O.v[1]) < 0.02) O.v = [0, 0];
+  if (Math.abs(O.w) < 0.004) O.w = 0;
+  return O;
+}
+// every corner of it inside its own bay, in from the door's line
+function keepIn(O) {
+  const B = O.cfg.bay, x1 = DOOR.x - SHOVE.door;
+  let lo = 0, hi = 0, near = 0, far = 0;
+  for (const b of O.boxes) for (const lx of [b.x0, b.x1]) for (const lz of [-b.r, b.r]) {
+    const w = outOfOther(O, [lx, 0, lz]), x = w[0] + O.p[0], z = w[2] + O.p[1];
+    lo = Math.max(lo, B.x0 - x); hi = Math.max(hi, x - x1); near = Math.max(near, B.z0 - z); far = Math.max(far, z - B.z1);
+  }
+  if (lo > 0 || hi > 0) { O.p[0] += lo - hi; if ((lo > hi) === (O.v[0] < 0)) O.v[0] = 0; }
+  if (near > 0 || far > 0) { O.p[1] += near - far; if ((near > far) === (O.v[1] < 0)) O.v[1] = 0; }
+}
+// how far along the straight line from a to b stays r clear of the parked ships (0..1): for a camera that follows
+export function clearOfOthers(a, b, r, others) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), steps = Math.max(1, Math.ceil(L / 0.5));
+  for (const O of others) {
+    if (Math.min(Math.hypot(a[0] - O.p[0], a[2] - O.p[1]), Math.hypot(b[0] - O.p[0], b[2] - O.p[1])) > L + 14) continue;
+    for (let s = 0; s <= steps; s++) { const t = s / steps; if (insideOther(O, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t], r)) return Math.max(0, (s - 1) / steps); }
+  }
+  return 1;
+}
+
+// ── THE SHIP'S OWN VOICE ── V = makeVoice() each time someone sits down. voiceStep -> the clip to say now, by what it
+// is ('welcome', 'safety'), or null. The welcome: once, as the power first comes on. "Safety violation.": while the
+// ship is in another hangar (there: visiting), again and again, a gap after each; it waits for the welcome to end.
+export const makeVoice = () => ({ welcomed: false, busy: 0, said: { welcome: 0, safety: 0 } });
+export function voiceStep(V, S, dt, there = null) {
+  V.busy = Math.max(0, V.busy - dt);
+  let say = null;
+  if (S.power && !V.welcomed) { V.welcomed = true; say = 'welcome'; V.busy = VOICE.welcome; }
+  else if (there && V.busy <= 0) { say = 'safety'; V.busy = VOICE.safety + VOICE.gap; }
+  if (say) V.said[say]++;
+  return say;
+}
+
 // setting itself down: level and nose out over the pad's middle, then down onto it
 function settle(S, dt, solid) {
   const T = S.settle, P = S.cfg.pad, G = SETTLE; T.t += dt;
@@ -364,8 +578,22 @@ function backOff(S, solid) {
   const n = solid.away(at[0], at[1], at[2], [0, 0, 0]);
   return n[0] || n[1] || n[2] ? [{ to: add(S.p, mul(n, 14)), face: turn(S.q, [1, 0, 0]), speed: 5, near: 1.5, stop: true }] : [];
 }
+// THE AUTOPILOT NEVER GOES INTO ANOTHER SHIP'S HANGAR: none of its ways leads there. Switched on in one (flown in by
+// hand), it first goes straight out through that hangar's own door: levelled and at the height it is carried at, along
+// the line it is on (kept clear of the door's jambs), without turning, since its ends would swing into what is parked
+// there. Then as from outside. -> { other, at (where that leaves it), legs } or null (not in one)
+export function outOfOtherBay(S) {
+  const o = S.landed ? null : (S.cfg.others || []).find((q) => S.p[0] < DOOR.face + 11 && S.p[0] > q.bay.x0 - 2 && Math.abs(S.p[2] - q.at[2]) < DOOR.w / 2 + 1 && S.p[1] > -1 && S.p[1] < 12);
+  if (!o) return null;
+  const f0 = turn(S.q, [1, 0, 0]), f = Math.hypot(f0[0], f0[2]) > 0.2 ? unit([f0[0], 0, f0[2]]) : [1, 0, 0], q = facing(f);
+  // (how wide it is across the door, turned as it is)
+  let half = 0; for (const pt of S.cfg.points) half = Math.max(half, Math.abs(turn(q, pt)[2]));
+  const k = Math.max(0, DOOR.w / 2 - half - SKIN - 0.5), z = clamp(S.p[2], o.at[2] - k, o.at[2] + k), y = S.cfg.pad[1] + S.cfg.hover, at = [DOOR.face + 24, y, z];
+  return { other: o, at, legs: [{ to: [S.p[0], y, z], face: f, speed: 2.5, near: 0.3, stop: true }, { to: at, face: f, speed: 7, near: 2, stop: true }] };
+}
 // out of the hangar and clear of the station (solid: what it bumps into, if a start beside a wall is to be looked after)
 export function planLeave(S, solid = null) {
+  const out = outOfOtherBay(S); if (out) return [...out.legs, ...planLeave({ ...S, p: out.at, landed: false }, solid)];
   const c = S.cfg, P = c.pad, clear = OUTSIDE_BOX.max[0] + AREA.out + 30;
   if (S.landed || inBay(S.p, c)) return [
     { to: [Math.max(S.p[0], P[0]), P[1] + c.hover, P[2]], face: [1, 0, 0], speed: 2.5, near: 0.25, stop: true },
@@ -383,6 +611,7 @@ export function planLand(S, solid = null) {
   const c = S.cfg, P = c.pad, y = P[1] + c.hover;
   const over = { to: [P[0], P[1] + c.low, P[2]], face: [1, 0, 0], speed: 3, near: 0.3, stop: true }, down = { down: true };
   if (onPad(S)) return [];
+  const out = outOfOtherBay(S); if (out) return [...out.legs, ...planLand({ ...S, p: out.at, landed: false }, solid)];
   if (inBay(S.p, c)) return [{ to: [S.p[0], Math.min(Math.max(S.p[1], P[1] + c.low), y), P[2]], face: unit([turn(S.q, [1, 0, 0])[0] || 1, 0, 0]), speed: 3, near: 0.4, stop: true }, over, down];
   const gate = [DOOR.face + 90, y, P[2]], legs = backOff(S, solid), from = legs.length ? legs[0].to : S.p;
   // (already on the door's own line, between the gate and the door: straight on in)

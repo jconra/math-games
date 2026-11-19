@@ -261,7 +261,7 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
         build(); jobs.show(false); if (guide.active) guide.clear();
         // (the drill operator's game: fetched and its ship built now, so the field does not wait)
         if (iDrill && !drillKit) import('./drillview.js').then(async (m) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
-        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null) }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
           onClear: () => { T.clear = true; if (steps[T.i] && steps[T.i].kind === 'leave') say(iPilot ? 'out' : 'crewOut'); }, onJump: () => { T.jumpAsked = true; },
           onLanded: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.landed = true; },

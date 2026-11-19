@@ -9,6 +9,9 @@
 //               `near` metres, 1.5 unless given; quieter on out to `far`, 28); left out: plain, from everywhere
 //       volume  0..1 (1 unless given); rate: played quicker and higher (over 1) or slower and lower (under 1)
 //       group   the sounds' own volume group ('voices' unless given; groups.<name>.gain sets one group's level)
+//   sound.alarm({ at, volume, near, far, group, notes, beat })   -> { stop() } | null (as play). A sound made here, with
+//       no file: an alarm of two notes, turn and turn about (`notes` in Hz, `beat` seconds each), until it is stopped.
+//       The game's maker (2026-11-18, of the Miner flown into another ship's hangar): "you would hear an alarm".
 //   sound.ears(camera)               each frame: where the ears are (the camera, its way and its up)
 //   sound.volume, sound.muted        as saved in this browser (0..1, 0.8 at first; not muted); setVolume(v), setMuted(m)
 //   sound.ready                      true once the player has touched the page and sound can play
@@ -59,17 +62,36 @@ function makeSound() {
     const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
     const g = ctx.createGain(); g.gain.value = Math.max(0, volume);
     src.connect(g);
-    let out = g;
-    if (at) {
-      const p = ctx.createPanner();
-      p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = near; p.maxDistance = far; p.rolloffFactor = 1.3;
-      if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z);
-      g.connect(p); out = p;
-    }
-    out.connect(groups[group] || groups.voices);
+    placed(g, at, near, far).connect(groups[group] || groups.voices);
     src.start();
     S.played++;
     return { stop() { try { src.stop(); } catch (e) { /* done already */ } } };
+  };
+  // (a sound's last node, set at a point in the world if it has one: softer with distance)
+  function placed(node, at, near, far) {
+    if (!at) return node;
+    const p = ctx.createPanner();
+    p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = near; p.maxDistance = far; p.rolloffFactor = 1.3;
+    if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z);
+    node.connect(p); return p;
+  }
+  // AN ALARM, MADE HERE (no sound file): two notes, turn and turn about, for as long as it is wanted. The game's maker
+  // (2026-11-18, of the Miner flown into another ship's hangar): "you would hear an alarm".
+  S.alarm = ({ at = null, volume = 0.5, group = 'effects', near = 10, far = 140, notes = [640, 480], beat = 0.42 } = {}) => {
+    if (!ctx || ctx.state !== 'running' || !level()) return null;
+    const t = ctx.currentTime, osc = ctx.createOscillator(), turn = ctx.createOscillator(), depth = ctx.createGain(), soft = ctx.createBiquadFilter(), g = ctx.createGain();
+    // (one voice whose pitch a slow square wave moves between the two notes; softened, so it is a horn and not a buzz)
+    osc.type = 'sawtooth'; osc.frequency.value = (notes[0] + notes[1]) / 2;
+    turn.type = 'square'; turn.frequency.value = 1 / (2 * beat); depth.gain.value = (notes[0] - notes[1]) / 2;
+    turn.connect(depth); depth.connect(osc.frequency);
+    soft.type = 'lowpass'; soft.frequency.value = 1400; soft.Q.value = 0.6;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(Math.max(0, volume) * 0.3, t + 0.1);
+    osc.connect(soft); soft.connect(g);
+    placed(g, at, near, far).connect(groups[group] || groups.effects);
+    osc.start(); turn.start();
+    S.played++;
+    let over = false;
+    return { stop() { if (over) return; over = true; const e = ctx.currentTime; try { g.gain.cancelScheduledValues(e); g.gain.setValueAtTime(g.gain.value, e); g.gain.linearRampToValueAtTime(0, e + 0.15); osc.stop(e + 0.2); turn.stop(e + 0.2); } catch (x) { /* done already */ } } };
   };
   // where the ears are: the camera's place, the way it looks and its up
   const e = new Array(16);

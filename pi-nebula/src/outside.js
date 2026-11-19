@@ -23,10 +23,19 @@
 //     camera (the three hangars from the hangar side, the terminal from its window's side, ...), and the flown ship's
 //     own hangar always (its thruster pods and canisters are drawn with it). That is the best quality only; at the
 //     others (a phone's) the flown ship's hangar alone is drawn and the other openings get plain stand-ins (below).
+//   - FLOWN INTO ANOTHER SHIP'S HANGAR (the game's maker, 2026-11-18: "Lol, I'm sure kids will try to do this and it
+//     will make them laugh, so why not"; src/visit.js):
+//       the flown ship is still drawn in there: its own room, and what hangs on its own hangar's room and rides with
+//       it (its pods, its canisters). That hangar's own walls and floor, two walls away and out of sight, are put away
+//       meanwhile (`bulk` below), so being in another hangar costs that hangar and the ship, not two hangars;
+//       on a phone, the hangar the ship is lined up with and close to (outside.near) is the real one by the time it
+//       is at the door: its stand-in fades away over it (FADE seconds), and comes back the same way once the ship has
+//       gone off again. Never a sudden swap.
 //
 //   const outside = addOutside(W, { seed })
-//   outside.update(camera)      once a frame, before W.frame
+//   outside.update(camera, dt)  once a frame, before W.frame
 //   outside.flying = shipRoomId | null    a ship flown (the room it is parked in), or none
+//   outside.near = hangarId | null        the other hangar a flown ship is lined up with and close to, or in (src/visit.js)
 //   outside.out                 true while the camera is out in space (a flown ship's, past the hull)
 //   outside.triangles()         the hull's and the gear's triangles as plain lists (what a flying ship bumps into)
 import * as THREE from 'three';
@@ -38,6 +47,7 @@ import { OPENINGS } from '../kit/outside-plan.js';
 import { DIR } from '../world/sky.js';
 
 export const SUN = { colour: 0xfff0dc, strength: 3.3 };      // the Hull Lab's own sun
+export const FADE = 0.7;      // a phone's stand-in for a hangar, fading away over the real one and back (s)
 const SKINS = /^skin-/;
 
 // the sun, worked out in a material of its own accord: one more light in its sums, from the sky's sun
@@ -114,48 +124,78 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       // a point of the opening: s along it (-1..1 of half its width), d metres in from its face
       const at = (s, y, d, half = O.w / 2) => [O.at[0] + ax * s * half - ox * d, y, O.at[2] + az * s * half - oz * d];
       const g = new THREE.Group(), door = O.w > 10;
+      let room = null, sh = null, mat = null;
       if (door) {
+        // (a hangar's stand-in has a material of its own, so it can fade away over the real hangar: k below)
+        mat = dim.clone(); owned.push(mat);
         const h = O.w / 2 + 2.8, top = 10.9, deep = 39, wall = lin(0x1b2027), floor = lin(0x2b313a);
-        g.add(mesh([[[at(-1, 0, 0.4, h), at(1, 0, 0.4, h), at(1, 0, deep, h), at(-1, 0, deep, h)], floor], [[at(-1, top, 0.4, h), at(1, top, 0.4, h), at(1, top, deep, h), at(-1, top, deep, h)], wall],
+        room = mesh([[[at(-1, 0, 0.4, h), at(1, 0, 0.4, h), at(1, 0, deep, h), at(-1, 0, deep, h)], floor], [[at(-1, top, 0.4, h), at(1, top, 0.4, h), at(1, top, deep, h), at(-1, top, deep, h)], wall],
           [[at(-1, 0, 0.4, h), at(-1, 0, deep, h), at(-1, top, deep, h), at(-1, top, 0.4, h)], wall], [[at(1, 0, 0.4, h), at(1, 0, deep, h), at(1, top, deep, h), at(1, top, 0.4, h)], wall],
-          [[at(-1, 0, deep, h), at(1, 0, deep, h), at(1, top, deep, h), at(-1, top, deep, h)], lin(0x12161c)]], dim));
-        const sh = mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], [1, 1, 1]]], shield); sh.renderOrder = 5; g.add(sh);
+          [[at(-1, 0, deep, h), at(1, 0, deep, h), at(1, top, deep, h), at(-1, top, deep, h)], lin(0x12161c)]], mat); room.renderOrder = 4; g.add(room);
+        sh = mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], [1, 1, 1]]], shield); sh.renderOrder = 5; g.add(sh);
       } else g.add(mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], lin(0x0c131b)]], dim));
-      g.visible = false; stand.add(g); standIns.push({ o, g });
+      // (k: 1, the stand-in alone; 0, the real room alone; between, the stand-in fading over the real one)
+      g.visible = false; stand.add(g); standIns.push({ o, g, room, sh, mat, k: 1 });
     }
   }
+  // THE FLOWN SHIP'S OWN HANGAR, while the camera is in another: the room's own walls, floor and fittings (each kind of
+  // them one mesh, the room's merged pieces) are put away, and what hangs on the room beside them (the ship's pods and
+  // canisters, the crane) stays
+  const hangarAt = (p) => { for (const z of W.built.zones) if (hangars.has(z.id) && z.box.containsPoint(p)) return z.id; return null; };
+  let bulkOff = null;
+  function bulk(zoneId) {
+    if (zoneId === bulkOff) return;
+    for (const id of [bulkOff, zoneId]) { const z = id && W.room(id); if (z) for (const o of z.group.children) if (o.isMesh && z.merged && z.merged[o.name] === o.geometry) o.visible = id !== zoneId; }
+    bulkOff = zoneId;
+  }
+  const mine = new Set();
   const api = {
-    group: out.group, seed, flying: null, out: false, shown: true, off: false, mats,      // (off: put away, for the cost rigs' before and after)
-    ms: 0,
+    group: out.group, seed, flying: null, near: null, out: false, shown: true, off: false, mats,      // (off: put away, for the cost rigs' before and after)
+    ms: 0, cheap,
     get stats() { return out.stats; },
-    update(camera = W.camera) {
+    update(camera = W.camera, dt = 1 / 60) {
       const shown = !W.alone && !W.seenFrom && !api.off;
       api.shown = out.group.visible = shown;
       // (a flown ship's camera, out past the hull: in none of the hangars' own boxes)
-      let outThere = false;
-      if (shown && api.flying) { outThere = true; for (const z of W.built.zones) if (hangars.has(z.id) && z.box.containsPoint(camera.position)) { outThere = false; break; } }
+      const camIn = shown && api.flying ? hangarAt(camera.position) : null, outThere = !!(shown && api.flying) && !camIn;
       api.out = outThere; stand.visible = outThere && cheap;
+      // the flown ship's own rooms (its own, and the hangar it is drawn with): always drawn while it is flown
+      mine.clear();
+      if (shown && api.flying) { const z = W.room(api.flying); mine.add(api.flying); for (const w of (z && z.with) || []) mine.add(w); }
+      // (in another hangar: that one's own walls and floor put away)
+      const home = [...mine].find((id) => hangars.has(id)) || null;
+      bulk(camIn && home && camIn !== home ? home : null);
       if (outThere) {
         wanted.clear();
-        const mine = W.room(api.flying); for (const w of (mine && mine.with) || []) wanted.add(w);
+        for (const id of mine) if (hangars.has(id)) wanted.add(id);
         const facing = (o) => _p.copy(camera.position).sub(o.at).dot(o.out) > 0.5;
         if (!cheap) { for (const o of openings) if (facing(o)) wanted.add(o.room); }
-        else for (const s of standIns) s.g.visible = !wanted.has(s.o.room) && facing(s.o);
-      }
+        else for (const s of standIns) {
+          // (a phone: the hangar the ship is close to is the real one, its stand-in faded away over it; the others' stand-ins as ever)
+          if (s.mat) {
+            const real = s.o.room === api.near, k = s.k = Math.max(0, Math.min(1, s.k + (real ? -1 : 1) * dt / FADE));
+            if (k < 1) wanted.add(s.o.room);
+            if (s.mat.transparent !== (k < 1)) { s.mat.transparent = k < 1; s.mat.depthWrite = k >= 1; s.mat.needsUpdate = true; }
+            s.mat.opacity = k * k * (3 - 2 * k); s.room.visible = k > 0; s.sh.visible = k >= 1;
+          }
+          s.g.visible = (s.mat ? s.k > 0 : true) && !mine.has(s.o.room) && facing(s.o);
+        }
+      } else if (cheap) for (const s of standIns) if (s.mat && s.o.room === camIn) s.k = 0;      // (in it: the real one, and no fade on the way out)
     },
     triangles() {
       const lists = [];
       out.group.traverse((o) => { if (o.isMesh && o.geometry.index && /^(hull:(band|tiers|trim)|outside:(gear|glow))$/.test(o.name)) lists.push({ position: o.geometry.attributes.position.array, index: o.geometry.index.array }); });
       return lists;
     },
-    dispose() { W.rooms = null; for (const o of owned) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
+    dispose() { W.rooms = null; bulk(null); for (const o of owned) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
   };
   // the last word on which rooms are drawn: the stand-in walls put away under the hull; from out in space, the rooms
-  // behind the openings that face the camera
+  // behind the openings that face the camera; and a flown ship's own rooms wherever the camera is (in another ship's
+  // hangar too)
   W.rooms = (z, drawn) => {
     if (!api.shown) return drawn;
     if (SKINS.test(z.id)) return false;
-    if (!api.out) return drawn;
+    if (!api.out) return drawn || mine.has(z.id);
     return z.with ? z.with.some((w) => wanted.has(w)) : wanted.has(z.id);
   };
   api.ms = Math.round(performance.now() - t0);

@@ -49,6 +49,7 @@ import * as EB from '../kit/ships/explorer-built.js';
 import * as MD from '../kit/ships/medic-built.js';
 import * as MB from '../kit/ships/miner-built.js';
 import { shine } from './player.js';
+import { frameOf } from './standing.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
 // meets its hull: kit/ships/<ship>-built.js), the blueprint the game's maker picked, and its ways in (the ship's
@@ -63,6 +64,14 @@ export const SHIPS = [
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
 export const FLOWN = ['ship-miner'];
+// ... and the ships parked in the other two hangars, which a flown one can shove about their own hangar's floor (the
+// game's maker, 2026-11-18, of the Miner flown into another ship's hangar: "It would even be appropriate for the other
+// ship to get moved around if they rammed it. But it would be reset the next time they entered into the other hanger":
+// src/visit.js). B.stand(id, D) is the same for them: the cabin, the ways in (the Explorer's airstair, the Medic's
+// ramps and its crew door's stair), the walls a person feels and every spot asked for are where the ship stands.
+// STANDS_ANYWHERE: every room of the station that is felt as a part of its own for this (walls.js `apart`).
+export const SHOVED = ['ship-explorer', 'ship-medic'];
+export const STANDS_ANYWHERE = [...FLOWN, ...SHOVED];
 // how near (m, along the floor) a person must be to a way in for it to come down (the door's own reach, if it has one);
 // how long (s) after everyone has left a ship's hangar its cabin is dropped; the cabin's look
 export const NEAR = 4.5, LINGER = 4, LOOK = 'light';
@@ -234,7 +243,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       geos.push(w);
     }
     // (only while it is down; a way worked out ahead counts it down, as it comes down for whoever walks up to it)
-    walls.add(key, { solid: geos, up: geos, when: (pathing) => (pathing ? s.state === 'in' : D.t > 0.97) });
+    // (made where the ship is parked, as its leaves are kept, and stood where the ship stands)
+    walls.add(key, { solid: geos, up: geos, when: (pathing) => (pathing ? s.state === 'in' : D.t > 0.97), at: s.moved ? s.D : null });
     s.wayParts.set(key, D);
   }
 
@@ -258,7 +268,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     D.foot = new THREE.Box3(new THREE.Vector3(box.min.x - CLEAR, y0, box.min.z - CLEAR), new THREE.Vector3(box.max.x + CLEAR, y0 + 2.2, box.max.z + CLEAR));
     const size = D.foot.getSize(new THREE.Vector3()), c = D.foot.getCenter(new THREE.Vector3());
     const g = new THREE.BoxGeometry(size.x, size.y, size.z); g.translate(c.x, c.y, c.z);
-    walls.add(key, { solid: [g], when: (pathing) => !pathing && !!D.coming });
+    walls.add(key, { solid: [g], when: (pathing) => !pathing && !!D.coming, at: s.moved ? s.D : null });
   }
 
   // a person standing on a way's patch of floor as it is about to come down, walked off it at an easy pace: out past
@@ -394,14 +404,16 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       // the ways in: down for anyone near them while the cabin is in, up otherwise
       s.ways.forEach((D, i) => {
         let open = false;
+        // (the way's own point and patch are kept where the ship is parked: a person is brought there to be asked about
+        // them, `at`, as for a lift, when the ship stands somewhere else)
         if (s.state === 'in') {
           const reach = Math.max(D.near || NEAR, WAY_REACH);
-          for (const e of eyes) if (Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < reach && Math.abs(e.y - D.sense.y) < 3) { open = true; break; }
+          for (const e0 of eyes) { const e = at(s, e0); if (Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < reach && Math.abs(e.y - D.sense.y) < 3) { open = true; break; } }
           keepClear(s, D, i);
         }
         // (on its way down: its patch of floor is shut to walkers, and it waits while anyone still stands on it)
         D.coming = open && D.t < 1;
-        const onPatch = (e) => e.x > D.foot.min.x && e.x < D.foot.max.x && e.z > D.foot.min.z && e.z < D.foot.max.z && e.y < D.foot.min.y + 1.4;
+        const onPatch = (e0) => { const e = at(s, e0); return e.x > D.foot.min.x && e.x < D.foot.max.x && e.z > D.foot.min.z && e.z < D.foot.max.z && e.y < D.foot.min.y + 1.4; };
         const waits = D.coming && D.foot && eyes.some(onPatch);
         // (the player standing there is walked off it first, the shortest way that is not into the ship's side)
         if (waits && player && onPatch(player.pos)) standClear(s, D, player.pos, dt);
@@ -493,6 +505,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     s.Di.copy(s.D).invert(); s.moved = !!D; s.flown = null;
     const at = s.moved ? s.D : null;
     walls.place('room:' + s.zone.id, at);
+    // (its ways in, shut: each door's own box, kept where the ship is parked, is asked where the ship stands)
+    const fr = s.moved ? frameOf(s.D.elements) : null; for (const e of s.entries) e.fr = fr;
     if (s.M0) {
       s.M.multiplyMatrices(s.D, s.M0); s.inv.copy(s.M).invert();
       if (s.cabin) { s.cabin.group.matrix.copy(s.M); s.cabin.group.matrixWorldNeedsUpdate = true; }

@@ -11,7 +11,8 @@ import { standElements, frameOf, into, outOf, yawOf as turnOf, isParked } from '
 import { planCycle, valueAt, canAt, moveMounts } from '../kit/crane-plan.js';
 
 const STATION = JSON.parse(readFileSync(new URL('../kit/rooms/station.json', import.meta.url), 'utf8'));
-const SOLID = stationSolid({ bay: bayOf(M.MINER.pad[2]) });
+// (what the Miner bumps into, as the game makes it: its own bay, and the other two hangars' bays open to it)
+const SOLID = stationSolid({ bay: bayOf(M.MINER.pad[2]), bays: M.OTHERS.map((o) => o.bay) });
 const DT = 1 / 60;
 const keys = (...k) => M.controlsOf(new Set(k));
 const room = (S) => Math.min(...M.pointsOf(S).map((p) => SOLID.dist(p[0], p[1], p[2]))) - SKIN;      // how much room the ship has (0: touching)
@@ -136,11 +137,12 @@ test('the Miner\'s own facts match the station', () => {
 });
 
 test('bumping the station does no harm: it stops, or slides along', () => {
-  // straight at the wall beside the door, from outside
-  const S = M.makeShip(); M.place(S, [110, 4, 10], M.facing([-1, 0, 0]));
+  // straight at the station's side, from outside (past the three hangar doors, where its side is a plain wall: the
+  // posts between the doors are narrower than the ship, and it slips off one into a doorway)
+  const S = M.makeShip(); M.place(S, [110, 4, 90], M.facing([-1, 0, 0]));
   let least = 99; for (let t = 0; t < 8; t += DT) { M.stepShip(S, keys('forward'), DT, SOLID); least = Math.min(least, room(S)); }
   assert.ok(least > -0.12, `it never goes into the wall (${least.toFixed(2)} m)`);
-  assert.ok(S.p[0] > DOOR.face + 5 && M.speedOf(S) < 0.5, `it is stopped against it (x = ${S.p[0].toFixed(1)})`);
+  assert.ok(S.p[0] > 45 && S.p[0] < 60 && M.speedOf(S) < 0.5, `it is stopped against it (x = ${S.p[0].toFixed(1)})`);
   assert.ok(S.power && !S.landed, 'and nothing else has happened to it');
   // at a slant: it slides along the wall
   const G = M.makeShip(); M.place(G, [110, 4, 10], M.facing([-1, 0, 0.45]));
@@ -152,11 +154,253 @@ test('bumping the station does no harm: it stops, or slides along', () => {
     assert.ok(l > -0.06, `in the bay, held ${k}: it stops at the bay's edge (${l.toFixed(2)} m)`);
     assert.ok(Math.abs(B.p[2] - M.MINER.pad[2]) < DOOR.w / 2 && B.p[1] > -0.05 && B.p[1] < DOOR.h && B.p[0] > 20, `and is still in the bay (${B.p.map((v) => v.toFixed(1))})`);
   }
-  // the other hangars' doors are shut to it
-  const H = M.makeShip(); M.place(H, [110, 4, HANGARS[1].z], M.facing([-1, 0, 0]));
-  hold(H, 8, ['forward']);
-  assert.ok(H.p[0] > DOOR.face + 5, 'it cannot fly into another ship\'s hangar');
-  assert.equal(capsOf([DOOR.x + 0.02, HANGARS[0].z]).length, OPENINGS.length - 1, 'every real opening but its own door is shut');
+  // the windows are shut to it: every real opening but the three hangar doors is capped
+  assert.equal(capsOf([DOOR.x + 0.02, HANGARS[0].z]).length, OPENINGS.length - 1, 'one door left open: every other opening is shut');
+  assert.equal(capsOf(HANGARS.map((h) => [DOOR.x + 0.02, h.z])).length, OPENINGS.length - 3, 'the three hangar doors left open: the windows are still shut');
+});
+
+// ── THE OTHER TWO HANGARS (the game's maker, 2026-11-18: "Lol, I'm sure kids will try to do this and it will make them
+// laugh, so why not. ... you would hear an alarm and red lights started spinning around in the hanger and people started
+// running around and it started saying "Safety Violation" over and over in your cockpit. It would even be appropriate
+// for the other ship to get moved around if they rammed it. But it would be reset the next time they entered into the
+// other hanger. No need for damage or anything like that.") ──
+// (the ships parked there, as things that can be shoved, and what the Miner bumps into with them in it)
+const parkedOthers = () => { const L = M.OTHERS.map(M.makeOther); return { L, solid: { ...SOLID, push: (S) => M.pushOthers(S, L) } }; };
+function holdWith(S, secs, C, W) { const c = Array.isArray(C) ? keys(...C) : C; for (let t = 0; t < secs - 1e-9; t += DT) { M.stepShip(S, c, DT, W.solid); for (const O of W.L) M.stepOther(O, DT); } return S; }
+// every corner of a parked ship, in the station's frame
+const cornersOf = (O) => { const c = Math.cos(O.yaw), s = Math.sin(O.yaw), out = []; for (const b of O.boxes) for (const x of [b.x0, b.x1]) for (const z of [-b.r, b.r]) out.push([c * x + s * z + O.p[0], -s * x + c * z + O.p[1]]); return out; };
+const inItsBay = (O, slack = 0.01) => cornersOf(O).every(([x, z]) => x > O.cfg.bay.x0 - slack && x < DOOR.x + slack && z > O.cfg.bay.z0 - slack && z < O.cfg.bay.z1 + slack);
+
+test('the ships parked in the other two hangars are where the station has them, and the size their own files say', () => {
+  assert.deepEqual(M.OTHERS.map((o) => o.id), ['explorer', 'medic']);
+  assert.equal(M.MINER.others, M.OTHERS, 'the Miner knows them');
+  for (const o of M.OTHERS) {
+    const place = STATION.places.ships[o.id];
+    assert.deepEqual(o.at, place.at, `the ${o.name} is where the station file parks it`);
+    assert.equal(place.nose, o.nose > 0 ? '+x' : '-x', `and its nose points the way the station file says (${place.nose})`);
+    assert.ok(STATION.rooms.some((r) => r.id === o.room && r.with && r.with[0] === o.hangar), `it is the room ${o.room}, drawn with ${o.hangar}`);
+    assert.equal(o.at[2], HANGARS.find((h) => h.id === o.hangar).z, 'on its own bay door\'s line');
+    // its boxes cover its hull, as its own file measures it (the ship's frame there: x across, y up, z along), and no more than half a metre over
+    const sp = JSON.parse(readFileSync(new URL(`../assets/ships/${o.id}-built.space.json`, import.meta.url), 'utf8'));
+    const a0 = Math.min(...o.boxes.map((b) => b.a[0])), a1 = Math.max(...o.boxes.map((b) => b.a[1])), r = Math.max(...o.boxes.map((b) => b.r)), h = Math.max(...o.boxes.map((b) => b.h));
+    assert.ok(a0 <= sp.min[2] + 0.1 && a0 > sp.min[2] - 0.5 && a1 >= sp.max[2] - 0.1 && a1 < sp.max[2] + 0.5, `the ${o.name}'s length (${a0} to ${a1}; its file: ${sp.min[2]} to ${sp.max[2]})`);
+    assert.ok(r >= Math.max(-sp.min[0], sp.max[0]) - 0.1 && r < Math.max(-sp.min[0], sp.max[0]) + 0.5, `its half width (${r})`);
+    assert.ok(h >= sp.max[1] - 0.1 && h < sp.max[1] + 0.5, `its height (${h}; its file: ${sp.max[1]})`);
+    // parked, all of it is inside its bay with room to be shoved every way
+    const O = M.makeOther(o);
+    assert.ok(inItsBay(O, -2), 'parked, it is well inside its bay');
+    assert.equal(M.otherStand(O), null); assert.equal(M.otherElements(O), null, 'and parked is no move at all');
+  }
+});
+
+test('the other two bays can be flown into: their walls and the ship parked there stop the Miner, which is never down there', () => {
+  for (const o of M.OTHERS) {
+    const W = parkedOthers(), O = W.L.find((q) => q.cfg === o), zc = o.at[2];
+    // in through the door on its middle line, slowly: it is in, and stops against the parked ship
+    const S = M.makeShip(); M.place(S, [DOOR.face + 14, 2.6, zc], M.facing([-1, 0, 0]));
+    let least = 99; for (let t = 0; t < 9; t += DT) { M.stepShip(S, { ...M.noControls(), move: [0.12, 0, 0] }, DT, W.solid); for (const q of W.L) M.stepOther(q, DT); least = Math.min(least, room(S)); }
+    assert.ok(S.p[0] < DOOR.x - 1, `it flies in through the ${o.name}'s door (x = ${S.p[0].toFixed(1)})`);
+    assert.ok(least > -0.06, `touching nothing of the hangar on the way (${least.toFixed(2)} m)`);
+    assert.ok(!M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN - 0.06)), 'and it is not inside the parked ship');
+    assert.ok(O.moved && M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN + 2.5)), 'it has come up against it');
+    // a ship held still by its hangar's back wall stops it dead, as a wall does
+    const W1 = parkedOthers(), O1 = W1.L.find((q) => q.cfg === o); O1.p[0] = o.at[0] - 30; O1.v = [-0.5, 0]; M.stepOther(O1, DT); O1.v = [0, 0]; O1.w = 0;      // (put past the wall and stepped once: the wall has it)
+    const back = [...O1.p], P = M.makeShip(); M.place(P, [DOOR.x - 4, 2.6, zc], M.facing([-1, 0, 0]));
+    for (let t = 0; t < 8; t += DT) { M.stepShip(P, keys('forward'), DT, W1.solid); for (const q of W1.L) M.stepOther(q, DT); }
+    assert.ok(Math.abs(O1.p[0] - back[0]) < 0.02 && M.speedOf(P) < 0.6, `against the back wall the ${o.name} goes no further and the Miner is stopped (${M.speedOf(P).toFixed(2)} m/s)`);
+    assert.ok(!M.pointsOf(P).some((p) => M.insideOther(O1, p, SKIN - 0.1)), 'outside it still');
+    // the bay's side, its roof and its floor stop it as its own bay's do (the parked ship stood back out of the way)
+    for (const k of ['left', 'right', 'up', 'down']) {
+      const B = M.makeShip(); M.place(B, [DOOR.x - 8.5, 2.6, zc], M.facing([-1, 0, 0])); const W2 = parkedOthers(); W2.L.find((q) => q.cfg === o).p[0] -= 9.5;
+      let l = 99; for (let t = 0; t < 6; t += DT) { M.stepShip(B, keys(k), DT, W2.solid); l = Math.min(l, room(B)); }
+      assert.ok(l > -0.06, `in the ${o.name}'s bay, held ${k}: it stops at the bay's edge (${l.toFixed(2)} m)`);
+      assert.ok(Math.abs(B.p[2] - zc) < DOOR.w / 2 && B.p[1] > -0.05 && B.p[1] < DOOR.h, `and is still in the bay (${B.p.map((v) => v.toFixed(1))})`);
+      // SET DOWN THERE IT MAY REST, BUT IT IS NOT DOWN: no legs on another ship's floor, so the seat never lets the pilot out
+      if (k === 'down') {
+        hold(B, 2, [], W2.solid);
+        assert.ok(B.p[1] < 0.05 && M.speedOf(B) < 0.01, `brought down, it rests on that floor (${B.p[1].toFixed(2)} m)`);
+        assert.equal(B.landed, false, 'but it is not down');
+        assert.equal(M.standing(B), null); assert.equal(M.canGetUp(B), false, 'and the seat does not let the pilot out');
+        assert.equal(M.floorUnder(B), null, 'that floor is not its own');
+        assert.equal(M.floorBelow(B), 0, 'though it is a floor, for whoever is under the ship');
+        assert.ok(M.visiting(B) === o, 'and it is in that ship\'s hangar the while');
+        assert.ok(!M.helpFor('fly', { getUp: M.canGetUp(B) }).some(([, w]) => /Get up/.test(w)), 'no "Get up" in the help corner either');
+      }
+    }
+  }
+});
+
+test('the alarm\'s moment: in another ship\'s hangar from the first of the Miner over the door\'s line to the last of it out', () => {
+  const S = M.makeShip();
+  assert.equal(M.visiting(S), null, 'parked in its own hangar: no');
+  const L = lifted(); assert.equal(M.visiting(L), null, 'hovering in its own bay: no');
+  hold(L, 6, ['forward']); assert.equal(M.visiting(L), null, 'out through its own door: no');
+  const noseAt = (x, z, f = [-1, 0, 0]) => { const T = M.makeShip(); M.place(T, [0, 2.6, z], M.facing(f)); const n = Math.min(...M.pointsOf(T).map((p) => p[0])); T.p[0] += x - n; return T; };
+  for (const o of M.OTHERS) {
+    const zc = o.at[2];
+    assert.equal(M.visiting(noseAt(DOOR.x + 0.5, zc)), null, `nose half a metre short of the ${o.name}'s door line: no`);
+    assert.equal(M.visiting(noseAt(DOOR.x - 0.5, zc)), o, 'nose half a metre over it: yes');
+    assert.equal(M.visiting(noseAt(DOOR.x - 20, zc)), o, 'all the way in: yes');
+    // backing out: on until the last of it is out (nose in, its nose is the last)
+    const T = noseAt(DOOR.x - 8, zc); let last = null, flips = 0, was = true;
+    for (let t = 0; t < 8; t += DT) { M.stepShip(T, keys('reverse'), DT, SOLID); const v = !!M.visiting(T); if (v !== was) { flips++; was = v; last = Math.min(...M.pointsOf(T).map((p) => p[0])); } }
+    assert.equal(flips, 1, 'backing out it goes off once, and stays off');
+    assert.ok(last > DOOR.x - 0.01 && last < DOOR.x + 1, `as the last of it crosses the line (${last.toFixed(2)})`);
+    // beside the door, outside, against the hull: no
+    assert.equal(M.visiting(noseAt(DOOR.face + 1.2, zc + 15)), null, 'outside, against the wall between two doors: no');
+    // tail first counts just the same
+    assert.equal(M.visiting(noseAt(DOOR.x - 18, zc, [1, 0, 0])), o, 'whichever way round it is');
+  }
+  // down on its own hangar's floor it is never in another's
+  const D = M.makeShip(M.MINER, { p: [40, 0, -3], q: M.facing([0, 0, 1]) }); assert.equal(M.visiting(D), null);
+});
+
+test('a rammed ship is shoved along the floor and turned, slows by itself, stays in its hangar, and its reset puts it back', () => {
+  for (const o of M.OTHERS) {
+    const W = parkedOthers(), O = W.L.find((q) => q.cfg === o), zc = o.at[2];
+    // straight in at a good speed, off its middle line: it is hit, slides and turns
+    const S = M.makeShip(); M.place(S, [DOOR.face + 40, 2.6, zc + 3.5], M.facing([-1, 0, -0.12]));
+    holdWith(S, 3.2, ['forward'], W);
+    assert.ok(O.moved && O.hit > 3, `the ${o.name} was hit (at ${O.hit.toFixed(1)} m/s)`);
+    const moved0 = Math.hypot(O.p[0] - o.at[0], O.p[1] - o.at[2]);
+    assert.ok(moved0 > 0.5, `and shoved along the floor (${moved0.toFixed(1)} m so far)`);
+    assert.ok(Math.hypot(O.v[0], O.v[1]) <= M.SHOVE.most + 1e-6 && Math.abs(O.w) <= M.SHOVE.spin + 1e-6, 'no faster than a shoved ship goes');
+    // the Miner is unharmed and still flying: nothing else has happened to it
+    assert.ok(S.power && !S.landed && S.p.every(Number.isFinite), 'the Miner flies on, nothing else has happened to it');
+    // let go and backed off: it slows by itself and stops
+    holdWith(S, 1.5, ['reverse'], W); holdWith(S, 6, [], W);
+    assert.ok(M.otherStill(O), 'left alone it slows and stops by itself');
+    // pushed on the side of its nose (or its tail: whichever end is toward the door), well off its middle: it turns
+    M.place(S, [DOOR.x - 4, 2.6, zc + 7.5], M.facing([-1, 0, 0])); M.resetOther(O);
+    // (nose in, its right is toward the hangar's middle line)
+    holdWith(S, 4, ['right'], W); holdWith(S, 6, [], W);
+    assert.ok(M.otherStill(O) && Math.abs(O.yaw) > 0.05, `turned by the bump (${(O.yaw * 180 / Math.PI).toFixed(1)} degrees)`);
+    const E = M.otherElements(O), fr = frameOf(E);
+    assert.ok(E && !isParked(E), 'where it stands is a move from where it is parked');
+    assert.deepEqual([E[1], E[4], E[5], E[6], E[9], E[13]], [0, 0, 1, 0, 0, 0], 'a turn about straight up and a move across the floor: nothing tips');
+    const [hx, hz] = outOf(fr, o.at[0], o.at[2]);
+    assert.ok(Math.hypot(hx - O.p[0], hz - O.p[1]) < 1e-9, 'and that one move takes its pad\'s point to where it now stands');
+    // shoved every way for a long time, it never leaves its bay nor passes the door's line
+    for (const [from, f, secs] of [[[DOOR.face + 30, 2.6, zc], [-1, 0, 0], 12], [[DOOR.x - 6, 2.6, zc - 3], [-1, 0, 0.25], 10], [[DOOR.x - 6, 2.6, zc + 3], [-1, 0, -0.25], 10]]) {
+      M.place(S, from, M.facing(f)); let worst = 99;
+      for (let t = 0; t < secs; t += DT) { M.stepShip(S, keys('forward'), DT, W.solid); for (const q of W.L) M.stepOther(q, DT); worst = Math.min(worst, room(S)); assert.ok(inItsBay(O), `the ${o.name} stays in its bay (${cornersOf(O).map((c) => c.map((v) => v.toFixed(1)))})`); }
+      assert.ok(worst > -0.12, `and the Miner is never squeezed into a wall by it (${worst.toFixed(2)} m)`);
+      assert.ok(!M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN - 0.1)), 'nor into it');
+    }
+    // the other hangar's ship has not been touched
+    for (const q of W.L) if (q !== O) assert.ok(!q.moved && M.otherStand(q) === null, `the ${q.cfg.name} has not moved`);
+    // THE RESET: back exactly where it is parked
+    M.resetOther(O);
+    assert.deepEqual([O.p, O.yaw, O.v, O.w, O.moved], [[o.at[0], o.at[2]], 0, [0, 0], 0, false]);
+    assert.equal(M.otherElements(O), null, 'reset, it is exactly where it is parked');
+  }
+  // NOBODY IS HIT: it stops dead rather than come over someone standing on that floor
+  {
+    const W = parkedOthers(), O = W.L[0], zc = O.cfg.at[2], who = [O.cfg.at[0] - 11.5, zc + 1], S = M.makeShip(); M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
+    for (let t = 0; t < 9; t += DT) { M.stepShip(S, keys('forward'), DT, W.solid); for (const q of W.L) M.stepOther(q, DT, q === O ? [who] : null); }
+    assert.ok(O.moved && O.held > 0 && M.otherStill(O), 'rammed toward someone standing behind it, it is shoved, and stopped');
+    assert.ok(O.p[0] < O.cfg.at[0] - 1 && M.insideOther(O, [who[0], 1, who[1]], M.SHOVE.person + 0.6), `just short of them (shoved ${(O.cfg.at[0] - O.p[0]).toFixed(1)} m)`);
+    assert.ok(!M.insideOther(O, [who[0], 1, who[1]], M.SHOVE.person - 0.01), `never nearer than ${M.SHOVE.person} m, let alone over them`);
+    assert.ok(M.speedOf(S) < 0.6 && !M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN - 0.1)), 'and the Miner, pressing on, is stopped behind it');
+    // they step away: it goes on to the wall
+    holdWith(S, 5, ['forward'], W); assert.ok(Math.min(...cornersOf(O).map((c) => c[0])) < who[0] - 0.3, 'they gone, it can be shoved on');
+    // someone standing under its wing, as people do: that does not hold it, but its body still stops short of them
+    const W2 = parkedOthers(), O2 = W2.L[0], wing = [O2.cfg.at[0] - 4, zc + 5.2]; M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
+    assert.ok(M.insideOther(O2, [wing[0], 1, wing[1]], 0), '(they stand under its wing)');
+    for (let t = 0; t < 6; t += DT) { M.stepShip(S, keys('forward'), DT, W2.solid); for (const q of W2.L) M.stepOther(q, DT, q === O2 ? [wing] : null); }
+    assert.ok(O2.p[0] < O2.cfg.at[0] - 1, `under its wing they do not hold it still (shoved ${(O2.cfg.at[0] - O2.p[0]).toFixed(1)} m)`);
+  }
+  // a gentle push moves it too, slowly: no ram is needed
+  const W = parkedOthers(), O = W.L[0], S = M.makeShip(); M.place(S, [DOOR.x - 2, 2.6, O.cfg.at[2]], M.facing([-1, 0, 0]));
+  holdWith(S, 5, { ...M.noControls(), move: [0.4, 0, 0] }, W);
+  assert.ok(O.moved && O.p[0] < O.cfg.at[0] - 0.3, `pushed gently it gives way (${(O.cfg.at[0] - O.p[0]).toFixed(1)} m)`);
+});
+
+test('the autopilot never plans a way into another ship\'s hangar, and switched on in one it goes straight out', () => {
+  // is a point in one of the other two bays (any of the box a ship can fly in, in from the door's line)?
+  const inOther = (p) => M.OTHERS.find((o) => p[0] < DOOR.x && p[0] > o.bay.x0 - 1 && p[2] > o.bay.z0 && p[2] < o.bay.z1 && p[1] > -1 && p[1] < 12) || null;
+  const along = (a, b, fn) => { const n = Math.max(2, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]))); for (let i = 0; i <= n; i++) fn([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, a[2] + (b[2] - a[2]) * i / n]); };
+  let rnd = 20261118; const R = () => (rnd = (rnd * 1664525 + 1013904223) >>> 0) / 4294967296;
+  // from anywhere outside, and from its own bay: no leg of a landing or a leaving passes through either bay
+  let tried = 0;
+  for (let i = 0; i < 400; i++) {
+    const S = M.makeShip();
+    if (i % 5 === 0) M.place(S, [28 + R() * 30, 1 + R() * 2, M.MINER.pad[2] - 6 + R() * 12], M.facing([R() - 0.5, 0, R() - 0.5]));
+    else M.place(S, [OUTSIDE_BOX.min[0] - 150 + R() * (OUTSIDE_BOX.max[0] - OUTSIDE_BOX.min[0] + 300), OUTSIDE_BOX.min[1] - 60 + R() * 250, OUTSIDE_BOX.min[2] - 150 + R() * (OUTSIDE_BOX.max[2] - OUTSIDE_BOX.min[2] + 300)], M.facing([R() - 0.5, R() * 0.2 - 0.1, R() - 0.5]));
+    if (inOther(S.p)) continue;
+    for (const plan of [M.planLand(S), M.planLeave(S)]) {
+      let at = [...S.p];
+      for (const leg of plan) { if (leg.down) continue; along(at, leg.to, (p) => assert.equal(inOther(p), null, `a leg from ${at.map((v) => v.toFixed(0))} to ${leg.to.map((v) => v.toFixed(0))} goes through another ship's hangar`)); at = leg.to; }
+      tried++;
+    }
+  }
+  assert.ok(tried > 700);
+  // just outside each of the other doors, nose toward it: it turns away, never in
+  for (const o of M.OTHERS) {
+    const W = parkedOthers(), S = M.makeShip(); M.place(S, [DOOR.face + 14, 2.6, o.at[2]], M.facing([-1, 0, 0]));
+    const plan = M.planLand(S, W.solid); let t = 0, seen = false;
+    while (t < 200) { const C = M.fly(S, plan, DT); if (!C && !S.settle) break; M.stepShip(S, C || M.noControls(), DT, W.solid); t += DT; if (M.visiting(S)) seen = true; if (S.landed && t > 1) break; }
+    assert.ok(M.onPad(S), `from the ${o.name}'s door it lands on its own pad`);
+    assert.equal(seen, false, 'without ever going in');
+  }
+  // SWITCHED ON INSIDE ONE (flown in by hand): out through that hangar's own door, then home, touching nothing
+  // (nose in through the door as far as the parked ship lets it; at a slant; tail first; and right inside, the parked
+  // ship having been shoved to the back of its bay)
+  for (const o of M.OTHERS) for (const [dx, dz, f, shoved] of [[0.2, 0, [-1, 0, 0], 0], [0.6, 2, [-1, 0, 0.3], 0], [2.6, -1.5, [1, 0, 0.2], 0], [-8, 1, [-1, 0, 0.1], 9.5], [-6.5, 0, [0.6, 0, 0.6], 9.5]]) {
+    const W = parkedOthers(), O = W.L.find((q) => q.cfg === o), S = M.makeShip(); M.place(S, [DOOR.x + dx, 1.8, o.at[2] + dz], M.facing(f));
+    O.p[0] -= shoved; const stood = [...O.p];
+    assert.equal(M.visiting(S), o);
+    assert.ok(!M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN)), 'it starts clear of the parked ship');
+    const plan = M.planLand(S, W.solid), out = M.outOfOtherBay(S);
+    assert.ok(out && out.other === o && out.at[0] > DOOR.face + 12, 'it knows which hangar it is in, and where its door leaves it');
+    // its first legs stay on a line through that bay's own door, and no later leg comes back into either bay
+    let at = [...S.p];
+    plan.forEach((leg, i) => { if (leg.down) return; along(at, leg.to, (p) => { const q = inOther(p); if (i < 2) assert.ok(q === null || q === o, 'out by its own door'); else assert.equal(q, null, 'and never back in'); }); if (i < 2) assert.ok(Math.abs(leg.to[2] - o.at[2]) < DOOR.w / 2 - 3.3, 'clear of the door\'s jambs'); at = leg.to; });
+    let t = 0, bumps = 0, outAt = null, back = false;
+    while (t < 240) { const C = M.fly(S, plan, DT); if (!C && !S.settle) break; M.stepShip(S, C || M.noControls(), DT, W.solid); for (const q of W.L) M.stepOther(q, DT); t += DT; if (S.bump > 0) bumps++; const v = M.visiting(S); if (!v && outAt == null) outAt = t; if (v && outAt != null) back = true; if (S.landed && t > 1 && plan.every((l) => l.down)) break; }
+    assert.ok(M.onPad(S), `from inside the ${o.name}'s hangar the autopilot ends on its own pad (${S.p.map((v) => v.toFixed(1))})`);
+    assert.equal(bumps, 0, 'touching nothing'); assert.ok(!O.moved && O.p[0] === stood[0] && O.p[1] === stood[1], 'the parked ship least of all');
+    assert.ok(outAt != null && outAt < 12 && !back, `out of there in ${outAt && outAt.toFixed(1)} s and never back`);
+  }
+  // and leaving: out of that door, then clear of the station
+  const W = parkedOthers(), S = M.makeShip(); M.place(S, [DOOR.x + 0.3, 2.2, M.OTHERS[1].at[2] + 1], M.facing([-1, 0, 0]));
+  const plan = M.planLeave(S, W.solid); let t = 0;
+  while (t < 120) { const C = M.fly(S, plan, DT); if (!C) break; M.stepShip(S, C, DT, W.solid); t += DT; }
+  assert.ok(M.clearOf(S.p) && !W.L.some((q) => q.moved), `the autopilot leaves from in there too (${M.boxDist(S.p).toFixed(0)} m clear)`);
+});
+
+test('the ship\'s voice: the welcome once each sitting as the power comes on, "Safety violation" over and over in another hangar', () => {
+  const run = (V, S, secs, there = null) => { const said = []; for (let t = 0; t < secs - 1e-9; t += DT) { const c = M.voiceStep(V, S, DT, there); if (c) said.push([c, +t.toFixed(2)]); } return said; };
+  const S = M.makeShip(); let V = M.makeVoice();
+  assert.deepEqual(run(V, S, 3), [], 'sat down, the power off: nothing is said');
+  M.setPower(S, true);
+  assert.deepEqual(run(V, S, 1).map((x) => x[0]), ['welcome'], 'the power comes on: the welcome, once');
+  // lifting off, flying, landing and lifting off again: no more welcomes
+  hold(S, 1.5, ['up']); assert.equal(S.landed, false);
+  assert.deepEqual(run(V, S, 8), [], 'not at lift-off');
+  M.park(S); assert.deepEqual(run(V, S, 2), []); hold(S, 1.5, ['up']); assert.deepEqual(run(V, S, 2), [], 'nor at the next one');
+  // the power switched off and on again on the pad, the same sitting: still the once
+  M.park(S); M.setPower(S, false); run(V, S, 1); M.setPower(S, true);
+  assert.deepEqual(run(V, S, 5), [], 'once each time the pilot sits down, not every time the switch is thrown');
+  assert.equal(V.said.welcome, 1);
+  // the next time someone sits down: again
+  V = M.makeVoice(); M.setPower(S, false); assert.deepEqual(run(V, S, 1), []); M.setPower(S, true);
+  assert.deepEqual(run(V, S, 5).map((x) => x[0]), ['welcome']);
+  // a crew member riding with the crew's pilot: the power comes on by itself as the autopilot lifts off, and it is said then
+  const A = M.makeShip(), VA = M.makeVoice(), plan = M.planLeave(A); let first = null;
+  for (let t = 0; t < 4; t += DT) { M.stepShip(A, M.fly(A, plan, DT) || M.noControls(), DT, SOLID); const c = M.voiceStep(VA, A, DT, null); if (c && first == null) first = c; }
+  assert.equal(first, 'welcome'); assert.equal(VA.said.welcome, 1);
+  // IN ANOTHER HANGAR: at once, then again and again with a short gap, and no more once it has left
+  const o = M.OTHERS[0], period = M.VOICE.safety + M.VOICE.gap;
+  const said = run(V, S, period * 4 - 0.1, o);
+  assert.deepEqual(said.map((x) => x[0]), ['safety', 'safety', 'safety', 'safety'], 'over and over');
+  assert.equal(said[0][1], 0, 'from the moment it is in');
+  for (let i = 1; i < said.length; i++) assert.ok(Math.abs(said[i][1] - said[i - 1][1] - period) < 0.03, `one every ${period} s: the clip, then the gap`);
+  assert.ok(M.VOICE.gap >= 0.8 && M.VOICE.gap <= 2.5, 'a short gap');
+  assert.deepEqual(run(V, S, 20, null), [], 'out of there: no more');
+  // flown in before the welcome is over: it waits for it
+  const V2 = M.makeVoice(), early = run(V2, S, 5, o);
+  assert.deepEqual(early.map((x) => x[0]), ['welcome', 'safety']); assert.ok(early[1][1] >= M.VOICE.welcome - 0.02, 'it does not talk over its own welcome');
 });
 
 test('the station\'s area: clear of it, the jump is offered', () => {

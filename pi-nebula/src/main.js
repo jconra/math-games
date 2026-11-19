@@ -27,7 +27,8 @@ import { drawLooks, drawn, storedReady, storedInfo } from './portraits.js';
 import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
-import { makeBoarding, FLOWN } from './boarding.js';
+import { makeBoarding, STANDS_ANYWHERE } from './boarding.js';
+import { makeVisit } from './visit.js';
 import { makeCrane } from './crane.js';
 import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
@@ -84,8 +85,9 @@ async function boot() {
   progress(0.84, 'Checking the doors');
   await new Promise((go) => setTimeout(go, 0));
   // (the parked Miner's own room is felt as a part of its own: flown in by hand it stands wherever it was set down,
-  // and its hull and legs with it: walls.js `apart`, boarding.js stand)
-  const walls = makeWalls(W.built, { portals: W.R.portals, apart: FLOWN });
+  // and its hull and legs with it: walls.js `apart`, boarding.js stand. The Explorer's and the Medic's too: the Miner,
+  // flown into their hangars, can shove them about: src/visit.js)
+  const walls = makeWalls(W.built, { portals: W.R.portals, apart: STANDS_ANYWHERE });
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
   // (the big scanner glides only with someone on its bed: parked until the station's people put a patient there)
@@ -94,6 +96,9 @@ async function boot() {
   const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
   // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
   const crane = GAME.crane = makeCrane({ W, walls, boarding });
+  // (the other two hangars, for a Miner flown into them by hand: the alarm, the red lights, the people running, the
+  // parked ship shoved and put back: src/visit.js)
+  const visit = GAME.visit = makeVisit({ W, boarding, outside, people: () => people });
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -143,7 +148,7 @@ async function boot() {
   const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
-  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
+  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
@@ -195,7 +200,8 @@ async function boot() {
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
     if (GAME.cam) GAME.cam(W.camera, now, dt);      // (a rig's own camera, for films: GAME.cam = (camera, now, dt) => {...})
-    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now });
+    // (the nearest people are counted from a ship flown about the station, while one is: src/visit.js)
+    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus });
     sound.ears(W.camera);
     if (GAME.player) {
       const busy = jobs.busy();
@@ -210,7 +216,8 @@ async function boot() {
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
-    outside.update(W.camera);
+    visit.update(dt, W.camera);      // (a ship flown into another hangar: the alarm there, the parked ship where it has been shoved)
+    outside.update(W.camera, dt);
     W.frame(dt, now, eyes);
     GAME.frames++;
   }
