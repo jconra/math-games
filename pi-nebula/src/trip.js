@@ -31,9 +31,10 @@
 //     sitting down (there was a dark moment that put them there from the captain's "Let's go": gone, with the
 //     question). At the rocks the drill operator's view outside the ship is reached by moving the eye: as the jump's
 //     flash clears it is already rising out of the seat and gliding back to the drill's view behind the ship; when the
-//     drilling is done it glides back down into the seat, and there, the eye where the pilot's eyes are, the cockpit is
-//     round it again (that last moment is a plain cut: the drill's ship is a second one, built for outside, with no
-//     cabin in it).
+//     drilling is done it goes round the ship to behind it and forward down into the seat, and there, the eye where
+//     the crew member's eyes are, the view is their own cockpit again (that last moment is a plain cut: the drill's
+//     ship is a second one, built for outside, in a scene of its own with its own sky and rocks; it has a cockpit of
+//     its own, so the cut changes the sky outside and the screens' small print, not the whole picture).
 //   - AT THE ROCKS THE SHIP DOES NOT MOVE (as before): from the jump's flash out to the jump's flash home it stands
 //     where it is parked and the station is simply not drawn (W.alone: only the ship's own room; everything else hung
 //     on the scene is put away and brought back). The crossing itself is the streaks and the flash, as it was: the

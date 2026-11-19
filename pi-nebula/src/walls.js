@@ -150,16 +150,20 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
     }
     return r;
   }
+  // (in or beside a part stood somewhere else, a ship set down crooked, the ring of points a person is felt at is turned
+  // with that part: so every question asked of its walls is the very one asked when it stands as it was made, and a
+  // person fits its doors and slides along its walls exactly as they did)
   function free(x, y, z, r = BODY.r, doorsOpen = false) {
     if (extra.length) r = radiusAt(x, y, z, r);
+    const fr = turned ? frameAtXZ(x, z) : null, c = fr ? fr.c : 1, s = fr ? fr.s : 0;
     for (const h of BODY.heights) {
       if (full(x, y + h, z)) return false;
-      for (let i = 0; i < 8; i++) if (full(x + RX[i] * r, y + h, z + RZ[i] * r)) return false;
+      for (let i = 0; i < 8; i++) if (full(x + (c * RX[i] + s * RZ[i]) * r, y + h, z + (c * RZ[i] - s * RX[i]) * r)) return false;
     }
     if (doorAt(x, y, z, r, doorsOpen)) return false;
     // something low in the way (a bed, a chair's seat, a table's top): too tall to step onto
     const lr = Math.min(r, BODY.lowR);
-    for (let i = 0; i < 8; i += 2) { const f = floorAt(x + RX[i] * lr, z + RZ[i] * lr, y + BODY.low, BODY.low); if (f !== null && f > y + BODY.stepUp) return false; }
+    for (let i = 0; i < 8; i += 2) { const f = floorAt(x + (c * RX[i] + s * RZ[i]) * lr, z + (c * RZ[i] - s * RX[i]) * lr, y + BODY.low, BODY.low); if (f !== null && f > y + BODY.stepUp) return false; }
     return true;
   }
   function tryStep(pos, sx, sz, r, doorsOpen) {
@@ -185,10 +189,11 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   // doorsOpen: walk as if every door that can open were open (for working out a way)
   // (the frame of a part stood somewhere else that a person is in or beside, if any: `turned` says whether any part is)
   let turned = false;
-  function frameAt(p) {
-    for (const L of extra) { const fr = L.fr; if (!fr) continue; const dx = p.x - fr.x, dz = p.z - fr.z, lx = fr.c * dx - fr.s * dz, lz = fr.s * dx + fr.c * dz; if (lx >= L.box.min.x && lx <= L.box.max.x && lz >= L.box.min.z && lz <= L.box.max.z) return fr; }
+  function frameAtXZ(x, z) {
+    for (const L of extra) { const fr = L.fr; if (!fr) continue; const dx = x - fr.x, dz = z - fr.z, lx = fr.c * dx - fr.s * dz, lz = fr.s * dx + fr.c * dz; if (lx >= L.box.min.x && lx <= L.box.max.x && lz >= L.box.min.z && lz <= L.box.max.z) return fr; }
     return null;
   }
+  const frameAt = (p) => frameAtXZ(p.x, p.z);
   function move(pos, dx, dz, r = BODY.r, doorsOpen = false) {
     const dist = Math.hypot(dx, dz); if (dist < 1e-6) return 0;
     // (somewhere no person can stand, as when a ship's ramp has come down where they were: out to the nearest spot)

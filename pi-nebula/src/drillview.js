@@ -508,7 +508,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   function glideFrom({ eye, look, fov }, secs = 2) { glide = { out: true, t: 0, secs, eye: new THREE.Vector3(...eye), look: new THREE.Vector3(...look), fov, done: false }; cam.fresh = false; cam.eye.copy(glide.eye); cam.look.copy(glide.look); cam.fov = fov; }
   function glideTo({ eye, look, fov }, secs = 1.5) {
     const P = viewOf('look'), spot = (e, l, f) => ({ eye: new THREE.Vector3(...e), look: new THREE.Vector3(...l), fov: f });
-    glide = { out: false, t: 0, done: false, from: { eye: cam.eye.clone(), look: cam.look.clone(), fov: cam.fov }, legs: [{ to: spot(P.eye, P.look, P.fov), secs: secs * 0.7, down: false }, { to: spot(eye, look, fov), secs, down: true }] };
+    glide = { out: false, t: 0, done: false, from: { eye: cam.eye.clone(), look: cam.look.clone(), fov: cam.fov }, legs: [{ to: spot(P.eye, P.look, P.fov), secs: secs * 0.9, round: true }, { to: spot(eye, look, fov), secs, down: true }] };
   }
   const go = (stage) => { V.stage = stage; V.t = 0; V.sub = ''; V.subT = 0; V.log.push(stage); };
   const looking = () => V.stage === 'look' || V.stage === 'arrive' || V.stage === 'back';
@@ -861,8 +861,18 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
         if (glide.t >= glide.secs) glide = null;
       } else if (!glide.done) {
         const L = glide.legs[0], k = ease(glide.t / L.secs), a = glide.from, b = L.to, ky = L.down ? k * k : k;
-        cam.eye.set(a.eye.x + (b.eye.x - a.eye.x) * k, a.eye.y + (b.eye.y - a.eye.y) * ky, a.eye.z + (b.eye.z - a.eye.z) * k);
-        cam.look.lerpVectors(a.look, b.look, k); cam.fov = a.fov + (b.fov - a.fov) * k;
+        if (L.round) {
+          // (round the ship to behind it, the ship kept in the picture: the eye goes round the ship's own middle, and
+          // looks at where it was looking until it is most of the way round)
+          const pv = VIEWS.pivot, a0 = Math.atan2(a.eye.x - pv[0], a.eye.z - pv[2]), a1 = Math.atan2(b.eye.x - pv[0], b.eye.z - pv[2]), da = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0));
+          const r0 = Math.hypot(a.eye.x - pv[0], a.eye.z - pv[2]), r1 = Math.hypot(b.eye.x - pv[0], b.eye.z - pv[2]), ang = a0 + da * k, r = r0 + (r1 - r0) * k;
+          cam.eye.set(pv[0] + Math.sin(ang) * r, a.eye.y + (b.eye.y - a.eye.y) * k, pv[2] + Math.cos(ang) * r);
+          cam.look.lerpVectors(a.look, b.look, ease((k - 0.55) / 0.45));
+        } else {
+          cam.eye.set(a.eye.x + (b.eye.x - a.eye.x) * k, a.eye.y + (b.eye.y - a.eye.y) * ky, a.eye.z + (b.eye.z - a.eye.z) * k);
+          cam.look.lerpVectors(a.look, b.look, k);
+        }
+        cam.fov = a.fov + (b.fov - a.fov) * k;
         if (glide.t >= L.secs) { glide.from = L.to; glide.legs.shift(); glide.t = 0; if (!glide.legs.length) glide.done = true; }
       }
     } else if (cam.fresh) { cam.eye.copy(want.eye); cam.look.copy(want.look); cam.fov = want.fov; cam.fresh = false; }
