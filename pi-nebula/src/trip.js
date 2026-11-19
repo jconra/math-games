@@ -131,6 +131,8 @@ const CSS = `
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's button and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 178px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
+/* (the count stays up while the jump home is worked out: beside the jump computer's panel on a wide screen, put away under it on a phone) */
+@media (min-width: 641px) { .pmt.has-panel .pmt-count { left: 31%; max-width: 56vw; } }
 @media (max-width: 640px) { .pmt.has-panel .pmt-count { display: none; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; left: 3vw; right: 3vw; transform: none; margin: 0 auto; width: fit-content; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; column-gap: 8px; row-gap: 0; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 `;

@@ -32,7 +32,9 @@
 import * as THREE from 'three';
 import { makeJump, stepJump, edgeOf } from './wormplan.js';
 
-export const HOLE = { r: 70, flow: 1.9, gain: 1.0 };      // the ball's size (m), how fast the walls stream by, how bright
+// the ball's size (m), how fast the walls stream by, how bright (and how bright at the lowest quality, where the picture
+// has no soft glow and the colours would come out dull beside the other qualities')
+export const HOLE = { r: 70, flow: 1.9, gain: 1.0, gainLow: 1.7 };
 
 // THE EDGE, shared by the wormhole and by whatever must not be seen through its colours: one set of numbers
 //   uVeilA, uVeilU, uVeilR   dead ahead, up and right (the world's frame)
@@ -97,7 +99,7 @@ void main() {
 
 export function makeWormhole({ scene, quality = 'high', rand = Math.random } = {}) {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...VEIL, uHue: { value: 0 }, uSwirl: { value: 1 }, uFlow: { value: HOLE.flow }, uGain: { value: HOLE.gain } },
+    uniforms: { ...VEIL, uHue: { value: 0 }, uSwirl: { value: 1 }, uFlow: { value: HOLE.flow }, uGain: { value: quality === 'low' ? HOLE.gainLow : HOLE.gain } },
     defines: quality === 'low' ? { LOW: '' } : {}, vertexShader: VERT, fragmentShader: FRAG, side: THREE.BackSide, fog: false,
   });
   const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(HOLE.r, 1), mat);
