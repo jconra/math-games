@@ -55,8 +55,9 @@ test('a rock has real numbers of its own: its box, its weight (half its box at s
   }
   assert.deepEqual([...shapes].sort(), ['flat', 'long', 'round']); assert.ok(totals.size >= 5, 'small rocks and big ones');
   // SOME ROCKS HOLD FOUR METALS (the game's maker: "I want to be able to drill a rock that has 4 different ores in it
-  // and get them all"): about one rock in seventeen, and most fields of thirty have one or two
-  assert.deepEqual(Object.keys(counts), ['1', '2', '3', '4']); assert.ok(counts[4] >= 12 && counts[4] <= 40, `rocks of four metals: ${counts[4]} of 400`);
+  // and get them all"; 2026-11-19 he picked "More: about 1 rock in 11 (every other big rock)"): most fields of thirty
+  // have two or three
+  assert.deepEqual(Object.keys(counts), ['1', '2', '3', '4']); assert.ok(counts[4] >= 24 && counts[4] <= 52, `rocks of four metals: ${counts[4]} of 400`);
   let fields = 0; for (let s = 1; s <= 100; s++) if (makeField(seed(s)).some((x) => Object.keys(x.metals).length === 4)) fields++;
   assert.ok(fields >= 65, `fields with a rock of four metals: ${fields} of 100`);
   // a rock asked for by its kind and its metals

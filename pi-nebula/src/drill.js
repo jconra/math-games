@@ -71,7 +71,8 @@ export const DRILL = {
   can: CAN_TONNES,          // tonnes a canister holds: one
   eighths: 8,               // heading home early, a part-full canister's level is rounded to the nearest 1/8 of a tonne
   field: 30,                // rocks in a field
-  four: 1 / 3,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
+  four: 1 / 2,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
+                            // (the game's maker, 2026-11-19, picked "More: about 1 rock in 11 (every other big rock)"; it was 1 in 3)
   reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.1,                // within this of the line, all of a lump
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
@@ -128,7 +129,7 @@ export function makeRock(rand = Math.random, { kind = null, metals = null } = {}
   const [shape, per, part] = kind || byWeight(rand, KINDS, (k) => k[3]), S = SHAPES[shape];
   const vol = S.box[0] * S.box[1] * S.box[2], weight = vol / 2 * per, total = weight / part;
   // its metals: one, two or three (never more metals than it has tonnes of ore); a rock with four tonnes of ore or
-  // more holds FOUR one time in three (DRILL.four). A whole number of tonnes of each
+  // more holds FOUR every other time (DRILL.four). A whole number of tonnes of each
   let M = metals ? { ...metals } : null;
   if (!M) {
     const x = rand(), k = total >= 4 && rand() < DRILL.four ? 4 : Math.min(total, x < 0.45 ? 1 : x < 0.85 ? 2 : 3), names = [];
