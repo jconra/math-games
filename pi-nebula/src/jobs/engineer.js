@@ -18,21 +18,21 @@
 //    6  into 3D: a block of pellets in layers, how many in all
 //    7  volume by the sides, length × width × height; then (its own level) a missing side
 //    8  the frame: the lengths of all 12 edges of the field
-//    9  the skin: the area of all six faces of the field
+//    9  surface area: the area of all six faces of the field
 //   10  a cluster to turn: how many pellets are in it, hidden ones included
 //   11  the field round a cluster: the smallest box that holds it, its volume; then (its own level) how much is empty
-//   12  the cluster's own skin: how many faces show on the outside
+//   12  a cluster's surface area: how many faces show on the outside
 // Fifteen levels: steps 4, 7 and 11 each hold two kinds of question and are two levels each. Circles and pi stay out.
 // THE MORE, THE HARDER: the clusters grow from one cluster level to the next (CLUSTER below).
 //
 // UNITS. The youngest levels count whole pellets. From the way round onward a pellet is a cube 1 centimetre along each
 // side (a real fuel pellet is about that size), so lengths are centimetres, areas square centimetres and volumes cubic
-// centimetres; the cluster's skin is counted in faces.
+// centimetres; a cluster's surface area is counted in faces.
 //
 // EVERY WRONG ANSWER IS A SLIP A LEARNER MAKES (the sides added where they should be multiplied, the pellets along the
 // edge counted for the way round, one layer only, only the faces that can be seen ...), each with one plain line that
 // says why it is wrong. HELP just teaches: its picture, one line, and the sum with the numbers filled in (rows of
-// squares for an area, layer by layer for a block or a cluster, the pairs of faces for the skin, the 4 + 4 + 4 edges
+// squares for an area, layer by layer for a block or a cluster, the pairs of faces for the surface area, the 4 + 4 + 4 edges
 // for the frame).
 //
 // THE SHAPE SHOWN. Each card hands over the plain facts of its shape (`facts.shape`: the flat box's squares, the block's
@@ -366,12 +366,12 @@ export const MAKERS = {
       const l = t.int(2, 6), w = t.int(2, 4), h = t.int(2, 5), lw = l * w, lh = l * h, wh = w * h, half = lw + lh + wh, S = 2 * half;
       const shape = { kind: 'box', l, w, h, cells: boxCells(l, w, h), pellets: false, field: true, skin: true, marks: [{ axis: 'l', text: cm(l) }, { axis: 'w', text: cm(w) }, { axis: 'h', text: cm(h) }] };
       return ownOrder({
-        key: 'box:skin', story: `The field's skin covers all six faces of the box: ${l} centimetres long, ${w} wide and ${h} high.`, ask: 'What is the area of the skin?', right: C(S, CM2),
+        key: 'box:skin', story: `The field covers all six faces of the box: ${l} centimetres long, ${w} wide and ${h} high.`, ask: 'What is the surface area of the box?', right: C(S, CM2),
         slips: [
           { ...C(half, CM2), slip: 'onePair', why: 'That is one face of each pair. Every face has a twin on the far side: double it.' },
-          { ...C(lw * h, CM2), slip: 'volume', why: 'That is the volume, the space inside. The skin is the area of the six faces.' },
+          { ...C(lw * h, CM2), slip: 'volume', why: 'That is the volume, the space inside. The surface area is the area of the six faces.' },
           { ...C(S - lw, CM2), slip: 'noBottom', why: 'That leaves out one face. Count all six: top, bottom, front, back and the two ends.' },
-          { ...C(4 * (l + w + h), CM2), slip: 'frame', why: 'That is the frame, the length of the edges. The skin is the area of the faces.' },
+          { ...C(4 * (l + w + h), CM2), slip: 'frame', why: 'That is the frame, the length of the edges. The surface area is the area of the faces.' },
           { ...C(6 * lw, CM2), slip: 'allSame', why: `That is six faces of ${l} × ${w}. Only the top and the bottom are that size.` },
         ],
         rightWhy: `${l} × ${w} = ${lw}, ${l} × ${h} = ${lh}, ${w} × ${h} = ${wh}; ${lw} + ${lh} + ${wh} = ${half}, and twice that is ${u(S, CM2)}`,
@@ -450,12 +450,12 @@ export const MAKERS = {
       }
       const { skin, up, down, side, front } = G, boxSkin = 2 * (lw + l * h + w * h);
       return ownOrder({
-        key: 'cluster:skin', story: 'The skin is every pellet face that shows on the outside. Drag it round to look underneath.', ask: 'How many faces show on the outside?', right: C(skin, FACE),
+        key: 'cluster:skin', story: 'Every pellet face that shows on the outside counts. Drag it round to look underneath.', ask: 'How many faces show on the outside?', right: C(skin, FACE),
         slips: [
           { ...C(skin / 2, FACE), slip: 'threeSides', why: 'That counts the faces on three sides. The back, the bottom and the far side have as many again.' },
           { ...C(6 * n, FACE), slip: 'everyFace', why: 'That counts six faces on every pellet. A face pressed against another pellet does not show.' },
           { ...C(skin - down, FACE), slip: 'noBottom', why: 'That leaves out the faces underneath. Drag it over and count those too.' },
-          ...(boxSkin !== skin ? [{ ...C(boxSkin, FACE), slip: 'boxSkin', why: 'That is the skin of the box round it. Count the cluster\'s own faces, dents and all.' }] : []),
+          ...(boxSkin !== skin ? [{ ...C(boxSkin, FACE), slip: 'boxSkin', why: 'That counts the faces of the box round it. Count the cluster\'s own faces, dents and all.' }] : []),
           { ...C(n, FACE), slip: 'pellets', why: 'That is the pellets. Count the faces of them that show.' },
         ],
         rightWhy: `Up and down ${up} + ${up}, front and back ${front} + ${front}, the two sides ${side} + ${side}: ${u(skin, FACE)}`,
@@ -470,26 +470,28 @@ export const MAKERS = {
 
 // ── the ladder: easiest first ─────────────────────────────────────────────────────────────────────────────────────
 const M = (maker, step, w = 1) => ({ maker, step, w });
+// (The game's maker, 2026-11-19: "About one question in three from the level below, as the drill and the pilot do."
+// So every level but the youngest deals its own kind twice for every once of the level below's.)
 
 export const PLACE = {
   id: 'engineer', name: 'The Miner\'s core', short: 'Engineer', math: 'Fuel pellets and their containment field: sides, the way round, area, volume, edges and faces', pic: 'smelter', job: null,
   line: 'The fuel pellets in the core and the containment field round them: a flat box on a grid, a block in layers, a cluster to turn.',
   levels: [
     { id: 'sides', title: 'The sides of a flat box', line: 'Count the pellets along a side: how long, how high', gen: { mix: [M('flat', 1)] } },
-    { id: 'round', title: 'All the way round', line: 'The field round a flat box: 4 and 3 and 4 and 3', gen: { mix: [M('flat', 2)] } },
-    { id: 'fill', title: 'Pellets in a flat box', line: '4 rows of 5 pellets', gen: { mix: [M('flat', 3)] } },
-    { id: 'area', title: 'Area by the sides', line: '6 centimetres long, 4 high: 6 × 4', gen: { mix: [M('flat', 4)] } },
-    { id: 'areaSide', title: 'A missing side', line: '24 square centimetres, 6 long: how high', gen: { mix: [M('flat', 5)] } },
-    { id: 'bend', title: 'Round a corner', line: 'An L-shape, split into two boxes', gen: { mix: [M('flat', 6)] } },
-    { id: 'block', title: 'A block in layers', line: '3 layers of 4 by 2 pellets', gen: { mix: [M('box', 1)] } },
-    { id: 'volume', title: 'Volume by the sides', line: '4 long, 3 wide, 2 high: 4 × 3 × 2', gen: { mix: [M('box', 2)] } },
-    { id: 'volSide', title: 'A missing side of a box', line: '24 cubic centimetres, 4 long, 3 wide: how high', gen: { mix: [M('box', 3)] } },
-    { id: 'frame', title: 'The frame', line: 'All 12 edges: 4 long, 4 wide, 4 high', gen: { mix: [M('box', 4)] } },
-    { id: 'skin', title: 'The skin', line: 'All six faces, in three pairs', gen: { mix: [M('box', 5)] } },
-    { id: 'cluster', title: 'A cluster to turn', line: 'How many pellets, hidden ones too', gen: { mix: [M('cluster', 1)] } },
-    { id: 'fieldBox', title: 'The field round a cluster', line: 'The smallest box that holds it: its volume', gen: { mix: [M('cluster', 2)] } },
-    { id: 'empty', title: 'The empty part of the field', line: 'The box take away the pellets', gen: { mix: [M('cluster', 3)] } },
-    { id: 'clusterSkin', title: 'The cluster\'s own skin', line: 'Every face that shows on the outside', gen: { mix: [M('cluster', 4)] } },
+    { id: 'round', title: 'All the way round', line: 'The field round a flat box: 4 and 3 and 4 and 3', gen: { mix: [M('flat', 2, 2), M('flat', 1)] } },
+    { id: 'fill', title: 'Pellets in a flat box', line: '4 rows of 5 pellets', gen: { mix: [M('flat', 3, 2), M('flat', 2)] } },
+    { id: 'area', title: 'Area by the sides', line: '6 centimetres long, 4 high: 6 × 4', gen: { mix: [M('flat', 4, 2), M('flat', 3)] } },
+    { id: 'areaSide', title: 'A missing side', line: '24 square centimetres, 6 long: how high', gen: { mix: [M('flat', 5, 2), M('flat', 4)] } },
+    { id: 'bend', title: 'Round a corner', line: 'An L-shape, split into two boxes', gen: { mix: [M('flat', 6, 2), M('flat', 5)] } },
+    { id: 'block', title: 'A block in layers', line: '3 layers of 4 by 2 pellets', gen: { mix: [M('box', 1, 2), M('flat', 6)] } },
+    { id: 'volume', title: 'Volume by the sides', line: '4 long, 3 wide, 2 high: 4 × 3 × 2', gen: { mix: [M('box', 2, 2), M('box', 1)] } },
+    { id: 'volSide', title: 'A missing side of a box', line: '24 cubic centimetres, 4 long, 3 wide: how high', gen: { mix: [M('box', 3, 2), M('box', 2)] } },
+    { id: 'frame', title: 'The frame', line: 'All 12 edges: 4 long, 4 wide, 4 high', gen: { mix: [M('box', 4, 2), M('box', 3)] } },
+    { id: 'skin', title: 'Surface area', line: 'All six faces, in three pairs', gen: { mix: [M('box', 5, 2), M('box', 4)] } },
+    { id: 'cluster', title: 'A cluster to turn', line: 'How many pellets, hidden ones too', gen: { mix: [M('cluster', 1, 2), M('box', 5)] } },
+    { id: 'fieldBox', title: 'The field round a cluster', line: 'The smallest box that holds it: its volume', gen: { mix: [M('cluster', 2, 2), M('cluster', 1)] } },
+    { id: 'empty', title: 'The empty part of the field', line: 'The box take away the pellets', gen: { mix: [M('cluster', 3, 2), M('cluster', 2)] } },
+    { id: 'clusterSkin', title: 'A cluster\'s surface area', line: 'Every face that shows on the outside', gen: { mix: [M('cluster', 4, 2), M('cluster', 3)] } },
   ],
 };
 

@@ -25,9 +25,21 @@ import { answerOf } from '../../mathwood-valley/src/math/jobsums.js';
 const SEEDS = 150;
 const crewOf = () => ({ id: 'c1', name: 'Test', look: { id: 'zuri' } });
 const dealAt = (id, rand) => { const crew = crewOf(); setLevelAt(crew, 'engineer', id); return E.deal(crew, JOB, { rand }); };
-// every level, many questions of each: fn(order, level, question)
+// (the game's maker, 2026-11-19: "About one question in three from the level below, as the drill and the pilot do." So a
+// level deals its own kind of question or the kind of the level below; `ownOf` says whose kind a card is.)
+const ownOf = (order) => PLACE.levels.find((L) => KIND_OF[L.id] === order.facts.kind);
+// a card of the level's own kind (never the look back at the level below)
+const dealOwn = (id, rand) => { for (let k = 0; k < 60; k++) { const q = dealAt(id, rand); if (ownOf(q.order).id === id) return q; } throw new Error(`${id}: never its own kind`); };
+// every level, many questions of each: fn(order, the level whose kind of question it is, question, the level it was dealt at)
 function everyQuestion(fn, n = SEEDS) {
-  for (const L of PLACE.levels) { const rand = seeded(1000 + L.id.length * 131 + L.grade); for (let k = 0; k < n; k++) { const q = dealAt(L.id, rand); fn(q.order, L, q); } }
+  for (const [i, L] of PLACE.levels.entries()) {
+    const rand = seeded(1000 + L.id.length * 131 + L.grade);
+    for (let k = 0; k < n; k++) {
+      const q = dealAt(L.id, rand), own = ownOf(q.order);
+      assert.ok(own === L || (i > 0 && own === PLACE.levels[i - 1]), `${L.id}: a card of ${own && own.id}`);
+      fn(q.order, own, q, L);
+    }
+  }
 }
 const rightOf = (o) => o.coins.find((c) => c.good);
 
@@ -91,7 +103,13 @@ test('the engineer\'s ladder joins Mathwood\'s levels cleanly: fifteen levels, e
   assert.equal(P.levels.length, 15); assert.equal(new Set(P.levels.map((L) => L.id)).size, 15);
   assert.deepEqual(P.levels.map((L) => L.id), Object.keys(KIND_OF));
   for (let i = 1; i < P.levels.length; i++) assert.ok(P.levels[i].grade > P.levels[i - 1].grade, `${P.levels[i].id}: ${P.levels[i].grade} after ${P.levels[i - 1].grade}`);
-  for (const L of P.levels) { assert.equal(L.strand, 'geo', L.id); assert.equal(L.gen.mix.length, 1, `${L.id}: one kind of question to a level`); assert.ok(L.title && L.line); }
+  for (const [i, L] of P.levels.entries()) {
+    assert.equal(L.strand, 'geo', L.id); assert.ok(L.title && L.line);
+    // its own kind of question twice for every once of the level below's (the youngest level has none below it)
+    const mix = L.gen.mix, below = i ? P.levels[i - 1].gen.mix[0] : null;
+    assert.equal(mix.length, i ? 2 : 1, L.id); assert.equal(mix[0].w, i ? 2 : 1, L.id);
+    if (i) assert.deepEqual([mix[1].maker, mix[1].step, mix[1].w], [below.maker, below.step, 1], `${L.id}: looks back at ${P.levels[i - 1].id}`);
+  }
   // nothing added to Mathwood's kinds of math: geometry was there already, and the list is as long as it was
   assert.ok(STRAND.geo); assert.equal(STRANDS.length, before);
   // Mathwood's own places are all still there
@@ -245,7 +263,7 @@ test('help is on every level and just teaches: a picture, one line, the sum with
     if (L.id !== 'sides' && !(L.id === 'cluster' && o.facts.h === 1)) assert.ok(o.sum, `${L.id}: a sum for Work it out on paper`);
   }, 60);
   // the four ways the help was asked to teach, in its own words
-  const one = (id) => dealAt(id, seeded(5)).order.help;
+  const one = (id) => dealOwn(id, seeded(5)).order.help;
   assert.match(one('area').title, /Rows/); assert.match(one('block').title, /Layer by layer/); assert.match(one('cluster').title, /Layer by layer/);
   assert.match(one('skin').title, /pairs/); assert.match(one('frame').title, /4 \+ 4 \+ 4/); assert.match(one('bend').title, /two boxes/);
 });
@@ -263,7 +281,7 @@ test('a cluster is one piece, has no pellet sealed inside and no hollow, fits it
   for (const id of CLUSTER_LEVELS) {
     const rand = seeded(77 + id.length), B = CLUSTER[CLUSTER_LEVELS.indexOf(id) + 1]; sizes[id] = [];
     for (let k = 0; k < 400; k++) {
-      const o = dealAt(id, rand).order, c = o.facts.shape.cells, set = new Set(c.map(key)), b = boxOf(c);
+      const o = dealOwn(id, rand).order, c = o.facts.shape.cells, set = new Set(c.map(key)), b = boxOf(c);
       assert.ok(onePiece(c), `${id}: in two pieces: ${JSON.stringify(c)}`);
       assert.ok(c.every((p) => N6.some((d) => !set.has(key(plus(p, d))))), `${id}: a pellet with a pellet on all six sides`);
       assert.ok(firstInLine(c), `${id}: a pellet that cannot be seen straight on from any side: ${JSON.stringify(c)}`);
@@ -301,7 +319,7 @@ test('every pellet of a cluster shows a face from some side the display can be t
   for (const id of CLUSTER_LEVELS) {
     const rand = seeded(31 + id.length);
     for (let k = 0; k < 120; k++) {
-      const S = dealAt(id, rand).order.facts.shape, shown = new Set();
+      const S = dealOwn(id, rand).order.facts.shape, shown = new Set();
       for (const [yaw, pitch] of SIDES) for (const i of seenFrom(S, yaw, pitch)) shown.add(i);
       assert.equal(shown.size, S.cells.length, `${id}: a pellet that shows no face from any side: ${JSON.stringify(S.cells)}`);
       // it starts on one of the four corners it can be seen from, tipped as every shape is
@@ -339,14 +357,14 @@ function firstMet(S, cam, sx, sy) {
 }
 test('the display paints a shape in 3D as the eye sees it: at any place on it, the pellet face on top is the one a ray from the eye meets first', () => {
   const shapes = [];
-  for (const id of CLUSTER_LEVELS) { const rand = seeded(9 + id.length); for (let k = 0; k < 6; k++) shapes.push(dealAt(id, rand).order.facts.shape); }
-  shapes.push(dealAt('block', seeded(3)).order.facts.shape);
+  for (const id of CLUSTER_LEVELS) { const rand = seeded(9 + id.length); for (let k = 0; k < 6; k++) shapes.push(dealOwn(id, rand).order.facts.shape); }
+  shapes.push(dealOwn('block', seeded(3)).order.facts.shape);
   let checked = 0, faces = 0, empty = 0;
   const rand = seeded(2026);
   for (const S of shapes) {
     for (const [yaw, pitch] of [[START.yaw, START.pitch], [1.1, 0.9], [2.6, -0.5], [-2.2, 1.3], [0.02, 0.01], [4.0, -1.4]]) {
       const list = listOf(S, yaw, pitch), cam = camera(S, yaw, pitch), drawn = list.filter((it) => it.k === 'p' && it.i != null);
-      assert.ok(drawn.length >= 3);
+      assert.ok(drawn.length >= 1);          // (a thin cluster seen end on shows only a face or two)
       for (let n = 0; n < 60; n++) {
         const sx = VIEW.w / 2 + (rand() - 0.5) * 2 * cam.k * (cam.r + 0.3), sy = cam.mid + (rand() - 0.5) * 2 * cam.k * (cam.r + 0.3);
         if (drawn.some((it) => toEdge(it.pts, sx, sy) < 1.2)) continue;          // (on a line between two faces)
@@ -364,7 +382,7 @@ test('the display paints a shape in 3D as the eye sees it: at any place on it, t
 });
 
 test('a shape fits its display at every turn, whatever height the page gives it, and a flat shape shows every pellet once', () => {
-  const shapes = PLACE.levels.flatMap((L) => { const rand = seeded(40 + L.grade); return [0, 1, 2, 3].map(() => dealAt(L.id, rand).order.facts.shape); });
+  const shapes = PLACE.levels.flatMap((L) => { const rand = seeded(40 + L.grade); return [0, 1, 2, 3].map(() => dealOwn(L.id, rand).order.facts.shape); });
   for (const S of shapes) {
     for (const h of [VIEW.least, 134, 161, VIEW.h, VIEW.most]) {
       const views = is3d(S) ? [0, 0.7, 1.4, 2.1, 2.8, 3.5, 4.2, 4.9, 5.6].flatMap((y) => [-TURN.most, -0.6, 0, START.pitch, 1, TURN.most].map((p) => [y, p])) : [[0, 0]];
@@ -399,7 +417,8 @@ test('the level arrows step through all fifteen; on a captain\'s run a right ans
   assert.equal(E.level(crew, JOB).id, 'sides'); assert.equal(E.level(crew, JOB).canDown, false);
   for (const L of PLACE.levels) {
     const c = crewOf(); setLevelAt(c, 'engineer', L.id);
-    const q = E.deal(c, JOB, { rand: seeded(8) }), wrong = q.order.coins.findIndex((x) => !x.good), right = q.order.coins.findIndex((x) => x.good);
+    const rand = seeded(8); let q = E.deal(c, JOB, { rand }); while (ownOf(q.order) !== L) q = E.deal(c, JOB, { rand });
+    const wrong = q.order.coins.findIndex((x) => !x.good), right = q.order.coins.findIndex((x) => x.good);
     assert.ok(q.worth.pay >= E.PAY.min && q.worth.pay <= E.PAY.max, `${L.id}: its work is worth ${q.worth.pay}`);
     const miss = E.answer(c, JOB, q, wrong, { ms: 9000, pay: false });
     assert.equal(miss.right, false); assert.equal(miss.why, q.order.coins[wrong].why); assert.equal(q.done, false);
@@ -411,7 +430,7 @@ test('the level arrows step through all fifteen; on a captain\'s run a right ans
   }
 });
 
-test('units: whole pellets for the youngest and wherever pellets are counted, centimetres from the way round on, faces for a cluster\'s skin', () => {
+test('units: whole pellets for the youngest and wherever pellets are counted, centimetres from the way round on, faces for a cluster\'s surface area', () => {
   const UNIT = { sides: 'pellets', round: 'centimetres', fill: 'pellets', area: 'square centimetres', areaSide: 'centimetres', bend: 'square centimetres', block: 'pellets', volume: 'cubic centimetres', volSide: 'centimetres',
     frame: 'centimetres', skin: 'square centimetres', cluster: 'pellets', fieldBox: 'cubic centimetres', empty: 'cubic centimetres', clusterSkin: 'faces' };
   everyQuestion((o, L) => {
@@ -424,4 +443,12 @@ test('units: whole pellets for the youngest and wherever pellets are counted, ce
     // (and its question fits one line of the card on a wide screen)
     assert.ok(o.ask.length <= 42 && o.ask.endsWith('?'), `${L.id}: ${o.ask}`);
   }, 40);
+});
+
+test('about one question in three looks back at the level below; the youngest level asks only its own', () => {
+  for (const [i, L] of PLACE.levels.entries()) {
+    const rand = seeded(77 + i); let below = 0; const N = 600;
+    for (let k = 0; k < N; k++) { const own = ownOf(dealAt(L.id, rand).order); assert.ok(own === L || (i > 0 && own === PLACE.levels[i - 1]), `${L.id}: a card of ${own && own.id}`); if (own !== L) below++; }
+    if (!i) assert.equal(below, 0); else assert.ok(below > N * 0.25 && below < N * 0.42, `${L.id}: ${below} of ${N} from the level below`);
+  }
 });
