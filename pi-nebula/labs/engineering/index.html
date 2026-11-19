@@ -18,7 +18,7 @@
   #note { flex: 1 1 320px; margin: 0; font-size: 12.5px; color: #a9b8c8; min-height: 1.3em; }
   /* the ladder, to read: every level, easiest first, the one in hand lit. Beside the card on a wide screen; a phone
      has the card along the bottom and the level in hand in the line under the buttons */
-  #ladder { position: fixed; left: 0; top: 46px; bottom: 0; right: calc(min(480px, 44vw) + 32px); margin: 0; padding: 20px 16px 16px 20px; list-style: none; overflow-y: auto;
+  #ladder { position: fixed; left: 0; top: var(--lab-top, 46px); bottom: 0; right: calc(min(480px, 44vw) + 32px); margin: 0; padding: 20px 16px 16px 20px; list-style: none; overflow-y: auto;
     display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; align-content: start; }
   #ladder li { display: grid; grid-template-columns: 26px 1fr; column-gap: 6px; padding: 8px 10px; background: #0b1118; border: 1px solid rgba(150, 210, 250, 0.2); border-radius: 6px; }
   #ladder li b { grid-row: 1 / 3; font-size: 15px; color: #6f8194; }
@@ -26,7 +26,14 @@
   #ladder li small { font-size: 12.5px; color: #8fa3b6; }
   #ladder li.is-now { border-color: #ffab45; background: #121b25; }
   #ladder li.is-now b { color: #ffab45; }
-  @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) { #ladder { display: none; } }
+  /* the card under this page's top line, however many rows that wraps to */
+  html body .pnj[data-job="engineer"] .pnj-panel { top: max(64px, calc(var(--lab-top, 46px) + 10px)); max-height: calc(100% - max(64px, calc(var(--lab-top, 46px) + 10px)) - 16px); }
+  /* a phone: the card starts right under the top line (in the game it lies along the bottom of the screen, with the
+     ship's room in view above it; here there is nothing above it to see), the same size as it is in the game */
+  @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+    #ladder { display: none; }
+    html body .pnj[data-job="engineer"] .pnj-panel { top: calc(var(--lab-top, 84px) + 8px); bottom: auto; max-height: calc(100% - var(--lab-top, 84px) - 16px); }
+  }
   #loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 18px; color: #cfe6ff; background: #05070b; }
 </style>
 </head>

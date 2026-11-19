@@ -25,6 +25,8 @@
 //                                        -> { el, flat, state(), set(yaw, pitch), hold(on), stop() }
 //   seenFrom(shape, yaw, pitch)       -> which pellets (indexes into shape.cells) show a face from that side
 //   outsideFaces(cells)               -> the faces with no pellet against them: [{ i, c, d }]
+//   listOf(shape, yaw, pitch, { h })  -> what is drawn, in order: [{ k: 'p' | 'l' | 't', ... }] (the tests read it)
+//   camera(shape, yaw, pitch)         -> the eye: { eye, pt(x, y, z) -> [x, y] on the display, k, mid, D, rot }
 //   plansSvg, pairsSvg                -> two of the help's pictures: a cluster layer by layer; a box's faces in pairs
 //   engineerLink()                    -> the job panel's `live` for this job (src/jobs/panel.js): the card's top, and
 //                                        the display put on each new card
@@ -35,10 +37,10 @@
 //     marks: [{ axis: 'l' | 'w' | 'h', text }], note, view: { yaw, pitch } }
 // and, for the help's pictures only: lit, bands, tags, caption (flat); lit, tones, edgeTones, legend (3D).
 
-export const VIEW = { w: 360, h: 220 };                    // the display's own units: every shape is drawn in this box
+export const VIEW = { w: 360, h: 220, least: 120, most: 290 };   // the display's own units: a shape is drawn 360 wide, and 220 high unless the page gives it another height (120 to 290)
 export const START = { yaw: -0.62, pitch: 0.46 };          // how a 3D shape is first seen: its front, its right side, its top
 export const TURN = { spin: 0.3, drag: 0.011, rest: 3, most: 1.45 };   // radians a second by itself; radians a pixel dragged; seconds still after a drag; the most it tips up or down
-const CAM = { far: 6, most: 46, pad: 10, marked: 26 };     // the eye, in half-widths of the shape away; the biggest a pellet is drawn; room round the shape, and round one with its sides marked
+const CAM = { far: 8, most: 48, pad: 7, marked: 16 };     // the eye, in half-widths of the shape away; the biggest a pellet is drawn; room round the shape, and round one with its sides marked
 // the colours (src/jobs/pics.js NIGHT's, and the two this display adds: a pellet's faces and its light edges)
 const K = { INK: '#dfe9f2', SOFT: '#8fa3b6', GRID: '#1e2d3b', ASK: '#ffd560', FIELD: '#ffab45', EDGE: '#a8ecff', PLATE: '#0b1118',
   P0: [9, 27, 38], P1: [44, 118, 142],                     // a pellet's face, in the dark and in the light
@@ -104,9 +106,17 @@ export function outline(cells) {
   return out;
 }
 function flatList(S, { w: W = VIEW.w, h: H = VIEW.h } = {}) {
-  const out = [], marks = S.marks || [], set = new Set(S.cells.map((c) => k2(c[0], c[1])));
-  const side = marks.length ? 50 : 18, top = marks.length ? 26 : 12, bot = (marks.length ? 26 : 12) + (S.caption ? 22 : 0);
-  const u = Math.min(36, (W - 2 * side) / (S.l + 1), (H - top - bot) / (S.h + 1));
+  const out = [], set = new Set(S.cells.map((c) => k2(c[0], c[1])));
+  // the sides marked: which way each lies, and which way is out from it (the side of the line where the shape is not;
+  // a mark may say its own, `out`)
+  const marks = (S.marks || []).map((m) => {
+    const flatways = m.a[1] === m.b[1], mx = (m.a[0] + m.b[0]) / 2, my = (m.a[1] + m.b[1]) / 2;
+    return { ...m, flatways, nx: m.out ? m.out[0] : flatways ? 0 : set.has(k2(m.a[0], Math.floor(my))) ? -1 : 1, ny: m.out ? m.out[1] : !flatways ? 0 : set.has(k2(Math.floor(mx), m.a[1])) ? -1 : 1 };
+  });
+  // room for the words: only on the sides of the shape's box that have a mark outside them
+  const side = marks.some((m) => !m.flatways && (m.nx < 0 ? m.a[0] === 0 : m.a[0] === S.l)) ? 50 : (S.tags || []).length ? 30 : 14;
+  const top = marks.some((m) => m.flatways && m.ny > 0 && m.a[1] === S.h) ? 26 : 8, bot = (marks.some((m) => m.flatways && m.ny < 0 && m.a[1] === 0) ? 26 : 8) + (S.caption ? 22 : 0);
+  const u = Math.min(44, (W - 2 * side) / (S.l + 1), (H - top - bot) / (S.h + 1));
   const x0 = (W - S.l * u) / 2, yb = top + (H - top - bot + S.h * u) / 2;
   const X = (x) => x0 + x * u, Y = (y) => yb - y * u;
   // the grid, half a square past the shape all round
@@ -125,9 +135,7 @@ function flatList(S, { w: W = VIEW.w, h: H = VIEW.h } = {}) {
   if (S.field) for (const pass of [{ lw: 6, sa: 0.16 }, { lw: 2.2, sa: 1 }]) for (const [ax, ay, bx, by] of outline(S.cells)) out.push(line(X(ax), Y(ay), X(bx), Y(by), { stroke: K.FIELD, ...pass }));
   // a side's length written along it, on the outside: a thin measure line with a tick at each end, and the words
   for (const m of marks) {
-    const [ax, ay] = m.a, [bx, by] = m.b, flatways = ay === by, mx = (ax + bx) / 2, my = (ay + by) / 2;
-    // (which way is out: the side of the line where the shape is not; a mark may say its own, `out`)
-    const nx = m.out ? m.out[0] : flatways ? 0 : set.has(k2(ax, Math.floor(my))) ? -1 : 1, ny = m.out ? m.out[1] : !flatways ? 0 : set.has(k2(Math.floor(mx), ay)) ? -1 : 1;
+    const [ax, ay] = m.a, [bx, by] = m.b, { flatways, nx, ny } = m;
     const ask = m.text === '?', col = ask ? K.ASK : K.SOFT, off = 9, px = X(ax) + nx * off, py = Y(ay) - ny * off, qx = X(bx) + nx * off, qy = Y(by) - ny * off, tk = 3.5;
     out.push(line(px, py, qx, qy, { stroke: col, lw: 1.1 }));
     out.push(flatways ? line(px, py - tk, px, py + tk, { stroke: col, lw: 1.1 }) : line(px - tk, py, px + tk, py, { stroke: col, lw: 1.1 }));
@@ -161,7 +169,7 @@ const facesFor = (cells) => { let f = facesKept.get(cells); if (!f) { f = cells.
 
 // the eye: the shape turned by yaw (round its upright) and then tipped by pitch (toward the eye), seen from a little
 // way off so that the near side is a little bigger than the far one
-function camera(S, yaw, pitch, W, H, lift = 0) {
+export function camera(S, yaw, pitch, W = VIEW.w, H = VIEW.h, lift = 0) {
   const c = [S.l / 2, S.h / 2, S.w / 2], r = Math.hypot(S.l, S.w, S.h) / 2, D = r * CAM.far, big = CAM.far / (CAM.far - 1);
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
   const pad = (S.marks || []).length ? CAM.marked : CAM.pad;
@@ -206,7 +214,7 @@ function solidList(S, yaw, pitch, { w: W = VIEW.w, h: H = VIEW.h } = {}) {
         const n = DIRS[d];
         if (n[0] * (eye[0] - c[0] - 0.5 - n[0] * 0.5) + n[1] * (eye[1] - c[1] - 0.5 - n[1] * 0.5) + n[2] * (eye[2] - c[2] - 0.5 - n[2] * 0.5) <= 0) continue;
         const fill = S.tones ? rgb(mix(TONE[d >> 1], [255, 255, 255], shade[d] * 0.16)) : rgb(mix(K.P0, K.P1, shade[d]));
-        out.push(poly(QUADS[d].flatMap((o) => pt(c[0] + o[0], c[1] + o[1], c[2] + o[2])), { fill, fa: on ? 1 : 0.16, stroke: lit && on ? K.ASK : K.EDGE, sa: on ? 0.9 : 0.22, lw: 1 }));
+        out.push(poly(QUADS[d].flatMap((o) => pt(c[0] + o[0], c[1] + o[1], c[2] + o[2])), { fill, fa: on ? 1 : 0.16, stroke: lit && on ? K.ASK : K.EDGE, sa: on ? 0.9 : 0.22, lw: 1, i, d }));   // (i, d: which pellet's face, pointing which way: the tests read them)
       }
     }
   }
@@ -276,49 +284,92 @@ export function plansSvg({ cells, l, w, h, box = false, names = null, caption = 
 }
 // A BOX'S SIX FACES IN THEIR THREE PAIRS: one face of each pair drawn to size, its two sides written on it, "twice"
 export function pairsSvg({ l, w, h, caption = '' }) {
-  const W = VIEW.w, out = [], gap = 26, pairs = [[l, w, 'top and bottom', K.WIDE], [l, h, 'front and back', K.LONG], [w, h, 'the two ends', K.HIGH]];
-  const u = Math.min(22, (W - 30 - 2 * gap) / (l + l + w), 84 / Math.max(w, h)), wide = (l + l + w) * u + 2 * gap, tallest = Math.max(w, h) * u, top = 14, tall = top + tallest + 40 + (caption ? 22 : 0);
-  let x = (W - wide) / 2;
-  for (const [a, b, name, col] of pairs) {
-    const y = top + (tallest - b * u) / 2;
+  // (each pair has a third of the width, so the words under one never run into the next)
+  const W = VIEW.w, out = [], slot = W / 3, pairs = [[l, w, 'top and bottom', K.WIDE], [l, h, 'front and back', K.LONG], [w, h, 'the two ends', K.HIGH]];
+  const u = Math.min(22, (slot - 20) / Math.max(l, w), 84 / Math.max(w, h)), tallest = Math.max(w, h) * u, top = 14, tall = top + tallest + 40 + (caption ? 22 : 0);
+  pairs.forEach(([a, b, name, col], i) => {
+    const mid = slot * (i + 0.5), x = mid - a * u / 2, y = top + (tallest - b * u) / 2;
     out.push(poly([x, y, x + a * u, y, x + a * u, y + b * u, x, y + b * u], { fill: col, fa: 0.16, stroke: col, lw: 1.8 }));
-    out.push(words(x + a * u / 2, y + b * u / 2 + 4.5, `${a} × ${b}`, { weight: 800, size: 13, plate: true }));
-    out.push(words(x + a * u / 2, top + tallest + 16, name, { size: 11.5, fill: K.SOFT }));
-    out.push(words(x + a * u / 2, top + tallest + 31, 'twice', { size: 11.5, fill: K.INK, weight: 700 }));
-    x += a * u + gap;
-  }
+    out.push(words(mid, y + b * u / 2 + 4.5, `${a} × ${b}`, { weight: 800, size: 13, plate: true }));
+    out.push(words(mid, top + tallest + 16, name, { size: 11.5, fill: K.SOFT }));
+    out.push(words(mid, top + tallest + 31, 'twice', { size: 11.5, fill: K.INK, weight: 700 }));
+  });
   if (caption) out.push(words(W / 2, tall - 8, caption, { fill: K.ASK, weight: 800, size: 13.5 }));
   return toSvg(out, W, tall, 'The three pairs of faces of a box');
 }
 
 // ── on the page ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// THE DISPLAY'S LOOK on a card of the job panel (the panel's own look is src/jobs/jobs.css). The display is as wide as
+// the card and AS HIGH AS THE SCREEN LEAVES ROOM FOR, so that the four answers, two lines of why and Help are in view
+// under it without scrolling. On a wide screen under 860 px high the panel is set a little closer and the rest of it
+// needs about 546 px of the screen's height; under 780 px the card's own top line is left off too (the panel's top
+// says what job it is) and the rest needs about 515 px. On a phone the rest needs about 547 px, and this job's panel
+// may take more of the screen than the other jobs' do (88 hundredths of its height). Whatever its height, a shape
+// is drawn to fit it and its words stay the same size. A finger on a shape in 3D turns it and nothing else.
+const CSS = `
+.pnj[data-job="engineer"] .pnj-pic.is-lead { padding: 3px; margin: 2px 0 8px; }
+.pnj[data-job="engineer"] .pnj-pic svg { max-height: none; }
+.pne-view { height: 258px; }
+.pne-still, .pne-canvas { display: block; width: 100%; height: 100%; }
+.pnj .pne-still svg { display: block; width: 100%; height: 100%; max-height: none; }
+.pne-canvas { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pne-canvas.is-held { cursor: grabbing; }
+@media (min-width: 641px) and (max-height: 860px) {
+  .pne-view { height: clamp(150px, calc(100vh - 546px), 258px); }
+  .pnj[data-job="engineer"] .pnj-panel { gap: 8px; padding: 10px 14px 12px; }
+  .pnj[data-job="engineer"] .pnj-card { padding: 8px 12px 10px; }
+  .pnj[data-job="engineer"] .pnj-cardtop { padding-bottom: 5px; margin-bottom: 5px; }
+  .pnj[data-job="engineer"] .pnj-story { margin-bottom: 5px; }
+  .pnj[data-job="engineer"] .pnj-pic.is-lead { margin: 2px 0 5px; }
+  .pnj[data-job="engineer"] .pnj-coin { min-height: 54px; }
+}
+@media (min-width: 641px) and (max-height: 780px) {
+  .pnj[data-job="engineer"] .pnj-cardtop { display: none; }
+  .pne-view { height: clamp(150px, calc(100vh - 515px), 258px); }
+}
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj[data-job="engineer"] .pnj-panel { max-height: 88vh; }
+  .pnj[data-job="engineer"] .pnj-story { margin-bottom: 6px; }
+  .pne-view { height: clamp(150px, calc(88vh - 547px), 215px); }
+}`;
 function ensureCss() {
-  if (document.querySelector('link[data-pne]')) return;
-  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = new URL('./engineer.css', import.meta.url).href; l.dataset.pne = '1'; document.head.appendChild(l);
+  if (document.getElementById('pne-css')) return;
+  const st = document.createElement('style'); st.id = 'pne-css'; st.textContent = CSS; document.head.appendChild(st);
 }
 // THE SHAPE SHOWN IN `host` (the card's picture box). A flat shape: its still picture. A shape in 3D: a canvas that
-// turns slowly by itself and is dragged round; it stops by itself once it is off the page.
+// turns slowly by itself and is dragged round. Either is drawn again when its box changes size, and stops by itself
+// once it is off the page.
 export function mountShape(host, S, { spin = true } = {}) {
   ensureCss();
   host.classList.add('pne-view');
-  if (!is3d(S)) { host.innerHTML = shapeSvg(S); return { el: host.firstElementChild, flat: true, state: () => ({ flat: true }), set() {}, hold() {}, stop() {} }; }
-  const cv = document.createElement('canvas');
-  cv.className = 'pne-canvas'; cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', `${wordsOf(S)}. Drag to turn it.`);
-  host.innerHTML = ''; host.appendChild(cv);
-  const g = cv.getContext('2d');
-  let yaw = (S.view && S.view.yaw) ?? START.yaw, pitch = (S.view && S.view.pitch) ?? START.pitch;
-  let held = false, still = false, rest = 0, last = 0, raf = 0, dirty = true, stopped = false, px = 0, py = 0, frames = 0, cost = 0, wPx = 0;
-  function size() {
-    const w = cv.clientWidth; if (!w) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.round(w * dpr), H = Math.round(w * VIEW.h / VIEW.w * dpr);
-    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
-    wPx = W; dirty = true;
+  const flat = !is3d(S), el = document.createElement(flat ? 'div' : 'canvas');
+  el.className = flat ? 'pne-still' : 'pne-canvas';
+  if (!flat) { el.setAttribute('role', 'img'); el.setAttribute('aria-label', `${wordsOf(S)}. Drag to turn it.`); }
+  host.innerHTML = ''; host.appendChild(el);
+  // the drawing's own height, from the room the page gives it (its width is always VIEW.w)
+  const tall = () => { const w = el.clientWidth, h = el.clientHeight; return w && h ? Math.max(VIEW.least, Math.min(VIEW.most, VIEW.w * h / w)) : VIEW.h; };
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => size()) : null;
+  let H = VIEW.h, stopped = false, size = () => {};
+  if (flat) {
+    size = () => { if (!el.isConnected) { if (ro) ro.disconnect(); return; } const h = tall(); if (h === H && el.firstChild) return; H = h; el.innerHTML = shapeSvg(S, { h: H }); };
+    size(); if (ro) ro.observe(el);
+    return { el, flat: true, state: () => ({ flat: true, tall: H, box: [el.clientWidth, el.clientHeight] }), set() {}, hold() {}, stop() { if (ro) ro.disconnect(); } };
   }
+  const cv = el, g = cv.getContext('2d');
+  let yaw = (S.view && S.view.yaw) ?? START.yaw, pitch = (S.view && S.view.pitch) ?? START.pitch;
+  let held = false, still = false, rest = 0, last = 0, raf = 0, dirty = true, px = 0, py = 0, frames = 0, cost = 0, wPx = 0;
+  size = () => {
+    const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.round(w * dpr), Hpx = Math.round(h * dpr);
+    if (cv.width !== W || cv.height !== Hpx) { cv.width = W; cv.height = Hpx; }
+    wPx = W; H = tall(); dirty = true;
+  };
   function draw() {
     if (!wPx) size(); if (!wPx) return;
     const t0 = performance.now(), k = wPx / VIEW.w;
-    g.setTransform(k, 0, 0, k, 0, 0); g.clearRect(0, 0, VIEW.w, VIEW.h);
-    paint(g, solidList(S, yaw, pitch));
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+    g.setTransform(k, 0, 0, k, 0, Math.max(0, (cv.height - H * k) / 2));   // (a box taller than a shape is ever drawn: the shape in its middle)
+    paint(g, solidList(S, yaw, pitch, { h: H }));
     dirty = false; frames++; cost += (performance.now() - t0 - cost) * (frames < 20 ? 1 / frames : 0.05);
   }
   function tick(now) {
@@ -335,14 +386,13 @@ export function mountShape(host, S, { spin = true } = {}) {
   cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   // (a finger on the display turns it and nothing else: the page under it stays where it is)
   cv.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false }); cv.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(size) : null; if (ro) ro.observe(cv);
+  if (ro) ro.observe(cv);
   function stop() { stopped = true; cancelAnimationFrame(raf); if (ro) ro.disconnect(); }
   size(); draw(); raf = requestAnimationFrame(tick);
-  return { el: cv, flat: false, stop,
-    state: () => ({ flat: false, yaw, pitch, held, still, frames, ms: cost, faces: outsideFaces(S.cells).length, pellets: S.pellets ? S.cells.length : 0, px: [cv.width, cv.height] }),
+  return { el: cv, flat: false, stop, draw,
+    state: () => ({ flat: false, yaw, pitch, held, still, frames, ms: cost, tall: H, faces: outsideFaces(S.cells).length, pellets: S.pellets ? S.cells.length : 0, px: [cv.width, cv.height], box: [cv.clientWidth, cv.clientHeight] }),
     set(y, p = pitch) { yaw = y; pitch = Math.max(-TURN.most, Math.min(TURN.most, p)); dirty = true; draw(); },
-    hold(on = true) { still = !!on; },               // (a rig's: no turning by itself, for a picture)
-    draw };
+    hold(on = true) { still = !!on; } };             // (a rig's: no turning by itself, for a picture)
 }
 
 // THE JOB PANEL'S `live` FOR THIS JOB (src/jobs/panel.js): the card's top, and the display put on each new card in place

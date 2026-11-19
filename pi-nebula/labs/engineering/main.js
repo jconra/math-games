@@ -12,21 +12,31 @@
 //   - "New question": another question of the level in hand (in the game the next card comes after a right answer);
 //   - the list of the fifteen levels beside the card, to read (the level in hand is lit; the card's own arrows move it);
 //   - nobody is paid here, as on a captain's run (the pay there is the share of the haul);
-//   - whoever is in the lab starts on level 1, not at a level found for them.
-// Address switches: ?level=cluster  start on that level; ?seed=7  the same questions each time (for pictures).
+//   - whoever is in the lab starts on level 1, not at a level found for them, and THE LEVEL IS KEPT: an answer, right
+//     or wrong, does not move it (in the game four right in five climb a level and a miss with the bar empty drops
+//     one); only the card's arrows do. The card says so ("Kept"), and its Levels button can turn that off.
+//   - on a phone the card starts right under the top line (in the game it lies along the bottom of the screen, the
+//     ship's room in view above it), the same size as it is in the game.
+// Address switches: ?level=cluster  start on that level; ?seed=7  the same questions each time (for pictures);
+// ?keep=0  the level moves by itself as in the game.
 // window.ENGLAB: { ready, job, crew, link, panel(), view(), state(), again() }.
 import * as E from '../../src/jobs/engine.js';
 import { JOB } from '../../src/jobs/engineer.js';
 import { engineerLink } from '../../src/jobs/engview.js';
 import { openPanel } from '../../src/jobs/panel.js';
-import { setLevelAt } from '../../../mathwood-valley/src/levels/model.js';
+import { setLevelAt, setKeep } from '../../../mathwood-valley/src/levels/model.js';
 import { seeded } from '../../../mathwood-valley/src/levels/kit.js';
 
 const Q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id);
 const crew = { id: 'engineering-lab', name: 'Engineer' };
+// (the card and the ladder sit under this page's top line, however many rows it wraps to)
+const topBar = () => document.documentElement.style.setProperty('--lab-top', $('top').offsetHeight + 'px');
+new ResizeObserver(topBar).observe($('top')); topBar();
 E.register(JOB);
 const LV = JOB.place.levels;
 setLevelAt(crew, JOB.place.id, LV.some((L) => L.id === Q.get('level')) ? Q.get('level') : LV[0].id);
+// (the level stays where the arrows put it: here an answer, right or wrong, does not move it; ?keep=0: it moves as in the game)
+if (Q.get('keep') !== '0') setKeep(crew, JOB.place.id, true);
 
 // the ladder, to read
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

@@ -177,7 +177,7 @@ export const MAKERS = {
         const P = 2 * (l + h), shape = { kind: 'flat', l, h, cells: flatCells(l, h), pellets: true, field: true, marks: [{ a: [0, 0], b: [1, 0], text: cm(1) }] };
         const sides = [{ a: [0, 0], b: [l, 0], text: cm(l) }, { a: [0, h], b: [l, h], text: cm(l) }, { a: [0, 0], b: [0, h], text: cm(h) }, { a: [l, 0], b: [l, h], text: cm(h) }];
         return ownOrder({
-          key: 'flat:round', story: 'A containment field runs round the edge of the box. Each pellet is 1 centimetre wide.', ask: 'How many centimetres long is the field, all the way round?', right: C(P, CM),
+          key: 'flat:round', story: 'A containment field runs round the edge of the box. Each pellet is 1 centimetre wide.', ask: 'How long is the field, all the way round?', right: C(P, CM),
           slips: [
             { ...C(l + h, CM), slip: 'twoSides', why: `${l} + ${h} is only two of its sides. The field goes all the way round: four sides.` },
             ...(h >= 2 ? [{ ...C(P - 4, CM), slip: 'edgePellets', why: 'That counts the pellets along the edge. A corner pellet has two sides on the edge: count sides, not pellets.' }] : []),
@@ -268,7 +268,7 @@ export const MAKERS = {
         rightWhy: `${L} × ${b} = ${L * b} and ${top} × ${ch} = ${top * ch}; ${L * b} + ${top * ch} = ${u(A, CM2)}`,
         sum: [{ op: 'mul', a: L, b, say: 'First the lower box' }, { op: 'mul', a: top, b: ch, say: 'Then the upper box' }, { op: 'add', a: L * b, b: top * ch, say: 'Then the two together' }],
         lead: shapeSvg(shape),
-        help: { title: 'Split it into two boxes', svg: shapeSvg({ ...shape, bands: [lower, upper], tags: [{ x: L / 2, y: b / 2, text: `${L} × ${b}`, plate: true }, { x: upper.x + top / 2, y: b + ch / 2, text: `${top} × ${ch}`, plate: true }], caption: 'the lower box + the upper box = ?' }, HELP), line: 'Cut the shape into two boxes. Work out the area of each, then add them.', steps: [`The lower box: ${L} × ${b}`, `The upper box: ${top} × ${ch}`, 'Then add the two'] },
+        help: { title: 'Split it into two boxes', svg: shapeSvg({ ...shape, bands: [lower, upper], tags: [{ x: upper.x + top / 2, y: b / 2, text: `${L} × ${b}`, plate: true }, { x: upper.x + top / 2, y: b + ch / 2, text: `${top} × ${ch}`, plate: true }], caption: 'the lower box + the upper box = ?' }, HELP), line: 'Cut the shape into two boxes. Work out the area of each, then add them.', steps: [`The lower box: ${L} × ${b}`, `The upper box: ${top} × ${ch}`, 'Then add the two'] },
         own: { strand: 'geo', at: 42 }, credit: [{ strand: 'mul', at: 30, weight: 0.5 }], facts: { kind: 'bend', l: L, h: H, lower: [L, b], upper: [top, ch], ans: A, shape }, size: 3,
       }, rand);
     },
@@ -347,7 +347,7 @@ export const MAKERS = {
         const l = t.int(2, 9), w = t.int(2, 6), h = t.int(2, 6), F = 4 * (l + w + h), marks = [{ axis: 'l', text: cm(l) }, { axis: 'w', text: cm(w) }, { axis: 'h', text: cm(h) }];
         const shape = { kind: 'box', l, w, h, cells: boxCells(l, w, h), pellets: false, field: true, frame: true, marks };
         return ownOrder({
-          key: 'box:frame', story: `The field's frame runs along every edge of the box: ${l} centimetres long, ${w} wide and ${h} high.`, ask: 'How many centimetres of frame is that in all?', right: C(F, CM),
+          key: 'box:frame', story: `The field's frame runs along every edge of the box: ${l} centimetres long, ${w} wide and ${h} high.`, ask: 'How long is the frame in all?', right: C(F, CM),
           slips: [
             { ...C(l + w + h, CM), slip: 'oneEach', why: 'That is one edge of each kind. A box has 4 long edges, 4 wide ones and 4 high ones.' },
             { ...C(2 * (l + w + h), CM), slip: 'twoEach', why: 'That is two of each edge. There are four of each: 12 edges in all.' },
@@ -432,7 +432,7 @@ export const MAKERS = {
       if (s === 3) {
         const E = V - n;
         return ownOrder({
-          key: 'cluster:empty', story: 'The field is the smallest box that holds the whole cluster. One pellet fills 1 cubic centimetre.', ask: 'How many cubic centimetres of the field are empty?', right: C(E, CM3),
+          key: 'cluster:empty', story: 'The field is the smallest box that holds the whole cluster. One pellet fills 1 cubic centimetre.', ask: 'How much of the field is empty?', right: C(E, CM3),
           slips: [
             { ...C(V, CM3), slip: 'wholeBox', why: `${V} is the whole box. Take away the room the pellets fill.` },
             { ...C(n, CM3), slip: 'pellets', why: `${n} is the room the pellets fill. The empty part is the rest of the box.` },
