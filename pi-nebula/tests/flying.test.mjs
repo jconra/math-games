@@ -304,11 +304,14 @@ test('a rammed ship is shoved along the floor and turned, slows by itself, stays
     assert.ok(M.speedOf(S) < 0.6 && !M.pointsOf(S).some((p) => M.insideOther(O, p, SKIN - 0.1)), 'and the Miner, pressing on, is stopped behind it');
     // they step away: it goes on to the wall
     holdWith(S, 5, ['forward'], W); assert.ok(Math.min(...cornersOf(O).map((c) => c[0])) < who[0] - 0.3, 'they gone, it can be shoved on');
-    // someone standing under its wing, as people do: that does not hold it, but its body still stops short of them
+    // someone standing under its wing, as people do when it is parked: it does not move at all until they have gone
+    // (a wing's tip is lower than a head)
     const W2 = parkedOthers(), O2 = W2.L[0], wing = [O2.cfg.at[0] - 4, zc + 5.2]; M.place(S, [DOOR.face + 30, 2.6, zc], M.facing([-1, 0, 0]));
     assert.ok(M.insideOther(O2, [wing[0], 1, wing[1]], 0), '(they stand under its wing)');
     for (let t = 0; t < 6; t += DT) { M.stepShip(S, keys('forward'), DT, W2.solid); for (const q of W2.L) M.stepOther(q, DT, q === O2 ? [wing] : null); }
-    assert.ok(O2.p[0] < O2.cfg.at[0] - 1, `under its wing they do not hold it still (shoved ${(O2.cfg.at[0] - O2.p[0]).toFixed(1)} m)`);
+    assert.ok(O2.hits > 0 && O2.held > 0 && O2.p[0] === O2.cfg.at[0] && O2.p[1] === O2.cfg.at[2] && O2.yaw === 0, 'with someone under its wing it is hit and does not move');
+    assert.ok(M.speedOf(S) < 0.6 && !M.pointsOf(S).some((p) => M.insideOther(O2, p, SKIN - 0.1)), 'the Miner stopped against it, as against a wall');
+    holdWith(S, 3, ['forward'], W2); assert.ok(O2.p[0] < O2.cfg.at[0] - 1, `they gone, it is shoved (${(O2.cfg.at[0] - O2.p[0]).toFixed(1)} m)`);
   }
   // a gentle push moves it too, slowly: no ram is needed
   const W = parkedOthers(), O = W.L[0], S = M.makeShip(); M.place(S, [DOOR.x - 2, 2.6, O.cfg.at[2]], M.facing([-1, 0, 0]));

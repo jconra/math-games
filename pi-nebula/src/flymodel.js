@@ -39,7 +39,8 @@
 //   - THE OTHER TWO BAYS are open to the ship as its own is, by hand. THE AUTOPILOT never plans a way into them, and
 //     switched on in one it first goes straight out through that hangar's own door.
 //   - THE SHIP PARKED IN EACH is something it bumps into, and a bump shoves it: it slides across the floor and turns,
-//     slows by itself and stops; its hangar's walls and its door's shield keep it in. Nothing tips, nothing breaks.
+//     slows by itself and stops; its hangar's walls and its door's shield keep it in, and it stops dead rather than
+//     slide over anyone standing on that floor. Nothing tips, nothing breaks.
 //   - IN ANOTHER SHIP'S HANGAR (visiting: any of the ship past that door's line) the alarm is on, and off the moment
 //     all of it is out again. It can rest on that floor but is never down there: its legs take only its own hangar's
 //     floor, so the seat never lets the pilot out there.
@@ -459,20 +460,20 @@ export function pushOthers(S, others) {
   return touched;
 }
 // a shoved ship slides on and slows by itself; its hangar's walls and its door's shield keep it in.
-// NOBODY IS HIT: feet ([[x, z], ...]: where the people on that floor stand) stop it dead rather than let any part of
-// it come over someone it was not over already (SHOVE.person: how near). Someone standing under a wing, as people
-// do when it is parked, does not hold the wing; its body stops short of them all the same.
+// NOBODY IS HIT: feet ([[x, z], ...]: where the people on that floor stand) hold it. It does not move at all while
+// anyone stands within SHOVE.person of any part of it, under a wing too (a wing's tip is lower than a head), and it
+// stops dead rather than come that near anyone. They run clear of it (src/visit.js), and then it can be shoved.
 export function stepOther(O, dt, feet = null) {
   if (otherStill(O)) return O;
-  const over = (f) => { const l = intoOther(O, [f[0], 0, f[1]]); return O.boxes.map((b) => inBox(b, l, SHOVE.person)); };
-  const was = feet && feet.length ? { p: O.p, yaw: O.yaw, over: feet.map(over) } : null;
+  const over = (f) => { const l = intoOther(O, [f[0], 0, f[1]]); return O.boxes.some((b) => inBox(b, l, SHOVE.person)); };
+  const was = feet && feet.length ? { p: O.p, yaw: O.yaw } : null;
   const G = SHOVE, sp = Math.hypot(O.v[0], O.v[1]), cap = sp > G.most ? G.most / sp : 1;
   O.v = [O.v[0] * cap, O.v[1] * cap]; O.w = clamp(O.w, -G.spin, G.spin);
   O.p = [O.p[0] + O.v[0] * dt, O.p[1] + O.v[1] * dt]; O.yaw += O.w * dt;
   const s1 = Math.hypot(O.v[0], O.v[1]), k = s1 > 1e-9 ? Math.max(0, s1 - G.grip * dt) / s1 : 0;
   O.v = [O.v[0] * k, O.v[1] * k]; O.w = Math.sign(O.w) * Math.max(0, Math.abs(O.w) - G.gripTurn * dt);
   keepIn(O);
-  if (was && feet.some((f, i) => over(f).some((now, j) => now && !was.over[i][j]))) { O.p = was.p; O.yaw = was.yaw; O.v = [0, 0]; O.w = 0; O.held = (O.held || 0) + 1; return O; }
+  if (was && feet.some(over)) { O.p = was.p; O.yaw = was.yaw; O.v = [0, 0]; O.w = 0; O.held = (O.held || 0) + 1; return O; }
   if (Math.hypot(O.v[0], O.v[1]) < 0.02) O.v = [0, 0];
   if (Math.abs(O.w) < 0.004) O.w = 0;
   return O;

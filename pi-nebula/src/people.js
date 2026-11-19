@@ -1625,7 +1625,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
       if (P.pos.x < B.min.x || P.pos.x > B.max.x || P.pos.z < B.min.z || P.pos.z > B.max.z) continue;
       const under = !!avoid && avoid(P.pos);
-      if (P.fleeing && !under) { n++; continue; }      // (running already, and not into trouble)
+      // (running already: left to it, unless something has come over them since they set off, and then they are
+      // sent out from under it once, not again and again: a way takes a moment to work out; or unless they are held
+      // up, by a shoved ship slid into their way or by someone else running, and then they run somewhere else)
+      const heldUp = P.fleeing && (P.held > 0.7 || P.heldAll > 1.6);
+      if (P.fleeing && !heldUp && (!under || P.fleeing.out)) { n++; continue; }
       let to = null;
       for (let i = 0; i < 14 && !to; i++) {
         const p = i < 10 && spots.length ? pick(spots) : walls.snap(B.min.x + 2 + Math.random() * (B.max.x - B.min.x - 4), P.pos.y + 0.4, B.min.z + 2 + Math.random() * (B.max.z - B.min.z - 4), 0.8);
@@ -1637,7 +1641,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (!to) continue;
       endTalk(P); if (P.cap && P.cap.busy) endOffer(P);
       if (!P.fleeing) { P.fleeing = { was: P.speed }; P.speed = Math.max(P.speed, 1.2) * 1.9; }
+      P.fleeing.out = under;
       begin(P, { kind: 'walk', step: { for: [0.3, 0.9] }, spot: { pos: to, heading: null }, list: [{ pos: to }], j: 0 });
+      P.held = 0; P.heldAll = 0;
       n++;
     }
     return n;

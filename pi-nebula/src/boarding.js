@@ -23,6 +23,13 @@
 // (walls.place), so the cabin's narrow doors are exactly as wide as they were. `stands` counts the moves, for whoever
 // keeps something that depends on where a ship is (src/people.js: the patches kept off; src/mission.js: the line).
 //
+// THE SAME FOR A SHIP SHOVED ABOUT ITS HANGAR (the game's maker, 2026-11-18, of the Miner flown into another ship's
+// hangar: "It would even be appropriate for the other ship to get moved around if they rammed it. But it would be reset
+// the next time they entered into the other hanger"; src/visit.js): B.stand('explorer', D) and B.stand('medic', D). Their
+// ways in follow as the Miner's lift does: the airstair, the ramps and the crew door's stair are drawn with the ship
+// (visit.js), each way's own point and patch of floor are kept where the ship is parked and a person is brought there
+// to be asked about them, its treads and its shut door are felt where the ship stands (walls.place, a door's `fr`).
+//
 // HOW (nothing here knows a coordinate: ships, rooms and doors are found by name in the station file):
 //   - Each ship parked in the station is a room of the station file ('ship-explorer', drawn with its hangar). Its cabin
 //     is built only while someone is in that hangar or the way into it (each cabin is about 80-110k triangles), by the

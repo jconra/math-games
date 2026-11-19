@@ -21,9 +21,12 @@
 //     no lamp is added to the scene, so the station's saved light, its materials and its files are untouched, and
 //     nothing casts a shadow. (The wash: seen from outside, a red pane across the door's opening; from inside, the
 //     whole picture, cockpit and all.) It turns slowly on purpose: a little over one pulse a second.
-//   - THE PEOPLE IN THAT HANGAR RUN ABOUT (src/people.js runAbout): each to somewhere else on its floor, and on again
-//     when they get there. Nobody is hit: they never choose a place under the flown ship or in the shoved one, never
-//     a way that passes under either, and whoever one of them comes over runs out from under it at once.
+//   - THE PEOPLE IN THAT HANGAR RUN ABOUT (src/people.js runAbout): each to another of the places people stand in on
+//     that floor, and on again when they get there. NOBODY IS HIT: they never choose a place under the flown ship or
+//     near the parked one (under its wings neither), never a way that passes under either, and whoever one of the
+//     two is over when the alarm starts, or the flown ship comes over, runs clear at once; and the parked ship does
+//     not move while anyone is within half a metre of any part of it, and stops dead rather than come that near
+//     anyone (flymodel.js stepOther). When the alarm stops they finish the run they are on and go on with their day.
 //   - NO BANNER, NO SCORE, NO DAMAGE, NO TIMER: nothing else happens. The few words along the top (the flying's own)
 //     say whose hangar it is; the seat never lets the pilot out there.
 //
@@ -62,7 +65,8 @@ import { DOOR } from '../kit/outside-plan.js';
 // red patch on the floor (its reach, m). wash: the least and the most of the red wash. sound: the alarm's own.
 // run: how often the people are looked at (s). tell: how often a sliding ship's place is told to the cabin and the
 // walls (s). real: a phone's real hangar: how near its door (m out from the door's line) and how nearly on its line
-// (m to the side) the ship is when it is asked for, and when it is let go again.
+// (m to the side) the ship is when it is asked for, and when it is let go again. room, low: how much room round the
+// flown ship the people keep (m), and how low it has to be (m, its feet over the floor) for them to mind it.
 export const ALARM = {
   lamps: { x: [33, 49], z: [-6, 6], y: 9.2 }, turn: 3.4, beam: { len: 15, r: 2.3, dip: 0.36, glow: 0.2 }, pool: { r: 11, glow: 0.2 }, wash: [0.015, 0.07], colour: 0xff2a14,
   sound: { volume: 0.55, near: 12, far: 160, notes: [640, 480], beat: 0.42 }, run: 0.4, tell: 0.3, real: { out: 38, side: 13, outGo: 48, sideGo: 16 }, room: 1.3, low: 3.6,
@@ -76,9 +80,9 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     const mine = new Set(), shared = new Set();
     for (const D of W.built.doors) for (const leaf of D.leaves) for (const im of leaf.meshes || []) (D.zone === cfg.room ? mine : shared).add(im);
     // (drawn, told: where it was last drawn and last told to be; parked, as the station has it, nothing is touched)
-    return { O, cfg, zone, hangar, meshes: [...mine].filter((im) => !shared.has(im)), D: new THREE.Matrix4(), drawn: keyOf(O), told: [O.p[0], O.p[1], O.yaw], tellT: 0 };
+    return { O, cfg, zone, hangar, meshes: [...mine].filter((im) => !shared.has(im)), D: new THREE.Matrix4(), drawn: keyOf(O), told: [O.p[0], O.p[1], O.yaw], tellT: 0, clearT: 0, home: M.makeOther(cfg) };
   }).filter((v) => v.zone && v.hangar);
-  const counts = { alarms: 0, stops: 0, resets: 0, tells: 0, ran: 0, soundAsked: 0, soundHeard: 0 };
+  const counts = { alarms: 0, stops: 0, resets: 0, waits: 0, tells: 0, ran: 0, soundAsked: 0, soundHeard: 0 };
   let flying = null, alarm = null, siren = null, sirenFor = null, phase = 0, runT = 0, near = null;
   const focus = new THREE.Vector3(); let focusOn = false;
 
@@ -125,7 +129,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
   let lit = null;
   function makeLit() {
     const g = new THREE.Group(); g.name = 'alarm lights';
-    const glowMat = (opacity) => own(new THREE.MeshBasicMaterial({ color: red, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const glowMat = (opacity) => own(new THREE.MeshBasicMaterial({ color: red, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
     // a beam: a cone from the lamp along +x, bright at the lamp and fading to nothing at its end
     const cone = own(new THREE.CylinderGeometry(A.beam.r, 0.14, A.beam.len, 14, 4, true).rotateZ(-Math.PI / 2).translate(A.beam.len / 2, 0, 0));
     { const P = cone.attributes.position, c = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = Math.pow(Math.max(0, 1 - P.getX(i) / A.beam.len), 1.6); c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = k; } cone.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
@@ -146,13 +150,14 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     const poolMat = glowMat(A.pool.glow); poolMat.polygonOffset = true; poolMat.polygonOffsetFactor = -2; poolMat.polygonOffsetUnits = -2;
     const pools = new THREE.InstancedMesh(pool, poolMat, 4); pools.frustumCulled = false; pools.renderOrder = 5;
     // the wash: a pane across the door's opening (seen from outside), and the whole picture (from inside)
-    const paneMat = own(new THREE.MeshBasicMaterial({ color: red, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const paneMat = own(new THREE.MeshBasicMaterial({ color: red, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
     const pane = new THREE.Mesh(own(new THREE.PlaneGeometry(DOOR.w, DOOR.h).rotateY(Math.PI / 2)), paneMat); pane.renderOrder = 7;
     const allMat = own(new THREE.ShaderMaterial({ uniforms: { c: { value: red.clone() }, a: { value: 0 } }, vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: 'uniform vec3 c; uniform float a;\nvoid main() {\n  gl_FragColor = vec4(c * a, 1.0);\n  #include <tonemapping_fragment>\n  #include <colorspace_fragment>\n}',
       blending: THREE.AdditiveBlending, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     const all = new THREE.Mesh(own(new THREE.PlaneGeometry(2, 2)), allMat); all.frustumCulled = false; all.renderOrder = 9999;
     g.add(pools, beams, domes, pane, all);
-    return { g, beams, domes, pools, pane, paneMat, all, allMat, tris: (cone.index.count / 3) * 8 + (dome.index.count / 3) * 4 + (pool.index.count / 3) * 4 + 4, draws: 5 };
+    // (each glowing thing is drawn once, both its faces together: it only adds light; the pane or the whole picture, never both)
+    return { g, beams, domes, pools, pane, paneMat, all, allMat, tris: (cone.index.count / 3) * 8 + (dome.index.count / 3) * 4 + (pool.index.count / 3) * 4 + 2, draws: 4 };
   }
   function light(v, camera) {
     if (!lit) lit = makeLit();
@@ -180,14 +185,13 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     for (const P of pp.list) if (!P.hidden && !P.away && P.pos.y < 2.4 && P.pos.x > B.min.x && P.pos.x < B.max.x && P.pos.z > B.min.z && P.pos.z < B.max.z) out.push([P.pos.x, P.pos.z]);
     return out;
   }
-  // (under the flown ship, while it is low; and where the parked ship is while it slides: once it is still, the walls
-  // have it where it stands, and under its wings is somewhere a person can stand again, as when it is parked)
+  // (under the flown ship, while it is low; and anywhere near the parked ship, under its wings too: while the alarm
+  // is on it may be shoved at any moment, and it does not move while anyone is that near it)
   function avoidFor(S, v) {
-    const low = S.p[1] < A.low, sliding = !M.otherStill(v.O);
+    const low = S.p[1] < A.low;
     return (pos) => {
       if (low) { const r = M.unturn(S.q, [pos.x - S.p[0], 0, pos.z - S.p[2]]); if (r[0] > hull.a0 - A.room && r[0] < hull.a1 + A.room && Math.abs(r[2]) < hull.r1 + A.room) return true; }
-      if (!sliding) return false;
-      _w[0] = pos.x; _w[1] = 1; _w[2] = pos.z; return M.insideOther(v.O, _w, 0.8);
+      _w[0] = pos.x; _w[1] = 1; _w[2] = pos.z; return M.insideOther(v.O, _w, M.SHOVE.person + 0.5);
     };
   }
 
@@ -204,8 +208,12 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
         if (!was) M.stepOther(O, dt, feetOn(v));
         draw(v);
         if (M.otherStill(O)) tell(v); else if ((v.tellT -= dt) <= 0) { v.tellT = A.tell; tell(v); }
-        // THE RESET: the flown ship out of this hangar, and the hangar not being drawn
-        if (O.moved && there !== v.cfg && !v.hangar.group.visible) reset(v);
+        // THE RESET: the flown ship out of this hangar, and the hangar not being drawn. (Never onto anyone: whoever
+        // stands where the ship parks is sent off it first, unseen, and it is put back once they are clear.)
+        if (O.moved && there !== v.cfg && !v.hangar.group.visible && (v.clearT -= dt) <= 0) {
+          const pp = people(), on = (pos) => { _w[0] = pos.x; _w[1] = 1; _w[2] = pos.z; return M.insideOther(v.home, _w, 0.6); };
+          if (pp && feetOn(v).some(([x, z]) => on({ x, z }))) { v.clearT = A.run; if (pp.flee) pp.flee(v.cfg.at[0], v.cfg.at[2], 0, 2.5, { inside: on }); counts.waits++; } else reset(v);
+        }
       }
       // the alarm: on while it is in there, off the moment it is out
       if (there !== alarm) {

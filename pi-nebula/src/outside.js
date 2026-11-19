@@ -28,9 +28,10 @@
 //       the flown ship is still drawn in there: its own room, and what hangs on its own hangar's room and rides with
 //       it (its pods, its canisters). That hangar's own walls and floor, two walls away and out of sight, are put away
 //       meanwhile (`bulk` below), so being in another hangar costs that hangar and the ship, not two hangars;
-//       on a phone, the hangar the ship is lined up with and close to (outside.near) is the real one by the time it
-//       is at the door: its stand-in fades away over it (FADE seconds), and comes back the same way once the ship has
-//       gone off again. Never a sudden swap.
+//       on a phone, the hangar the ship is lined up with and close to (outside.near) is the real one well before it
+//       is at the door. The change is never seen to happen: a dark pane just inside the door goes dark over the
+//       stand-in, the real hangar takes its place behind the dark, and the pane clears (FADE seconds in all), as if
+//       the hangar's lights had come on; and the other way round once the ship has gone off again.
 //
 //   const outside = addOutside(W, { seed })
 //   outside.update(camera, dt)  once a frame, before W.frame
@@ -47,7 +48,7 @@ import { OPENINGS } from '../kit/outside-plan.js';
 import { DIR } from '../world/sky.js';
 
 export const SUN = { colour: 0xfff0dc, strength: 3.3 };      // the Hull Lab's own sun
-export const FADE = 0.7;      // a phone's stand-in for a hangar, fading away over the real one and back (s)
+export const FADE = 0.9;      // a phone's stand-in for a hangar giving way to the real one, and back: the dark and the clearing (s)
 const SKINS = /^skin-/;
 
 // the sun, worked out in a material of its own accord: one more light in its sums, from the sky's sun
@@ -124,20 +125,24 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       // a point of the opening: s along it (-1..1 of half its width), d metres in from its face
       const at = (s, y, d, half = O.w / 2) => [O.at[0] + ax * s * half - ox * d, y, O.at[2] + az * s * half - oz * d];
       const g = new THREE.Group(), door = O.w > 10;
-      let room = null, sh = null, mat = null;
+      let room = null, sh = null, curtain = null;
       if (door) {
-        // (a hangar's stand-in has a material of its own, so it can fade away over the real hangar: k below)
-        mat = dim.clone(); owned.push(mat);
         const h = O.w / 2 + 2.8, top = 10.9, deep = 39, wall = lin(0x1b2027), floor = lin(0x2b313a);
         room = mesh([[[at(-1, 0, 0.4, h), at(1, 0, 0.4, h), at(1, 0, deep, h), at(-1, 0, deep, h)], floor], [[at(-1, top, 0.4, h), at(1, top, 0.4, h), at(1, top, deep, h), at(-1, top, deep, h)], wall],
           [[at(-1, 0, 0.4, h), at(-1, 0, deep, h), at(-1, top, deep, h), at(-1, top, 0.4, h)], wall], [[at(1, 0, 0.4, h), at(1, 0, deep, h), at(1, top, deep, h), at(1, top, 0.4, h)], wall],
-          [[at(-1, 0, deep, h), at(1, 0, deep, h), at(1, top, deep, h), at(-1, top, deep, h)], lin(0x12161c)]], mat); room.renderOrder = 4; g.add(room);
+          [[at(-1, 0, deep, h), at(1, 0, deep, h), at(1, top, deep, h), at(-1, top, deep, h)], lin(0x12161c)]], dim); g.add(room);
         sh = mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], [1, 1, 1]]], shield); sh.renderOrder = 5; g.add(sh);
+        // (THE CURTAIN: a dark pane across the opening, in the depth of the door's own frame and in front of its shield, for the moment the stand-in gives way
+        // to the real hangar or takes its place again: the hangar goes dark, the two change places behind the dark,
+        // and it clears. So nothing is ever seen to appear: k below)
+        const cm = new THREE.MeshBasicMaterial({ color: 0x151a21, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide, forceSinglePass: true }); owned.push(cm);
+        curtain = mesh([[[at(-1, y0, -0.45), at(1, y0, -0.45), at(1, y1, -0.45), at(-1, y1, -0.45)], [1, 1, 1]]], cm); curtain.renderOrder = 6; curtain.visible = false; g.add(curtain);
       } else g.add(mesh([[[at(-1, y0, 0.3), at(1, y0, 0.3), at(1, y1, 0.3), at(-1, y1, 0.3)], lin(0x0c131b)]], dim));
-      // (k: 1, the stand-in alone; 0, the real room alone; between, the stand-in fading over the real one)
-      g.visible = false; stand.add(g); standIns.push({ o, g, room, sh, mat, k: 1 });
+      // (k: 1, the stand-in; 0, the real room; between, the curtain: dark by DARK, the change made there, clear again by 0)
+      g.visible = false; stand.add(g); standIns.push({ o, g, room, sh, curtain, k: 1 });
     }
   }
+  const DARK = 0.62;
   // THE FLOWN SHIP'S OWN HANGAR, while the camera is in another: the room's own walls, floor and fittings (each kind of
   // them one mesh, the room's merged pieces) are put away, and what hangs on the room beside them (the ship's pods and
   // canisters, the crane) stays
@@ -162,25 +167,29 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       // the flown ship's own rooms (its own, and the hangar it is drawn with): always drawn while it is flown
       mine.clear();
       if (shown && api.flying) { const z = W.room(api.flying); mine.add(api.flying); for (const w of (z && z.with) || []) mine.add(w); }
-      // (in another hangar: that one's own walls and floor put away)
+      // (in another hangar, past its door's own line: the flown ship's own hangar's walls and floor put away. Just
+      // outside that door, where a hangar's box still reaches, its own door may be in sight along the wall: left whole.)
       const home = [...mine].find((id) => hangars.has(id)) || null;
-      bulk(camIn && home && camIn !== home ? home : null);
+      const within = !!camIn && camIn !== home && openings.some((o) => o.room === camIn && _p.copy(camera.position).sub(o.at).dot(o.out) < 0);
+      bulk(within && home ? home : null);
       if (outThere) {
         wanted.clear();
         for (const id of mine) if (hangars.has(id)) wanted.add(id);
         const facing = (o) => _p.copy(camera.position).sub(o.at).dot(o.out) > 0.5;
         if (!cheap) { for (const o of openings) if (facing(o)) wanted.add(o.room); }
         else for (const s of standIns) {
-          // (a phone: the hangar the ship is close to is the real one, its stand-in faded away over it; the others' stand-ins as ever)
-          if (s.mat) {
+          // (a phone: the hangar the ship is close to is the real one; the others' stand-ins as ever. The change is made
+          // behind the curtain, when it is quite dark)
+          if (s.curtain) {
             const real = s.o.room === api.near, k = s.k = Math.max(0, Math.min(1, s.k + (real ? -1 : 1) * dt / FADE));
-            if (k < 1) wanted.add(s.o.room);
-            if (s.mat.transparent !== (k < 1)) { s.mat.transparent = k < 1; s.mat.depthWrite = k >= 1; s.mat.needsUpdate = true; }
-            s.mat.opacity = k * k * (3 - 2 * k); s.room.visible = k > 0; s.sh.visible = k >= 1;
+            const isReal = k <= DARK, c = isReal ? k / DARK : (1 - k) / (1 - DARK);
+            if (isReal) wanted.add(s.o.room);
+            s.room.visible = s.sh.visible = !isReal;
+            s.curtain.visible = k > 0 && k < 1; s.curtain.material.opacity = c * c * (3 - 2 * c);
           }
-          s.g.visible = (s.mat ? s.k > 0 : true) && !mine.has(s.o.room) && facing(s.o);
+          s.g.visible = (s.curtain ? s.k > 0 : true) && !mine.has(s.o.room) && facing(s.o);
         }
-      } else if (cheap) for (const s of standIns) if (s.mat && s.o.room === camIn) s.k = 0;      // (in it: the real one, and no fade on the way out)
+      } else if (cheap) for (const s of standIns) if (s.curtain && s.o.room === camIn) s.k = 0;      // (in it: the real one, and nothing to clear on the way out)
     },
     triangles() {
       const lists = [];

@@ -13,10 +13,18 @@
 //     flight, so a hop about the hangar is enough to try it (in the game it is up coming home);
 //   - set down by hand the ship stands where it was put, as in the game; there is nobody here to get up out of the
 //     seat. "Back on the pad" parks it properly again.
+//   - THE OTHER TWO HANGARS are open to it here as in the game (the game's maker, 2026-11-18: "Lol, I'm sure kids will
+//     try to do this and it will make them laugh, so why not. ... you would hear an alarm and red lights started
+//     spinning around in the hanger and people started running around and it started saying "Safety Violation" over
+//     and over in your cockpit. It would even be appropriate for the other ship to get moved around if they rammed
+//     it. But it would be reset the next time they entered into the other hanger."): the same alarm and red lights,
+//     the same ships to shove, the same reset once their hangar is out of sight (src/visit.js), and the ship's own
+//     voice (its welcome as the power comes on, and again after "Back on the pad", which is the lab's way of sitting
+//     down afresh). The station's people are not in the lab, so nobody runs about here.
 //
 // Address switches: ?q=low|medium|high  the picture's quality; ?view=behind  start in the view from behind;
 // ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a screenshot; ?seed=N  which of the
-// outside's windows are lit. window.LAB: { ready, W, F (the flying), boarding, crane, outside, step }.
+// outside's windows are lit. window.LAB: { ready, W, F (the flying), boarding, crane, outside, visit, step }.
 import * as THREE from 'three';
 import { loadStation } from '../../src/station.js';
 import { makeWalls } from '../../src/walls.js';
