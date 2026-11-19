@@ -131,6 +131,8 @@ const CSS = `
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's buttons (Fly manually over Scan) and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 226px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
+/* (flown by hand at the rocks on a phone: above the flying's own row of buttons, View, Controls, Back to the drill) */
+@media (max-width: 640px) { .pmt.is-drill.is-hand .pmt-say { bottom: 290px; } }
 /* (the count stays up while the jump home is worked out: beside the jump computer's panel on a wide screen, put away under it on a phone) */
 @media (min-width: 641px) { .pmt.has-panel .pmt-count { left: 31%; max-width: 56vw; } }
 @media (max-width: 640px) { .pmt.has-panel .pmt-count { display: none; } }
@@ -431,7 +433,7 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   function endDrill() {
     if (ff) { ff.close(); ff = null; api.field = null; }
     if (!drill) return;
-    drillOn = false; drill.close(); drill = null; el.classList.remove('is-drill'); camFresh = true;
+    drillOn = false; drill.close(); drill = null; el.classList.remove('is-drill', 'is-hand'); camFresh = true;
   }
   function cleanUp() {
     endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
@@ -467,7 +469,7 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
       if (fl) { fl.panel = !!panel; fl.update(dt); if (T.done) return; }
       // (at the rocks: the drill's view, the flying kept there; and the wormhole, whose two ends change the place)
       if (drill && drillOn) drill.update(dt);
-      if (ff) { ff.fl.panel = !!panel; ff.update(dt); }
+      if (ff) { ff.fl.panel = !!panel; ff.update(dt); el.classList.toggle('is-hand', ff.mode === 'hand'); }
       if (wh) { wh.update(dt); if (T.done) return; }
       if (arms && arms.group.visible) { spin += dt * MB.ARMS.spin; MB.armStep(arms, T.inField ? armsWant : 'stowed', dt, { spin }); if (rocks) rocks.update(dt); }
     },
