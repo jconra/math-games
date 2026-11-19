@@ -177,10 +177,12 @@ const CSS = `
 .pfl-seat button { flex: none; height: 44px; padding: 0 18px; font-size: 15px !important; font-weight: 800 !important; letter-spacing: 0.08em; text-transform: uppercase; color: #1c1205 !important; background: #ff8f2e !important;
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
 .pfl-seat button kbd { margin-left: 8px; background: rgba(0, 0, 0, 0.18); color: #1c1205; }
-.pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 112px); }
+.pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 176px); }
 @media (max-width: 640px) {
   .pfl-guide { top: max(136px, calc(env(safe-area-inset-top) + 132px)); left: max(8px, env(safe-area-inset-left)); width: 152px; }
   .pfl-holo { height: 136px; } .pfl-holo small { font-size: 9.5px; bottom: 3px; white-space: nowrap; }
+  /* (the seat's prompt across a phone's screen, over the buttons' two rows) */
+  .pfl-seat { left: 10px; right: 10px; transform: none; max-width: none; justify-content: space-between; } .pfl-seat b { white-space: nowrap; }
 }
 `;
 
