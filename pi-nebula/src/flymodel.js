@@ -72,7 +72,7 @@ import { standElements } from './standing.js';
 // ── the keys, as he said them (KeyboardEvent.code -> what it does) ──
 export const KEYS = {
   KeyW: 'forward', KeyS: 'reverse', KeyA: 'left', KeyD: 'right', Space: 'up', KeyC: 'down', KeyQ: 'rollLeft', KeyE: 'rollRight',
-  KeyF: 'mouse', KeyV: 'view', KeyT: 'autopilot', KeyP: 'power', KeyJ: 'jump', KeyR: 'look', KeyH: 'help',
+  KeyF: 'mouse', KeyV: 'view', KeyT: 'autopilot', KeyP: 'power', KeyJ: 'jump', KeyR: 'look', KeyH: 'help', KeyM: 'task',
 };
 export const HELD = ['forward', 'reverse', 'left', 'right', 'up', 'down', 'rollLeft', 'rollRight', 'look'];   // (held down; the rest are one press)
 
@@ -143,6 +143,9 @@ export const MINER = {
   others: null,
   // ITS VOICE: its clips are named by it (src/voices.js SHIP_CLIPS: 'ship-miner-welcome', 'ship-miner-safety')
   voice: 'miner',
+  // ITS CLAW: where its hand holds a rock, in its own frame [ahead, up, right] (src/drillview.js reads the same place
+  // off the arm itself: 1.7 m ahead of its nose, a little under its middle)
+  claw: [8.54, 2.94, 0],
 };
 
 // ── THE OTHER TWO HANGARS, AND THE SHIP PARKED IN EACH ──
@@ -512,6 +515,64 @@ export function voiceStep(V, S, dt, there = null) {
   return say;
 }
 
+// ── AT THE ROCKS ──
+// THE GAME'S MAKER (2026-11-18, of who flies at the rocks): "Yeah the pilot flies if you are operating the drill. If you
+// signed up for both there can be a button that lets you switch tasks. Either way, you should be able to click on an
+// asteroid to travel over to it (If you want to fly and you signed up to be a pilot, you can click a button to fly
+// manually if you want). If you are the drill operator and you click on an asteroid that is you telling the pilot where
+// you would like they to fly. If you are autopilot it is the same control."
+// SO, FLOWN BY HAND OUT THERE, it is the same ship with the same keys and the same feel. What is different:
+//   - THERE IS NOTHING TO LAND ON (FIELD: the Miner's own facts with no pad, no bay and no floor), so it is never down;
+//   - THE ROCKS are what it bumps into, with no damage, as at the station: it stops, or slides round them (pushRocks).
+//     A rock is small beside the ship, so it is the ship's whole hull, as one box, that is tried against each rock
+//     (the hull's few points alone would let a rock slip in between them);
+//   - ITS CLAW TAKES A ROCK THE SHIP HAS BEEN BROUGHT UP TO (rockNear): the rock's middle within TAKE.reach of where
+//     the claw's hand holds a rock, and the ship moving slower than TAKE.slow. The claw then takes it as it does after
+//     a tapped trip (src/drillview.js). Nothing is asked of how the ship is turned. The reach is the whole of the
+//     nose: a rock met nose on, anywhere across it, is taken; one met by the ship's side or tail is not.
+// A rock here is a ball: { p: [x, y, z] its middle, r its size (m) }, in whatever frame the ship is flown in.
+// (the speed's screen stands a little higher there: the drill's own Miner has a deeper sill than the cabin in the hangar)
+export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, screen: { ...MINER.screen, at: [0.5, 3.585, 5.3] } };
+export const TAKE = { reach: 4.5, slow: 3 };
+// where the claw's hand is now
+export const clawOf = (S) => add(S.p, turn(S.q, S.cfg.claw || MINER.claw));
+// eased back out of any rock its hull has come into (within SKIN of), keeping the speed that runs round it -> touched?
+export function pushRocks(S, rocks) {
+  const H = hullOf(S.cfg); let touched = false;
+  for (const R of rocks) {
+    const far = R.r + SKIN, w = sub(R.p, S.p);
+    if (Math.abs(w[0]) > 14 + far || Math.abs(w[1]) > 14 + far || Math.abs(w[2]) > 14 + far) continue;
+    const l = unturn(S.q, w), c = [clamp(l[0], H.a0, H.a1), clamp(l[1], 0, H.u1), clamp(l[2], -H.r, H.r)];
+    let n = sub(c, l), d = len(n);
+    if (d >= far) continue;
+    let deep = far - d;
+    if (d < 1e-6) {
+      // (the rock's middle is inside the hull: out by the nearest side of it)
+      let best = Infinity; n = [0, 1, 0];
+      for (const [e, m] of [[l[0] - H.a0, [1, 0, 0]], [H.a1 - l[0], [-1, 0, 0]], [l[1], [0, 1, 0]], [H.u1 - l[1], [0, -1, 0]], [l[2] + H.r, [0, 0, 1]], [H.r - l[2], [0, 0, -1]]]) if (e < best) { best = e; n = m; }
+      deep = far + best;
+    } else n = mul(n, 1 / d);
+    // (n: from the rock to the hull, the ship's own frame; the ship goes that way)
+    const nw = turn(S.q, n);
+    S.p = add(S.p, mul(nw, deep)); S.bump = Math.max(S.bump, deep); touched = true;
+    const into = dot(S.v, nw); if (into < 0) S.v = sub(S.v, mul(nw, into));
+  }
+  return touched;
+}
+// what a ship bumps into at the rocks, as the flying takes it (stepShip's `solid`): rocks() gives the rocks now
+export function rockSolid(rocks) {
+  return { reach: 3, dist: () => 99, away: (x, y, z, out) => { out[0] = out[1] = out[2] = 0; return out; }, push: (S) => pushRocks(S, rocks()), clear: () => 1 };
+}
+// THE ROCK THE CLAW CAN TAKE NOW: the nearest to the claw's hand within TAKE.reach, the ship slow enough; or null
+export function rockNear(S, rocks) {
+  if (S.landed || speedOf(S) > TAKE.slow) return null;
+  const c = clawOf(S); let best = null, bd = TAKE.reach;
+  for (const R of rocks) { const d = len(sub(R.p, c)); if (d <= bd) { bd = d; best = R; } }
+  return best;
+}
+// a ship out at the rocks, in flight: at `p`, its nose along `f`
+export function makeFieldShip(p = [0, 0, 0], f = [0, 0, 1], cfg = FIELD) { const S = makeShip(cfg); place(S, p, facing(f)); S.engine = 0.15; return S; }
+
 // setting itself down: level and nose out over the pad's middle, then down onto it
 function settle(S, dt, solid) {
   const T = S.settle, P = S.cfg.pad, G = SETTLE; T.t += dt;
@@ -712,8 +773,15 @@ export function guideTurn(S) { return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) 
 // it, or a crew member who is not the pilot). -> [[key, words], ...]
 // touch: a phone has no keys: each line names the button or the stick on the screen instead
 // getUp: the ship is down where the seat lets them out (the seat's own prompt says so too)
-export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false, getUp = false } = {}) {
+// field: out at the rocks: nothing to land on and no autopilot of its own there (a tapped rock is where the autopilot
+// flies, in the drill's view); task: the words of the button that switches back to the drill, for whoever has it
+export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false, getUp = false, field = false, task = '' } = {}) {
   const view = [touch ? 'View' : 'V', behind ? 'See from the cockpit' : 'See from behind'], look = behind && !touch ? [['R', 'Hold: look round the ship']] : [];
+  if (field && pilot && !auto) {
+    const back = task ? [[touch ? task : 'M', touch ? 'Stop flying: back to the drill' : task]] : [], claw = [['', 'Fly up to a rock: the claw takes it']];
+    if (touch) return [...claw, ['Fly', 'Left stick: forward, back, left, right'], ['Nose', 'Right stick: point the nose'], ['Up Down', 'Hold: up, down'], ['Roll', 'Hold: roll'], view, ...back];
+    return [...claw, ...(mode === 'pointer' ? [['F', 'Fly with the mouse']] : [['Mouse', 'Point the nose'], ['F', 'Free the mouse for the buttons']]), ['W S', 'Forward, back'], ['A D', 'Left, right'], ['Space C', 'Up, down'], ['Q E', 'Roll'], view, ...look, ...back];
+  }
   const out = getUp ? [[touch ? 'Get up' : 'E', 'Get up out of the seat']] : [];
   if (!pilot) return [['', 'The crew\'s pilot is flying'], ...out, view, ...look];
   const autoLine = [touch ? 'Autopilot' : 'T', auto ? 'Autopilot off: fly it yourself' : 'Autopilot: it flies for you'], jump = canJump ? [[touch ? 'Jump' : 'J', 'Jump']] : [];

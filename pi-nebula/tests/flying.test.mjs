@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../src/flymodel.js';
+import * as W from '../src/wormplan.js';
 import { stationSolid, bayOf, SKIN, capsOf } from '../src/flysolid.js';
 import { OUTSIDE_BOX, DOOR, HANGARS, OPENINGS } from '../kit/outside-plan.js';
 import { standElements, frameOf, into, outOf, yawOf as turnOf, isParked } from '../src/standing.js';
@@ -766,4 +767,161 @@ test('the help corner changes with the mode, in plain words', () => {
   assert.ok(has(tSeat, 'Power') && has(tSeat, 'Lift off') && has(tSeat, 'Autopilot') && !has(tSeat, 'P') && !has(tSeat, 'Space'));
   assert.ok(says(tFly, /Left stick/) && says(tFly, /Right stick/) && has(tFly, 'Jump') && !has(tFly, 'W S') && !has(tFly, 'F'));
   for (const rows of [seat, fly, ptr, watch, crew, tSeat, tFly]) for (const [, w] of rows) assert.ok(w.length <= 44 && !/pitch|yaw|strafe|throttle|toggle/i.test(w), `plain and short: "${w}"`);
+});
+
+// ── THE JUMP (src/wormplan.js) AND FLYING AT THE ROCKS ──
+// The game's maker (2026-11-18): "Hopefully we can have some cool colorful plasma effect that looks like it rips open a
+// wormhole in front of you and you see pretty colors until the destination scene is loaded and then appears in front
+// of you." And of the rocks: "Either way, you should be able to click on an asteroid to travel over to it (If you want
+// to fly and you signed up to be a pilot, you can click a button to fly manually if you want)."
+// (ways out from the eye, all round: [the cosine of the angle from dead ahead, the angle round that line])
+const WAYS = []; for (let i = 0; i < 400; i++) WAYS.push([1 - 2 * (i + 0.5) / 400, i * 2.399963]);
+const seededRand = (n) => () => { n = (n * 1664525 + 1013904223) % 4294967296; return n / 4294967296; };
+
+test('the jump: a tear ahead, the colours all round, the far end ahead, in that order, and never dark', () => {
+  const J = W.makeJump(seededRand(3)), seen = [], events = [];
+  let t = 0, coveredAt = {};
+  while (J.phase !== 'done' && t < 20) {
+    for (const ev of W.stepJump(J, DT, true)) events.push([ev, +t.toFixed(2)]);
+    if (seen[seen.length - 1] !== J.phase) seen.push(J.phase);
+    const n = WAYS.filter(([c, p]) => W.covered(J, c, p, t)).length;
+    (coveredAt[J.phase] = coveredAt[J.phase] || []).push(n);
+    t += DT;
+  }
+  assert.deepEqual(seen, ['rip', 'plunge', 'tunnel', 'open', 'done']);
+  assert.deepEqual(events.map((e) => e[0]), ['shut', 'open', 'done'], 'the place is changed once, then the far end opens, then it is over');
+  const all = W.JUMP.rip + W.JUMP.plunge + W.JUMP.least + W.JUMP.open;
+  assert.ok(Math.abs(t - all) < 0.1 && all < 4, `with the place ahead ready a jump takes ${all} s: short`);
+  // the tear starts as nothing and only grows; all through the tunnel every way out from the eye is covered
+  assert.ok(coveredAt.rip[0] === 0 && coveredAt.rip[coveredAt.rip.length - 1] > 5, 'the tear opens from nothing');
+  for (const ph of ['rip', 'plunge']) for (let i = 1; i < coveredAt[ph].length; i++) assert.ok(coveredAt[ph][i] >= coveredAt[ph][i - 1] - 6, `${ph}: the mouth only widens (but for its ragged edge)`);
+  assert.ok(coveredAt.tunnel.every((n) => n === WAYS.length), 'in the tunnel the colours are all round: nothing of either place can be seen');
+  assert.ok(coveredAt.open[coveredAt.open.length - 1] <= 2 && coveredAt.open[0] >= WAYS.length - 2, 'the far end opens from nothing until the colours are gone');
+  // going in, it is dead ahead that is covered first and straight behind last; coming out, dead ahead is clear first
+  const R = W.makeJump(seededRand(5)); R.t = W.JUMP.rip * 0.8;
+  assert.ok(W.covered(R, 1, 0) && !W.covered(R, 0, 0) && !W.covered(R, -1, 0), 'the tear is in front of the ship');
+  const O = W.makeJump(seededRand(5)); O.phase = 'open'; O.t = W.JUMP.open * 0.5;
+  assert.ok(!W.covered(O, 1, 0) && W.covered(O, 0, 0) && W.covered(O, -1, 0), 'the place ahead appears in front of the ship');
+  // the tear is a crack before it is a mouth: early on it is many times longer than it is wide
+  const C = W.makeJump(() => 0.5); C.t = W.JUMP.rip * 0.3;
+  const e = W.edgeOf(C); assert.ok(e.mode === 1 && e.slit < 0.15 && e.E > 0.05, 'a thin crack first');
+  C.t = W.JUMP.rip * 0.99; assert.ok(W.edgeOf(C).slit > 0.97, 'pulled open round by the end of the rip');
+});
+
+test('the jump: the colours go on until the place ahead is made, and the place is changed only under them', () => {
+  const J = W.makeJump(seededRand(9)); let ready = false, t = 0, shutAt = null, openAt = null;
+  while (J.phase !== 'done' && t < 30) {
+    for (const ev of W.stepJump(J, DT, ready)) { if (ev === 'shut') { shutAt = t; assert.ok(WAYS.every(([c, p]) => W.covered(J, c, p, t)), 'at the moment the place is changed every way out is covered'); } if (ev === 'open') openAt = t; }
+    if (J.phase === 'tunnel') assert.ok(J.shut && WAYS.every(([c, p]) => W.covered(J, c, p, t)));
+    if (t > 6) ready = true;      // (the place ahead takes six seconds to make)
+    t += DT;
+  }
+  assert.ok(shutAt != null && openAt != null && openAt > 6 && openAt < 6.2, `the far end waited for the place ahead (opened at ${openAt && openAt.toFixed(2)} s)`);
+  assert.ok(!J.shut, 'and once it is over the place is not to be changed');
+  // never for ever: a place that never comes is opened on all the same
+  const N = W.makeJump(seededRand(1)); let n = 0; while (N.phase !== 'done' && n < 60 * 60) { W.stepJump(N, 0.25, false); n++; }
+  assert.equal(N.phase, 'done');
+});
+
+test('each jump has its own colours, swirl and slant, at no cost: a few plain numbers', () => {
+  const r = seededRand(11), looks = Array.from({ length: 40 }, () => W.lookOf(r));
+  for (const L of looks) assert.ok(L.hue >= 0 && L.hue < 1 && Math.abs(L.swirl) === 1 && Math.abs(L.slant) <= 0.56 && L.seed >= 0, JSON.stringify(L));
+  assert.ok(new Set(looks.map((L) => L.hue.toFixed(2))).size > 25 && looks.some((L) => L.swirl > 0) && looks.some((L) => L.swirl < 0), 'they differ from jump to jump');
+  // the look never changes what happens when
+  const a = W.makeJump(seededRand(1)), b = W.makeJump(seededRand(2));
+  for (let i = 0; i < 400; i++) { assert.deepEqual(W.stepJump(a, DT), W.stepJump(b, DT)); assert.equal(W.edgeOf(a).E, W.edgeOf(b).E); }
+});
+
+// (how near a rock's surface is to the ship's hull, taken as the box round its points; under 0: inside it)
+function gapTo(S, R) {
+  const l = M.unturn(S.q, [R.p[0] - S.p[0], R.p[1] - S.p[1], R.p[2] - S.p[2]]), c = [Math.max(-9, Math.min(6.8, l[0])), Math.max(0, Math.min(5.1, l[1])), Math.max(-3.3, Math.min(3.3, l[2]))];
+  return Math.hypot(l[0] - c[0], l[1] - c[1], l[2] - c[2]) - R.r;
+}
+const fieldHold = (S, secs, k, rocks) => hold(S, secs, k, M.rockSolid(() => rocks));
+
+test('at the rocks it is the same ship and the same keys, and there is nothing to land on', () => {
+  const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]);
+  assert.ok(!S.landed && S.power && M.FIELD.bay === null && M.FIELD.floor === null && M.FIELD.others === null);
+  assert.deepEqual(M.FIELD.points, M.MINER.points); assert.deepEqual(M.FIELD.seat, M.MINER.seat);
+  fieldHold(S, 3, ['forward'], []);
+  assert.ok(S.p[2] > 20 && Math.abs(S.p[0]) < 1e-6 && Math.abs(S.p[1]) < 1e-6, 'W takes it along its nose');
+  fieldHold(S, 6, [], []); const at = [...S.p];
+  fieldHold(S, 3, [], []); assert.deepEqual(S.p, at, 'keys let go, it stops and stays');
+  fieldHold(S, 8, ['down'], []);
+  assert.ok(!S.landed && S.p[1] < -30 && M.standing(S) === null && !M.canGetUp(S) && M.visiting(S) === null, 'held down for as long as you like it is never down: there is no floor out there');
+  fieldHold(S, 2, M.controlsOf(new Set(['right'])), []); assert.ok(S.v[0] < -2, 'D slides it to its right');
+  assert.equal(M.KEYS.KeyM, 'task');
+});
+
+test('a rock stops the ship or lets it slide round, with no damage, and is never inside its hull', () => {
+  // dead ahead: it stops against it, and stays stopped for as long as W is held
+  for (const r of [0.55, 1.0, 1.6]) {
+    const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), rock = { id: 1, p: [0, 2.9, 60], r };
+    fieldHold(S, 9, ['forward'], [rock]);
+    assert.ok(gapTo(S, rock) > SKIN - 0.05 && gapTo(S, rock) < SKIN + 0.3, `a rock ${r} m across its half: held ${gapTo(S, rock).toFixed(2)} m off the hull`);
+    assert.ok(M.speedOf(S) < 0.3 && S.p[2] < 60, 'stopped short of it');
+  }
+  // off its middle line: it slides round it and goes on
+  { const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), rock = { id: 1, p: [3.6, 2.5, 40], r: 1 }; let least = 99;
+    for (let t = 0; t < 9; t += DT) { M.stepShip(S, keys('forward'), DT, M.rockSolid(() => [rock])); least = Math.min(least, gapTo(S, rock)); }
+    assert.ok(S.p[2] > 60 && least > SKIN - 0.06, `slid past (never nearer than ${least.toFixed(2)} m)`); }
+  // a field of them, flown about for a minute any which way: no rock is ever in the hull
+  const r = seededRand(21), rocks = [];
+  for (let i = 0; i < 260; i++) rocks.push({ id: i, p: [(r() - 0.5) * 90, (r() - 0.5) * 36, 16 + r() * 110], r: 0.5 + r() * 1.2 });
+  const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]); let worst = 99, bumps = 0;
+  for (let t = 0, C = keys('forward'); t < 60; t += DT) {
+    if (Math.round(t / DT) % 90 === 0) { C = M.controlsOf(new Set(['forward', 'reverse', 'left', 'right', 'up', 'down', 'rollLeft'].filter(() => r() < 0.35))); C.turn = [r() * 2 - 1, r() * 2 - 1]; }
+    M.stepShip(S, C, DT, M.rockSolid(() => rocks)); if (S.bump > 0) bumps++;
+    for (const R of rocks) worst = Math.min(worst, gapTo(S, R));
+  }
+  assert.ok(worst > SKIN - 0.12, `never nearer than ${worst.toFixed(2)} m to any rock`);
+  assert.ok(bumps > 0, 'and it did meet some');
+  assert.ok(S.p.every(Number.isFinite) && S.q.every(Number.isFinite));
+});
+
+test('the claw takes a rock the ship has been brought up to, and not one it flies past', () => {
+  const far = { id: 1, p: [0, 2.9, 60], r: 1 };
+  const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]);
+  assert.equal(M.rockNear(S, [far]), null, 'nothing within reach');
+  // flown up to it: taken, well before the hull meets it
+  let took = null, t = 0;
+  for (; t < 12 && !took; t += DT) { const d = far.p[2] - M.clawOf(S)[2]; M.stepShip(S, keys(...(d > 14 ? ['forward'] : [])), DT, M.rockSolid(() => [far])); took = M.rockNear(S, [far]); }
+  assert.equal(took, far); assert.ok(M.speedOf(S) <= M.TAKE.slow && gapTo(S, far) > SKIN, 'slow, and not yet touching');
+  const c = M.clawOf(S); assert.ok(Math.hypot(c[0] - far.p[0], c[1] - far.p[1], c[2] - far.p[2]) <= M.TAKE.reach);
+  // slid past one at speed, the rock crossing just in front of the nose: not taken, however near the claw it came
+  { const P = M.makeFieldShip([10, 0, 0], [0, 0, 1]), by = { id: 3, p: [0, 2.94, 9.6], r: 1 }; let any = null, least = 99;
+    for (let t2 = 0; t2 < 4; t2 += DT) { M.stepShip(P, keys('right'), DT, M.rockSolid(() => [by])); const k = M.clawOf(P); least = Math.min(least, Math.hypot(k[0] - by.p[0], k[1] - by.p[1], k[2] - by.p[2])); any = any || M.rockNear(P, [by]); }
+    assert.ok(least < 1.5 && P.p[0] < -8 && any === null, `passed ${least.toFixed(1)} m from the claw at speed: left alone`); }
+  // pressed up against a rock of any size, nose on: it is within the claw's reach (so no rock is one the claw cannot get)
+  // (anywhere on the nose: its middle, its corners)
+  for (const r of [0.5, 0.8, 1.05, 1.6]) for (const y of [0.4, 2.9, 4.6]) for (const x of [0.6, -3.0]) {
+    const Q = M.makeFieldShip([0, 0, 0], [0, 0, 1]), rock = { id: 2, p: [x, y, 30], r };
+    fieldHold(Q, 6, ['forward'], [rock]);
+    assert.equal(M.rockNear(Q, [rock]), rock, `a rock ${r} m, ${y} m up the nose, ${x} m across it`);
+  }
+  // but not one met by its side or its tail: the claw is at the nose
+  { const Q = M.makeFieldShip([8, 0, 0], [0, 0, 1]), rock = { id: 4, p: [0, 2.5, -3], r: 1 };
+    fieldHold(Q, 5, ['right'], [rock]);
+    assert.ok(gapTo(Q, rock) < SKIN + 0.3 && M.rockNear(Q, [rock]) === null, 'pressed against its side: not taken'); }
+  // of two in reach, the nearer to the claw's hand
+  { const Q = M.makeFieldShip([0, 0, 0], [0, 0, 1]), k = M.clawOf(Q), a = { id: 'a', p: [k[0] + 2, k[1], k[2] + 1], r: 1 }, b = { id: 'b', p: [k[0] - 1, k[1], k[2] + 0.5], r: 1 };
+    assert.equal(M.rockNear(Q, [a, b]), b); }
+  assert.deepEqual(M.MINER.claw, [8.54, 2.94, 0]);
+});
+
+test('the help corner at the rocks: the same keys, the way back to the drill, no autopilot of its own', () => {
+  const has = (rows, key) => rows.some(([k]) => k === key), says = (rows, re) => rows.some(([, w]) => re.test(w));
+  const fly = M.helpFor('fly', { field: true, task: 'Back to the drill' }), ptr = M.helpFor('pointer', { field: true, task: 'Back to the drill', behind: true });
+  for (const rows of [fly, ptr]) {
+    for (const k of ['W S', 'A D', 'Space C', 'Q E', 'V', 'M']) assert.ok(has(rows, k), k);
+    assert.ok(!has(rows, 'T') && !has(rows, 'P') && !has(rows, 'J') && !has(rows, 'Space'), 'no autopilot, power, jump or lift-off out there');
+    assert.ok(says(rows, /claw takes it/) && says(rows, /Back to the drill/));
+  }
+  assert.ok(has(fly, 'Mouse') && has(ptr, 'F') && has(ptr, 'R'));
+  const touch = M.helpFor('fly', { field: true, touch: true, task: 'Back to the drill' });
+  assert.ok(says(touch, /Left stick/) && says(touch, /Right stick/) && has(touch, 'Back to the drill') && !has(touch, 'M') && !has(touch, 'Autopilot'));
+  // riding (the pilot's seat left to the crew): only the views, as at the station
+  const ride = M.helpFor('watch', { pilot: false, field: true });
+  assert.ok(says(ride, /pilot is flying/i) && has(ride, 'V') && !has(ride, 'M'));
+  for (const rows of [fly, ptr, touch]) for (const [, w] of rows) assert.ok(w.length <= 44 && !/pitch|yaw|strafe|throttle|toggle/i.test(w), `plain and short: "${w}"`);
 });
