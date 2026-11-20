@@ -277,6 +277,36 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+// THE VEINS: a flat strip from one end to the other, turned to the eye and as wide on the screen as its metal asks
+// (never thinner than a hair's breadth of the picture); hard-edged, white-hot down its middle. Drawn over its own
+// rock as the glow is.
+const VEIN_VERT = `
+${VEIL_GLSL}
+attribute vec3 aO; attribute vec3 aC; attribute vec4 aCol; attribute float aW; attribute float aR; attribute vec2 aS;
+uniform float uPx; uniform vec2 uHalf; varying vec3 vCol; varying float vK; varying float vU;
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0), o = modelMatrix * vec4(aO, 1.0), c = modelMatrix * vec4(aC, 1.0);
+  float depth = dot(w.xyz - c.xyz, normalize(cameraPosition - c.xyz)) / max(aR, 0.001);
+  vK = aCol.a * mix(0.4, 1.0, smoothstep(-0.7, 0.55, depth)); vCol = aCol.rgb; vU = aS.x;
+  vec4 mv = viewMatrix * w, mo = viewMatrix * o; float dist = max(0.1, -mv.z);
+  mv.xyz += normalize(-mv.xyz) * aR * 1.25; mo.xyz += normalize(-mo.xyz) * aR * 1.25;      // toward the eye, as the glow
+  vec4 p = projectionMatrix * mv, po = projectionMatrix * mo;
+  vec2 d = (po.xy / max(po.w, 0.001) - p.xy / max(p.w, 0.001)) * uHalf; float len = length(d);
+  d = len > 0.0001 ? d / len : vec2(1.0, 0.0);
+  float px = max(aW * uPx / dist, 1.15);
+  p.xy += vec2(-d.y, d.x) * aS.x * aS.y * px / uHalf * p.w;
+  gl_Position = p;
+  if (veiled(c.xyz)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const VEIN_FRAG = `
+varying vec3 vCol; varying float vK; varying float vU;
+void main() {
+  float u = abs(vU), edge = 1.0 - smoothstep(0.66, 0.8, u), core = 1.0 - smoothstep(0.0, 0.42, u);
+  gl_FragColor = vec4(vCol * edge * vK * 1.3 + vec3(1.0) * core * vK * 0.6, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const listOf = (w) => (w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
@@ -286,7 +316,7 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {} }) {
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'glow' }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
   // FG: the field's own frame (where `at` puts it), still. G: the ship's frame, which moves through the field.
@@ -356,18 +386,70 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   })();
   const colOf = new Map(Object.entries(ORE).map(([k, v]) => [k, new THREE.Color(v.glow)]));
   let glowN = 0;
+  // ── THE VEINS: another way of showing the same ore, to be chosen between (oreLook: 'glow', as it was, or 'veins').
+  // The game's maker (2026-11-19, of the soft glow): "can we explore different glow options. The current glow is kind
+  // of meh, I'd prefer to try to make it "Wow". It would be cool if it had some hard edges in it like you are taking
+  // an x-ray of the mineral veins inside it." So every vein is a sharp bright line from lump to lump in its metal's
+  // colour, with short twigs off each lump; thick where much metal is left, thinner as it is drilled out, gone where
+  // none is; and a small hot spot at each lump. One batch of flat strips, in the field's frame; nothing else changes
+  // (the ore is where it was, a hole finds what it found). ──
+  let oreLook = ore === 'veins' ? 'veins' : 'glow';
+  const VN = 2600, veins = (() => {
+    const g = new THREE.BufferGeometry(), idx = new Uint32Array(VN * 6);
+    for (const [k, n] of [['position', 3], ['aO', 3], ['aC', 3], ['aCol', 4], ['aW', 1], ['aR', 1], ['aS', 2]]) { const a = new THREE.BufferAttribute(new Float32Array(VN * 4 * n), n); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, a); }
+    for (let i = 0; i < VN; i++) { idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3], i * 6); const S = g.attributes.aS; S.setXY(i * 4, -1, 1); S.setXY(i * 4 + 1, 1, 1); S.setXY(i * 4 + 2, -1, -1); S.setXY(i * 4 + 3, 1, -1); }
+    g.setIndex(new THREE.BufferAttribute(idx, 1)); g.setDrawRange(0, 0);
+    const mat = new THREE.ShaderMaterial({ uniforms: { ...VEIL, uPx: { value: 600 }, uHalf: { value: new THREE.Vector2(640, 360) } }, vertexShader: VEIN_VERT, fragmentShader: VEIN_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.name = 'drill: the ore\'s veins'; m.renderOrder = 5; FG.add(m);
+    return m;
+  })();
+  let veinN = 0;
+  const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), frac = (x) => x - Math.floor(x), hash = (n) => frac(Math.sin(n * 12.9898 + 4.1414) * 43758.5453);
+  // one strip from a to b (the rock's own places, its radius 1), w wide (the rock's radius 1), so bright
+  function strip(o, pos, q, big, a, b, w, col, k) {
+    if (veinN >= VN) return;
+    const A = veins.geometry.attributes, sq = o.S.sq, R = 0.92 * ROCK_R * big;
+    _va.set(a[0] * sq[0], a[1] * sq[1], a[2] * sq[2]).multiplyScalar(R).applyQuaternion(q).add(pos);
+    _vb.set(b[0] * sq[0], b[1] * sq[1], b[2] * sq[2]).multiplyScalar(R).applyQuaternion(q).add(pos);
+    for (let i = 0; i < 4; i++) {
+      const n = veinN * 4 + i, P = i < 2 ? _va : _vb, O = i < 2 ? _vb : _va;
+      A.position.setXYZ(n, P.x, P.y, P.z); A.aO.setXYZ(n, O.x, O.y, O.z); A.aC.setXYZ(n, pos.x, pos.y, pos.z);
+      A.aCol.setXYZW(n, col.r, col.g, col.b, k); A.aW.setX(n, w * ROCK_R * big); A.aR.setX(n, ROCK_R * 1.1 * big);
+    }
+    veinN++;
+  }
+  // a rock's veins (twigs: only for a rock near enough for them to be seen)
+  function veinsOf(o, pos, q, k, twigs = true, big = 1) {
+    const rock = o.rock, L = rock.lumps, wide = (ore) => 0.02 + 0.042 * Math.min(1.5, Math.sqrt(Math.max(0, ore) / 0.11));
+    for (let i = 0; i < L.length; i++) {
+      const a = L[i], col = colOf.get(a.metal) || colOf.get('copper'), fa = a.ore0 > 0 ? a.show / a.ore0 : 0;
+      if (i + 1 < L.length && L[i + 1].vein === a.vein) {
+        const b = L[i + 1], least = Math.min(a.show, b.show), f = Math.min(fa, b.ore0 > 0 ? b.show / b.ore0 : 0);
+        if (f > 0.02) strip(o, pos, q, big, a.p, b.p, wide(least), col, k * (0.45 + 0.55 * Math.min(1, f)));
+      }
+      if (!twigs || fa <= 0.02) continue;
+      for (let t = 0; t < 3; t++) {
+        const h = rock.look * 0.001 + i * 7.31 + t * 3.17, th = hash(h) * Math.PI * 2, z = hash(h + 1.7) * 2 - 1, r = Math.sqrt(1 - z * z), len = 0.12 + 0.17 * hash(h + 2.9);
+        const e = [a.p[0] + r * Math.cos(th) * len, a.p[1] + z * len, a.p[2] + r * Math.sin(th) * len], m = Math.hypot(e[0], e[1], e[2]);
+        if (m > 0.9) { e[0] *= 0.9 / m; e[1] *= 0.9 / m; e[2] *= 0.9 / m; }
+        strip(o, pos, q, big, a.p, e, wide(a.show) * 0.5, col, k * (0.35 + 0.45 * Math.min(1, fa)));
+      }
+    }
+  }
   // (pos, q: the rock's place and turn in the field's frame; k: how bright; big: how many times larger than life its
   // glow is drawn. A rock far off is a few dots across on the screen, so the scan draws its ore spread wider than the
   // rock itself, each vein's colour still apart from the next: the scan's picture of it, over the rock.)
   function glowOf(o, pos, q, k, between = true, big = 1) {
-    const A = glow.geometry.attributes, rock = o.rock, sq = o.S.sq;
+    const A = glow.geometry.attributes, rock = o.rock, sq = o.S.sq, dot = oreLook === 'veins' ? 0.42 : 1;
+    if (oreLook === 'veins') { veinsOf(o, pos, q, k, between, big); between = false; }
     const put = (p, ore, ore0, col) => {
       if (glowN >= GN || ore0 <= 0) return;
       const f = Math.max(0, ore / ore0), amt = Math.min(1.5, Math.sqrt(Math.max(0, ore) / 0.11));
       if (f < 0.02) return;
       _v.set(p[0] * sq[0], p[1] * sq[1], p[2] * sq[2]).multiplyScalar(0.92 * ROCK_R * big).applyQuaternion(q).add(pos);
       A.position.setXYZ(glowN, _v.x, _v.y, _v.z); A.aC.setXYZ(glowN, pos.x, pos.y, pos.z);
-      A.aCol.setXYZW(glowN, col.r, col.g, col.b, k * (0.1 + 0.5 * amt)); A.aSize.setX(glowN, ROCK_R * big * (0.2 + 0.21 * Math.cbrt(ore0 / 0.11)) * (0.5 + 0.5 * Math.min(1.2, f))); A.aR.setX(glowN, ROCK_R * 1.1 * big);
+      // (in the veins' look the soft spots are small hot ones at the lumps: `dot`)
+      A.aCol.setXYZW(glowN, col.r, col.g, col.b, k * (0.1 + 0.5 * amt) * (dot < 1 ? 1.5 : 1)); A.aSize.setX(glowN, ROCK_R * big * dot * (0.2 + 0.21 * Math.cbrt(ore0 / 0.11)) * (0.5 + 0.5 * Math.min(1.2, f))); A.aR.setX(glowN, ROCK_R * 1.1 * big);
       glowN++;
     };
     let prev = null;
@@ -865,7 +947,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       H.o.pos.copy(H.centre).applyMatrix4(here.M); H.o.q.copy(here.q).multiply(H.q);
     }
     // the glow follows the metal left
-    glowN = 0;
+    glowN = 0; veinN = 0;
     const eyeAt = _c.copy(camera.position).applyMatrix4(_m.copy(at).invert());
     for (const o of seen.values()) {
       for (const L of o.rock.lumps) { if (L.show == null) L.show = L.ore; L.show += (L.ore - L.show) * Math.min(1, dt * 3.2); }
@@ -873,6 +955,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       else { const far = o.pos.distanceTo(eyeAt); o.far = far; glowOf(o, o.pos, o.q, 1, far < 150, bigOf(far)); }
     }
     const A = glow.geometry.attributes; glow.geometry.setDrawRange(0, glowN); for (const k of ['position', 'aC', 'aCol', 'aSize', 'aR']) A[k].needsUpdate = true;
+    veins.geometry.setDrawRange(0, veinN * 6); if (veinN) { const B = veins.geometry.attributes; for (const k of ['position', 'aO', 'aC', 'aCol', 'aW', 'aR']) B[k].needsUpdate = true; }
     stepChips(dt);
 
     // the canisters: the row is the eight as they are, each its metal's colour (its rim from the moment it is given
@@ -946,6 +1029,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     }
     cameraIn.updateMatrixWorld(true);
     glow.material.uniforms.uPx.value = renderer.getDrawingBufferSize(ndc).y / (2 * Math.tan(cameraIn.fov * Math.PI / 360));
+    veins.material.uniforms.uPx.value = glow.material.uniforms.uPx.value; veins.material.uniforms.uHalf.value.set(ndc.x / 2, ndc.y / 2);
     // the rock looked at: the one the mouse was last on (it stays the one while the mouse goes to the Scan button),
     // else the one nearest the middle of the view
     // (flown by hand, or seen from the seat: no rock is picked out and nothing is scanned; the readouts stay by their rocks)
@@ -1020,6 +1104,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     reach: (dir) => { if (!H) return null; const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return +cutterTo(H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE)).miss.toFixed(3); },
   };
   return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
+    // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
+    oreLook(name) { if (name === 'glow' || name === 'veins') oreLook = name; return oreLook; },
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)
     ship: here, heldPos,
     // (put away and back: while the eye is in the seat, with a wormhole's far end opening or the jump home being worked out)

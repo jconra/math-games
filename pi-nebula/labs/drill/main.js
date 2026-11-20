@@ -59,14 +59,16 @@ const topBar = () => document.documentElement.style.setProperty('--pdr-top', doc
 new ResizeObserver(topBar).observe(document.getElementById('top')); topBar();
 
 // ── the switches ──
-const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0 };
+// (ore: how the ore in the rocks is shown, 'glow' as the game shows it or 'veins': two looks for the game's maker to
+// choose between; ?ore=veins starts with the veins)
+const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: Q.get('ore') === 'veins' ? 'veins' : 'glow' };
 const crew = { id: 'drill-lab', name: 'Driller' };
 E.register(SCAN);
 const levelEl = $('level');
 levelEl.innerHTML = SCAN.place.levels.map((L, i) => `<option value="${L.id}">Question ${i + 1}: ${L.title}</option>`).join('');
 const setLevel = (id) => { try { setLevelAt(crew, 'drill', id); levelEl.value = id; } catch (e) { /* no such level */ } };
 setLevel(SCAN.place.levels.some((L) => L.id === Q.get('level')) ? Q.get('level') : 'part');
-const paint = () => { $('ask').textContent = 'Question: ' + (st.ask ? 'on' : 'off'); $('ask').setAttribute('aria-pressed', String(st.ask)); };
+const paint = () => { $('ask').textContent = 'Question: ' + (st.ask ? 'on' : 'off'); $('ask').setAttribute('aria-pressed', String(st.ask)); $('ore').textContent = 'Ore: ' + st.ore; };
 const note = (w) => { $('note').textContent = w; };
 
 // ── the game ──
@@ -81,7 +83,7 @@ function start() {
   if (FF) { FF.close(); FF = null; }
   if (view) view.close();
   const rand = st.seed != null ? seeded(st.seed + st.n) : Math.random; st.n++;
-  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, lab: true, flier: 'The autopilot', pilot: true, onFly: () => { if (FF) FF.fly(); },
+  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, ore: st.ore, lab: true, flier: 'The autopilot', pilot: true, onFly: () => { if (FF) FF.fly(); },
     onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load${r.early ? " (home early, each part-full canister rounded to the nearest 1/8)" : ""}: ${lotsWords(sellsFor(r.store).lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.bare} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
   // THE FLYING, KEPT AT THE ROCKS, as in the game: from the seat while the wormhole's far end opens on the field, then
   // the eye glides out to the drill's view ("flip up and down" is the Flight Lab's own, kept in this browser)
@@ -91,6 +93,7 @@ function start() {
 }
 $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
+$('ore').addEventListener('click', () => { st.ore = st.ore === 'veins' ? 'glow' : 'veins'; if (view) view.oreLook(st.ore); paint(); });
 levelEl.addEventListener('change', () => { setLevel(levelEl.value); });
 paint();
 
