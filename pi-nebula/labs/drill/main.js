@@ -18,7 +18,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createSky } from '../../world/sky.js';
-import { buildShip, makeDrillView, ORE_LOOKS } from '../../src/drillview.js';
+import { buildShip, makeDrillView, ORE_LOOKS, ROCK_LOOKS } from '../../src/drillview.js';
 import { startFlying } from '../../src/flying.js';
 import { makeFieldFlying } from '../../src/fieldfly.js';
 import { makeWormhole } from '../../src/wormhole.js';
@@ -61,14 +61,14 @@ new ResizeObserver(topBar).observe(document.getElementById('top')); topBar();
 // ── the switches ──
 // (ore: how the ore in the rocks is shown: 'glow' as the game shows it, 'veins', 'sparkle', 'cracks' or 'crystals', for
 // the game's maker to choose between: the Ore button goes round them; ?ore=sparkle starts with that one)
-const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: ORE_LOOKS.includes(Q.get('ore')) ? Q.get('ore') : 'glow' };
+const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: ORE_LOOKS.includes(Q.get('ore')) ? Q.get('ore') : 'sparkle', rock: ROCK_LOOKS.includes(Q.get('rock')) ? Q.get('rock') : 'low poly' };
 const crew = { id: 'drill-lab', name: 'Driller' };
 E.register(SCAN);
 const levelEl = $('level');
 levelEl.innerHTML = SCAN.place.levels.map((L, i) => `<option value="${L.id}">Question ${i + 1}: ${L.title}</option>`).join('');
 const setLevel = (id) => { try { setLevelAt(crew, 'drill', id); levelEl.value = id; } catch (e) { /* no such level */ } };
 setLevel(SCAN.place.levels.some((L) => L.id === Q.get('level')) ? Q.get('level') : 'part');
-const paint = () => { $('ask').textContent = 'Question: ' + (st.ask ? 'on' : 'off'); $('ask').setAttribute('aria-pressed', String(st.ask)); $('ore').textContent = 'Ore: ' + st.ore; };
+const paint = () => { $('ask').textContent = 'Question: ' + (st.ask ? 'on' : 'off'); $('ask').setAttribute('aria-pressed', String(st.ask)); $('ore').textContent = 'Ore: ' + st.ore; $('rock').textContent = 'Rock: ' + st.rock; };
 const note = (w) => { $('note').textContent = w; };
 
 // ── the game ──
@@ -83,7 +83,7 @@ function start() {
   if (FF) { FF.close(); FF = null; }
   if (view) view.close();
   const rand = st.seed != null ? seeded(st.seed + st.n) : Math.random; st.n++;
-  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, ore: st.ore, lab: true, flier: 'The autopilot', pilot: true, onFly: () => { if (FF) FF.fly(); },
+  view = makeDrillView({ scene, camera, renderer, ship, at: AT, crew, rand, ask: st.ask, ore: st.ore, rock: st.rock, lab: true, flier: 'The autopilot', pilot: true, onFly: () => { if (FF) FF.fly(); },
     onDone: (r) => { const m = Math.floor(r.secs / 60), s = Math.round(r.secs % 60); st.last = r; note(`The last load${r.early ? " (home early, each part-full canister rounded to the nearest 1/8)" : ""}: ${lotsWords(sellsFor(r.store).lots)}, from ${r.stats.rocks} rocks and ${r.stats.holes} holes (${r.stats.bare} in bare rock), in ${m} min ${s} s. It would sell for ${r.sells.toLocaleString('en-US')} credits: the drill operator's share ${Math.round(r.sells * 0.2).toLocaleString('en-US')}. A new field is up.`); start(); } });
   // THE FLYING, KEPT AT THE ROCKS, as in the game: from the seat while the wormhole's far end opens on the field, then
   // the eye glides out to the drill's view ("flip up and down" is the Flight Lab's own, kept in this browser)
@@ -94,6 +94,7 @@ function start() {
 $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
 $('ore').addEventListener('click', () => { st.ore = ORE_LOOKS[(ORE_LOOKS.indexOf(st.ore) + 1) % ORE_LOOKS.length]; if (view) view.oreLook(st.ore); paint(); });
+$('rock').addEventListener('click', () => { st.rock = ROCK_LOOKS[(ROCK_LOOKS.indexOf(st.rock) + 1) % ROCK_LOOKS.length]; if (view) view.rockLook(st.rock); paint(); });
 levelEl.addEventListener('change', () => { setLevel(levelEl.value); });
 paint();
 

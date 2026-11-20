@@ -110,7 +110,9 @@ export const VIEWS = {
 const ROCK_R = 1.05;       // a round rock's radius, metres ("about 2 metres" across)
 const UP_Y = new THREE.Vector3(0, 1, 0), UP_X = new THREE.Vector3(1, 0, 0);
 // the ways the ore can be shown (see `oreLook` in makeDrillView)
-export const ORE_LOOKS = ['glow', 'veins', 'sparkle', 'cracks', 'crystals'];
+export const ORE_LOOKS = ['glow', 'veins', 'sparkle', 'sparkle and veins', 'cracks', 'crystals'];
+// the ways a rock's own skin can be drawn: its flat faces as they are, or smoothed and roughened by the shader
+export const ROCK_LOOKS = ['low poly', 'natural'];
 const HAND = { flat: 0, round: 0, long: 0.45 };   // how much further along the hand a rock's middle lies, by its shape (m)
 // (the rocks as the flying feels them: each a ball, this much of its longest half-length)
 const BALL = 0.95;
@@ -217,8 +219,15 @@ function rockGeo(S, detail) {
 }
 const ROCK_VERT = `
 attribute vec3 aBary; attribute vec2 aFace; varying vec3 vW; varying vec3 vL; varying vec3 vB; varying vec2 vF;
+#ifdef ORE
+uniform vec3 uSq; varying vec3 vN; varying mat3 vRot;
+#endif
 void main() {
   vL = position; vB = aBary; vF = aFace;
+  #ifdef ORE
+  vRot = mat3(modelMatrix);                                           // (the rock's own turn, for the natural look's bumps)
+  vN = normalize(vRot * (position / (uSq * uSq)));                    // (the way out of a smooth rock of this shape)
+  #endif
   #ifdef USE_INSTANCING
   vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
   #else
@@ -242,19 +251,38 @@ uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 u
 // sparkle (very many tiny bright dots, thickest along fine cracks, a soft glow under them), 2 the cracks (the rock's
 // own edges lit), 3 only the soft glow (under the crystals). Only what faces the eye is seen: it is the surface.
 uniform vec3 uVD[5]; uniform vec3 uVC[5]; uniform float uVA[5]; uniform int uVN; uniform float uOre; uniform float uT; uniform int uMode;
+uniform float uNat; varying vec3 vN; varying mat3 vRot;
 float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 float vn3(vec3 p) {
   vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(h31(i), h31(i + vec3(1.0, 0.0, 0.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 0.0)), h31(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
              mix(mix(h31(i + vec3(0.0, 0.0, 1.0)), h31(i + vec3(1.0, 0.0, 1.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 1.0)), h31(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
+// (a rock's rough skin, anchored to the rock: big blotches, lumps, grain)
+float rockH(vec3 p) { return vn3(p) * 0.55 + vn3(p * 2.3 + 7.0) * 0.28 + vn3(p * 5.3 + 3.0) * 0.17; }
 #endif
 varying vec3 vW; varying vec3 vL; varying vec3 vB; varying vec2 vF;
 void main() {
   if (veiled(vW)) discard;      // (not seen through a wormhole's colours: src/wormhole.js)
   vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
-  float d = max(dot(n, uSun), 0.0);
   vec3 base = uTint * (0.72 + 0.56 * vF.x);
+  #ifdef ORE
+  if (uNat > 0.0) {
+    // A MORE NATURAL ROCK (the game's maker, 2026-11-19: "Would it be easy to give the asteroid a more natural look
+    // where its not glowing? Right now it looks low poly, which I dont hate, but if it looked more real with the
+    // shader that would probably be better."): the flat faces smoothed away and a rough skin worked out in their
+    // place, lit by the same sun: lumps and grain that catch the light, dark and pale blotches, pits.
+    // (its bumps: the slope of the rough skin, worked out in the rock's own frame and turned with the rock, so it is
+    // smooth however near the eye is)
+    vec3 pl = vL * 2.4; float e = 0.07, hgt = rockH(pl);
+    vec3 slope = vRot * (vec3(rockH(pl + vec3(e, 0.0, 0.0)), rockH(pl + vec3(0.0, e, 0.0)), rockH(pl + vec3(0.0, 0.0, e))) - hgt) / e;
+    vec3 ns = normalize(mix(n, normalize(vN), 0.75));
+    n = normalize(ns - 0.34 * (slope - ns * dot(slope, ns)));
+    float pit = smoothstep(0.32, 0.5, hgt);
+    base = uTint * (0.55 + 0.95 * rockH(vL * 1.5 + 11.0)) * (0.66 + 0.34 * pit) * (0.94 + 0.12 * vn3(vL * 19.0));
+  }
+  #endif
+  float d = max(dot(n, uSun), 0.0);
   vec3 c = base * (0.06 + uSunK * d) + base * vec3(0.16, 0.2, 0.27) * max(0.45 - 0.55 * dot(n, uSun), 0.0);
   c += base * uLamp * pow(max(dot(n, normalize(cameraPosition - vW)), 0.0), 1.5);      // (the scan's own lamp: a rock's facets read from every side)
   #ifdef ORE
@@ -271,7 +299,7 @@ void main() {
       float amt = uVA[i];
       if (amt > 0.002) {
         // (the patch: wider for more metal, never so wide as to reach the next vein's, a right angle away)
-        float ang = acos(clamp(dot(od, uVD[i]), -1.0, 1.0)), R = min(0.78, 0.36 + 0.26 * sqrt(amt)), m = 1.0 - smoothstep(R * 0.25, R, ang);
+        float ang = acos(clamp(dot(od, uVD[i]), -1.0, 1.0)), R = min(0.8, 0.13 + 0.42 * sqrt(amt)), m = 1.0 - smoothstep(R * 0.25, R, ang);
         if (m > 0.0) {
           float glow = 0.3;
           if (uMode == 2) glow = edge * (0.7 + 1.9 * m) + 0.12;
@@ -393,7 +421,7 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'glow' }) {
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'sparkle', rock = 'low poly' }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
   // FG: the field's own frame (where `at` puts it), still. G: the ship's frame, which moves through the field.
@@ -418,7 +446,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(0.45), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   // (a rock that holds ore has a material of its own, for the ore on its surface: the same program, its own veins)
   const oreUni = () => ({ uSq: { value: new THREE.Vector3(1, 1, 1) }, uVD: { value: Array.from({ length: 5 }, () => new THREE.Vector3(0, 1, 0)) }, uVC: { value: Array.from({ length: 5 }, () => new THREE.Color(0, 0, 0)) },
-    uVA: { value: [0, 0, 0, 0, 0] }, uVN: { value: 0 }, uOre: { value: 0 }, uT: { value: 0 }, uMode: { value: 1 } });
+    uVA: { value: [0, 0, 0, 0, 0] }, uVN: { value: 0 }, uOre: { value: 0 }, uT: { value: 0 }, uMode: { value: 1 }, uNat: { value: 0 } });
   const rockMat = () => new THREE.ShaderMaterial({ defines: { ORE: '' }, uniforms: { ...uni(0.45), ...oreUni() }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   const heldMat = new THREE.ShaderMaterial({ defines: { HELD: '', ORE: '' }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG,
     uniforms: { ...oreUni(), ...uni(1.25), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
@@ -489,11 +517,15 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // In these three only the side of a rock that faces the eye shows its ore: turn the rock to see the rest. A rock
   // far off, a few dots across, still shows its soft glow, so its metals can be told from a distance.
   let oreLook = ORE_LOOKS.includes(ore) ? ore : 'glow';
-  const onSurface = () => oreLook === 'sparkle' || oreLook === 'cracks' || oreLook === 'crystals';
+  // (2026-11-19, later: "I like the sparkle effect the most", so that is how the game shows the ore; "could I see views
+  // in combination with sparkles?", taken as veins: 'sparkle and veins' is the sparkle with the veins' lines too)
+  const onSurface = () => oreLook === 'sparkle' || oreLook === 'sparkle and veins' || oreLook === 'cracks' || oreLook === 'crystals';
+  const withVeins = () => oreLook === 'veins' || oreLook === 'sparkle and veins';
+  let rockLook = ROCK_LOOKS.includes(rock) ? rock : 'low poly';
   const veinLeft = (o, v) => { let t = 0; for (const L of o.vd[v].lumps) t += Math.max(0, L.show == null ? L.ore : L.show); return t; };
   // a rock's ore, told to its material (U: the material's uniforms; k: how bright)
   function oreOn(U, o, k) {
-    const on = onSurface(); U.uOre.value = on ? k : 0; if (!on) return;
+    const on = onSurface(); U.uOre.value = on ? k : 0; U.uNat.value = rockLook === 'natural' ? 1 : 0; if (!on) return;
     U.uMode.value = oreLook === 'cracks' ? 2 : oreLook === 'crystals' ? 3 : 1; U.uT.value = V.clock;
     const n = Math.min(5, o.vd.length); U.uVN.value = n;
     for (let v = 0; v < n; v++) { U.uVD.value[v].copy(o.vd[v].d); U.uVC.value[v].copy(colOf.get(o.rock.veins[v].metal) || colOf.get('copper')); U.uVA.value[v] = veinLeft(o, v); }
@@ -572,8 +604,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // glow is drawn. A rock far off is a few dots across on the screen, so the scan draws its ore spread wider than the
   // rock itself, each vein's colour still apart from the next: the scan's picture of it, over the rock.)
   function glowOf(o, pos, q, k, between = true, big = 1) {
-    const A = glow.geometry.attributes, rock = o.rock, sq = o.S.sq, dot = oreLook === 'veins' ? 0.42 : 1;
-    if (oreLook === 'veins') { veinsOf(o, pos, q, k, between, big); between = false; }
+    const A = glow.geometry.attributes, rock = o.rock, sq = o.S.sq, dot = withVeins() ? 0.42 : 1;
+    if (withVeins()) { veinsOf(o, pos, q, k, between, big); between = false; if (oreLook !== 'veins') return; }
     const put = (p, ore, ore0, col) => {
       if (glowN >= GN || ore0 <= 0) return;
       const f = Math.max(0, ore / ore0), amt = Math.min(1.5, Math.sqrt(Math.max(0, ore) / 0.11));
@@ -1087,11 +1119,11 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       for (const L of o.rock.lumps) { if (L.show == null) L.show = L.ore; L.show += (L.ore - L.show) * Math.min(1, dt * 3.2); }
       if (H && o === H.o) {
         oreOn(heldMat.uniforms, o, S === 'breakUp' ? 0 : 1.2);
-        if (S !== 'breakUp' && !surf) glowOf(o, o.pos, o.q, 1.15);
+        if (S !== 'breakUp' && (!surf || withVeins())) glowOf(o, o.pos, o.q, 1.15);
       } else {
         const far = o.pos.distanceTo(eyeAt), big = bigOf(far); o.far = far; oreOn(o.mat.uniforms, o, 1);
         if (!surf) glowOf(o, o.pos, o.q, 1, far < 150, big);
-        else { if (big > 1.3) glowOf(o, o.pos, o.q, 0.8, false, big); if (oreLook === 'crystals' && big <= 1.3) crystalsOf(o, o.pos, o.q); }      // (far off: its soft glow, as the scan's picture of it)
+        else { if (big > 1.3) { const was = oreLook; if (was === 'sparkle and veins') oreLook = 'sparkle'; glowOf(o, o.pos, o.q, 0.8, false, big); oreLook = was; } else if (withVeins()) glowOf(o, o.pos, o.q, 1, true, big); if (oreLook === 'crystals' && big <= 1.3) crystalsOf(o, o.pos, o.q); }      // (far off: its soft glow, as the scan's picture of it)
       }
     }
     crystals.count = crystalN; if (crystalN) { crystals.instanceMatrix.needsUpdate = true; crystals.instanceColor.needsUpdate = true; }
@@ -1247,6 +1279,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
     // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
     oreLook(name) { if (ORE_LOOKS.includes(name)) oreLook = name; return oreLook; },
+    // (how a rock's own skin is drawn: 'low poly' or 'natural'; given a name, changes it)
+    rockLook(name) { if (ROCK_LOOKS.includes(name)) rockLook = name; return rockLook; },
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)
     ship: here, heldPos,
     // (put away and back: while the eye is in the seat, with a wormhole's far end opening or the jump home being worked out)
