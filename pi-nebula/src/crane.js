@@ -80,8 +80,9 @@ import { Voxels } from '../kit/bake.js';
 import { updateDoors, setDoors } from '../kit/layout.js';
 import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
-import { POD } from '../kit/ships/miner-built.hull.js';
-import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
+// (the Miner's hull drawn where it is, its pods, its engine and the air under it: the one shared ship piece's, as for
+// every ship; the canisters, the round and the landing below are the crane's own)
+import { makeHull, FLIGHT } from './shiphull.js';
 import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 
@@ -112,7 +113,8 @@ export const LANDING = { secs: 12, from: 46, hover: 3.0, low: 2.0, inBy: 0.425, 
 // how long its nozzle takes to cool after it is down (s), how long the dust takes to settle (s)
 // (and after the critic: the pods' flames dying away as it settles (wind, s) rather than going out at once, the dust
 // settling slower)
-export const FLIGHT = { swing: { yaw: 1.2, pitch: 0.62 }, podLen: 1.1, idle: 0.15, cool: 30, settle: 2.6, wind: 0.7 };
+// (now src/shiphull.js FLIGHT, every flown ship's: the same numbers)
+export { FLIGHT };
 // THE SWING: how long a swing takes (a pendulum of about the cables' length), how quickly it dies away, and the most
 // it swings (radians)
 export const SWING = { period: 3.2, damp: 0.55, most: 0.06 };
@@ -141,16 +143,14 @@ export function makeCrane({ W, walls, boarding = null }) {
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
 
   // ── the Miner, for its landing: its own room (drawn with the hangar), the leaves that are its alone, its legs ──
+  // (its hull: src/shiphull.js, as every flown ship's. Not the canisters: they change places between the ship and the
+  // rack, and kit/crane.js puts each where it is, riding the ship's own move when it is on a mount (L.ship); the trays
+  // are the ship's alone and ride with it. Its thruster pods, live doors so the landing can turn them, are drawn with
+  // the hangar, as the crane's parts are, rather than wherever anyone is)
+  const hull = makeHull({ W, id: 'miner', kit: MB.FLIGHT, skip: /^mb:can/, hangar: room });
   const ship = (() => {
-    const zone = W.room('ship-miner'); if (!zone) return null;
-    const mine = new Set(), others = new Set();
-    for (const D of W.built.doors) for (const leaf of D.leaves) for (const im of leaf.meshes || []) (D.zone === 'ship-miner' ? mine : others).add(im);
-    // (not the canisters: they change places between the ship and the rack, and kit/crane.js puts each where it is,
-    // riding the ship's own move when it is on a mount (L.ship); the trays are the ship's alone and ride with it)
-    const meshes = [...mine].filter((im) => !others.has(im) && !/^mb:can/.test(im.name));
-    // (its thruster pods, live doors so the landing can turn them, drawn with the hangar, as the crane's parts are,
-    // rather than wherever anyone is)
-    for (const D of W.built.doors) if (D.zone === 'ship-miner' && D.piece === 'mbPod') for (const leaf of D.leaves) for (const im of leaf.meshes || []) if (meshes.includes(im)) room.group.add(im);
+    if (!hull) return null;
+    const zone = hull.zone, meshes = hull.meshes;
     const legs = W.built.doors.filter((D) => D.zone === 'ship-miner' && (D.piece === 'mbGear' || D.piece === 'mbGearDoors'));
     const pad = W.place('pads') || null, at = W.R?.places?.pads?.miner ? new THREE.Vector3(...W.R.places.pads.miner) : zone.box.getCenter(new THREE.Vector3()).setY(0);
     const nose = W.R?.places?.ships?.miner?.nose === '-x' ? -1 : 1;
@@ -166,8 +166,7 @@ export function makeCrane({ W, walls, boarding = null }) {
     if (k == null) {
       // (not flying or landing: where it stands, which is its proper parking place unless it was set down by hand)
       if (S.stand) { S.M.copy(S.stand); shipMoved(); return; }
-      S.zone.group.matrix.identity(); S.zone.group.matrixWorldNeedsUpdate = true;
-      for (const im of S.meshes) { im.matrix.identity(); im.matrixWorldNeedsUpdate = true; }
+      hull.move(null);
       L.ship(null); return;
     }
     const { x, h, z, yaw, tilt } = poseAt(k);
@@ -180,8 +179,7 @@ export function makeCrane({ W, walls, boarding = null }) {
   // the Miner drawn where S.M has it (S.M: from where it is parked to where it is now), with all that rides on it
   function shipMoved() {
     const S = ship;
-    S.zone.group.matrixAutoUpdate = false; S.zone.group.matrix.copy(S.M); S.zone.group.matrixWorldNeedsUpdate = true;
-    for (const im of S.meshes) { im.matrixAutoUpdate = false; im.matrix.copy(S.M); im.matrixWorldNeedsUpdate = true; }
+    hull.move(S.M);
     L.ship(S.M);
   }
   // the Miner `k` of the way through its landing, as numbers: where its middle is over the floor, how high, its turn
@@ -217,12 +215,8 @@ export function makeCrane({ W, walls, boarding = null }) {
   let flight = null, air = null, cool = 0, settle = 0, wind = 0;
   function flightFx() {
     if (flight !== null || !ship) return flight;
-    const pods = W.built.doors.filter((D) => D.zone === 'ship-miner' && D.piece === 'mbPod' && D.hold == null && D.leaves.length && D.leaves[0].hinge);
-    if (!pods.length) { flight = false; return flight; }
-    const frame = new THREE.Matrix4().copy(pods[0].leaves[0].M).multiply(new THREE.Matrix4().makeTranslation(0, -MB.DECK, 0));
-    flight = makeFlight({ pods, podHalf: POD.size[2] / 2, swing: FLIGHT.swing, nozzles: MB.jetNozzles(), jet: MB.JET, podJet: { len: MB.POD_JET.len * FLIGHT.podLen, gain: MB.POD_JET.gain, r: MB.POD_JET.r }, frame, parent: ship.zone.group, quality: W.quality });
-    air = makeDownwash({ parent: room.group, quality: W.quality });
-    ship.pods = pods;
+    flight = hull.fx();
+    if (flight) { air = hull.air; ship.pods = hull.pods; }
     return flight;
   }
   let landT = 0, legsDown = false, aloft = false, loaded = false;
@@ -455,15 +449,13 @@ export function makeCrane({ W, walls, boarding = null }) {
     fly(D, dt = 0, how = null) {
       if (mode !== 'out' || !ship) return false;
       if (!D) {
-        if (aloft) { aloft = false; shipAt(null); L.pose(t); posePieces(L.state(t), 0); if (flight) { flight.rest(); for (const P of ship.pods) W.driven.delete(P); } if (air) air.hide(); }
+        if (aloft) { aloft = false; shipAt(null); L.pose(t); posePieces(L.state(t), 0); hull.rest(); }
         return true;
       }
-      if (!aloft) { aloft = true; if (flightFx()) for (const P of ship.pods) W.driven.add(P); }
+      if (!aloft) { aloft = true; if (flightFx()) hull.lift(); }
       ship.M.copy(D); shipMoved(); L.pose(t); posePieces(L.state(t), 0);
-      if (flight && how) {
-        flight.update(dt, how);
-        if (how.height != null && how.hold > 0.01) air.update(dt, { x: how.x, z: how.z, height: how.height, strength: how.hold * (how.height < 4 ? 0.8 : 0.4), spread: 1 }); else air.hide();
-      }
+      // (its pods, jets and engine, and the air under it: the shared hull's)
+      hull.thrust(dt, how);
       return true;
     },
     get aloft() { return aloft; },

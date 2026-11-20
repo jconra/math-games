@@ -140,13 +140,15 @@ import { stepsFor, land, LAMPS, ROLES, aboardOf } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
 import { MINER, flyingOf, setFlying } from './flymodel.js';
+import { flightOf } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
 // screen and the bottom of a phone's) and without
-// (the Miner's own facts now: src/flymodel.js MINER.seat; the flying's cockpit view is the same seat)
+// (the Miner's own facts now: src/fleet.js, as every ship's; the flying's cockpit view is the same seat. A run's own
+// ship's: SHIP below)
 export const SEAT = MINER.seat;
 // the eye's glide between the seat and the drill's view outside the ship: out (once the wormhole's far end has opened),
 // back in, and out for the short scene of a part skipped at the rocks (s)
@@ -210,6 +212,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   const { W, walls, boarding, crane, jobs, guide, crew, save } = ctx;
   if (!document.getElementById('pmt-css')) { const st = document.createElement('style'); st.id = 'pmt-css'; st.textContent = CSS; document.head.appendChild(st); }
   const S = boarding.ships.find((s) => s.id === M.ship);
+  // (the run's ship's own facts, as the shared ship piece flies it: src/fleet.js)
+  const SHIP = flightOf(M.ship) || MINER;
   const steps = stepsFor(M, roles, tune), TALK = RUN_TALK[M.id] || {};
   const el = document.createElement('div'); el.className = 'pmt';
   el.innerHTML = '<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div><div class="pmt-acts"><button type="button" class="pmt-skip" hidden></button><button type="button" class="pmt-up" hidden>Get up <kbd>E</kbd></button><button type="button" class="pmt-view" hidden></button></div>';
@@ -356,7 +360,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (the core's tuning, if this run has one: fetched now too, and the ship's own words for it)
         if (!tuneAsked && steps.some((s) => s.kind === 'tune')) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
         if (!drillKit) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
-        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
           // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
           view: iWatch ? 'behind' : 'cockpit',
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
@@ -376,7 +380,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // ship once you click the pilots seat"): the captain and one of his crew, here from now on. The captain is
         // taken out of the station meanwhile (he waited by the ship's lift)
         const pp = ctx.people ? ctx.people() : null;
-        if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: MINER.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random })
+        if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: SHIP.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random })
           .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard) pp.aboard(M.captain, true); T.log.push('aboard: ' + A.list.map((w) => w.name).join(', ')); })
           .catch((e) => { console.error(e); if (window.oops) window.oops(e); });
       }
@@ -578,7 +582,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     cam.position.applyMatrix4(_X); cam.quaternion.premultiply(_Xq);
     if (k > 0) {
       // (behind the ship, as the flying's own view from behind has it)
-      const b = MINER.behind; _oe.set(b.look[0], b.up, -b.back).applyMatrix4(Mn); _ol.set(...b.look).applyMatrix4(Mn); _ou.set(0, 1, 0).transformDirection(Mn);
+      const b = SHIP.behind; _oe.set(b.look[0], b.up, -b.back).applyMatrix4(Mn); _ol.set(...b.look).applyMatrix4(Mn); _ou.set(0, 1, 0).transformDirection(Mn);
       _om.lookAt(_oe, _ol, _ou); _oq.setFromRotationMatrix(_om);
       cam.position.lerp(_oe, k); cam.quaternion.slerp(_oq, k);
     }
@@ -690,10 +694,10 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // drill's own ship was not built by then, from the seat as soon as it is.
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
   // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship)
-  const seatEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640; return { eye: [iPilot ? SEAT.eye[0] : -SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]], look: tall ? SEAT.lookTall : SEAT.look, fov: tall ? SEAT.fovTall : SEAT.fov }; };
+  const seatEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640; return { eye: [iPilot ? SHIP.seat.eye[0] : -SHIP.seat.eye[0], SHIP.seat.eye[1], SHIP.seat.eye[2]], look: tall ? SHIP.seat.lookTall : SHIP.seat.look, fov: tall ? SHIP.seat.fovTall : SHIP.seat.fov }; };
   // (the flying's own view from behind, in the same frame: where the eye goes back to for whoever came out to the rocks
   // in that view, so the jump home is theirs to watch from behind too)
-  const behindEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, b = MINER.behind; return { eye: [b.look[0], b.up, -b.back], look: b.look, fov: tall ? b.fovTall : b.fov }; };
+  const behindEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, b = SHIP.behind; return { eye: [b.look[0], b.up, -b.back], look: b.look, fov: tall ? b.fovTall : b.fov }; };
   function openDrill() {
     if (drill || !drillKit) return;
     // (nothing of the parked ship or its cabin is drawn out there: the game's own Miner is far from them)
@@ -841,10 +845,10 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (fl && fl.on) { fl.aim(camera, dt); camFresh = true; return; }
       if (!api.seated || !S.M) return;
       const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, up = !!panel;
-      _eye.copy(inShip(iPilot ? SEAT.eye : [-SEAT.eye[0], SEAT.eye[1], SEAT.eye[2]])); _look.copy(inShip(tall ? (up ? SEAT.lookTallPanel : SEAT.lookTall) : up ? SEAT.lookPanel : SEAT.look));
+      _eye.copy(inShip(iPilot ? SHIP.seat.eye : [-SHIP.seat.eye[0], SHIP.seat.eye[1], SHIP.seat.eye[2]])); _look.copy(inShip(tall ? (up ? SHIP.seat.lookTallPanel : SHIP.seat.lookTall) : up ? SHIP.seat.lookPanel : SHIP.seat.look));
       if (camFresh) { camLook.copy(_look); camFresh = false; } else camLook.lerp(_look, 1 - Math.exp(-3 * dt));
       camera.position.copy(_eye); camera.lookAt(camLook);
-      const fov = tall ? SEAT.fovTall : SEAT.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      const fov = tall ? SHIP.seat.fovTall : SHIP.seat.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     },
     // just before the picture: no haze out there (after the boarding's light has had its say)
     late() {

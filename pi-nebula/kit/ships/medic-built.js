@@ -772,6 +772,11 @@ export function rampStep(built, down, both, dt, updateDoors) {
 // the cabinets along the starboard opening: shown with one ramp
 export function equipStep(built, show) { for (const D of doorsOf(built, 'mdBay')) for (const L of D.leaves) C.poseLeaf(L, 0, null, !show); }
 
+// ── FLOWN (the one shared ship piece: src/fleet.js, src/shiphull.js), in the same shape for every ship: its main
+// engine's nozzles in its own frame (a function, as jetNozzles) and their jets' look; its thruster pods, if it has any
+// (null: none); its cabin's deck over its ground line
+export const FLIGHT = { nozzles: jetNozzles, jet: JET, pods: null, deck: DECK };
+
 // ── IN THE SHIP LAB (labs/ships/main.js) ────────────────────────────────────────────────────────────────────────────
 export const LAB = {
   controls: ['ramps', 'rampCount', 'gear', 'door', 'dirt', 'throttle'],

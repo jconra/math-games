@@ -1,5 +1,5 @@
-// THE MINER IN ANOTHER SHIP'S HANGAR: the alarm, the red lights, the people running about, and the parked ship that
-// gets shoved. (That the other two hangars can be flown into at all, what the Miner bumps into in them, how a shoved
+// THE MINER IN ANOTHER SHIP'S HANGAR (or any flown ship: the one shared ship piece, src/fleet.js; in the game only the
+// Miner is flown yet): the alarm, the red lights, the people running about, and the parked ship that gets shoved. (That the other two hangars can be flown into at all, what the Miner bumps into in them, how a shoved
 // ship moves, and when the alarm's moment is, are plain numbers: src/flymodel.js OTHERS, visiting, pushOthers,
 // stepOther. The ship's own "Safety violation" in the cockpit is the flying's: src/flying.js.)
 //
@@ -50,7 +50,9 @@
 // lined up with another hangar's door and close, that hangar is asked for as the real one (outside.near), well before
 // the ship is at the door; the stand-in fades away over it.
 //
-//   const visit = makeVisit({ W, boarding, outside, people })     people: () -> the station's people, or null
+//   const visit = makeVisit({ W, boarding, outside, people, cfg })     people: () -> the station's people, or null; cfg:
+//                                the flown ship's facts (src/fleet.js flightOf; the Miner's if none): the other
+//                                hangars and their ships are the ones it meets (cfg.others)
 //   visit.others                 the ships parked in the other hangars, as the flying shoves them (flymodel.js makeOther)
 //   visit.fly(F)                 the flying now (src/flying.js), or null
 //   visit.update(dt, camera)     once a frame, after the camera is set and before the picture
@@ -77,8 +79,8 @@ export const ALARM = {
   sound: { volume: 0.55, near: 12, far: 160, notes: [640, 480], beat: 0.42 }, run: 0.4, tell: 0.3, real: { out: 38, side: 13, outGo: 48, sideGo: 16 }, room: 1.3, low: 3.6,
 };
 
-export function makeVisit({ W, boarding = null, outside = null, people = () => null }) {
-  const others = M.OTHERS.map(M.makeOther);
+export function makeVisit({ W, boarding = null, outside = null, people = () => null, cfg: ship = M.MINER }) {
+  const OTHERS = ship.others || [], others = OTHERS.map(M.makeOther);
   // ── each parked ship as it is drawn: its own room, the moving parts that are its alone, its hangar ──
   const views = others.map((O) => {
     const cfg = O.cfg, zone = W.room(cfg.room), hangar = W.room(cfg.hangar);
@@ -186,7 +188,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
   function dark() { if (lit && lit.g.parent) lit.g.parent.remove(lit.g); }
 
   // ── the people of that hangar, kept running; never under the flown ship, never in the shoved one ──
-  const hull = (() => { let a0 = 0, a1 = 0, r1 = 0; for (const p of M.MINER.points) { a0 = Math.min(a0, p[0]); a1 = Math.max(a1, p[0]); r1 = Math.max(r1, Math.abs(p[2])); } return { a0, a1, r1 }; })();
+  const hull = (() => { let a0 = 0, a1 = 0, r1 = 0; for (const p of ship.points) { a0 = Math.min(a0, p[0]); a1 = Math.max(a1, p[0]); r1 = Math.max(r1, Math.abs(p[2])); } return { a0, a1, r1 }; })();
   const _w = [0, 0, 0];
   // where the people on a hangar's floor stand: [[x, z], ...]
   function feetOn(v) {
@@ -246,7 +248,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
       if (focusOn) focus.set(S.p[0], Math.max(0, Math.min(3, S.p[1])), S.p[2]);
       // a phone's real hangar: lined up with another hangar's door and close, or in it
       let want = null;
-      if (S && !S.landed) for (const o of M.OTHERS) { const R = A.real, held = near === o.hangar, dx = S.p[0] - DOOR.x, dz = Math.abs(S.p[2] - o.at[2]); if (dx < (held ? R.outGo : R.out) && dz < (held ? R.sideGo : R.side)) want = o.hangar; }
+      if (S && !S.landed) for (const o of OTHERS) { const R = A.real, held = near === o.hangar, dx = S.p[0] - DOOR.x, dz = Math.abs(S.p[2] - o.at[2]); if (dx < (held ? R.outGo : R.out) && dz < (held ? R.sideGo : R.side)) want = o.hangar; }
       near = want; if (outside) outside.near = near;
     },
     reset(id = null) { for (const v of views) if (!id || v.cfg.id === id) reset(v); },

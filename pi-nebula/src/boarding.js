@@ -12,7 +12,8 @@
 //   B.fly(id, D)                                       a ship flown (src/flying.js): its cabin drawn where it is now
 //   B.stand(id, D)                                     a ship set down somewhere else than it is parked (below)
 //   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
-//   B.ride(id, on)                                     off: its lift carries nobody (out on a run, someone on foot aboard)
+//   B.ride(id, on)                                     off: its lift carries nobody and its ways in stay up (out on a
+//                                                      run, someone on foot aboard; a ship flown)
 //
 // A SHIP SET DOWN BY HAND STANDS WHERE THE PILOT PUT IT (the game's maker, 2026-11-18: "I don't wan the ship taking
 // over ... if the pilot sets down and is still crooked then I would hope the crane can just compensate for it ... Even
@@ -67,13 +68,16 @@ import { coreIn } from './missions.js';
 // Medic's ramp unfolds its foot). `lifts`: a way in that people ride instead (the Miner's belly lift: LIFTS below),
 // by piece, with where to stand on the hangar floor to step onto it (`foot`: in the ship's frame, x to port, z to the
 // nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.) `cockpit`: its
-// module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js).
+// module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js). `flight`: its kit's
+// facts for being flown (its engine's nozzles and jets, its thruster pods if any: src/shiphull.js).
 export const SHIPS = [
-  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', ways: ['ebAirstair'] },
-  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
-  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
+  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: EB.FLIGHT, ways: ['ebAirstair'] },
+  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: MD.FLIGHT, ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: MB.FLIGHT, ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
+// (every ship flies the same way, src/fleet.js; in the game itself only the Miner is flown yet: the Explorer and the
+// Medic in the Flight Lab, labs/flight/)
 export const FLOWN = ['ship-miner'];
 // ... and the ships parked in the other two hangars, which a flown one can shove about their own hangar's floor (the
 // game's maker, 2026-11-18, of the Miner flown into another ship's hangar: "It would even be appropriate for the other
@@ -420,7 +424,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         // them, `at`, as for a lift, when the ship stands somewhere else)
         if (s.state === 'in') {
           const reach = Math.max(D.near || NEAR, WAY_REACH);
-          for (const e0 of eyes) { const e = at(s, e0); if (Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < reach && Math.abs(e.y - D.sense.y) < 3) { open = true; break; } }
+          // (a ship flown, B.ride off: its ways stay up, as its lift carries nobody)
+          if (!s.noRide) for (const e0 of eyes) { const e = at(s, e0); if (Math.hypot(e.x - D.sense.x, e.z - D.sense.z) < reach && Math.abs(e.y - D.sense.y) < 3) { open = true; break; } }
           keepClear(s, D, i);
         }
         // (on its way down: its patch of floor is shut to walkers, and it waits while anyone still stands on it)

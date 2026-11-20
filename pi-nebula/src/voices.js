@@ -61,11 +61,16 @@ export const clipUrl = (id) => new URL('../assets/sound/voices/' + id + '.mp3', 
 //             over in your cockpit")
 //   reactor   to its engineer, out at the place a run goes to, when its core needs tuning (src/tune.js: heard all
 //             through the ship, as the others are in the cockpit)
-// (Made and waiting for its own job, not in the game yet: ship-miner-pullup "Warning. Pull up.")
+// (Made and waiting for their own job, not in the game yet: ship-<ship>-pullup "Warning. Pull up.", in
+// ~/pw/elevenlabs/ship-voice/<ship>/ready/)
 // THE THREE SHIP VOICES (the game's maker, 2026-11-19, of the tries he was sent): "we should use 3 for one ship, 4 for
 // another, and 9_new_calm_goddess_3.mp3 for another": 3 is the Miner's own deep voice with a low buzz under it (the
 // Miner's clips here, with the longer pause he asked for after "pilot."), 4 a giant rumbling being, 9 a calm woman.
-// Which of the other two ships gets which is his to say; their clips are made and wait with the Miner's other two.
+// And which is which (2026-11-19, evening): "The Explorer: the calm woman. The Medic: the giant being."
+// secs: how long each clip is (the ship waits for its welcome to end before anything else, and leaves a gap after
+// each "Safety violation.": src/flymodel.js voiceStep)
 export const SHIP_CLIPS = {
-  miner: { welcome: { id: 'ship-miner-welcome', words: 'Welcome aboard, pilot. Systems ready.' }, safety: { id: 'ship-miner-safety', words: 'Safety violation.' }, reactor: { id: 'ship-miner-reactor', words: 'Reactor imbalance.' } },
+  miner: { welcome: { id: 'ship-miner-welcome', words: 'Welcome aboard, pilot. Systems ready.', secs: 3.4 }, safety: { id: 'ship-miner-safety', words: 'Safety violation.', secs: 1.9 }, reactor: { id: 'ship-miner-reactor', words: 'Reactor imbalance.', secs: 1.31 } },
+  explorer: { welcome: { id: 'ship-explorer-welcome', words: 'Welcome aboard, pilot. Systems ready.', secs: 3.85 }, safety: { id: 'ship-explorer-safety', words: 'Safety violation.', secs: 1.99 }, reactor: { id: 'ship-explorer-reactor', words: 'Reactor imbalance.', secs: 2.07 } },
+  medic: { welcome: { id: 'ship-medic-welcome', words: 'Welcome aboard, pilot. Systems ready.', secs: 3.19 }, safety: { id: 'ship-medic-safety', words: 'Safety violation.', secs: 1.43 }, reactor: { id: 'ship-medic-reactor', words: 'Reactor imbalance.', secs: 1.34 } },
 };

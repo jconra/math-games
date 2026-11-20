@@ -84,7 +84,10 @@
 // the drill's view); `task` is the one more button, for a crew member with both jobs: back to the drill.
 // src/fieldfly.js joins the two.
 //
-//   const F = startFlying({ W, boarding, crane, outside, people, visit }, { cfg, pilot, goal, settings, flier, on... })
+//   const F = startFlying({ W, boarding, crane, hull, outside, people, visit }, { cfg, pilot, goal, settings, flier, on... })
+//     cfg         the ship's own facts (src/fleet.js flightOf): EVERY SHIP IS FLOWN BY THIS SAME CODE from its data
+//     hull        whoever draws its hull where it is flown, fires its thrusters and keeps where it stands: the Miner's
+//                 crane (its canisters ride with it; the default), or the ship's own (src/shiphull.js makeHull)
 //     body        at the rocks, in place of boarding and crane: { at (Matrix4: the field's own frame in the world), M0
 //                 (Matrix4: the ship's kit frame in the flight model's), p, f (where it is and the way its nose points,
 //                 the field's frame), fly(M) (the ship drawn there: M, its kit frame in the field's), solid }
@@ -230,12 +233,14 @@ const SOLIDS = new Map();
 // (its own bay, and the other hangars' bays it can fly into by hand: cfg.others)
 export function solidFor(cfg, outside = null) {
   const key = cfg.id;
-  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles() : null }));
+  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: cfg.bay || bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles() : null }));
   return SOLIDS.get(key);
 }
 
 export function startFlying(ctx, opts = {}) {
-  const { W, boarding, crane, outside = null, people = () => null, visit = null } = ctx;
+  // (hull: whoever keeps the ship's hull where it is flown and stands, its thrusters and its pad: the Miner's crane, or
+  // the ship's own shared hull, src/shiphull.js)
+  const { W, boarding, crane = null, hull = crane, outside = null, people = () => null, visit = null } = ctx;
   const cfg = opts.cfg || M.MINER, pilot = opts.pilot !== false, canvas = W.renderer.domElement;
   // (at the rocks: a body of its own, the top of this file; then there is no cabin, no crane and no station here)
   const body = opts.body || null;
@@ -244,8 +249,10 @@ export function startFlying(ctx, opts = {}) {
   if (!document.getElementById('pfl-css')) { const st = document.createElement('style'); st.id = 'pfl-css'; st.textContent = CSS; document.head.appendChild(st); }
   // WHERE IT STANDS: its proper parking place, or wherever it was last set down by hand (boarding has it: B.D, from
   // where it is parked to where it stands). As the flight model has it ({ p, q }), and back as that matrix.
-  const standNow = () => { if (body || !B.moved) return null; const p = new THREE.Vector3(...cfg.pad).applyMatrix4(B.D), q = new THREE.Quaternion().setFromRotationMatrix(B.D); return { p: p.toArray(), q: q.toArray() }; };
-  const matrixOf = (st) => (st ? new THREE.Matrix4().fromArray(standElements(st, cfg.pad)) : null);
+  // (a ship parked nose in, cfg.q0: the flight model's turn is the move's turn after the parked one)
+  const q0 = new THREE.Quaternion(...M.parkedTurn(cfg)), q0i = q0.clone().invert();
+  const standNow = () => { if (body || !B.moved) return null; const p = new THREE.Vector3(...cfg.pad).applyMatrix4(B.D), q = new THREE.Quaternion().setFromRotationMatrix(B.D); if (cfg.q0) q.multiply(q0); return { p: p.toArray(), q: q.toArray() }; };
+  const matrixOf = (st) => (st ? new THREE.Matrix4().fromArray(standElements(cfg.q0 ? { p: st.p, q: new THREE.Quaternion(...st.q).multiply(q0i).toArray() } : st, cfg.pad)) : null);
   const S = body ? M.makeFieldShip(body.p, body.f, cfg) : M.makeShip(cfg, standNow()), job0 = body ? null : solidFor(cfg, outside);
   // WHAT IT BUMPS INTO: the station (the job above, worked a little at a time), and with it the ships parked in the
   // other two hangars (src/visit.js keeps them: where each is, how it is sliding). They give way to a bump
@@ -257,6 +264,7 @@ export function startFlying(ctx, opts = {}) {
   // ITS VOICE (src/voices.js SHIP_CLIPS, by the ship's own name; when each is said: flymodel.js voiceStep): heard in the
   // cockpit, from everywhere, in both views. Never the browser's own speech: a ship with no clip says nothing.
   const clips = body ? {} : SHIP_CLIPS[cfg.voice] || {}, voice = M.makeVoice(), heard = { welcome: 0, safety: 0 };
+  const secs = { welcome: (clips.welcome && clips.welcome.secs) || M.VOICE.welcome, safety: (clips.safety && clips.safety.secs) || M.VOICE.safety, gap: M.VOICE.gap };
   if (body) voice.welcomed = true;      // (its welcome was said as the crew member sat down, at the station)
   for (const c of Object.values(clips)) sound.load(c.id, clipUrl(c.id));
   let saying = null, there = null;
@@ -440,15 +448,16 @@ export function startFlying(ctx, opts = {}) {
     if (body) { parked = false; now.compose(_p.set(...S.p), _q.set(...S.q), _one).multiply(body.M0); body.fly(now, dt); rig.matrix.multiplyMatrices(body.at, now); rig.matrixWorldNeedsUpdate = true; return; }
     // (on its pad with the power off: exactly as it is parked, its thrusters at rest; with the power on its engine idles)
     if (S.landed && !S.power) {
-      if (!parked) { crane.fly(null); boarding.fly(cfg.id, null); parked = true; now.copy(B.M); rig.matrix.copy(now); rig.matrixWorldNeedsUpdate = true; }
+      if (!parked) { hull.fly(null); boarding.fly(cfg.id, null); parked = true; now.copy(B.M); rig.matrix.copy(now); rig.matrixWorldNeedsUpdate = true; }
       return;
     }
     parked = false;
-    _D.compose(_p.set(...S.p), _q.set(...S.q), _one).multiply(_T.makeTranslation(-cfg.pad[0], -cfg.pad[1], -cfg.pad[2]));
+    _q.set(...S.q); if (cfg.q0) _q.multiply(q0i);
+    _D.compose(_p.set(...S.p), _q, _one).multiply(_T.makeTranslation(-cfg.pad[0], -cfg.pad[1], -cfg.pad[2]));
     // (how it is moving, for its thrusters: its push in the kit's frame, x its left, y up, z its nose; in the bay the
     // pods hold it up, out in space nothing needs to)
     const hold = S.landed ? 0 : Math.max(0, Math.min(1, (DOOR.face + 8 - S.p[0]) / 12)), inBay = S.p[0] < DOOR.face + 8;
-    crane.fly(_D, dt, { acc: _acc.set(-S.acc[2], S.acc[1], S.acc[0]), spin: S.spin, hold, engine: S.engine, heat: 1, x: S.p[0], z: S.p[2], height: inBay ? S.p[1] - cfg.pad[1] : null });
+    hull.fly(_D, dt, { acc: _acc.set(-S.acc[2], S.acc[1], S.acc[0]), spin: S.spin, hold, engine: S.engine, heat: 1, x: S.p[0], z: S.p[2], height: inBay ? S.p[1] - cfg.pad[1] : null });
     boarding.fly(cfg.id, _D);
     now.multiplyMatrices(_D, B.M0); rig.matrix.copy(now); rig.matrixWorldNeedsUpdate = true;
   }
@@ -462,7 +471,7 @@ export function startFlying(ctx, opts = {}) {
     const D = matrixOf(M.standOf(S));
     if (!D && !B.moved) return;
     _was.copy(B.D);
-    if (crane.stand) crane.stand(D); else boarding.stand(cfg.id, D);
+    if (hull.stand) hull.stand(D); else boarding.stand(cfg.id, D);
     _move.copy(_was).invert(); if (D) _move.premultiply(D);
     if (parked) { now.copy(B.M); rig.matrix.copy(now); rig.matrixWorldNeedsUpdate = true; }
     if (opts.onStand) opts.onStand(_move);
@@ -474,9 +483,8 @@ export function startFlying(ctx, opts = {}) {
   // ── THE GUIDE'S SMALL SPACE: a small model of the ship and the hologram of its goal, in a small picture of their own ──
   // (the ship's own shape in a few boxes, metres in its own frame: [from, to] along it, across it and up, and what it is)
   const holo = (() => {
-    const BOXES = [[-8.2, 2.5, -2.2, 2.2, 1.6, 4.4, 'body'], [2.5, 5.2, -1.6, 1.6, 1.9, 4.0, 'body'], [5.2, 6.8, -0.9, 0.9, 2.1, 3.4, 'nose'], [3.0, 5.0, -1.1, 1.1, 4.0, 4.5, 'glass'],
-      [-5.4, -0.6, 2.2, 3.3, 1.7, 4.2, 'pod'], [-5.4, -0.6, -3.3, -2.2, 1.7, 4.2, 'pod'], [-9.0, -8.2, -1.4, 1.4, 2.0, 4.0, 'engine'],
-      [-6.3, -5.9, 2.2, 2.6, 0, 1.7, 'leg'], [-6.3, -5.9, -2.6, -2.2, 0, 1.7, 'leg'], [2.8, 3.2, 1.7, 2.1, 0, 1.9, 'leg'], [2.8, 3.2, -2.1, -1.7, 0, 1.9, 'leg']];
+    // (the ship's own: src/fleet.js `model`)
+    const BOXES = cfg.model;
     const k = 1 / M.GUIDE.space, c = new THREE.Color();
     function shape(colours) {
       const pos = [], nor = [], col = [], idx = [];
@@ -591,7 +599,7 @@ export function startFlying(ctx, opts = {}) {
     guideOn = (home || opts.guide === 'always') && !(S.landed && where !== 'edge');
     keysOn = guideOn && pilot && !auto;
     $('.pfl-seat').hidden = !seatUp; $('.pfl-guide').hidden = !guideOn; $('.pfl-keys').hidden = !keysOn || touch; holo.show(guideOn);
-    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; $('.pfl-seat small').textContent = where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
+    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
     const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body, task: opts.task ? opts.task.words : '' });
     helpEl.querySelector('ul').innerHTML = rows.map(([k, w]) => (k ? `<li><kbd>${k}</kbd><span>${w}</span></li>` : `<li class="is-word"><span>${w}</span></li>`)).join('');
     helpEl.classList.toggle('is-shut', helpShut == null ? touch : helpShut);
@@ -712,7 +720,7 @@ export function startFlying(ctx, opts = {}) {
       }
       pend.dx = pend.dy = 0;
       const was = S.landed;
-      S.padBusy = !!(crane && crane.padBusy && crane.padBusy());
+      S.padBusy = !!(hull && hull.padBusy && hull.padBusy());
       // (what it bumps into: a little of that work each frame on the pad, all that is left of it the moment it is off)
       M.stepShip(S, C, dt, S.landed ? job.run(S.power ? 12 : 6) : job.finish());
       if (was && !S.landed) { if (liftMouse && pilot && !auto && canLock) { liftLock = 1.5; capture(true); } liftMouse = false; painted = ''; }
@@ -722,7 +730,7 @@ export function startFlying(ctx, opts = {}) {
       // as its power first comes on this sitting, "Safety violation" over and over while it is in there. (A clip asked
       // for before the page may make a sound is tried again for a moment, then let go.)
       there = M.visiting(S);
-      const clip = M.voiceStep(voice, S, dt, there);
+      const clip = M.voiceStep(voice, S, dt, there, secs);
       if (clip && clips[clip]) saying = { what: clip, t: clip === 'welcome' ? 1.5 : 0.4 };
       if (saying) { const h = sound.play(clips[saying.what].id, { volume: 0.95 }); if (h) { heard[saying.what]++; saying = null; } else if ((saying.t -= dt) <= 0) saying = null; }
       // (coming down low over a hangar's floor, its own or another's: anyone under it hurries out of its way, as from
@@ -762,7 +770,7 @@ export function startFlying(ctx, opts = {}) {
     away() {
       if (closed) return;
       M.park(S, standNow()); S.power = true; auto = !pilot; plan = null; offered = false; letGo(); setMouse('pointer');
-      crane.fly(null); boarding.fly(cfg.id, null); parked = true; now.copy(B.M); rig.matrix.copy(now); rig.visible = false;
+      hull.fly(null); boarding.fly(cfg.id, null); parked = true; now.copy(B.M); rig.matrix.copy(now); rig.visible = false;
       on = false; el.hidden = true; holo.show(false); if (outside) outside.flying = null; restoreCamera();
     },
     // out of the jump home: outside the station, in sight of it
@@ -811,7 +819,7 @@ export function startFlying(ctx, opts = {}) {
       removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('blur', onBlur);
       removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerdown', onDown); removeEventListener('pointerup', onUp); canvas.removeEventListener('contextmenu', onMenu);
       document.removeEventListener('pointerlockchange', onLock); capture(false);
-      if (!body) { crane.fly(null); boarding.fly(cfg.id, null); }
+      if (!body) { hull.fly(null); boarding.fly(cfg.id, null); }
       W.scene.remove(rig); screen.dispose(); holo.dispose(); el.remove(); if (outside) outside.flying = null; restoreCamera();
       if (visit) visit.fly(null);
     },

@@ -1269,6 +1269,11 @@ export function podStep(built, on, time, jets) {
 // the canisters on their mounts, or (off) the mounts empty
 export function canisterStep(built, on) { for (const D of built.doors.filter((q) => q.piece === 'mbCanister')) for (const L of D.leaves) C.poseLeaf(L, D.t, null, !on); }
 
+// ── FLOWN (the one shared ship piece: src/fleet.js, src/shiphull.js), in the same shape for every ship: its main
+// engine's nozzles in its own frame (a function, as jetNozzles) and their jets' look; its thruster pods, if it has any
+// (the doors that turn: their piece, half their length, their jets' look; null: none); its cabin's deck over its ground line
+export const FLIGHT = { nozzles: jetNozzles, jet: JET, pods: { piece: 'mbPod', half: POD.size[2] / 2, jet: POD_JET }, deck: DECK };
+
 // ── IN THE SHIP LAB (labs/ships/main.js) ────────────────────────────────────────────────────────────────────────────
 export const LAB = {
   controls: ['arms', 'thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
