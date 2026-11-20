@@ -741,7 +741,18 @@ function calmStand(clips, scene, C = CALM, moves = null, rig = null) {
 // a thick thigh (the dock worker's, the women's spacesuit's, security's, the cook's apron) its fingers went 12 to 14 cm
 // down into it; at 12 cm, the first try, those hands stayed inside, checked on the person as drawn: rigs/crew-3/
 // sitcheck.js).
-export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05 };
+// THE HAND'S MIDDLE OVER THE THIGH (2026-11-19; the game's maker's three slim androids, the medical, service and
+// feminine ones: sitting, their hands came to rest down the inner side of a thigh by the lap, and the feminine one's
+// fingers went up to 6 cm into her thighs: ~/pw/space-math/ANDROIDS_1.md). The rule above places the WRIST over the
+// thigh; the women's clip hangs the hand down and in from it, and on a slim thigh the hand's middle then lay past the
+// thigh's top, its fingers down the gap between the two thighs, where nothing lifts them. So, after it: a hand whose own
+// middle (its points' middle) lies further in toward the other thigh than SEAT.inner of the thigh's half-width (from
+// the middle of the thigh's cloth at that place along) is moved out to that, then lifted onto the thigh as before; a
+// hand held up off the thigh (clapping) is left as the clip has it: moved less and less from SEAT.near[0] over the
+// thigh's top to not at all at SEAT.near[1]. null: left out (as before this). And the lift itself: it only lifted the points it found inside a thigh, and a
+// finger hanging under the thigh's lowest point beside it (down that gap) was carried up into the thigh by it, so the
+// lift is worked out again from where it put the hand, SEAT.again times at most (0: once, as before).
+export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05, inner: 0.35, near: [0.04, 0.12], again: 3 };
 export const DRIVE = { clip: 'Drive', up: 0.15, apart: 0.34, forward: 0.08 };
 const SEAT_LEG = /^UpperLeg[LR]$/, SEAT_ARM = /^(LowerArm)([LR])$/, SEAT_HAND = /^(Wrist|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)([LR])$/;
 // (a part's points, each in the frame of the bone that carries most of it, at rest: { bone names, points (x, y, z each) };
@@ -815,6 +826,26 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
     if (kind === 'drive') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
     const centre = mid.L.clone().add(mid.R).multiplyScalar(0.5), side = Math.sign(B.UpperArmL.getWorldPosition(new THREE.Vector3()).x - B.UpperArmR.getWorldPosition(new THREE.Vector3()).x) || 1;
     let moved = 0;
+    // (THE HAND'S MIDDLE OVER THE THIGH, below: how far out a hand is to go, at this moment of the clip)
+    const hm = new THREE.Vector3(), q = new THREE.Vector3();
+    const handOver = (s, hip, ax0, fwd) => {
+      const ax = ax0.clone().normalize(), across = new THREE.Vector3(ax.z, 0, -ax.x);
+      const other = B[(s === 'L' ? 'UpperLegR' : 'UpperLegL')].getWorldPosition(new THREE.Vector3());
+      const inward = Math.sign(other.sub(hip).dot(across)) || 1;
+      let n = 0; hm.set(0, 0, 0);
+      for (let i = 0; i < hands.names.length; i++) if (hands.names[i].slice(-1) === s) { hm.add(at(hands, i, v).add(fwd)); n++; }
+      if (!n) return q.set(0, 0, 0);
+      hm.divideScalar(n).sub(hip);
+      const t = hm.dot(ax), x = hm.dot(across);
+      let lo = Infinity, hi = -Infinity, top = -Infinity;
+      for (let i = 0; i < legs.names.length; i++) { if (legs.names[i].slice(-1) !== s) continue; at(legs, i, v).sub(hip); if (Math.abs(v.dot(ax) - t) > 0.025) continue; const xq = v.dot(across); if (xq < lo) lo = xq; if (xq > hi) hi = xq; if (v.y > top) top = v.y; }
+      if (!(hi > lo)) return q.set(0, 0, 0);
+      // (only a hand down at the thigh: one held up off it, clapping, is the clip's own, and from SEAT.near[0] over the
+      // thigh's top to SEAT.near[1] it is moved less and less)
+      const up = (hm.y - top - S.near[0]) / (S.near[1] - S.near[0]), w = up <= 0 ? 1 : up >= 1 ? 0 : 1 - up * up * (3 - 2 * up);
+      const over = ((x - (lo + hi) / 2) * inward - S.inner * (hi - lo) / 2) * w;
+      return over > 0 ? q.copy(across).multiplyScalar(-inward * over) : q.set(0, 0, 0);
+    };
     for (let k = 0; k < steps; k++) {
       const t = (dur * k) / (steps - 1); times.push(t); pose(t);
       // (the thighs' cloth seen from above: in each 1.5 cm cell its lowest and its highest point; a hand or forearm point
@@ -836,11 +867,23 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
           const fwd = tc < S.along ? ax.clone().multiplyScalar(S.along - tc) : new THREE.Vector3();
           // (and a hand beside the thigh, further out from its line than SEAT.side, brought in over it)
           if (tl > 1e-6) { const across = new THREE.Vector3(ax.z, 0, -ax.x).normalize(), off = W0.clone().sub(hip).dot(across); if (Math.abs(off) > S.side) fwd.addScaledVector(across, Math.sign(off) * S.side - off); }
+          // (THE HAND'S MIDDLE OVER THE THIGH: a hand whose own middle lies further in toward the other thigh than
+          // SEAT.inner of the thigh's half-width from its cloth's middle there is moved out, to that, so it rests on the
+          // thigh and not down the gap between the two)
+          if (tl > 1e-6 && S.inner != null) fwd.add(handOver(s, hip, ax, fwd));
+          // (AND AGAIN: a point under a thigh's lowest in its cell, a finger hanging down beside the thigh, that the lift
+          // brings up into the thigh, is lifted over it too: the lift worked out again from where it puts the hand, up to
+          // SEAT.again times more)
           let lift = 0;
-          for (const P of [hands, fore]) for (let i = 0; i < P.names.length; i++) {
-            if (P.names[i].slice(-1) !== s) continue;
-            at(P, i, v).add(fwd); const h = top.get(Math.floor(v.x / C) * 4096 + Math.floor(v.z / C));
-            if (h && v.y > h[0] && h[1] + S.clear - v.y > lift) lift = h[1] + S.clear - v.y;
+          for (let pass = 0; pass <= (S.again || 0); pass++) {
+            let more = 0;
+            for (const P of [hands, fore]) for (let i = 0; i < P.names.length; i++) {
+              if (P.names[i].slice(-1) !== s) continue;
+              at(P, i, v).add(fwd); v.y += lift; const h = top.get(Math.floor(v.x / C) * 4096 + Math.floor(v.z / C));
+              if (h && v.y > h[0] && h[1] + S.clear - v.y > more) more = h[1] + S.clear - v.y;
+            }
+            if (!(more > 0) || lift >= S.most) break;
+            lift += more;
           }
           if (lift > 0 || fwd.lengthSq() > 0) T = W0.clone().add(fwd).add(new THREE.Vector3(0, Math.min(lift, S.most), 0));
         } else {
