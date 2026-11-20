@@ -71,11 +71,16 @@ export function asWorn(R, picked, person) {
 export const ownFor = (recipe, suit) => (brings(suit) ? { ...(recipe || {}), colours: {} } : recipe || {});
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
 // (2026-11-19: all 13 heads on the 11 bodies and under the 23 hairs, each drawn from the front, the side and behind
-// and looked at. No hair is left out on any head. Two heads on a body are: the 40s man's thick neck comes through the
-// back of the dark crew uniform's collar in ragged pieces, and the 30s man's neck stands long and bare over the back of
-// the women's spacesuit's collar. The 30s man on the dark crew uniform does as the first, but that is the ready-made
-// look Sol himself, so it stays: asked.)
-export const APART = { hair: {}, suit: { atlantis1: ['t8'], spaceWoman: ['t6'] } };
+// and looked at. No hair is left out on any head. Two heads on a body were: the 40s man's thick neck came through the
+// back of the dark crew uniform's collar in ragged pieces, and the 30s man's neck stood long and bare over the back of
+// the women's spacesuit's collar; the 30s man on the dark crew uniform (the ready-made look Sol) did as the first.
+// The game's maker, shown them: "Make their head smaller and move them forward a tad if it helps, for that head and
+// body combo. Also the middle head needs to go down." So each of the three has a place of its own on that body
+// (crew.json, the head's headFit.suits): t8 on atlantis1 0.92 the size, t6 on atlantis1 0.89 the size, t6 on spaceWoman
+// 0.87 the size and 4 cm lower; forward did not help (the neck came further past the collar's back), so none of them
+// is moved forward. Looked at close from behind standing and walking: no neck through the collar. So none is left out
+// now; any pairing found apart later goes here.)
+export const APART = { hair: {}, suit: {} };
 // (no hair at all is one of the hair row's choices: the last one before the row comes round again)
 export const NO_HAIR = null;
 

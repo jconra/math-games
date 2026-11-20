@@ -64,15 +64,38 @@ test('an arrow steps to the next choice or the one before, and a row comes round
 });
 
 test('pairings that do not go together are stepped past, whichever part is being changed', () => {
-  for (const [suit, heads] of Object.entries(APART.suit)) for (const head of heads) {
-    assert.equal(goTogether({ suit, head, hair: null }), false);
-    // on that body the head row never offers that head; with that head on, the body row never offers that body
-    assert.ok(!choices(KIT, 'head', worn({ suit, head: 't10' })).includes(head), `${head} on ${suit}`);
-    assert.ok(!choices(KIT, 'suit', worn({ suit: 'civilian', head })).includes(suit), `${suit} under ${head}`);
-    // (but a pairing already worn stays one of its own choices, so the row still starts from it)
-    assert.ok(choices(KIT, 'head', worn({ suit, head })).includes(head));
-  }
+  // (none is left out now: one is laid in for this test, and taken out again after)
+  const was = APART.suit.smelter;
+  APART.suit.smelter = ['t4'];
+  try {
+    for (const [suit, heads] of Object.entries(APART.suit)) for (const head of heads) {
+      assert.equal(goTogether({ suit, head, hair: null }), false);
+      // on that body the head row never offers that head; with that head on, the body row never offers that body
+      assert.ok(!choices(KIT, 'head', worn({ suit, head: 't10' })).includes(head), `${head} on ${suit}`);
+      assert.ok(!choices(KIT, 'suit', worn({ suit: 'civilian', head })).includes(suit), `${suit} under ${head}`);
+      // (but a pairing already worn stays one of its own choices, so the row still starts from it)
+      assert.ok(choices(KIT, 'head', worn({ suit, head })).includes(head));
+    }
+  } finally { if (was === undefined) delete APART.suit.smelter; else APART.suit.smelter = was; }
   assert.equal(goTogether(worn()), true);
+});
+
+test('the three heads whose neck came through the collar from behind are offered on those bodies, each fitted there: smaller, and the middle one lower', () => {
+  // (the game's maker, of the question's picture: "Make their head smaller and move them forward a tad if it helps, for
+  // that head and body combo. Also the middle head needs to go down")
+  assert.deepEqual(APART, { hair: {}, suit: {} });
+  const pair = (head, suit) => ((KIT.head.find((h) => h.id === head).headFit || {}).suits || {})[suit] || {};
+  for (const [head, suit, size, seat] of [['t8', 'atlantis1', 0.92, 0.015], ['t6', 'atlantis1', 0.89, 0.015], ['t6', 'spaceWoman', 0.87, 0.04]]) {
+    assert.deepEqual(pair(head, suit), { seat, size }, `${head} on ${suit}`);
+    assert.ok(choices(KIT, 'head', worn({ suit, head: 't10' })).includes(head), `${head} offered on ${suit}`);
+    assert.ok(choices(KIT, 'suit', worn({ suit: 'civilian', head })).includes(suit), `${suit} offered under ${head}`);
+  }
+  // (smaller than before: t8 and t6 on atlantis1 were 1 and 0.97; the middle one, t6 on the women's spacesuit, was as
+  // made, and goes 4 cm down; none is brought forward: it did not help)
+  assert.ok(pair('t6', 'spaceWoman').seat > 0.03);
+  for (const [h, s] of [['t8', 'atlantis1'], ['t6', 'atlantis1'], ['t6', 'spaceWoman']]) assert.equal(pair(h, s).forward, undefined);
+  // (Sol, the ready-made look, is t6 on atlantis1: he wears the new place too)
+  assert.deepEqual(lookIn('sol').slice(0, 2), ['atlantis1', 't6']);
 });
 
 test('what is saved: a part or colour laid over the ready-made look, taken out again when put back', () => {
