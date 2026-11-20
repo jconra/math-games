@@ -31,10 +31,19 @@
 // cost of 3 tins: 3 × $2.25"), its finished line stays a moment, and the next board comes up with the answer carried
 // into it, written in green ("Then the change from $20: $20.00 − $6.75 (the $6.75 from sum 1)").
 //
-//   const L = openLongWork(root, { work, chain, final, title, ask, speak, closeLabel, top, onOwn, onTap, onDone, onClose })
+// A RUNNING TOTAL (tally: Pi Nebula's smelter, a haul worked out metal by metal; the game's maker: "I wouldn't be able
+// to remember 23,250 while I was doing the math for Gold and Copper"): in place of the strip of sums, a small slip of
+// its own, a row for each part (a metal, what of it there is, what it comes to once its sums are done; the one being
+// worked lit) and under them the total so far, written in as each part is added on. It stays on the finished note.
+//
+//   const L = openLongWork(root, { work, chain, tally, final, title, ask, speak, closeLabel, top, onOwn, onTap, onDone, onClose })
 //     work      src/math/longwork.js workMul / workDiv / workAdd / workSub (workOf)
 //     chain     [{ work, sum, say, carried }] in place of work: sums in steps (src/math/jobsums.js: sum is the step as
 //               the question puts it, say what it finds, carried: { a?: k, b?: k } its numbers that are sum k's answer)
+//     tally     with a chain, or null: { title, unit, rows: [{ label, note, value, from, to }], totals: [{ after, value }] }:
+//               a row's value is written in once sum `to` is done (to < from: known as its turn comes, the chart's own
+//               number), lit while its sums (from on) are worked; the total so far is the last of `totals` whose sum
+//               `after` is done
 //     stay      true: the finished sheet stays as a note (above); onDone is called as it shrinks, onGone when it goes
 //     top       true: over the lock box (z-index 70; the keys are the sheet's even with the box under it)
 //     onOwn     () => void, or null: a small "Type my own sum" button in the top strip (the tools open their entry)
@@ -80,12 +89,14 @@ export const LONGWORK = {
   noteCell: [19, 27],   // px: a board square on the finished sheet's small note (a phone, a window)
 };
 
-export function openLongWork(root = document.body, { work, chain = null, final = null, title = 'Work it out', ask = '', speak = null,
+export function openLongWork(root = document.body, { work, chain = null, tally = null, final = null, title = 'Work it out', ask = '', speak = null,
   closeLabel = 'Back to the slip', free = false, top = false, stay = false, onOwn = null, onTap = () => {}, onDone = () => {}, onClose = () => {}, onGone = () => {} } = {}) {
   ensureCss();
   // the sums worked here: one, or a sum in steps (each its own board, in turn)
   const works = chain && chain.length ? chain.map((x) => ({ ...x })) : [{ work, sum: null, say: '', carried: null }];
   const many = works.length > 1;
+  // (a running total, with sums in steps only)
+  const T = many && tally && Array.isArray(tally.rows) && tally.rows.length ? tally : null;
   // the parts in order: each sum's board steps, the word answer (optional)
   const parts = [];
   works.forEach((W, w) => W.work.steps.forEach((s, i) => parts.push({ part: 'work', w, i, ask: s.ask, choices: s.choices, step: s, wide: !!s.wide })));
@@ -99,7 +110,8 @@ export function openLongWork(root = document.body, { work, chain = null, final =
       <header class="bml-top"><div class="bml-title"><b>${esc(title)}</b><small>${esc(ask)}</small></div>
         ${onOwn ? '<button type="button" class="bml-own">Type my own sum</button>' : ''}
         <button type="button" class="bml-x">${esc(closeLabel)}<kbd>Esc</kbd></button></header>
-      ${many ? '<ol class="bml-chain" aria-label="The sums, in order"></ol>' : ''}
+      ${many && !T ? '<ol class="bml-chain" aria-label="The sums, in order"></ol>' : ''}
+      ${T ? `<div class="bml-tally" aria-label="${esc(T.title || 'Running total')}" aria-live="polite"></div>` : ''}
       <div class="bml-boardwrap"><div class="bml-board" aria-hidden="true"></div><p class="bml-note"></p></div>
       <p class="bml-ask" aria-live="polite"></p>
       <div class="bml-choices" role="group" aria-label="Pick the answer"></div>
@@ -131,14 +143,27 @@ export function openLongWork(root = document.body, { work, chain = null, final =
     return `${left} ${m[1]} ${right}`;
   }
   function showChain(done = wNow) {
+    showTally(done);
     if (!chainEl) return;
     chainEl.innerHTML = works.map((W, w) => `<li class="bml-ch${w < done ? ' is-done' : w === done ? ' is-now' : ''}"><i>${w + 1}</i><span>${esc(sumText(w, done))}</span>${w < done ? `<b>= ${esc(answerText(W))}</b>` : ''}</li>`).join('');
+  }
+  // THE RUNNING TOTAL (tally): a row for each part, its value once its sums are done, and the total so far
+  const tallyEl = $('.bml-tally'), num = (v) => Number(v).toLocaleString('en-US');
+  function showTally(done) {
+    if (!tallyEl) return;
+    const so = (T.totals || []).filter((x) => x.after < done).pop(), all = done >= works.length;
+    tallyEl.innerHTML = `<b class="bml-tt">${esc(T.title || 'Running total')}</b>${T.rows.map((r) => {
+      const known = r.to < done, now = !known && r.from <= done;
+      return `<div class="bml-tr${known ? ' is-done' : now ? ' is-now' : ''}"><span>${esc(r.label)}</span><small>${esc(r.note || '')}</small><em>${known ? esc(num(r.value)) : now ? '…' : ''}</em></div>`;
+    }).join('')}<div class="bml-tr is-total"><span>${all ? 'In all' : 'So far'}</span><small></small><em>${so ? `${esc(num(so.value))}${T.unit ? ` <i>${esc(T.unit)}</i>` : ''}` : '–'}</em></div>`;
   }
   // the words a sum in steps starts with: what it finds, the sum, and where a carried number came from
   const ORD = ['First', 'Then', 'Then', 'Then', 'Then', 'Last'];
   function sumIntro(w) {
     const W = works[w], c = W.carried || {};
-    const from = [...new Set([c.a, c.b].filter((x) => x != null))].map((x) => `the ${answerText(works[x])} from sum ${x + 1}`);
+    // (with a running total there is no strip of numbered sums: a carried number is one found before)
+    const ks = [...new Set([c.a, c.b].filter((x) => x != null))];
+    const from = T ? (ks.length ? [`${ks.map((x) => `the ${answerText(works[x])}`).join(' and ')} found before`] : []) : ks.map((x) => `the ${answerText(works[x])} from sum ${x + 1}`);
     return `${W.say || ORD[Math.min(w, ORD.length - 1)]}: ${sumText(w, w)}${from.length ? ` (${from.join(' and ')})` : ''}.`;
   }
 
@@ -455,7 +480,8 @@ export function openLongWork(root = document.body, { work, chain = null, final =
       const p = parts[k];
       return { part: p.part, i: p.i, k, of: parts.length, ask: p.ask, choices: p.choices.map((c) => ({ label: c.label, good: !!c.good })), busy, done: finished, closed,
         slot: p.step && p.step.slot ? p.step.slot : null, line: lineEl.textContent, misses, taps,
-        w: wNow, sums: works.map((W, w) => ({ words: sumText(w, finished ? works.length : wNow), line: W.work.line, say: W.say || '' })), intro: (askEl.querySelector('small') || {}).textContent || '' };
+        w: wNow, sums: works.map((W, w) => ({ words: sumText(w, finished ? works.length : wNow), line: W.work.line, say: W.say || '' })), intro: (askEl.querySelector('small') || {}).textContent || '',
+        tally: tallyEl ? [...tallyEl.querySelectorAll('.bml-tr')].map((d) => [...d.children].map((c) => c.textContent.trim())) : null };
     },
   };
 }
