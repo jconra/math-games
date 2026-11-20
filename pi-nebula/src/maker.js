@@ -18,9 +18,8 @@
 // brought inside THE SKIN'S RANGE (skinInRange, below): never white or near white.
 //
 // THE PARTS ARE THE CREW KIT'S OWN, as they are: nothing is re-made or re-fitted for the maker. What is left out:
-//   KEPT_BACK   parts no player picks by themselves: the android's helmet (it comes with the android's body: BRINGS),
-//               and the three captains' bodies (whether a player may wear a captain's is the game's maker's to say:
-//               asked);
+//   KEPT_BACK   parts no player wears: Captain Vega's body and his helmet (his own: "Vega is special"), and the three
+//               captains' bodies (whether a player may wear a captain's is the game's maker's to say: asked);
 //   APART       pairings that do not go together cleanly in the kit (a hair on one head, a head on one body): the arrows
 //               step past them. Each was looked at from the front, the side and behind (~/pw/space-math/CHARACTER_MAKER.md).
 
@@ -30,12 +29,13 @@ export const ROWS = [
   { id: 'head', part: 'head', word: 'Head' },
   { id: 'body', part: 'suit', word: 'Body' },
 ];
-export const KEPT_BACK = { suit: ['captainMan', 'captainOld', 'captainWoman'], head: ['vega'], hair: [] };
-// THE ANDROID (the game's maker, 2026-11-19, of a blue-skinned crew member the checks had made: "I guess we have aliens
-// now. I wonder if we should let the player pick an android?", and then: "we already have android models"): the
-// android's body is one of the body arrows' choices. It brings its own head, the helmet with the visor (crew.json: that
-// head goes `with` this body alone), and wears no hair: so while it is worn the head and hair arrows have nothing to
-// step to, and the head and hair the player had are kept under it and are theirs again on the next body.
+export const KEPT_BACK = { suit: ['vega', 'captainMan', 'captainOld', 'captainWoman'], head: ['vega'], hair: [] };
+// AN ANDROID'S BODY (the game's maker, 2026-11-19, of a blue-skinned crew member the checks had made: "I guess we have
+// aliens now. I wonder if we should let the player pick an android?"): a body that brings its own head and wears no
+// hair. While one is worn the head and hair arrows have nothing to step to, and the head and hair the player had are
+// kept under it and are theirs again on the next body. THE PLAYER'S ANDROIDS ARE TO BE HIS SIX (the dock, heavy,
+// medical, old, service and feminine ones he made: not yet in the crew kit). Captain Vega's own body is such a body
+// too, but no player wears it: "I wasn't going to let the player select Captain Vega because Vega is special."
 export const BRINGS = { vega: { head: 'vega', hair: null } };
 export const brings = (suit) => (suit && Object.prototype.hasOwnProperty.call(BRINGS, suit) ? BRINGS[suit] : null);
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
