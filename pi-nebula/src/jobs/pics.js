@@ -473,6 +473,20 @@ Object.assign(DRAW, {
     if (ask) s += text(W / 2, line ? 104 : 86, ask, { size: 14, fill: K.ASK, weight: 800 });
     return { svg: svg(line && ask ? 114 : 96, s), line: '' };
   },
+  // one canister part full (the smelter's haul home early): a tonne cut into d equal parts, the first `have` lit in the
+  // metal's own colour (glow), the empty ones each a "?"; `top` over it, `line` and `ask` under it
+  canfill({ d = 8, have = 0, glow = '#ffc233', top = '', line = '', ask = '' }) {
+    const x0 = 14, x1 = W - 14, pw = (x1 - x0) / d;
+    let s = text(W / 2, 14, top, { size: 13 }) + `<rect x="${x0 - 4}" y="24" width="${x1 - x0 + 6}" height="40" rx="10" fill="${K.STEEL}" stroke="${K.INK}" stroke-width="1.3"/>`;
+    for (let i = 0; i < d; i++) {
+      const on = i < have, x = x0 + i * pw, mx = x + (pw - 2) / 2;
+      s += `<rect x="${x.toFixed(1)}" y="30" width="${(pw - 2).toFixed(1)}" height="28" rx="3" fill="${on ? glow : K.PAPER}" ${on ? 'opacity="0.9"' : ''} stroke="${on ? K.INK : K.ASK}" stroke-width="1.2"/>`;
+      if (!on && pw > 22) s += text(mx, 50, '?', { size: 15, fill: K.ASK, weight: 800 });
+    }
+    if (line) s += text(W / 2, 84, line, { size: 12.5, fill: K.SOFT });
+    if (ask) s += text(W / 2, line ? 104 : 86, ask, { size: 14, fill: K.ASK, weight: 800 });
+    return { svg: svg(line && ask ? 114 : 96, s), line: '' };
+  },
   // a row of boxes with a sign between each two: { top (what it is), mid (its number), bot (its "= ?"), glow (a dot of
   // a metal's colour), ask (the box asked for) }; `op` the sign between them, `last` the sign before the last box
   // where that is another one, `ask` the words under the row

@@ -105,6 +105,8 @@
 }
 .pnj-story { margin: 0 0 8px; font-size: 17px; line-height: 1.4; }
 .pnj-ask { margin: 0; font-size: 18px; font-weight: 700; color: #ffd29e; }
+/* a tip under the question (the smelter's, where eighths of a tonne are asked) */
+.pnj-tip { margin: 6px 0 0; font-size: 15px; color: #bfe3ff; }
 
 /* the pictures (Mathwood's drawings) on a light card */
 .pnj-pic { background: #f4ecdc; border-radius: 6px; padding: 6px; }

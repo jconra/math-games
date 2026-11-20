@@ -48,8 +48,9 @@
 //     home early ("round the level to the nearest 1/8th to make the math easier": { iron: 2.625, copper: 0.75 }).
 //     "It's as simple as add up what they came back with and multiply each type of metal with what it is worth and
 //     that's what you get paid." Its payout slip (src/missions.js) is that plain sum. A slip here about it tells the
-//     same amounts, exactly (nothing is told round any more: the amounts are round as they come), in tonnes, an
-//     eighth as a fraction (2 5/8 tonnes, never 2.625).
+//     same amounts, exactly, in tonnes, an eighth as a fraction (2 5/8 tonnes, never 2.625). One that came home with
+//     a canister part full is asked about by the level the player is on (A HAUL THAT CAME HOME EARLY, below): the
+//     whole of it exactly only at the top; lower down approximately, or one part of it.
 // haulOf gives a haul as its lots (`lots`: each metal, its tonnes, what a tonne of it sells for, what that comes to)
 // and its pay as their plain sum. Who is paid what share of it is the contract's (src/missions.js), and the share is
 // collected at this job's controls (its payout card, src/missions.js payoutOrder).
@@ -458,8 +459,12 @@ function eachCard(L, { t, rand, who = null, W, key = 'each', H = null }) {
 // STEP TWO: THE TOTAL SALE PRICE. The load by its amounts, as a slip's rows, and the chart of what each metal sells
 // for beside it: each metal's amount times its price, added up. mine: a haul the player went out for, told as their
 // crew's, its amounts exactly as they came home (L.eighths: whole tonnes and eighths of a tonne, said as fractions).
+// A haul the player went out for that came home with a canister part full (L.eighths, mine) is this slip only at the
+// smelter's top level, and its Work it out goes metal by metal the game's maker's way, with a running total kept for
+// them (hisWay below) and the tip "1/8 of 1000 is 125" on the card.
 function totalCard(L, { t, rand, who = null, W, key = 'pay:total', H = null, mine = false, at = 70 }) {
   const T = L.total, unit = L.unit, units = unit[1], ps = L.parts, k = ps.length, last = k - 1, E = !!L.eighths, am = (x) => (E ? eighthsText(x) : nf(x));
+  const his = mine && E && ps.some((p) => !Number.isInteger(p.amt)) ? hisWay(L) : null;
   const pays = ps.map((p) => Math.round(p.amt * p.m.price)), sold = pays.reduce((a, b) => a + b, 0), parted = ps.some((p) => !Number.isInteger(p.amt));
   const worked = k === 1 ? `${am(ps[0].amt)} × ${credits(ps[0].m.price)} = ${credits(sold)} credits` : `${ps.map((p, i) => `${am(p.amt)} × ${credits(p.m.price)} = ${credits(pays[i])}`).join('; ')}; together ${credits(sold)} credits`;
   const slips = t.shuffle([
@@ -470,20 +475,20 @@ function totalCard(L, { t, rand, who = null, W, key = 'pay:total', H = null, min
     { ...P(sold + ps[0].m.price), slip: 'groupOff', why: `That is a ${unit[0]} of ${ps[0].m.name} too many.` },
     { ...P(sold * 10), slip: 'pointLost', why: 'That is ten times too much. Count the zeros again.' },
   ]);
-  const sums = saleSteps(L, pays);
+  const sums = his ? his.steps : saleSteps(L, pays);
   const story = mine ? `Your crew came home with ${list(ps.map((p) => `${tonnesWords(p.amt, E)} of ${p.m.name}`))}.` : toldLoad(L, W, 'amounts');
-  return madeBy(carriedBy(ownOrder({
-    key: `${key}:${unit === CAN ? 'cans' : 'tonnes'}:${k}`, story, ask: 'What is the total sale price?',
+  return withTally(madeBy(carriedBy(ownOrder({
+    key: his ? 'mine:exact' : `${key}:${unit === CAN ? 'cans' : 'tonnes'}:${k}`, story, ask: 'What is the total sale price?',
     right: P(sold), slips,
     rightWhy: worked,
     sum: sums, chart: chartOf(unit),
     // (its rows, as the payout slip's: a metal and its amount)
     lines: [...ps.map((p) => [cap(p.m.name), amtWords(p.amt, unit, E)]), ['Sold for', '?']],
     help: { title: 'Each metal at its own price', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${am(p.amt)} × ${credits(p.m.price)}`, () => '= ?'), op: k > 1 ? '+' : '', ask: 'the load = ? credits' },
-      line: `A ${unit[0]} of each metal sells for that metal's price on the chart.${E && parted ? ' A part of a tonne sells for that part of the price.' : ''}${k > 1 ? ' Work each metal out, then add them up.' : ''}` },
-    own: { strand: 'money', at }, credit: [{ strand: 'mul', at: 43, weight: 0.5 }],
-    facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct ?? null, amt: p.amt })) }, ans: sold, step: 'total', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}), ...(mine ? { mine: true } : {}) }, size: Math.min(3, k + (k > 1 ? 1 : 0)),
-  }, rand), sums), who);
+      line: `A ${unit[0]} of each metal sells for that metal's price on the chart.${E && parted ? ' A part of a tonne sells for that part of the price.' : ''}${k > 1 ? ' Work each metal out, then add them up.' : ''}${his && k > 1 ? ' Work it out goes metal by metal and keeps the running total for you.' : ''}` },
+    own: { strand: 'money', at }, credit: [{ strand: his ? 'frac' : 'mul', at: his ? 47 : 43, weight: 0.5 }],
+    facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct ?? null, amt: p.amt })) }, ans: sold, step: his ? 'exact' : 'total', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}), ...(mine ? { mine: true } : {}) }, size: Math.min(3, k + (k > 1 ? 1 : 0)),
+  }, rand), sums), who), his, his ? TIP : null);
 }
 // THE WHOLE PAY SLIP IN ONE GO (the top rung, for older kids, with Work it out): the load by its shares and the chart;
 // how much of each metal, each at its price, added up.
@@ -510,6 +515,172 @@ function slipCard(L, { t, rand, who = null, W, H = null }) {
     own: { strand: 'pct', at: 76 }, credit: [{ strand: 'money', at: 66, weight: 0.5 }],
     facts: { load: { unit: units, total: T, parts: ps.map((p) => ({ metal: p.m.name, pct: p.pct, amt: p.amt })) }, ans: sold, step: 'slip', live: !!H, ...(H ? { haul: H.n, from: fromOf(H) } : {}) }, size: 3,
   }, rand), sums), who);
+}
+
+// ── A HAUL THAT CAME HOME EARLY ─────────────────────────────────────────────────────────────────────────────────────
+// The game's maker (2026-11-19), of the slip that told such a haul exactly ("Your crew came home with 3 7/8 tonnes of
+// titanium, 1 3/8 tonnes of gold, 1 tonne of iron and 5/8 of a tonne of copper. What is the total sale price?"):
+// "This is a pretty hard question. I feel like it would only be appropriate at the highest level. You could always say
+// 'You brought approximately 4 tonnes of Titanium, 1 tonne of gold, 1 tonne of iron, and 1 tonne of copper. What is
+// your approximate payout?' Or you could turn it into something like 'You filled a gold canister up to 3/8 of a tonne.
+// How much more would you have gotten if you finished filling it?' hmm.. You could always say 'Tip: 1/8 of 1000 is
+// 125'. I'm curious if we have a good way to 'Work-it-out' If someone has to calculate that out they would need to work
+// out each metal separately and remember the answer to add them all up ... So work-it-out would need to be able to
+// help them with each portion of the multiplication (which in my head I would do like Titanium is 4 * 6000 - (125 *
+// 6)). But then I wouldn't be able to remember 23,250 while I was doing the math for Gold and Copper. So I think this
+// math would be doable as long as work-it-out hold their hand the whole time. But for younger ages just ask
+// 'approximate' questions or just part of the question." And: "I am also fine with rounding."
+// SO a haul the player went out for that came home with a canister part full (partFull: a metal's tonnes not whole,
+// in eighths) is asked about ONCE at the smelter's controls (after the payout card), by the level the player is on:
+// its point on the school guide (0 starting kindergarten .. 80 eighth grade), the same bands as the payout card's
+// forms (src/missions.js payoutOrder: count under 20, adding from 20, parts from 44):
+//   under 20       (counting canisters)                nothing more: the payout card has them count the canisters
+//   20 to 43       APPROXIMATELY (approxCard): each metal to the nearest whole tonne (a half up; a metal under half a
+//                  tonne is left out), "You brought approximately ... What is your approximate payout?"
+//   44 to 75       ONE PART (partCard): one part-full canister, "You filled a gold canister up to 3/8 of a tonne. How
+//                  much more would you have gotten if you finished filling it?", in credits, with the tip
+//   76, the top    THE EXACT QUESTION (totalCard): every metal in eighths, the total sale price, with the tip; Work it
+//                  out goes metal by metal his way and keeps a running total on the sheet (hisWay)
+// A haul that came home with every canister full or empty (whole tonnes) is asked about as before (the pay maker).
+export const MINE_AT = { approx: 20, part: 44, exact: 76 };
+export const TIP = 'Tip: 1/8 of 1000 is 125.';
+const MINE_STEP = { approx: 1, part: 2, exact: 3 }, MINE_KIND = { 1: 'approx', 2: 'part', 3: 'exact' };
+export const partFull = (H) => !!H && !!H.flown && H.lots.some((L) => thousandths(L.tonnes) % 1000 !== 0);
+export const mineKind = (grade) => (grade >= MINE_AT.exact ? 'exact' : grade >= MINE_AT.part ? 'part' : grade >= MINE_AT.approx ? 'approx' : null);
+// the haul told approximately: each metal to the nearest whole tonne (a half rounds up), in the haul's own order (the
+// most first); a metal that rounds to nothing is left out -> [{ m, amt }]
+export const roundLots = (lots) => lots.map((L) => ({ m: L.metal, amt: Math.floor((thousandths(L.tonnes) + 500) / 1000) })).filter((p) => p.amt > 0);
+// the part-full canisters of a haul: a metal fills its own part-full canister first, so each metal has one at most,
+// as full as its tonnes' part of a tonne -> [{ m, n (its eighths) }]
+export const partCans = (lots) => lots.filter((L) => thousandths(L.tonnes) % 1000).map((L) => ({ m: L.metal, n: Math.round((thousandths(L.tonnes) % 1000) / 125) }));
+const an = (w) => (/^[aeiou]/i.test(w) ? 'an' : 'a');
+const ofE = (k) => fracText(simplest(fr(k, 8)));   // eighths as said: 3 -> "3/8", 4 -> "1/2"
+
+// HIS WAY, METAL BY METAL, with the running total kept on the sheet. Each metal: what 1/8 of a tonne of it sells for
+// (his tip: 1/8 of 1,000 is 125, so 1/8 of 6,000 is 6 lots of 125); then, a canister more than half full, from the
+// next whole tonne take away the eighths it is short ("Titanium is 4 * 6000 - (125 * 6)": 3 7/8 tonnes are 4 tonnes
+// less 1/8); half full or less, the whole tonnes and the eighths added. A whole tonne of a metal is its price on the
+// chart, no sum. After each metal but the first, the running total. (Whole tonnes only, the approximate haul: each
+// metal's tonnes times its price, then the running total.)
+// L.parts: [{ m, amt }] -> { steps (sums with what each finds, `uses` where a number is an earlier one's answer),
+// tally: { title, unit, rows: [{ label, note, value, from, to }], totals: [{ after, value }] } }: a row's value is known
+// once sum `to` is done (to < from: from the chart, known when its turn comes); the running total after sum `after`
+function hisWay(L, { about = false } = {}) {
+  const steps = [], rows = [], totals = [], push = (s) => { steps.push(s); return s; };
+  let total = 0, totalStep = null;
+  L.parts.forEach((p, i) => {
+    const name = p.m.name, price = p.m.price, k8 = Math.round(thousandths(p.amt) / 125), w = Math.floor(k8 / 8), n = k8 % 8, from = steps.length;
+    const value = k8 * price / 8, said = about ? `about ${u(w, TONNE)}` : tonnesWords(p.amt, true), chart = `${credits(price)} on the chart`;
+    let last = null, own = '';     // (last: the sum that gives the metal's value; none: its price on the chart)
+    if (!n) {
+      if (w !== 1) last = push({ op: 'mul', a: w, b: price, say: `${cap(name)}: ${said} at ${credits(price)} credits` });
+      else own = ` (1 tonne: ${chart})`;
+    } else {
+      const P = price / 1000, eighth = price / 8, up = n >= 5, whole = up ? w + 1 : w, k = up ? 8 - n : n, tw = (x) => `${x} ${x === 1 ? 'tonne' : 'tonnes'}`;
+      const one = push({ op: 'mul', a: 125, b: P, say: `${cap(name)}, ${said}. First 1/8 of a tonne: 1/8 of 1,000 is 125, so 1/8 of ${credits(price)} is ${P} lots of 125` });
+      const Wh = whole > 1 ? push({ op: 'mul', a: whole, b: price, say: up ? `${cap(said)} is ${ofE(k)} short of ${tw(whole)}. Then the ${tw(whole)}` : `Then the ${tw(whole)}` }) : null;
+      const Ek = k > 1 ? push({ op: 'mul', a: k, b: eighth, say: `Then the ${ofE(k)} of a tonne${up ? ' it is short' : ''}: ${k} lots of what 1/8 sells for`, uses: { b: one } }) : one;
+      if (!whole) last = Ek;
+      else {
+        const wt = whole === 1 ? `1 tonne (${chart})` : tw(whole);
+        last = push({ op: up ? 'sub' : 'add', a: whole * price, b: k * eighth, say: `So the ${name} sells for ${wt} ${up ? 'less' : 'and'} ${ofE(k)}`, uses: { ...(Wh ? { a: Wh } : {}), b: Ek } });
+      }
+    }
+    if (i === 0) { total = value; totalStep = last; }
+    else {
+      total += value;
+      totalStep = push({ op: 'add', a: total - value, b: value, say: `Running total: ${i === 1 ? `the ${L.parts[0].m.name} and the ${name}` : `and the ${name}`}${own}`, uses: { ...(rows.length && totals.length && totals[totals.length - 1].step ? { a: totals[totals.length - 1].step } : {}), ...(last ? { b: last } : {}) } });
+    }
+    rows.push({ label: cap(name), note: said, value, from, to: last ? steps.indexOf(last) : from - 1 });
+    totals.push({ after: totalStep ? steps.indexOf(totalStep) : from - 1, value: total, step: totalStep });
+  });
+  return { steps, tally: { title: about ? 'Approximately' : 'Running total', unit: 'credits', rows, totals: totals.map(({ after, value }) => ({ after, value })) } };
+}
+// a card's tally (hisWay's) and tip put on it: the tally only where Work it out is sums in steps that it follows
+function withTally(o, his, tip = null) {
+  if (his && o.sum && o.sum.chain && o.sum.chain.length === his.steps.length) o.tally = his.tally;
+  if (tip) o.tip = tip;
+  return o;
+}
+
+// APPROXIMATELY: the game's maker's own sentence, each metal to the nearest whole tonne; the chart beside it
+function approxCard(H, { t, rand, who = null }) {
+  const told = roundLots(H.lots);
+  if (!told.length) return null;
+  const L = { unit: TONNE, total: told.reduce((s, p) => s + p.amt, 0), haul: H.n, parts: told }, ps = told, k = ps.length, last = k - 1;
+  const pays = ps.map((p) => p.amt * p.m.price), sold = pays.reduce((a, b) => a + b, 0), T = L.total, his = hisWay(L, { about: true });
+  const slips = t.shuffle([
+    ...(k > 1 ? [{ ...P(T * ps[0].m.price), slip: 'onePrice', why: `That sells all ${T} tonnes at ${ps[0].m.name}'s price. Each metal has its own price on the chart.` },
+      { ...P(ps.reduce((s, p) => s + p.m.price, 0)), slip: 'pricesOnly', why: 'That adds up the prices of one tonne of each metal. Multiply each metal\'s tonnes by its price first.' },
+      { ...P(sold - pays[last]), slip: 'part', why: `That leaves out the ${ps[last].m.name}. Every metal is sold: add them all.` }]
+      : [{ ...P(ps[0].m.price), slip: 'oneTonne', why: `${credits(ps[0].m.price)} credits is what one tonne sells for. There are about ${u(ps[0].amt, TONNE)}.` },
+        ...(ps[0].amt > 1 ? [{ ...P(sold - ps[0].m.price), slip: 'groupOff', why: `That is a tonne short. There are about ${u(ps[0].amt, TONNE)}.` }] : [])]),
+    { ...P(sold + ps[0].m.price), slip: 'groupOff', why: `That is a tonne of ${ps[0].m.name} too many.` },
+    { ...P(sold * 10), slip: 'pointLost', why: 'That is ten times too much. Count the zeros again.' },
+  // (the haul's exact pay is never offered as a wrong answer: it is what it really sold for)
+  ]).filter((s) => s.v !== Math.round(H.pay * 100));
+  const worked = k === 1 ? `About ${ps[0].amt} × ${credits(ps[0].m.price)} = ${credits(sold)} credits.` : `About ${ps.map((p) => (p.amt === 1 ? credits(p.m.price) : `${p.amt} × ${credits(p.m.price)}`)).join(' + ')} = ${credits(sold)} credits.`;
+  const o = ownOrder({
+    key: 'mine:approx', story: `You brought approximately ${list(ps.map((p) => `${u(p.amt, TONNE)} of ${p.m.name}`))}.`, ask: 'What is your approximate payout?',
+    right: P(sold), slips,
+    rightWhy: `${worked} The haul sold for ${credits(H.pay)} credits exactly.`,
+    sum: his.steps.length ? his.steps : null, chart: chartOf(TONNE),
+    help: { title: 'Each metal at its own price', pic: { kind: 'boxes', boxes: boxesOf(L, (p) => `${p.amt} × ${credits(p.m.price)}`, () => '= ?'), op: k > 1 ? '+' : '', ask: 'about ? credits' },
+      line: `Each metal's tonnes times its price on the chart.${k > 1 ? ' Work each metal out, then add them up.' : ''} One tonne of a metal sells for its price.` },
+    own: { strand: 'money', at: 30 }, credit: [{ strand: 'add', at: 30, weight: 0.5 }],
+    facts: { load: { unit: 'tonnes', total: T, parts: ps.map((p) => ({ metal: p.m.name, amt: p.amt })) }, ans: sold, exact: H.pay, step: 'approx', mine: true, live: true, haul: H.n, from: fromOf(H) }, size: Math.min(3, k),
+  }, rand);
+  return withTally(madeBy(his.steps.length ? carriedBy(o, his.steps) : o, who), his);
+}
+
+// ONE PART: one part-full canister, and what filling it would have brought, in credits; the chart and the tip beside it
+function partCard(H, { t, rand, who = null }) {
+  const cans = partCans(H.lots);
+  if (!cans.length) return null;
+  const { m, n } = t.pick(cans), name = m.name, price = m.price, left = 8 - n, eighth = price / 8, ans = left * eighth, have = tonnesWords(n / 8, true), empty = tonnesWords(left / 8, true);
+  const S = (k, slip, why) => ({ ...P(k * eighth), slip, why });
+  const slips = t.shuffle([
+    S(n, 'filled', `That is what the ${have} already in it sells for. The question is the part still empty: ${empty}.`),
+    S(8, 'whole', `${credits(price)} credits is a whole tonne of ${name}. ${cap(have)} is already in the canister.`),
+    ...(left > 1 ? [S(1, 'oneEighth', `That is 1/8 of a tonne. ${cap(empty)} is ${left} lots of 1/8.`)] : []),
+    ...(left + 1 < 8 ? [S(left + 1, 'off', `That is ${ofE(left + 1)} of a tonne. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
+    ...(left - 1 >= 1 ? [S(left - 1, 'off', `That is ${ofE(left - 1)} of a tonne. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
+    { ...P(ans * 10), slip: 'pointLost', why: 'That is ten times too much. Count the zeros again.' },
+  ]);
+  const one = { op: 'mul', a: 125, b: price / 1000, say: `Then what 1/8 of a tonne of ${name} sells for: 1/8 of 1,000 is 125, so 1/8 of ${credits(price)} is ${price / 1000} lots of 125` };
+  const gap = { op: 'sub', a: 8, b: n, say: `First the eighths still empty: a full canister is 8/8 of a tonne, and ${n}/8 ${n % 2 ? '' : `(${have}) `}is in it` };
+  const steps = left > 1 ? [gap, one, { op: 'mul', a: left, b: eighth, say: `Then the ${left}/8 still empty: ${left} lots of that`, uses: { a: gap, b: one } }] : [gap, one];
+  const ofIt = n % 2 ? '' : ` (${n}/8)`;
+  return madeBy(carriedBy(ownOrder({
+    key: 'mine:part', story: `You filled ${an(name)} ${name} canister up to ${have}.`, ask: 'How much more would you have gotten if you finished filling it?',
+    right: P(ans), slips,
+    rightWhy: `A full canister is 8/8 of a tonne. ${cap(have)}${ofIt} is in it, so ${left}/8 is still empty. 1/8 of ${credits(price)} is ${credits(eighth)}, and ${left} × ${credits(eighth)} = ${credits(ans)} credits.`,
+    sum: steps, chart: chartOf(TONNE),
+    help: { title: 'The part still empty', pic: { kind: 'canfill', d: 8, have: n, glow: glowOf(name), top: `a full ${name} canister: 1 tonne, ${credits(price)} credits`, line: `${have} in it, ${left}/8 still empty`, ask: `${left} lots of 1/8 of ${credits(price)} = ? credits` },
+      line: `A full canister holds 1 tonne: 8 eighths. Count the eighths still empty, find what 1/8 of a tonne of ${name} sells for, then take that many of them.` },
+    own: { strand: 'frac', at: 47 }, credit: [{ strand: 'money', at: 47, weight: 0.5 }],
+    facts: { metal: name, n, left, ans, step: 'part', mine: true, live: true, haul: H.n, from: fromOf(H) }, size: 2,
+  }, rand), steps), who);
+  // (the tip goes on as the card is made: mineCard)
+}
+
+// the slip about a haul home early, of a kind: 'approx' | 'part' | 'exact' (null: none of that kind can be told of it)
+export function mineCard(H, kind, { t, rand = Math.random, who = null }) {
+  if (!partFull(H)) return null;
+  if (kind === 'approx') return approxCard(H, { t, rand, who });
+  if (kind === 'part') { const o = partCard(H, { t, rand, who }); if (o) o.tip = TIP; return o; }
+  const L = { unit: TONNE, total: H.tonnes, haul: H.n, eighths: true, parts: H.lots.map((x) => ({ m: x.metal, amt: x.tonnes })) };
+  return totalCard(L, { t, rand, W: null, who, key: 'mine:exact', H, mine: true, at: MINE_AT.exact });
+}
+// whether a kind can be told of the haul: the approximate one needs a metal of half a tonne or more
+const canTell = (H, kind) => partFull(H) && (kind !== 'approx' || roundLots(H.lots).length > 0);
+// THE SMELTER'S OWN PICK of a slip (engine.js make: before the level's own mix): the haul in the hangar the player went
+// out for, home with a canister part full, not asked about yet at this kind -> { maker: 'mine', step }; else null
+function pickAsk(mix, { live = null } = {}) {
+  if (!live) return null;
+  const H = haulOf(live.round), L = PLACE.levels.find((x) => x.gen.mix === mix), kind = L && Number.isFinite(L.grade) ? mineKind(L.grade) : null;
+  if (!kind || !canTell(H, kind) || !isNew(live, 'mine', kind)) return null;
+  return { maker: 'mine', step: MINE_STEP[kind], w: 1 };
 }
 
 export const MAKERS = {
@@ -877,7 +1048,8 @@ export const MAKERS = {
   // step 1  one metal: its tonnes times what a tonne of it sells for (2.8 tonnes of cobalt at 5,000 credits a tonne)
   // step 2  THE TWO STEPS, two slips about one load: how much of each metal (eachCard), then the total sale price by
   //         the chart (totalCard). Once a haul the first load is the Miner's own haul in the hangar; a haul the player
-  //         went out for is told by its amounts as they came home, on one slip (they are known: there is no first step)
+  //         went out for that came home in whole tonnes is told by its amounts, on one slip (they are known: there is
+  //         no first step). (One home with a canister part full: the `mine` maker, by the level)
   // step 3  the whole pay slip in one go: the shares and the chart (slipCard)
   pay: {
     strand: 'dec', at: (step) => (step <= 1 ? 66 : step === 2 ? 70 : 76),
@@ -908,9 +1080,9 @@ export const MAKERS = {
       }
       const H = live ? haulOf(live.round) : null;
       // A HAUL THE PLAYER WENT OUT FOR, once at each of these rungs, by the payout slip's own pattern: each metal's
-      // tonnes at its price, added up. Its amounts are told as they came home: whole tonnes when all eight canisters
-      // were full, eighths of a tonne (as fractions) when the crew headed home early
-      if (H && H.flown && isNew(live, 'pay:mine', step)) {
+      // tonnes at its price, added up, in whole tonnes. (One that came home with a canister part full is the smelter's
+      // own pick, by the level: the `mine` maker, A HAUL THAT CAME HOME EARLY above)
+      if (H && H.flown && !partFull(H) && isNew(live, 'pay:mine', step)) {
         used(live, 'pay:mine', step);
         const L = { unit: TONNE, total: H.tonnes, haul: H.n, eighths: inEighths(H.lots), parts: H.lots.map((x) => ({ m: x.metal, amt: x.tonnes })).sort((p, q) => q.amt - p.amt || p.m.price - q.m.price) };
         return totalCard(L, { t, rand, W, key: 'pay:mine', H, mine: true, at: step === 2 ? 70 : 76 });
@@ -926,6 +1098,22 @@ export const MAKERS = {
       const HO = ownHaul(live, 'pay:haul', 3);
       const L = HO ? haulLoad(HO) : loadOf(t, { ks: [2, 3], kinds: frac < 0.5 ? ['cans8', 'cans', 'tonnes'] : ['cans8', 'cans', 'tonnes', 'tenths', 'tenths'] });
       return slipCard(L, { t, rand, who, W, H: HO });
+    },
+  },
+
+  // ── a haul the player went out for that came home with a canister part full (A HAUL THAT CAME HOME EARLY, above):
+  // dealt by the smelter's own pick (pickAsk), once a haul for each kind, never from a level's mix
+  // step 1  approximately: each metal to the nearest whole tonne, the approximate payout
+  // step 2  one part: one part-full canister, what filling it would have brought
+  // step 3  the exact question: every metal in eighths, the total sale price; Work it out his way, a running total kept
+  mine: {
+    strand: 'money', at: (step) => [30, 47, MINE_AT.exact][Math.max(1, Math.min(3, step)) - 1],
+    make(step, { rand = Math.random, live = null, who = null } = {}) {
+      const t = kit(rand), kind = MINE_KIND[Math.max(1, Math.min(3, step))], H = live ? haulOf(live.round) : null;
+      const o = H && canTell(H, kind) ? mineCard(H, kind, { t, rand, who }) : null;
+      if (!o) throw new Error(`smelter mine: no haul home early in the hangar to ask about (${kind})`);
+      used(live, 'mine', kind);
+      return o;
     },
   },
 };
@@ -983,6 +1171,6 @@ export const JOB = {
   // and its ladle (the crew member stands at the console, in view)
   view: 'smelter-controls',
   sign: 'Smelter controls', hint: 'Work out what the haul sells for',
-  place: PLACE, setting: SETTING, makers: MAKERS,
+  place: PLACE, setting: SETTING, makers: MAKERS, pickAsk,
   card: 'payslip',
 };

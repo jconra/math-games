@@ -7,7 +7,8 @@
 //   the card         the job's scene (a recipe card in the galley, a patient chart at the triage desk, a pay slip at
 //                    the smelter: its rows in place of the story where the order has them, and beside them the
 //                    chart of what each metal sells for where the order has one), the story and the
-//                    question, and for the youngest the things to count drawn on it
+//                    question, and for the youngest the things to count drawn on it; under the question a tip where
+//                    the order has one (o.tip: the smelter's "Tip: 1/8 of 1000 is 125." where eighths of a tonne are asked)
 //   the answers      four buttons, each the number big and its unit small under it (an answer that is a set of
 //                    numbers, the smelter's "how much of each metal": a row for each, its name and its number). No
 //                    key numbers on them (keys 1 to 4 still pick). A wrong pick shakes and goes dull with one plain line why, and the Help button
@@ -164,7 +165,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     card.innerHTML = `${sceneHtml(o)}
       ${o.chart ? `<div class="pnj-beside"><div>${storyHtml(o)}</div><div class="pnj-prices">${priceChart(o.chart)}</div></div>` : storyHtml(o)}
       ${lead ? `<div class="pnj-pic is-lead${o.tap ? ' is-tap' : ''}${pic && pic.flip && !o.lead ? ' is-flip' : ''}">${lead}</div>` : ''}
-      <p class="pnj-ask">${esc(o.ask)}</p>`;
+      <p class="pnj-ask">${esc(o.ask)}</p>${o.tip ? `<p class="pnj-tip">${esc(o.tip)}</p>` : ''}`;
     answers.innerHTML = '';
     answers.classList.toggle('is-wide', o.coins.some((c) => !c.rows && String(c.big).length > 7));
     // (answers that are sets of numbers: a row for each, the name and the number)
@@ -418,7 +419,8 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
       if (s.chain) chain = s.chain.map((x) => ({ work: workOf(x), sum: x, say: x.say || '', carried: x.carried || null }));
       else work = workOf(s);
     } catch (e) { console.warn(e); return; }
-    sheet = openLongWork(document.body, { work, chain, title: 'Work it out', ask: q.order.ask, closeLabel: 'Close', free: true, stay: true,
+    // (a running total kept on the sheet where the order has one: the smelter's haul, metal by metal)
+    sheet = openLongWork(document.body, { work, chain, tally: chain ? q.order.tally || null : null, title: 'Work it out', ask: q.order.ask, closeLabel: 'Close', free: true, stay: true,
       onClose: () => { sheet = null; }, onGone: () => { sheet = null; } });
   });
 
@@ -451,6 +453,8 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     el, close, pick, help, step,
     state: () => ({ job: job.id, level: q && q.level.id, levelN: E.level(crew, job), story: q && q.order.story, ask: q && q.order.ask, coins: q ? q.order.coins.map((c) => ({ label: c.label, good: c.good })) : [],
       key: q && q.order.key, facts: q && q.order.facts, tap: q && q.order.tap ? { map: q.order.tap.map, at: q.order.tap.at } : null,
-      right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, waiting: answers.classList.contains('is-waiting'), help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet }),
+      right: q ? q.order.coins.findIndex((c) => c.good) : -1, busy, waiting: answers.classList.contains('is-waiting'), help: helpOn, done: q && q.done, credits: E.credits(crew), sheet: !!sheet,
+      // (the rigs: the worked sheet's own state, its step and its answers; the card's tip)
+      paper: sheet && sheet.state ? sheet.state() : null, tip: q ? q.order.tip || null : null }),
   };
 }

@@ -364,9 +364,13 @@ test('a haul the player went out for is one haul on every slip: its store in the
     assert.deepEqual([P.sold, P.share, P.pay], [MS.forecast({ store }).sold, 10, MS.forecast({ store }).pay]);
     if (n % 7) { flownHaul(n, null); return; }
     // ... and the smelter's own slip about that haul says the same: its amounts as they came home (whole tonnes; home
-    // early, eighths of a tonne as fractions), each at its price on the chart, added up: the payout's own total
-    const pay = M.pay.make(2, { rand, live: live(n) });
+    // early, eighths of a tonne as fractions), each at its price on the chart, added up: the payout's own total (home
+    // early with a canister part full: that slip is the top level's only, the `mine` maker's step 3)
+    const early = TONNES3[i] < 8, pay = early ? M.mine.make(3, { rand, live: live(n) }) : M.pay.make(2, { rand, live: live(n) });
     assert.equal(pay.facts.from, 'Your crew\'s haul'); assert.equal(pay.facts.mine, true); assert.equal(rightOf(pay), P.sold, pay.story);
+    assert.equal(pay.key.startsWith(early ? 'mine:exact' : 'pay:mine'), true, pay.key);
+    // (home early, the pay maker's own slip about it is no longer asked: it would be the exact one at a lower rung)
+    if (early) assert.notEqual(M.pay.make(2, { rand, live: live(n) }).facts.mine, true);
     assert.deepEqual(Object.fromEntries(pay.facts.load.parts.map((x) => [x.metal, x.amt])), store);
     assert.ok(!/about/i.test(`${pay.story} ${pay.ask} ${pay.rightWhy}`), pay.story); assert.ok(!('about' in pay.facts) && !('sold' in pay.facts));
     assert.ok(/Your crew came home with/.test(pay.story) && !/canister|\d\.\d/.test(pay.story), pay.story);

@@ -13,7 +13,7 @@ import * as DR from '../src/drill.js';
 import { MISSIONS } from '../src/missions.js';
 import { DRILL, VEIN, ORE, SHAPES, KINDS, ODDS, NAMES, makeRock, makeField, makeRun, drillHole, holeWorth, bestHole, take, oreLeft, oreBy, scanOf, rockSells, emptyCans, stow, roomFor, storeOf, roundCans, crewLoad, seeded as seed } from '../src/drill.js';
 import { JOB as drill, SHARE } from '../src/jobs/drill.js';
-import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, lotsWords, tonnesWords, eighthsText, priceOf, METALS, CARRIES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
+import { JOB as smelter, haulOf, flownHaul, forget, partFull, sellsFor, lotsWords, tonnesWords, eighthsText, priceOf, METALS, CARRIES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
 import { helpPicture, PALE } from '../src/jobs/pics.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PLACE } from '../../mathwood-valley/src/levels/places.js';
@@ -434,6 +434,7 @@ test('home from a run at the drill: the load is one haul on every slip, the payo
   const live = (round) => ({ round, canisters: CARRIES, phase: 'unload', onShip: 5, fullOnShip: 5, docked: [{ socket: 0, percent: 0 }, { socket: 1, percent: 30 }, { socket: 2, percent: 90 }], drained: 1, onRack: 8, carried: 0,
     steady: { onShip: 60, fullOnShip: 60, docked: 60, drained: 60, onRack: 60 } });
   const M = smelter.makers, rand = seeded(17); let fullRuns = 0, earlyRuns = 0, fracs = 0;
+  E.register(smelter);   // (the levels' points on the school guide: the smelter's own pick reads them)
   // (runs played until all eight are full, and runs that head home after one, two or three rocks)
   for (let s = 1; s <= 16; s++) for (const rocks of [Infinity, 1, 2, 3]) {
     const roles = [['drill'], ['pilot', 'drill'], ['pilot', 'drill', 'engineer']][s % 3], n = 20 + s; forget(); flownHaul(n, null);
@@ -456,9 +457,15 @@ test('home from a run at the drill: the load is one haul on every slip, the payo
     });
     assert.ok(!/\d\.\d/.test(lotsWords(P.lots)), lotsWords(P.lots));
     // THE SMELTER'S SLIP about this haul reads by the same pattern (each metal's tonnes at its price, added up), its
-    // amounts exactly as they came home, and its answer is what the payout says the haul sold for; once at each rung
-    for (const step of [2, 3]) {
-      const o = M.pay.make(step, { rand, live: live(n) }), f = o.facts, why = `${why0} at step ${step}: ${o.story}`;
+    // amounts exactly as they came home, and its answer is what the payout says the haul sold for; once at each rung.
+    // (Home with a canister part full, that slip is the top level's only: the `mine` maker's step 3, the smelter's own
+    // pick; the pay maker's rungs then deal their slips from the log)
+    const early = partFull(H), top = smelter.place.levels[smelter.place.levels.length - 1].gen.mix, L0 = live(n);
+    if (early) for (const step of [2, 3]) assert.notEqual(M.pay.make(step, { rand, live: live(n) }).facts.mine, true, `${why0}: the pay maker's slip about a haul home early`);
+    // (the top level's own pick: the haul home early, not asked about yet)
+    assert.deepEqual(smelter.pickAsk(top, { live: L0 }), early ? { maker: 'mine', step: 3, w: 1 } : null);
+    for (const step of early ? [3] : [2, 3]) {
+      const o = (early ? M.mine : M.pay).make(step, { rand, live: live(n) }), f = o.facts, why = `${why0} at step ${step}: ${o.story}`;
       assert.equal(f.from, 'Your crew\'s haul'); assert.equal(f.mine, true); assert.equal(f.haul, n); assert.equal(f.ans, P.sold); assert.equal(rightOf(o), P.sold, why);
       assert.deepEqual(Object.fromEntries(f.load.parts.map((p) => [p.metal, p.amt])), store, why); assert.equal(f.load.total, total);
       for (let i = 1; i < f.load.parts.length; i++) assert.ok(f.load.parts[i].amt <= f.load.parts[i - 1].amt, 'the most first');
@@ -472,8 +479,10 @@ test('home from a run at the drill: the load is one haul on every slip, the payo
       assert.deepEqual(o.lines.slice(0, -1).map(([k, v]) => [k.toLowerCase(), v]), f.load.parts.map((p) => [p.metal, tonnesWords(p.amt, true)])); assert.deepEqual(o.lines[o.lines.length - 1], ['Sold for', '?']);
       // its sums are whole-number sums that end on the answer: a part of a tonne is what one part sells for, then so many of them
       const chain = o.sum.chain || [o.sum]; for (const x of chain) assert.ok(Number.isInteger(x.a) && Number.isInteger(x.b), `${why}: ${JSON.stringify(x)}`);
-      const end = chain[chain.length - 1], ends = end.op === 'add' ? end.a + end.b : end.op === 'mul' ? end.a * end.b : end.a / end.b; assert.equal(ends, P.sold, why);
-      assert.notEqual(M.pay.make(step, { rand, live: live(n) }).facts.mine, true, 'once a haul at each rung: then slips from the log');
+      const end = chain[chain.length - 1], ends = end.op === 'add' ? end.a + end.b : end.op === 'sub' ? end.a - end.b : end.op === 'mul' ? end.a * end.b : end.a / end.b; assert.equal(ends, P.sold, why);
+      // once a haul: then the level's own slips
+      if (early) assert.equal(smelter.pickAsk(top, { live: L0 }), null, 'once a haul');
+      else assert.notEqual(M.pay.make(step, { rand, live: live(n) }).facts.mine, true, 'once a haul at each rung: then slips from the log');
     }
     // the slips that ask a share of the haul in the hangar are from the log (its shares need not be quarters of the load)
     for (const o of [M.each.make(1, { rand, live: live(n) }), M.part.make(1, { rand, live: live(n) }), M.part.make(2, { rand, live: live(n) })]) assert.equal(o.facts.live, false, o.story);

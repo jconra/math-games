@@ -353,13 +353,16 @@ test('the smelter: every level, over many seeds, deals slips with one right answ
     seen.add(o.key);
   });
   // (the ladder's own kinds of slip all came up)
-  for (const k of ['pay:each', 'pay:total', 'pay:slip', 'pay:mine', 'each', 'lots:whole', 'lots:mixed', 'weigh:lots', 'part:one', 'part:some', 'percent:any']) assert.ok([...seen].some((x) => x.startsWith(k)), `no ${k} slip`);
+  for (const k of ['pay:each', 'pay:total', 'pay:slip', 'pay:mine', 'each', 'lots:whole', 'lots:mixed', 'weigh:lots', 'part:one', 'part:some', 'percent:any', 'mine:approx', 'mine:part', 'mine:exact']) assert.ok([...seen].some((x) => x.startsWith(k)), `no ${k} slip`);
 });
 
 test('the smelter: no question names both tonnes and canisters, and a canister is never a part of a tonne', () => {
   let tonnes = 0, cans = 0;
   everySlip((o, L) => {
     const text = `${wordsOf(o)} ${helpPicture(o).svg.replace(/<[^>]+>/g, ' ')} ${o.chart ? o.chart.title : ''}`, t = /\btonnes?\b/i.test(text), c = /\bcanisters?\b/i.test(text);
+    // (one card is the game's maker's own sentence about one canister and how full it is, in tonnes: "You filled a
+    // gold canister up to 3/8 of a tonne. How much more would you have gotten if you finished filling it?")
+    if (o.key === 'mine:part') { assert.ok(/^You filled an? \w+ canister up to [\d/ ]+ (of a )?tonnes?\.$/.test(o.story), o.story); tonnes++; return; }
     assert.ok(!(t && c), `${L.id}: tonnes and canisters in one question: ${text}`);
     if (t) tonnes++; if (c) cans++;
     assert.ok(!(c && /of a tonne|\d\.\d/.test(`${o.story} ${o.ask}`)), `${L.id}: a canister with a part of a tonne: ${o.story}`);
