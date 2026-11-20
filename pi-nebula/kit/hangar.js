@@ -106,7 +106,9 @@ function roundFace(z) {
   // rings of quads from the round hole out to the 4 x 3 m edge, along rays from the hole's centre
   const m = new MeshData(), T = [0, 0.04, 0.12, 0.26, 0.48, 0.74, 1], N = 48, ang = [];
   for (let i = 0; i < N; i++) ang.push(i / N * PI * 2);
-  for (const [x, y] of [[AHALF, 0], [AHALF, H], [-AHALF, H], [-AHALF, 0]]) ang.push(Math.atan2(y - AC, x));
+  // (the corners' angles in the same 0..2 pi as the rest: the lower two came out below 0 and sorted to the front, and
+  // the quad between them closed the round hole's lower part with a flat panel, a wall nobody could step through)
+  for (const [x, y] of [[AHALF, 0], [AHALF, H], [-AHALF, H], [-AHALF, 0]]) ang.push((Math.atan2(y - AC, x) + PI * 2) % (PI * 2));
   ang.sort((a, b) => a - b);
   const pts = ang.map((a) => {
     const c = Math.cos(a), s = Math.sin(a), t = Math.min(Math.abs(c) > 1e-9 ? AHALF / Math.abs(c) : Infinity, s > 1e-9 ? (H - AC) / s : s < -1e-9 ? AC / -s : Infinity);
@@ -136,7 +138,10 @@ export function airlock(p, v) {
     }
     q.sweep('black', rrect(0.08, 0.06, 0.012, 2, 0.04, 0.02), ringPath(AR + 0.36, z + 0.01), { closed: true });
     for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * PI * 2; q.cyl('grey', 0.016, 0.014, [Math.cos(a) * (AR + 0.4), AC + Math.sin(a) * (AR + 0.4), z + 0.05], [PI / 2, 0, 0], 10); }
-    q.slab('gun', -0.75, 0.75, 0, 0.235, z, z + 0.32, { r: 0.012 }); q.slab('yellow', -0.75, 0.75, 0.226, 0.236, z + 0.28, z + 0.32, { r: 0.004 });   // (the step up)
+    // (the step up: deep enough that a person standing on the floor at its edge is clear of the raised sill, so they
+    // can step onto it: src/walls.js feels a person's body as a ring 0.28 m round; at 0.32 m deep the ring met the sill
+    // before the feet reached the step)
+    q.slab('gun', -0.75, 0.75, 0, 0.235, z, z + 0.46, { r: 0.012 }); q.slab('yellow', -0.75, 0.75, 0.226, 0.236, z + 0.42, z + 0.46, { r: 0.004 });
     // four docking clamps round the ring, each with an amber light
     for (const a of [PI / 4, 3 * PI / 4, 5 * PI / 4, 7 * PI / 4]) {
       const cx = Math.cos(a) * (AR + 0.6), cy = AC + Math.sin(a) * (AR + 0.6);
@@ -155,14 +160,28 @@ export function airlock(p, v) {
   p.slab('gun', -0.6, 0.6, AC - AR - 0.02, AC - AR + 0.012, -ASKIN - 0.03, ASKIN + 0.03, { r: 0.006 });
   const leafR = AR + 0.03;
   if (outer) {
-    // a sealed round door with a porthole to space
-    const pts = []; for (let i = 0; i < 48; i++) { const a = i / 48 * PI * 2; pts.push([Math.cos(a) * leafR, Math.sin(a) * leafR]); }
-    const hole = []; for (let i = 47; i >= 0; i--) { const a = i / 48 * PI * 2; hole.push([Math.cos(a) * 0.3, Math.sin(a) * 0.3 + 0.25]); }
-    p.extrude('white2', pts, 0.1, 0.014, { holes: [hole] }).translate(0, AC, -0.05);
-    p.sweep('black', rrect(0.06, 0.13, 0.01, 2, -0.03, 0), ringPath(0.3, 0).map((f) => ({ ...f, p: f.p.clone().add(v3(0, 0.25, 0)) })), { closed: true });
-    p.glass(0.6, 0.6, [0, AC + 0.25, -0.03]);
-    for (const a of [0, PI / 2, PI, 3 * PI / 2]) p.box('black', [0.5, 0.1, 0.05], [Math.cos(a) * 0.65, AC + Math.sin(a) * 0.65 - (a === 3 * PI / 2 ? 0 : 0), 0.06], [0, 0, a], { r: 0.012 });
-    p.slab('band', -0.7, 0.7, AC - 0.5, AC - 0.3, 0.05, 0.065, { r: 0.006 });
+    // a sealed round door with a porthole to space, in two halves that slide apart into the bulkhead as the inner door's
+    // do: it opens once there is somewhere to go (the bridge to the ship at the dock, built: src/dockwalk.js); until then
+    // it leads nowhere and stays shut (src/walls.js: a door with no floor beyond it is locked). Each half its own leaf
+    // (sx -1 the left, 1 the right), so the clamps and the band stay on the door's one face. (Its porthole's middle is
+    // on the line between them, as the inner door's window is.)
+    const PR = 0.3, PY = 0.25;
+    const half = (q, sx) => {
+      const X = (x) => -sx * x, pts = [];   // (drawn as the left half, x <= 0; the right one mirrored)
+      for (let i = 0; i <= 24; i++) { const a = -PI / 2 - PI * i / 24; pts.push([X(Math.cos(a) * leafR), Math.sin(a) * leafR]); }
+      pts.push([0, PY + PR]); for (let i = 1; i < 12; i++) { const a = PI / 2 + PI * i / 12; pts.push([X(Math.cos(a) * PR), PY + Math.sin(a) * PR]); } pts.push([0, PY - PR]);
+      q.extrude('white2', pts, 0.1, 0.014).translate(0, AC, -0.05);
+      const arc = []; for (let i = 0; i <= 12; i++) { const a = PI / 2 + PI * i / 12, c = Math.cos(a), s = Math.sin(a); arc.push({ p: v3(X(c * PR), AC + PY + s * PR, 0), x: v3(X(c), s, 0), y: v3(0, 0, 1) }); }
+      q.sweep('black', rrect(0.06, 0.13, 0.01, 2, -0.03, 0), arc, { caps: true });
+      const pane = []; for (let i = 0; i <= 12; i++) { const a = PI / 2 + PI * i / 12; pane.push([X(Math.cos(a) * (PR + 0.01)), PY + Math.sin(a) * (PR + 0.01)]); }
+      for (const back of [false, true]) { const g = flat(pane, 0.0005); g.translate(0, AC, -0.03); if (back) g.scale(1, 1, -1); q.add('glass', g); }
+      // (its clamp at the side, and its half of the ones at the top and the bottom; its half of the band)
+      q.box('black', [0.5, 0.1, 0.05], [X(-0.65), AC, 0.06], [0, 0, 0], { r: 0.012 });
+      for (const y of [0.65, -0.65]) q.box('black', [0.05, 0.5, 0.05], [X(-0.025), AC + y, 0.06], [0, 0, 0], { r: 0.012 });
+      q.slab('band', sx < 0 ? -0.7 : 0, sx < 0 ? 0 : 0.7, AC - 0.5, AC - 0.3, 0.05, 0.065, { r: 0.006 });
+    };
+    for (const sx of [-1, 1]) p.leaf('airlock-outer:' + sx, (q) => half(q, sx), { slide: [sx * AR, 0, 0], door: 0 });
+    p.door(0, [0, 1.2, 0], 2.8, 1.1);
     return;
   }
   const leaf = (q) => {

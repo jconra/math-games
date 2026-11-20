@@ -2,7 +2,7 @@
 // own deck plan, as near as this hull allows"), checked on the space measured inside it as the Ship Lab checks it; its
 // engineer's spot found as the other ships' are; nothing of a cargo bay inside (2026-11-19: "we decided to do the
 // external cargo containers rather than have the pallets on the inside"); its containers a mix of ribbed boxes and
-// tanks (HAUL-2); all six of its pods turning thrusters and its front legs folding into the cab's belly (HAUL-5); and
+// tanks (HAUL-2), which where at random (HAUL3-1); all six of its pods turning thrusters and its front legs folding into the cab's belly (HAUL-5); and
 // its kit named as the other three ships' kits are, so whatever shared code reads one ship reads it too (his words:
 // "the ships will basically all fly the same and share the same class"). No browser: plain data and the modules' text.
 // (Where it waits, at the dock, is placed in a page: ~/pw/space-math/rigs/hauler-3/steps_dockcheck.js measures it.)
@@ -89,11 +89,14 @@ test('the ship as built: the cockpit for four is its own, with the rooms inside 
   assert.ok(!BP.swap, 'his plan needs no swap of its own: the ship\'s cockpit is already the one for four');
 });
 
-test('the containers: some ribbed steel boxes, some eight-sided tanks, four and four, the two sides alike', () => {
-  const mix = block('CARGO_MIX'), looks = readFileSync(here('kit/ships/cargo-container.js'), 'utf8');
-  assert.match(mix, /upper: 'ribbed'/); assert.match(mix, /lower: 'tank'/);
+test('the containers: each a ribbed steel box or an eight-sided tank, at random, drawn when it is made (HAUL3-1)', () => {
+  const looks = readFileSync(here('kit/ships/cargo-container.js'), 'utf8');
   assert.match(looks, /\n  ribbed: \{/); assert.match(looks, /\n  tank: \{/);
   assert.match(block('CARGO_LOOK'), /look: 'mix'/);
+  // (no fixed mix left: every mount's look comes from the draw, kit/ships/cargo-mix.js; tests/dockwalk.test.mjs)
+  assert.ok(!/CARGO_MIX/.test(KIT), 'no fixed mix');
+  assert.match(KIT, /import \{ drawMix as drawLooks \} from '\.\/cargo-mix\.js'/);
+  assert.match(KIT, /export function drawMix\(rand = Math\.random\) \{\n  const L = drawLooks\(MOUNTS\.map\(\(m\) => m\.name\), rand\);/);
   const mounts = placed('hbContainer'); assert.equal(mounts.length, 8);
   for (const side of ['port', 'starboard']) for (const row of ['upper', 'lower']) assert.equal(mounts.filter((m) => m.startsWith(`${side} ${row}`)).length, 2, `${side} ${row}`);
 });

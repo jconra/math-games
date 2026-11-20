@@ -14,11 +14,16 @@
 //   - its ninth ring reaches the ship: a wave of light out along the bridge, the ship's docking lights turn green, the
 //     port opens, and the end card (src/jobs/panel.js over): "Next ship" (the next ship comes: a new bridge from ring 1)
 //     or "Done" (the next visit starts the next ship's bridge). One ship waits at a time.
+//   - THE HAULER DOCKING (the game's maker, HAUL3-2 and HAUL3-4, 2026-11-20): as the wave reaches it the view comes
+//     round to its crew door (VIEW.dock), the ring of lights round the door turns from red to green, its door lifts, the
+//     short sealed tunnel slides out from a plate across the bridge's end to its hull round the door, and its stair
+//     swings down onto the tunnel's floor (DOCKING). Once built, the bridge stands and is walked across
+//     (src/dockwalk.js): while the job is up it is put away and the job draws its own.
 // The panel's `live` (src/jobs/panel.js): ready(), right(q, coin), wrong(q, coin), and the dock's own: head(o) (the
 // card's top: the bridge plan, which ring), play(o, ui) (the squares to tap), over() (the try's end), update(dt),
 // aim(camera, dt), close(); state() for the rigs.
 import * as THREE from 'three';
-import { DOCK, ring as ringParts, collar, hull, crewModule, plan, meshesOf, FLOODS, MODULE_LIGHT } from '../../kit/dockbridge.js';
+import { DOCK, ring as ringParts, collar, hull, crewModule, plan, meshesOf, FLOODS, MODULE_LIGHT, tunnel, endWall } from '../../kit/dockbridge.js';
 import { AIRLOCK } from '../../kit/hangar.js';
 import { expand, zonesOf } from '../../kit/layout.js';
 import { placeMatrix } from '../../kit/grid.js';
@@ -54,6 +59,10 @@ export const VIEW = {
   // (the end: aimed further out, at the plan's fifth ring, so the rings built and the ship both show: on a wide screen
   // a little wider; on a phone up and back, the bridge's line running up the band to the ship)
   end: { wide: { from: [-7.6, 4.6, -2.6], on: [-0.35, -0.1], fov: 60, ring: 4 }, tall: { from: [-6.0, 12.0, -7.0], on: [0, 0.5], fov: 64, ring: 4 } },
+  // (THE DOCKING, the Hauler's: once the wave of light reaches it, over to the cab's side of the bridge's end, where its
+  // crew door and the ring of lights round it show (from the side the bridge was built from, its front clamp frame
+  // stands in front of them): `ring` 9.9, the door's middle, past the last ring)
+  dock: { wide: { from: [3.4, 1.15, -2.4], on: [-0.3, -0.05], fov: 52, ring: 9.9 }, tall: { from: [4.6, 2.6, -3.6], on: [0, 0.42], fov: 62, ring: 9.9 } },
   // (never further back toward the station than this, metres from the port's face: past it the camera would be in the
   // station's rooms, the terminal behind the airlock)
   back: -4.5,
@@ -80,16 +89,14 @@ export function portFrame(W, from) {
   return null;
 }
 
-// ── the meshes: made once, the first time the job opens (kept for the next) ────────────────────────────────────────
-let MADE = null;
-function make(W, frame) {
-  const t0 = performance.now(), mats = makeMaterials();
-  // (outside: no haze)
-  for (const m of Object.values(mats)) { m.fog = false; }
-  // the light: the sun and the planet's glow (their world directions into the bridge's frame), the floodlights
+// THE LIGHT OUT THERE, in the bridge's frame (the kit's saved-light units): the sun and the planet's glow (their world
+// directions into the bridge's frame), the port's floodlights, the stand-in ship's lights (module: false, where the
+// Hauler waits instead), and any lamps of its own ({ at, i, c, reach }: the tunnel's). Shared with the bridge once
+// built, src/dockwalk.js. -> light(p, n) -> [r, g, b]
+export function bridgeLight(frame, { module = true, lamps = [] } = {}) {
   const inv = new THREE.Matrix4().copy(frame).invert(), sun = SKY.sun.clone().transformDirection(inv), shine = SKY.planet.clone().transformDirection(inv);
   const ML = MODULE_LIGHT(), _d = new THREE.Vector3(), _m = new THREE.Vector3(...ML.at);
-  const light = (p, n) => {
+  return (p, n) => {
     const out = [0, 0, 0], add = (k, c) => { out[0] += k * c[0]; out[1] += k * c[1]; out[2] += k * c[2]; };
     add(Math.max(0, n.dot(sun)) * SUN.i, SUN.c);
     add((0.35 + 0.65 * Math.max(0, n.dot(shine))) * SHINE.i, SHINE.c);
@@ -98,10 +105,37 @@ function make(W, frame) {
       const lam = Math.max(0, n.dot(_d)), cone = clamp01((-_d.dot(F.dir) - FLOOD.cone[0]) / (FLOOD.cone[1] - FLOOD.cone[0]));
       add(FLOOD.i * lam * ease(cone) / (d2 + 1.5), FLOOD.c);
     }
-    _d.copy(_m).sub(p); const md2 = _d.lengthSq(); _d.normalize();
-    add(ML.i * Math.max(0, n.dot(_d)) * clamp01(1 - Math.sqrt(md2) / ML.reach) / (md2 * 0.3 + 1), ML.color);
+    if (module) {
+      _d.copy(_m).sub(p); const md2 = _d.lengthSq(); _d.normalize();
+      add(ML.i * Math.max(0, n.dot(_d)) * clamp01(1 - Math.sqrt(md2) / ML.reach) / (md2 * 0.3 + 1), ML.color);
+    }
+    for (const L of lamps) {
+      _d.set(L.at[0] - p.x, L.at[1] - p.y, L.at[2] - p.z); const d2 = _d.lengthSq(), d = Math.sqrt(d2); _d.divideScalar(d || 1);
+      add(L.i * Math.max(0, n.dot(_d)) * clamp01(1 - d / L.reach) / (d2 * 0.6 + 1), L.c);
+    }
     return out;
   };
+}
+// THE TUNNEL INTO THE HAULER'S DOOR and the plate across the bridge's end (kit/dockbridge.js tunnel, endWall; T: the
+// Hauler's own, src/haulerdock.js TUNNEL), as meshes lit by `light` and its own lamp: { group, wall, tube } (the plate
+// and the tunnel, each a group of its own)
+export const TUNNEL_LAMP = { i: 1.4, c: [1, 0.95, 0.85], reach: 2.4 };
+export function tunnelMeshes(T, mats, frame, light = null) {
+  const tn = tunnel(T), lit = light || bridgeLight(frame, { module: false, lamps: [{ at: tn.lamp, ...TUNNEL_LAMP }] });
+  const group = new THREE.Group(), wall = new THREE.Group(), tube = new THREE.Group(); group.name = 'dock: the tunnel';
+  for (const o of meshesOf(endWall(T), mats, lit)) wall.add(o);
+  for (const o of [...meshesOf(tn.solid, mats, lit), ...meshesOf(tn.glow, mats, lit)]) tube.add(o);
+  tube.matrixAutoUpdate = false; group.add(wall, tube);
+  return { group, wall, tube, lamp: tn.lamp };
+}
+
+// ── the meshes: made once, the first time the job opens (kept for the next) ────────────────────────────────────────
+let MADE = null;
+function make(W, frame) {
+  const t0 = performance.now(), mats = makeMaterials();
+  // (outside: no haze)
+  for (const m of Object.values(mats)) { m.fog = false; }
+  const light = bridgeLight(frame), inv = new THREE.Matrix4().copy(frame).invert();
   const root = new THREE.Group(); root.name = 'dock: the bridge'; root.matrixAutoUpdate = false;
   const add = (to, list) => { for (const x of list) to.add(x); return list; };
   add(root, meshesOf(collar(), mats, light));
@@ -149,9 +183,20 @@ function make(W, frame) {
     root.add(g);
     rings.push({ i, g, braces, glass, glassMat, glow, glowMat, stripMat, outlines, targets, flashes });
   }
-  MADE = { root, rings, ghosts, outlineMat, planMat, shipLights, module, ms: Math.round(performance.now() - t0) };
+  MADE = { root, rings, ghosts, outlineMat, planMat, shipLights, module, mats, frame, tunnel: null, ms: Math.round(performance.now() - t0) };
   return MADE;
 }
+// (the tunnel into the Hauler's door, made the first time it is wanted: hidden until the bridge reaches the Hauler)
+function tunnelOf(M, W) {
+  if (M.tunnel || !W.dockShip?.tunnel) return M.tunnel;
+  M.tunnel = tunnelMeshes(W.dockShip.tunnel, M.mats, M.frame); M.tunnel.group.visible = false; M.root.add(M.tunnel.group);
+  return M.tunnel;
+}
+// THE DOCKING, once the wave of light reaches the Hauler (seconds after it gets there): its docking lights turn green
+// (as the stand-in ship's did when the wave got to it: "green when the bridge reaches it"; the view has come round to
+// its door, VIEW.dock), then its door lifts, the tunnel slides out from the plate across the bridge's end and seals
+// against its hull round the door, and its stair swings down to lie on the tunnel's floor
+export const DOCKING = { lights: 0.5, door: [1.0, 2.3], tunnel: [2.3, 3.1], stair: [3.1, 4.0] };
 
 // crew: the crew member building (their bridge is kept with them, src/jobs/dock.js bridgeOf); save(): saves them
 export function dockLink({ W, walls = null, job, spot = null, crew = null, save = () => {} } = {}) {
@@ -164,6 +209,8 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
   // (the Hauler waiting at the bridge's end in its place: src/haulerdock.js)
   M.module.visible = !W.dockShip;
   W.scene.add(M.root);
+  // (the bridge as built and walked on, src/dockwalk.js: put away while the job draws its own here)
+  if (W.dockWalk) W.dockWalk.hold(true);
   const dustWas = W.dust ? W.dust.visible : false; if (W.dust) W.dust.visible = false;
   // (the camera is out in space: the station's rooms drawn are the ones seen from inside the port, the airlock)
   W.seenFrom = new THREE.Vector3(0, DOCK.c, -1.6).applyMatrix4(frame);
@@ -192,6 +239,9 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
     });
     M.ghosts.forEach((g, i) => { g.visible = i >= cur; g.material.color.copy(M.planMat.color); g.material.opacity = M.planMat.opacity; });
     M.shipLights.color.setRGB(...SHIP_RED);
+    // (the Hauler waiting for this bridge: its door shut, its stair stowed, its docking lights red, no tunnel yet)
+    if (W.dockShip?.pose) { W.dockShip.pose('waiting'); W.dockShip.lights('red'); }
+    const T = tunnelOf(M, W); if (T) T.group.visible = false;
     slideOut(cur);
   }
   function slideOut(i) { if (i >= S.length || i >= BRIDGE.rings) return; const s = S[i]; s.state = 'out'; s.t = 0; s.ext = 0; M.rings[i].g.visible = true; M.ghosts[i].visible = false; }
@@ -350,6 +400,19 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
       const reached = (clock - endT) * 4 >= n, glow = 1 + (t >= n ? Math.max(0, 1 - (t - n) / 2.5) : 0);
       if (reached) M.shipLights.color.setRGB(SHIP_GREEN[0] * glow, SHIP_GREEN[1] * glow, SHIP_GREEN[2] * glow);
       else M.shipLights.color.setRGB(...SHIP_RED);
+      // (the Hauler, DOCKING: its lights green, its door, the tunnel, its stair)
+      const H = W.dockShip;
+      if (H?.pose) {
+        const s = clock - endT - n / 4, k = (a) => clamp01((s - a[0]) / (a[1] - a[0])), T = tunnelOf(M, W);
+        H.pose({ crew: k(DOCKING.door), stair: k(DOCKING.stair) * H.docked.stair });
+        if (T) {
+          const z0 = H.tunnel.z0, kt = Math.max(0.02, ease(k(DOCKING.tunnel)));
+          T.group.visible = s >= DOCKING.tunnel[0];
+          T.tube.matrix.makeTranslation(0, 0, z0).multiply(_sc.makeScale(1, 1, kt)).multiply(_sh.makeTranslation(0, 0, -z0)); T.tube.matrixWorldNeedsUpdate = true;
+        }
+        const green = s >= DOCKING.lights;
+        H.lights(green ? 'green' : 'red', green ? glow : 1);
+      }
     } else endT = -1;
   }
 
@@ -372,7 +435,9 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
     // (the first moment: the end's view, along the bridge's plan to the ship waiting at the far end, then over to the
     // ring being built: where it is all going first)
     const first = intro > 0 && forced == null; intro -= dt;
-    const V = end || first ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
+    // (the Hauler docking: once the wave of light has reached it, the view of its door)
+    const docking = end && forced == null && !!W.dockShip?.pose && endT >= 0 && (clock - endT) * 4 >= DOCK.rings;
+    const V = docking ? VIEW.dock[tall ? 'tall' : 'wide'] : end || first ? VIEW.end[tall ? 'tall' : 'wide'] : VIEW[tall ? 'tall' : 'wide'];
     poseFor(V, forced != null ? forced : end || first ? V.ring : Math.min(cur, BRIDGE.rings - 1), camera.aspect || innerWidth / innerHeight);
     if (fresh) { camPos.copy(want); camQ.copy(probe.quaternion); camera.fov = V.fov; camera.updateProjectionMatrix(); fresh = false; }
     const k = 1 - Math.exp(-2.5 * dt);
@@ -396,6 +461,8 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
     removeEventListener('keydown', onKey);
     W.scene.remove(M.root);
     W.seenFrom = null;
+    // (the bridge as built back, if it stands; the Hauler docked at it or waiting, as it stands: src/dockwalk.js)
+    if (W.dockWalk) W.dockWalk.hold(false);
     if (W.dust) W.dust.visible = dustWas;
     fade();
   }
@@ -403,7 +470,7 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
   return {
     ready, right, wrong, head, play, over, update, aim, close,
     // (for the rigs: the rings' states, the squares to tap on screen, a tap on one of them)
-    state: () => ({ cur, answered, finished, ship: crew ? bridgeOf(crew).ship : 1, built: crew ? bridgeOf(crew).rings : cur, rings: S.slice(0, BRIDGE.rings).map((s) => ({ state: s.state, braced: [...s.braced].sort(), loose: +s.loose.toFixed(2) })), made: M.ms }),
+    state: () => ({ cur, answered, finished, ship: crew ? bridgeOf(crew).ship : 1, built: crew ? bridgeOf(crew).rings : cur, rings: S.slice(0, BRIDGE.rings).map((s) => ({ state: s.state, braced: [...s.braced].sort(), loose: +s.loose.toFixed(2) })), made: M.ms, hauler: W.dockShip?.pose ? { lights: W.dockShip.lit, tunnel: !!M.tunnel?.group.visible } : null }),
     lookAtRing: (i = null) => { forced = i; },
     // (where ring i's squares are on the screen, as the camera is now: its squares' middles, standing still)
     squaresOnScreen: (i = cur) => {

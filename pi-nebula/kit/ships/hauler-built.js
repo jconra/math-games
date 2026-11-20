@@ -12,6 +12,7 @@
 //   cargoStep   moves each mount toward what is wanted of it (on / off, clamps open); cargoPose sets them outright
 //   LAB         the Ship Lab's controls
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
 import { crewSeat } from '../shipparts/cockpit/seats.js';
@@ -19,6 +20,7 @@ import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE_AT, POD, POD_HALF, DECK as DECK0, PARTS, Q } from './hauler-built.hull.js';
 import { CONTAINER, LOOKS, COLOURS, containerLeaf, cargoContainer } from './cargo-container.js';
+import { drawMix as drawLooks } from './cargo-mix.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
 const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -362,6 +364,68 @@ function hbStair(p) {
   p.door('stair', [S.x + 1.8, 1.0 - DECK, (z0 + z1) / 2], CREWDOOR.near, S.speed);
   return p;
 }
+// AT THE DOCK, ONCE THE BRIDGE HAS REACHED IT (src/haulerdock.js pose 'docked'; the game's maker, HAUL3-3 2026-11-20:
+// "Once all nine rings are built, walk across it and in through the crew door"): the door lifted all the way, and the
+// stair swung out level, lying on the docking tunnel's floor as the way in. (Stowed upright just inside the door it
+// stands across the doorway; swung down its whole way it would go through the tunnel's floor.) Each a door's t: the kit
+// turns a hinge by its angle times smooth(t) (kit/layout.js leafMatrix), so the stair's t is where that comes to a
+// quarter turn.
+const unsmooth = (k) => 0.5 - Math.sin(Math.asin(1 - 2 * k) / 3);
+export const DOCKED = { crew: 1, stair: +unsmooth(PI / 2 / CREWSTAIR.angle).toFixed(5) };
+// the door section's port side at a height (between its bilge, 0.83, and its roof, 3.27): where the docking tunnel's
+// walls meet the hull round the door (src/haulerdock.js TUNNEL)
+export const sideAt = (y) => sectX(Math.max(SECT[3][1], Math.min(SECT[11][1], y)));
+
+// THE DOCKING LIGHTS (the game's maker, HAUL3-4 2026-11-20: "A ring of lights round the Hauler's crew door: red, then
+// green when the bridge reaches it"): small lamps let into the door section's skin all round the crew door: a row over
+// its head, a row under its sill, and two in the narrow strip of skin each side of it (between the door and the cab in
+// front, the door and the core behind). Each a black housing and a glowing lens, flat on the skin.
+//   variant 'port'            housings and red lenses (the Ship Lab, the Kit Lab: it waits for its bridge)
+//   variant 'port, housings'  the housings alone: the game draws the lenses itself, in a colour it can change
+//                             (src/haulerdock.js, dockLenses below: red, then green when the bridge reaches it)
+export const DOCK_LIGHTS = {
+  above: 3.17, below: 0.94, z: [2.93, 3.13, 3.33, 3.53], lamp: [0.11, 0.05],
+  // (the side ones in the strip of skin each side of the door, clear of the docking tunnel's walls: src/haulerdock.js)
+  side: { z: [2.762, 3.693], y: [1.72, 2.38] }, sideLamp: [0.026, 0.13], rim: 0.012, proud: 0.022,
+  red: [1.6, 0.14, 0.1], green: [0.25, 2.2, 0.6],
+};
+// (the door section's profile at a height: its outward normal, in x and y)
+function sectN(y) {
+  for (let i = 3; i < 12; i++) { const [xa, ya] = SECT[i], [xb, yb] = SECT[i + 1]; if (y >= ya && y <= yb) { const n = V3(yb - ya, -(xb - xa), 0).normalize(); return n; } }
+  return V3(1, 0, 0);
+}
+// every lamp: its middle on the skin, its normal, the way up its face (along the profile), its size (along z, up)
+export function dockLamps() {
+  const L = DOCK_LIGHTS, out = [];
+  const at = (y, z, [w, h]) => { const n = sectN(y); out.push({ c: V3(sectX(y), y, z), n, up: V3(-n.y, n.x, 0), w, h }); };
+  for (const z of L.z) { at(L.above, z, L.lamp); at(L.below, z, L.lamp); }
+  for (const z of L.side.z) for (const y of L.side.y) at(y, z, L.sideLamp);
+  return out;
+}
+function dockLights(acc, { housings = true, lens = null } = {}) {
+  const L = DOCK_LIGHTS, Z = V3(0, 0, 1);
+  for (const q of dockLamps()) {
+    if (housings) boxAt(acc, q.c.clone().addScaledVector(q.n, L.proud / 2), [q.n, q.up, Z], [L.proud / 2, q.h / 2 + L.rim, q.w / 2 + L.rim], PAL.black, ['u-']);
+    if (!lens) continue;
+    const o = q.c.clone().addScaledVector(q.n, L.proud + 0.003), u = q.up.clone().multiplyScalar(q.h / 2), w = Z.clone().multiplyScalar(q.w / 2);
+    quad(acc, [o.clone().sub(u).sub(w), o.clone().sub(u).add(w), o.clone().add(u).add(w), o.clone().add(u).sub(w)], q.n, lens, 'glow');
+  }
+}
+function hbDockLights(p, variant) {
+  const acc = new Acc();
+  dockLights(acc, { lens: variant === 'port' ? DOCK_LIGHTS.red : null });
+  return acc.flush(p);
+}
+// the lenses alone, as one geometry in the ship's own frame (its ground at y 0), for the game to draw in its own
+// colour (src/haulerdock.js)
+export function dockLenses() {
+  const acc = new Acc(), list = [];
+  dockLights(acc, { housings: false, lens: [1, 1, 1] });
+  acc.flush({ add: (mat, g) => { list.push(g); } });
+  const g = list.length === 1 ? list[0] : mergeGeometries(list);
+  for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+  return g.translate(0, DECK, 0);
+}
 // the airlock just inside the door: a small lit room, a shut inner door on each end wall (forward to the cockpit,
 // aft to the core), so an open door shows a room and not the empty hull
 //   'port, cabin'   with the rooms built inside (LAB.cabin): the cabin's room at the door is the airlock (or the
@@ -404,16 +468,24 @@ export const CARGO = { x: 1.92, y: [1.55, 3.00], z: [0.63, -3.57], out: 1.6, lif
 const MOUNT_COLOUR = { 'port upper front': 'blue', 'port upper rear': 'rust', 'port lower front': 'yellow', 'port lower rear': 'olive', 'starboard upper front': 'yellow', 'starboard upper rear': 'olive', 'starboard lower front': 'blue', 'starboard lower rear': 'rust' };
 // THE MIX (the game's maker, HAUL-2 2026-11-20: "I think that having some A and some D would be good, since D looks like
 // a liquid container, but A is recognizable"): some ribbed steel boxes, some eight-sided tanks (cargo-container.js
-// LOOKS ribbed and tank). How many of each and where was left open: the plainest even mix, four and four, the two
-// sides alike: the upper row ribbed boxes, the lower row tanks (each in its mount's own colour). A question for him.
-export const CARGO_MIX = { upper: 'ribbed', lower: 'tank' };
+// LOOKS ribbed and tank), each in its mount's own colour. WHICH WHERE, AT RANDOM (HAUL3-1: "I would just do it
+// randomly"): each mount a box or a tank, drawn when the Hauler is made (cargo-mix.js drawMix): drawMix() here draws a
+// new one for all eight (src/haulerdock.js, once each time the game starts; the Ship Lab's Mix chip, each press).
 // (the look drawn: 'mix' as above, or one look for all eight, the lab's chips: to compare)
 export const CARGO_LOOK = { look: 'mix' };
 export const MOUNTS = [];
 for (const side of ['port', 'starboard']) for (const row of ['upper', 'lower']) for (const end of ['front', 'rear']) {
   const name = `${side} ${row} ${end}`, sx = side === 'port' ? 1 : -1;
-  MOUNTS.push({ name, side, row, end, sx, at: [sx * CARGO.x, CARGO.y[row === 'upper' ? 1 : 0], CARGO.z[end === 'front' ? 0 : 1]], colour: MOUNT_COLOUR[name], look: CARGO_MIX[row], turn: end === 'rear' });
+  MOUNTS.push({ name, side, row, end, sx, at: [sx * CARGO.x, CARGO.y[row === 'upper' ? 1 : 0], CARGO.z[end === 'front' ? 0 : 1]], colour: MOUNT_COLOUR[name], look: null, turn: end === 'rear' });
 }
+// a new mix for all eight mounts (rand: () -> 0..1); the containers built after it show it (a container already built
+// is kept by the kit's cache: forget 'hbContainer' first, kit/layout.js forgetPiece). -> { mount name: look }
+export function drawMix(rand = Math.random) {
+  const L = drawLooks(MOUNTS.map((m) => m.name), rand);
+  for (const m of MOUNTS) m.look = L[m.name];
+  return L;
+}
+drawMix();
 const mountNamed = (name) => MOUNTS.find((m) => m.name === name) || MOUNTS[0];
 const CX = CONTAINER.w / 2, CY = CONTAINER.h / 2, CZ = CONTAINER.l / 2;
 // the clamp stations along each side (z, front to back) and which way each one's lips and jaws reach (to a container)
@@ -875,7 +947,8 @@ export const LAB = {
       sep(), lab('Clamps'),
       chip(H.clamps === 'open' ? 'Shut clamps' : 'Open clamps', false, () => { H.clamps = H.clamps === 'open' ? 'shut' : 'open'; menu(); }, true, 'Fold the jaws back onto the posts, or swing them over the containers'),
       sep(), lab('Container'),
-      ...[['mix', { name: 'Mix', about: 'His pick: some ribbed steel boxes and some eight-sided tanks (the upper row boxes, the lower row tanks)' }], ...Object.entries(LOOKS)].map(([k, L], i) => chip(`${i + 1} ${L.name}`, CARGO_LOOK.look === k, () => { if (CARGO_LOOK.look === k) return; CARGO_LOOK.look = k; reload(['hbContainer']); }, true, k === 'mix' ? L.about : 'All eight: ' + L.about)),
+      // (Mix: his pick, each container a box or a tank at random; pressed again, another mix)
+      ...[['mix', { name: 'Mix', about: 'His pick: each container a ribbed steel box or an eight-sided tank, at random (press again for another mix)' }], ...Object.entries(LOOKS)].map(([k, L], i) => chip(`${i + 1} ${L.name}`, CARGO_LOOK.look === k, () => { if (k === 'mix') drawMix(); else if (CARGO_LOOK.look === k) return; CARGO_LOOK.look = k; reload(['hbContainer']); }, true, k === 'mix' ? L.about : 'All eight: ' + L.about)),
     ];
   },
   step(B, st, dt, { updateDoors, person, jets, time }) {
@@ -924,6 +997,7 @@ export const SHIP_HAULER_BUILT = {
   hbGear: { name: 'Hauler (built): landing leg', group: GR, at: 'free', foot: [0.5, 0.7, 1.5], variants: Object.keys(GEAR.at), build: hbGear },
   hbCrewDoor: { name: 'Hauler (built): crew door', group: GR, at: 'free', foot: [0.6, 2.0, 0.85], variants: ['port'], build: (p) => hbCrewDoor(p) },
   hbStair: { name: 'Hauler (built): crew stair', group: GR, at: 'free', foot: [0.3, 2.0, 0.8], variants: ['port'], build: (p) => hbStair(p) },
+  hbDockLights: { name: 'Hauler (built): docking lights round the crew door', group: GR, at: 'free', foot: [0.2, 2.4, 1.0], variants: ['port', 'port, housings'], build: (p, v) => hbDockLights(p, v) },
   hbAirlock: { name: 'Hauler (built): crew airlock', group: GR, at: 'free', foot: [2.2, 2.0, 0.85], variants: ['port', 'port, cabin'], build: (p, v) => hbAirlock(p, v) },
   hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['four seats', 'four seats, cabin'], build: (p, v) => hbCockpit(p, v) },
   cargoContainer: { name: 'Cargo container (shared)', group: GR, at: 'free', foot: [CONTAINER.w, CONTAINER.h, CONTAINER.l], variants: Object.keys(LOOKS).flatMap((k) => [k, ...Object.keys(COLOURS).slice(1, 3).map((c) => `${k}:${c}`)]), build: cargoContainer },

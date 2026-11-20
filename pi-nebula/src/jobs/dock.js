@@ -50,6 +50,16 @@ export function bridgeOf(crew) {
 }
 export function built(crew) { const b = bridgeOf(crew); b.rings = Math.min(BRIDGE.rings, b.rings + 1); b.docked = b.rings >= BRIDGE.rings; return b; }
 export function nextShip(crew) { const b = bridgeOf(crew); b.ship += 1; b.rings = 0; b.docked = false; return b; }
+// THE BRIDGE TO THE HAULER STANDS once the crew member has built a whole one (the game's maker, HAUL3-6 2026-11-20: "we
+// need the bridge built before it is accessible ... I'd be fine with it where you can get on it and look around after
+// the bridge is built"): all nine rings now, or a ship docked before this one (a bridge from ring 1 for the next ship
+// leaves the one built standing: the Hauler waits at the port until its rescue mission, src/dockwalk.js). Kept with the
+// crew member as their bridge is, so it is there again after the page is loaded again. (Only read: a crew member who
+// never went to the dock is left as they were.)
+export function bridgeStands(crew) {
+  const b = crew?.jobs?.dock?.bridge; if (!b || typeof b !== 'object') return false;
+  return (Number.isInteger(b.rings) && b.rings >= BRIDGE.rings) || (Number.isInteger(b.ship) && b.ship > 1);
+}
 
 // ── the pictures: on the panel's light card, as the station's others (src/jobs/pics.js): the numbers given, a "?" for
 // what is asked. The bridge's struts steel grey, its glass pale blue, a brace amber.

@@ -1,7 +1,9 @@
 // BOARDING THE PARKED SHIPS: walk up a ship's way in (the Explorer's airstair, the Medic's ramps and its crew door's
-// stair) into its real cabin, the rooms the Ship Lab builds from the ship's blueprint, and back out.
+// stair) into its real cabin, the rooms the Ship Lab builds from the ship's blueprint, and back out. And the Hauler
+// waiting at the dock, across its bridge once that is built (DOCKED_SHIP below; src/dockwalk.js): its cabin the same.
 //
-//   const B = makeBoarding({ W, walls, quality })     W: the station (station.js), walls: where a person can walk
+//   const B = makeBoarding({ W, walls, quality, dock })     W: the station (station.js), walls: where a person can
+//                                                      walk; dock: the Hauler's hooks (src/dockwalk.js D.boarding)
 //   B.update(dt, { player, eyes, camera })            once a frame, before W.frame: loads a ship's cabin when someone
 //                                                      (the player, or the title's camera) is near it and drops it when
 //                                                      they have gone; works its doors; the light as you go in and out
@@ -58,6 +60,7 @@ import { CORE_TAG } from '../kit/shipparts/cabin/reactor.js';
 import * as EB from '../kit/ships/explorer-built.js';
 import * as MD from '../kit/ships/medic-built.js';
 import * as MB from '../kit/ships/miner-built.js';
+import * as HB from '../kit/ships/hauler-built.js';
 import { POD as MB_POD } from '../kit/ships/miner-built.hull.js';
 import { shine } from './player.js';
 import { frameOf } from './standing.js';
@@ -68,17 +71,25 @@ import { coreIn } from './missions.js';
 // doors that come down to the floor, by piece; `step`: what the ship's module does each frame to pose them, as the
 // Medic's ramp unfolds its foot). `lifts`: a way in that people ride instead (the Miner's belly lift: LIFTS below),
 // by piece, with where to stand on the hangar floor to step onto it (`foot`: in the ship's frame, x to port, z to the
-// nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.) `cockpit`: its
+// nose, on the ground; beside the open front of its side railings). `cockpit`: its
 // module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js). `flight`: how it is
-// flown (src/shiphull.js), from its kit's own exports, in the same shape for every ship (flight below).
+// flown (src/shiphull.js), from its kit's own exports, in the same shape for every ship (flight below). (The Hauler
+// waits at the dock instead: DOCKED_SHIP below.)
 // HOW A SHIP IS FLOWN, from its kit: its main engine's nozzles (its jetNozzles) and their jets' look (JET), its deck over
 // its ground line (DECK), and its thruster pods if it has any (their piece, half their length, their jets' look:
 // POD_JET; none: null)
 export const flight = (kit, pods = null) => ({ nozzles: kit.jetNozzles, jet: kit.JET, deck: kit.DECK, pods });
+// THE HAULER, AT THE DOCK (`dock`: not parked in a hangar of the station file but waiting outside at the docking port,
+// src/haulerdock.js; its way in the docking bridge and its tunnel, src/dockwalk.js, which gives makeBoarding({ dock })
+// the hooks: whether it may be gone into (the bridge stands), where it is, its hull's version with the rooms inside and
+// what of that hull a person meets). Near it: in the airlock, or out on the bridge (the airlock is the room nearest
+// there). Its cabin is his deck plan (HAUL-1), built and walked as the others'. No `flight`: it is not flown (HAUL3-6).
+export const DOCKED_SHIP = { id: 'hauler', dock: true, near: ['airlock'], lab: HB.LAB, cockpit: HB.COCKPIT, bp: 'hauler-his-plan', ways: [] };
 export const SHIPS = [
   { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: flight(EB), ways: ['ebAirstair'] },
   { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: flight(MD), ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
   { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: flight(MB, { piece: 'mbPod', half: MB_POD.size[2] / 2, jet: MB.POD_JET }), ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
+  DOCKED_SHIP,
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
 // (every ship flies the same way, src/fleet.js; in the game itself only the Miner is flown yet: the Explorer and the
@@ -131,7 +142,7 @@ const FAR = new THREE.Vector3(1e6, 1e6, 1e6), ONE = [null];
 const files = new Map();
 const fetchJSON = (url) => { if (!files.has(url)) files.set(url, fetch(url).then((r) => { if (!r.ok) throw new Error('boarding: no file at ' + url); return r.json(); })); return files.get(url); };
 
-export function makeBoarding({ W, walls, quality = 'high' }) {
+export function makeBoarding({ W, walls, quality = 'high', dock = null }) {
   const mats = cabinMaterials(LOOK); livePalette(mats.live, 'vivid');
   const base = { exposure: W.renderer.toneMappingExposure, fogNear: W.scene.fog?.near ?? 7, fogFar: W.scene.fog?.far ?? 60 };
   const look = { inside: 0 };
@@ -141,6 +152,13 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   let poolKey = null;
   const ships = [];
   for (const S of SHIPS) {
+    // (the ship at the dock: no room of the station file; near it, the rooms it is reached from; its place and its hull
+    // from the dock's hooks)
+    if (S.dock) {
+      if (!dock) continue;
+      ships.push({ ...S, dock, zd: null, zone: null, hangar: null, near: new Set(S.near), ways: [], lifts: [], entries: [], state: 'out', away: 0, cabin: null, wayParts: new Map(), M: null, M0: null, inv: null, D: new THREE.Matrix4(), Di: new THREE.Matrix4(), moved: false, stats: null });
+      continue;
+    }
     const zd = W.R.rooms?.find((r) => r.id === S.zone), zone = W.room(S.zone);
     if (!zd || !zone || !zd.pieces?.length) { console.info('boarding: the station has no ' + S.zone); continue; }
     // the zones a person is near the ship in: the hangar it is drawn with, and the way into that hangar
@@ -169,9 +187,17 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       // where the ship is parked: its hull's placement, its frame's feet on the floor (the cabin is built with its deck
       // at the space's deck, as the Ship Lab builds it), and as much higher as the ship stands on its legs (its LAB.stand:
       // the Miner's pieces are raised by it, kit/layout.js)
-      const pl = s.zd.pieces[0], off = pl.off || [0, 0, 0];
       // (M0: where it is parked; M: where it stands, which is the same unless it was set down by hand somewhere else)
-      s.M0 = placeMatrix({ ...pl, off: [off[0], off[1] - space.deck + (s.lab.stand || 0), off[2]] }, new THREE.Matrix4());
+      if (s.dock) {
+        // (the ship at the dock: its own frame where it waits, the cabin's deck at its own; and its hull's version with
+        // the rooms inside drawn instead, built the first time)
+        s.M0 = s.dock.matrix().clone().multiply(new THREE.Matrix4().makeTranslation(0, s.dock.deck() - space.deck, 0));
+        await s.dock.inside(true);
+        if (s.state !== 'loading') { s.dock.inside(false); return; }
+      } else {
+        const pl = s.zd.pieces[0], off = pl.off || [0, 0, 0];
+        s.M0 = placeMatrix({ ...pl, off: [off[0], off[1] - space.deck + (s.lab.stand || 0), off[2]] }, new THREE.Matrix4());
+      }
       s.M = new THREE.Matrix4().multiplyMatrices(s.D, s.M0);
       s.inv = s.M.clone().invert(); s.bpData = bp; s.space = space;
       let t = performance.now();
@@ -182,7 +208,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       const beams = quality === 'low' ? null : makeBeams(C.parts.beams);
       if (beams) { beams.object.position.y = space.deck; group.add(beams.object); }
       await breath();
-      if (s.state !== 'loading') { C.built.dispose(); beams?.dispose(); return; }
+      if (s.state !== 'loading') { C.built.dispose(); beams?.dispose(); s.dock?.inside(false); return; }
       // where a person can walk: its walls, floors and furniture, and its doors, in the station's frame as the ship is
       // parked, and stood where the ship stands (walls.place: asked in the ship's own frame, never worked out again)
       t = performance.now();
@@ -197,6 +223,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         for (const leaf of D.leaves) for (const im of leaf.meshes || []) { if (!im.geometry.boundingBox) im.geometry.computeBoundingBox(); box.union(_b.copy(im.geometry.boundingBox).applyMatrix4(_m.copy(leaf.M).multiply(leaf.base))); }
         if (!box.isEmpty()) doors.push({ D, box: box.applyMatrix4(s.M0) });
       }
+      // (the ship at the dock: its hull is no room of the station's, so what a person meets of it goes in with its cabin)
+      if (s.dock) { const h = s.dock.walls(); solid.push(...h.solid); up.push(...h.up); }
       walls.add('cabin:' + s.id, { solid, up, doors, voxel: CABIN_WALLS.voxel, r: CABIN_WALLS.r, at: s.moved ? s.D : null });
       s.lifts.forEach((L, i) => liftParts(s, L, i));
       times.walls = Math.round(performance.now() - t);
@@ -205,7 +233,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
       t = performance.now();
       if (W.renderer.compileAsync) await W.renderer.compileAsync(group, W.camera); else W.renderer.compile(group, W.camera);
       times.compile = Math.round(performance.now() - t);
-      if (s.state !== 'loading') { W.scene.remove(group); walls.drop('cabin:' + s.id); for (const k of s.wayParts.keys()) walls.drop(k); s.wayParts.clear(); C.built.dispose(); beams?.dispose(); return; }
+      if (s.state !== 'loading') { W.scene.remove(group); walls.drop('cabin:' + s.id); for (const k of s.wayParts.keys()) walls.drop(k); s.wayParts.clear(); C.built.dispose(); beams?.dispose(); s.dock?.inside(false); return; }
       // the cabin's own picture of itself, for the people walking in it (the player's suit lit by its strips)
       t = performance.now();
       const env = cabinPicture(s, group);
@@ -229,6 +257,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     for (const L of s.lifts) { L.key = L.patch = null; L.carried.clear(); }
     for (const e of s.entries) e.locked = true;
     s.cabin = null; s.flown = null; s.state = 'out'; poolKey = null;
+    s.dock?.inside(false);      // (the ship at the dock: its plain hull again)
     for (const L of pools) { L.intensity = 0; L.userData.pool = null; }
     console.info('boarding: the ' + s.id + '\'s cabin is dropped');
   }
@@ -417,8 +446,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     const who = player ? player.pos : camera.position, here = W.zoneAt(who)?.id;
     const inShip = inside(who);
     for (const s of ships) {
-      // near: in its hangar or the way into it (or in its cabin)
-      const near = s.near.has(here) || inShip === s;
+      // near: in its hangar or the way into it (or in its cabin); the ship at the dock only once its bridge stands
+      const near = (s.near.has(here) || inShip === s) && (!s.dock || s.dock.open());
       s.away = near ? 0 : s.away + dt;
       if (near && s.state === 'out' && !s.held) load(s);
       else if (!near && s.away > LINGER && (s.state === 'in' || s.state === 'loading')) drop(s);
@@ -453,7 +482,7 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
         ONE[0] = D; updateDoors(ONE, best, dt, 'auto');
       }
       // drawn with its hangar
-      c.group.visible = (s.zone.group.visible || inShip === s) && !s.held;
+      c.group.visible = ((s.zone ? s.zone.group.visible : s.dock.shown()) || inShip === s) && !s.held;
       c.beams?.update(W.dust ? performance.now() / 1000 : 0);
     }
     const now = performance.now() / 1000, flick = liveTick(now), core = corePulse(now, CORE_LOOK);

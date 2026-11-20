@@ -14,6 +14,10 @@
 //                     docking ring's lights apart, for the job to colour); the
 //                     bridge's plan, faint (a hoop for every ring and three lines along), to show where it goes
 //   hull(box)      plating over the outside of the station's room round the port (seen from out here)
+//   wholeBridge()  every ring built and braced, as the job leaves it: the bridge that stands and is walked on
+//                  (src/dockwalk.js)
+//   endWall(T), tunnel(T)   the plate across the tube's end and the short sealed tunnel from it in to the Hauler's
+//                  crew door (the game's maker, HAUL3-2), from the Hauler's own numbers (src/haulerdock.js TUNNEL)
 //   meshesOf(piece, mats, light)       a piece's parts merged into meshes, one a material, lit by `light(p, n)`
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -165,6 +169,92 @@ export function plan() {
   const z1 = moduleAt(), L = [];
   for (const a of [0, 90, 180]) L.push(onlyPos(rodGeo(at(a, DOCK.z0, DOCK.R), at(a, z1, DOCK.R), 0.008)));
   return { hoops, lines: mergeGeometries(L) };
+}
+
+// ── THE WHOLE BRIDGE, BUILT: every ring braced, its glass on, its hoop and its deck's strips lit, as the dock's job
+// leaves it once all nine are built (the game's maker, HAUL3-3 2026-11-20: "Once all nine rings are built, walk across it
+// and in through the crew door"): drawn by src/dockwalk.js for as long as it stands, and walked on.
+//   wholeBridge() -> { solid: Piece (the collar, the rings, all their braces, a plate over the collar from the port's
+//                    sill to the first ring's deck), glass: [geometry], glow: [geometry] (the hoops), strips: Piece }
+export function wholeBridge() {
+  const solid = collar(), strips = new Piece(), glass = [], glow = [];
+  const moved = (g, z) => g.translate(0, 0, z);
+  for (let i = 0; i < DOCK.rings; i++) {
+    const z = DOCK.z0 + i * DOCK.L, R = ring(i);
+    for (const P of [R.solid, ...R.braces]) for (const { mat, geo } of P.parts) solid.parts.push({ mat, geo: moved(geo, z) });
+    for (const { mat, geo } of R.strips.parts) strips.parts.push({ mat, geo: moved(geo, z) });
+    glass.push(moved(R.glass, z)); glow.push(moved(R.glow, z));
+  }
+  // (the plate over the collar: the port's round door's sill is the bridge's deck, so the way out is level, over the
+  // airlock's outer step)
+  const hw = Math.sqrt(DOCK.R * DOCK.R - (DOCK.c - DOCK.deck) ** 2) - 0.04;
+  solid.slab('gun', -hw, hw, DOCK.deck - 0.07, DOCK.deck, -0.02, DOCK.z0 + 0.01, { r: 0.012 });
+  return { solid, glass, glow, strips };
+}
+
+// ── THE TUNNEL INTO THE SHIP'S DOOR (the game's maker, HAUL3-2 2026-11-20: "Add a short, narrow tunnel, the size of the
+// door, from the bridge's end in to the door." and "What is the point of having a tunnel if it isn't sealed?"): the
+// ship's door is narrower than the tube and set in past what stands out beside it (the Hauler's front clamp frame and
+// front pod), so a closed tunnel the size of the door runs from a plate across the tube's end in to the ship's hull
+// round the door: a floor, two walls and a roof, sealed against the hull with a black gasket and against the plate.
+// T, in the bridge's frame (src/haulerdock.js TUNNEL, from the ship's own door):
+//   half      its inside's half width (the door's)          wall   its walls' thickness
+//   floor     its floor's top                               roof   its roof's underside (the door's head)
+//   z0        where it starts: the bridge's last hoop       face(y) -> z   the ship's hull at a height: where it ends
+//   ys        the heights at which the hull's side bends (its profile's points), for the walls' edge along it
+//   endWall(T) -> Piece        the plate across the tube's end, an opening the tunnel's inside in it
+//   tunnel(T)  -> { solid: Piece, glow: Piece (the strip of light along its roof), lamp: [x, y, z] (that light's
+//                 middle, for the light worked out on it) }
+export function endWall(T) {
+  const p = new Piece(), n = 64, out = [];
+  for (let k = 0; k < n; k++) { const a = k / n * 2 * PI; out.push([(DOCK.R - 0.01) * Math.cos(a), DOCK.c + (DOCK.R - 0.01) * Math.sin(a)]); }
+  const x = T.half, hole = [[-x, T.floor], [-x, T.roof], [x, T.roof], [x, T.floor]];
+  p.add('solid', extrude(out, 0.05, 0.006, { holes: [hole] }).translate(0, 0, T.z0 - 0.045), 'grey2');
+  // (a frame round the opening on the bridge's side, the hazard yellow along its sill)
+  const f = 0.05, zf = T.z0 - 0.06;
+  p.slab('white2', -x - f, -x, T.floor, T.roof + f, zf, T.z0 - 0.04, { r: 0.008 });
+  p.slab('white2', x, x + f, T.floor, T.roof + f, zf, T.z0 - 0.04, { r: 0.008 });
+  p.slab('white2', -x - f, x + f, T.roof, T.roof + f, zf, T.z0 - 0.04, { r: 0.008 });
+  p.slab('yellow', -x, x, DOCK.deck - 0.005, DOCK.deck + 0.006, T.z0 - 0.09, T.z0 - 0.04, { r: 0.003 });
+  return p;
+}
+export function tunnel(T) {
+  const p = new Piece(), glow = new Piece(), { half, wall, floor, roof, z0 } = T, xo = half + wall, th = 0.05;
+  const y0 = floor - th, y1 = roof + th;
+  // (the hull's face along a wall's edge, from under the floor to over the roof: the heights it bends at, and the ends)
+  const ys = [y0, ...T.ys.filter((y) => y > y0 + 1e-3 && y < y1 - 1e-3), y1];
+  const edge = ys.map((y) => [T.face(y) - 0.005, y]);
+  // the floor and the roof, each from the plate in to the hull
+  p.slab('grey2', -xo, xo, y0, floor, z0 - 0.04, T.face(floor) - 0.005, { r: 0.006 });
+  p.slab('grey2', -xo, xo, roof, y1, z0 - 0.04, T.face(roof) - 0.005, { r: 0.006 });
+  // the two walls: from the plate in to the hull, their edge along its face (an outline in (z, y), across x)
+  const outline = [[z0 - 0.04, y0], ...edge, [z0 - 0.04, y1]];
+  for (const s of [-1, 1]) {
+    const g = extrude(outline, wall, 0.004);   // (made in (z, y), pushed out along what becomes -x)
+    const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-1, 0, 0));
+    g.applyMatrix4(m).translate(s > 0 ? xo : -half, 0, 0);
+    p.add('solid', fixWinding(g), 'grey2');
+  }
+  // ribs round its outside, white as the bridge's hoops
+  for (const z of [z0 + 0.32, z0 + 0.86]) {
+    const a = z - 0.04, b = z + 0.04;
+    for (const s of [-1, 1]) p.slab('white2', s > 0 ? xo : -xo - 0.04, s > 0 ? xo + 0.04 : -xo, y0 - 0.04, y1 + 0.04, a, b, { r: 0.008 });
+    p.slab('white2', -xo, xo, y1, y1 + 0.04, a, b, { r: 0.008 }); p.slab('white2', -xo, xo, y0 - 0.04, y0, a, b, { r: 0.008 });
+  }
+  // THE SEAL: a black gasket all round where it meets the hull, and a dark band where it meets the plate
+  const loop = [...edge.map(([z, y]) => [-xo - 0.012, y, z - 0.02]), ...edge.slice().reverse().map(([z, y]) => [xo + 0.012, y, z - 0.02])];
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[i], b = loop[(i + 1) % loop.length];
+    if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-3) continue;
+    rod(p, 'black', a, b, 0.03, 8);
+  }
+  for (const s of [-1, 1]) p.slab('black', s > 0 ? xo : -xo - 0.03, s > 0 ? xo + 0.03 : -xo, y0 - 0.03, y1 + 0.03, z0 - 0.04, z0 + 0.04, { r: 0.006 });
+  p.slab('black', -xo - 0.03, xo + 0.03, y1, y1 + 0.03, z0 - 0.04, z0 + 0.04, { r: 0.006 });
+  // its light: a strip down the middle of its roof
+  const zl = (z0 + T.face(roof)) / 2, len = T.face(roof) - z0 - 0.3;
+  glow.glowSlab('strip', -0.07, 0.07, roof - 0.012, roof - 0.002, zl - len / 2, zl + len / 2);
+  p.slab('black', -0.1, 0.1, roof - 0.004, roof, zl - len / 2 - 0.03, zl + len / 2 + 0.03, { r: 0.003 });
+  return { solid: p, glow, lamp: [0, roof - 0.15, zl] };
 }
 
 // ── a piece into meshes ──────────────────────────────────────────────────────────────────────────────────────────

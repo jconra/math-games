@@ -31,6 +31,7 @@ import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
 import { makeBoarding, STANDS_ANYWHERE } from './boarding.js';
+import { makeDockWalk } from './dockwalk.js';
 import { makeVisit } from './visit.js';
 import { makeCrane } from './crane.js';
 import { makeChase, CAM } from './chase.js';
@@ -100,8 +101,11 @@ async function boot() {
   GAME.walls = walls;
   // (the big scanner glides only with someone on its bed: parked until the station's people put a patient there)
   for (const D of W.built.glides || []) D.use = null;
-  // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps: boarding.js)
-  const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality });
+  // (the bridge to the Hauler at the dock, once the crew member playing has built it: walked across, dockwalk.js)
+  const dockWalk = W.dockWalk = GAME.dockWalk = makeDockWalk({ W, walls, crew: () => GAME.player });
+  // (the parked ships: their cabins loaded when someone is near, boarded up their stairs and ramps; the Hauler's across
+  // its bridge: boarding.js)
+  const boarding = GAME.boarding = makeBoarding({ W, walls, quality: W.quality, dock: dockWalk.boarding });
   // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
   const crane = GAME.crane = makeCrane({ W, walls, boarding });
   // (the other two hangars, for a Miner flown into them by hand: the alarm, the red lights, the people running, the
@@ -233,6 +237,7 @@ async function boot() {
     if (people) { eyes.push(...people.eyes()); people.onWays(shipEyes); }
     // (a parked ship's ways in come down for the player, never for the station's people, who do not board yet; anyone
     // of them standing on a way's patch is counted, so it waits for them)
+    dockWalk.update(dt);
     boarding.update(dt, { player: GAME.mode === 'play' ? P : null, eyes: shipEyes, camera: W.camera });
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
