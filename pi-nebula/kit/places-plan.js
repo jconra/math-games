@@ -12,8 +12,8 @@
 //               hallway somewhere that opens and then you get teleported to the same looking box at the control room
 //               or cargo area."
 //               "It makes sense for the lift to be in the center, since you'd think it had to have come up the
-//               center. We probably need some models for pallets. Maybe a forklift.. hah." (he makes the forklift
-//               himself: its place on the floor is left empty)
+//               center. We probably need some models for pallets. Maybe a forklift.. hah." (he made the forklift
+//               himself: it parks in its painted place on the floor, FORKLIFT below)
 //               "I think the storage room needs to be much bigger than your design, especially if there is going to
 //               be a forklift driving around. It can go out underneath the arena and even under the hangers if needed
 //               right? I would imagine that a space station should have a good supply"
@@ -83,8 +83,8 @@ export const SLOT = { z: [3.5, 8, 12.5, 17], w: 2.9, h: 2.9, full: [0, 1, 2], en
 export const RACKS = { z: [-5.55, -0.55, 4.45, 9.45, 14.45, 19.45], x0: [10.6, 6.2, 6.2, 6.2, 6.2, 6.2], x1: 19.8, deep: 1.3, bay: 2.72, levels: [0, 1.25, 2.45], beam: 0.12, top: 3.3 };
 export const baysOf = (row) => Math.floor((RACKS.x1 - RACKS.x0[row]) / RACKS.bay + 1e-6);
 // THE REST OF THE FLOOR (plan_3), each [x0, x1, z0, z1]: the scale north of container 01 by the cut corner, out of the
-// containers' way; the packing benches and the shipping desk at the south end; the forklift's place (left empty: a
-// painted bay); the pallets waiting on the loading floor; the two cold store doors in the east wall at the ends of two
+// containers' way; the packing benches and the shipping desk at the south end; the forklift's place (a painted bay:
+// his forklift parks in it, FORKLIFT below); the pallets waiting on the loading floor; the two cold store doors in the east wall at the ends of two
 // aisles (doors only: nothing is behind them)
 export const FLOOR = {
   scale: [-1.2, 2.2, -3.4, 0],
@@ -94,6 +94,28 @@ export const FLOOR = {
   waiting: [[-0.2, 15.5], [1.5, 15.5], [3.2, 15.5], [1.5, 19.6]],
   cold: [{ z: 2, n: 1 }, { z: 12, n: 2 }],
 };
+// THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
+// in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js
+// draws it), parked in its painted place. In his file it is one unit long, its forks along +x, its foot on y = 0:
+//   raw    its size in his file [long, tall, wide] (his units; the tallest part is the mast)
+//   mast   how tall its mast stands (m): it is fitted by its mast, so a real small forklift's 2 to 2.2 m. So its body is
+//          2.5 m long to the forks' face (3.45 m with its forks) and 1.14 m wide across its wheels, as a real one is.
+//          (Fitted by its length instead, 3 m with its forks, its mast would be 1.83 m, lower than a person's head.)
+//   at     the middle of its foot [x, z] (the middle of the painted place: FORKLIFT on the floor shows past its north
+//          side, the stripes past its south side); yaw: its turn about straight up (0: its forks to the east, toward
+//          the open floor south of the lift, where it would drive out)
+//   forks  where its two forks lie in his file [x0, x1, z0, z1] (his units). They lie low on the floor, under the
+//          heights a person's body is felt at (src/walls.js BODY), so a block over them, knee high, stands in the
+//          walls with the forklift: nobody walks over its forks
+export const FORKLIFT = { raw: [0.9995, 0.6079, 0.3296], mast: 2.1, at: [6.9, 32.9], yaw: 0, forks: [0.22, 0.5, -0.096, 0.095] };
+export const forkliftScale = () => FORKLIFT.mast / FORKLIFT.raw[1];
+// its foot on the floor at its place, [x0, x1, z0, z1] (m, the station's frame; a quarter turn at most)
+export function forkliftBox() {
+  const k = forkliftScale(), along = Math.abs(Math.cos(FORKLIFT.yaw)) > 0.5, L = FORKLIFT.raw[0] * k / 2, W = FORKLIFT.raw[2] * k / 2;
+  const [hx, hz] = along ? [L, W] : [W, L], [x, z] = FORKLIFT.at;
+  return [x - hx, x + hx, z - hz, z + hz];
+}
+
 // where nobody walks in the store, for the tests: every rack, the benches, the desk, the scale's post, the pallets
 // waiting, the container ends ([x0, x1, z0, z1])
 export function storeBlocks() {

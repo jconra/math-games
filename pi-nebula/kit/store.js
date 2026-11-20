@@ -8,13 +8,15 @@
 //              cargo slots in the west wall (three with a container's end come in through its socket, the fourth empty
 //              with a shield across it, as a hangar door has), two cold store doors in the east wall (doors only:
 //              nothing is behind them), the ceiling and its long lamps over the aisles and the lane, and the
-//              forklift's painted place (left empty: the game's maker makes the forklift)
+//              forklift's painted place (his forklift parks in it: kit/places-plan.js FORKLIFT)
 //   rack       a FREE piece: 'bays <n>', a row of shelving n bays long from x = 0 along +x, its middle on z = 0: two
 //              shelves over the floor, orange beams on dark uprights
 //   pallet     a FREE piece, a pallet and its load, 1.2 m by 1 m: 'crates', 'boxes', 'drums', 'wrapped', 'totes'
 //   scale      a FREE piece: the floor scale, a platform 3 m square with its readout on a post at its north-west corner
 //   bench      a FREE piece: 'packing', a packing bench 3.6 m long (two make the row of benches)
 //   shipDesk   a FREE piece: the shipping desk, 3.6 m long, its screens and its printer (the bill)
+//   forklift   the game's maker's own model, a file of his (kit/forklift.js draws it): listed here so the Kit Lab shows
+//              it with Cargo's pieces; the kit builds nothing of it
 // Chunky and plain: every copy of a piece is drawn with its room in one draw for each kind of surface (kit/layout.js).
 import * as THREE from 'three';
 import { MeshData, bevelBox, put } from './geo.js';
@@ -315,5 +317,8 @@ export const STORE_PIECES = {
   scale: { name: 'Floor scale', group: 'Cargo', at: 'free', variants: ['platform'], foot: [3.4, 1.8, 3.4], build: scale },
   bench: { name: 'Packing bench', group: 'Cargo', at: 'free', variants: ['packing'], foot: [3.6, 1.4, 0.9], build: bench },
   shipDesk: { name: 'Shipping desk', group: 'Cargo', at: 'free', variants: ['desk'], foot: [3.6, 1.4, 0.8], build: shipDesk },
+  // the game's maker's own forklift (kit/forklift.js): a file of his, not cut by the kit, so it builds nothing here;
+  // the Kit Lab fetches it and stands it on its stand (`model`), and in the station's Cargo in its painted place
+  forklift: { name: 'Forklift', group: 'Cargo', at: 'free', variants: ['his model'], foot: [3.45, 2.1, 1.14], build: () => {}, model: 'forklift' },
 };
 export { textWidth, MeshData };

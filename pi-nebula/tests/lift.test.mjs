@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LIFT, STOPS, TOWER, towerCorners, DESKS, DESK, STORE, SLOT, RACKS, baysOf, FLOOR, storeBlocks } from '../kit/places-plan.js';
+import { LIFT, STOPS, TOWER, towerCorners, DESKS, DESK, STORE, SLOT, RACKS, baysOf, FLOOR, storeBlocks, FORKLIFT, forkliftScale, forkliftBox } from '../kit/places-plan.js';
 import { stopIn, carry, choices, placeOf, dirOf, words, RIDE } from '../src/liftrules.js';
 import { SPIRE, SLOTS, DOCK, DECK_PATH, outsidePlans } from '../kit/outside-plan.js';
 
@@ -172,7 +172,7 @@ test('the store: laid out as the agreed drawing, nothing overlapping, a clear wa
   // the cold store doors in the east wall, at the ends of two aisles
   const aisles = RACKS.z.slice(0, -1).map((z, i) => (z + RACKS.z[i + 1]) / 2);
   for (const d of FLOOR.cold) assert.ok(aisles.some((a) => Math.abs(a - d.z) < 0.2), 'cold store ' + d.n + ' at an aisle\'s end');
-  // the forklift's place is left empty: nothing stands on it
+  // nothing else stands in the forklift's place (the forklift itself: the next test)
   const blocks = [...storeBlocks(), { what: 'the scale', box: FLOOR.scale }, { what: 'the lift', box: liftBox(stop('store')) }];
   for (const b of blocks) assert.ok(!overlap(b.box, FLOOR.forklift), b.what + ' stands in the forklift\'s place');
   for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) assert.ok(!overlap(blocks[i].box, blocks[j].box), blocks[i].what + ' overlaps ' + blocks[j].what);
@@ -198,4 +198,37 @@ test('the store: laid out as the agreed drawing, nothing overlapping, a clear wa
   const pallets = R.pieces.filter((p) => p.piece === 'pallet'), places = RACKS.z.reduce((n, _, i) => n + baysOf(i) * RACKS.levels.length * 2, 0);
   assert.ok(pallets.length > places * 0.6 && pallets.length <= places + FLOOR.waiting.length, `${pallets.length} pallets for ${places} places on the racks`);
   for (const p of pallets) { const q = at(p); assert.ok(RACKS.levels.some((y) => Math.abs(q.y - y - (y ? RACKS.beam : 0)) < 1e-6), 'a pallet on a shelf or the floor'); }
+});
+
+test('Cargo\'s forklift: the game\'s maker\'s own, a real one\'s size, parked in its painted place, clear of the walls and the benches', () => {
+  // fitted by its mast (a real small warehouse forklift's 2 to 2.2 m): so its body, to the forks' face, is 2.3 to 3 m
+  // long and it is a little over a metre wide across its wheels, as a real one is; its forks lie in front of its body
+  const k = forkliftScale(), [L, H, W] = FORKLIFT.raw, [fx0, fx1, fz0, fz1] = FORKLIFT.forks;
+  assert.ok(FORKLIFT.mast >= 2 && FORKLIFT.mast <= 2.2, 'its mast ' + FORKLIFT.mast);
+  assert.ok(Math.abs(H * k - FORKLIFT.mast) < 1e-9);
+  const body = (fx0 + L / 2) * k, forks = (fx1 - fx0) * k;
+  assert.ok(body >= 2.3 && body <= 3, 'its body ' + body.toFixed(2) + ' m long');
+  assert.ok(W * k > 1.0 && W * k < 1.25, (W * k).toFixed(2) + ' m wide');
+  assert.ok(forks > 0.8 && forks < 1.2, 'its forks ' + forks.toFixed(2) + ' m long');
+  assert.ok(fx1 <= L / 2 + 1e-3 && fz0 >= -W / 2 && fz1 <= W / 2, 'its forks inside its own box');
+  // standing in its painted place, with a little floor showing all round it
+  const F = forkliftBox(), [x0, x1, z0, z1] = F, [bx0, bx1, bz0, bz1] = FLOOR.forklift;
+  assert.ok(x0 > bx0 + 0.2 && x1 < bx1 - 0.2 && z0 > bz0 + 0.2 && z1 < bz1 - 0.2, 'in its place: ' + F.map((v) => v.toFixed(2)));
+  // inside the room, clear of its walls (their faces 0.3 m in from their lines) by more than a person's width
+  const wall = 0.3 + 0.7;
+  assert.ok(x0 > STORE.x0 + wall && x1 < STORE.x1 - wall && z0 > STORE.z0 + wall && z1 < STORE.z1 - wall, 'clear of the walls');
+  // clear of the benches, the shipping desk, the scale, the lift, the racks, the pallets waiting and the containers' ends,
+  // by more than a person's width
+  const blocks = [...storeBlocks(), { what: 'the scale', box: FLOOR.scale }, { what: 'the lift', box: liftBox(stop('store')) }];
+  for (const b of blocks) assert.ok(!overlap(b.box, F, -0.7), b.what + ' is within 0.7 m of the forklift');
+  // a way still clear (a person 0.7 m wide on a half-metre grid): from the lift's doorway to the benches, the shipping
+  // desk and every side of the forklift
+  const step = 0.5, r = 0.35, nx = Math.ceil((STORE.x1 - STORE.x0) / step), nz = Math.ceil((STORE.z1 - STORE.z0) / step), all = [...blocks, { what: 'the forklift', box: F }];
+  const free = (x, z) => x > STORE.x0 + 0.3 + r && x < STORE.x1 - 0.3 - r && z > STORE.z0 + 0.3 + r && z < STORE.z1 - 0.3 - r && !all.some((b) => x > b.box[0] - r && x < b.box[1] + r && z > b.box[2] - r && z < b.box[3] + r);
+  const cell = (x, z) => [Math.round((x - STORE.x0) / step), Math.round((z - STORE.z0) / step)], seen = new Uint8Array(nx * nz), s = stop('store');
+  const [i0, k0] = cell(s.at[0] + 1.8, s.at[2]), queue = [[i0, k0]]; seen[i0 * nz + k0] = 1;
+  while (queue.length) { const [i, kk] = queue.pop(); for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = i + di, b = kk + dk; if (a < 0 || b < 0 || a >= nx || b >= nz || seen[a * nz + b] || !free(STORE.x0 + a * step, STORE.z0 + b * step)) continue; seen[a * nz + b] = 1; queue.push([a, b]); } }
+  const reach = (x, z, what) => { const [i, kk] = cell(x, z); assert.ok(seen[i * nz + kk], 'no clear way from the lift to ' + what); };
+  reach(-1, 24.6, 'the packing benches'); reach(-1, 28.6, 'the shipping desk');
+  reach((x0 + x1) / 2, z0 - 0.6, 'the forklift\'s north side'); reach((x0 + x1) / 2, z1 + 0.6, 'its south side'); reach(x0 - 0.6, (z0 + z1) / 2, 'its back'); reach(x1 + 0.6, (z0 + z1) / 2, 'its forks\' tips');
 });

@@ -24,6 +24,7 @@ import { plane, put } from '../../kit/geo.js';
 import { Piece } from '../../kit/piece.js';
 import { makeDust } from '../../kit/dust.js';
 import { makeBeams, beamsOf } from '../../kit/beams.js';
+import { loadForklift, standForklift } from '../../kit/forklift.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station'], ['hull-sample', 'A sample hull'], ['ship-sample', 'A sample cabin'], ['ship-miner', 'Miner A'], ['ship-medic', 'Medic A'], ['ship-explorer', 'Explorer C'], ['ship-hauler', 'Hauler A']];
@@ -159,7 +160,10 @@ function touchControls() {
 }
 
 // ── building what's shown ────────────────────────────────────────────────────────────────────────────────────────
-function clearStage() { if (built) { built.dispose(); built = null; } if (beams) { beams.dispose(); beams = null; } STAGE.clear(); }
+function clearStage() { if (built) { built.dispose(); built = null; } if (beams) { beams.dispose(); beams = null; } STAGE.clear(); shown.model = null; shownFor++; }
+// (a model of the game's maker's own on show, his forklift: its numbers; shownFor: which stage it is for)
+const shown = { model: null };
+let shownFor = 0;
 // the beams of light with dust in them (kit/beams.js), under each light of the part that makes one; not at Low quality
 let beams = null;
 function showBeams() { const list = state.quality === 'low' ? [] : beamsOf(built.lights); if (list.length) { beams = makeBeams(list); STAGE.add(beams.object); } }
@@ -181,8 +185,18 @@ async function showPart(id = state.part, variant) {
   const room = { name: def.name, pieces: [{ piece: id, cell: [0, 0], turn: 0, variant, off: [0, lift, 0] }] };
   built = buildRoom(room, mats, { bake: { ...QUALITY[state.quality].bake, shadows: true }, extra: { solid: [standGeo()] } });
   STAGE.add(built.group); setDoors(built.doors, state.doors === 'open' ? 1 : 0); showBeams();
+  // (a model of the game's maker's own, a file the kit does not cut: his forklift, kit/forklift.js, fetched and stood
+  // on the stand, casting the key light's shadow as the kit's pieces do)
+  let model = null;
+  if (def.model === 'forklift') {
+    loading('Fetching the ' + def.name.toLowerCase() + '…', true);
+    const stage = shownFor, F = await loadForklift().catch((e) => { console.error('kit lab: the forklift did not come', e); return null; });
+    if (my !== partBusy || stage !== shownFor) return;
+    if (F) { model = standForklift(F, { at: [0, 0], floor: 0, yaw: 0 }); model.light(null, 0.9); model.group.traverse((o) => { if (o.isMesh && o.name !== 'forklift:shade') o.castShadow = true; }); STAGE.add(model.group); shown.model = F.facts; }
+  }
   // frame it
-  const box = roomBounds(room);
+  // (the model as it stands; had its file not come, the room it would take)
+  const box = model ? new THREE.Box3().setFromObject(model.group.children[0]) : def.model ? new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(0, def.foot[1] / 2, 0), new THREE.Vector3(...def.foot)) : roomBounds(room);
   framed.c = box.getCenter(new THREE.Vector3()); framed.r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() / 2);
   cam.mode = 'orbit'; camera.fov = 45; camera.updateProjectionMatrix(); view(state.view in PVIEWS ? state.view : 'q');
   key.target.position.copy(framed.c); key.position.copy(framed.c).add(new THREE.Vector3(4, 7, 5)); renderer.shadowMap.needsUpdate = true;
@@ -218,6 +232,15 @@ async function showRoom(id = state.room) {
   setEnv('room', R.probe || R.views?.start?.at || [0, 1.6, 0]); if (R.rooms) zoneProbes(built); dust.visible = state.quality !== 'low';
   if (!(state.view in (R.views || {}))) state.view = 'start';
   view(state.view); loading(''); menu(); readout();
+  parkForklift();
+}
+// THE STATION'S CARGO: the game's maker's forklift parked in its painted place, as in the game (kit/forklift.js), lit
+// by Cargo's own picture of itself; fetched once the room is up
+async function parkForklift() {
+  const zone = built?.zones?.find((z) => z.id === 'store'); if (!zone) return;
+  const mine = shownFor, F = await loadForklift().catch((e) => { console.error('kit lab: the forklift did not come', e); return null; });
+  if (!F || mine !== shownFor) return;
+  const f = standForklift(F); zone.group.add(f.group); f.light(zoneSets.get('store')?.env || null, 1.25); shown.model = F.facts; readout();
 }
 // the light round the scene: a studio for the parts; inside a room, the room itself seen from its middle (a picture
 // taken all round, blurred: its reflections and its soft bounce)
@@ -291,7 +314,7 @@ const fps = { n: 0, t: performance.now(), v: 0, ms: 0, cpu: 0 };
 let sceneCalls = 0, sceneTris = 0;
 function stats() {
   const s = built?.stats || {};
-  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: s.draws, tris: s.tris, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
+  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: (s.draws || 0) + (shown.model?.draws || 0), tris: (s.tris || 0) + (shown.model?.tris || 0), model: shown.model, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
 }
 function readout() {
   const s = stats(), what = state.tab === 'parts' ? `${PIECES[state.part].name} · ${state.variant}` : state.tab === 'sky' ? 'Sky · ' + SKY_VIEWS[state.sky].name : (ROOMS.find((r) => r[0] === state.room)?.[1] || state.room);

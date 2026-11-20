@@ -50,6 +50,7 @@ import { makeMission } from './mission.js';
 import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
 import { makeLift } from './lift.js';
+import { makeCargoForklift } from './cargoforklift.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
@@ -167,6 +168,8 @@ async function boot() {
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
+  // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift (src/cargoforklift.js)
+  const forklift = GAME.forklift = makeCargoForklift({ W, walls });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -226,6 +229,8 @@ async function boot() {
     // (and the control room's and Cargo's people about only while the player is there: the lift says where, src/lift.js
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
+    // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
+    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });
     sound.ears(W.camera);
     if (GAME.player) {
       const busy = jobs.busy();
