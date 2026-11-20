@@ -61,6 +61,9 @@
 // seen from the front (x across, up up, one scale both ways, the visor's middle at the layout's middle). It is plain
 // dark glass, and the face on it is drawn by its shader as glowing strokes, as the character sheet draws them: EXPRESSIONS
 // (neutral, happy, thinking with its turning ring of dots, surprised), set with c.setExpression(name).
+// A FACE PLATE (the game's maker's six androids, 2026-11-19): the same faces drawn by the head's own material on its
+// painted plate (crewPart.face 'plate'), only where his paint is dark; see A FACE PLATE below. c.meshes.visor is then
+// the head itself.
 //
 // CARD HAIR (Blender-made styles: a smooth shell plus hair cards, crew.json `cards: true`): one shared grey strand atlas
 // for every style (crew.json hairAtlas), tinted by the hair colour, drawn in one alpha-to-coverage pass (hairCardMaterial).
@@ -1011,8 +1014,20 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
     if (PT.marks) m.defines.CR_MARKS = '';
   }
   m.userData.crewOwnColours = !!(part && part.jobColours === false);
+  // (A FACE PLATE, below: a head packed with a face layout on its painted plate (crewPart.face 'plate': the androids'))
+  const FP = !!(part && part.kind === 'head' && part.face === 'plate');
+  if (FP) {
+    m.defines.CREW_FACE = '';
+    m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
+    Object.assign(u, m.userData.visor, { crFaceAt: { value: new THREE.Vector4(0, 0, 1, 0) }, crFaceLook: { value: new THREE.Vector4(...PLATE_FACE.dark, 0, PLATE_FACE.rough) } });
+  }
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
+    if (FP) {
+      sh.vertexShader = 'attribute vec2 crFace; varying vec2 vCrFace;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  vCrFace = crFace;`);
+      sh.fragmentShader = 'varying vec2 vCrFace; uniform vec4 crFaceAt, crFaceLook;\n' + VISOR_GLSL + PLATE_GLSL + sh.fragmentShader;
+    }
     if (PT) sh.vertexShader = 'uniform mat4 crHeadFrame; varying vec3 vCrHead; varying vec3 vCrHeadN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
     if (FK) sh.vertexShader = 'uniform mat4 crFrecFrame; varying vec3 vCrFrec;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -1048,6 +1063,18 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 ` + sh.fragmentShader
       .replace('#include <map_fragment>', `#include <map_fragment>
   float crLineMask = 0.0;
+#ifdef CREW_FACE
+  // (on the plate's layout (every other face of the head lies at its corner (0, 1)), where his paint is dark)
+  float crFaceOn = 0.0, crFaceLens = 0.0;
+  #ifdef USE_MAP
+  float crFaceIn = 1.0 - step(vCrFace.x, 0.001) * step(0.999, vCrFace.y);
+  crFaceOn = crFaceIn * (1.0 - smoothstep(crFaceLook.x, crFaceLook.y, crLum(sampledDiffuseColor.rgb)));
+  // (ONE EYE on a round lens (crFaceLook.z: the lens's radius, in the face's own measure): its middle made the eye's dark
+  // glass, below, and the eye drawn there whatever the paint)
+  if (crFaceLook.z > 0.0) crFaceLens = crFaceIn * (1.0 - smoothstep(crFaceLook.z * 0.85, crFaceLook.z, length((vCrFace - vec2(0.5) - vec2(crFaceAt.x, -crFaceAt.y)) / crFaceAt.z)));
+  crFaceOn = max(crFaceOn, crFaceLens);
+  #endif
+#endif
 #ifdef USE_MAP
   #if defined(CREW_SUIT) && defined(CREW_MASKTEX)
   {
@@ -1089,6 +1116,9 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
   #ifdef CREW_FRECKLES
     diffuseColor.rgb = mix(diffuseColor.rgb, crFreckled(diffuseColor.rgb), crA(sampledDiffuseColor.a));
   #endif
+  #ifdef CREW_FACE
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.004, 0.005, 0.007), crFaceLens); crLineMask *= 1.0 - crFaceLens;
+  #endif
   diffuseColor.a = opacity;
 #endif
 #ifdef CREW_HAIR
@@ -1109,9 +1139,15 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 #ifdef CREW_PAINT
   roughnessFactor = mix(roughnessFactor, 0.92, crPaintM);
+#endif
+#ifdef CREW_FACE
+  roughnessFactor = mix(roughnessFactor, crFaceLook.w, crFaceOn);
 #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-  totalEmissiveRadiance += crLines * crLineMask * crGlow;`);
+  totalEmissiveRadiance += crLines * crLineMask * crGlow;
+#ifdef CREW_FACE
+  totalEmissiveRadiance += vsCol * vsGlow * crPlateFace(vCrFace) * crFaceOn;
+#endif`);
     if (PB) sh.fragmentShader = 'varying vec3 vCrRadial; uniform float crBend;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   normal = normalize(mix(normal, normalize(vCrRadial + 1e-6), crBend));`);
     if (SL) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + STRAND_NORMAL)
@@ -1729,6 +1765,41 @@ float vsFace(vec2 uv) {
 }
 `;
 const VISOR_OWN = 0x35f2e4;      // the colour a visor's face glows in when no eye colour is given
+// A FACE PLATE (2026-11-19, the game's maker's six androids: "It would be great to have faces on the ones that have
+// fave plates. There's at least one that has a circle where their face is. So Im not sure about that one. But you can
+// try something"). An android's face plate is part of its head as he painted it (not cut out as glass: cut by whole
+// faces its edge was a saw of white teeth); the head part carries a second layout over the plate (crewPart.face 'plate',
+// rigs/crew-rig/parts.py face_layout: seen from the front as a visor's is), and the head's own material draws the
+// visor's faces and expressions there (vsFace), glowing in the eye colour, only where his paint is dark (PLATE_FACE.dark:
+// the texel's lightness, fully dark below the first, none above the second), the plate a little glossier there
+// (PLATE_FACE.rough). crew.json's head entry `plateFace` places it: at [x, y] (the face's middle moved, in the layout's
+// width: + to the head's left and up), size (1: as a visor's), eye (true: ONE EYE, for a plate that is one round lens:
+// a round eye that blinks, a happy arc, the turning ring of dots, a wide ring), lens (the lens's middle, out to that
+// radius in the face's own measure, taken as the eye's dark glass: his painted pupil gives way to the drawn eye).
+const PLATE_FACE = { dark: [0.03, 0.09], rough: 0.16 };
+const PLATE_GLSL = `
+float vsEye(vec2 uv) {
+  vec2 p = vec2(uv.x - 0.5, 0.5 - uv.y);
+  float d = 1e3;
+  if (vsExpr == 1) d = vsArc(p, vec2(0.0, -0.05), 0.13, 0.45, 2.69);
+  else if (vsExpr == 2) {
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.7853982 + vsTime * 3.0;
+      d = min(d, length(p - 0.13 * vec2(cos(a), sin(a))) - (0.008 + 0.016 * float(i) / 7.0));
+    }
+  } else if (vsExpr == 3) d = min(abs(length(p) - 0.17), length(p) - 0.04);
+  else {
+    float b = fract(vsTime / 4.3); b = 1.0 - smoothstep(0.0, 0.025, b) * (1.0 - smoothstep(0.035, 0.06, b));
+    d = length(vec2(p.x, p.y / max(b, 0.12))) - 0.09;
+  }
+  float w = 0.024;
+  return (1.0 - smoothstep(w * 0.55, w, d)) + 0.22 * exp(-max(d - w, 0.0) * 34.0);
+}
+float crPlateFace(vec2 uv) {
+  vec2 q = vec2(0.5) + (uv - vec2(0.5) - vec2(crFaceAt.x, -crFaceAt.y)) / crFaceAt.z;
+  return crFaceAt.w > 0.5 ? vsEye(q) : vsFace(q);
+}
+`;
 function visorMaterial(src) {
   const m = new THREE.MeshStandardMaterial({ name: 'visor', color: 0x05070a, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.3 });
   const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
@@ -3278,6 +3349,14 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       // they lie on the body's. Captain Vega's helmet is packed without them and is drawn as it was.)
       const plated = kind === 'head' && !!(refsOf.head && refsOf.head.masks && refsOf.head.masks.tex);
       const mat = crewMaterial(own, plated ? 'suit' : kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
+      // (A FACE PLATE: the head's own material draws the face, as a visor's is drawn (its expressions, its eye colour);
+      // where on the plate and how big from crew.json's head entry `plateFace`; its layout read as the attribute crFace)
+      if (mat.userData.visor) {
+        visor = mat; meshes.visor = o;
+        if (o.geometry.attributes.uv1 && !o.geometry.attributes.crFace) o.geometry.setAttribute('crFace', o.geometry.attributes.uv1);
+        const F = (lib.entry('head', R.head) || {}).plateFace || {};
+        mat.userData.crew.crFaceAt.value.set((F.at || [0, 0])[0], (F.at || [0, 0])[1], F.size || 1, F.eye ? 1 : 0); mat.userData.crew.crFaceLook.value.z = +F.lens || 0;
+      }
       // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
       if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       // (A HAIR COLOURED BY ITS OWN LIGHT AND DARK: set before the material is first drawn, so its shader is made with it)
