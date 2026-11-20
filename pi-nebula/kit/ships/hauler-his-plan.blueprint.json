@@ -1,0 +1,475 @@
+{
+ "id": "hauler-his-plan",
+ "name": "His deck plan",
+ "ship": "ship-hauler-built",
+ "shell": "hauler-built",
+ "grid": {
+  "cell": 0.5,
+  "step": 0.5,
+  "deck": 1.05
+ },
+ "idea": "Drawn from his own deck plan: the cockpit for four (two seats, two more behind them), then the crew area and mess, which the crew door opens straight into (his plan has no airlock), one 2-high bunk as his bunk picture has, the washroom beside a short passage, and a bigger engineering at the back reaching into the engine block. No cargo bay inside: the cargo rides outside in the eight containers.",
+ "rooms": [
+  {
+   "id": "cockpit",
+   "name": "Cockpit for four",
+   "kind": "cockpit",
+   "rect": [
+    -1,
+    4.0,
+    1,
+    6.5
+   ],
+   "ceiling": "canopy",
+   "floor": 0.3,
+   "notes": "its floor 0.3 m over the cabin's deck, one step up; under the canopy there is 2.1 m over it at the seats and less ahead of them"
+  },
+  {
+   "id": "crew",
+   "name": "Crew area and mess",
+   "kind": "galley",
+   "rect": [
+    -1,
+    0.5,
+    1,
+    4.0
+   ],
+   "ceiling": 2.2,
+   "notes": "his plan's \"Crew Area (Mess / Rest)\": the crew door opens into it (his plan draws no airlock)"
+  },
+  {
+   "id": "bunks",
+   "name": "Crew bunks",
+   "kind": "bunks",
+   "rect": [
+    -1,
+    -1.5,
+    1,
+    0.5
+   ],
+   "ceiling": 2.5
+  },
+  {
+   "id": "wash",
+   "name": "Washroom",
+   "kind": "washroom",
+   "rect": [
+    -1,
+    -3.0,
+    0,
+    -1.5
+   ],
+   "ceiling": 2.3
+  },
+  {
+   "id": "passage",
+   "name": "Passage",
+   "kind": "corridor",
+   "rect": [
+    0,
+    -3.0,
+    1,
+    -1.5
+   ],
+   "ceiling": 2.3
+  },
+  {
+   "id": "engineering",
+   "name": "Engineering",
+   "kind": "engineering",
+   "rect": [
+    -1,
+    -6.5,
+    1,
+    -3.0
+   ],
+   "ceiling": 2.5,
+   "busy": true
+  }
+ ],
+ "doors": [
+  {
+   "id": "outer",
+   "rooms": [
+    "crew",
+    "outside"
+   ],
+   "at": [
+    1,
+    3.25
+   ],
+   "width": 0.8,
+   "notes": "the crew door in the port side behind the cab"
+  },
+  {
+   "id": "cockpit",
+   "rooms": [
+    "crew",
+    "cockpit"
+   ],
+   "at": [
+    0,
+    4.0
+   ],
+   "width": 0.8
+  },
+  {
+   "id": "bunks",
+   "rooms": [
+    "crew",
+    "bunks"
+   ],
+   "at": [
+    0.5,
+    0.5
+   ],
+   "width": 0.8
+  },
+  {
+   "id": "wash",
+   "rooms": [
+    "wash",
+    "passage"
+   ],
+   "at": [
+    0,
+    -2.6
+   ],
+   "width": 0.6,
+   "leaves": 1
+  },
+  {
+   "id": "passage-a",
+   "rooms": [
+    "passage",
+    "bunks"
+   ],
+   "at": [
+    0.5,
+    -1.5
+   ],
+   "width": 0.8
+  },
+  {
+   "id": "passage-b",
+   "rooms": [
+    "passage",
+    "engineering"
+   ],
+   "at": [
+    0.5,
+    -3.0
+   ],
+   "width": 0.8
+  }
+ ],
+ "items": [
+  {
+   "id": "seat-l",
+   "kind": "seat",
+   "room": "cockpit",
+   "rect": [
+    0.25,
+    4.75,
+    1.0,
+    5.5
+   ],
+   "h": 1.3,
+   "name": "Bucket seat, pilot"
+  },
+  {
+   "id": "seat-r",
+   "kind": "seat",
+   "room": "cockpit",
+   "rect": [
+    -1.0,
+    4.75,
+    -0.25,
+    5.5
+   ],
+   "h": 1.3,
+   "name": "Bucket seat, co-pilot"
+  },
+  {
+   "id": "pedestal",
+   "kind": "console",
+   "room": "cockpit",
+   "rect": [
+    -0.25,
+    4.75,
+    0.25,
+    5.5
+   ],
+   "h": 0.9,
+   "name": "Throttle pedestal"
+  },
+  {
+   "id": "dash",
+   "kind": "console",
+   "room": "cockpit",
+   "rect": [
+    -1.0,
+    5.5,
+    1.0,
+    6.5
+   ],
+   "h": 0.9,
+   "name": "Dash, under the windscreen"
+  },
+  {
+   "id": "seat-3",
+   "kind": "seat",
+   "room": "cockpit",
+   "rect": [
+    0.5,
+    4.0,
+    1.0,
+    4.75
+   ],
+   "h": 1.3,
+   "name": "Seat for a third crew member (behind the pilot)",
+   "notes": "his deck plan: \"Cockpit (Crew: 2-4)\", four seats, two by two"
+  },
+  {
+   "id": "seat-4",
+   "kind": "seat",
+   "room": "cockpit",
+   "rect": [
+    -1.0,
+    4.0,
+    -0.5,
+    4.75
+   ],
+   "h": 1.3,
+   "name": "Seat for a fourth crew member (behind the co-pilot)"
+  },
+  {
+   "id": "suit-1",
+   "kind": "locker",
+   "room": "crew",
+   "rect": [
+    -1,
+    3.0,
+    -0.75,
+    3.5
+   ],
+   "h": 2.0,
+   "name": "Suit locker, high on the wall (starboard, by the door)",
+   "fit": "high"
+  },
+  {
+   "id": "suit-2",
+   "kind": "locker",
+   "room": "crew",
+   "rect": [
+    -1,
+    3.5,
+    -0.75,
+    4.0
+   ],
+   "h": 2.0,
+   "name": "Suit locker, high on the wall (starboard, by the door)",
+   "fit": "high"
+  },
+  {
+   "id": "bench-a",
+   "kind": "bench",
+   "room": "crew",
+   "rect": [
+    -1,
+    0.5,
+    -0.5,
+    1.0
+   ],
+   "h": 0.45,
+   "name": "Bench"
+  },
+  {
+   "id": "table",
+   "kind": "table",
+   "room": "crew",
+   "rect": [
+    -1,
+    1.0,
+    -0.25,
+    2.0
+   ],
+   "h": 0.75,
+   "name": "Mess table (four, on its two benches)",
+   "stools": 0
+  },
+  {
+   "id": "bench-b",
+   "kind": "bench",
+   "room": "crew",
+   "rect": [
+    -1,
+    2.0,
+    -0.5,
+    2.5
+   ],
+   "h": 0.45,
+   "name": "Bench"
+  },
+  {
+   "id": "drinks",
+   "kind": "locker",
+   "room": "crew",
+   "rect": [
+    0.5,
+    1.0,
+    1,
+    1.5
+   ],
+   "h": 2.0,
+   "name": "Drink unit",
+   "fit": "drinks"
+  },
+  {
+   "id": "counter",
+   "kind": "counter",
+   "room": "crew",
+   "rect": [
+    0.5,
+    1.5,
+    1,
+    2.5
+   ],
+   "h": 0.9,
+   "name": "Galley counter (cooker, sink), the grow pod over it"
+  },
+  {
+   "id": "bunk-s",
+   "kind": "bunk",
+   "room": "bunks",
+   "rect": [
+    -1,
+    -1.5,
+    -0.4,
+    0.5
+   ],
+   "h": 1.9,
+   "name": "Bunks, 2-high (starboard)",
+   "head": "high",
+   "notes": "his picture \"Crew Bunks (2-4)\": one 2-high bunk; the other two of four share them, or sleep in the cockpit's seats"
+  },
+  {
+   "id": "lockers-s",
+   "kind": "overhead",
+   "room": "bunks",
+   "rect": [
+    -1,
+    -1.5,
+    -0.4,
+    0.5
+   ],
+   "h": 0.45,
+   "name": "Lockers over the berths (one each)",
+   "y": 1.9
+  },
+  {
+   "id": "locker-1",
+   "kind": "locker",
+   "room": "bunks",
+   "rect": [
+    0.75,
+    -1.0,
+    1,
+    -0.5
+   ],
+   "h": 2.0,
+   "name": "Crew locker"
+  },
+  {
+   "id": "locker-2",
+   "kind": "locker",
+   "room": "bunks",
+   "rect": [
+    0.75,
+    -0.5,
+    1,
+    0.0
+   ],
+   "h": 2.0,
+   "name": "Crew locker"
+  },
+  {
+   "id": "shower",
+   "kind": "shower",
+   "room": "wash",
+   "rect": [
+    -1,
+    -2.25,
+    -0.25,
+    -1.5
+   ],
+   "h": 2.0,
+   "name": "Shower"
+  },
+  {
+   "id": "toilet",
+   "kind": "toilet",
+   "room": "wash",
+   "rect": [
+    -1,
+    -3.0,
+    -0.5,
+    -2.25
+   ],
+   "h": 0.8,
+   "name": "Toilet"
+  },
+  {
+   "id": "drive",
+   "kind": "machine",
+   "room": "engineering",
+   "rect": [
+    -1,
+    -6.5,
+    1,
+    -5.5
+   ],
+   "h": 1.8,
+   "name": "Drive, pumps and the engines' feed"
+  },
+  {
+   "id": "reactor",
+   "kind": "machine",
+   "room": "engineering",
+   "rect": [
+    -1,
+    -5.5,
+    -0.25,
+    -4.0
+   ],
+   "h": 1.8,
+   "name": "Reactor"
+  },
+  {
+   "id": "eng-station",
+   "kind": "console",
+   "room": "engineering",
+   "rect": [
+    0.5,
+    -5.0,
+    1,
+    -4.0
+   ],
+   "h": 1.2,
+   "name": "Engineering station"
+  },
+  {
+   "id": "eng-shelves",
+   "kind": "rack",
+   "room": "engineering",
+   "rect": [
+    0.5,
+    -4.0,
+    1,
+    -3.5
+   ],
+   "h": 1.8,
+   "name": "Spares and tools"
+  }
+ ]
+}

@@ -18,10 +18,13 @@
 //     reaching), Thrusters (the corner pods swivel and fire), Canisters on / off (the eight ore canisters on their
 //     mounts), Door (the belly lift's door), Gear. The Medic ("Medic (built)"): Ramps down / up (each ramp unfolds as it
 //     comes down), Ramp: both sides or one (port; the starboard opening sealed, cabinets along it inside), Door (the
-//     crew doors' airstairs), Gear. All: Dirt sets the grime over the clean paint; Throttle runs the
+//     crew doors' airstairs), Gear. The Hauler ("Hauler (built)"): Thrusters (its four corner pods), Containers on /
+//     off (the shared Canisters control, named by its LAB.cargo), and its own chips (its LAB.menu): one container
+//     unloaded or loaded at a time, the clamps' jaws open or shut, the containers' look; Door (the crew door lifts,
+//     then its stair swings down), Gear. All: Dirt sets the grime over the clean paint; Throttle runs the
 //     engines up (plume.js, the jet: Off nothing, the nozzles dark; Idle a dull orange, up through bright orange and
 //     white-yellow to blue at Afterburn), easing to the new setting.
-//   ?ship=built|miner|medic|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   ?ship=built|miner|medic|hauler|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   ?look=light|warm  ?level=asnow|darker|darkest (the Light look's light level; the menu's Light chips)
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
@@ -53,17 +56,20 @@ import { makeBeams } from '../../kit/beams.js';
 import * as EB from '../../kit/ships/explorer-built.js';
 import * as MB from '../../kit/ships/miner-built.js';
 import * as MD from '../../kit/ships/medic-built.js';
+import * as HB from '../../kit/ships/hauler-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
 // .space.json measured from it)
 // (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
 const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-ore-cockpit', 'miner-mess-forward', 'miner-bunks-forward'];   // (his pick first, so the lab opens on it)
+const HAULER_BPS = ['hauler-row', 'hauler-his-plan', 'hauler-bunks-forward'];   // (the first: the plainest, so the lab opens on it until the game's maker picks)
 const MEDIC_BPS = ['medic-open-bench', 'medic-open', 'medic-open-daybed', 'medic-bunks-across', 'medic-side-by-side', 'medic-one-ramp'];   // (the first three: one airlock, drawn from the marks of the game's maker, the first of them the plan he chose, so the lab opens on it; the rest: the earlier two-airlock plans)
 const SHIPS = [
   { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
   { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
   { id: 'medic', name: 'Medic (built)', layout: 'ship-medic-built', shell: 'medic-built', lab: MD.LAB, bps: MEDIC_BPS, note: 'The Medic built from the 3k smart mesh with its own ring engines and the 8k\'s legs: a ramp in each side opening into the med bay (or one, the other sealed), one crew door (an airstair, on the port side), legs that rise into the belly' },
+  { id: 'hauler', name: 'Hauler (built)', layout: 'ship-hauler-built', shell: 'hauler-built', lab: HB.LAB, bps: HAULER_BPS, note: 'The Hauler built from the 3k smart mesh\'s nose and cab and the 8k\'s engines, its middle in code: a spine with eight separate containers in yellow clamp frames (each unloads on its own), a crew door that lifts with a stair that swings down, legs that draw up into their pods' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
@@ -498,7 +504,10 @@ function menu() {
     // (a ship with its own arm chips draws those: the Miner's claws, folds and work, miner-built.js LAB.armChips)
     ...(has('arms') ? [sep(), lab('Arms'), ...(L.armChips ? L.armChips(st, menu).map((c) => (c.label ? lab(c.label) : chip(c.text, c.on, c.do, true, c.tip))) : [chip(st.arms === 'stowed' ? 'Arms reaching' : 'Arms stowed', false, () => { st.arms = st.arms === 'stowed' ? 'reaching' : 'stowed'; menu(); }, true, 'Fold the mining arms in for flight, or reach them out to dig (the cutter heads spin)')])] : []),
     ...(has('thrusters') ? [sep(), lab('Thrusters'), chip(st.thrusters ? 'Thrusters off' : 'Thrusters', st.thrusters, () => { st.thrusters = !st.thrusters; menu(); }, true, 'The corner pods swivel and fire')] : []),
-    ...(has('canisters') ? [sep(), lab('Canisters'), chip(st.canisters ? 'Canisters off' : 'Canisters on', false, () => { st.canisters = !st.canisters; menu(); }, true, 'The eight ore canisters on their mounts, or the mounts empty')] : []),
+    ...(has('canisters') ? [sep(), lab(L.cargo?.name || 'Canisters'), chip(`${L.cargo?.name || 'Canisters'} ${st.canisters ? 'off' : 'on'}`, false, () => { st.canisters = !st.canisters; menu(); }, true, L.cargo?.tip || 'The eight ore canisters on their mounts, or the mounts empty')] : []),
+    // (a built ship's own chips, from its module (its LAB.menu): the Hauler's containers one at a time, its clamps, the
+    // containers' look)
+    ...(L?.menu ? L.menu({ sep, lab, chip, menu, st, reload: (ids) => { for (const id of ids) forgetPiece(id); for (const k of [...shells.keys()]) if (k.startsWith(st.ship.id)) shells.delete(k); showShip(st.ship); } }) : []),
     ...(has('ramps') ? [sep(), lab('Ramps'), chip(st.ramps === 'down' ? 'Ramps up' : 'Ramps down', false, () => { st.ramps = st.ramps === 'down' ? 'up' : 'down'; menu(); }, true, 'Lower the ramps to the ground (each unfolds as it comes down), or raise them to close the bay')] : []),
     ...(has('rampCount') ? [lab('Ramp'), ...[['both', 'Both sides'], ['one', 'One (port)']].map(([k, t]) => chip(t, st.rampCount === k, () => { st.rampCount = k; menu(); }, true, k === 'one' ? 'Only the port ramp opens; the starboard opening is sealed, with medical cabinets along it inside' : 'A ramp in each side opening'))] : []),
     ...(has('gear') ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, L.gearTip || 'Fold the landing legs into their wells, or let them down')] : []),
