@@ -87,6 +87,9 @@
 .mbl-final span:first-child em { color: var(--you); } .mbl-final span:last-child em { color: var(--them); }
 .mbl-final .mbl-dash { color: var(--faint); font-size: 14px; }
 .mbl-earned { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--accent); font-weight: 700; }
+/* (under the credits: "Your best: N", or "New best!" in the player's own colour when this round beat it) */
+.mbl-best { margin: -4px 0 0; text-align: center; color: var(--dim); font-size: 15px; font-weight: 600; }
+.mbl-best.is-new { color: var(--you); font-weight: 800; letter-spacing: 0.04em; }
 .mbl-endgo { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .mbl-endgo button { height: 44px; padding: 0 16px; font-weight: 700; background: var(--glass-hi) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 9px; }
 .mbl-endgo .mbl-again { background: var(--accent) !important; color: var(--accent-ink); box-shadow: none; }

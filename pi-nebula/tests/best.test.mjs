@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
-import { keepBest } from '../src/mathball/best.js';
+import { keepBest, bestWords } from '../src/mathball/best.js';
 import { ANNOUNCE, LINES, makeAnnouncer, makeAnnounce, happened } from '../src/announce.js';
 import { makeStore } from '../../shared/players.js';
 
@@ -37,6 +37,21 @@ test('a best round: the first only sets it (nothing beaten), more beats it, the 
   assert.deepEqual(round(old, 3), { best: 3, was: null, beaten: false });
   // (a damaged number in a save is no best)
   for (const bad of [-1, NaN, 'x', null]) { const d = { id: 'd', jobs: { arena: { best: bad } } }; assert.equal(round(d, 2).beaten, false); assert.equal(d.jobs.arena.best, 2); }
+});
+
+test('the end card under the credits (the game\'s maker: "Your best: 6". When you beat it: "New best!")', () => {
+  const c = { id: 'e' }, card = (score) => bestWords(round(c, score));
+  assert.equal(card(3), 'Your best: 3', 'the first round only sets it: its own score is the best');
+  assert.equal(card(6), 'New best!', 'more: beaten');
+  assert.equal(card(6), 'Your best: 6', 'the same again: not beaten');
+  assert.equal(card(4), 'Your best: 6', 'less: the best kept');
+  assert.equal(card(0), 'Your best: 6');
+  assert.equal(card(7), 'New best!');
+  assert.equal(card(2), 'Your best: 7');
+  // (a first round of nothing: a best of 0)
+  assert.equal(bestWords(round({ id: 'z' }, 0)), 'Your best: 0');
+  // (nothing kept: no line)
+  assert.equal(bestWords(null), ''); assert.equal(bestWords({ best: null, beaten: false }), '');
 });
 
 test('each crew member keeps their own best, with their save, and a reload keeps it', () => {

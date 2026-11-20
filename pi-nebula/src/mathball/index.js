@@ -18,7 +18,8 @@
 //     line why. The keys or the thumb stick still walk you about; dragging the view turns the camera;
 //   - the light bar runs round the room: as it reaches each goal (every 30 seconds) that goal's rule changes. Back over
 //     the door, the round ends: the score and the credits, then Play again (one tap) or Leave; the crew member's own
-//     best round is kept with their save, and a round that beats it has the station announce it (best.js);
+//     best round is kept with their save, and a round that beats it has the station announce it (best.js); under the
+//     credits the card says "Your best: N", or "New best!" when this round beat it;
 //   - Help (H) shows the four goals' rules explained, any time, and holds the round still while it is open.
 //
 //   const M = openMathball({ W, walls, input, crew, lib, job, people, onClose, onSave, onCredits })
@@ -40,7 +41,7 @@ import { makeCrew } from '../../kit/crew.js';
 import { ROSTER } from '../life.js';
 import { shine } from '../player.js';
 import { makeSound } from './sound.js';
-import { keepBest } from './best.js';
+import { keepBest, bestWords } from './best.js';
 import { happened } from '../announce.js';
 
 const MID = COURT.mid;
@@ -225,10 +226,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function showEnd(r) {
     lastEnd = r; const opp = OPPONENTS[choice], was = other || opp;
     const words = r.you > r.them ? 'You win!' : r.you < r.them ? `${esc(was.name)} wins this one` : 'A draw!';
-    const E2 = $('.mbl-end');
+    const E2 = $('.mbl-end'), mine = bestWords(r.best);
     E2.innerHTML = `<h2>${words}</h2>
       <div class="mbl-final"><span><b>You</b><em>${r.you}</em></span><span class="mbl-dash">to</span><span><em>${r.them}</em><b>${esc(was.name)}</b></span></div>
       <p class="mbl-earned"><i aria-hidden="true"></i>${earned.toLocaleString('en-US')} credits this round</p>
+      ${mine ? `<p class="mbl-best${r.best.beaten ? ' is-new' : ''}">${esc(mine)}</p>` : ''}
       ${levelHtml(r.played ?? null)}
       <div class="mbl-endgo"><button type="button" class="mbl-again">Play again<kbd>Enter</kbd></button>
       <button type="button" class="mbl-swap">Against: ${esc(opp.name)} &#9656;</button>
@@ -526,7 +528,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     onSave(); sound.play('end');
     if (best.beaten) happened('best');
     showGoals(false); say('', 0);
-    showEnd({ you: e.you, them: e.them, played: Math.max(0, LADDER.findIndex((s) => s.key === set.key)) });
+    // (the card says the best under the credits: "Your best: N", or "New best!" when this round beat it)
+    showEnd({ you: e.you, them: e.them, played: Math.max(0, LADDER.findIndex((s) => s.key === set.key)), best });
     if (hiddenPerson) { /* (they stay out of the station's crowd while they are here on the court) */ }
   }
   // (the HUD is written only when something on it changes)

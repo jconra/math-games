@@ -13,3 +13,12 @@ export function keepBest(tally, score) {
   if (was == null || s > was) tally.best = s;
   return { best: tally.best, was, beaten };
 }
+// ON THE END CARD (2026-11-20, the game's maker: "Under the credits on the end card: "Your best: 6". When you beat it:
+// "New best!""). The line under the credits on the card at the end of a round: the crew member's own best, or, the
+// round that beat it, "New best!". (The first round only sets it, as the station says nothing then: "Your best: 3".)
+// Nothing of it on the card where you pick who to play.
+//   bestWords(keepBest's { best, beaten }) -> 'Your best: 6' | 'New best!' | '' (no best)
+export function bestWords(r) {
+  if (!r || !Number.isFinite(r.best)) return '';
+  return r.beaten ? 'New best!' : `Your best: ${r.best}`;
+}
