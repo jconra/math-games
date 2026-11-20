@@ -95,9 +95,10 @@ export const SHIPS = [
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
     // (standing on the top of its dashboard, 0.8 m ahead of the eyes, between its life support and its terminal (its
     // kit's COCKPIT_BANK); held upright, further along the top, its foot above those two screens as that view sees
-    // them; riding in the other seat, beyond the terminal)
+    // them; riding in the other seat, beyond the terminal and a little further along the top, so that seat's view (its
+    // look is the pilot's: src/flying.js aim) has it above a phone's help tab)
     dash: { arc: 2.26625, at: [0.2889, 3.256, 4.9746], w: 0.6249, h: 0.1934, lean: 0.4, tall: { at: [0.4524, 3.3217, 5.256], w: 0.6282, h: 0.1944, lean: 0.31 },
-      rider: { at: [-0.5742, 3.256, 4.9288], w: 0.5297, h: 0.164, lean: 0.4, tall: { at: [-0.5622, 3.3217, 5.2373], w: 0.5299, h: 0.164, lean: 0.31 } } },
+      rider: { at: [-0.5978, 3.2735, 5.0055], w: 0.5433, h: 0.1682, lean: 0.4, tall: { at: [-0.5118, 3.3217, 5.2464], w: 0.5079, h: 0.1572, lean: 0.31 } } },
     // (src/flymodel.js MINER.floor has the words: the crane's rails, the rack, the cart)
     floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
     shove: { mass: 2, gyr: 4 }, voice: 'miner',
@@ -118,7 +119,10 @@ export const SHIPS = [
     // in front of the pilot, its foot on the screen there, leaning back less than the face, its top just in front of
     // the hood, turned with the face's curve; held upright, none of the face is above a phone's buttons, so it stands
     // on the hood's top at the windscreen's foot, over the bottom of the window)
-    dash: { arc: 1.94167, at: [0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [0.47, 3.098, 5.696], w: 0.5, h: 0.155, lean: 0.17 } },
+    // (riding in the other seat, across the ship, on its face's other screen; held upright, a little nearer the middle,
+    // as that seat's view looks where the pilot's does)
+    dash: { arc: 1.94167, at: [0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [0.47, 3.098, 5.696], w: 0.5, h: 0.155, lean: 0.17 },
+      rider: { at: [-0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [-0.4, 3.098, 5.7041], w: 0.5, h: 0.155, lean: 0.17 } } },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'explorer',
   },
   {
@@ -134,7 +138,7 @@ export const SHIPS = [
     // (standing on the top of its dashboard, a metre ahead of the eyes, between its life support and its terminal, as
     // the Miner's)
     dash: { arc: 2.84958, at: [0.3588, 3.328, 6.2753], w: 0.695, h: 0.2151, lean: 0.385, tall: { at: [0.4262, 3.3207, 6.5596], w: 0.5541, h: 0.1715, lean: 0.31 },
-      rider: { at: [-0.6068, 3.328, 6.2401], w: 0.6634, h: 0.2053, lean: 0.385, tall: { at: [-0.5817, 3.3207, 6.5384], w: 0.5675, h: 0.1756, lean: 0.31 } } },
+      rider: { at: [-0.6227, 3.3248, 6.3653], w: 0.6713, h: 0.2078, lean: 0.385, tall: { at: [-0.5363, 3.3182, 6.6423], w: 0.5357, h: 0.1658, lean: 0.31 } } },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'medic',
   },
 ];

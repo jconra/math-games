@@ -122,17 +122,16 @@ const cutsOf = (d) => D.dashCuts(D.dashLayout(1024, Math.round(1024 * d.h / d.w)
 const panelsOf = (s, d) => D.dashPanels(s, d.arc, cutsOf(d));
 const cornersOf = (s, d) => panelsOf(s, d).flatMap((q) => q.corners);
 // (each of its places: the pilot's and the other seat's (none of its own: the pilot's across the ship), wide and held
-// upright, with the eyes and the look of that seat)
+// upright, with the eyes of that seat; the other seat looks where the pilot's does, as src/flying.js aim has it)
 const across = (q) => ({ ...q, at: [-q.at[0], q.at[1], q.at[2]] }), acrossV = (v) => [-v[0], v[1], v[2]];
 function placesOf(cfg) {
   const d = cfg.dash, st = cfg.seat, r = d.rider, out = [];
   for (const [who, m] of [['the pilot', 1], ['riding in the other seat', -1]]) {
-    const wide = m > 0 ? d : r || across(d), tall = m > 0 ? d.tall : r ? r.tall || r : across(d.tall), eye = m > 0 ? st.eye : acrossV(st.eye), mv = (v) => (m > 0 ? v : acrossV(v));
-    // (riding, there are no buttons at the bottom but View, at the far right, and no keys: lower, short of it)
-    out.push([who, '1280 x 800', wide, eye, mv(st.look), st.fov, 1.6, m > 0 ? { x0: 0.23, x1: 0.97, y0: 0.55, y1: 0.925 } : { x0: 0.23, x1: 0.89, y0: 0.55, y1: 0.96 }]);
-    // (on a phone on its side, between the sticks and above the help's tab in the middle: riding, beside the tab)
-    out.push([who, '860 x 400', wide, eye, mv(st.look), st.fov, 2.15, m > 0 ? { x0: 0.17, x1: 0.83, y0: 0.55, y1: 0.905 } : { x0: 0.17, x1: 0.83, y0: 0.55, y1: 0.96, tab: { x0: 0.44, x1: 0.56, y0: 0.89 } }]);
-    out.push([who, '400 x 860', tall, eye, mv(st.lookTall), st.fovTall, 400 / 860, { x0: 0.02, x1: 0.98, y0: 0.45, y1: 0.68 }]);
+    const wide = m > 0 ? d : r || across(d), tall = m > 0 ? d.tall : r ? r.tall || r : across(d.tall), eye = m > 0 ? st.eye : acrossV(st.eye);
+    out.push([who, '1280 x 800', wide, eye, st.look, st.fov, 1.6, { x0: 0.23, x1: 0.97, y0: 0.55, y1: 0.925 }]);
+    // (on a phone on its side, between the sticks and above the help's tab in the middle)
+    out.push([who, '860 x 400', wide, eye, st.look, st.fov, 2.15, { x0: 0.17, x1: 0.83, y0: 0.55, y1: 0.905 }]);
+    out.push([who, '400 x 860', tall, eye, st.lookTall, st.fovTall, 400 / 860, { x0: 0.02, x1: 0.98, y0: 0.45, y1: 0.68 }]);
   }
   return out;
 }
@@ -146,7 +145,7 @@ test('every ship\'s display stands in front of the crew member, below the window
     for (const [what, q] of [['held upright', d.tall], ['in front of the other seat', d.rider], ['in front of the other seat, held upright', d.rider && d.rider.tall]]) if (q) assert.ok(Math.abs(q.w / q.h - d.w / d.h) < 0.06 * d.w / d.h, `${id}: the same shape ${what} (${(d.w / d.h).toFixed(2)}, ${(q.w / q.h).toFixed(2)})`);
     for (const [who, size, s, eye, look, fov, aspect, box] of placesOf(cfg)) {
       const c = cornersOf(s, d).map((p) => onScreen(eye, look, fov, aspect, p));
-      for (const [fx, fy] of c) assert.ok(fx > box.x0 && fx < box.x1 && fy > box.y0 && fy < box.y1 && !(box.tab && fx > box.tab.x0 && fx < box.tab.x1 && fy > box.tab.y0), `${id}, ${who}, at ${size}: a corner at ${fx.toFixed(3)}, ${fy.toFixed(3)} is inside ${JSON.stringify(box)}`);
+      for (const [fx, fy] of c) assert.ok(fx > box.x0 && fx < box.x1 && fy > box.y0 && fy < box.y1, `${id}, ${who}, at ${size}: a corner at ${fx.toFixed(3)}, ${fy.toFixed(3)} is inside ${JSON.stringify(box)}`);
       // (in front of the eyes and below them: it stands on the dashboard)
       for (const p of cornersOf(s, d)) assert.ok(p[2] > eye[2] + 0.4 && p[1] < eye[1], `${id}, ${who}, at ${size}: in front of the crew member and below the eyes`);
     }
@@ -211,7 +210,8 @@ test('the life support and the terminal stand up on the dashboard\'s top, the di
     const [ls, tm] = K.bank.screens, [p0, p1] = spanOf(d, d), [r0, r1] = spanOf(d.rider, d);
     const gaps = [['the life support', 'the display', ls.x0 - p1], ['the display', 'the terminal', p0 - tm.x1], ['the terminal', 'the other seat\'s display', tm.x0 - r1]];
     for (const [a, b, g] of gaps) assert.ok(g > 0.005 && g < 0.04, `${id}: ${a} and ${b} side by side (${(g * 100).toFixed(1)} cm apart)`);
-    assert.ok(r0 > -end, id + ': the other seat\'s display within the dashboard\'s end');
+    // (the other seat's display a little further along the top than the row: within the dashboard's end there)
+    assert.ok(r0 > -(Math.hypot(d.rider.at[0], d.rider.at[2] - d.arc) * Math.sin(S.T) + 0.002), id + ': the other seat\'s display within the dashboard\'s end');
   }
 });
 
