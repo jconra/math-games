@@ -10,7 +10,12 @@
 //     down, E). There is no "shall we go now", and nobody is put in the seat behind a dark screen;
 //   - home, the share waits at the smelter's controls: the smelter job's first card there is the payout card
 //     (payoutCard: the panel's `card` hook), its prompt says so (hint), and a line on the floor leads to it; the right
-//     answer brings the pay, whatever was picked before it.
+//     answer brings the pay, whatever was picked before it;
+//   - signed as the ship's engineer, THE CORE'S TUNING (src/missions.js 'tune', src/tune.js, loaded only when one is
+//     due): before the run or after it, as picked when the contract was signed. Before: the seat does not start the
+//     run until the core is tuned (its prompt says so, with nothing to press). After: the ship stays on its pad and the
+//     share is held at the smelter's controls until the core is tuned. Kept with the contract, so it is still due
+//     after a reload.
 //
 //   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people, crew, save, body, put })
 //   mission.update(dt, P, playing) -> true while a trip has the player (seated: no walking, the trip's camera)
@@ -19,7 +24,7 @@
 //   mission.payoutCard(), mission.hint()         the smelter's controls
 //   mission.offer(id), mission.start(), mission.state(), mission.trip   (the rigs)
 import * as THREE from 'three';
-import { missions, missionOf, contractOf, sign, collect, payoutOrder, MISSIONS } from './missions.js';
+import { missions, missionOf, contractOf, sign, collect, payoutOrder, tuneOf, tuneFor, tuneDue, tuned, MISSIONS } from './missions.js';
 import { CAPTAINS } from './lines.js';
 import * as E from './jobs/engine.js';
 import { JOB as smelter } from './jobs/smelter.js';
@@ -35,7 +40,14 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
   prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Sit at the controls and fly the Miner out</small></div><button type="button" class="pnj-go">Sit down<kbd>E</kbd></button>';
   // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
-  const promptFor = (m) => { const pilot = m.roles.includes('pilot'); prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit'; prompt.querySelector('small').textContent = pilot ? 'Sit at the controls and fly the Miner out' : 'Sit down and ride out to the rocks with the crew'; };
+  // (held: the core's tuning is due before the run: the prompt says so, and there is nothing to press)
+  let prompted = '';
+  const promptFor = (m, held = false) => {
+    const pilot = m.roles.includes('pilot'), key = pilot + ':' + held; if (key === prompted) return; prompted = key;
+    prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit';
+    prompt.querySelector('small').textContent = held ? 'The core needs adjusting first, back in Engineering' : pilot ? 'Sit at the controls and fly the Miner out' : 'Sit down and ride out to the rocks with the crew';
+    prompt.classList.toggle('is-soon', held); prompt.querySelector('.pnj-go').hidden = held;
+  };
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => start());
   addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start(); } });
@@ -94,7 +106,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       card = openContract(document.body, { mission: M, captain: captain.name || nameOf(captain.id),
         onSign: (roles) => {
           done();
-          const m = sign(c, M.id, roles); if (!m) return;
+          // (?tune=before or ?tune=after in the address: this run's tuning of the core then, for trying each)
+          const want = new URLSearchParams(location.search).get('tune'), m = sign(c, M.id, roles, Date.now(), want === 'before' ? () => 0 : want === 'after' ? () => 0.999 : Math.random); if (!m) return;
           save(c); crane.awayHeld = true;
           if (crane.mode === 'away') crane.arrive();      // (found parked and ready)
           // (he says so, turned to the crew member while he says it, and then walks to his ship)
@@ -116,17 +129,22 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     if (!m || m.state !== 'signed' || trip || loading || card || !body()) return false;
     // (never from anywhere else: nobody is put in the seat without being seen to get there)
     if (boarding.where(body().pos) !== MISSIONS[m.id].ship + '/cockpit') return false;
+    // (the core's tuning due before the run: the ship does not leave until its engineer has tuned it)
+    if (tuneDue(c) === 'before') return false;
     loading = true; prompt.hidden = true;
     if (input) input.enabled = false;
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
       if (!playing) { if (input) input.enabled = false; return; }
+      // (tuneAfter: home and down the core's tuning comes next, so the captain's last words of the run wait for it)
       trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, visit, people, crew: c, save, body, put, captainName: nameOf(m.captain) }, { mission: MISSIONS[m.id], roles: m.roles,
+        tuneAfter: m.tune === 'after' && !m.tuned && !!tuneFor(MISSIONS[m.id], m.roles),
         onEnd: (r) => {
           lastRun = r; crane.awayHeld = false;
           if (input) input.enabled = playing;
           // (home: the share waits; the captain, who waited by the ship, goes on with his day from where he is)
-          if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(m.captain, null); meeting = null; }
+          // (the core's tuning due now: the ship stays on its pad, and the line to the share comes once it is tuned)
+          if (r.payout) { if (tuneDue(c)) crane.awayHeld = true; else lead('payout'); const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(m.captain, null); meeting = null; }
           else crane.awayHeld = true;
         } });
       api.trip = trip;
@@ -137,7 +155,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // ── the smelter's controls: the share of the run, waiting ──
   function payoutCard() {
     const c = crew(), m = c && contractOf(c);
-    if (!m || m.state !== 'payout') return null;
+    if (!m || m.state !== 'payout' || tuneDue(c)) return null;      // (held until the core is tuned)
     E.register(smelter);
     const v = E.level(c, smelter), L = smelter.place.levels[v ? v.i : 0] || smelter.place.levels[0];
     const order = payoutOrder(m, L.grade || 0);
@@ -152,19 +170,43 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         return { right: true, first: q.misses === 0, pay: r.pay, worth: r.pay, credits: r.credits, moved: 0, up: false, down: false, level: null, why: q.order.rightWhy };
       } };
   }
-  const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
+  const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? (tuneDue(crew()) ? `Your share is waiting: the ${(CAPTAINS[m.captain] || {}).ship || 'ship'}'s core needs adjusting first` : `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits`) : null; };
+
+  // ── THE CORE'S TUNING (src/tune.js), while one is due: its runner fetched then, kept until it is done and the
+  // captain's last words about it have gone ──
+  let tune = null, tuneAsked = false;
+  function tuneStep(dt, P, c, m, due) {
+    if (tune && (tune.crew !== (c && c.id) || (!due && !tune.done) || (tune.done && tune.quiet))) { tune.close(); tune = null; }
+    if (due && !tune && !tuneAsked && playing) {
+      tuneAsked = true;
+      import('./tune.js').then(({ startTune }) => {
+        tuneAsked = false;
+        const c2 = crew(), d2 = c2 ? tuneDue(c2) : null, m2 = d2 ? contractOf(c2) : null; if (!d2 || tune || trip) return;
+        const M = MISSIONS[m2.id];
+        tune = startTune({ W, boarding, crew: c2, save, captainName: nameOf(m2.captain) }, { mission: M, step: tuneOf(M), when: d2,
+          onPanel: (up) => { if (input) input.enabled = !up && playing; },
+          // (tuned. Before: the seat's prompt is there now. After: the run is done, the share to be collected, and the
+          // ship free to go out again)
+          onDone: () => { tuned(c2); save(c2); if (d2 === 'after') { crane.awayHeld = false; if (playing) lead('payout'); } } });
+        tune.crew = c2.id; api.tune = tune;
+      }).catch((e) => { tuneAsked = false; fail(e); });
+    }
+    if (!tune) api.tune = null;
+    return tune ? tune.update(dt, P, playing) : false;
+  }
 
   let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
   const api = {
     trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, hint, meetSpot, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P;
-      const c = crew(), m = c ? contractOf(c) : null;
+      const c = crew(), m = c ? contractOf(c) : null, due = c ? tuneDue(c) : null;
       // (a crew member come aboard with a contract already signed: the Miner waits for them; a line once, to where they are wanted)
-      if (c && synced !== c.id + ':' + (m ? m.state : '')) {
-        const first = synced == null || !String(synced).startsWith(c.id + ':'); synced = c.id + ':' + (m ? m.state : '');
-        crane.awayHeld = !!(m && m.state === 'signed');
-        if (first && playing && m && !trip) lead(m.state === 'signed' ? 'miner' : 'payout');
+      // (and with the core's tuning due after a run: the Miner waits on its pad for that too, and the line leads to it)
+      if (c && synced !== c.id + ':' + (m ? m.state : '') + ':' + (due || '')) {
+        const first = synced == null || !String(synced).startsWith(c.id + ':'); synced = c.id + ':' + (m ? m.state : '') + ':' + (due || '');
+        crane.awayHeld = !!(m && (m.state === 'signed' || due));
+        if (first && playing && m && !trip) lead(m.state === 'signed' || due ? 'miner' : 'payout');
       }
       // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
       // station's people are aboard; any other state: he is not)
@@ -175,6 +217,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (lineTo === 'hangar' && guide.active === 'mission' && boarding.spots('miner')) lead('miner');
       if (stoodAt !== (boarding.stands ?? 0)) { stoodAt = boarding.stands ?? 0; if (lineTo === 'lift' && guide.active === 'mission' && !trip && playing) lead('miner'); }
       if (trip) {
+        // (the tuning before this run is done with: its last words go as the run begins)
+        if (tune) { tune.close(); tune = null; api.tune = null; }
         if (playing) trip.update(dt);
         // (done: the captain's last words stay up a few seconds more)
         if (trip.done) { tail = trip; tailT = 8; trip = null; api.trip = null; }
@@ -182,17 +226,21 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         return !!trip;
       }
       if (tail) { tail.update(dt); tailT -= dt; if (tailT <= 0) tail = null; }
-      // the pilot's seat: in the cockpit with a contract signed
+      // the core's tuning, while it is due: at the core with its card up the crew member stands there (as in the seat)
+      const tuning = tuneStep(dt, P, c, m, due);
+      // the pilot's seat: in the cockpit with a contract signed (the core's tuning due first: it says so, nothing to press)
       const at = playing && m && m.state === 'signed' && !card && !loading && !jobs.panel && boarding.where(P.pos) === MISSIONS[m.id].ship + '/cockpit' && crane.mode !== 'out';
-      if (at && prompt.hidden) promptFor(m);
+      if (at) promptFor(m, due === 'before');
       prompt.hidden = !at;
-      return loading;
+      return loading || tuning;
     },
-    aim(camera, dt) { if (trip) trip.aim(camera, dt); },
+    aim(camera, dt) { if (trip) trip.aim(camera, dt); else if (tune) tune.aim(camera, dt); },
     late() { if (trip) trip.late(); },
-    get seated() { return !!(trip && trip.seated); },
-    stop() { if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
-    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
+    // (in the seat on a run, or at the core with its card up: seen through their own eyes, their body put away)
+    get seated() { return !!(trip && trip.seated) || !!(tune && tune.busy); },
+    tune: null,      // (the core's tuning, while one is due: src/tune.js; for the rigs)
+    stop() { if (trip) { trip.abort(); trip = null; api.trip = null; } if (tune) tune.stop(); if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
+    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: tune ? tune.state() : null, due: crew() ? tuneDue(crew()) : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, held: !prompt.hidden && prompt.classList.contains('is-soon'), loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
       meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),
   };
   return api;

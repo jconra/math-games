@@ -43,18 +43,27 @@ test('the contract: the three roles and their shares, as the game\'s maker gave 
   assert.equal(missions.ready('vega'), false); assert.equal(missions.ready('hale'), false);
 });
 
-test('the contract: the pilot and the drill can be signed for, alone or together; the engineer is his crew\'s, and switches on with one flag', () => {
+test('the contract: each of the three jobs can be signed for, alone or with the others; a job whose game is not made is his crew\'s, by one flag', () => {
   const R = MS.rolesOf(MINING);
-  assert.deepEqual(R.map((r) => [r.id, r.open]), [['pilot', true], ['drill', true], ['engineer', false]]);
-  assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill']);
+  assert.deepEqual(R.map((r) => [r.id, r.open]), [['pilot', true], ['drill', true], ['engineer', true]]);
+  assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill', 'engineer']);
   const crew = crewOf();
-  // asking for more than is open signs for what is open
-  const m = MS.sign(crew, 'mining', ['pilot', 'drill', 'engineer'], 1000);
+  const m = MS.sign(crew, 'mining', ['pilot', 'drill'], 1000);
   assert.deepEqual(m, { id: 'mining', captain: 'ruiz', roles: ['pilot', 'drill'], state: 'signed', signed: 1000 });
-  assert.equal(MS.sign(crewOf(), 'mining', ['engineer']), null, 'nothing open among those asked: no contract');
   assert.equal(MS.sign(crew, 'mining', ['pilot']), null, 'one mission at a time');
-  // each alone
+  // each alone, and all three: half the haul
   assert.deepEqual(MS.sign(crewOf(), 'mining', ['pilot']).roles, ['pilot']); assert.deepEqual(MS.sign(crewOf(), 'mining', ['drill']).roles, ['drill']);
+  assert.deepEqual(MS.sign(crewOf(), 'mining', ['engineer']).roles, ['engineer']); assert.equal(MS.shareOf(['engineer']), 20);
+  const all = MS.sign(crewOf(), 'mining', ['engineer', 'drill', 'pilot']);
+  assert.deepEqual(all.roles, ['pilot', 'drill', 'engineer']); assert.equal(MS.shareOf(all.roles), 50);
+  // a job whose game is not made: asking for more than is open signs for what is open, and nothing open, no contract
+  ROLES.engineer.ready = false;
+  try {
+    assert.deepEqual(MS.rolesOf(MINING).map((r) => [r.id, r.open]), [['pilot', true], ['drill', true], ['engineer', false]]);
+    assert.deepEqual(MS.sign(crewOf(), 'mining', ['pilot', 'drill', 'engineer'], 1000), { id: 'mining', captain: 'ruiz', roles: ['pilot', 'drill'], state: 'signed', signed: 1000 });
+    assert.equal(MS.sign(crewOf(), 'mining', ['engineer']), null);
+    assert.equal(MS.tuneFor(MINING, ['engineer']), null, 'and its step is the crew\'s');
+  } finally { ROLES.engineer.ready = true; }
   // the drill and not the pilot: the field is the crew member's, the jumps the crew's own pilot's (the short version)
   const S = MS.stepsFor(MINING, ['drill']);
   assert.deepEqual(S.map((s) => [s.id, s.mine]), [['out', false], ['jumpOut', false], ['field', true], ['jumpHome', false], ['home', false]]);
@@ -62,21 +71,109 @@ test('the contract: the pilot and the drill can be signed for, alone or together
   // who does what on the trip: the crew member their own role, the captain's crew the rest
   assert.deepEqual(MS.crewFor(MINING, ['pilot'], 'Maya').map((c) => c.name), ['Maya', 'Miner Kestrel', 'Engineer Okafor']);
   assert.equal(MS.rolesWords(['pilot']), 'Pilot'); assert.equal(MS.rolesWords(['pilot', 'drill', 'engineer']), 'Pilot, drill operator and engineer');
-  // the engineer's game made: one flag, and it can be signed for, its step is the crew member's, its share is added
-  ROLES.engineer.ready = true;
-  try {
-    assert.deepEqual(MS.openRoles(MINING), ['pilot', 'drill', 'engineer']);
-    const all = MS.sign(crewOf(), 'mining', ['engineer', 'drill', 'pilot']);
-    assert.deepEqual(all.roles, ['pilot', 'drill', 'engineer']); assert.equal(MS.shareOf(all.roles), 50);
-    assert.equal(MS.stepsFor(MINING, ['engineer']).find((s) => s.id === 'field').mine, true);
-    assert.equal(MS.stepsFor(MINING, ['engineer']).find((s) => s.id === 'jumpOut').mine, false, 'the crew\'s pilot flies it');
-  } finally { ROLES.engineer.ready = false; }
+  // the engineer alone takes no part in anything that is flown: the crew's pilot flies it, the crew drills
+  assert.deepEqual(MS.stepsFor(MINING, ['engineer']).map((s) => [s.id, s.mine]), [['out', false], ['jumpOut', false], ['field', false], ['jumpHome', false], ['home', false]]);
+});
+
+// ── the core's tuning: the engineer's step ───────────────────────────────────────────────────────────────────────
+test('the core\'s tuning is a step in the mission\'s data: the engineer\'s, three cards, before the run or after it, picked for each run', () => {
+  const st = MS.tuneOf(MINING);
+  assert.deepEqual(st, { id: 'core', kind: 'tune', role: 'engineer', cards: 3, when: ['before', 'after'] });
+  assert.equal(st.cards, CARDS, 'as many cards as a jump asks');
+  assert.ok(MINING.steps.includes(st), 'listed among the mission\'s steps');
+  // a mission that does not list it has none (the exploring, medical and cargo missions get it by listing it)
+  assert.equal(MS.tuneOf({ steps: [{ id: 'out', kind: 'leave' }] }), null); assert.equal(MS.tuneOf(null), null);
+  // theirs only if they signed as engineer; and it is never one of the steps that are flown
+  assert.equal(MS.tuneFor(MINING, ['engineer']), st); assert.equal(MS.tuneFor(MINING, ['pilot', 'drill', 'engineer']), st);
+  assert.equal(MS.tuneFor(MINING, ['pilot', 'drill']), null);
+  for (const roles of ROLE_MIXES) assert.ok(!MS.stepsFor(MINING, roles).some((s) => s.kind === 'tune'), roles.join());
+  // one or the other, picked for each run: both come up, about as often as each other
+  assert.equal(MS.pickTune(MINING, ['engineer'], () => 0), 'before'); assert.equal(MS.pickTune(MINING, ['engineer'], () => 0.49), 'before');
+  assert.equal(MS.pickTune(MINING, ['engineer'], () => 0.5), 'after'); assert.equal(MS.pickTune(MINING, ['engineer'], () => 0.9999999), 'after');
+  assert.equal(MS.pickTune(MINING, ['pilot'], () => 0), null, 'not the engineer: no tuning');
+  const rand = seeded(7), n = { before: 0, after: 0 };
+  for (let k = 0; k < 400; k++) n[MS.pickTune(MINING, ['drill', 'engineer'], rand)]++;
+  assert.ok(n.before > 150 && n.after > 150, JSON.stringify(n));
+  // kept with the contract as it is signed, and only for an engineer
+  assert.equal(MS.sign(crewOf(), 'mining', ['engineer'], 5, () => 0).tune, 'before'); assert.equal(MS.sign(crewOf(), 'mining', ['pilot', 'engineer'], 5, () => 0.7).tune, 'after');
+  assert.ok(!('tune' in MS.sign(crewOf(), 'mining', ['pilot', 'drill'], 5, () => 0)));
+});
+
+test('the ship\'s own core is its place: found in each parked ship\'s own plan, with room to stand before it', async () => {
+  const { readFileSync } = await import('node:fs');
+  const plan = (name) => JSON.parse(readFileSync(new URL(`../kit/ships/${name}.blueprint.json`, import.meta.url), 'utf8'));
+  // (the three ships parked in the station, as src/boarding.js SHIPS has them: the Miner's is the one in use; the
+  // Explorer's and the Medic's are there for their missions to list the step)
+  const want = { 'miner-ore-cockpit': ['engineering', 'reactor'], 'explorer-c-row': ['engineering', 'reactor'], 'medic-open-bench': ['eng', 'drive'] };
+  for (const [name, [roomId, itemId]] of Object.entries(want)) {
+    const bp = plan(name), C = MS.coreIn(bp);
+    assert.ok(C, name); assert.equal(C.room, roomId, name); assert.equal(C.item, itemId, name);
+    const room = bp.rooms.find((r) => r.id === C.room), it = bp.items.find((i) => i.id === C.item), [x, z] = C.stand;
+    assert.equal(room.kind, 'engineering'); assert.match(it.name, /reactor/i, name);
+    // where to stand: on the room's clear floor, a step from the reactor and no more than need be, clear of the walls
+    // and of everything else that stands on the floor
+    const far = (r) => Math.hypot(Math.max(r[0] - x, 0, x - r[2]), Math.max(r[1] - z, 0, z - r[3]));
+    assert.ok(x >= room.rect[0] + MS.CORE.room - 1e-9 && x <= room.rect[2] - MS.CORE.room + 1e-9 && z >= room.rect[1] + MS.CORE.room - 1e-9 && z <= room.rect[3] - MS.CORE.room + 1e-9, `${name}: ${C.stand}`);
+    assert.ok(far(it.rect) >= MS.CORE.out - 1e-9 && far(it.rect) <= 1.05, `${name}: ${far(it.rect)} m from it`);
+    for (const o of bp.items.filter((i) => i.room === room.id && i.y == null && i !== it)) assert.ok(far(o.rect) >= MS.CORE.room - 1e-9, `${name}: ${far(o.rect)} m from ${o.id}`);
+    // where to look: the middle of the reactor, about waist high
+    assert.ok(C.look[0] > it.rect[0] && C.look[0] < it.rect[2] && C.look[2] > it.rect[1] && C.look[2] < it.rect[3] && C.look[1] > 0.6 && C.look[1] < 1.2, `${name}: ${C.look}`);
+  }
+  // the Miner's: in the aisle of its Engineering, the reactor to starboard
+  assert.deepEqual(MS.coreIn(plan('miner-ore-cockpit')).stand, [0.25, -5.25]);
+  // a ship with no engineering room, or none of its machines: no core, and nothing breaks
+  assert.equal(MS.coreIn({ rooms: [{ id: 'mess', kind: 'galley', rect: [0, 0, 2, 2] }], items: [] }), null);
+  assert.equal(MS.coreIn({ rooms: [{ id: 'eng', kind: 'engineering', rect: [0, 0, 2, 2] }], items: [] }), null); assert.equal(MS.coreIn(null), null);
+});
+
+test('the core\'s tuning, before: due from the signing until it is done, and never again on that run', () => {
+  const crew = crewOf(), m = MS.sign(crew, 'mining', ['pilot', 'engineer'], 1, () => 0);
+  assert.equal(m.tune, 'before'); assert.equal(MS.tuneDue(crew), 'before');
+  assert.equal(MS.tuned(crew), m); assert.equal(m.tuned, true); assert.equal(MS.tuneDue(crew), null);
+  // home: the share is there to be collected, nothing held
+  const P = MS.land(crew, { n: 31, store: { iron: 4, nickel: 2, titanium: 2 } });
+  assert.equal(MS.tuneDue(crew), null); assert.equal(P.share, 30); assert.equal(P.pay, 7800);
+  assert.deepEqual(MS.collect(crew), { pay: 7800, credits: 7800 }); assert.equal(MS.contractOf(crew), null);
+  // nobody's contract, or not the engineer: nothing is ever due
+  assert.equal(MS.tuneDue(crewOf()), null); assert.equal(MS.tuneDue(null), null); assert.equal(MS.tuned(crewOf()), null);
+  const other = crewOf(); MS.sign(other, 'mining', ['pilot', 'drill'], 1, () => 0); assert.equal(MS.tuneDue(other), null);
+});
+
+test('the core\'s tuning, after: not due until the ship is home; then the share is held until it is done, and is the same share', () => {
+  const crew = crewOf(), m = MS.sign(crew, 'mining', ['engineer'], 1, () => 0.9);
+  assert.equal(m.tune, 'after'); assert.equal(MS.tuneDue(crew), null, 'nothing before the run');
+  const P = MS.land(crew, { n: 32, store: { copper: 8 } });
+  assert.equal(P.sold, 32000); assert.equal(P.share, 20); assert.equal(P.pay, 6400);
+  assert.equal(MS.tuneDue(crew), 'after');
+  assert.equal(MS.collect(crew), null, 'held'); assert.equal(MS.contractOf(crew).state, 'payout'); assert.ok(!crew.credits);
+  // kept as plain facts with the crew member, so it is still due after a reload
+  const again = JSON.parse(JSON.stringify(crew)); assert.equal(MS.tuneDue(again), 'after'); assert.equal(MS.collect(again), null);
+  MS.tuned(crew);
+  assert.equal(MS.tuneDue(crew), null);
+  // no card of the tuning changes the pay: it is what the haul sells for times the share, as ever
+  assert.deepEqual(MS.collect(crew), { pay: 6400, credits: 6400 }); assert.equal(MS.contractOf(crew), null);
+});
+
+test('the core\'s tuning: the ship\'s own words for it, and the captain\'s', async () => {
+  const { SHIP_CLIPS, clipUrl } = await import('../src/voices.js'), { RUN_TALK } = await import('../src/lines.js'), { existsSync } = await import('node:fs'), { fileURLToPath } = await import('node:url');
+  // "a "Reactor imbalance" voice for when you need to do the engineering questions": the Miner's own clip, in the game
+  const c = SHIP_CLIPS[MINING.ship].reactor;
+  assert.equal(c.words, 'Reactor imbalance.'); assert.ok(existsSync(fileURLToPath(clipUrl(c.id))), c.id);
+  for (const k of Object.values(SHIP_CLIPS[MINING.ship])) assert.ok(existsSync(fileURLToPath(clipUrl(k.id))), k.id);
+  // "the captain tells you the core needs to be adjusted. So you go back to mechanical"; and a word when it is done
+  const T = RUN_TALK[MINING.id];
+  for (const key of ['tune', 'tunedBefore', 'tunedAfter']) { assert.ok(Array.isArray(T[key]) && T[key].length, key); for (const w of T[key]) assert.ok(w.length <= 90, w); }
+  for (const w of T.tune) { assert.match(w, /core needs adjusting/); assert.match(w, /Engineering/); }
+  for (const w of T.tunedAfter) assert.match(w, /smelter/);
+  // the captain's word at the rocks names the run's engineer, whoever that is
+  assert.ok(T.field.some((w) => /\{engineer\}/.test(w))); assert.ok(!Object.values(T).flat().some((w) => /Okafor/.test(w)));
 });
 
 // ── the trip's steps ─────────────────────────────────────────────────────────────────────────────────────────────
 test('the mission\'s steps: out, the jump, the field, the jump home, home; a pilot does the two jumps', () => {
-  assert.deepEqual(MINING.steps.map((s) => [s.id, s.kind]), [['out', 'leave'], ['jumpOut', 'jump'], ['field', 'work'], ['jumpHome', 'jump'], ['home', 'land']]);
+  assert.deepEqual(MINING.steps.filter((s) => s.kind !== 'tune').map((s) => [s.id, s.kind]), [['out', 'leave'], ['jumpOut', 'jump'], ['field', 'work'], ['jumpHome', 'jump'], ['home', 'land']]);
   const S = MS.stepsFor(MINING, ['pilot']);
+  assert.deepEqual(S.map((s) => s.id), ['out', 'jumpOut', 'field', 'jumpHome', 'home']);
   assert.deepEqual(S.filter((s) => s.mine).map((s) => s.id), ['jumpOut', 'jumpHome']);
   // "calculate a jump (with maybe 3 questions)": three cards a jump, one for each lamp
   for (const s of S.filter((x) => x.kind === 'jump')) assert.equal(s.cards, 3);

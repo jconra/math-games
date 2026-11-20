@@ -105,6 +105,7 @@
 //   F.away()      the ship back where it is parked, nothing of the flying drawn (it has jumped: src/trip.js)
 //   F.arrive()    out of the jump home: outside the station, in sight of it, to fly in and land
 //   F.press(what), F.hold(what, on)   a key's work, by name (the buttons; the rigs)
+//   F.skip()      a part of the flying skipped by someone who takes no part in it: clear of the station, or down on its pad
 //   F.pause(on)   put away altogether for a while, the ship left where it is (at the rocks: the drill's view has the eye)
 //   F.eye(camera) where the eye is now, in the ship's own kit frame: { eye, look, fov } (for a glide that starts there)
 //   F.eyeFrom(camera)   the view from behind taken up from wherever the eye is now, so it eases there and does not jump
@@ -763,6 +764,20 @@ export function startFlying(ctx, opts = {}) {
       voice.welcomed = false; voice.busy = 0; saying = null;      // (as newly sat down: its welcome again when the power comes on)
       on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room;
       pose(1 / 60); painted = ''; paint();
+    },
+    // A PART OF THE FLYING SKIPPED by a crew member who takes no part in it (src/trip.js: its skip button, while the
+    // crew's own pilot flies). Coming home: down on its pad at once, as it is parked. Leaving: clear of the station at
+    // once, out from its own bay door (where the jump home comes out), nose away from it.
+    skip() {
+      if (closed || !on || body) return false;
+      if (goal === 'land') {
+        if (S.landed) return false;
+        M.park(S); stood(); eArmed = !held.has('rollRight'); setMouse('pointer'); auto = !pilot; plan = null; fresh = true; painted = ''; pose(1 / 60); paint();
+        if (opts.onLanded) opts.onLanded();
+        return true;
+      }
+      const A = M.arrival(cfg); M.place(S, A.p, M.facing([1, 0, 0])); plan = null; fresh = true; painted = ''; pose(1 / 60);
+      return true;
     },
     // (the rigs, and the lab: the ship put somewhere at once)
     put(p, q = null) { M.place(S, p, q || M.facing([1, 0, 0])); fresh = true; pose(1 / 60); painted = ''; },

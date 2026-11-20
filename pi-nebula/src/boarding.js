@@ -8,6 +8,7 @@
 //   B.ships                                            [{ id, state ('out' | 'loading' | 'in'), ... }]
 //   B.inside(p)                                        the ship whose cabin a point is in (or null)
 //   B.where(p)                                         where aboard: 'explorer/mess' (the ship and its room), or null
+//   B.core(id)                                         a ship's own reactor core: where to stand before it, where it is
 //   B.fly(id, D)                                       a ship flown (src/flying.js): its cabin drawn where it is now
 //   B.stand(id, D)                                     a ship set down somewhere else than it is parked (below)
 //   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
@@ -57,6 +58,7 @@ import * as MD from '../kit/ships/medic-built.js';
 import * as MB from '../kit/ships/miner-built.js';
 import { shine } from './player.js';
 import { frameOf } from './standing.js';
+import { coreIn } from './missions.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
 // meets its hull: kit/ships/<ship>-built.js), the blueprint the game's maker picked, and its ways in (the ship's
@@ -492,6 +494,18 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   // (where a point is aboard: 'explorer/mess', or null)
   const where = (p) => { const s = inside(p); if (!s) return null; const r = roomOf(s, p); return s.id + '/' + (r ? r.id : '?'); };
 
+  // A SHIP'S OWN CORE: the reactor in its engineering room, found by name in its blueprint (src/missions.js coreIn).
+  // -> { room ('miner/engineering'), pos (where a person stands before it, on the nearest floor there), look (the
+  // glowing core itself) }, in the station's frame, where the ship stands; null while its cabin is not in. (The
+  // engineer's tuning of the core: src/tune.js.)
+  function core(id) {
+    const s = ships.find((q) => q.id === id); if (!s || s.state !== 'in' || !s.bpData || !s.M) return null;
+    const C = coreIn(s.bpData); if (!C) return null;
+    const deck = s.space.deck + C.floor, at = new THREE.Vector3(C.stand[0], deck, C.stand[1]).applyMatrix4(s.M);
+    const pos = walls.snap(at.x, at.y + 0.25, at.z, 0.8, CABIN_WALLS.r) || at;
+    return { room: s.id + '/' + C.room, pos: new THREE.Vector3(pos.x, pos.y, pos.z), look: new THREE.Vector3(C.look[0], deck + C.look[1], C.look[2]).applyMatrix4(s.M) };
+  }
+
   // (a ship that is not parked yet, the Miner landing (src/crane.js): its cabin not loaded or drawn, its lift left as it
   // is, until it is down)
   function hold(id, on = true) { const s = ships.find((q) => q.id === id); if (s) s.held = !!on; return !!s; }
@@ -523,5 +537,5 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     poolKey = null; stands++;
     return true;
   }
-  return { ships, update, inside, where, look, spots, hold, fly, stand, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
+  return { ships, update, inside, where, core, look, spots, hold, fly, stand, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
 }

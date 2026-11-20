@@ -59,12 +59,13 @@ export const clipUrl = (id) => new URL('../assets/sound/voices/' + id + '.mp3', 
 //   welcome   as its power first comes on with someone newly in the seat
 //   safety    again and again while it is in another ship's hangar ("it started saying "Safety Violation" over and
 //             over in your cockpit")
-// (Made and waiting for their own jobs, not in the game yet: ship-miner-pullup "Warning. Pull up." and
-// ship-miner-reactor "Reactor imbalance.")
+//   reactor   to its engineer, aboard it where it is parked, when its core needs tuning (src/tune.js: heard all
+//             through the ship, as the others are in the cockpit)
+// (Made and waiting for its own job, not in the game yet: ship-miner-pullup "Warning. Pull up.")
 // THE THREE SHIP VOICES (the game's maker, 2026-11-19, of the tries he was sent): "we should use 3 for one ship, 4 for
 // another, and 9_new_calm_goddess_3.mp3 for another": 3 is the Miner's own deep voice with a low buzz under it (the
 // Miner's clips here, with the longer pause he asked for after "pilot."), 4 a giant rumbling being, 9 a calm woman.
 // Which of the other two ships gets which is his to say; their clips are made and wait with the Miner's other two.
 export const SHIP_CLIPS = {
-  miner: { welcome: { id: 'ship-miner-welcome', words: 'Welcome aboard, pilot. Systems ready.' }, safety: { id: 'ship-miner-safety', words: 'Safety violation.' } },
+  miner: { welcome: { id: 'ship-miner-welcome', words: 'Welcome aboard, pilot. Systems ready.' }, safety: { id: 'ship-miner-safety', words: 'Safety violation.' }, reactor: { id: 'ship-miner-reactor', words: 'Reactor imbalance.' } },
 };

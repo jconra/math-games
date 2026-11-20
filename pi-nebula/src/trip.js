@@ -79,11 +79,26 @@
 //     is the same game worked by the captain's driller (src/drill.js crewLoad: one metal to a canister, all eight
 //     filled).
 //   - NO ANSWER CHANGES THE HAUL. The jump's lamps show where the pilot is in the jump, and nothing else.
+//   - THE ENGINEER'S STEP IS NOT FLOWN (src/missions.js 'tune', src/tune.js: the core is tuned on foot with the ship
+//     parked, before this trip or after it). Here it shows only at the end: home and down with the tuning still to
+//     come (opts.tuneAfter), the captain's last words of the run are left to it.
+//   - A PART THE CREW MEMBER TAKES NO PART IN CAN BE SKIPPED (the game's maker, 2026-11-19, of a crew member signed
+//     only as engineer: "it can just show basically the cinematic of the ship jumping, the cinematic of the ship
+//     drilling ... we can just play through the cinematic and show the ship from the outside for now. ... If the ship
+//     is doing something that you aren't taking part in, then there should be a button to "Go Home" or whatever to
+//     make it just play the cinematic instead"). So, signed for neither the pilot's seat nor the drill, they ride as a
+//     drill operator rides today and watch what a pilot alone watches today, seen from behind the ship where that view
+//     exists (leaving and coming home; V still changes it) and through the glass at the rocks. And for anyone, while
+//     the crew's pilot flies out, while the crew drills, and while the crew's pilot flies home, one button (K) skips
+//     that part: clear of the station at once and straight into the jump; the canisters full at once and the jump
+//     home; down on the pad at once. The wormhole itself is never skipped. Nothing else changes: the same haul comes
+//     home either way.
 //
-//   const T = startTrip(ctx, { mission, roles, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
+//   const T = startTrip(ctx, { mission, roles, tuneAfter, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
 //       people, crew, save, body, put, onCredits }; the crew member is in the ship's cockpit
 //   T.update(dt) each frame; T.aim(camera, dt) after the game's own camera; T.late() just before the picture
 //   T.abort()   given up (the crew screen): back in the parked ship, the contract still signed
+//   T.skipPart()   the skip button, pressed (true if there was a part to skip); T.state().skip: its words now, or null
 //   T.fly       the flying, while there is one (src/flying.js): its own state, its keys by name (the rigs)
 //   T.state()   for the rigs
 import * as THREE from 'three';
@@ -128,6 +143,14 @@ const CSS = `
 .pmt-count small { display: block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #a7b0ba; }
 .pmt-count b { font-size: 26px; font-weight: 800; }
 .pmt-count em { display: block; font-style: normal; font-size: 14px; color: #cfe6ff; min-height: 1.35em; }
+/* (a part the crew member takes no part in: the button that skips it, over the flying's own row of buttons) */
+.pmt-skip { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 52px); height: 44px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; pointer-events: auto; cursor: pointer; border: 0; margin: 0;
+  font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #eef1f4; background: rgba(15, 19, 25, 0.88); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.45); -webkit-tap-highlight-color: transparent;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+.pmt-skip[hidden] { display: none; }
+.pmt-skip kbd { font: 700 12px/1 ui-monospace, "SF Mono", Consolas, monospace; padding: 3px 6px; color: #10151c; background: #cfd8e2; border-radius: 3px; }
+@media (hover: none) and (pointer: coarse) { .pmt-skip kbd { display: none; } }
+@media (max-width: 640px) { .pmt-skip { right: 50%; transform: translateX(50%); bottom: calc(max(20px, env(safe-area-inset-bottom)) + 112px); height: 46px; } }
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's buttons (Fly manually over Scan) and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
 @media (max-width: 640px) { .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: auto; bottom: 226px; left: 50% !important; max-width: 78vw; } .pmt.is-drill.has-panel .pmt-say { display: none; } }
@@ -158,15 +181,15 @@ function rockField(M) {
   return { group, update(dt) { for (const [m, a, b] of spins) { m.rotation.y += a * dt; m.rotation.x += b * dt; } }, dispose() { group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); mat.dispose(); } };
 }
 
-export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
+export function startTrip(ctx, { mission: M, roles, tuneAfter = false, onEnd = () => {} }) {
   const { W, walls, boarding, crane, jobs, guide, crew, save } = ctx;
   if (!document.getElementById('pmt-css')) { const st = document.createElement('style'); st.id = 'pmt-css'; st.textContent = CSS; document.head.appendChild(st); }
   const S = boarding.ships.find((s) => s.id === M.ship);
   const steps = stepsFor(M, roles), TALK = RUN_TALK[M.id] || {};
   const el = document.createElement('div'); el.className = 'pmt';
-  el.innerHTML = '<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div>';
+  el.innerHTML = '<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div><button type="button" class="pmt-skip" hidden></button>';
   document.body.appendChild(el);
-  const $ = (s) => el.querySelector(s), sayEl = $('.pmt-say'), countEl = $('.pmt-count');
+  const $ = (s) => el.querySelector(s), sayEl = $('.pmt-say'), countEl = $('.pmt-count'), skipEl = $('.pmt-skip');
   $('.pmt-chip b').textContent = M.name;
   // (the seat's own prompt, when the jump computer has been put away for a moment)
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
@@ -175,8 +198,10 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   prompt.querySelector('.pnj-go').addEventListener('click', () => openCards());
 
   const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, cans: null, early: false, log: [] };
-  // (signed for which: the pilot's seat, the drill)
-  const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill');
+  // (signed for which: the pilot's seat, the drill; for neither, the ship's engineer alone: they ride and watch)
+  const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill'), iWatch = !iPilot && !iDrill;
+  // (who the captain speaks to as the run's engineer: the crew member, signed for it, or his own)
+  const engineer = roles.includes('engineer') ? null : (ROLES.engineer.crew || '').split(' ').pop();
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
   let panel = null, arms = null, rocks = null, hidden = null, stand = null, sayT = 0, fireIn = -1, spin = 0, armsWant = 'stowed', cutT = 0;
   // (the flying, src/flying.js: fetched as the crew member sits down; it lives from the seat to the landing)
@@ -185,7 +210,7 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   // the far end of the jump out until the colours of the jump home are all round)
   let wh = null, ff = null;
   const name = crew.name || 'pilot';
-  const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, ...more }[k] ?? ''));
+  const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, engineer: engineer || name, ...more }[k] ?? ''));
   const pick = (L) => (L && L.length ? L[Math.floor(Math.random() * L.length)] : '');
   function say(key, more) { const w = fill(pick(TALK[key]), more); if (!w) return; $('.pmt-say small').textContent = ctx.captainName || 'The captain'; $('.pmt-say p').textContent = w; sayEl.classList.add('is-on'); sayT = Math.min(8, 2.4 + w.length * 0.06); T.log.push('says: ' + w); }
   const words = (w) => { $('.pmt-chip span').textContent = w; };
@@ -244,8 +269,36 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
     panel = openPanel(document.body, { job: PILOT, crew, live: link, pay: false, onSave: () => save(crew), onCredits: () => {},
       onClose: () => { panel = null; el.classList.remove('has-panel'); if (T.phase === 'cards' && fireIn < 0) { T.paused = true; prompt.hidden = false; } } });
   }
-  function onKey(e) { if (!prompt.hidden && !panel && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); openCards(); } }
+  function onKey(e) {
+    if (!prompt.hidden && !panel && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); openCards(); }
+    else if (e.code === 'KeyK' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && skipWhat()) { e.preventDefault(); skip(); }
+  }
   addEventListener('keydown', onKey);
+
+  // ── THE SKIP BUTTON (the top of this file): the part of the run now going on, if the crew member takes no part in
+  // it and it can be skipped: the button's words, or null ──
+  function skipWhat() {
+    if (T.done || T.i < 0 || T.i >= steps.length) return null;
+    const k = steps[T.i].kind;
+    if (k === 'leave' && !iPilot && T.phase === 'fly' && fl && fl.on && !T.clear) return 'Skip the flying';
+    if (k === 'work' && !iDrill && (T.phase === 'reach' || T.phase === 'cut')) return 'Skip the drilling';
+    if (k === 'land' && !iPilot && T.phase === 'fly' && fl && fl.on && !fl.S.landed) return 'Skip the landing';
+    return null;
+  }
+  function skip() {
+    const what = skipWhat(); if (!what) return false;
+    const k = steps[T.i].kind;
+    // (leaving: clear of the station at once, and the crew's pilot's jump with it. Drilling: the canisters full, and the
+    // jump home plotted at once if it is the crew's pilot's. Landing: down on its pad as it is parked)
+    if (k === 'leave') { fl.skip(); T.hurry = true; }
+    else if (k === 'work') { T.phase = 'cut'; T.saidField = true; countEl.hidden = false; cutT = CARRIES * FILL; T.hurry = true; }
+    else fl.skip();
+    T.log.push('skipped: ' + what); skipEl.hidden = true;
+    return true;
+  }
+  skipEl.addEventListener('click', () => { skip(); skipEl.blur(); });
+  let skipShown = null;
+  function paintSkip() { const w = skipWhat(); if (w === skipShown) return; skipShown = w; skipEl.hidden = !w; if (w) skipEl.innerHTML = `${w} <kbd>K</kbd>`; }
 
 
   // ── the steps ──
@@ -272,6 +325,8 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
         // (the drill operator's game: fetched and its ship built now, so the field does not wait)
         if (iDrill && !drillKit) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
         fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: MINER, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+          // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
+          view: iWatch ? 'behind' : 'cockpit',
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
           onClear: () => { T.clear = true; if (steps[T.i] && steps[T.i].kind === 'leave') say(iPilot ? 'out' : 'crewOut'); }, onJump: () => { T.jumpAsked = true; },
           onLanded: () => { if (steps[T.i] && steps[T.i].kind === 'land') T.landed = true; },
@@ -290,10 +345,11 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
         // (the ship steadies itself and holds where it is while the jump is worked out: the flying's controls put away)
         if (fl && fl.on) fl.lock(true);
         T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Juno plots the jump home' : 'Juno plots the jump'));
-        if (st.mine) { T.phase = 'cards'; openCards(); } else T.phase = 'crew';
+        if (st.mine) { T.phase = 'cards'; T.hurry = false; openCards(); } else T.phase = 'crew';
       }
-      // (a pilot of the captain's own: the lamps light by themselves)
-      if (T.phase === 'crew' && T.t > 1.2 * (T.lit + 1)) { T.lamps[T.lit] = 'lit'; T.lit++; if (T.lit >= st.cards) fireIn = 0.6; }
+      // (a pilot of the captain's own: the lamps light by themselves; all at once after a part skipped: T.hurry)
+      if (T.phase === 'crew' && T.hurry && fireIn < 0) { T.hurry = false; while (T.lit < st.cards) T.lamps[T.lit++] = 'lit'; fireIn = 0.3; }
+      else if (T.phase === 'crew' && T.lit < st.cards && T.t > 1.2 * (T.lit + 1)) { T.lamps[T.lit] = 'lit'; T.lit++; if (T.lit >= st.cards) fireIn = 0.6; }
       if (fireIn >= 0 && T.phase !== 'jumping') {
         fireIn -= dt;
         if (fireIn <= 0) { fireIn = -1; T.phase = 'jumping'; prompt.hidden = true; if (panel) panel.close(true), panel = null, el.classList.remove('has-panel'); words('Jumping'); startJump(st); }
@@ -340,7 +396,8 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
         T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
-        words('Home'); say(iPilot ? 'landed' : 'landedCrew');
+        // (the core's tuning still to come, home and down: the captain's last words of the run are its own, src/tune.js)
+        words('Home'); if (!tuneAfter) say(iPilot ? 'landed' : 'landedCrew');
         next();
       }
     },
@@ -378,7 +435,8 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
   }
   // ARRIVING home (the colours all round): outside the station, in sight of it; the flying there is back, to come in and land
   function arriveHome() {
-    const view = ff ? ff.fl.view : 'cockpit';
+    // (whoever only watches comes home in the view they went out in: from behind the ship, unless they changed it)
+    const view = ff ? ff.fl.view : iWatch ? T.view || 'cockpit' : 'cockpit';
     endDrill();
     arms.group.visible = false; rocks.group.visible = false; arms.rockOn = false; arms.armsAs = null;
     space(false);
@@ -465,7 +523,8 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
       if (T.i < 0) next();
       T.t += dt;
       RUN[steps[T.i].kind](dt, steps[T.i]);
-      if (T.done) return;
+      if (T.done) { skipEl.hidden = true; return; }
+      paintSkip();
       if (fl) { fl.panel = !!panel; fl.update(dt); if (T.done) return; }
       // (at the rocks: the drill's view, the flying kept there; and the wormhole, whose two ends change the place)
       if (drill && drillOn) drill.update(dt);
@@ -496,9 +555,11 @@ export function startTrip(ctx, { mission: M, roles, onEnd = () => {} }) {
     abort,
     // (the rigs: the cut-scene hurried on)
     skip(secs = 1) { T.t += secs; if (T.phase === 'cut') cutT += secs; },
+    // (the skip button, pressed: a part the crew member takes no part in)
+    skipPart: () => skip(),
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
-    state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n,
+    state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
       fly: fl ? fl.state() : null, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, arms: arms ? arms.doors.map((D) => ({ t: +D.t.toFixed(2), work: +(D.work || 0).toFixed(2), grip: +(D.grip || 0).toFixed(2) })) : null, log: T.log.slice(-12) }),
   };

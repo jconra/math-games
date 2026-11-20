@@ -396,11 +396,12 @@ export function mountShape(host, S, { spin = true } = {}) {
 }
 
 // THE JOB PANEL'S `live` FOR THIS JOB (src/jobs/panel.js): the card's top, and the display put on each new card in place
-// of its still picture. view(): the display now on the card.
-export function engineerLink() {
+// of its still picture. view(): the display now on the card. small: the top line's small words, for whoever has
+// something to say there (on a run, which of the tuning's cards this is: src/tune.js); none: "Fuel pellets".
+export function engineerLink({ small = null } = {}) {
   let view = null;
   return {
-    head: () => '<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Core display</b><small>Fuel pellets</small></header>',
+    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Core display</b><small>${(small && small()) || 'Fuel pellets'}</small></header>`,
     play(o, ui) {
       if (view) view.stop(); view = null;
       const box = ui.card.querySelector('.pnj-pic.is-lead'), S = o.facts && o.facts.shape;

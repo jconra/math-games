@@ -15,6 +15,8 @@
 //   ?rig                 keeps the picture readable for a screenshot
 //   ?nopeople            the station without its people
 //   ?seed=N              which of the outside's windows are lit (otherwise a different half each time the game starts)
+//   ?tune=before|after   signed as a ship's engineer: its core needs tuning before the run, or after it (otherwise
+//                        one or the other, picked as the contract is signed: src/missions.js pickTune)
 //   ?crowd=N             that many of the station's people about the player at once, whatever the quality (life.js NEAR:
 //                        the cost rigs); ?far=N: people drawn with their far copy from N metres (people.js LIFE.far)
 import * as THREE from 'three';

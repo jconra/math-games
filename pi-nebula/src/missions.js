@@ -16,9 +16,22 @@
 // to get back to the station. Then you only get 10% from the contract."
 //
 // A MISSION IS DATA (MISSIONS): its captain and ship, its roles and their shares, one plain line on how it pays, and
-// its steps in order. Each KIND of step has one runner in src/trip.js ('leave', 'jump', 'work', 'land'); a step names
-// the role that does it, and a role whose game is not made yet (ROLES: `ready`) is done by the captain's own crew. So
-// another captain's trip is another entry here with its own steps, and a new role's game switches on with its flag.
+// its steps in order. Each KIND of step that is flown has one runner in src/trip.js ('leave', 'jump', 'work', 'land');
+// a step names the role that does it, and a role whose game is not made yet (ROLES: `ready`) is done by the captain's
+// own crew. So another captain's trip is another entry here with its own steps, and a new role's game switches on with
+// its flag.
+//
+// THE ENGINEER'S STEP, 'tune', IS NOT FLOWN: the ship's reactor core is tuned on foot, with the ship parked (the game's
+// maker, 2026-11-18: "if you signed up for engineering then the captain tells you the core needs to be adjusted. So you
+// go back to mechanical and answer so questions there"; 2026-11-19: "I want the player to have to run back to
+// mechanical and click on something (press E)", and "We can make the reactor need tuning before or after missions (so
+// it isn't always the same exact sequence). This should be used for the explore, medical, and cargo missions too").
+// A mission that lists a 'tune' step has it, at the core of its own ship (found by name in the ship's blueprint:
+// src/boarding.js core): once a run, BEFORE the ship leaves or AFTER it is home and down, one or the other picked as
+// the contract is signed (pickTune, kept with the contract: `tune`). src/tune.js is its runner, started by
+// src/mission.js. Before: the seat does not start the run until the core is tuned. After: the share waits at the
+// smelter's controls as ever, and is held until the core is tuned (tuneDue). With the engineer's job left to the
+// captain's own crew nothing of it is seen or heard.
 //
 // THE MONEY (the game's maker, 2026-11-18: "It's as simple as add up what they came back with and multiply each type
 // of metal with what it is worth and that's what you get paid"). What comes home is a STORE: so many tonnes of each
@@ -35,6 +48,7 @@
 //
 // KEPT WITH THE CREW MEMBER (save.js keeps any field): crew.mission, one at a time:
 //   { id, captain, roles: [...], state: 'signed', signed }                the contract signed, the run not flown yet
+//   (signed as engineer on a mission with a 'tune' step: also `tune`: 'before' | 'after', and `tuned`: true once done)
 //   { ..., state: 'payout', payout: { n, canisters, tonnes, lots: [{ metal, tonnes, price, pay }] (the plain sum,
 //     metal by metal, the most tonnes first), sold, share, pay, at } }   home: the share waiting at the smelter's controls
 // A reload in the middle of a trip finds the contract still signed. Collected, the mission is cleared and the captain
@@ -57,7 +71,7 @@ import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighths
 export const ROLES = {
   pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno' },
   drill: { id: 'drill', name: 'Drill operator', does: 'operating the drill', share: 20, ready: true, crew: 'Miner Kestrel' },
-  engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: false, crew: 'Engineer Okafor' },
+  engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: true, crew: 'Engineer Okafor' },
 };
 export const CARDS = 3;      // the cards of a jump (its three lamps: distance, charge, go)
 export const LAMPS = ['Distance', 'Charge', 'Go'];
@@ -67,15 +81,19 @@ export const LAMPS = ['Distance', 'Charge', 'Go'];
 // hand or on autopilot: src/flying.js), 'jump' (the jump
 // computer: `cards` cards, then the jump `to` the field or home),
 // 'work' (at the field: the roles that work there, and how long the crew takes when the player has none of them),
-// 'land' (home: flown in through the bay door and set down on the pad, the haul aboard)
+// 'land' (home: flown in through the bay door and set down on the pad, the haul aboard),
+// 'tune' (not flown: the ship's reactor core tuned by its engineer, `cards` cards at the core, with the ship parked;
+// `when`: the moments of a run it may come at, one of them picked for each run)
 export const MISSIONS = {
   mining: {
     id: 'mining', captain: 'ruiz', ship: 'miner', name: 'Mining run', roles: ['pilot', 'drill', 'engineer'],
     paid: 'You are paid your share of what the haul sells for, at the smelter\'s controls, when you are back.',
     steps: [
+      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['before', 'after'] },
       { id: 'out', kind: 'leave', secs: 4 },
       { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'field' },
-      { id: 'field', kind: 'work', roles: ['drill', 'engineer'], secs: 18 },
+      // (nothing is the engineer's at the rocks yet: the core is tuned with the ship parked)
+      { id: 'field', kind: 'work', roles: ['drill'], secs: 18 },
       { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
       { id: 'home', kind: 'land', secs: 5 },
     ],
@@ -107,14 +125,49 @@ export function rolesWords(roleIds) {
 // the rest
 export const crewFor = (M, mine, name = 'You') => M.roles.map((id) => ({ role: id, name: mine.includes(id) ? name : ROLES[id].crew, you: mine.includes(id) }));
 
-// the trip's steps for a crew member with these roles: each step, and whether it is theirs to do (`mine`: their role,
-// its game made) or the crew's
+// the trip's steps for a crew member with these roles, the steps that are flown: each step, and whether it is theirs
+// to do (`mine`: their role, its game made) or the crew's
 export function stepsFor(M, mine) {
-  return M.steps.map((s) => {
+  return M.steps.filter((s) => s.kind !== 'tune').map((s) => {
     const roles = s.role ? [s.role] : s.roles || [];
     return { ...s, mine: roles.some((id) => mine.includes(id) && ROLES[id].ready) };
   });
 }
+// THE CORE'S TUNING (the top of this file). A mission's 'tune' step, if it lists one; that step for a crew member with
+// these roles, if it is theirs to do; and which of its moments this run's comes at
+export const tuneOf = (M) => (M && M.steps.find((s) => s.kind === 'tune')) || null;
+export function tuneFor(M, mine) { const s = tuneOf(M); return s && mine.includes(s.role) && ROLES[s.role].ready ? s : null; }
+// A SHIP'S OWN CORE, in its blueprint (kit/ships/<ship>.blueprint.json: the plan its cabin is built from): the reactor in
+// its engineering room, found by name as the cabin's furnishing finds it (kit/ships/cabin-furnish.js: the room of kind
+// 'engineering', its machine named a reactor, or its first machine). So every ship has its core where its own plan has
+// it, and no mission says where. -> { room (the room's id), item (the reactor's), stand: [x, z] (where a person stands
+// before it: a spot of the room's clear floor at least CORE.out from it, CORE.room from the room's walls and from
+// everything else standing on its floor: squarely before one of its sides if any such spot is, the nearest to it,
+// and of spots as near the one nearest its middle),
+// look: [x, y, z] (the middle of it, y above the room's floor) }, in the ship's own frame; null: a ship with no such
+// room or machine, or no floor to stand on. (src/boarding.js core puts it where the ship stands.)
+export const CORE = { out: 0.45, room: 0.2, step: 0.125 };
+export function coreIn(bp) {
+  const room = bp && (bp.rooms || []).find((r) => r.kind === 'engineering'); if (!room) return null;
+  const items = (bp.items || []).filter((it) => it.room === room.id), machines = items.filter((it) => it.kind === 'machine');
+  const it = machines.find((m) => /reactor/i.test(m.name || '')) || machines[0]; if (!it) return null;
+  const [X0, Z0, X1, Z1] = room.rect, mx = (it.rect[0] + it.rect[2]) / 2, mz = (it.rect[1] + it.rect[3]) / 2;
+  const far = (r, x, z) => Math.hypot(Math.max(r[0] - x, 0, x - r[2]), Math.max(r[1] - z, 0, z - r[3]));      // (from a fitting's plan to a point)
+  const others = items.filter((o) => o !== it && o.y == null);
+  // (the spots tried: on the plan's own eighths of a metre)
+  const from = (v) => Math.ceil((v + CORE.room - 1e-9) / CORE.step) * CORE.step;
+  let best = null;
+  for (let x = from(X0); x <= X1 - CORE.room + 1e-9; x += CORE.step) for (let z = from(Z0); z <= Z1 - CORE.room + 1e-9; z += CORE.step) {
+    const d = far(it.rect, x, z); if (d < CORE.out - 1e-9 || others.some((o) => far(o.rect, x, z) < CORE.room - 1e-9)) continue;
+    // (squarely before one of its sides first; then the nearest; then the nearest to its middle)
+    const square = (x >= it.rect[0] && x <= it.rect[2]) || (z >= it.rect[1] && z <= it.rect[3]);
+    const k = [square ? 0 : 1, Math.round(d * 1000), Math.round(Math.hypot(x - mx, z - mz) * 1000)];
+    if (!best || k[0] < best.k[0] || (k[0] === best.k[0] && (k[1] < best.k[1] || (k[1] === best.k[1] && k[2] < best.k[2])))) best = { k, at: [+x.toFixed(3), +z.toFixed(3)] };
+  }
+  if (!best) return null;
+  return { room: room.id, item: it.id, floor: room.floor || 0, stand: best.at, look: [mx, Math.min(+it.h || 1.8, 1.9) * 0.5, mz] };
+}
+export function pickTune(M, mine, rand = Math.random) { const s = tuneFor(M, mine), W = s ? s.when || [] : []; return W.length ? W[Math.min(W.length - 1, Math.floor(rand() * W.length))] : null; }
 
 // ── what a run brings home ──
 // what a store would sell for, and the pay of a share of it (the plain sum; the tests, the notes, the contract's card)
@@ -135,14 +188,25 @@ export function contractOf(crew) {
 }
 // the contract signed for these roles (only roles whose game is made) -> the mission as kept, or null (none of them
 // can be signed for, or another mission is still on)
-export function sign(crew, missionId, roleIds, now = Date.now()) {
+// (signed as its engineer: when this run's tuning of the core comes, picked now and kept: `tune`)
+export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.random) {
   const M = MISSIONS[missionId];
   if (!M || !crew || contractOf(crew)) return null;
   const roles = openRoles(M, roleIds);
   if (!roles.length) return null;
-  crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now };
+  const tune = pickTune(M, roles, rand);
+  crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now, ...(tune ? { tune } : {}) };
   return crew.mission;
 }
+// IS THE CORE'S TUNING DUE NOW, for this crew member? 'before' (their contract signed, the run not flown yet: the seat
+// does not start it until the core is tuned), 'after' (home and down, their share waiting: held until the core is
+// tuned), or null (not their job, done already, or not yet time). tuned(crew): it is done.
+export function tuneDue(crew) {
+  const m = contractOf(crew);
+  if (!m || m.tuned || !tuneFor(MISSIONS[m.id], m.roles)) return null;
+  return m.tune === 'before' && m.state === 'signed' ? 'before' : m.tune === 'after' && m.state === 'payout' ? 'after' : null;
+}
+export function tuned(crew) { const m = contractOf(crew); if (!m) return null; m.tuned = true; return m; }
 // home from the run: the haul's facts set for every slip about it (flownHaul: its store), and the crew member's share
 // of what it sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); store: the
 // tonnes of each metal that came home (all eight canisters full: whole tonnes; headed home early: the rounded store,
@@ -160,7 +224,7 @@ export function land(crew, { n = 0, store = {}, now = Date.now() } = {}) {
 // mission is done. -> { pay, credits } or null (nothing waiting)
 export function collect(crew) {
   const m = contractOf(crew);
-  if (!m || m.state !== 'payout') return null;
+  if (!m || m.state !== 'payout' || tuneDue(crew)) return null;      // (the share is held until the core is tuned)
   const pay = Math.max(0, Math.floor(+m.payout.pay || 0));
   const credits = earn(crew, m.id, pay);
   jobTally(crew, m.id).n++;      // (the runs flown and paid)

@@ -51,12 +51,20 @@ export const CAPTAINS = {
 };
 
 // A CAPTAIN'S RUN (src/trip.js): what the captain says from the other seat as the run goes, one of each at its moment,
-// in a bubble (no recorded clips yet). {player}: the crew member's name; {ore}: the metal; {tonnes}: the haul's ore
+// in a bubble (no recorded clips yet). {player}: the crew member's name; {ore}: the metal; {tonnes}: the haul's ore;
+// {engineer}: whoever is the run's engineer (the crew member, or the captain's own)
 export const RUN_TALK = {
   mining: {
+    // THE CORE'S TUNING (src/tune.js; the game's maker, 2026-11-18: "if you signed up for engineering then the captain
+    // tells you the core needs to be adjusted. So you go back to mechanical and answer so questions there. Then you
+    // make your way back up to the pilot seat"). tune: as the ship says "Reactor imbalance." (before the run, or home
+    // and down after it); tunedBefore: the core tuned, the ship may leave; tunedAfter: tuned, the run done
+    tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
+    tunedBefore: ['The core is steady. Come up to the cockpit, {player}.'],
+    tunedAfter: ['The core is steady. Good work, {player}. Your share is at the smelter\'s controls.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
-    field: ['Kestrel, bring that one in. Okafor, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
+    field: ['Kestrel, bring that one in. {engineer}, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
     full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
     home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
     homeCrew: ['There\'s the station. Juno has the landing.', 'Home. Juno takes her in.'],

@@ -5,8 +5,8 @@
 // ask what its height is and what its length is. The levels would progress through area and volume. The high levels
 // could show a cluster of cubes (the more, the harder) in 3d that can spin around. The questions can claim that the
 // cubes are fuel pellets that need a containment field or something."
-// (When they are asked, later and not here: "if you signed up for engineering then the captain tells you the core needs
-// to be adjusted. So you go back to mechanical and answer so questions there.")
+// (When they are asked, src/tune.js: "if you signed up for engineering then the captain tells you the core needs to be
+// adjusted. So you go back to mechanical and answer so questions there.")
 //
 // One ladder like every job's, kids to grown-ups, easiest first. Its first and last steps are his; the steps between
 // are the ladder he agreed to ("That sounds good, let's do it"):
@@ -496,9 +496,9 @@ export const PLACE = {
 };
 
 export const JOB = {
-  // (not one of the station's job spots, src/jobs/index.js JOBS, and not on a contract yet: its cards will be asked at
-  // the Miner's core on a captain's run. The card's top and its display come from the panel's `live` for this job:
-  // src/jobs/engview.js engineerLink())
+  // (not one of the station's job spots, src/jobs/index.js JOBS: its cards are asked at the ship's own core on a
+  // captain's run, src/tune.js. Its levels are on the crew screen's list with the others': src/ui/title.js. The card's
+  // top and its display come from the panel's `live` for this job: src/jobs/engview.js engineerLink())
   id: 'engineer', name: 'Reactor core', short: 'Engineer', open: true, seated: true,
   spot: null, sign: 'The Miner\'s core', hint: 'Check the containment field',
   place: PLACE, setting: SETTING, makers: MAKERS,

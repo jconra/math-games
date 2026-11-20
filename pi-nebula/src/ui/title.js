@@ -118,9 +118,10 @@ const theme = {
     joblevels(ctx) {
       const p = ctx.current();
       if (!p) return;
-      // (and the pilot's seat's and the drill's, whose cards come up on a captain's run: src/jobs/pilot.js, drill.js)
-      Promise.all([import('../jobs/index.js'), import('./levels.js'), import('../jobs/pilot.js'), import('../jobs/drill.js')]).then(([J, L, P, D]) => {
-        L.openJobLevels(document.body, p, { jobs: [...J.JOBS, P.JOB, D.JOB], onChange: (x) => ctx.changed(x || p), onClose: () => ctx.focusKey('joblevels', false) });
+      // (and the pilot's seat's, the drill's and the engineer's, whose cards come up on a captain's run: src/jobs/pilot.js,
+      // drill.js, engineer.js)
+      Promise.all([import('../jobs/index.js'), import('./levels.js'), import('../jobs/pilot.js'), import('../jobs/drill.js'), import('../jobs/engineer.js')]).then(([J, L, P, D, G]) => {
+        L.openJobLevels(document.body, p, { jobs: [...J.JOBS, P.JOB, D.JOB, G.JOB], onChange: (x) => ctx.changed(x || p), onClose: () => ctx.focusKey('joblevels', false) });
       }).catch((e) => console.error('Pi Nebula: the job levels could not open', e));
     },
     // the height on the new crew member's form
