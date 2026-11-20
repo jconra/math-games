@@ -80,7 +80,8 @@ function quad(p, look, pts, n, mat = 'solid') {
 // ── one wall of the control room, in its own frame: x along it (-L/2 .. L/2), its face on z = 0, the room in +z ────
 const T = TOWER.thick, SILL = TOWER.sill, HEAD = TOWER.head, MUL = TOWER.mullion, END = 0.35;
 export function windowsOf(L) {
-  const n = L > 7 ? 3 : 2, w = (L - 2 * END - (n - 1) * MUL) / n, out = [];
+  // (three on a long wall; one big pane across each cut corner, where no desk stands: the clearest view down)
+  const n = L > 7 ? 3 : 1, w = (L - 2 * END - (n - 1) * MUL) / n, out = [];
   for (let i = 0; i < n; i++) { const x0 = -L / 2 + END + i * (w + MUL); out.push([x0, x0 + w]); }
   return out;
 }
