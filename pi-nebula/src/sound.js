@@ -4,7 +4,9 @@
 //
 //   import { sound } from './sound.js'
 //   sound.load(name, url)            fetch a sound once (it is made ready to play once the player has touched the page)
-//   sound.play(name, { at, volume, rate, group, near, far })   -> { stop() } | null (not loaded, muted, or not yet allowed)
+//   sound.play(name, { at, volume, rate, group, near, far, delay })   -> { stop(), volume(v) } | null (not loaded, muted,
+//               or not yet allowed); delay: seconds from now it starts (sounds joined end to end start on time);
+//               volume(v): its own volume changed while it plays (eased over a tenth of a second)
 //       at      a point in the world ({ x, y, z }): the sound comes from there, softer with distance (full within
 //               `near` metres, 1.5 unless given; quieter on out to `far`, 28); left out: plain, from everywhere
 //       volume  0..1 (1 unless given); rate: played quicker and higher (over 1) or slower and lower (under 1)
@@ -14,12 +16,13 @@
 //       The game's maker (2026-11-18, of the Miner flown into another ship's hangar): "you would hear an alarm".
 //   sound.ears(camera)               each frame: where the ears are (the camera, its way and its up)
 //   sound.volume, sound.muted        as saved in this browser (0..1, 0.8 at first; not muted); setVolume(v), setMuted(m)
+//   sound.has(name), sound.length(name)   a sound fetched and made ready to play; how long it lasts (s; 0 if not)
 //   sound.ready                      true once the player has touched the page and sound can play
 //   sound.played                     how many sounds have played (the rigs read it)
 // The volume and the mute are kept in this browser (localStorage 'calc-station.sound'); ui/soundbutton.js is the HUD's
 // switch for them.
 const KEY = 'calc-station.sound';
-const GROUPS = { voices: 0.9, effects: 1, music: 0.6 };
+const GROUPS = { voices: 0.9, effects: 1, music: 0.6, station: 0.9 };   // (station: the station's announcements, src/announce.js)
 
 function makeSound() {
   let ctx = null, master = null;
@@ -56,16 +59,18 @@ function makeSound() {
     bytes.set(name, null);
     return fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => { if (!b) { bytes.delete(name); return; } bytes.set(name, b); decode(name); }).catch(() => { bytes.delete(name); });
   };
-  S.play = (name, { at = null, volume = 1, rate = 1, group = 'voices', near = 1.5, far = 28 } = {}) => {
+  S.has = (name) => !!bufs.get(name);
+  S.length = (name) => { const b = bufs.get(name); return b ? b.duration : 0; };
+  S.play = (name, { at = null, volume = 1, rate = 1, group = 'voices', near = 1.5, far = 28, delay = 0 } = {}) => {
     if (!ctx || ctx.state !== 'running' || !level()) return null;
     const buf = bufs.get(name); if (!buf) { decode(name); return null; }
     const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
     const g = ctx.createGain(); g.gain.value = Math.max(0, volume);
     src.connect(g);
     placed(g, at, near, far).connect(groups[group] || groups.voices);
-    src.start();
+    src.start(delay > 0 ? ctx.currentTime + delay : 0);
     S.played++;
-    return { stop() { try { src.stop(); } catch (e) { /* done already */ } } };
+    return { stop() { try { src.stop(); } catch (e) { /* done already */ } }, volume(v) { g.gain.setTargetAtTime(Math.max(0, v), ctx.currentTime, 0.04); } };
   };
   // (a sound's last node, set at a point in the world if it has one: softer with distance)
   function placed(node, at, near, far) {
