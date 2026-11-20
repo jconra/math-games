@@ -973,7 +973,9 @@ export function startFlying(ctx, opts = {}) {
     },
     lock(v) { locked = !!v; letGo(); if (locked) { setMouse('pointer'); card.hidden = true; } painted = ''; paint(); },
     // (the crew member on their feet aboard: the top of this function, `aside`)
-    aside(v) { if (closed || aside === !!v) return; aside = !!v; letGo(); setMouse('pointer'); card.hidden = true; painted = ''; if (on) paint(); else el.hidden = true; },
+    // (at the rocks the cabin walked is the hangar's own Miner, drawn in the drill's Miner's place, its dashboard lower
+    // than that ship's: this flying's display is put away meanwhile, so it does not hang over the cabin's dashboard)
+    aside(v) { if (closed || aside === !!v) return; aside = !!v; if (body) dash.group.visible = !aside; letGo(); setMouse('pointer'); card.hidden = true; painted = ''; if (on) paint(); else el.hidden = true; },
     // put away altogether for a while, the ship left where it is (at the rocks, while the drill's view has the eye), and back
     pause(v) { if (closed) return; on = !v; if (ownDash) D.last = null; letGo(); setMouse('pointer'); card.hidden = true; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; if (on) { pose(1 / 60); paint(); } else el.hidden = true; },
     // where the eye is now, in the ship's own kit frame (a glide out of this view starts there)
