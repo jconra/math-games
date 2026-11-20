@@ -13,6 +13,13 @@
 //       f.dispose()       the solid's geometries (the file's own are kept for the next copy)
 //   F.facts   { tris, draws, texture [w, h], textureMB (on the graphics card, with its smaller copies), size [long,
 //             tall, wide] (m, as it stands), scale }
+//       f.set({ lift, front, back, steer })   ITS MOVING PARTS (it drives: src/cargoforklift.js): the carriage and its
+//                 forks up by `lift` metres, the wheels turned round their axles (front, back: radians), the back
+//                 wheels steered (radians about straight up)
+// ITS MOVING PARTS are his mesh's own pieces, none cut or changed: his triangles part into pieces of their own (points
+// on the very same spot counted as joined), and the carriage (its frame and both forks), each wheel and the rest are
+// such pieces (~/pw/space-math/shots/forklift-2/pieces/). Each is drawn as a mesh of his triangles (his vertices
+// shared, an index of its own), so it is six draws in all where it was one, and nothing of his file is changed.
 // THE SHADE: the station draws no shadows (people.js puts a soft dark patch under each person). Under the forklift lies
 // a patch the shape of its own foot: its triangles seen from straight above, the nearer the floor the darker, softened,
 // so its wheels and its forks sit on the floor. Worked out once from his triangles when the file comes (a few ms), one
@@ -44,10 +51,54 @@ export function loadForklift() {
     const tw = img ? img.width : 0, th = img ? img.height : 0;
     // (his triangles in the template's frame, once: for the shade and for the solid)
     const local = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-    const facts = { tris: Math.round(tris), draws: draws + 1, texture: [tw, th], textureMB: +(tw * th * 4 * 4 / 3 / 1048576).toFixed(1), size: [+size.x.toFixed(3), +size.y.toFixed(3), +size.z.toFixed(3)], scale: +k.toFixed(4) };
+    const parts = splitParts(mesh);
+    const facts = { tris: Math.round(tris), draws: parts.draws + 1, texture: [tw, th], textureMB: +(tw * th * 4 * 4 / 3 / 1048576).toFixed(1), size: [+size.x.toFixed(3), +size.y.toFixed(3), +size.z.toFixed(3)], scale: +k.toFixed(4), parts: parts.counts };
     return { template, mesh, mat, local, shade: shadeOf(local, size), forks: forkBlock(src), facts };
   }).catch((e) => { fetched = null; throw e; });
   return fetched;
+}
+
+// HIS MESH IN ITS MOVING PARTS (above): his triangles sorted by the piece each belongs to, and each part a mesh of its
+// own in the mesh's place, sharing his vertices and his material. In his units, in his mesh's own frame:
+//   'forklift:carriage'   every piece wholly in front of FORKLIFT.carriage: moved up by the lift
+//   'forklift:front'      the two front wheels (one axle), turned about it
+//   'forklift:backL/R'    each back wheel, steered about straight up through its middle, and turned about its axle
+//   'forklift:body'       the rest (the body, the mast, the seat, the wheel)
+function splitParts(mesh) {
+  const g = mesh.geometry, P = g.attributes.position, I = g.index.array, n = P.count;
+  // (his pieces: points joined by a triangle, or lying on the very same spot)
+  const par = new Int32Array(n); for (let i = 0; i < n; i++) par[i] = i;
+  const find = (a) => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+  const join = (a, b) => { a = find(a); b = find(b); if (a !== b) par[a] = b; };
+  for (let t = 0; t < I.length; t += 3) { join(I[t], I[t + 1]); join(I[t], I[t + 2]); }
+  const spot = new Map();
+  for (let i = 0; i < n; i++) { const key = Math.round(P.getX(i) * 1e5) + ',' + Math.round(P.getY(i) * 1e5) + ',' + Math.round(P.getZ(i) * 1e5); const j = spot.get(key); if (j == null) spot.set(key, i); else join(i, j); }
+  const box = new Map();
+  for (let i = 0; i < n; i++) { const r = find(i); let b = box.get(r); if (!b) box.set(r, b = new THREE.Box3()); b.expandByPoint(new THREE.Vector3(P.getX(i), P.getY(i), P.getZ(i))); }
+  // (which part each piece is)
+  const [[ax], [bx]] = FORKLIFT.axles, kind = new Map();
+  for (const [r, b] of box) {
+    const c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
+    const wheel = b.min.y < 0.01 && b.max.y < 0.18 && s.y > 0.14 && s.x < 0.2 && Math.abs(c.z) > 0.1;
+    kind.set(r, b.min.x > FORKLIFT.carriage ? 'carriage' : wheel && Math.abs(c.x - ax) < 0.03 ? 'front' : wheel && Math.abs(c.x - bx) < 0.03 ? (c.z < 0 ? 'backL' : 'backR') : 'body');
+  }
+  const lists = { body: [], carriage: [], front: [], backL: [], backR: [] };
+  for (let t = 0; t < I.length; t += 3) lists[kind.get(find(I[t]))].push(I[t], I[t + 1], I[t + 2]);
+  const geo = (L) => { const q = new THREE.BufferGeometry(); for (const [name, a] of Object.entries(g.attributes)) q.setAttribute(name, a); q.setIndex(L); q.computeBoundingBox(); q.computeBoundingSphere(); return q; };
+  const part = (name, L, at = null) => {
+    const m = new THREE.Mesh(geo(L), mesh.material); m.name = 'forklift:' + name;
+    if (!at) return m;
+    const pivot = new THREE.Group(); pivot.name = 'forklift:' + name; pivot.position.set(...at); m.position.set(-at[0], -at[1], -at[2]); m.name += ':mesh'; pivot.add(m); return pivot;
+  };
+  const root = new THREE.Group(); root.name = 'forklift:parts'; root.position.copy(mesh.position); root.quaternion.copy(mesh.quaternion); root.scale.copy(mesh.scale);
+  const [[, ay], [, by]] = FORKLIFT.axles, wz = FORKLIFT.wheelZ;
+  const carriage = new THREE.Group(); carriage.name = 'forklift:carriage'; carriage.add(part('carriage:mesh', lists.carriage));
+  // (each back wheel: steered about straight up through its middle, then turned about its axle)
+  const back = (name, z) => { const steer = new THREE.Group(); steer.name = 'forklift:' + name; steer.position.set(bx, by, z); const spin = part(name + ':spin', lists[name], [0, 0, 0]); spin.children[0].position.set(-bx, -by, -z); steer.add(spin); return steer; };
+  root.add(part('body', lists.body), carriage, part('front', lists.front, [ax, ay, 0]), back('backL', -wz), back('backR', wz));
+  mesh.parent.add(root); mesh.parent.remove(mesh);
+  const counts = Object.fromEntries(Object.entries(lists).map(([k2, L]) => [k2, L.length / 3]));
+  return { draws: 5, counts };
 }
 
 // the block over its forks, in the template's frame (his units turned into where they stand)
@@ -100,9 +151,15 @@ export function standForklift(F, { at = FORKLIFT.at, floor = STORE.floor, yaw = 
   group.position.set(at[0], floor, at[1]); group.rotation.set(0, yaw, 0); group.updateMatrixWorld(true);
   const M = new THREE.Matrix4().makeRotationY(yaw).setPosition(at[0], floor, at[1]);
   const solid = [F.local.clone().applyMatrix4(M), F.forks.clone().applyMatrix4(M)];
+  const by = (name) => copy.getObjectByName('forklift:' + name);
+  const P = { carriage: by('carriage'), front: by('front'), backL: by('backL'), backR: by('backR') }, k = forkliftScale();
   return {
     group, solid,
-    light(env, k = 1.25) { F.mat.envMap = env || null; F.mat.envMapIntensity = k; F.mat.needsUpdate = true; },
+    light(env, k2 = 1.25) { F.mat.envMap = env || null; F.mat.envMapIntensity = k2; F.mat.needsUpdate = true; },
+    set({ lift = 0, front = 0, back = 0, steer = 0 } = {}) {
+      P.carriage.position.y = lift / k; P.front.rotation.z = front;
+      for (const w of [P.backL, P.backR]) { w.rotation.y = steer; w.children[0].rotation.z = back; }
+    },
     dispose() { for (const g of solid) g.dispose(); },
   };
 }

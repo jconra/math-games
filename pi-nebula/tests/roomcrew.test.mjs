@@ -104,6 +104,7 @@ test('the rest work at the desks, stand about, talk and walk about: their whole 
   const kinds = new Set();
   for (const P of ROOM_CREW) for (const { kind, group } of steps(P)) {
     kinds.add(kind);
+    if (kind === 'drive') continue;      // (a machine of their room's, not a spot: Cargo's forklift, tests/forklift.test.mjs)
     const defs = kind === 'sit' ? SEATS[group] : kind === 'talk' ? TALKS[group] : SPOTS[group];
     assert.ok(defs && defs.length, `${P.id}: ${kind}:${group} is a group of life.js`);
     for (const d of defs) assert.equal(d.room, ROOM_OF[P.place], `${P.id}: ${group} is in their own place`);
@@ -122,7 +123,7 @@ test('every spot, seat and talking spot of theirs is where a person can stand in
   for (const P of ROOM_CREW) for (const { kind, group } of steps(P)) used.set(kind + ':' + group, P.place);
   for (const [key, place] of used) {
     const [kind, group] = key.split(':');
-    if (kind === 'sit') continue;      // (the seats are the room's own chairs, above)
+    if (kind === 'sit' || kind === 'drive') continue;      // (the seats are the room's own chairs, above; the forklift: tests/forklift.test.mjs)
     const defs = kind === 'talk' ? TALKS[group] : SPOTS[group];
     for (const d of defs) {
       const pts = kind === 'talk' ? talkPlaces(d) : pointsOf(d);

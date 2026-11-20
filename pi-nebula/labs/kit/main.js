@@ -25,6 +25,7 @@ import { Piece } from '../../kit/piece.js';
 import { makeDust } from '../../kit/dust.js';
 import { makeBeams, beamsOf } from '../../kit/beams.js';
 import { loadForklift, standForklift } from '../../kit/forklift.js';
+import { makePallets } from '../../kit/cargopallets.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station'], ['hull-sample', 'A sample hull'], ['ship-sample', 'A sample cabin'], ['ship-miner', 'Miner A'], ['ship-medic', 'Medic A'], ['ship-explorer', 'Explorer C'], ['ship-hauler', 'Hauler A']];
@@ -235,9 +236,12 @@ async function showRoom(id = state.room) {
   parkForklift();
 }
 // THE STATION'S CARGO: the game's maker's forklift parked in its painted place, as in the game (kit/forklift.js), lit
-// by Cargo's own picture of itself; fetched once the room is up
+// by Cargo's own picture of itself; fetched once the room is up. And its own pallets, where they stand at the start
+// (kit/cargopallets.js: the kit's pallet piece, drawn apart from the room so the game's forklift can carry them)
 async function parkForklift() {
   const zone = built?.zones?.find((z) => z.id === 'store'); if (!zone) return;
+  const room = (roomData[state.room]?.rooms || []).find((r) => r.id === 'store');
+  const P = makePallets({ zone, lights: built.lights || [], sky: room && room.sky }); zone.group.add(P.group); shown.pallets = P.facts;
   const mine = shownFor, F = await loadForklift().catch((e) => { console.error('kit lab: the forklift did not come', e); return null; });
   if (!F || mine !== shownFor) return;
   const f = standForklift(F); zone.group.add(f.group); f.light(zoneSets.get('store')?.env || null, 1.25); shown.model = F.facts; readout();

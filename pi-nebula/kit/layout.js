@@ -70,7 +70,7 @@ const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _d = new THREE.Vector3
 // an attribute stored as normalized integers (the shader still reads it as floats from -1 or 0 to 1)
 // (in four parts, not three: a GPU reading three 16-bit or 8-bit numbers may convert them on every draw, measured at
 // 25 times slower here; four-part ones it reads as they are. The fourth is padding: 0, or full for a colour's alpha.)
-function compact(g, name, Type, max) {
+export function compact(g, name, Type, max) {
   const a = g.attributes[name]; if (!a || !(a.array instanceof Float32Array) || a.itemSize !== 3) return;
   const src = a.array, n = src.length / 3, dst = new Type(n * 4), lo = Type === Uint8Array ? 0 : -1, pad = name === 'color' ? max : 0;
   for (let i = 0; i < n; i++) { for (let k = 0; k < 3; k++) dst[i * 4 + k] = Math.round(Math.max(lo, Math.min(1, src[i * 3 + k])) * max); dst[i * 4 + 3] = pad; }

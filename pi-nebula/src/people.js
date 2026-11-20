@@ -206,7 +206,7 @@ const MARKER = (() => {
   return new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
 })();
 
-export async function makePeople({ W, walls, lib, jobs = null, boarding = null, crane = null, say = () => {}, crew = () => null }) {
+export async function makePeople({ W, walls, lib, jobs = null, boarding = null, crane = null, say = () => {}, crew = () => null, rides = {} }) {
   const pieces = piecesOf(W.R), list = [], missing = [];
   const recipeOf = (r) => (typeof r === 'string' ? (lib.list.recipes || {})[r] : r);
   const alarms = { stuck: 0, inWall: 0, inPerson: 0, onPatch: 0, planFailed: 0, gaveUp: 0, seen: {} };
@@ -454,6 +454,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const n = P.c.person.actions[name] ? name : STAND;
     if (P.clip !== n) { P.c.play(n, { fade, speed }); P.clip = n; } else P.c.play(n, { speed });
   };
+  // RIDES: what a machine of a room's (rides[group]) is handed to work its driver: their clips, and on with their day
+  const RIDES = { play: (P, n, o) => play(P, n, o), next: (P) => next(P), clips: { sit: CLIPS.sit, stand: STAND } };
 
   // ── a day ────────────────────────────────────────────────────────────────────────────────────────────────────
   // (what a step of a day asks: its kind, its group, a spot of it nobody has, claimed)
@@ -519,6 +521,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       counts.scans++;
       return { kind: 'scan', step, spot: A };
     }
+    if (kind === 'drive') {
+      // (a machine of their room's to drive, rides[group]: Cargo's forklift, src/cargoforklift.js; to the spot beside its
+      // seat if it is in and has something to carry; the rest, on and off and the ride, is the machine's: RIDES below)
+      const R = rides[group], s = R && R.claim(P); if (!s) return null;
+      P.claim = s; s.who = P; taken.set(P, [s.pos]); return { kind, step, spot: s, ride: R };
+    }
     if (kind === 'walk') {
       const L = (groups[group] || []).filter(Boolean); if (!L.length) return null;
       taken.delete(P);
@@ -534,6 +542,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   const shipsMoved = () => (boarding?.ships || []).some((s) => s.moved);
   function release(P) {
+    if (P.act && P.act.ride) P.act.ride.release(P);      // (RIDES: off their machine, its round finished)
     const c = P.claim; taken.delete(P);
     endTalk(P);
     if (SCAN && SCAN.busy && (SCAN.busy.patient === P || SCAN.busy.medic === P)) scanOver(P);
@@ -933,6 +942,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (a.kind === 'scan') { scanPatient(P, a, dt); return; }
     if (a.kind === 'scanMedic') { scanMedic(P, a, dt); return; }
+    // RIDES: at their machine (getting on, riding it, getting off): the machine's own part, src/cargoforklift.js
+    if (a.kind === 'drive') { a.ride.step(P, a, dt, RIDES); return; }
     // at it: standing, at work, or talking (the time counted once both are there)
     if (a.kind === 'talk') {
       const other = a.spot.talk.who[1 - a.spot.i], there = other && other.act && other.act.phase === 'do' && other.act.spot.talk === a.spot.talk;
@@ -1473,7 +1484,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const still = !by || by === 'patch' || (by !== playerNow && !by.walking), end = P.way[P.way.length - 1];
       // (the scanner's patient and medic keep at it: a scan is not dropped for someone standing near; they work the way
       // out again round them, and give up only after twice as long)
-      const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic');
+      const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic' || P.act.kind === 'drive');
       if (still && !keen && P.held > LIFE.stillWait && Math.hypot(end.x - P.pos.x, end.z - P.pos.z) < 1.6) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
       if (P.held > LIFE.sidestep && !P.side) P.side = Math.random() < 0.75 ? 0.9 : -0.9;
       // (the way worked out again whenever held this long, at most once in LIFE.replanEvery seconds; held up too long in
@@ -1642,7 +1653,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // walk, which would start them where another walker of the same round may be put)
     const n = P.day.length, k0 = Math.floor(Math.random() * n);
     let first = null;
-    for (let i = 0; i < n && !first; i++) { P.k = (k0 + i) % n; if (!/^walk:/.test(P.day[P.k].do)) first = claimFor(P, P.day[P.k]); }
+    for (let i = 0; i < n && !first; i++) { P.k = (k0 + i) % n; if (!/^(walk|drive):/.test(P.day[P.k].do)) first = claimFor(P, P.day[P.k]); }
     if (!first) return false;
     const at = first.spot.seat || first.spot.pos, zone = W.zoneAt(at);
     // (their room drawn: only somewhere out of the camera's view, else they are left to come a moment later)

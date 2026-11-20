@@ -6583,14 +6583,11 @@
         {"piece":"pallet","cell":[5,9.5],"turn":2,"variant":"wrapped","off":[0.38,2.57,-0.45]},
         {"piece":"pallet","cell":[5.5,9.5],"turn":0,"variant":"boxes","off":[-0.06,2.57,0.45]},
         {"piece":"pallet","cell":[6,9.5],"turn":0,"variant":"totes","off":[0.34,0,0.45]},
-        {"piece":"pallet","cell":[7,9.5],"turn":2,"variant":"boxes","off":[0.34,0,-0.45]},
         {"piece":"pallet","cell":[7,9.5],"turn":0,"variant":"drums2","off":[-0.34,1.37,0.45]},
         {"piece":"pallet","cell":[6,9.5],"turn":0,"variant":"totes","off":[0.34,2.57,0.45]},
-        {"piece":"pallet","cell":[7.5,9.5],"turn":0,"variant":"boxes","off":[0.06,0,0.45]},
         {"piece":"pallet","cell":[7.5,9.5],"turn":0,"variant":"drums2","off":[0.06,1.37,0.45]},
         {"piece":"pallet","cell":[7.5,9.5],"turn":0,"variant":"boxes","off":[0.06,2.57,0.45]},
         {"piece":"pallet","cell":[8,9.5],"turn":0,"variant":"drums","off":[0.38,2.57,0.45]},
-        {"piece":"pallet","cell":[9,9.5],"turn":2,"variant":"drums2","off":[0.22,0,-0.45]},
         {"piece":"pallet","cell":[9.5,9.5],"turn":0,"variant":"totes","off":[0.1,0,0.45]},
         {"piece":"pallet","cell":[9.5,9.5],"turn":0,"variant":"boxes","off":[0.1,1.37,0.45]},
         {"piece":"pallet","cell":[9,9.5],"turn":2,"variant":"crates","off":[0.22,2.57,-0.45]},
@@ -6599,11 +6596,7 @@
         {"piece":"bench","cell":[-1.5,13.5],"turn":0,"variant":"packing","off":[0.05,0,-0.3]},
         {"piece":"bench","cell":[0.5,13.5],"turn":0,"variant":"packing","off":[-0.25,0,-0.3]},
         {"piece":"shipDesk","cell":[-0.5,15.5],"turn":0,"variant":"desk","off":[-0.1,0,-0.3]},
-        {"piece":"chair","cell":[-0.5,16],"turn":2,"variant":"desk","off":[-0.1,0,0.35]},
-        {"piece":"pallet","cell":[0,8],"turn":0,"variant":"wrapped","off":[-0.2,0,-0.5]},
-        {"piece":"pallet","cell":[1,8],"turn":2,"variant":"crates","off":[0.5,0,0.5]},
-        {"piece":"pallet","cell":[1.5,8],"turn":0,"variant":"boxes","off":[0.2,0,-0.5]},
-        {"piece":"pallet","cell":[1,10],"turn":2,"variant":"totes","off":[0.5,0,0.4]}
+        {"piece":"chair","cell":[-0.5,16],"turn":2,"variant":"desk","off":[-0.1,0,0.35]}
       ]
     }
   ]

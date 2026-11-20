@@ -22,6 +22,7 @@
 //   'talk:<spots>'       to a group's talking spot: two people standing face to face, talking (chatter.js)
 //   'walk:<spots>'       through every spot of a group in turn without stopping (a patrol)
 //   'scan'               a patient's turn in the big scanner: a medic is asked over, they lie on its bed, it scans
+//   'drive:<machine>'    to a machine of their room's, on, a round on it, off (people.js RIDES: Cargo's forklift)
 // with the time in seconds after it ([least, most]) where the activity's own is not wanted, and p: how likely it is
 // done each time round (left out: always).
 // A CAPTAIN (captain: { ship, mission }) wears a yellow marker over their head and speaks to the player who comes near:
@@ -116,7 +117,8 @@ export const SPOTS = {
   // cold store doors
   printer: [{ piece: 'shipDesk', room: 'store', local: [1.3, 0, 0.85], face: [0, -1] }],
   benches: [-0.9, 0.9].flatMap((x) => [{ piece: 'bench', variant: 'packing', room: 'store', all: true, local: [x, 0, -0.8], face: [0, 1] }, { piece: 'bench', variant: 'packing', room: 'store', all: true, local: [x, 0, 0.8], face: [0, -1] }]),
-  pallets: [{ piece: 'storeHall', room: 'store', local: [-0.2, 0, 16.65], face: [0, -1] }, { piece: 'storeHall', room: 'store', local: [3.2, 0, 16.65], face: [0, -1] }, { piece: 'storeHall', room: 'store', local: [1.5, 0, 18.45], face: [0, 1] }],
+  // (the pallets waiting: from their north side, between two, as the forklift comes up to them from the south)
+  pallets: [0.075, 1.525, 2.975].map((x) => ({ piece: 'storeHall', room: 'store', local: [x, 0, 14.4], face: [0, 1] })),
   containers: [3.5, 8, 12.5].map((z) => ({ piece: 'storeHall', room: 'store', local: [-2.3, 0, z], face: [-1, 0] })),
   scale: [{ piece: 'scale', room: 'store', local: [-0.95, 0, -0.95], face: [-1, -1] }],
   racks: [{ piece: 'rack', room: 'store', all: true, local: [1.36, 0, 1.25], face: [0, -1] }, { piece: 'rack', room: 'store', all: true, local: [4.08, 0, -1.25], face: [0, 1] }],
@@ -144,9 +146,9 @@ export const TALKS = {
   lobby: [{ room: 'smelter-lobby', at: [0.55, 0.5], face: [0, 1] }],
   medical: [{ room: 'medical', at: [0.6, 0.3], face: [1, 0] }],
   // (the control room: between the lift and the readouts desk, and by its north-west corner window; Cargo: on the
-  // loading floor, and between the last row of racks and the benches)
+  // loading floor, and at its south-west end, out of the forklift's way)
   tower: [{ piece: 'controlRoom', room: 'tower', local: [0, 0, 3.0], face: [1, 0] }, { piece: 'controlRoom', room: 'tower', local: [-5.2, 0, -5.2], face: [1, -1] }],
-  cargo: [{ piece: 'storeHall', room: 'store', local: [1.5, 0, 10.25], face: [1, 0] }, { piece: 'storeHall', room: 'store', local: [7.5, 0, 23.2], face: [1, 0] }],
+  cargo: [{ piece: 'storeHall', room: 'store', local: [1.5, 0, 10.25], face: [1, 0] }, { piece: 'storeHall', room: 'store', local: [-3.2, 0, 19.8], face: [1, 0] }],
 };
 export const APART = 1.15;
 
@@ -245,8 +247,11 @@ export const ROOM_CREW = [
       { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'stand:containers', for: T(15, 25), p: 0.4 }] },
   { id: 'stock-sami', name: 'Sami', place: 'store', look: { suit: 'atlantis1', head: 't10', hair: 'mohawk', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } }, voice: 'ym', rate: 1.04,
     day: [{ do: 'walk:cargoRound' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach', p: 0.7 }, { do: 'stand:cold', for: T(8, 15), p: 0.5 },
-      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }] },
+      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'drive:forklift', p: 0.25 }] },
+  // (Otto, the loader, drives the forklift most often: 'drive:forklift', a pallet from the loading floor to the shelves
+  // and back to park, src/cargoforklift.js; the game's maker, FORK1-1, C: "Now and then one of Cargo's people drives it
+  // to carry a pallet: from the loading floor by the containers to the shelves, then parks it again")
   { id: 'loader-otto', name: 'Otto', place: 'store', look: { suit: 'smelter', head: 't4', hair: 'shortFull', colours: { job: 'hauler', skin: '#d9a37f', hair: '#8f8a84' } }, voice: 'om', rate: 1.03,
-    day: [{ do: 'stand:containers', for: T(20, 40), clip: 'reach' }, { do: 'stand:scale', for: T(15, 30) }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach' }, { do: 'walk:cargoRound', p: 0.4 },
+    day: [{ do: 'stand:containers', for: T(20, 40), clip: 'reach' }, { do: 'stand:scale', for: T(15, 30) }, { do: 'drive:forklift', p: 0.5 }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach' }, { do: 'walk:cargoRound', p: 0.4 },
       { do: 'talk:cargo', for: T(20, 40), p: 0.5 }] },
 ];

@@ -84,16 +84,42 @@ export const RACKS = { z: [-5.55, -0.55, 4.45, 9.45, 14.45, 19.45], x0: [10.6, 6
 export const baysOf = (row) => Math.floor((RACKS.x1 - RACKS.x0[row]) / RACKS.bay + 1e-6);
 // THE REST OF THE FLOOR (plan_3), each [x0, x1, z0, z1]: the scale north of container 01 by the cut corner, out of the
 // containers' way; the packing benches and the shipping desk at the south end; the forklift's place (a painted bay:
-// his forklift parks in it, FORKLIFT below); the pallets waiting on the loading floor; the two cold store doors in the east wall at the ends of two
-// aisles (doors only: nothing is behind them)
+// his forklift parks in it, FORKLIFT below); the pallets waiting on the loading floor (their middles [x, z]: the
+// forklift's own, which it carries to the shelves, CARGO below); the two cold store doors in the east wall at the ends
+// of two aisles (doors only: nothing is behind them)
 export const FLOOR = {
   scale: [-1.2, 2.2, -3.4, 0],
   benches: [-4.8, 2.6, 25.6, 27.8],
   desk: [-4.8, 2.6, 29.6, 31.8],
   forklift: [4.6, 9.2, 31.4, 34.4],
-  waiting: [[-0.2, 15.5], [1.5, 15.5], [3.2, 15.5], [1.5, 19.6]],
+  waiting: [[-0.65, 15.6], [0.8, 15.6], [2.25, 15.6], [3.7, 15.6]],
   cold: [{ z: 2, n: 1 }, { z: 12, n: 2 }],
 };
+// A PALLET (kit/store.js pallet: a low platform, its load on it): 1.2 m long (its skids run along it) and 1 m across;
+// its deck's underside is `deck` over the floor (the forks go in under it, between the skids); its load stands up to
+// `top` (the tallest load, the wrapped one's)
+export const PALLET = { long: 1.2, wide: 1, deck: 0.1, top: 1.04 };
+// THE FORKLIFT'S ROUND (2026-11-20, the game's maker, of what his forklift does, question FORK1-1, C: "Now and then one
+// of Cargo's people drives it to carry a pallet: from the loading floor by the containers to the shelves, then parks
+// it again."). Its own pallets, drawn apart from the room so they can be carried (kit/cargopallets.js), each turned so
+// its skids run north to south: the forks go in along them.
+//   waiting  FLOOR.waiting: pallets waiting on the loading floor, a row south of container 03; the forklift comes up to
+//            each from the south
+//   shelf    where it sets them: the floor level of the last row of racks (row 6), from its south side, the open floor
+//            between the racks and the benches. (Not the aisles: they are 3.7 m wide and it is 3.7 m long with a pallet
+//            on its forks, so it cannot turn in one. Not the shelves over the floor: the first is 1.37 m up, and its
+//            forks' frame would have to rise 0.4 m over the top of its mast to set a pallet there.) [x, z]: a pallet's
+//            middle there, 0.75 m in from a post (so the forklift's front wheels pass the posts by 10 cm), its front
+//            edge 5 cm proud of the rack's face (so its body stops short of the face)
+//   pallets  each pallet's load and where it is at the start: 'w<n>' a waiting place, 's<n>' a place on the shelf
+// (A pallet carried to the shelves comes back to the loading floor now and then, as one arriving: src/cargoforklift.js.)
+export const CARGO = {
+  waiting: FLOOR.waiting,
+  shelf: [[13.61, 19.55], [15.11, 19.55], [16.33, 19.55], [17.83, 19.55]],
+  pallets: [{ load: 'wrapped', at: 'w0' }, { load: 'crates', at: 'w1' }, { load: 'boxes', at: 'w2' }, { load: 'totes', at: 'w3' }, { load: 'boxes', at: 's0' }, { load: 'boxes', at: 's1' }, { load: 'drums2', at: 's3' }],
+};
+// (a pallet of the forklift's, as it stands at a place: [x0, x1, z0, z1], its skids along z)
+export const palletBox = ([x, z]) => [x - PALLET.wide / 2, x + PALLET.wide / 2, z - PALLET.long / 2, z + PALLET.long / 2];
 // THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
 // in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js
 // draws it), parked in its painted place. In his file it is one unit long, its forks along +x, its foot on y = 0:
@@ -107,7 +133,17 @@ export const FLOOR = {
 //   forks  where its two forks lie in his file [x0, x1, z0, z1] (his units). They lie low on the floor, under the
 //          heights a person's body is felt at (src/walls.js BODY), so a block over them, knee high, stands in the
 //          walls with the forklift: nobody walks over its forks
-export const FORKLIFT = { raw: [0.9995, 0.6079, 0.3296], mast: 2.1, at: [6.9, 32.9], yaw: 0, forks: [0.22, 0.5, -0.096, 0.095] };
+// Its moving parts, read off his file (his units; his mesh's own pieces, each apart from the rest where his triangles
+// part: ~/pw/space-math/shots/forklift-2/pieces/), none of them cut or changed (kit/forklift.js):
+//   face      where the forks leave the carriage (its frame's front), along x
+//   carriage  every piece wholly in front of this x is the carriage: its frame and its two forks, which go up and down
+//             together in front of the mast (the mast itself is one piece and stays)
+//   axles     [x, y, the wheels' radius]: the front pair, then the back pair (a forklift steers by its back wheels)
+//   wheelZ    the wheels' middles out from its middle line
+//   seat      the middle of its seat's cushion, on top [x, y]
+//   blade     the top of the forks' blades (at their heel; they lie from 0.017 up)
+export const FORKLIFT = { raw: [0.9995, 0.6079, 0.3296], mast: 2.1, at: [6.9, 32.9], yaw: 0, forks: [0.22, 0.5, -0.096, 0.095],
+  face: 0.233, carriage: 0.185, axles: [[0.111, 0.086, 0.084], [-0.394, 0.075, 0.075]], wheelZ: 0.131, seat: [-0.195, 0.315], blade: 0.03 };
 export const forkliftScale = () => FORKLIFT.mast / FORKLIFT.raw[1];
 // its foot on the floor at its place, [x0, x1, z0, z1] (m, the station's frame; a quarter turn at most)
 export function forkliftBox() {
@@ -122,7 +158,7 @@ export function storeBlocks() {
   const out = [];
   RACKS.z.forEach((z, i) => out.push({ what: 'rack ' + (i + 1), box: [RACKS.x0[i], RACKS.x0[i] + baysOf(i) * RACKS.bay, z - RACKS.deep / 2, z + RACKS.deep / 2] }));
   out.push({ what: 'the packing benches', box: FLOOR.benches.slice() }, { what: 'the shipping desk', box: FLOOR.desk.slice() });
-  for (const [x, z] of FLOOR.waiting) out.push({ what: 'a pallet waiting', box: [x - 0.6, x + 0.6, z - 0.5, z + 0.5] });
+  for (const p of FLOOR.waiting) out.push({ what: 'a pallet waiting', box: palletBox(p) });
   SLOT.full.forEach((k) => out.push({ what: 'container 0' + (k + 1), box: [STORE.x0, SLOT.end, SLOT.z[k] - SLOT.box[0] / 2, SLOT.z[k] + SLOT.box[0] / 2] }));
   return out;
 }

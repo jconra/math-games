@@ -168,7 +168,8 @@ async function boot() {
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
-  // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift (src/cargoforklift.js)
+  // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift; now and then
+  // one of Cargo's people drives it, a pallet from the loading floor to the shelves (src/cargoforklift.js)
   const forklift = GAME.forklift = makeCargoForklift({ W, walls });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
@@ -230,7 +231,7 @@ async function boot() {
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
     // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
-    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });
+    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });
     sound.ears(W.camera);
     if (GAME.player) {
       const busy = jobs.busy();
@@ -267,7 +268,7 @@ async function boot() {
   // the people come aboard after the station is ready (the player wakes in their quarters, behind a shut door)
   if (!q.has('nopeople')) {
     GAME.peopleReady = false;
-    makePeople({ W, walls, lib, jobs, boarding, crane, crew: () => GAME.player }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
+    makePeople({ W, walls, lib, jobs, boarding, crane, crew: () => GAME.player, rides: { forklift: forklift.ride } }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
   }
 
   // ── the start button: the chosen crew member, in their quarters ───────────────────────────────────────────────
