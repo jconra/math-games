@@ -273,7 +273,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     T.space = on;
     if (on) {
       W.alone = [S.zone.id];
-      const keep = new Set([W.sky.object, S.cabin && S.cabin.group, P() && P().c.root, wh && wh.ball].filter(Boolean));
+      // (the crew aboard are aboard: drawn out there too, where they stand in the way as ever)
+      const keep = new Set([W.sky.object, S.cabin && S.cabin.group, P() && P().c.root, wh && wh.ball, ...(crewA ? crewA.list.map((w) => w.c.root) : [])].filter(Boolean));
       hidden = W.scene.children.filter((o) => !o.isLight && !keep.has(o) && o !== W.built.group && o.visible);
       for (const o of hidden) o.visible = false;
     } else {

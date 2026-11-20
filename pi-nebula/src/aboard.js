@@ -106,10 +106,10 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
         if (r === 'back' && turnBack(W)) { if (W.doing === 'walk') play(W, CLIP.walk); }
         else if (r === 'wait' || r === 'back') { play(W, CLIP.stand); W.wait += dt; }
         else {
-          play(W, CLIP.walk);
+          // (walking, on the cabin's deck; there, at the place's own height: a bunk's bed, the flight deck's seats. The
+          // deck was set after arriving once, so someone who walked to a bunk lay 0.42 m low, in its base)
+          play(W, CLIP.walk); W.pos.y = s.space.deck;
           if (r === 'there') arrive(W, W.target);
-          // (the floor: each room's own)
-          W.pos.y = s.space.deck;
         }
       } else if (W.t > W.stay && !(pp && W.place && Math.hypot(pp.x - W.place.stand[0], pp.z - W.place.stand[1]) < WALK.room)) { W.t = 0; goNext(W); }
       // (in the ship's own frame: lying, laid on the back along the bed, the head toward its head end)
