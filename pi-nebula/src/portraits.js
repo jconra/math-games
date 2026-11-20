@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeCrew } from '../kit/crew.js';
 import { LOOKS, lookById, recipeOf } from './looks.js';
+import { isMade, keyOf } from './maker.js';
 
 // the pictures' sizes (the title shows a face at 44 to 110 px and a body at up to about 270 px tall: these are about
 // twice that, for sharp screens)
@@ -28,7 +29,7 @@ const OVER = 2;
 const KEEP = 'calc-station.looks.pictures';     // (the last visit's pictures, in this browser)
 
 // ── the studio ─────────────────────────────────────────────────────────────────────────────────────────────────
-let studio = null;
+let studio = null, held = null;      // (held: the person the character maker last drew, left standing: { pk, c })
 function openStudio() {
   if (studio) return studio;
   const canvas = document.createElement('canvas');
@@ -52,6 +53,8 @@ function openStudio() {
 }
 export function closeStudio() {
   if (!studio) return;
+  // (the person the character maker left standing in it, A MADE LOOK'S PICTURES below)
+  if (held) { studio.scene.remove(held.c.root); held.c.dispose(); held = null; }
   studio.scene.environment.dispose(); studio.pmrem.dispose(); studio.renderer.dispose(); studio.renderer.forceContextLoss();
   studio = null;
 }
@@ -59,10 +62,17 @@ export function closeStudio() {
 const _h = new THREE.Vector3(), _t = new THREE.Vector3();
 // one person, posed, drawn as each kind asked for: { face: data address, body: ... }
 async function draw(lib, recipe, kinds, pose = null) {
-  const S = openStudio(), stand = { ...POSE, ...(pose || {}) }, got = {};
+  const S = openStudio(), stand = { ...POSE, ...(pose || {}) };
   const c = await makeCrew(lib, recipe);
   S.scene.add(c.root);
   c.play(stand.clip, { fade: 0 }); c.update(0); c.update(stand.at);
+  const got = snap(S, c, kinds);
+  S.scene.remove(c.root); c.dispose();
+  return got;
+}
+// a person standing in the studio, drawn as each kind asked for
+function snap(S, c, kinds, quality = 0.9) {
+  const got = {};
   // (a head sized on its outfit, kit/crew.js THE HEAD'S PLACE, is sized about its Head joint: its middle, and the face
   // picture's camera, are taken by that size, so every face fills its window alike. 1 for a head as made)
   const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
@@ -90,9 +100,8 @@ async function draw(lib, recipe, kinds, pose = null) {
     S.out.width = w; S.out.height = h;
     S.pen.clearRect(0, 0, w, h); S.pen.imageSmoothingEnabled = true; S.pen.imageSmoothingQuality = 'high';
     S.pen.drawImage(S.canvas, 0, 0, w, h);
-    got[kind] = S.out.toDataURL('image/webp', 0.9);
+    got[kind] = S.out.toDataURL('image/webp', quality);
   }
-  S.scene.remove(c.root); c.dispose();
   return got;
 }
 
@@ -162,3 +171,130 @@ export async function drawLooks(lib, { only = null } = {}) {
 }
 // one look's two pictures as data: addresses (the rig that stores them uses this)
 export const drawLook = async (lib, id) => { try { return await draw(lib, recipeOf({ id }), ['body', 'face']); } finally { closeStudio(); } };
+
+// ── A MADE LOOK'S PICTURES (the character maker: maker.js, ui/title.js) ────────────────────────────────────────────
+// A look the player has changed (another body, head or hair, a colour) has no stored picture: its two pictures are
+// drawn here in the browser by the same studio, once the crew kit is in (useKit), and only when they are wanted. The
+// parts come as the crew kit fetches them (a part is downloaded the first time someone wears it), so nothing more is
+// loaded as the page opens. While a changed look's own picture is on its way, the picture it was changed from stands
+// in for it, so the screen always shows someone (coming() says so, and the title dims it a little).
+// The person last drawn is left standing in the studio: a colour changed is laid on them and drawn again, with no one
+// put together afresh. The studio is put away a little after the last picture, and when the game starts (restStudio).
+// The saved crew's own made pictures are kept in this browser (keepPictures), so they are there as the page opens next
+// time; they are drawn again when the stored pictures' rig has run since (the crew kit has changed).
+//
+//   useKit(lib), kit(), onKit(fn)        the crew kit once it has loaded (main.js gives it; fn(lib) then, or at once)
+//   picKey(look)                         the name a look's pictures go by: a ready-made look's id, a made look's own key
+//   pictureFor(look, kind)               its picture's address, or null: a made look's own once drawn, till then the
+//                                        one it was changed from
+//   coming(look)                         true while a made look's own picture is still on its way
+//   wantPicture(look, { from, now })     draw a made look's pictures (from: the look it was changed from; now: the
+//                                        player is looking at it, so it goes first and older such wishes are dropped)
+//   keepPictures(looks)                  the made looks whose pictures are kept for the next visit (the saved crew's)
+//   restStudio()                         the studio put away
+const MADE_KEEP = 'calc-station.looks.made', MADE_MOST = 40, REST_AFTER = 20000;
+const MADE = new Map();          // a made look's key -> { face, body, own: its own picture (not a stand-in), t, kit }
+const waiting = [], failed = new Set(), kitHeard = new Set();
+let lib = null, busy = false, doing = null, restTimer = 0, keepTimer = 0;      // (doing: the key being drawn now)
+const kept = new Map();          // the made looks kept for the next visit: key -> look
+export const made = { drawn: 0, ms: 0, last: 0, failed: 0 };       // (for the rigs: how many were drawn, and how long they took)
+
+export const kit = () => lib;
+export function useKit(l) { lib = l; for (const fn of kitHeard) { try { fn(l); } catch (e) { console.error(e); } } pump(); }
+export const onKit = (fn) => { kitHeard.add(fn); if (lib) fn(lib); return () => kitHeard.delete(fn); };
+export const picKey = (look) => (isMade(look) ? 'made:' + keyOf(look) : lookById(look && look.id).id);
+export function pictureFor(look, kind = 'face') {
+  if (!isMade(look)) return pictureOf(look && look.id, kind);
+  const m = MADE.get(keyOf(look));
+  return (m && m[kind]) || null;
+}
+export const coming = (look) => isMade(look) && !failed.has(keyOf(look)) && !(MADE.get(keyOf(look)) || {}).own;
+
+// the pictures kept from the last visit (shown at once; drawn again if the crew kit has changed since: `kit` is the
+// stored pictures' own date, which their rig moves on each time it runs)
+try {
+  const j = JSON.parse(localStorage.getItem(MADE_KEEP) || 'null');
+  if (j && j.pics) {
+    for (const [k, v] of Object.entries(j.pics)) if (v && typeof v.face === 'string' && typeof v.body === 'string') MADE.set(k, { face: v.face, body: v.body, own: true, t: 0, kit: j.kit || null });
+    storedReady.then(() => {
+      for (const [k, m] of MADE) if (m.t === 0 && m.kit !== info.made) { m.own = false; if (kept.has(k)) wantPicture(kept.get(k)); }
+    }).catch(() => {});
+  }
+} catch (e) { /* none kept, or saves blocked: drawn again */ }
+function store() {
+  clearTimeout(keepTimer);
+  keepTimer = setTimeout(() => {
+    const pics = {};
+    for (const k of kept.keys()) { const m = MADE.get(k); if (m && (m.own || m.t === 0)) pics[k] = { face: m.face, body: m.body }; }
+    try { if (Object.keys(pics).length) localStorage.setItem(MADE_KEEP, JSON.stringify({ kit: info.made, pics })); else localStorage.removeItem(MADE_KEEP); } catch (e) { /* full or blocked: drawn again next time */ }
+  }, 600);
+}
+// the saved crew's made looks: their pictures are kept for the next visit, and any not drawn yet is drawn
+export function keepPictures(looks) {
+  kept.clear();
+  for (const l of looks || []) if (isMade(l)) { kept.set(keyOf(l), JSON.parse(JSON.stringify(l))); wantPicture(l); }
+  store();
+}
+// (the oldest pictures dropped once there are many: the ones kept, waited for or standing in stay)
+function trim() {
+  if (MADE.size <= MADE_MOST) return;
+  const safe = new Set([...kept.keys(), ...waiting.map((w) => w.key)]);
+  for (const [k, m] of [...MADE].sort((a, b) => a[1].t - b[1].t)) { if (MADE.size <= MADE_MOST) break; if (!safe.has(k)) MADE.delete(k); }
+}
+
+export function wantPicture(look, { from = null, now = false } = {}) {
+  if (!isMade(look)) return;
+  const key = keyOf(look), have = MADE.get(key);
+  failed.delete(key);
+  if (have && have.own) { have.t = Date.now(); return; }
+  // (until its own is drawn: the picture of the look it was changed from)
+  if (!have && from) { const f = { face: pictureFor(from, 'face'), body: pictureFor(from, 'body') }; if (f.face || f.body) MADE.set(key, { ...f, own: false, t: Date.now() }); }
+  const at = waiting.findIndex((w) => w.key === key);
+  if (doing === key || (at >= 0 && !now)) return;
+  const w = at >= 0 ? waiting.splice(at, 1)[0] : { look: JSON.parse(JSON.stringify(look)), key, now: false, tries: 0 };
+  if (now) {
+    // (the looks stepped through on the way here are not drawn: only where the player has stopped)
+    for (let i = waiting.length - 1; i >= 0; i--) if (waiting[i].now) { const d = waiting.splice(i, 1)[0], m = MADE.get(d.key); if (m && !m.own && !kept.has(d.key)) MADE.delete(d.key); }
+    w.now = true; waiting.unshift(w);
+  } else waiting.push(w);
+  pump();
+}
+
+async function drawMade(look) {
+  const recipe = recipeOf(look, lib);
+  delete recipe.size;
+  const pk = JSON.stringify([recipe.suit, recipe.head, recipe.hair, recipe.face || {}, !!(recipe.colours && recipe.colours.freckles)]);
+  if (!held || held.pk !== pk) {
+    const c = await makeCrew(lib, recipe), S = openStudio();
+    if (held) { S.scene.remove(held.c.root); held.c.dispose(); }
+    held = { pk, c }; S.scene.add(c.root);
+    c.play(POSE.clip, { fade: 0 }); c.update(0);
+  } else held.c.setColours({ uniform: null, skin: null, hair: null, eyes: null, ...(recipe.colours || {}) });
+  // (stood as the ready-made pictures' people stand, each time)
+  const c = held.c;
+  if (c.person.cur) c.person.cur.time = 0;
+  c.update(0); c.update(POSE.at);
+  return snap(openStudio(), c, ['body', 'face'], 0.86);
+}
+async function pump() {
+  if (busy || !lib || !waiting.length) return;
+  busy = true; clearTimeout(restTimer);
+  const w = waiting.shift(), t0 = performance.now();
+  doing = w.key;
+  try {
+    const got = await drawMade(w.look);
+    MADE.set(w.key, { ...got, own: true, t: Date.now(), kit: info.made });
+    made.drawn++; made.last = Math.round(performance.now() - t0); made.ms += made.last;
+    trim(); store();
+  } catch (e) {
+    // (a part that did not arrive: tried once more, then the picture it had stays and the next change tries again)
+    console.warn('Pi Nebula: a look\'s picture could not be drawn', e);
+    if (++w.tries < 2) waiting.push(w); else { failed.add(w.key); made.failed++; }
+  }
+  doing = null;
+  tell(picKey(w.look));
+  await breath();
+  busy = false;
+  if (waiting.length) pump(); else restTimer = setTimeout(() => { if (!busy) closeStudio(); }, REST_AFTER);
+}
+export function restStudio() { clearTimeout(restTimer); if (!busy) closeStudio(); else restTimer = setTimeout(restStudio, 1500); }

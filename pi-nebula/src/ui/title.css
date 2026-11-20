@@ -60,7 +60,7 @@
 }
 
 /* ── the eight-sided frame ───────────────────────────────────────────────────────────────────────────────────── */
-.cst-rider, .cst-newrider, .cst-panel, .cst-ride, .cst-btn, .cst-card, .cst-row, .cst-input, .cst-agech, .cst-grown, .cst-x {
+.cst-rider, .cst-newrider, .cst-panel, .cst-ride, .cst-btn, .cst-card, .cst-row, .cst-input, .cst-agech, .cst-grown, .cst-x, .cst-arrow {
   --cut: 12px; --edge: var(--line); --fill: var(--glass); --dw: 1px;
   border: 1px solid var(--edge);
   background:
@@ -73,7 +73,7 @@
 }
 /* (an outline would be cut off with the corners, so keyboard focus is a bright line INSIDE the frame) */
 .cst-rider:focus-visible, .cst-newrider:focus-visible, .cst-ride:focus-visible, .cst-btn:focus-visible, .cst-input:focus-visible,
-.cst-agech:focus-visible, .cst-grown:focus-visible, .cst-x:focus-visible {
+.cst-agech:focus-visible, .cst-grown:focus-visible, .cst-x:focus-visible, .cst-arrow:focus-visible {
   outline: none; --edge: var(--focus); --dw: 3px; box-shadow: inset 0 0 0 2px var(--focus);
 }
 
@@ -166,13 +166,54 @@
 .cst-head h2 em { font-style: normal; }
 .cst-head p { font-size: 14px; color: var(--dim); }
 
-.cst-crew { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: start; }
-.cst-about { display: grid; gap: 18px; align-content: start; }
+/* the chosen crew member's panel, top to bottom: a line, THE CHARACTER MAKER, the ready-made looks, the job levels */
+.cst-crew { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; }
 .cst-line { font-size: 15px; line-height: 1.5; color: var(--dim); }
+
+/* THE CHARACTER MAKER (title.js): the whole person in a window, an arrow at each side of them for the hair, the head
+   and the body (each pair about level with the part it changes); beside the window the colours as rows of small
+   eight-sided swatches, then freckles and the height. A picture still on its way (.is-coming) is the one before,
+   dimmed. */
+.cst-maker { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 18px; align-items: start; }
+.cst-stage { position: relative; height: 322px; }
+.cst-stage .cst-face.cst-full { width: 100%; height: 100%; aspect-ratio: auto; }
+/* (the face close, in the window's corner: an eye colour or freckles cannot be seen on the whole person at this size) */
+.cst-stage .cst-face.cst-close { position: absolute; left: 8px; bottom: 8px; width: 96px; padding: 2px; background: var(--line-hi); }
+.cst-stage .cst-close .cst-pic { background-size: 175% auto, auto; background-position: 50% 26%, center; }
+/* (the person stands a little to the right of the window's middle, so their feet are clear of the face) */
+.cst-stage .cst-full .cst-pic { background-position: 64% bottom, center, center, center; }
+.cst-pic { transition: filter 0.12s; }
+.cst-pic.is-coming { filter: brightness(0.6) saturate(0.6); }
+.cst-arrow {
+  --cut: 8px; --fill: rgba(40, 47, 56, 0.92);
+  position: absolute; width: 44px; height: 44px; padding: 0; display: grid; place-items: center; align-content: center; gap: 1px;
+}
+.cst-arrow.is-prev { left: 8px; }
+.cst-arrow.is-next { right: 8px; }
+.cst-arrow.is-hair { top: 3%; }
+.cst-arrow.is-head { top: 19.5%; }
+.cst-arrow.is-body { top: 44%; }
+.cst-arrow svg { display: block; width: 17px; height: 17px; }
+.cst-arrow.is-prev svg { transform: scaleX(-1); }
+.cst-arrow b { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); line-height: 1; }
+.cst-arrow:hover:not(:disabled) { --fill: rgba(64, 73, 85, 0.96); --edge: var(--line-hi); }
+.cst-arrow:active:not(:disabled) { --fill: var(--accent); --edge: #ffc48a; color: var(--accent-ink); }
+.cst-arrow:active:not(:disabled) b { color: var(--accent-ink); }
+.cst-arrow:disabled { opacity: 0.4; }
+.cst-tints { display: grid; gap: 10px; align-content: start; }
+.cst-tints .cst-label { margin-bottom: 6px; }
+.cst-swatches { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+.cst-swatch { display: block; aspect-ratio: 1; padding: 2px; background: var(--line); clip-path: var(--oct); }
+.cst-swatch i { display: block; width: 100%; height: 100%; background: var(--c); clip-path: var(--oct); }
+.cst-swatch:hover { background: var(--line-hi); }
+.cst-swatch[aria-checked="true"] { background: var(--accent); padding: 3.5px; }
+.cst-swatch:focus-visible { outline: none; background: var(--focus); padding: 3.5px; }
+.cst-heights.cst-two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 170px; }
+.cst-tints .cst-agech { height: 32px; font-size: 13px; }
 
 /* the looks to pick from: each a face in its eight-sided window; the chosen one's window is orange */
 .cst-looks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.cst-looks.is-small { grid-template-columns: repeat(4, minmax(0, 62px)); gap: 6px; }
+.cst-looks.is-small { grid-template-columns: repeat(8, minmax(0, 58px)); gap: 6px; }
 .cst-look { position: relative; display: block; padding: 0; }
 .cst-look .cst-face { width: 100%; padding: 2px; }
 .cst-look .cst-pic { filter: brightness(0.78) saturate(0.85); transition: filter 0.15s; }
@@ -292,6 +333,10 @@
 /* ── sizes ───────────────────────────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .cst { grid-template-columns: minmax(0, 1fr) minmax(400px, 540px); }
+  /* (a narrower panel: the maker's window over its colours, as on a phone, the swatches no bigger than a thumb needs) */
+  .cst-maker { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .cst-stage { width: 100%; max-width: 340px; margin: 0 auto; }
+  .cst-swatches { grid-template-columns: repeat(10, minmax(0, 40px)); gap: 4px; }
 }
 /* a short wide screen: a smaller person, a shorter button */
 @media (max-height: 820px) and (min-width: 701px) {
@@ -299,6 +344,15 @@
   .cst-ride { min-height: 60px; font-size: 22px; }
   .cst-head { margin-bottom: 12px; padding-bottom: 10px; }
   .cst-form { gap: 12px 18px; }
+  /* (the maker and all under it in sight at 800 high, with nothing to scroll inside the panel) */
+  .cst-crew { gap: 9px; }
+  .cst-stage { height: 300px; }
+  .cst-tints { gap: 6px; }
+  .cst-tints .cst-label { margin-bottom: 5px; }
+  .cst-tints .cst-agech { height: 30px; }
+  .cst-crew .cst-label { margin-bottom: 6px; }
+  .cst-crew .cst-startline { margin-top: 5px; font-size: 12.5px; letter-spacing: -0.01em; }
+  .cst-panel { --pad-b: 18px; }
 }
 /* a phone on its side */
 @media (max-height: 560px) and (min-width: 600px) {
@@ -319,6 +373,16 @@
   .cst-crew, .cst-form { gap: 10px 14px; }
   .cst-looks { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 5px; }
   .cst-looks.is-small { grid-template-columns: repeat(8, minmax(0, 44px)); }
+  .cst-maker { grid-template-columns: 180px minmax(0, 1fr); gap: 12px; }
+  .cst-stage { height: 232px; }
+  .cst-stage .cst-face.cst-close { width: 56px; left: 5px; bottom: 5px; }
+  .cst-arrow { width: 36px; height: 36px; --cut: 7px; }
+  .cst-arrow.is-prev { left: 5px; }
+  .cst-arrow.is-next { right: 5px; }
+  .cst-arrow b { font-size: 8px; letter-spacing: 0.04em; }
+  .cst-arrow svg { width: 14px; height: 14px; }
+  .cst-tints { gap: 7px; }
+  .cst-tints .cst-label { margin-bottom: 4px; }
   .cst-line { font-size: 13px; }
   .cst-ride { min-height: 46px; font-size: 18px; --cut: 12px; }
   .cst-agech { height: 30px; font-size: 12px; }
@@ -365,7 +429,21 @@
   /* (the form open: the saved crew fold away, so the whole form shows without scrolling; Cancel brings them back) */
   .cst-left:has(.cst-newrider[aria-current="true"]) .cst-rider { display: none; }
   .cst-looks { gap: 6px; }
-  .cst-looks.is-small { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cst-looks.is-small { grid-template-columns: repeat(4, minmax(0, 72px)); gap: 8px; }
+  /* (the maker: the window the whole width with the arrows inside its edges, big enough for a thumb; the colours under it) */
+  .cst-maker { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .cst-stage { height: 336px; }
+  .cst-stage .cst-face.cst-close { width: 104px; left: 10px; bottom: 10px; }
+  .cst-arrow { width: 62px; height: 50px; --cut: 10px; }
+  .cst-arrow.is-prev { left: 10px; }
+  .cst-arrow.is-next { right: 10px; }
+  .cst-arrow.is-head { top: 20%; }
+  .cst-arrow b { font-size: 11px; }
+  .cst-arrow svg { width: 19px; height: 19px; }
+  .cst-tints { gap: 12px; }
+  .cst-swatches { gap: 4px; }
+  .cst-tints .cst-agech { height: 40px; font-size: 14px; }
+  .cst-heights.cst-two { max-width: 220px; }
   .cst-agepick { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   .cst-agech, .cst-agech.is-skip { height: 40px; padding: 0; }
   /* (here the whole page scrolls, not the panel: the buttons hold to the screen's bottom edge, past the page's own

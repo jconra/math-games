@@ -25,7 +25,7 @@ import * as save from './save.js';
 import { showTitle } from './ui/title.js';
 import { loadStation } from './station.js';
 import { loadCrew } from '../kit/crew.js';
-import { drawLooks, drawn, storedReady, storedInfo } from './portraits.js';
+import { drawLooks, drawn, storedReady, storedInfo, useKit, restStudio, made } from './portraits.js';
 import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
@@ -54,13 +54,15 @@ const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
 
 document.title = GAME_NAME;
 const canvas = document.getElementById('game');
-const GAME = window.GAME = { ready: false, mode: 'title', frames: 0, missing: [], drawn };
+const GAME = window.GAME = { ready: false, mode: 'title', frames: 0, missing: [], drawn, made };
 const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
 
 async function boot() {
   const players = save.load();
   let chosen = null, canBuild = false;
-  const T = showTitle(document.getElementById('title-root'), { players, build: BUILD, onStart: start, onChange: (p) => { chosen = p; if (canBuild) prebuild(p); } });
+  // (a look changed in the character maker, press after press: the character is built once the presses have stopped)
+  let buildSoon = 0;
+  const T = showTitle(document.getElementById('title-root'), { players, build: BUILD, onStart: start, onChange: (p) => { chosen = p; clearTimeout(buildSoon); if (canBuild) buildSoon = setTimeout(() => prebuild(chosen), 700); } });
   GAME.T = T; chosen = T.player();
   // the loading strip: the bytes expected are the last visit's whole load in this browser, or the stored pictures' rig's
   let expect = 0;
@@ -74,8 +76,9 @@ async function boot() {
 
   // the crew kit, for the looks' pictures, the player and the people (one copy for all three)
   const libP = loadCrew();
-  // (the looks' pictures are stored ready-made and on their way already; a look with none is drawn here once the kit is in)
-  Promise.all([libP, storedReady]).then(([lib, missing]) => missing.length ? drawLooks(lib, { only: missing }) : null).catch(fail);
+  // (the looks' pictures are stored ready-made and on their way already; a look with none is drawn here once the kit is in;
+  // then the kit is the character maker's: its arrows' list of parts, and the pictures of the looks made with it)
+  Promise.all([libP, storedReady]).then(([lib, missing]) => (missing.length ? drawLooks(lib, { only: missing }) : null)).catch(fail).then(() => libP).then(useKit).catch(fail);
 
   const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => progress(0.02 + f * 0.8, words) });
   GAME.W = W;
@@ -244,6 +247,7 @@ async function boot() {
   // ── the start button: the chosen crew member, in their quarters ───────────────────────────────────────────────
   async function start(p) {
     GAME.player = p;
+    clearTimeout(buildSoon);
     const key = p.id + ':' + JSON.stringify(p.look);
     if (!player || player.key !== key) {
       const P = await prebuild(p);
@@ -258,6 +262,7 @@ async function boot() {
       chase.snap(P.pos, P.heading);
     }
     GAME.mode = 'play';
+    restStudio();      // (the character maker's drawing board is put away while the game is played)
     player.P.c.root.visible = true;
     input.enabled = true; menu.hidden = false; soundSw.show(true);
     T.hide();
@@ -293,6 +298,8 @@ async function boot() {
     auto.way = way; auto.i = 1; auto.run = run; auto.to = s.pos; auto.still = 0; return way.length;
   };
   GAME.walking = () => !!auto.way;
+  // (a rig looking at the player's own figure: the crew kit's character, as built from their look)
+  GAME.body = () => (player ? player.P : null);
   // (a rig standing the player somewhere at once: { at: [x, y, z] } or a spot by name, facing `heading`)
   GAME.put = (spot, heading = 0) => {
     const s = spot.at ? { pos: walls.snap(spot.at[0], spot.at[1] + 0.15, spot.at[2], 1.5) } : resolve(W, walls, spot); if (!s || !s.pos || !player) return false;

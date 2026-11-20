@@ -13,8 +13,8 @@
 // title screen does not print it (a person-like name under a picture would be taken for the player's own name).
 //
 // WHAT IS SAVED with a player is { id } (save.js), not the whole recipe, so a look that is improved here improves for
-// everyone who already picked it, and the picture always matches. Later, things a player earns (an outfit, a colour)
-// can be saved beside the id and laid over the look's recipe: recipeOf() below already does that.
+// everyone who already picked it, and the picture always matches. What a player changes in the character maker (a
+// body, a head, a hair, colours: maker.js) is saved beside the id and laid over the look's recipe by recipeOf() below.
 
 import { BAND_COLOURS as BAND } from '../kit/crew.js';
 
@@ -48,9 +48,13 @@ export const lookById = (id) => LOOKS.find((l) => l.id === id) || LOOKS[0];
 // saved extras laid over it (colours are merged, so one earned colour does not wipe the others). Given the crew kit's
 // library (lib: its entry(kind, id)), a saved extra that names a part the crew no longer has (a retired outfit, head or
 // hair: 2026-11-17, the old captain1 portrait set) is left out, so the look's own part is worn.
+// THE CHARACTER MAKER (2026-11-19, maker.js) saves just such extras: a body (suit), a head, a hair (null: none) and
+// colours (hair, skin, uniform: the body's colour, eyes, freckles). A head of the player's own choosing wears its own
+// face: the look's face settings were made for the look's own head, and are left off any other.
 export function recipeOf(saved, lib = null) {
   const base = lookById(saved && saved.id).recipe, extra = { ...(saved || {}) };
   delete extra.id;
   if (lib && lib.entry) for (const k of ['suit', 'head', 'hair', 'hand']) if (typeof extra[k] === 'string' && !lib.entry(k, extra[k])) delete extra[k];
-  return { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...(base.face || {}), ...(extra.face || {}) } };
+  const face = typeof extra.head === 'string' && extra.head !== base.head ? {} : base.face || {};
+  return { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...face, ...(extra.face || {}) } };
 }

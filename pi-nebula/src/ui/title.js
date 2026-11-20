@@ -8,20 +8,22 @@
 //   T.setProgress(0.4, 'Building the rooms'); T.nudge(); T.hide(); T.show(); T.player()
 //
 // What this game adds to the engine: the look pictures (looks.js), a panel for the chosen crew member with the whole
-// person and rows to change their look and their height (THE HEIGHT, below), a button to their job levels (ui/levels.js:
-// each job's range of levels and "keep to these levels"), and the words. Nothing here opens by itself.
+// person and THE CHARACTER MAKER round them (below), rows to pick a ready-made look and a height (THE HEIGHT, below), a
+// button to their job levels (ui/levels.js: each job's range of levels and "keep to these levels"), and the words.
+// Nothing here opens by itself.
 // THE STARTING DIFFICULTY (the engine's row on the new crew member's form, Easy, Medium or Hard, in place of the age it
 // asked before): where each job's questions begin until the crew member's answers say more. Hard starts near the top
 // of each job's ladder (the game's maker: "Start grown-ups higher"); Mathwood's src/math/skill.js STARTS says how high.
-import { showTitle as showShared, esc } from '../../../shared/title/title.js';
+import { showTitle as showShared, esc, ICONS } from '../../../shared/title/title.js';
 import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
-import { LOOKS, lookById } from '../looks.js';
-import { pictureOf, onPicture } from '../portraits.js';
-import { SIZES } from '../../kit/crew.js';
+import { LOOKS, lookById, recipeOf } from '../looks.js';
+import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
+import { ROWS, step, withPart, withColour, withLook, isMade } from '../maker.js';
+import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=5', import.meta.url).href;
+const SHEET = new URL('./title.css?v=6', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -37,15 +39,22 @@ const withSize = (look, v) => { const l = { ...(look || {}) }; if (v === 1) dele
 // Ready names for a crew member who types none (a child who cannot read yet just taps "Come aboard").
 const NAMES = ['Rookie', 'Comet', 'Scout', 'Pixel', 'Ace', 'Sparks', 'Jet', 'Echo', 'Dash', 'Rocket', 'Nova', 'Orbit'];
 
-// A look's picture: the face on cards, the whole person where the stylesheet asks for it (.cst-full). The pictures are
-// stored ready-made (portraits.js, assets/looks/) and arrive all together as the page opens: an empty frame until
-// then, which then fills every frame showing that look.
-const vars = (id) => ['face', 'body'].map((k) => { const u = pictureOf(id, k); return `--${k}:${u ? `url('${u}')` : 'none'}`; }).join(';');
+// A look's picture: the face on cards, the whole person where the stylesheet asks for it (.cst-full). The ready-made
+// looks' pictures are stored (portraits.js, assets/looks/) and arrive all together as the page opens: an empty frame
+// until then, which then fills every frame showing that look. A look the player has made (THE CHARACTER MAKER) is
+// drawn in the browser: until its own picture is in, its frame shows the picture it was changed from, a little dimmed
+// (.is-coming), and is filled the same way when the new one arrives.
+const shown = new Map();      // the looks whose pictures are on the screen, by their pictures' name
+const vars = (look) => ['face', 'body'].map((k) => { const u = pictureFor(look, k); return `--${k}:${u ? `url('${u}')` : 'none'}`; }).join(';');
 const pic = (look) => {
-  const id = lookById(look && look.id).id;
-  return `<span class="${P}-pic" data-look="${id}" style="${vars(id)}"></span>`;
+  const l = { ...(look || {}), id: lookById(look && look.id).id }, key = picKey(l);
+  shown.set(key, l);
+  return `<span class="${P}-pic${coming(l) ? ' is-coming' : ''}" data-look="${esc(key)}" style="${vars(l)}"></span>`;
 };
-onPicture((id) => { for (const el of document.querySelectorAll(`.${P}-pic[data-look="${id}"]`)) el.setAttribute('style', vars(id)); });
+onPicture((key) => {
+  const l = shown.get(key); if (!l) return;
+  for (const el of document.querySelectorAll(`.${P}-pic`)) if (el.getAttribute('data-look') === key) { el.setAttribute('style', vars(l)); el.classList.toggle('is-coming', coming(l)); }
+});
 
 function dayStart(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 const day = (t) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -71,12 +80,69 @@ function brand() {
     <h1 class="${P}-name"><b>${esc(GAME_NAME)}</b><i>${esc(STATION_NAME)}</i></h1>`;
 }
 
-// the row of looks (on the chosen crew member's panel: pick another and it is saved at once)
-const lookRow = (cur) => `<div class="${P}-looks is-small" role="radiogroup" aria-label="Look" data-nav="radio">
-  ${LOOKS.map((l) => `<button class="${P}-look" role="radio" aria-checked="${l.id === cur}" tabindex="${l.id === cur ? 0 : -1}"
+// the row of ready-made looks (on the chosen crew member's panel: pick one and it is saved at once, as it is: whatever
+// the maker had changed is let go). `cur` is the look worn as made, or null for a crew member who has changed theirs.
+const lookRow = (cur, at) => `<div class="${P}-looks is-small" role="radiogroup" aria-label="Ready-made looks" data-nav="radio">
+  ${LOOKS.map((l) => `<button class="${P}-look" role="radio" aria-checked="${l.id === cur}" tabindex="${l.id === (cur || at) ? 0 : -1}"
       data-act="setlook" data-id="${l.id}" data-k="setlook:${l.id}">
-    <span class="${P}-face">${pic(l)}</span><span class="${P}-lname">${esc(l.name)}</span></button>`).join('')}
+    <span class="${P}-face">${pic({ id: l.id })}</span><span class="${P}-lname">${esc(l.name)}</span></button>`).join('')}
 </div>`;
+
+// THE CHARACTER MAKER (2026-11-19; the game's maker: "It would be great if it showed the character and had arrows to
+// the sides for hear, head, and body. And then some color options for hair, skin, and body"; and eye colour and
+// freckles: "Why not, people usually like customizing characters"). The rules are maker.js's: which parts a player may
+// wear and which go together. Here: the whole person in a window with an arrow at each side for the hair, the head and
+// the body (the one before, the next one, coming round at the ends), their face close in the window's corner (an eye
+// colour or freckles cannot be seen on the whole person at that size), and beside them the colours as swatches. Every
+// press is saved at once with the crew member (their look), the person is drawn again (portraits.js: the part is
+// fetched then, if nobody has worn it yet) and the game builds them so (main.js).
+// THE ARROWS wait for the crew kit's list of parts (a moment after the page opens): shown, not yet pressable.
+// The player reads "Body" for an outfit (the game's maker's word), never "outfit", "uniform" or "suit".
+const HAIR_WORDS = ['black', 'dark brown', 'brown', 'chestnut', 'light brown', 'dark blond', 'blond', 'red', 'gray', 'silver'];
+const TINTS = [
+  { id: 'hair', word: 'Hair color', said: (i) => HAIR_WORDS[i] },
+  { id: 'skin', word: 'Skin', said: (i, n) => `${i + 1} of ${n}, light to dark` },
+  { id: 'uniform', word: 'Body color', said: (i) => Object.keys(BAND_COLOURS)[i] },
+  { id: 'eyes', word: 'Eye color', said: (i, n) => `${i + 1} of ${n}` },
+];
+const wornOf = (R) => ({ suit: R.suit, head: R.head, hair: R.hair == null ? null : R.hair });
+const arrow = (row, dir, ready) => `<button class="${P}-arrow is-${row.id} ${dir < 0 ? 'is-prev' : 'is-next'}" data-act="part" data-id="${row.id}" data-v="${dir}"
+    data-k="part:${row.id}:${dir}" aria-label="${row.word}: ${dir < 0 ? 'the one before' : 'the next one'}"${ready ? '' : ' disabled'}>${ICONS.chevron}<b>${row.word}</b></button>`;
+const swatches = (T, cur) => {
+  const list = save.SWATCHES[T.id], on = list.indexOf(cur);
+  return `<section><h3 class="${P}-label">${T.word}</h3>
+    <div class="${P}-swatches" role="radiogroup" aria-label="${T.word}" data-nav="radio">
+      ${list.map((c, i) => `<button class="${P}-swatch" role="radio" aria-checked="${i === on}" tabindex="${i === (on < 0 ? 0 : on) ? 0 : -1}" style="--c:${c}"
+          aria-label="${T.word}: ${esc(T.said(i, list.length) || i + 1)}" data-act="tint" data-id="${T.id}" data-v="${c}" data-k="tint:${T.id}:${i}"><i></i></button>`).join('')}
+    </div></section>`;
+};
+const frecklesRow = (on) => `<div class="${P}-heights ${P}-two" role="radiogroup" aria-label="Freckles" data-nav="radio">
+  ${[[0, 'No'], [1, 'Yes']].map(([v, word]) => `<button class="${P}-agech is-skip" role="radio" aria-checked="${!!on === !!v}" tabindex="${!!on === !!v ? 0 : -1}"
+      data-act="freckles" data-v="${v}" data-k="freckles:${v}">${word}</button>`).join('')}
+</div>`;
+function makerHtml(p) {
+  const lib = kit(), R = recipeOf(p.look, lib), col = R.colours || {};
+  return `<div class="${P}-maker">
+    <div class="${P}-stage" role="group" aria-label="Your character: hair, head and body" data-nav="grid">
+      <span class="${P}-face ${P}-full">${pic(p.look)}</span>
+      <span class="${P}-face ${P}-close">${pic(p.look)}</span>
+      ${ROWS.map((row) => arrow(row, -1, !!lib) + arrow(row, 1, !!lib)).join('')}
+    </div>
+    <div class="${P}-tints">
+      ${TINTS.map((T) => swatches(T, col[T.id] || null)).join('')}
+      <section><h3 class="${P}-label">Freckles</h3>${frecklesRow(col.freckles)}</section>
+      <section><h3 class="${P}-label">Height</h3>${heightRow(sizeOf(p.look), 'setsize')}</section>
+    </div>
+  </div>`;
+}
+// a crew member's look changed in the maker: saved now, drawn again (the picture it had stands in till then)
+function lookChanged(ctx, p, next) {
+  const old = p.look;
+  p.look = next;
+  wantPicture(next, { from: old, now: true });
+  ctx.changed(p);
+  ctx.keepFocus(() => { ctx.draw.players(); ctx.draw.panel(); });
+}
 
 const theme = {
   prefix: P,
@@ -100,17 +166,14 @@ const theme = {
   cardSaid: (p) => `${esc(p.name)}, ${esc(aboard(p.last).toLowerCase())}`,
   panelLine: (p) => esc(aboard(p.last)),
   panel(p) {
-    const cur = lookById(p.look && p.look.id).id;
+    const id = lookById(p.look && p.look.id).id;
     return `<div class="${P}-crew">
-      <span class="${P}-face ${P}-full">${pic(p.look)}</span>
-      <div class="${P}-about">
-        <p class="${P}-line">You start in your room. Walk around the station and see who is there.</p>
-        <section><h3 class="${P}-label">Look</h3>${lookRow(cur)}</section>
-        <section><h3 class="${P}-label">Height</h3>${heightRow(sizeOf(p.look), 'setsize')}</section>
-        <section><h3 class="${P}-label">Job levels</h3>
-          <button class="${P}-btn ${P}-joblevels" data-act="joblevels" data-k="joblevels">Levels to ask at each job</button>
-          <p class="${P}-startline">Which levels each job asks, and whether the game moves you up and down by itself.</p></section>
-      </div>
+      <p class="${P}-line">You start in your room. Walk around the station and see who is there.</p>
+      ${makerHtml(p)}
+      <section><h3 class="${P}-label">Ready-made looks</h3>${lookRow(isMade(p.look) ? null : id, id)}</section>
+      <section><h3 class="${P}-label">Job levels</h3>
+        <button class="${P}-btn ${P}-joblevels" data-act="joblevels" data-k="joblevels">Levels to ask at each job</button>
+        <p class="${P}-startline">Which levels each job asks, and whether the game moves you up and down by itself.</p></section>
     </div>`;
   },
   actions: {
@@ -138,14 +201,42 @@ const theme = {
       ctx.changed(p);
       ctx.keepFocus(() => ctx.draw.panel());
     },
-    // another look for the chosen crew member, saved straight away
+    // a ready-made look for the chosen crew member, as it is (the height kept), saved straight away
     setlook(ctx, data) {
       const p = ctx.current();
-      if (!p || !LOOKS.some((l) => l.id === data.id) || (p.look && p.look.id === data.id)) return;
-      p.look = { ...(p.look || {}), id: data.id };
-      ctx.changed(p);
-      ctx.keepFocus(() => { ctx.draw.players(); ctx.draw.panel(); });
+      if (!p || !LOOKS.some((l) => l.id === data.id) || (p.look && p.look.id === data.id && !isMade(p.look))) return;
+      lookChanged(ctx, p, withLook(p.look, data.id));
     },
+    // THE CHARACTER MAKER: an arrow (the hair, the head or the body before or after the one worn) ...
+    part(ctx, data) {
+      const p = ctx.current(), lib = kit(), row = ROWS.find((r) => r.id === data.id), dir = +data.v < 0 ? -1 : 1;
+      if (!p || !lib || !row) return;
+      const worn = wornOf(recipeOf(p.look, lib)), next = step(lib.list.parts, row.part, worn, dir);
+      if (next === worn[row.part]) return;
+      lookChanged(ctx, p, withPart(p.look, row.part, next, lookById(p.look.id).recipe));
+      // (the one after it in the same direction is fetched now, so the next press finds it here)
+      const after = step(lib.list.parts, row.part, { ...worn, [row.part]: next }, dir);
+      if (after && lib.entry(row.part, after)) lib.part(row.part, after).catch(() => {});
+    },
+    // ... a colour (hair, skin, the body's, the eyes'), one of the swatches ...
+    tint(ctx, data) {
+      const p = ctx.current(), list = save.SWATCHES[data.id];
+      if (!p || !list || !list.includes(data.v)) return;
+      const own = lookById(p.look.id).recipe, next = withColour(p.look, data.id, data.v, own);
+      if (JSON.stringify(next) !== JSON.stringify(p.look)) lookChanged(ctx, p, next);
+    },
+    // ... and freckles, or none
+    freckles(ctx, data) {
+      const p = ctx.current(); if (!p) return;
+      const next = withColour(p.look, 'freckles', +data.v ? 1 : 0, lookById(p.look.id).recipe);
+      if (JSON.stringify(next) !== JSON.stringify(p.look)) lookChanged(ctx, p, next);
+    },
+  },
+  // (the saved crew's made looks: their pictures kept for the next visit, any not yet drawn drawn; and the arrows come
+  // alive when the crew kit's list of parts is in)
+  begin(ctx) {
+    keepPictures(ctx.players.map((x) => x.look));
+    onKit(() => { if (ctx.S.view !== 'new' && ctx.current()) ctx.keepFocus(() => ctx.draw.panel()); });
   },
   grownLine: (p) => esc(aboard(p.last)),
   grownFacts: (p, ctx) => `<dt>Joined</dt><dd>${esc(day(p.made))}</dd>${ctx.difficultyFacts(p)}`,
@@ -188,5 +279,9 @@ const theme = {
 };
 
 export function showTitle(root, opts = {}) {
-  return showShared(root, theme, { players: opts.players, build: opts.build, onStart: opts.onStart, onChange: opts.onChange });
+  let T = null;
+  // (whoever is on the crew now: their made looks' pictures are the ones kept for the next visit)
+  const onChange = (p) => { if (T) keepPictures(T.ctx.players.map((x) => x.look)); if (opts.onChange) opts.onChange(p); };
+  T = showShared(root, theme, { players: opts.players, build: opts.build, onStart: opts.onStart, onChange });
+  return T;
 }
