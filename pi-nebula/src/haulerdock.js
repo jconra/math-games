@@ -41,7 +41,7 @@ import { portFrame } from './jobs/docklink.js';
 export const WAIT = 3000, DIRT = 0.45;
 // its port side's outermost point near the door: the clamp frames' posts with their jaws' pins (hauler-built.js FRAME,
 // JAW: the pin 3 cm round the post's outer corner); the containers (to 2.52 m) and the front pods (to 2.56 m) stand in
-// from it. Checked against the built ship by ~/pw/space-math/rigs/hauler-3/dock.cjs
+// from it. Checked against the built ship by ~/pw/space-math/rigs/hauler-3/steps_dockcheck.js
 export const OUT = HB.FRAME.post[1] + 0.03;
 // the door's middle along the ship (z) and the ship's frame to the bridge's (kit/dockbridge.js: +z out from the port,
 // y up from the station's floor, x across): turned a quarter round so its port side faces back along the bridge

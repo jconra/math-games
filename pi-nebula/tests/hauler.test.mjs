@@ -5,7 +5,7 @@
 // tanks (HAUL-2); all six of its pods turning thrusters and its front legs folding into the cab's belly (HAUL-5); and
 // its kit named as the other three ships' kits are, so whatever shared code reads one ship reads it too (his words:
 // "the ships will basically all fly the same and share the same class"). No browser: plain data and the modules' text.
-// (Where it waits, at the dock, is placed in a page: ~/pw/space-math/rigs/hauler-3/dock.cjs measures it.)
+// (Where it waits, at the dock, is placed in a page: ~/pw/space-math/rigs/hauler-3/steps_dockcheck.js measures it.)
 //   node --test pi-nebula/tests/hauler.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
