@@ -184,8 +184,9 @@ const spaceOf = (S) => fetch(`../../assets/ships/${S.shell}.space.json`).then((r
 // a ship that is a layout: built by the kit's own layout code (its doors and movers with it), in its grime materials
 async function loadBuilt(S, inside) {
   const [room, space] = await Promise.all([loadRoom(`../../kit/rooms/${S.layout}.json`), spaceOf(S)]);
-  // (with the cabin inside: the pieces it changes, swapped for their cabin variants)
-  const swap = inside && S.lab.cabin?.swap;
+  // (with the cabin inside: the pieces it changes, swapped for their cabin variants: the ship's own, and over them the
+  // blueprint's own where it names any (the Hauler's plan with the cockpit for four: its "swap"))
+  const swap = inside && swapOf(S);
   if (swap) room.pieces = room.pieces.map((pl) => (swap[pl.piece]?.[pl.variant] ? { ...pl, variant: swap[pl.piece][pl.variant] } : pl));
   const built = buildRoom(room, S.lab.materials(makeMaterials(), (S.lab.dirt || EB.LAB.dirt)[st.dirt]), { bake: { voxel: 0.08, rays: 24 } });
   const holder = new THREE.Group(), model = built.group; holder.add(model);
@@ -203,8 +204,13 @@ async function loadBuilt(S, inside) {
   return { holder, model, tris: built.stats.tris, size, space, built, jets };
 }
 const hasCabin = (S) => !!S?.lab?.cabin;
+// (the pieces swapped while the cabin is in: the ship's LAB.cabin.swap, each piece's own overridden by the blueprint's
+// "swap" when it is drawn for this ship; the shell kept apart for each)
+const bpSwap = (S) => (st.bp?.swap && (!st.bp.shell || st.bp.shell === S.shell) ? st.bp.swap : null);
+const swapOf = (S) => { const own = S.lab?.cabin?.swap || {}, bp = bpSwap(S); return bp ? { ...own, ...bp } : own; };
+const shellKey = (S, inside) => S.id + (inside ? ':inside' + (bpSwap(S) ? ':' + JSON.stringify(bpSwap(S)) : '') : '');
 async function loadShell(S) {
-  const inside = hasCabin(S) && st.inside, key = S.id + (inside ? ':inside' : '');
+  const inside = hasCabin(S) && st.inside, key = shellKey(S, inside);
   if (shells.has(key)) return shells.get(key);
   if (S.layout) { const rec = await loadBuilt(S, inside); shells.set(key, rec); return rec; }
   const [g, space] = await Promise.all([loader.loadAsync(`../../assets/ships/${S.shell}.glb`), spaceOf(S)]);
@@ -248,7 +254,8 @@ function setHull(mode) {
 }
 async function showShip(S) {
   loading.hidden = false; loading.classList.add('soft');
-  const rec = await loadShell(S);
+  const key = shellKey(S, hasCabin(S) && st.inside), rec = await loadShell(S);
+  st.shellKey = key;
   if (st.shell) scene.remove(st.shell.holder);
   st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
   const d = st.space.doors?.port, bd = st.space.doors?.belly;
@@ -355,6 +362,8 @@ function showOption(id) {
   st.opt = id; st.bp = st.edits[id] || clone(st.stock[id]); st.sel = null; st.undo = [];
   if (st.bp?.ramps) st.rampCount = st.bp.ramps;   // (a blueprint drawn for one ramp, or both: the ship's ramps follow it)
   recheck(true); url(); menu();
+  // (a blueprint that swaps the ship's own pieces (its "swap"): the ship built again for it)
+  if (st.ship && st.shell && hasCabin(st.ship) && st.inside && shellKey(st.ship, true) !== st.shellKey) showShip(st.ship);
 }
 function recheck(rebuild) {
   if (!st.bp || !st.space) return;

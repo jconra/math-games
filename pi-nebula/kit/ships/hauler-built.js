@@ -13,7 +13,8 @@
 //   LAB         the Ship Lab's controls
 import * as THREE from 'three';
 import { Acc } from '../shipparts/outside/facet.js';
-import { part } from '../shipparts/place.js';
+import { part, placeInto } from '../shipparts/place.js';
+import { crewSeat } from '../shipparts/cockpit/seats.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE_AT, POD, POD_HALF, DECK as DECK0, PARTS, Q } from './hauler-built.hull.js';
@@ -686,19 +687,23 @@ function hbMarks(p) {
 
 // ── THE COCKPIT: two bucket seats side by side behind the glass (the cockpit family's parts), on a floor 0.3 m over the
 // cabin's deck (the blueprints': one step up, as the Explorer's), its back wall at z `back` (the blueprints' cockpit
-// starts there). Everything under the glass is closed (built-common.js's tub, as the Miner's: no sky through a gap from
-// the seats); between the glass's back edge and the back wall the CHEEKS, a dark wall each side from the floor to the
-// roof (the 3k nose is open there, behind the side windows), and a dark roof over them; the back wall:
+// starts there). Its floor runs out to the hull's inside; under the glass the nose's own skin (drawn both ways) closes
+// it; between the glass's back edge and the back wall the CHEEKS, a dark wall each side from the floor to the roof (the
+// 3k nose is open there, behind the side windows), and a dark roof over them (no sky through a gap from the seats:
+// rigs/hauler-2/checks.cjs); the back wall:
 //   'two seats'          a bulkhead out to the hull's inside, a shut door in it
-//   'two seats, cabin'   with the rooms built inside (LAB.cabin): the tub cut at the back wall, which is the cabin's own
-//                        (the cockpit's door in it); a riser there, the step up; round the cabin's wall, a dark panel
-//                        out to the hull and up to the roof
-export const COCKPIT = { floor: 0.3, seatsZ: 5.15, wallX: 1.2, gap: 0.40, back: 4.0, front: 7.6, tubX: 1.1, cabinWall: { half: 1.0, top: 2.5 }, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 2.166 - DECK0 - 0.3, z: 7.787 - 5.15, slope: 0.78 } };
+//   'two seats, cabin'   with the rooms built inside (LAB.cabin): the back wall is the cabin's own (the cockpit's door in
+//                        it); a riser there, the step up; round the cabin's wall, a dark panel out to the hull and roof
+//   'four seats, cabin'  the same, and two crew seats behind the fliers (COCKPIT.rear): his deck plan's cockpit for four
+//                        (the blueprint hauler-his-plan asks for it: its "swap")
+export const COCKPIT = { floor: 0.3, seatsZ: 5.15, wallX: 1.2, gap: 0.40, back: 4.0, front: 7.6, tubX: 1.1, rear: { x: [0.72, -0.72], z: 4.4 }, cabinWall: { half: 1.0, top: 2.5 }, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 2.166 - DECK0 - 0.3, z: 7.787 - 5.15, slope: 0.78 } };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export const builtCockpitPlan = () => C.builtCockpitPlan(COCKPIT, COCKPIT_DROP);
 function hbCockpit(p, variant) {
-  const Cp = COCKPIT, cabin = variant === 'two seats, cabin', zb = Cp.back, fy = DECK + Cp.floor;
+  const Cp = COCKPIT, cabin = /, cabin$/.test(variant || ''), zb = Cp.back, fy = DECK + Cp.floor;
   C.cockpitParts(p, builtCockpitPlan(), Cp);
+  // (the cockpit for four, his deck plan's: two crew seats behind the fliers, facing forward)
+  if (variant === 'four seats, cabin') for (const x of COCKPIT.rear.x) placeInto(p, part(crewSeat, { look: 'ship', badge: 'crew' }), { at: [x, Cp.floor, COCKPIT.rear.z], rot: [0, 0, 0] });
   const acc = new Acc(), out = canopyPanes().outline;
   // THE FLOOR out to the hull's inside, row by row from the back wall to the nose (under the glass the nose's own skin,
   // drawn both ways, closes the cockpit: its canopy has no roof pane, so a tub down from the glass's edges would wall
@@ -797,7 +802,7 @@ export const LAB = {
   // as the cabin meets it: its head over the deck (the slope over it starts there), where the deck stops at its sill)
   cabin: { swap: { hbCockpit: { 'two seats': 'two seats, cabin' }, hbAirlock: { port: 'port, cabin' } }, outer: { head: +(CREWDOOR.head - DECK).toFixed(3), sill: +(sectX(CREWDOOR.sill) - 0.01).toFixed(3) } },
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
-  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] }, Cockpit: { at: [0.25, 2.75, 6.15], look: [-0.1, 2.25, 3.2] } },
+  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] }, Cockpit: { at: [0, 3.05, 6.25], look: [0, 1.55, 4.0] } },
   doorTip: 'Open the crew door (it lifts, then the stair swings down to the ground), or shut it',
   gearTip: 'Draw the landing legs up into their pods, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
@@ -865,6 +870,6 @@ export const SHIP_HAULER_BUILT = {
   hbCrewDoor: { name: 'Hauler (built): crew door', group: GR, at: 'free', foot: [0.6, 2.0, 0.85], variants: ['port'], build: (p) => hbCrewDoor(p) },
   hbStair: { name: 'Hauler (built): crew stair', group: GR, at: 'free', foot: [0.3, 2.0, 0.8], variants: ['port'], build: (p) => hbStair(p) },
   hbAirlock: { name: 'Hauler (built): crew airlock', group: GR, at: 'free', foot: [2.2, 2.0, 0.85], variants: ['port', 'port, cabin'], build: (p, v) => hbAirlock(p, v) },
-  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['two seats', 'two seats, cabin'], build: (p, v) => hbCockpit(p, v) },
+  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['two seats', 'two seats, cabin', 'four seats, cabin'], build: (p, v) => hbCockpit(p, v) },
   cargoContainer: { name: 'Cargo container (shared)', group: GR, at: 'free', foot: [CONTAINER.w, CONTAINER.h, CONTAINER.l], variants: Object.keys(LOOKS).flatMap((k) => [k, ...Object.keys(COLOURS).slice(1, 3).map((c) => `${k}:${c}`)]), build: cargoContainer },
 };

@@ -20,6 +20,9 @@
 //            "width" is the clear opening. Every inside door is a pocket door (the cabin kit's doorway): its leaves slide
 //            into the wall beside it. "leaves": 2 (the default: two leaves parting), or 1 / -1 (one leaf, sliding toward
 //            +x or -x on a wall along x, +z or -z on a wall along z). doorReach says how much wall that takes.
+//   swap     (optional) the ship's own pieces built another way for this plan while its rooms are in: { piece: { its
+//            variant: the variant to build } }, over the ship's LAB.cabin.swap (the Hauler's plan with the cockpit for
+//            four). The lab reads it; the checker does not
 //   eyes     (optional) where the lab's camera stands in each room, by room id: { "at": [x, z], "look": [x, z] }, at a
 //            person's eye height (the lab finds a spot itself for a room not listed)
 //   a room, optional: "busy": true (an engineering room: its walls filled with wiring, boxes of switches, gauges, a
