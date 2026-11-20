@@ -311,6 +311,8 @@ const CSS = `
 .pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 176px); }
 /* (seen from the seat: the Jump button and the seat's prompt just above the dashboard's display, never over it) */
 .pfl.is-dash .pfl-jump, .pfl.is-dash .pfl-seat { bottom: var(--dash-up) !important; }
+.pfl.is-dash.is-dash-btns .pfl-btns { bottom: var(--dash-up) !important; }
+.pfl.is-dash.is-dash-btns .pfl-jump, .pfl.is-dash.is-dash-btns .pfl-seat { bottom: calc(var(--dash-up) + 56px) !important; }
 @media (max-width: 640px) { .pfl-float { width: 120px; } .pfl-fpic { height: 104px; } .pfl-float small { font-size: 10.5px; } }
 @media (max-height: 480px) { .pfl-float { width: 108px; } .pfl-fpic { height: 84px; } .pfl-float small { font-size: 10px; } }
 @media (max-width: 640px) {
@@ -893,7 +895,14 @@ export function startFlying(ctx, opts = {}) {
     placeFloat(camera, view === 'behind' && glide.t >= VIEW.glide && powered() && !el.hidden);
     // (seen from the seat, the Jump button and the seat's prompt stand just above the display, not over it)
     { const r = view === 'cockpit' && glide.t >= VIEW.glide && !el.hidden ? dash.onScreen(camera) : null, up = r ? Math.round(innerHeight - r.top + 10) : 0;
-      if (up !== dashUp) { dashUp = up; el.classList.toggle('is-dash', !!r); if (r) el.style.setProperty('--dash-up', up + 'px'); } }
+      if (up !== dashUp) { dashUp = up; el.classList.toggle('is-dash', !!r); if (r) el.style.setProperty('--dash-up', up + 'px'); }
+      // (and the row of buttons, where the page puts it, over the display (a phone on its side, seated or watching): above
+      // it too, the seat's prompt and the Jump button above the row; looked at again when what is shown changes)
+      const key = r ? painted + '|' + up : '';
+      if (key !== btnKey) {
+        btnKey = key; el.classList.remove('is-dash-btns');
+        if (r) { const b = $('.pfl-btns').getBoundingClientRect(); el.classList.toggle('is-dash-btns', b.width > 0 && b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top); }
+      } }
     return true;
   }
   // ── THE DASHBOARD: its numbers, stepped once a frame in aim (the flying's own in the labs, from the ship's own moves; a
@@ -902,7 +911,7 @@ export function startFlying(ctx, opts = {}) {
   const ownDash = !opts.dash, D = opts.dash || makeDash(), _w = new THREE.Vector3();
   // (dashClock: the game's own time, for how often the words are drawn again; the picture of the tiny ship is drawn once
   // for each picture of the game's)
-  let ticked = -1, dashClock = 0, dashUp = -1;
+  let ticked = -1, dashClock = 0, dashUp = -1, btnKey = '';
   function dashTick() {
     const on = powered();
     dash.draw(dashRows(D, opts.run ? opts.run() : null), on, guideOn ? GUIDE_WORDS : '', dashClock);

@@ -202,6 +202,8 @@ const CSS = `
 /* (the count stays up while the jump home is worked out: beside the jump computer's panel on a wide screen, put away under it on a phone) */
 @media (min-width: 641px) { .pmt.has-panel .pmt-count { left: 31%; max-width: 56vw; } }
 @media (max-width: 640px) { .pmt.has-panel .pmt-count { display: none; } }
+/* (a phone on its side: the count at the top left, clear of the dashboard's display at the bottom middle) */
+@media (max-height: 480px) { .pmt .pmt-count, .pmt.has-panel .pmt-count { left: max(14px, env(safe-area-inset-left)); top: 60px; bottom: auto; transform: none; max-width: 40vw; padding: 6px 14px; } .pmt-count b { font-size: 20px; } .pmt-count em { font-size: 12px; } }
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; left: 3vw; right: 3vw; transform: none; margin: 0 auto; width: fit-content; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; column-gap: 8px; row-gap: 0; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 /* (the core's tuning: its card lies along the bottom of a phone and may reach nearly to its top: the strip and the captain's words are put away under it) */
 @media (max-width: 640px) { .pmt.is-tune.has-panel .pmt-chip, .pmt.is-tune.has-panel .pmt-say { display: none; } }
