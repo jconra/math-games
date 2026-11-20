@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Planet Lab</title>
+<meta name="description" content="A space station lab: a planet's ground, made by the game from a seed, a different one each time. A cratered moon under the game's own sky, or worlds with air, a coloured sky and haze, and the Terrain Lab's plants recoloured. Fly over it, find the landing place, keep a seed you like.">
+<meta name="theme-color" content="#070a0f">
+<link rel="icon" href="data:,">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../shared/oops.js"></script>
+<link rel="stylesheet" href="../kit/kit.css?v=1">
+<link rel="stylesheet" href="planet.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="A planet's ground, seen from above it"></canvas>
+<div class="kl-top" id="top">
+  <h1>Planet Lab</h1><a href="../">All labs</a>
+  <span class="kl-hud" id="hud" aria-live="off"></span>
+  <span class="pl-keys" id="keys">W A S D fly · Space up · C down · Shift faster · drag to look, or click to steer with the mouse (Esc lets go)</span>
+</div>
+<!-- the touch controls: a stick to fly, buttons up and down (only on touch screens) -->
+<div class="kl-stick" id="stick" aria-hidden="true"><div class="kl-knob" id="knob"></div></div>
+<div class="kl-updown" id="updown" aria-hidden="true"><button id="up" aria-label="Up">▲</button><button id="down" aria-label="Down">▼</button></div>
+<!-- THE ONE MENU: along the bottom, its rows wrapping onto the next line -->
+<div class="kl-bar pl-bar" id="bar">
+  <div class="kl-row">
+    <button class="chip pl-new" id="new" type="button">New planet</button>
+    <span class="kl-label">Kind</span>
+    <span id="kinds" role="group" aria-label="Which kind a new planet is" style="display:contents"></span>
+  </div>
+  <div class="kl-row">
+    <span class="kl-label">Seed</span>
+    <input class="pl-seed" id="seed" type="text" inputmode="numeric" autocomplete="off" aria-label="The planet's seed: type one and press Make">
+    <button class="chip" id="make" type="button">Make</button>
+    <span class="kl-sep"></span>
+    <span class="kl-label">Look</span>
+    <span id="views" role="group" aria-label="Where to look from" style="display:contents"></span>
+    <button class="chip sub" id="ring" type="button" aria-pressed="true">Landing ring</button>
+    <span class="kl-sep"></span>
+    <span class="kl-label">Graphics</span>
+    <span id="quality" role="group" aria-label="Graphics" style="display:contents"></span>
+  </div>
+  <div class="kl-row"><p class="pl-note" id="note" aria-live="polite"></p></div>
+</div>
+<div class="kl-loading" id="loading">Making the ground…<small id="loadingWhy"></small></div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>

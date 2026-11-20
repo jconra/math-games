@@ -1,0 +1,14 @@
+/* The Planet Lab: the Kit Lab's dark glass and blue edge (../kit/kit.css), with every row of controls wrapping onto
+   the next line instead of scrolling sideways. */
+.pl-bar .kl-row { flex-wrap: wrap; overflow: visible; row-gap: 6px; }
+.pl-bar .kl-row .chip { min-height: 30px; }
+.pl-seed { flex: none; width: 7.2em; height: 30px; border: 1px solid #2f3d50; border-radius: 15px; padding: 3px 10px; background: #0d141d; color: var(--ink); font: 600 13px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.pl-seed:focus { outline: none; border-color: var(--blue-hi); }
+.chip.pl-new { background: linear-gradient(#2c5f86, #1d4466); border-color: var(--blue); color: #eaf6ff; }
+.pl-note { flex: 1 1 100%; color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
+.pl-note b { color: var(--blue-hi); font-weight: 600; }
+.kl-top { max-width: min(100%, 860px); }
+.pl-keys { color: var(--mute); font-size: 12px; }
+.touch .pl-keys { display: none; }
+.kl-loading { flex-direction: column; gap: 10px; text-align: center; padding: 24px; }
+.kl-loading small { font: 500 14px/1.4 system-ui, sans-serif; letter-spacing: 0; color: var(--ink-2); }
