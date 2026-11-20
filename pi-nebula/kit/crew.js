@@ -262,6 +262,16 @@ export function skinTone(tone, own, L = SKIN_LIMIT) {
   return t;
 }
 export const HAIR_COLOURS = ['#17110d', '#2e1f15', '#4a2f1d', '#6b4127', '#8f5a32', '#b4824f', '#d8bc84', '#a83c22', '#8f8a84', '#d6d3cc'];
+// A HAIR COLOURED BY ITS OWN LIGHT AND DARK (2026-11-19; the game's maker, of the character maker's hair colours: "I
+// wonder if we should make the pink hair greyscale so it doesn't already have a color. Or will it take on other colors
+// okay?"). A hair colour is laid on a hair as a shift from the hair's own colour (the top of this file), which keeps
+// whatever of the hair's own colour differs from its mean: fine on a brown or black hair, but the pink side-swept
+// hair is painted bright pink over near-black roots, and its pink came through a dark colour (black hair with magenta
+// streaks: ~/pw/space-math/shots/character-1/q11_pink_hair.jpg). The hairs named here take a colour by their light and
+// dark alone instead (the picture's greyscale, worked out in the shader: no file is changed): the colour picked times
+// each texel's lightness against the hair's own mean. Worn in its own colour (no hair colour given) such a hair is
+// drawn exactly as made, pink and all. lib.hairByLight = false: as before (the checks' before picture).
+export const HAIR_BY_LIGHT = ['pinkSide'];
 
 // a visor's faces (kit/crew.js visorMaterial), in the order its shader numbers them
 export const EXPRESSIONS = { neutral: 'Neutral', happy: 'Happy', thinking: 'Thinking', surprised: 'Surprised' };
@@ -941,7 +951,7 @@ function crewUniforms(refs) {
     crSkin: { value: R('skin', 0xc08060) }, crSkinRef: { value: R('skin', 0xc08060) },
     // (THE SKIN'S LIMITS on the part: shine, shineMost, and how much of the texel's own colour (1: all, as made))
     crSkinLook: { value: new THREE.Vector3(SKIN_LIMIT.shine, SKIN_LIMIT.shineMost, 1) },
-    crHair: { value: R('hair', 0x402010) }, crHairRef: { value: R('hair', 0x402010) },
+    crHair: { value: R('hair', 0x402010) }, crHairRef: { value: R('hair', 0x402010) }, crHairOwn: { value: 1 },
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
 }
@@ -1017,7 +1027,7 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
 #endif
     vCrRadial = (modelViewMatrix * vec4(crR, 0.0)).xyz;
   }`);
-    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow; uniform vec3 crSkinLook;
+    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow, crHairOwn; uniform vec3 crSkinLook;
 #ifdef CREW_MASKTEX
 uniform sampler2D crMaskMap;
 #endif
@@ -1082,7 +1092,13 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
   diffuseColor.a = opacity;
 #endif
 #ifdef CREW_HAIR
+  #ifdef CREW_HAIR_LIGHT
+  // (A HAIR COLOURED BY ITS OWN LIGHT AND DARK, below: the colour picked times this texel's lightness against the hair's
+  // own mean, none of its own colour kept; in its own colour (crHairOwn 1) exactly as made)
+  diffuseColor.rgb = mix(crHair * min(crLum(diffuseColor.rgb) / max(crLum(crHairRef), 1e-4), 2.5), diffuseColor.rgb, crHairOwn);
+  #else
   diffuseColor.rgb = crShift(diffuseColor.rgb, crHair, crHairRef, 1.0);
+  #endif
 #endif
 #ifdef CREW_STRANDS
   diffuseColor.rgb = crStrands(diffuseColor.rgb);
@@ -1888,7 +1904,7 @@ function setColours(mats, { job, uniform, skin, hair, eyes, freckles } = {}) {
     u.crSkinLook.value.set(SKIN_LIMIT.shine, SKIN_LIMIT.shineMost, skin ? SKIN_LIMIT.hue : 1);
     u.crSkin.value.copy(skin ? skinTone(lin(skin), m.userData.crewSkinHead || u.crSkinRef.value) : m.userData.crewSkinOf || u.crSkinRef.value);
     if (skin && m.userData.crewHand) u.crSkin.value.multiplyScalar(SKIN_LIMIT.hands);
-    u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value);
+    u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value); u.crHairOwn.value = hair ? 0 : 1;
     // (FRECKLES: on a head made with them, shown or not)
     if (u.crFreckles) u.crFreckles.value = +freckles > 0 ? 1 : 0;
   }
@@ -3259,6 +3275,8 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       const mat = crewMaterial(own, kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
       // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
       if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
+      // (A HAIR COLOURED BY ITS OWN LIGHT AND DARK: set before the material is first drawn, so its shader is made with it)
+      if (kind === 'hair' && HAIR_BY_LIGHT.includes(R.hair) && lib.hairByLight !== false) mat.defines.CREW_HAIR_LIGHT = '';
       if (pt) { painted = pt; pt.mat = mat; }
       // (the hands, when no skin tone is given, take the head's own skin: HANDS)
       const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
