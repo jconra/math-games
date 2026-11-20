@@ -1,6 +1,6 @@
 {
- "made": "2026-11-17T18:22:43.514Z",
- "bytes": 11159430,
+ "made": "2026-11-20T04:44:48.947Z",
+ "bytes": 11947449,
  "by": "rigs/portraits/make.cjs",
  "pictures": {
   "kai": {
@@ -34,6 +34,22 @@
   "noor": {
    "face": "noor_face.webp",
    "body": "noor_body.webp"
+  },
+  "androidDock": {
+   "face": "androidDock_face.webp",
+   "body": "androidDock_body.webp"
+  },
+  "androidHeavy": {
+   "face": "androidHeavy_face.webp",
+   "body": "androidHeavy_body.webp"
+  },
+  "androidOld": {
+   "face": "androidOld_face.webp",
+   "body": "androidOld_body.webp"
+  },
+  "androidMedical": {
+   "face": "androidMedical_face.webp",
+   "body": "androidMedical_body.webp"
   }
  }
 }
