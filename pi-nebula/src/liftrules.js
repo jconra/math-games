@@ -39,5 +39,5 @@ export const boxPoint = (id, local) => { const S = byId(id); return S ? fromBox(
 export const outOf = (id) => { const S = byId(id); return S ? S.turn * Math.PI / 2 : 0; };
 export function placeOf(p) { const y = xyz(p)[1]; return y > TOWER.floor - 4 ? 'tower' : y < STORE.floor + STORE.h ? 'store' : 'deck'; }
 export function dirOf(from, to) { const i = STOPS.findIndex((s) => s.id === from), j = STOPS.findIndex((s) => s.id === to); return j < i ? 'up' : 'down'; }
-const TO = { tower: 'to the control room', deck: 'to the main deck', store: 'to the store room' };
+const TO = { tower: 'to the control room', deck: 'to the main deck', store: 'to Cargo' };
 export const words = (from, to) => `Going ${dirOf(from, to)} ${TO[to] || ''}`.trim();

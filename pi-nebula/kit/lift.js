@@ -59,7 +59,7 @@ export function liftWall(p, v) {
     p.slab('black', x - 0.15, x + 0.15, y0, y1, WF - 0.005, z, { r: 0.01 });
     p.slab('dark', x - 0.11, x + 0.11, y1 - 0.12, y1 - 0.04, z, z + 0.004, { r: 0.004 });
     segText(p, 'LIFT', { h: 0.035, at: [x, y1 - 0.08, z + 0.005], look: 'amber', mat: 'glow' });
-    ['TOWER', 'DECK', 'STORE'].forEach((t, i) => {
+    ['TOWER', 'DECK', 'CARGO'].forEach((t, i) => {
       const y = y1 - 0.2 - i * 0.12;
       p.cyl('grey', 0.024, 0.014, [x - 0.08, y, z + 0.007], [PI / 2, 0, 0], 14);
       p.add('glow', put(bevelBox([0.03, 0.03, 0.004], [0, 0, 0], { r: 0.002, seg: 1, cell: 9 }), [x - 0.08, y, z + 0.016]), 'soft');

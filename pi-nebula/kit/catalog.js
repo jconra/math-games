@@ -22,7 +22,7 @@ import { LIFT_PIECES } from './lift.js';         // (the lift: one box at each o
 import { TOWER_PIECES } from './tower.js';       // (the control room at the top of the tower, and its desks)
 import { STORE_PIECES } from './store.js';       // (the store room on the lower level: its walls, racks, pallets, scale, benches, desk)
 
-export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical', 'Lift', 'Tower', 'Store'];
+export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical', 'Lift', 'Tower', 'Cargo'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
 export const SHIP_GROUPS = ['Ship outside', 'Ship cockpit', 'Ship cabin'];
 export const PIECES = {

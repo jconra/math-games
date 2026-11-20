@@ -1,6 +1,6 @@
 {
   "name": "The station",
-  "about": "Your quarters, the corridors, the terminal (captains, jobs board, galley), the spine with its junction, three big hangars (Miner, Explorer, Medic), the loop hallway, the smelter (its hall, ingot store, lobby and control room), the medical centre, a docking airlock, a lift by the junction, the control room at the top of the tower and the store room on the lower level: one file of rooms.",
+  "about": "Your quarters, the corridors, the terminal (captains, jobs board, galley), the spine with its junction, three big hangars (Miner, Explorer, Medic), the loop hallway, the smelter (its hall, ingot store, lobby and control room), the medical centre, a docking airlock, a lift by the junction, the control room at the top of the tower and Cargo on the lower level: one file of rooms.",
   "bake": "station.bake",
   "spawn": {"at":[-3,1.7,3],"look":[-1,1.5,2],"room":"quarters"},
   "routes": {"ship":{"from":"spawn","to":"the shuttle's door","path":[[-1.5,1.5],[-1,1],[0.5,1],[0.5,12.25],[5,12.25],[5.5,12.5],[9.5,12.5],[11,12.5],[11,15.3],[22.375,15.3],[22.375,13.75]]}},
@@ -6448,7 +6448,7 @@
     },
     {
       "id": "store",
-      "name": "The store room",
+      "name": "Cargo",
       "probe": [9,-3.15,14],
       "coarse": true,
       "grid": {"cell":2,"deck":-4.75},

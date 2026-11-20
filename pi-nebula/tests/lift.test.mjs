@@ -64,12 +64,30 @@ test('the lift: its panel, its words, how long it takes', () => {
   assert.deepEqual(choices('store').map((s) => s.id), ['tower', 'deck']);
   assert.equal(dirOf('deck', 'tower'), 'up'); assert.equal(dirOf('deck', 'store'), 'down'); assert.equal(dirOf('store', 'tower'), 'up');
   assert.equal(words('deck', 'tower'), 'Going up to the control room');
-  assert.equal(words('tower', 'store'), 'Going down to the store room');
+  assert.equal(words('tower', 'store'), 'Going down to Cargo');
+  assert.equal(words('deck', 'store'), 'Going down to Cargo');
   assert.equal(words('store', 'deck'), 'Going up to the main deck');
-  assert.deepEqual(STOPS.map((s) => s.name), ['Control room', 'Main deck', 'Store room']);
+  assert.deepEqual(STOPS.map((s) => s.name), ['Control room', 'Main deck', 'Cargo']);
   const total = RIDE.shut + RIDE.go + RIDE.open; assert.ok(total > 2 && total < 5, 'a ride is a few seconds');
   assert.equal(placeOf([40, TOWER.floor, 25]), 'tower'); assert.equal(placeOf([5, 0, 5]), 'deck'); assert.equal(placeOf([5, STORE.floor, 5]), 'store');
   assert.equal(placeOf([42, 12, 25]), 'deck', 'a hangar\'s catwalk is the main deck');
+});
+
+// (2026-11-20, the game's maker: "Lets just call it "Cargo". If you call it store then people will think you can buy
+// stuff there.")
+test('the lower level is called Cargo wherever a player reads its name: the button, its words, the ride, the box\'s panel', () => {
+  const S2 = stop('store');
+  assert.equal(S2.name, 'Cargo');
+  for (const from of ['tower', 'deck']) assert.equal(words(from, 'store'), 'Going down to Cargo');
+  // (nothing a player reads on the panel, its buttons, their words under them or the ride's words says "store")
+  const read = [...STOPS.flatMap((s) => [s.name, s.sub]), ...STOPS.flatMap((a) => STOPS.filter((b) => b !== a).map((b) => words(a.id, b.id)))];
+  for (const w of read) assert.ok(!/store/i.test(w), w);
+  // the lit panel of stops inside the box (kit/lift.js): TOWER, DECK, CARGO
+  const kit = readFileSync(new URL('../kit/lift.js', import.meta.url), 'utf8');
+  assert.match(kit, /\['TOWER', 'DECK', 'CARGO'\]\.forEach/);
+  assert.ok(!/'STORE'/.test(kit));
+  // the station file's room (the Kit Lab's list of rooms)
+  assert.equal(room('store').name, 'Cargo');
 });
 
 test('the station file: the boxes where the plan has them, the deck\'s let into the spine\'s wall', () => {

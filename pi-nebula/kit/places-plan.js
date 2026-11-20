@@ -31,11 +31,13 @@
 // player is taken to the same spot in the box at the stop picked, and its doors open there.
 //   stops, top to bottom as on a lift's panel: id, the words on its button, a few words under them, the station
 //   file's room it stands in, the middle of its floor, its quarter turns (1: its doorway faces east)
+// (the lower level is called CARGO wherever a player sees its name, 2026-11-20, the game's maker: "Lets just call it
+// "Cargo". If you call it store then people will think you can buy stuff there." Its code name stays 'store'.)
 export const LIFT = { half: 1, clear: 0.78, wall: 0.22, h: 3, step: 0.03, doorHalf: 0.55 };
 export const STOPS = [
   { id: 'tower', name: 'Control room', sub: 'Top of the tower', room: 'tower', at: [40, 44.7, 25], turn: 1 },
   { id: 'deck', name: 'Main deck', sub: 'By the junction', room: 'lift', at: [12, 0, 28], turn: 1 },
-  { id: 'store', name: 'Store room', sub: 'The lower level', room: 'store', at: [12, -4.75, 28], turn: 1 },
+  { id: 'store', name: 'Cargo', sub: 'The lower level', room: 'store', at: [12, -4.75, 28], turn: 1 },
 ];
 
 // ── THE CONTROL ROOM, in the tower's control centre (kit/outside-plan.js: the spire's band with the big windows, its

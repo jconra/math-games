@@ -1,5 +1,7 @@
 // THE STORE ROOM, the whole lower level (kit/places-plan.js STORE, SLOT, RACKS, FLOOR have the game's maker's words
-// and the numbers; ~/pw/space-math/shots/control-room-1/plan_3 is the agreed drawing).
+// and the numbers; ~/pw/space-math/shots/control-room-1/plan_3 is the agreed drawing). Called CARGO wherever a player
+// or the Kit Lab shows its name (2026-11-20: "If you call it store then people will think you can buy stuff there");
+// 'store' stays its name in the code.
 //   storeHall  a CELL piece placed on the station's cell [0, 0] (its frame is the station's, its floor at y = 0): the
 //              floor of the station's plates with its painted lines, the walls (the station's panels, ribs and trims,
 //              3.75 m tall) on the grid lines inside the deck's hull and one slanting across the cut corner, the four
@@ -307,11 +309,11 @@ export function shipDesk(p) {
 }
 
 export const STORE_PIECES = {
-  storeHall: { name: 'Store room', group: 'Store', at: 'cell', variants: ['shell'], foot: [32, 3.75, 46], build: storeHall },
-  rack: { name: 'Shelving', group: 'Store', at: 'free', variants: ['bays 1', 'bays 3', 'bays 5'], accepts: (v) => /^bays \d+$/.test(v), foot: [13.6, 3.3, 1.1], build: rack },
-  pallet: { name: 'Pallet', group: 'Store', at: 'free', variants: PALLET_LOADS, foot: [1.2, 1.1, 1], build: pallet },
-  scale: { name: 'Floor scale', group: 'Store', at: 'free', variants: ['platform'], foot: [3.4, 1.8, 3.4], build: scale },
-  bench: { name: 'Packing bench', group: 'Store', at: 'free', variants: ['packing'], foot: [3.6, 1.4, 0.9], build: bench },
-  shipDesk: { name: 'Shipping desk', group: 'Store', at: 'free', variants: ['desk'], foot: [3.6, 1.4, 0.8], build: shipDesk },
+  storeHall: { name: 'Cargo (the hall)', group: 'Cargo', at: 'cell', variants: ['shell'], foot: [32, 3.75, 46], build: storeHall },
+  rack: { name: 'Shelving', group: 'Cargo', at: 'free', variants: ['bays 1', 'bays 3', 'bays 5'], accepts: (v) => /^bays \d+$/.test(v), foot: [13.6, 3.3, 1.1], build: rack },
+  pallet: { name: 'Pallet', group: 'Cargo', at: 'free', variants: PALLET_LOADS, foot: [1.2, 1.1, 1], build: pallet },
+  scale: { name: 'Floor scale', group: 'Cargo', at: 'free', variants: ['platform'], foot: [3.4, 1.8, 3.4], build: scale },
+  bench: { name: 'Packing bench', group: 'Cargo', at: 'free', variants: ['packing'], foot: [3.6, 1.4, 0.9], build: bench },
+  shipDesk: { name: 'Shipping desk', group: 'Cargo', at: 'free', variants: ['desk'], foot: [3.6, 1.4, 0.8], build: shipDesk },
 };
 export { textWidth, MeshData };
