@@ -8,6 +8,7 @@
   "step": 0.5,
   "deck": 1.05
  },
+ "sliding": true,
  "idea": "One row of rooms down the spine, nose to engines. The crew door opens into the airlock behind the cockpit (its suit lockers high on the wall); a short passage beside the washroom leads on to the mess and galley; the bunk room with a 2-high bunk against each side (four berths, each its owner's own); engineering at the back, reaching into the engine block. The cargo rides outside in the eight containers.",
  "rooms": [
   {
@@ -147,7 +148,8 @@
     0.5,
     2.5
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   },
   {
    "id": "passage-b",
@@ -159,7 +161,8 @@
     0.5,
     1.0
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   },
   {
    "id": "bunks",
@@ -509,5 +512,27 @@
    "h": 1.2,
    "name": "Engineering station"
   }
- ]
+ ],
+ "eyes": {
+  "wash": {
+   "at": [
+    -0.25,
+    1.35
+   ],
+   "look": [
+    -0.9,
+    2.2
+   ]
+  },
+  "bunks": {
+   "at": [
+    0,
+    -1.8
+   ],
+   "look": [
+    0,
+    -3.4
+   ]
+  }
+ }
 }

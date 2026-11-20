@@ -8,6 +8,7 @@
   "step": 0.5,
   "deck": 1.05
  },
+ "sliding": true,
  "idea": "Drawn from his own deck plan: the cockpit for four (two seats, two more behind them), then the crew area and mess, which the crew door opens straight into (his plan has no airlock), one 2-high bunk as his bunk picture has, the washroom beside a short passage, and a bigger engineering at the back reaching into the engine block. No cargo bay inside: the cargo rides outside in the eight containers.",
  "rooms": [
   {
@@ -26,7 +27,7 @@
   },
   {
    "id": "crew",
-   "name": "Crew area and mess",
+   "name": "Mess and crew area",
    "kind": "galley",
    "rect": [
     -1,
@@ -39,7 +40,7 @@
   },
   {
    "id": "bunks",
-   "name": "Crew bunks",
+   "name": "Bunks",
    "kind": "bunks",
    "rect": [
     -1,
@@ -123,7 +124,8 @@
     0.5,
     0.5
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   },
   {
    "id": "wash",
@@ -148,7 +150,8 @@
     0.5,
     -1.5
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   },
   {
    "id": "passage-b",
@@ -160,7 +163,8 @@
     0.5,
     -3.0
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   }
  ],
  "items": [
@@ -471,5 +475,27 @@
    "h": 1.8,
    "name": "Spares and tools"
   }
- ]
+ ],
+ "eyes": {
+  "wash": {
+   "at": [
+    -0.25,
+    -2.65
+   ],
+   "look": [
+    -0.9,
+    -1.8
+   ]
+  },
+  "bunks": {
+   "at": [
+    0.55,
+    0.2
+   ],
+   "look": [
+    -0.7,
+    -1.0
+   ]
+  }
+ }
 }

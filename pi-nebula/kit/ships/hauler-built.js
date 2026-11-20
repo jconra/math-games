@@ -792,8 +792,12 @@ export const LAB = {
   // 'canisters', named for this ship by `cargo`), the gear, the way in, the dirt, the throttle)
   controls: ['thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
   cargo: { name: 'Containers', tip: 'The eight containers in their clamp frames, or all unloaded: the jaws open, each container slides out and is lifted away' },
+  // (the rooms built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with them (the
+  // cockpit closed by the cabin's own wall, the airlock stub down to the door's jambs and head), and the ship's own door
+  // as the cabin meets it: its head over the deck (the slope over it starts there), where the deck stops at its sill)
+  cabin: { swap: { hbCockpit: { 'two seats': 'two seats, cabin' }, hbAirlock: { port: 'port, cabin' } }, outer: { head: +(CREWDOOR.head - DECK).toFixed(3), sill: +(sectX(CREWDOOR.sill) - 0.01).toFixed(3) } },
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
-  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] } },
+  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] }, Cockpit: { at: [0.25, 2.75, 6.15], look: [-0.1, 2.25, 3.2] } },
   doorTip: 'Open the crew door (it lifts, then the stair swings down to the ground), or shut it',
   gearTip: 'Draw the landing legs up into their pods, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),

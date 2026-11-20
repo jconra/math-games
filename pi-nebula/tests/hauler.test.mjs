@@ -88,4 +88,9 @@ test('the Hauler\'s kit is named as the other ships\' kits are', () => {
   const known = new Set(['arms', 'thrusters', 'canisters', 'ramps', 'rampCount', 'gear', 'door', 'dirt', 'throttle']);
   for (const k of ctl) assert.ok(known.has(k), `a control of its own: ${k}`);
   for (const k of ['thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle']) assert.ok(ctl.includes(k), k);
+  // the rooms inside, as the others have them: LAB.cabin's pieces that change (each a variant the catalog has) and its
+  // outer door
+  const H2 = src('hauler'), cab = H2.match(/cabin: \{ swap: \{(.*?)\} \}, outer: \{ head: (.*?), sill: (.*?) \} \}/);
+  assert.ok(cab, 'LAB.cabin { swap, outer: { head, sill } }');
+  for (const [, piece, to] of cab[1].matchAll(/(hb\w+): \{ [^:]+: '([^']+)' \}/g)) assert.ok(new RegExp(`${piece}: \\{[^\\n]*variants: \\[[^\\]]*'${to}'`).test(H2), `${piece} has the variant '${to}'`);
 });

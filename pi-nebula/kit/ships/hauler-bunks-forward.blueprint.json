@@ -8,6 +8,7 @@
   "step": 0.5,
   "deck": 1.05
  },
+ "sliding": true,
  "idea": "The bunk room right behind the airlock (four berths), so the crew sleep by the cockpit; the mess and galley in the middle of the ship; the washroom beside a short passage between the mess and engineering. The cargo rides outside in the eight containers.",
  "rooms": [
   {
@@ -171,7 +172,8 @@
     0.5,
     -2.0
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   },
   {
    "id": "passage-b",
@@ -183,7 +185,8 @@
     0.5,
     -3.5
    ],
-   "width": 0.8
+   "width": 0.8,
+   "leaves": -1
   }
  ],
  "items": [
@@ -496,5 +499,27 @@
    "h": 1.2,
    "name": "Engineering station"
   }
- ]
+ ],
+ "eyes": {
+  "wash": {
+   "at": [
+    -0.25,
+    -3.15
+   ],
+   "look": [
+    -0.9,
+    -2.3
+   ]
+  },
+  "bunks": {
+   "at": [
+    0,
+    2.2
+   ],
+   "look": [
+    0,
+    0.6
+   ]
+  }
+ }
 }
