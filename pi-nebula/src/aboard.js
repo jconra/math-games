@@ -24,8 +24,9 @@
 //     ship's doors are too narrow to step aside in, so they wait in the room). The player still coming on at them
 //     after a moment (WALK.back: in a passage too narrow to get round them, the Miner's mess past its table), they turn
 //     back to the place they just left and sit or lie there again, out of the way (aboardplan.js inTheWay, wayBack); on
-//     again as ever once their while there is up. (Waiting alone, the two stood face to face for good: the walk out
-//     of the Miner after a run, through its mess to the lift, was stopped by the captain standing in it, 2026-11-20.)
+//     again as ever once their while there is up. The last step, from beside a seat onto it, is never waited over:
+//     sitting down takes them out of the way. (Waiting alone, the two stood face to face for good: the walk out of
+//     the Miner after a run, through its mess to the lift, was stopped by the captain standing in it, 2026-11-20.)
 //   - DRAWN WHERE THE SHIP IS: each figure is placed in the ship's own frame and drawn by the ship's matrix just now
 //     (late(M)): parked, flown about the station, or out in the field (the same one matrix as the player on their feet).
 //   - LYING: the figure laid on its back along the bed, its head at the bed's head end (not climbed into: it is there).
