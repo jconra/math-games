@@ -6,7 +6,7 @@
 //                         asked only until it stands). soon: the player is in the lift. The file is fetched the
 //                         first time that is so (as Cargo's people are made then: src/people.js THE PLACES ONLY THE LIFT
 //                         GOES TO), never at the game's start; the ride down hides the wait.
-//   forklift.state()      { asked, fetched, standing, ms, facts, error } for the rigs
+//   forklift.state()      { asked, fetched, standing, ms, facts, wallsKB, error } for the rigs
 // PUT IN where nobody sees it come: while Cargo is not drawn (the lift's doors are shut on the way down), or else
 // while its place is out of the camera's view; and never onto someone standing there (a slow phone's player could be
 // down there before the file is). Once in, it stays.
@@ -24,7 +24,7 @@ export function makeCargoForklift({ W, walls }) {
   const [x0, x1, z0, z1] = forkliftBox();
   const box = new THREE.Box3(new THREE.Vector3(x0, STORE.floor, z0), new THREE.Vector3(x1, STORE.floor + 2.3, z1));
   const _f = new THREE.Frustum(), _m = new THREE.Matrix4();
-  const S = { asked: false, fetched: false, standing: false, ms: {}, facts: null, error: null };
+  const S = { asked: false, fetched: false, standing: false, ms: {}, facts: null, wallsKB: 0, error: null };
   let F = null, made = null, t0 = 0;
   function seen(camera) {
     if (!zone.group.visible || !camera) return false;
@@ -39,6 +39,7 @@ export function makeCargoForklift({ W, walls }) {
     made.light(W.envAt(new THREE.Vector3((x0 + x1) / 2, STORE.floor + 1, (z0 + z1) / 2)), SHINE);
     const L = walls.add(KEY, { solid: made.solid });
     S.standing = true; S.ms.put = Math.round(performance.now() - t); S.ms.walls = L.ms; S.ms.fromAsked = Math.round(performance.now() - t0);
+    S.wallsKB = L.V ? Math.round(L.V.bytes / 1024) : 0;
   }
   return {
     update(soon, { camera = null, feet = () => [] } = {}) {
