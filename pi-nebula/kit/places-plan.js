@@ -63,12 +63,13 @@ export const DESK = { deep: 1.0, h: 0.78, chairOut: 1.05 };
 
 // ── THE STORE, the whole lower level (kit/outside-plan.js DECK_PATH: the deck under the west rooms, from the cargo
 // slots' face east to under the hangars' back edge). Its floor is the cargo slots' own foot, so a container's end
-// stands on it. Its walls stand on the station's grid lines inside the deck's hull: the west wall on the slots' face,
-// the north wall, the east wall under the hangars, the south wall under the terminal's, and across the cut corner
+// stands on it. Its walls stand on the station's grid lines inside the deck's hull: the north wall, the east wall
+// under the hangars, the south wall under the terminal's; the west wall 0.4 m in from the slots' face (the walls
+// between the slots outside, kit/outside-plan.js dockPlans, bring their plates in that far); and across the cut corner
 // one slanting wall, half a metre inside the hull's own slant.
-export const STORE = { floor: -4.75, h: 3.75, x0: -7, x1: 25, z0: -9, z1: 37,
+export const STORE = { floor: -4.75, h: 3.75, x0: -6.6, x1: 25, z0: -9, z1: 37,
   // the slanting wall's line (the side away from the room) from its north end to its west end
-  cut: [[8.84, -9], [-7, -2.96]] };
+  cut: [[8.84, -9], [-6.6, -3.114]] };
 // the four cargo slots in the west wall (kit/outside-plan.js SLOTS): their middles along z, the opening's size; the
 // first three hold a container whose inner end comes in to x = END (the outside's own containers: SLOTS.x - 0.45 +
 // DOCK.in), the fourth is empty and has a shield across it, as a hangar door has

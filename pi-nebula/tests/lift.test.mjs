@@ -135,7 +135,8 @@ test('the store: the whole lower level inside the deck\'s hull, its floor the ca
   // about 30 m by 45 m, as the drawing has it
   assert.ok(STORE.x1 - STORE.x0 >= 30 && STORE.z1 - STORE.z0 >= 45);
   // the slots: the outside's own, and the containers' ends come in as far as the outside's containers do
-  assert.deepEqual(SLOT.z, SLOTS.z); assert.deepEqual(SLOT.full, SLOTS.full); assert.equal(STORE.x0, SLOTS.x);
+  assert.deepEqual(SLOT.z, SLOTS.z); assert.deepEqual(SLOT.full, SLOTS.full);
+  assert.ok(STORE.x0 > SLOTS.x + 0.35 && STORE.x0 < SLOTS.x + 0.5, 'the west wall stands just in from the slots\' face, in front of the walls between the slots outside');
   assert.ok(Math.abs(SLOT.end - (SLOTS.x - 0.45 + DOCK.in)) < 0.01);
 });
 
