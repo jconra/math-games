@@ -58,6 +58,7 @@ import { CORE_TAG } from '../kit/shipparts/cabin/reactor.js';
 import * as EB from '../kit/ships/explorer-built.js';
 import * as MD from '../kit/ships/medic-built.js';
 import * as MB from '../kit/ships/miner-built.js';
+import { POD as MB_POD } from '../kit/ships/miner-built.hull.js';
 import { shine } from './player.js';
 import { frameOf } from './standing.js';
 import { coreIn } from './missions.js';
@@ -68,12 +69,16 @@ import { coreIn } from './missions.js';
 // Medic's ramp unfolds its foot). `lifts`: a way in that people ride instead (the Miner's belly lift: LIFTS below),
 // by piece, with where to stand on the hangar floor to step onto it (`foot`: in the ship's frame, x to port, z to the
 // nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.) `cockpit`: its
-// module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js). `flight`: its kit's
-// facts for being flown (its engine's nozzles and jets, its thruster pods if any: src/shiphull.js).
+// module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js). `flight`: how it is
+// flown (src/shiphull.js), from its kit's own exports, in the same shape for every ship (flight below).
+// HOW A SHIP IS FLOWN, from its kit: its main engine's nozzles (its jetNozzles) and their jets' look (JET), its deck over
+// its ground line (DECK), and its thruster pods if it has any (their piece, half their length, their jets' look:
+// POD_JET; none: null)
+export const flight = (kit, pods = null) => ({ nozzles: kit.jetNozzles, jet: kit.JET, deck: kit.DECK, pods });
 export const SHIPS = [
-  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: EB.FLIGHT, ways: ['ebAirstair'] },
-  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: MD.FLIGHT, ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
-  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: MB.FLIGHT, ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
+  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: flight(EB), ways: ['ebAirstair'] },
+  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: flight(MD), ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: flight(MB, { piece: 'mbPod', half: MB_POD.size[2] / 2, jet: MB.POD_JET }), ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
 // (every ship flies the same way, src/fleet.js; in the game itself only the Miner is flown yet: the Explorer and the

@@ -820,11 +820,6 @@ export const STREAKS = [
 export const GRIME = { dirt: { value: 0.45 } };
 export const grimeMaterials = (mats, { dirt } = {}) => C.grimeMaterials(mats, { dirt, streaks: STREAKS, deck: DECK, grime: GRIME, key: 'ebgrime', glowKey: 'ebglow' });
 
-// ── FLOWN (the one shared ship piece: src/fleet.js, src/shiphull.js), in the same shape for every ship: its main
-// engine's nozzles in its own frame (a function, as jetNozzles) and their jets' look; its thruster pods, if it has any
-// (null: none); its cabin's deck over its ground line
-export const FLIGHT = { nozzles: jetNozzles, jet: JET, pods: null, deck: DECK };
-
 // ── IN THE SHIP LAB (labs/ships/main.js): this ship's controls, its close views, its materials, its jets, and how its
 // moving parts follow the menu (st: the lab's state; ctx: { updateDoors (the kit's), person (the lab's person, whose
 // coming near opens the airstair) })

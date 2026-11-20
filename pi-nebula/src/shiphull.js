@@ -1,7 +1,7 @@
 // A SHIP'S HULL, FLOWN: the part of the one shared ship piece that draws a ship where it is flown, turns and fires its
 // thruster pods if it has any, lights its engine's glow and blows the dust about under it (the plain part, and the
-// list of what each ship is: src/fleet.js). The same for every ship, from its kit's FLIGHT (its nozzles and their
-// jets' look, its pods) and its room of the station.
+// list of what each ship is: src/fleet.js). The same for every ship, from how its kit says it is flown (its nozzles and
+// their jets' look, its pods: src/boarding.js SHIPS `flight`) and its room of the station.
 //
 // THE GAME'S MAKER (2026-11-19): "Yeah I was hoping that the ships will basically all fly the same and share the same
 // class so that we don't have a lot of repetitive work and code." And of the Miner's landing (2026-11-17): "It should
@@ -17,7 +17,7 @@
 // it in its bay.
 //
 //   const H = makeHull({ W, id, kit, skip, hangar })
-//     kit      the ship's kit's FLIGHT (kit/ships/<ship>-built.js): { nozzles(), jet, pods: { piece, half, jet } | null, deck }
+//     kit      how its kit is flown (src/boarding.js flight): { nozzles(), jet, pods: { piece, half, jet } | null, deck }
 //     skip     a pattern of mesh names that are not the hull's to move (the Miner's canisters: the crane puts each
 //              where it is, src/crane.js)
 //     hangar   the hangar's room the pods and the air are drawn with (default: the one the ship is drawn with)

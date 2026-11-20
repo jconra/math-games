@@ -41,7 +41,7 @@ test('every ship\'s entry is in the same shape, and true to the station file and
   assert.deepEqual(F.SHIP_IDS, ['miner', 'explorer', 'medic']);
   const keys = (s) => Object.keys(s).filter((k) => k !== 'claw').sort();
   // (the ships that are boarded, with their blueprints, as src/boarding.js lists them: read from its text, it loads three.js)
-  const BOARD = Object.fromEntries([...read('../src/boarding.js').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, cockpit: [\w.]+, bp: '([\w-]+)', flight: ([A-Z]+)\.FLIGHT/g)].map((m) => [m[1], m[2]]));
+  const BOARD = Object.fromEntries([...read('../src/boarding.js').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, cockpit: [\w.]+, bp: '([\w-]+)', flight: flight\(([A-Z]+)(, \{ piece: '\w+', half: [^}]+, jet: [\w.]+ \})?\)/g)].map((m) => [m[1], m[2]]));
   for (const s of F.SHIPS) {
     assert.deepEqual(keys(s), keys(F.SHIPS[0]), s.id + ': the same facts as every other ship');
     const cfg = F.flightOf(s.id), placed = STATION.places.ships[s.id];
@@ -52,10 +52,10 @@ test('every ship\'s entry is in the same shape, and true to the station file and
     assert.ok(STATION.rooms.some((r) => r.id === cfg.room), s.id + ': its room is in the station file');
     // (its parked turn: none, or half way round for a ship parked nose in)
     const f = M.parkedNose(cfg); assert.ok(Math.abs(f[0] - s.nose) < 1e-12 && Math.abs(f[2]) < 1e-12, s.id + ': its nose points as it is parked');
-    // its kit: a FLIGHT export, in the same shape; its line in boarding.js names it
+    // how it is flown: its line in boarding.js, from its kit's own exports (its nozzles, their jets' look, its deck)
     const kit = read(`../kit/ships/${s.id}-built.js`);
-    assert.match(kit, /export const FLIGHT = \{ nozzles: jetNozzles, jet: JET, pods: (null|\{ piece: '\w+', half: [^}]+, jet: \w+ \}), deck: DECK \};/, s.id + ': its kit says how it is flown');
-    assert.ok(BOARD[s.id], s.id + ': boarded, its kit\'s FLIGHT handed on');
+    for (const k of ['export function jetNozzles', 'export const JET', 'export const DECK']) assert.ok(kit.includes(k), `${s.id}: its kit has ${k}`);
+    assert.ok(BOARD[s.id], s.id + ': boarded, and how it is flown handed on from its kit');
     // THE PILOT'S EYES: over the middle of its blueprint's pilot's seat, 1.27 m over the cockpit's floor
     const bp = JSON.parse(read(`../kit/ships/${BOARD[s.id]}.blueprint.json`)), deck = JSON.parse(read(`../assets/ships/${bp.shell}.space.json`)).deck;
     const floor = +kit.match(/export const COCKPIT = \{ floor: ([\d.]+)/)[1];

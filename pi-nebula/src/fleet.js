@@ -9,8 +9,8 @@
 // SO ONE PIECE FLIES EVERY SHIP, and a ship is its data:
 //   - ITS KIT (kit/ships/<ship>-built.js): what it is built of. The shared piece reads from there its deck and cockpit
 //     (src/boarding.js SHIPS: `lab`, `cockpit`), its ways in (its doors that come down to the floor, or a lift), its
-//     engine's nozzles, their jets' look and its thruster pods if it has any (the kit's FLIGHT), and its legs (they
-//     stay down as it flies, the Miner's too).
+//     engine's nozzles, their jets' look and its thruster pods if it has any (boarding's `flight`, from the kit's own
+//     jetNozzles, JET, DECK and POD_JET), and its legs (they stay down as it flies, the Miner's too).
 //   - ONE ENTRY HERE (SHIPS below), every one in the same shape: its name; where it is parked (its hangar, which way
 //     its nose points there; its pad is the station file's); its shape, as a few boxes (what it bumps by when flown,
 //     what is bumped and shoved when it is parked and another ship comes in; the small model in the landing guide);
@@ -23,9 +23,9 @@
 // drawn where it is flown, its pods turned and fired, its engine's glow, the air blown down under it), src/boarding.js
 // (boarded and walked, flown with its cabin), src/visit.js (in another ship's hangar).
 //
-// A FOURTH SHIP (the Hauler's kit is being made to the same shape): its kit with a FLIGHT export, its line in
-// boarding.js SHIPS (its blueprint and ways in), its clips in voices.js SHIP_CLIPS, its room and pad in the station
-// file, and one more entry here.
+// A FOURTH SHIP (the Hauler's kit is made to the same shape): its line in boarding.js SHIPS (its blueprint, its ways in,
+// `flight` from its kit), its clips in voices.js SHIP_CLIPS, its room and pad in the station file (in a hangar of its
+// own), and one more entry here.
 import { HANGARS, DOOR } from '../kit/outside-plan.js';
 import { bayOf } from './flysolid.js';
 

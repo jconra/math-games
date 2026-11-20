@@ -83,6 +83,7 @@ import * as MB from '../kit/ships/miner-built.js';
 // (the Miner's hull drawn where it is, its pods, its engine and the air under it: the one shared ship piece's, as for
 // every ship; the canisters, the round and the landing below are the crane's own)
 import { makeHull, FLIGHT } from './shiphull.js';
+import { SHIPS as BOARDED } from './boarding.js';
 import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 
@@ -147,7 +148,7 @@ export function makeCrane({ W, walls, boarding = null }) {
   // rack, and kit/crane.js puts each where it is, riding the ship's own move when it is on a mount (L.ship); the trays
   // are the ship's alone and ride with it. Its thruster pods, live doors so the landing can turn them, are drawn with
   // the hangar, as the crane's parts are, rather than wherever anyone is)
-  const hull = makeHull({ W, id: 'miner', kit: MB.FLIGHT, skip: /^mb:can/, hangar: room });
+  const hull = makeHull({ W, id: 'miner', kit: BOARDED.find((s) => s.id === 'miner').flight, skip: /^mb:can/, hangar: room });
   const ship = (() => {
     if (!hull) return null;
     const zone = hull.zone, meshes = hull.meshes;
