@@ -82,6 +82,8 @@ import * as THREE from 'three';
 import { buildRoom, updateDoors, loadRoom } from '../kit/layout.js';
 import { makeMaterials } from '../kit/materials.js';
 import * as MB from '../kit/ships/miner-built.js';
+import { POD } from '../kit/ships/miner-built.hull.js';
+import { makeFlight } from '../kit/ships/flight.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as SCAN } from './jobs/drill.js';
 import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, scanOf, rockSells } from './drill.js';
@@ -119,6 +121,10 @@ const BALL = 0.95;
 const T = { arrive: 1.4, turn: 0.3, down: 0.5, cut: 0.95, up: 0.35, breakUp: 1.7, release: 1.3, back: 0.8, full: 3.2 };   // seconds
 const FLY = { speed: 26, least: 2.4, most: 9, clear: 9 };   // flying over to a rock: metres a second, the shortest and longest it takes (s), how far other rocks are kept from the ship (m)
 const CAM_RATE = 2.4, SUN_K = 1.7, CUT_UP = 0.72, WHEEL = 0.4, BITE = 0.13;
+// (the thrusters at the rocks: the engine's idle; a push of `full` m/s² forward is full throttle; how quickly what the
+// pods are told follows the ship's own moving (a second ago's, eased); the most they are told; a move faster than `jump`
+// m/s is the ship put somewhere, not flown. The canopy's glass seen from outside)
+const JETS = { idle: 0.15, full: 9, ease: 6, most: 14, jump: 600, home: 0.7 }, GLASS_OUT = { opacity: 0.94, color: 0x05080c };
 const GLOW_PX = [34, 50, 0.38];   // a far rock's glow, across its radius: so many of the screen's dots at so many metres, and how slowly it shrinks further off
 
 const CSS = `
@@ -371,14 +377,33 @@ void main() {
   }
   #endif
   #ifdef HELD
-  float e = min(vB.x, min(vB.y, vB.z)), w = fwidth(e);
-  float crack = (1.0 - smoothstep(w * 0.7, w * 2.0, e)) * step(vF.y, uCrack);
-  c = mix(c, vec3(0.004), crack * 0.92) + uGlow * crack * 0.22 * uCrack;
+  // THE HOLES AND THE CRACKS (the game's maker, 2026-11-19: "Im also not a very big fan of the holes and cracks. The
+  // holes shouldn't have a glowing ring, and the crack should either lock natural (not trangles) or not at all."):
+  // a hole is a dark bore with a ragged edge, the rock a little darker round its lip, and no light round it. The cracks
+  // are the broken edges between lumps of the rock (never the edges of its triangles), running out from the holes and
+  // further with every hole made; dark, with no light in them.
   vec3 ld = normalize(vL / uSq);
+  float ragged = (vn3(vL * 13.0 + 2.0) - 0.5) * 0.0034, nearest = -1.0;
+  for (int i = 0; i < 8; i++) { if (i >= uHoleN) break; nearest = max(nearest, dot(ld, uHoles[i])); }
+  if (uCrack > 0.001 && uHoleN > 0) {
+    vec3 q = vL * 2.6 + 3.1; q += (vec3(vn3(q * 1.6), vn3(q * 1.6 + 5.2), vn3(q * 1.6 + 9.4)) - 0.5) * 0.7;
+    vec3 ci = floor(q), cf = fract(q); float f1 = 9.0, f2 = 9.0;
+    for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) {
+      vec3 g = vec3(float(x), float(y), float(z)), r = g + vec3(h31(ci + g), h31(ci + g + 17.3), h31(ci + g + 41.7)) - cf; float d2 = dot(r, r);
+      if (d2 < f1) { f2 = f1; f1 = d2; } else if (d2 < f2) f2 = d2;
+    }
+    float gap = sqrt(f2) - sqrt(f1), gw = fwidth(gap);
+    // (how far from a hole they have run: a little way after the first hole, about a quarter of the way round the rock
+    // when its last is made; whole by the hole, broken and thinning further off, so the rock is never tiled with them)
+    float reach = mix(0.975, 0.3, clamp(uCrack * 1.6, 0.0, 1.0)), spread = smoothstep(reach, reach + 0.2, nearest + (vn3(vL * 2.3 + 7.0) - 0.5) * 0.3);
+    float whole = mix(smoothstep(0.36, 0.62, vn3(vL * 2.9 + 1.7)), 1.0, smoothstep(0.90, 0.975, nearest));
+    c = mix(c, vec3(0.004), (1.0 - smoothstep(0.004 + gw * 0.6, 0.016 + gw * 1.5, gap)) * spread * whole * 0.88);
+  }
   for (int i = 0; i < 8; i++) {
     if (i >= uHoleN) break;
-    float a = dot(ld, uHoles[i]), h = smoothstep(0.984, 0.990, a);
-    c = mix(c, vec3(0.003), h) + uGlow * smoothstep(0.972, 0.984, a) * (1.0 - h) * 0.7;
+    float a = dot(ld, uHoles[i]) + ragged, h = smoothstep(0.984, 0.990, a);
+    c = mix(c, c * 0.5, smoothstep(0.970, 0.985, a) * (1.0 - h));
+    c = mix(c, vec3(0.003), h);
   }
   float band = 1.0 - smoothstep(0.0, 0.07, abs(vL.y - (uScan * 2.6 - 1.3)));
   c += vec3(0.25, 0.85, 1.0) * band * step(0.001, uScan) * 0.8;
@@ -473,7 +498,7 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'sparkle', rock = 'natural' }) {
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'dots', rock = 'natural' }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
   // FG: the field's own frame (where `at` puts it), still. G: the ship's frame, which moves through the field.
@@ -492,6 +517,53 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // (flown by hand: the flying says where the ship is, as its kit frame in the field's: src/flying.js `body`)
   function shipTo(M) { M.decompose(here.p, here.q, _s); placeShip(); }
   const yawOf = () => { _v.set(0, 0, 1).applyQuaternion(here.q); return Math.atan2(_v.x, _v.z); };
+  // THE SHIP'S THRUSTERS AND ITS ENGINE AT THE ROCKS (the game's maker, 2026-11-19, from the Drill Lab: "can you also
+  // make the thrusters turn and engine and thruster jets work? Or at least work in the game if they dont."): the same
+  // pods, jets and engine glow as its landing has (kit/ships/flight.js), told how the ship is moving from where it is
+  // one frame and the next, so they answer a tapped trip and the flying by hand alike. Standing still with a rock in
+  // the claw, the pods lie along the ship and the engine idles.
+  const thr = (() => {
+    const pods = built.doors.filter((D) => D.piece === 'mbPod' && D.hold == null && D.leaves.length && D.leaves[0].hinge);
+    if (!pods.length) return null;
+    const frame = new THREE.Matrix4().copy(pods[0].leaves[0].M).multiply(new THREE.Matrix4().makeTranslation(0, -MB.DECK, 0));
+    const fx = makeFlight({ pods, podHalf: POD.size[2] / 2, swing: { yaw: 1.2, pitch: 0.62 }, nozzles: MB.jetNozzles(), jet: MB.JET, podJet: { len: MB.POD_JET.len, gain: MB.POD_JET.gain, r: MB.POD_JET.r }, frame, parent: built.group, quality: 'medium' });
+    // (the field's frame to the hull's own numbers: x its left, y up, z its nose)
+    const toHull = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().multiplyMatrices(built.group.matrix, frame)).invert();
+    return { fx, frame, toHull, p: new THREE.Vector3(), q: new THREE.Quaternion(), v: new THREE.Vector3(), w: 0, acc: new THREE.Vector3(), spin: 0, engine: JETS.idle, had: false };
+  })();
+  const _fv = new THREE.Vector3(), _fa = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fw = new THREE.Vector3();
+  function flyStep(dt) {
+    if (!thr || dt <= 0) return;
+    const F = thr;
+    // (put somewhere at once, as on arriving: that is not a push)
+    if (!F.had || here.p.distanceTo(F.p) > JETS.jump * dt) { F.p.copy(here.p); F.q.copy(here.q); F.v.set(0, 0, 0); F.w = 0; F.had = true; }
+    _fv.copy(here.p).sub(F.p).divideScalar(dt); _fa.copy(_fv).sub(F.v).divideScalar(dt); F.v.copy(_fv); F.p.copy(here.p);
+    // (its turning about its own up, and how quickly that changes)
+    _fq.copy(here.q).multiply(F.q.invert()); if (_fq.w < 0) _fq.set(-_fq.x, -_fq.y, -_fq.z, -_fq.w); F.q.copy(here.q);
+    const ang = 2 * Math.atan2(Math.hypot(_fq.x, _fq.y, _fq.z), _fq.w), s = Math.hypot(_fq.x, _fq.y, _fq.z) || 1;
+    _fw.set(_fq.x / s, _fq.y / s, _fq.z / s).multiplyScalar(ang / dt).applyQuaternion(_q.copy(here.q).invert()).applyQuaternion(F.toHull);
+    const sp = (_fw.y - F.w) / dt; F.w = _fw.y;
+    _fa.applyQuaternion(_q.copy(here.q).invert()).applyQuaternion(F.toHull);
+    const k = 1 - Math.exp(-dt * JETS.ease);
+    F.acc.lerp(_fa.clampLength(0, JETS.most), k); F.spin += (Math.max(-JETS.most, Math.min(JETS.most, sp)) - F.spin) * k;
+    if (F.acc.lengthSq() < 1e-4) F.acc.set(0, 0, 0); if (Math.abs(F.spin) < 1e-3) F.spin = 0;
+    F.engine += (Math.max(JETS.idle, Math.min(1, JETS.idle + Math.max(0, F.acc.z) / JETS.full)) - F.engine) * k;
+    // (standing still: the pods swing back to lie along the ship)
+    if (F.acc.lengthSq() === 0 && F.spin === 0) for (const p of F.fx.pods) { p.yaw -= Math.max(-JETS.home * dt, Math.min(JETS.home * dt, p.yaw)); p.pitch -= Math.max(-JETS.home * dt, Math.min(JETS.home * dt, p.pitch)); }
+    F.fx.update(dt, { acc: F.acc, spin: F.spin, hold: 0, engine: F.engine, heat: 1 });
+  }
+  // THE CANOPY'S GLASS, SEEN FROM OUTSIDE (his words, the same evening: "we should either put the player models in the
+  // seats when you look at the ship, or tint the glass much darker"): much darker from outside, so the empty seats are
+  // not seen; from the seats it is the smoked glass it was. (This ship's own glass: no other ship's, no window's.)
+  const glass = ship.mats && ship.mats.glass ? { mat: ship.mats.glass, opacity: ship.mats.glass.opacity, color: ship.mats.glass.color.getHex(), inside: null, inv: thr ? new THREE.Matrix4().copy(thr.frame).invert() : null } : null;
+  function glassStep() {
+    if (!glass) return;
+    // (the eye in the hull's own numbers: under the canopy, by the seats, or not)
+    _v.copy(camera.position).applyMatrix4(_m.copy(built.group.matrixWorld).invert()); if (glass.inv) _v.applyMatrix4(glass.inv);
+    const C = MB.COCKPIT, inside = !!glass.inv && Math.abs(_v.x) < C.tubX + 0.5 && _v.y > MB.DECK && _v.y < MB.DECK + C.floor + 2.6 && _v.z > C.seatsZ - 1.7 && _v.z < C.seatsZ + 2.6;
+    if (inside === glass.inside) return;
+    glass.inside = inside; glass.mat.opacity = inside ? glass.opacity : GLASS_OUT.opacity; glass.mat.color.setHex(inside ? glass.color : GLASS_OUT.color);
+  }
 
   // ── the rocks' materials: the ones in the field; the one in the claw (its holes, its cracks, the scan's sweep) ──
   // THE LIGHT ON THE ROCKS (the game's maker, 2026-11-19, with a picture of a field of rocks lit hard from one side by
@@ -1094,6 +1166,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const S = V.stage;
     if (S === 'fly') stepShip();
     placeShip();
+    flyStep(dt); glassStep();
     // the arms: the wrist's turn (a flick of it running on a little), the fingers shut on the rock in the hand, the
     // cutter waiting just above or where the hole wants it
     const cutting = S === 'drill' && V.sub === 'cut';
@@ -1319,6 +1392,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     closePanel(); removeEventListener('keydown', onKey); el.remove();
     for (const id of [...seen.keys()]) dropSeen(id);
     if (H) { G.remove(H.mesh); H.mesh.geometry.dispose(); H = null; }
+    if (thr) { thr.fx.rest(); built.group.remove(thr.fx.group); }
+    if (glass) { glass.mat.opacity = glass.opacity; glass.mat.color.setHex(glass.color); }
     G.remove(built.group); scene.remove(G, FG, sun, sun.target); boom.geometry.dispose(); boom.material.dispose();
     for (const im of backdrop.list) FG.remove(im); backdrop.geo.dispose(); farMat.dispose(); chips.geometry.dispose(); glow.geometry.dispose(); glow.material.dispose(); veins.geometry.dispose(); veins.material.dispose(); FG.remove(dust); dust.geometry.dispose(); dust.material.dispose(); crystals.geometry.dispose(); crystals.material.dispose(); for (const o of seen.values()) o.mat.dispose(); fieldMat.dispose(); heldMat.dispose();
     camera.near = was.near; camera.far = was.far; camera.fov = was.fov; camera.updateProjectionMatrix();
@@ -1341,6 +1416,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       }
       return out.sort((p, q) => q.worth - p.worth);
     },
+    glass: () => (glass ? { inside: glass.inside, opacity: glass.mat.opacity } : null), jets: () => (thr ? { acc: thr.acc.toArray().map((x) => +x.toFixed(2)), spin: +thr.spin.toFixed(3), engine: +thr.engine.toFixed(2), pods: thr.fx.pods.map((p) => [+p.yaw.toFixed(2), +p.pitch.toFixed(2)]) } : null),
     pick, scan, drillAt, letGo, headHome, turnBy, spotAt, lookTo: (yaw, pitch = 0) => { look.yaw = yaw; look.pitch = pitch; cam.fresh = true; },
     hand: () => (H ? { turn: +H.turn.toFixed(3), axis: wristAxis.toArray().map((x) => +x.toFixed(3)), sign: wristSign, cut: cutDir.toArray().map((x) => +x.toFixed(3)), at: H.centre.toArray().map((x) => +x.toFixed(2)), grip: H.grip, gripMs: +(H.gripMs || 0).toFixed(2), cutter: cutQ ? { ...cutQ } : null, wait: { ...cutWait } } : null),
     // how near the cutter's wheel gets to spots all round the rock: [{ from (degrees round from the far end of the rock,

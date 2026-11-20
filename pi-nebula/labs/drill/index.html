@@ -33,7 +33,7 @@
   <h1>Drill Lab</h1><a href="../">All labs</a>
   <button type="button" id="new">New field</button>
   <button type="button" id="ask" aria-pressed="true">Question: on</button>
-  <button type="button" id="ore" title="How the ore in the rocks is shown: press to go round the looks">Ore: sparkle</button>
+  <button type="button" id="ore" title="How the ore in the rocks is shown: press to go round the looks">Ore: dots</button>
   <button type="button" id="rock" title="How a rock's own skin is drawn: its flat faces, or a more natural rock">Rock: natural</button>
   <button type="button" id="sliders" aria-pressed="false" title="Show or hide the look's sliders">Sliders</button>
   <label class="rng" title="The soft glow under the ore">Glow <input type="range" id="glow" min="0" max="1.5" step="0.05"><b></b></label>
@@ -46,6 +46,6 @@
 </div>
 <div id="loading">Unfolding the arms…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=14').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=15').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>
