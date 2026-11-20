@@ -84,6 +84,9 @@ function wreckAddress(u) {
   else { u.searchParams.set('paint', paint); u.searchParams.set('pieces', breaks); }
   return u;
 }
+// the menu's line about it: the wreck as it is shown (said again when its colours are changed where it lies)
+const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}.` : '');
+function repaint(id) { wreck.paint(id); const s = document.getElementById('wreckSay'); if (s) s.textContent = wreckSay(); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
 
 // ── the camera ───────────────────────────────────────────────────────────────────────────────────────────────────
 const cam = { pos: new THREE.Vector3(0, 60, 80), yaw: 0, pitch: 0.2 };
@@ -234,8 +237,7 @@ async function build(seed, { keepView = false } = {}) {
     history.replaceState(null, '', wreckAddress(u).href);
     keep({ seed });
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
-    const wr = wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}.` : '';
-    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}.${wr} <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
+    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}.<span id="wreckSay">${wreckSay()}</span> <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
     loading.hidden = true; LAB.ready = true; paintChips();
   })();
   try { await building; } finally { building = null; }
@@ -254,7 +256,7 @@ function paintChips() {
   $('wrecks').replaceChildren(chip('None', wreckWant === 'none', () => { if (wreckWant === 'none') return; wreckWant = 'none'; if (viewName === 'wreck') viewName = 'landing'; reWreck(); }, true),
     chip('Each rescue', wreckWant === 'any', () => { if (wreckWant === 'any') return; wreckWant = 'any'; reWreck(); }, true),
     ...WRECK_SHIPS.map((s) => chip(SHIP_NAMES[s], wreckWant === s, () => { if (wreckWant === s) return; byHand(); wreckWant = s; reWreck(); }, true)));
-  $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, shown.paint === id, () => { if (shown.paint === id) return; const was = byHand(); paint = id; keep(was ? { wreck: wreckWant, paint, pieces: breaks } : { paint }); if (wreck) { wreck.paint(id); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); } paintChips(); }, true); b.title = P.about; return b; }));
+  $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, shown.paint === id, () => { if (shown.paint === id) return; const was = byHand(); paint = id; keep(was ? { wreck: wreckWant, paint, pieces: breaks } : { paint }); if (wreck) repaint(id); paintChips(); }, true); b.title = P.about; return b; }));
   $('breaks').replaceChildren(...[[2, 'In two'], [3, 'In three']].map(([n, t]) => chip(t, shown.pieces === n, () => { if (shown.pieces === n) return; byHand(); breaks = n; reWreck(); }, true)));
   for (const id of ['paints', 'breaks']) { const el = $(id); for (const c of el.children) c.hidden = wreckWant === 'none'; if (el.previousElementSibling) el.previousElementSibling.hidden = wreckWant === 'none'; }
   $('quality').replaceChildren(...Object.entries(QUALITY).map(([id, v]) => chip(v.name, quality === id, () => { if (id === quality) return; keep({ q: id }); const u = new URL(location.href); u.searchParams.set('q', id); location.href = u.href; }, true)));
@@ -314,7 +316,7 @@ LAB.setWreck = async ({ ship, paint: p, pieces } = {}) => {
   else { byHand(); if (WRECK_SHIPS.includes(ship)) wreckWant = ship; if (PAINTS[p]) paint = p; if (pieces === 2 || pieces === 3) breaks = pieces; }
   const w = planet ? wreckPick(planet.land.seed) : null;
   if (planet && (w ? `${w.ship} ${w.pieces}` : 'none') !== had) await build(planet.land.seed, { keepView: true });
-  else if (wreck && w) { wreck.paint(w.paint); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
+  else if (wreck && w) repaint(w.paint);
   paintChips(); return wreck ? wreck.stats : null;
 };
 
