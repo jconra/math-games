@@ -273,8 +273,14 @@ export const HAIR_COLOURS = ['#17110d', '#2e1f15', '#4a2f1d', '#6b4127', '#8f5a3
 // streaks: ~/pw/space-math/shots/character-1/q11_pink_hair.jpg). The hairs named here take a colour by their light and
 // dark alone instead (the picture's greyscale, worked out in the shader: no file is changed): the colour picked times
 // each texel's lightness against the hair's own mean. Worn in its own colour (no hair colour given) such a hair is
-// drawn exactly as made, pink and all. lib.hairByLight = false: as before (the checks' before picture).
-export const HAIR_BY_LIGHT = ['pinkSide'];
+// drawn exactly as made, pink and all.
+// EVERY HAIR SO (the same day; the game's maker, shown the pink hair before and after: "Color every hair this way, not
+// only the pink one"): every hair mesh takes a colour by its own light and dark (the card hairs, the paint hairs and
+// the scalp's shade under a hair already did: the strand atlas is grey). HAIR_BY_LIGHT true: every hair; a list: only
+// the hairs named (['pinkSide']: as it was before this). lib.hairByLight, when set, in its place (false: none, the
+// shift for every hair, as at first; the checks' before pictures).
+export const HAIR_BY_LIGHT = true;
+const hairByLight = (lib, id) => { const L = lib.hairByLight === undefined ? HAIR_BY_LIGHT : lib.hairByLight; return L === true || (Array.isArray(L) && L.includes(id)); };
 
 // a visor's faces (kit/crew.js visorMaterial), in the order its shader numbers them
 export const EXPRESSIONS = { neutral: 'Neutral', happy: 'Happy', thinking: 'Thinking', surprised: 'Surprised' };
@@ -1439,12 +1445,15 @@ const STRAND_LIGHT = `
 // forehead. Only where the skin faces forward (never the sides of the head or the neck), and only on skin (the mask).
 // A head with no eyes of its own (Vega's helmet) takes none. They ride the head as its skin does: the dots are worked
 // out from each point's place at rest. Only a head whose recipe asks for them is given this shader.
-// Two sizes together: a few big ones (3 to 5 mm: these are what shows on the title's small pictures, where a true
+// Two sizes together: a few big ones (3 to 4 mm: these are what shows on the title's small pictures, where a true
 // freckle is less than a dot of the screen) and many small ones between them, fainter (what shows close up).
 //   cell: the big dots' grid, in `e`s (an e is about 3 cm): one dot at most in each cell, placed anywhere in it (the
 //   small ones' grid is half that); dot: the smallest and largest dot's radius, of a cell; share: how many cells have a
 //   dot; tint: what the skin is multiplied by at a dot's middle; depth: how much of that is laid on (1: all)
-export const FRECKLES = { cell: 0.34, dot: [0.16, 0.26], share: 0.62, tint: [0.52, 0.36, 0.28], depth: 0.9 };
+// (2026-11-19, the game's maker, of the freckles: "The number is fine, but reduce the max size a bit": the largest
+// dot's radius 0.26 -> 0.21 of a cell, so the biggest are about 4 mm across, not 5; the smallest, the cells and the
+// share as they were)
+export const FRECKLES = { cell: 0.34, dot: [0.16, 0.21], share: 0.62, tint: [0.52, 0.36, 0.28], depth: 0.9 };
 const FRECKLE_GLSL = `
 uniform vec4 crFrecAt, crFrecLook, crFrecTint; uniform float crFreckles;
 varying vec3 vCrFrec;
@@ -3360,7 +3369,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
       if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       // (A HAIR COLOURED BY ITS OWN LIGHT AND DARK: set before the material is first drawn, so its shader is made with it)
-      if (kind === 'hair' && HAIR_BY_LIGHT.includes(R.hair) && lib.hairByLight !== false) mat.defines.CREW_HAIR_LIGHT = '';
+      if (kind === 'hair' && hairByLight(lib, R.hair)) mat.defines.CREW_HAIR_LIGHT = '';
       if (pt) { painted = pt; pt.mat = mat; }
       // (the hands, when no skin tone is given, take the head's own skin: HANDS)
       const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
