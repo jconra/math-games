@@ -168,7 +168,8 @@
 //   lib.seats (the older layer over a head's older `seat`); HEAD_LIMITS; c.place (the place a person wears)
 //   lib.armsOf(suit id) -> its arm thickness (ARM THICKNESS; 1 as made); lib.arms { suit id: thickness } (a layer over
 //   crew.json's, the Crew Lab's while it's tried); ARMS_LIMITS; c.arms (the thickness a person wears); CALM (THE CALM
-//   STANDING POSE) and lib.calm (tried in its place: set before an outfit's clips are first fitted)
+//   STANDING POSE) and lib.calm (tried in its place: set before an outfit's clips are first fitted); FINGERS (THE
+//   FINGERS RELAXED) and lib.fingers (the same)
 //   lib.armsOutOf(suit id) -> { stand, move } (ARMS OUT, degrees: the standing clips' and the moving clips', the
 //   suit entry's `armsOut` and `armsOutMove`); lib.armsOut and lib.armsOutMove { suit id: ... } (tried in their place);
 //   c.armsOut (a person's), c.armsOutNow() (the angle worn this frame, the playing clips' mixed by their weights)
@@ -424,10 +425,12 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
         const rig = shoulderRig(handRig(g.scene.userData.crewRig, hg ? hg.scene.userData.crewRig : null), moves);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
         const clips = retargetClips(await lib.rawClips(body), rig, rest);
-        // (the crew's own copies: THE CALM STANDING POSE, THE HANDS ON THE THIGHS (sitting) and ON A WHEEL (driving), THE
-        // WRISTS A PERSON'S; lib.calm, lib.seat, lib.drive and lib.wrists tried in their places, null: that step left out)
+        // (the crew's own copies: THE CALM STANDING POSE, THE FINGERS RELAXED, THE HANDS ON THE THIGHS (sitting) and ON A
+        // WHEEL (driving), THE WRISTS A PERSON'S; lib.calm, lib.fingers, lib.seat, lib.drive and lib.wrists tried in their
+        // places, null: that step left out)
         const has = (k) => Object.prototype.hasOwnProperty.call(lib, k);
         const C0 = lib.calm || CALM; let cl = calmStand(clips, g.scene, { ...C0, ...((C0[body]) || {}) }, moves, rig);
+        cl = relaxFingers(cl, g.scene, rig, moves, has('fingers') ? lib.fingers : FINGERS);
         cl = seatedArms(cl, g.scene, hg ? hg.scene : null, rig, moves, has('seat') ? lib.seat : SEAT, has('drive') ? lib.drive : DRIVE);
         cl = humanWrists(cl, g.scene, has('wrists') ? lib.wrists : WRISTS);
         return { body, rig, moves, shoulders: sh, clips: cl, stride: strideOf(rig, body) };
@@ -554,7 +557,8 @@ export function retargetClips(clips, rig, rest = {}) {
 // palms had come to face BACKWARD with the thumbs into the thighs (the hands' rest turn is 45 degrees off palms-down), and
 // the hand part's own line, some 10 degrees off its forearm's, hung as a hand bent out at the wrist. Now THE PALMS TO THE
 // THIGHS (below): the thumbs forward, the palms to the thighs, the wrists straight; the fingers a hand's at rest, a
-// little curled (CALM.fingers: Sit_Listen's first frame; Idle's held them spread); and the arms aimed nearer straight
+// little curled (CALM.fingers: Sit_Listen's first frame; Idle's held them spread; from 2026-11-20 straightened and
+// brought together after: THE FINGERS RELAXED, below); and the arms aimed nearer straight
 // down (they were [5, 3] and [4, 14]). And (station life's blind critic: people standing about "knees bent, hips back,
 // as if half-sitting") the body blended toward its REST, straight up as the outfit was built (CALM.stand 'rest': the
 // knees straight, the hips over the feet), not toward Idle's first frame, its sway at CALM.shift 0.3 of the clip's own
@@ -720,6 +724,71 @@ function calmStand(clips, scene, C = CALM, moves = null, rig = null) {
   out.userData = { ...(src.userData || {}), calm: true };
   return clips.map((c, j) => (j === i ? out : c));
 }
+// THE FINGERS RELAXED (2026-11-20; the game's maker, of a man standing in the character maker's window and of men
+// sitting with their hands on their knees: "Can we fix their hands so they aren't curved inward like that? It looks
+// like they want to hold something. Just straight fingers going straight down, or at least more relaxed would be
+// better", "the fingers being curled looks odd"). The Mathwood clips the crew stand in (the calm stand, whose fingers
+// are Sit_Listen's: CALM.fingers) and sit in hold every finger bent at each of its four joints (14, 28, 28 and 28
+// degrees, the thumb 15 at each of its three: a hand cupped round something). The crew's own copies (made here at load,
+// before the sitting hands are placed on the thighs, so the lift is worked out for the hand as it now is; Mathwood's
+// files and people as they are), in the clips FINGERS.clips names:
+//   each finger joint turned back toward its rest (the bones as built: a flat hand) to keep FINGERS.bend of the clip's
+//     own bend, about the clip's own axis; the thumb's joints FINGERS.thumb of theirs;
+//   the fingers brought together: the hand as built holds them fanned out (a hand laid flat with its fingers spread), so
+//     each finger is turned in the palm's plane toward the middle finger, FINGERS.together of the way;
+//   the thumb brought in toward the index finger, FINGERS.thumbIn of the way (as built it stands out from the hand).
+// A clip not named keeps its fingers: the walk and the run, the wave, the clapping, the wheel, the hammer, the forge
+// and the polishing rag (a hand that holds something keeps its grip). lib.fingers (as FINGERS) tries other values, set
+// before an outfit's clips are first fitted; null: left out (as before this).
+export const FINGERS = { clips: /^(Stand_Listen|Sit_Listen|Stool_Bar)$/, bend: 0.25, thumb: 0.5, together: 0.7, thumbIn: 0.7 };
+const FINGER_BONE = /^(Thumb|Index|Middle|Ring|Pinky)\d[LR]$/;
+function relaxFingers(clips, scene, rig, moves, F = FINGERS) {
+  if (!F || !clips.some((c) => F.clips.test(c.name))) return clips;
+  const bare = bareBones(scene); if (!bare) return clips;
+  const { B, holder } = bare;
+  if (moves) for (const [n, v] of Object.entries(moves)) if (B[n]) B[n].position.add(v);
+  // (the hand's own finger joints, as the person wears them: HANDS)
+  if (rig && rig.hand) for (const [b, v] of Object.entries(rig.dstRest || {})) { const X = B[clean(b)]; if (X && HAND_BONE.test(b)) X.position.fromArray(v); }
+  holder.updateMatrixWorld(true);
+  const rest = {}; for (const [n, b] of Object.entries(B)) if (FINGER_BONE.test(n)) rest[n] = b.quaternion.clone();
+  // (each side's swings, laid on a first bone in its parent's frame before the clip's own turn: the fingers toward the
+  // middle finger about the palm's normal, the thumb toward the index)
+  const swing = {}, W = (n) => B[n].getWorldPosition(new THREE.Vector3());
+  for (const s of ['L', 'R']) {
+    if (!B['Wrist' + s] || !B['Middle2' + s] || !B['Index1' + s] || !B['Pinky1' + s]) continue;
+    const mid = W('Middle2' + s).sub(W('Middle1' + s)).normalize(), across = W('Index1' + s).sub(W('Pinky1' + s));
+    const n = mid.clone().cross(across).normalize(), flat = (v) => v.addScaledVector(n, -v.dot(n)).normalize();
+    const toParent = (name, axis, ang) => { const pq = B[name].parent.getWorldQuaternion(new THREE.Quaternion()).invert(); return new THREE.Quaternion().setFromAxisAngle(axis.clone().applyQuaternion(pq).normalize(), ang); };
+    const m0 = flat(mid.clone());
+    for (const f of ['Index', 'Ring', 'Pinky']) {
+      const a = f + '1' + s; if (!B[a] || !B[f + '2' + s] || !F.together) continue;
+      const d = flat(W(f + '2' + s).sub(W(a))), ang = Math.atan2(d.clone().cross(m0).dot(n), d.dot(m0));
+      swing[a] = toParent(a, n, ang * F.together);
+    }
+    const t1 = 'Thumb1' + s;
+    if (F.thumbIn && B[t1] && B['Thumb3' + s] && B['Index2' + s]) {
+      const td = W('Thumb3' + s).sub(W(t1)).normalize(), id = W('Index2' + s).sub(W('Index1' + s)).normalize(), ax = td.clone().cross(id);
+      if (ax.lengthSq() > 1e-8) swing[t1] = toParent(t1, ax.normalize(), td.angleTo(id) * F.thumbIn);
+    }
+  }
+  const q = new THREE.Quaternion(), r = new THREE.Quaternion();
+  return clips.map((src) => {
+    if (!F.clips.test(src.name)) return src;
+    let n = 0;
+    const tracks = src.tracks.map((t) => {
+      const [bone, prop] = t.name.split('.'); if (prop !== 'quaternion' || !rest[bone]) return t;
+      const k = /^Thumb/.test(bone) ? F.thumb : F.bend, sw = swing[bone], v = Float32Array.from(t.values);
+      for (let j = 0; j < v.length; j += 4) {
+        r.copy(rest[bone]); if (r.dot(q.fromArray(v, j)) < 0) r.set(-r.x, -r.y, -r.z, -r.w);
+        r.slerp(q.normalize(), k); if (sw) r.premultiply(sw); r.toArray(v, j);
+      }
+      n++; return new THREE.QuaternionKeyframeTrack(t.name, Array.from(t.times), v);
+    });
+    if (!n) return src;
+    const out = src.clone(); out.tracks = tracks; out.userData = { ...(src.userData || {}), fingers: true };
+    return out;
+  });
+}
 // THE HANDS ON THE THIGHS, SITTING; ON A WHEEL, DRIVING (2026-11-17; the game's maker, of the sitting and driving
 // clips: "The sitting ones are really bad because the hands just go right through the thighs", "The driving all need to
 // be about 6 inches higher or more", and of Sol: "must be holding the smallest steering wheel ever ... fingers
@@ -752,25 +821,36 @@ function calmStand(clips, scene, C = CALM, moves = null, rig = null) {
 // thigh's top to not at all at SEAT.near[1]. null: left out (as before this). And the lift itself: it only lifted the points it found inside a thigh, and a
 // finger hanging under the thigh's lowest point beside it (down that gap) was carried up into the thigh by it, so the
 // lift is worked out again from where it put the hand, SEAT.again times at most (0: once, as before).
-export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05, inner: 0.35, near: [0.04, 0.12], again: 3 };
+// THE CLOTH FILLED IN (2026-11-20, with THE FINGERS RELAXED): the thigh's cloth seen from above is its triangles, not
+// only its points (SEAT.fill; false: its points alone, as before), and with a hand part the sleeve's cuff is lifted too.
+export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05, inner: 0.35, near: [0.04, 0.12], again: 3, fill: true };
 export const DRIVE = { clip: 'Drive', up: 0.15, apart: 0.34, forward: 0.08 };
 const SEAT_LEG = /^UpperLeg[LR]$/, SEAT_ARM = /^(LowerArm)([LR])$/, SEAT_HAND = /^(Wrist|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)([LR])$/;
 // (a part's points, each in the frame of the bone that carries most of it, at rest: { bone names, points (x, y, z each) };
-// pick(name): the bones whose points are kept)
-function pointsByBone(scene, pick) {
-  const names = [], pts = [], v = new THREE.Vector3();
+// pick(name): the bones whose points are kept; withTris: also its triangles whose three points are all kept, as three
+// indices into the points each)
+function pointsByBone(scene, pick, withTris = false) {
+  const names = [], pts = [], tris = [], v = new THREE.Vector3();
   scene.updateMatrixWorld(true);
   scene.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const g = o.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bones = o.skeleton.bones, inv = o.skeleton.boneInverses;
+    const at = withTris ? new Int32Array(P.count).fill(-1) : null;
     for (let i = 0; i < P.count; i++) {
       let b = 0, w = -1; for (let k = 0; k < 4; k++) { const x = comp(SW, i, k); if (x > w) { w = x; b = comp(SI, i, k); } }
       const name = clean(bones[b].name); if (!pick(name)) continue;
       v.fromBufferAttribute(P, i).applyMatrix4(o.bindMatrix).applyMatrix4(inv[b]);
+      if (at) at[i] = names.length;
       names.push(name); pts.push(v.x, v.y, v.z);
     }
+    if (!at) return;
+    const I = g.index, n = I ? I.count : P.count;
+    for (let k = 0; k + 2 < n; k += 3) {
+      const a = at[I ? I.getX(k) : k], b = at[I ? I.getX(k + 1) : k + 1], c = at[I ? I.getX(k + 2) : k + 2];
+      if (a >= 0 && b >= 0 && c >= 0) tris.push(a, b, c);
+    }
   });
-  return { names, pts };
+  return withTris ? { names, pts, tris } : { names, pts };
 }
 // (the arm's two turns found so its wrist joint reaches T (the world): the upper arm turned the least way so the elbow
 // lands where the two lengths meet, on the side the elbow already bends to; then the forearm turned the least way onto
@@ -809,11 +889,19 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
   // (the thighs from 6 cm down them on (the hips' and the seat's cloth, which also rides the thighs, left out: a hand
   // rests on a thigh in front of the hip, and an elbow hangs beside the hip); the forearms' half next to the wrist)
   const along = (P, k, child) => { const c = B[child], d = c ? c.position.clone().normalize() : null; return d ? P.pts[k * 3] * d.x + P.pts[k * 3 + 1] * d.y + P.pts[k * 3 + 2] * d.z : 0; };
-  const only = (P, keep) => { const o = { names: [], pts: [] }; for (let k = 0; k < P.names.length; k++) if (keep(k)) { o.names.push(P.names[k]); o.pts.push(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]); } return o; };
-  const legs0 = pointsByBone(scene, (n) => SEAT_LEG.test(n)), fore0 = pointsByBone(scene, (n) => SEAT_ARM.test(n));
+  const only = (P, keep) => {
+    const o = { names: [], pts: [] }, at = new Int32Array(P.names.length).fill(-1);
+    for (let k = 0; k < P.names.length; k++) if (keep(k)) { at[k] = o.names.length; o.names.push(P.names[k]); o.pts.push(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]); }
+    if (P.tris) { o.tris = []; for (let k = 0; k < P.tris.length; k += 3) { const a = at[P.tris[k]], b = at[P.tris[k + 1]], c = at[P.tris[k + 2]]; if (a >= 0 && b >= 0 && c >= 0) o.tris.push(a, b, c); } }
+    return o;
+  };
+  const legs0 = pointsByBone(scene, (n) => SEAT_LEG.test(n), !!S.fill), fore0 = pointsByBone(scene, (n) => SEAT_ARM.test(n));
   const legs = only(legs0, (k) => along(legs0, k, 'LowerLeg' + legs0.names[k].slice(-1)) > 0.06);
   const fore = only(fore0, (k) => { const s = fore0.names[k].slice(-1), w = B['Wrist' + s]; return w && along(fore0, k, 'Wrist' + s) > 0.5 * w.position.length(); });
   const hands = pointsByBone(handScene || scene, (n) => SEAT_HAND.test(n));
+  // (THE FINGERS RELAXED: a hand laid flat on the thigh brings its wrist down to it, so with a hand part the sleeve's own
+  // cuff, the outfit's points riding the wrist, is lifted over the thigh too)
+  const cuffs = handScene ? pointsByBone(scene, (n) => /^Wrist[LR]$/.test(n)) : null;
   const v = new THREE.Vector3(), C = 0.015;
   const at = (P, k, out) => out.set(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]).applyMatrix4(B[P.names[k]].matrixWorld);
   return clips.map((src, j) => {
@@ -851,10 +939,26 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
       // (the thighs' cloth seen from above: in each 1.5 cm cell its lowest and its highest point; a hand or forearm point
       // between the two is in the thigh, and is lifted over its top. A point under a thigh's lowest, a hand hanging
       // down beside a knee, is not in it)
+      // (THE CLOTH FILLED IN, SEAT.fill: its points alone left cells empty where the cloth's triangles are wide, and a
+      // hand laid flat on the thigh (THE FINGERS RELAXED) sank there by up to 2 cm, a thumb or a cuff over an empty cell.
+      // Each triangle's height is also taken at every cell's middle it covers, seen from above)
       let top = null;
       if (kind === 'sit') {
         top = new Map();
-        for (let i = 0; i < legs.names.length; i++) { at(legs, i, v); const key = Math.floor(v.x / C) * 4096 + Math.floor(v.z / C), h = top.get(key); if (!h) top.set(key, [v.y, v.y]); else { if (v.y < h[0]) h[0] = v.y; if (v.y > h[1]) h[1] = v.y; } }
+        const put = (x, y, z) => { const key = Math.floor(x / C) * 4096 + Math.floor(z / C), h = top.get(key); if (!h) top.set(key, [y, y]); else { if (y < h[0]) h[0] = y; if (y > h[1]) h[1] = y; } };
+        const wp = new Float32Array(legs.names.length * 3);
+        for (let i = 0; i < legs.names.length; i++) { at(legs, i, v); wp[i * 3] = v.x; wp[i * 3 + 1] = v.y; wp[i * 3 + 2] = v.z; put(v.x, v.y, v.z); }
+        if (legs.tris) for (let k = 0; k < legs.tris.length; k += 3) {
+          const a = legs.tris[k] * 3, b = legs.tris[k + 1] * 3, c = legs.tris[k + 2] * 3;
+          const ax = wp[a], az = wp[a + 2], bx = wp[b] - ax, bz = wp[b + 2] - az, cx = wp[c] - ax, cz = wp[c + 2] - az, det = bx * cz - cx * bz;
+          if (Math.abs(det) < 1e-7) continue;
+          const i0 = Math.floor(Math.min(wp[a], wp[b], wp[c]) / C), i1 = Math.floor(Math.max(wp[a], wp[b], wp[c]) / C), j0 = Math.floor(Math.min(az, wp[b + 2], wp[c + 2]) / C), j1 = Math.floor(Math.max(az, wp[b + 2], wp[c + 2]) / C);
+          for (let i = i0; i <= i1; i++) for (let jj = j0; jj <= j1; jj++) {
+            const px = (i + 0.5) * C - ax, pz = (jj + 0.5) * C - az, u = (px * cz - cx * pz) / det, w = (bx * pz - px * bz) / det;
+            if (u < 0 || w < 0 || u + w > 1) continue;
+            put((i + 0.5) * C, wp[a + 1] + u * (wp[b + 1] - wp[a + 1]) + w * (wp[c + 1] - wp[a + 1]), (jj + 0.5) * C);
+          }
+        }
       }
       for (const s of ['L', 'R']) {
         const wr = B['Wrist' + s], W0 = wr.getWorldPosition(new THREE.Vector3()), H = wr.getWorldQuaternion(new THREE.Quaternion());
@@ -877,7 +981,7 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
           let lift = 0;
           for (let pass = 0; pass <= (S.again || 0); pass++) {
             let more = 0;
-            for (const P of [hands, fore]) for (let i = 0; i < P.names.length; i++) {
+            for (const P of cuffs ? [hands, fore, cuffs] : [hands, fore]) for (let i = 0; i < P.names.length; i++) {
               if (P.names[i].slice(-1) !== s) continue;
               at(P, i, v).add(fwd); v.y += lift; const h = top.get(Math.floor(v.x / C) * 4096 + Math.floor(v.z / C));
               if (h && v.y > h[0] && h[1] + S.clear - v.y > more) more = h[1] + S.clear - v.y;
