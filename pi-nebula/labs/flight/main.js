@@ -11,8 +11,11 @@
 //     sight of the station. Each jump has its own colours;
 //   - the autopilot leaves the station from the pad and comes in to land from outside;
 //   - "flip up and down" is kept in this browser (in the game it is kept with the crew member);
-//   - the landing guide (the small model and its blue hologram, and the lit keys) is up whenever the ship is in
+//   - the landing guide's asking (its words under the tiny ship, and the lit keys) is up whenever the ship is in
 //     flight, so a hop about the hangar is enough to try it (in the game it is up coming home);
+//   - THE DASHBOARD (src/flying.js, src/dash.js) is the game's own: the tiny ship, the speed, the fuel, how far and the
+//     flight time, counted here from the lift-off; there is no run, so no canisters. "Back on the pad" fills the tank
+//     and starts the count again;
 //   - set down by hand the ship stands where it was put, as in the game; there is nobody here to get up out of the
 //     seat. "Back on the pad" parks it properly again.
 //   - THE OTHER TWO HANGARS are open to it here as in the game (the game's maker, 2026-11-18: "Lol, I'm sure kids will
@@ -94,6 +97,8 @@ function begin() {
   boarding.ride(ID, false);
   F = LAB.F = startFlying({ W, boarding, crane, hull, outside, visit }, {
     cfg, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept, guide: 'always',
+    // (the tiny ship floating beside the ship from behind keeps clear of the lab's top bar too)
+    clearOf: () => [document.getElementById('top')],
     onSettings: (s) => keep({ ...kept, ...s }), words: (w) => { note.textContent = w; },
     // (the stand-in for the crew member stays in the seat of the ship as it stands)
     onStand: (moved) => { body.pos.applyMatrix4(moved); },
