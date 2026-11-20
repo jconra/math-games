@@ -19,7 +19,7 @@ import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
 import { OFFERED, lookById, recipeOf } from '../looks.js';
 import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
-import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange, brings } from '../maker.js';
+import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange, brings, ownFor } from '../maker.js';
 import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
 
 const P = 'cst';
@@ -168,7 +168,7 @@ function colourPicked(ctx, input, done) {
   const p = ctx.current(), what = input.getAttribute('data-pick');
   if (!p || !save.SWATCHES[what] || !HEX.test(input.value)) return;
   const v = what === 'skin' ? skinInRange(input.value) : input.value.toLowerCase();
-  const old = p.look, next = withColour(old, what, v, lookById(old.id).recipe), moved = JSON.stringify(next) !== JSON.stringify(old);
+  const old = p.look, next = withColour(old, what, v, ownFor(lookById(old.id).recipe, recipeOf(old, kit()).suit)), moved = JSON.stringify(next) !== JSON.stringify(old);
   clearTimeout(pickSoon);
   if (done) {
     if (moved) lookChanged(ctx, p, next);
@@ -267,7 +267,7 @@ const theme = {
     tint(ctx, data) {
       const p = ctx.current(), list = save.SWATCHES[data.id];
       if (!p || !list || !list.includes(data.v)) return;
-      const own = lookById(p.look.id).recipe, next = withColour(p.look, data.id, data.v, own);
+      const own = ownFor(lookById(p.look.id).recipe, recipeOf(p.look, kit()).suit), next = withColour(p.look, data.id, data.v, own);
       if (JSON.stringify(next) !== JSON.stringify(p.look)) lookChanged(ctx, p, next);
     },
     // ... and freckles, or none

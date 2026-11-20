@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, ANDROIDS, OFFERED_LOOKS, standIn, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
+import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, ANDROIDS, OFFERED_LOOKS, standIn, asWorn, ownFor, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
 
 const KIT = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.meta.url), 'utf8')).parts;
 const KAI = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };      // (the look "kai"'s own recipe)
@@ -206,4 +206,25 @@ test('a ready-made android\'s look stepped on to a person\'s body wears a person
   assert.equal(standIn({ suit: 'androidHeavy', head: 'androidDock', hair: null }, KAI_R).head, 't10');
   // (and the first ready-made look is a person, so the stand-in is a person's head)
   assert.equal(OFFERED_LOOKS[0], 'kai');
+});
+
+test('an android starts in its own colours: the ready-made look\'s own colours never land on it, a colour the player picked does', () => {
+  const MIRA = { suit: 'atlantis2', head: 't7', hair: 'q_bob', colours: { skin: '#e8bf9f', hair: '#d8bc84', uniform: '#3f8fe8' } };
+  const KAI_R = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };
+  // (Mira's look, the body stepped on to the dock android: recipeOf lays the saved extras over her recipe, then asWorn)
+  const saved = { id: 'mira', suit: 'androidDock' }, R = { ...MIRA, ...saved, colours: { ...MIRA.colours } };
+  delete R.id;
+  assert.deepEqual(asWorn(R, saved.colours, KAI_R), { suit: 'androidDock', head: 'androidDock', hair: null, colours: {}, face: {} });
+  // (a body colour and an eye colour the player picked: kept)
+  const picked = { uniform: '#d9463e', eyes: '#3fd07a' };
+  assert.deepEqual(asWorn({ ...R, colours: { ...MIRA.colours, ...picked } }, picked, KAI_R).colours, picked);
+  // picking on an android weighs against no colour of the look's own: Mira's own blue picked there is kept as picked
+  let l = withColour(saved, 'uniform', '#3f8fe8', ownFor(MIRA, 'androidDock'));
+  assert.deepEqual(l.colours, { uniform: '#3f8fe8' });
+  // (on a person's body, as before: the look's own colour picked again is no change)
+  assert.equal(withColour({ id: 'mira' }, 'uniform', '#3f8fe8', ownFor(MIRA, 'atlantis2')).colours, undefined);
+  // (and between people's bodies the look's own colours go along as before)
+  assert.deepEqual(asWorn({ ...MIRA, suit: 'medic' }, undefined, KAI_R).colours, MIRA.colours);
+  // the four ready-made androids, as they come: no colours of their own in their looks
+  for (const id of OFFERED_LOOKS.slice(4)) assert.match(LOOKS_SRC, new RegExp(`id: '${id}', name: '[^']+', recipe: \\{ suit: '${id}', head: '${id}', hair: null \\} \\}`), id);
 });

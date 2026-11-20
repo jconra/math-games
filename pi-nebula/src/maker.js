@@ -55,6 +55,20 @@ export function standIn(R, person) {
   if (!owned || (b && b.head === R.head) || !person) return R;
   return { ...R, head: person.head, hair: person.hair === undefined ? null : person.hair, colours: { ...(person.colours || {}), ...(R.colours || {}) }, face: {} };
 }
+// AN ANDROID STARTS IN ITS OWN COLOURS (2026-11-19, the game's maker, seeing a dock android come out blue aboard: "I
+// thought it started from white and the helper picked blue?"). A body that brings its own head wears its own head, no
+// hair, and only the colours the player picked (`picked`: the colours saved on the look, which are only ever the
+// player's: withColour takes out a look's own); the ready-made look's own colours (its band colour, its skin, its
+// hair) never land on it. Any other body: as standIn says. (Between two people's bodies the look's own colours still
+// go along, as before: asked.)
+export function asWorn(R, picked, person) {
+  const own = brings(R.suit);
+  return own ? { ...R, head: own.head, hair: own.hair, face: {}, colours: { ...(picked || {}) } } : standIn(R, person);
+}
+// the look's own recipe as the colour rows weigh a colour against it (withColour's `own`): on a body that brings its own
+// head, no colour of the look's own is worn, so none is the look's own (a picked colour that happens to be the look's
+// band colour is kept as picked)
+export const ownFor = (recipe, suit) => (brings(suit) ? { ...(recipe || {}), colours: {} } : recipe || {});
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
 // (2026-11-19: all 13 heads on the 11 bodies and under the 23 hairs, each drawn from the front, the side and behind
 // and looked at. No hair is left out on any head. Two heads on a body are: the 40s man's thick neck comes through the
