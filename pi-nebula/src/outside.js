@@ -43,6 +43,9 @@
 //   outside.jets                the small ships on the roof's pads this time (src/roofjets.js): [{ pad, at, yaw }];
 //                               outside.jetsDrawn: true once their file has come and they are drawn
 //   outside.jetCopy()           a promise of one more of them, for the control room's fly-past (src/lift.js)
+//   outside.hauler              the Hauler waiting outside at the dock (src/haulerdock.js; the game's maker, HAUL-3
+//                               2026-11-20): lit as the hull is, drawn whenever the outside is and while the dock's job
+//                               has the camera out there; a plain box of it in triangles()
 import * as THREE from 'three';
 import { hullMaterials } from '../kit/hull.js';
 import { shieldMaterial } from '../kit/materials.js';
@@ -52,6 +55,7 @@ import { OPENINGS } from '../kit/outside-plan.js';
 import { DIR } from '../world/sky.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { JET, jetsFor, jetBox } from './roofjets.js';
+import { makeHaulerAtDock } from './haulerdock.js';
 
 export const SUN = { colour: 0xfff0dc, strength: 3.3 };      // the Hull Lab's own sun
 export const FADE = 0.9;      // a phone's stand-in for a hangar giving way to the real one, and back: the dark and the clearing (s)
@@ -121,6 +125,10 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
     jetsDrawn = true;
   }).catch((e) => console.warn('the roof\'s small ships did not come: ' + (e && e.message ? e.message : e))), JET.wait) : null;
 
+  // THE HAULER WAITING AT THE DOCK (src/haulerdock.js): built a few seconds after the outside is made, lit by the same
+  // sun and mirroring the same sky as the hull
+  const hauler = makeHaulerAtDock(W, { light: (m) => { if (!m.isMeshStandardMaterial) return; sunlit(m, sun); if (mirror) m.envMap = mirror.texture; m.needsUpdate = true; lit.push(m); } });
+
   // the room behind each real opening, and the way the opening faces
   const _p = new THREE.Vector3();
   const openings = OPENINGS.map((o) => { const z = W.zoneAt(_p.set(o.at[0] - o.out[0] * 1.5, o.at[1] + Math.min(1, o.h / 2), o.at[2] - o.out[2] * 1.5)); return { src: o, at: new THREE.Vector3(o.at[0], o.at[1] + o.h / 2, o.at[2]), out: new THREE.Vector3(...o.out), room: z ? z.id : null }; }).filter((o) => o.room);
@@ -183,11 +191,13 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
     // one more of the same small ship, for something of the game's own (its own copy, at its size, drawn with the same
     // sun and the same sky in its metal): the control room's fly-past (src/lift.js)
     jetCopy: () => loadJet().then(({ src, k }) => { const o = src.clone(); o.scale.setScalar(k); return o; }),
-    ms: 0, cheap,
+    ms: 0, cheap, hauler,
     get stats() { return out.stats; },
     update(camera = W.camera, dt = 1 / 60) {
       const shown = !W.alone && !W.seenFrom && !api.off;
       api.shown = out.group.visible = shown;
+      // (the Hauler: with the outside, and while the dock's job has the camera out at the port, W.seenFrom)
+      hauler.show(!W.alone && !api.off);
       // (a flown ship's camera, out past the hull: in none of the hangars' own boxes)
       const camIn = shown && api.flying ? hangarAt(camera.position) : null, outThere = !!(shown && api.flying) && !camIn;
       api.out = outThere; stand.visible = outThere && cheap;
@@ -222,9 +232,10 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       const lists = [];
       out.group.traverse((o) => { if (o.isMesh && o.geometry.index && /^(hull:(band|tiers|trim)|outside:(gear|glow))$/.test(o.name)) lists.push({ position: o.geometry.attributes.position.array, index: o.geometry.index.array }); });
       for (const j of jets) lists.push(jetBox(j));
+      const hb = hauler.box(); if (hb) lists.push(hb);
       return lists;
     },
-    dispose() { W.rooms = null; bulk(null); if (jetTimer) clearTimeout(jetTimer); for (const o of [...owned, ...jetOwned]) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
+    dispose() { W.rooms = null; bulk(null); if (jetTimer) clearTimeout(jetTimer); hauler.dispose(); for (const o of [...owned, ...jetOwned]) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
   };
   // the last word on which rooms are drawn: the stand-in walls put away under the hull; from out in space, the rooms
   // behind the openings that face the camera; and a flown ship's own rooms wherever the camera is (in another ship's

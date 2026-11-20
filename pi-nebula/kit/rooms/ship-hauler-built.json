@@ -1,6 +1,6 @@
 {
  "name": "Hauler (built)",
- "about": "The Hauler as built from the game's maker's picture of a container carrier: the nose and cab from the 3,000-triangle smart mesh, the two drum engines from the 8,000-triangle one, and the whole middle in code: a narrow core with a spine, four yellow clamp frames a side, and eight separate containers, two stacked and two along on each side, each on its own mount with four jaws, each able to be unloaded on its own. Flat paint by rules (cream skin, graphite lower hull and panels, yellow hazard stripes and clamp arms, blue light strips, amber headlamps), a smoked glass canopy, a crew door on the port side that lifts with a stair that swings down, four legs that draw up into their pods, and the cockpit with two bucket seats.",
+ "about": "The Hauler as built from the game's maker's picture of a container carrier: the nose and cab from the 3,000-triangle smart mesh, the two drum engines from the 8,000-triangle one, and the whole middle in code: a narrow core with a spine, four yellow clamp frames a side, and eight separate containers, two stacked and two along on each side, each on its own mount with four jaws, each able to be unloaded on its own. Flat paint by rules (cream skin, graphite lower hull and panels, yellow hazard stripes and clamp arms, blue light strips, amber headlamps), a smoked glass canopy, a crew door on the port side that lifts with a stair that swings down, six thruster pods that turn and fire (four at the stern's corners, two under the cab), the front legs folding into the cab's belly and the rear legs drawing up into their housings, and the cockpit for four (two bucket seats, two crew seats behind them). The containers: the upper row ribbed steel boxes, the lower row eight-sided tanks.",
  "grid": { "cell": 0.5, "step": 0.5, "deck": 1.05 },
  "views": {
   "start": { "at": [13, 6.5, 15], "look": [0, 2.2, 0.3], "fov": 40 },
@@ -22,6 +22,8 @@
   { "piece": "hbPod", "cell": [0, 0], "turn": 0, "level": 0, "variant": "top rear starboard" },
   { "piece": "hbPod", "cell": [0, 0], "turn": 0, "level": 0, "variant": "bottom rear port" },
   { "piece": "hbPod", "cell": [0, 0], "turn": 0, "level": 0, "variant": "bottom rear starboard" },
+  { "piece": "hbPod", "cell": [0, 0], "turn": 0, "level": 0, "variant": "front port" },
+  { "piece": "hbPod", "cell": [0, 0], "turn": 0, "level": 0, "variant": "front starboard" },
   { "piece": "hbClamp", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port upper front" },
   { "piece": "hbClamp", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port upper rear" },
   { "piece": "hbClamp", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port lower front" },
@@ -45,6 +47,6 @@
   { "piece": "hbGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port rear" },
   { "piece": "hbGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard front" },
   { "piece": "hbGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard rear" },
-  { "piece": "hbCockpit", "cell": [0, 0], "turn": 0, "level": 0, "variant": "two seats" }
+  { "piece": "hbCockpit", "cell": [0, 0], "turn": 0, "level": 0, "variant": "four seats" }
  ]
 }

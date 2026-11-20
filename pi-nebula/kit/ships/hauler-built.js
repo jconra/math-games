@@ -2,7 +2,7 @@
 // front, a spine, eight containers (two stacked, two along, on each side) held in yellow clamp frames, and the engine
 // block at the back. Built the way the Miner and the Medic were (built-common.js):
 //   from the 3k smart mesh   the nose and cab (hauler-built.hull.js, parts 'body' and 'canopy'), painted by face
-//   from the 8k smart mesh   the engine block (part 'engines') and the four leg pods (POD)
+//   from the 8k smart mesh   the engine block (part 'engines') and the six thruster pods (POD)
 //   in code                  everything between: the door section, the core and spine, the clamp frames and their jaws,
 //                            the containers (cargo-container.js: one shared design), the legs, the door and its stair
 // The ship's frame: nose +z, port +x, y up from the ground, metres. Its pieces sit on the deck (DECK above the ground)
@@ -88,12 +88,18 @@ export const GLOW = { strip: [0.08, 0.85, 3.2], warm: [2.1, 0.78, 0.1], amber: [
 // (his picture: a cream cab on a dark lower hull, three yellow stripes leaning back on each cheek, a dark panel under
 // each side window and on the nose's front; a dark roof)
 export const STRIPES = { z: [6.75, 6.4, 6.05], y: 2.05, w: 0.22, lean: 0.7, y0: 1.84, y1: 2.3, x: 0.9 };
+// THE FRONT LEGS' FOLD (THE LEGS, below): the hinge's height over the ground; the turn, forward; the well each folds
+// into (port side's |x| and z), its top under the cockpit's floor (DECK + COCKPIT.floor = 1.35); folded, the sole
+// stands at hinge - boot = 0.85, the belly's line there. The belly's skin over each well is cut out (the zone 'well')
+export const FOLD = { hinge: 1.21, turn: -PI / 2, top: 1.31, well: { x: [0.04, 0.6], z: [5.12, 6.88] } };
 export const ZONES = [
   { zone: 'lower', parts: ['body', 'canopy'], planes: [[0, 1, 0, 1.78], [0, 0, -1, -4.63]] },
   { zone: 'lower', parts: ['body', 'canopy'], planes: [[0, 1, 0, 1.59], [0, 0, 1, 4.63]] },
   { zone: 'belt', parts: ['body'], planes: [[0, 0, -1, -4.8], [0, 0, 1, 5.7], [0, -1, 0, -1.72], [0, 1, 0, 2.36], [-1, 0, 0, -1.25]] },
   { zone: 'front', parts: ['body'], planes: [[1, 0, 0, 0.62], [0, 0, -1, -7.0], [0, 1, 0, 2.12]] },
   ...STRIPES.z.map((z) => { const d = STRIPES.lean * STRIPES.y + z; return { zone: 'stripe', parts: ['body'], planes: [[0, -1, 0, -STRIPES.y0], [0, 1, 0, STRIPES.y1], [-1, 0, 0, -STRIPES.x], [0, STRIPES.lean, 1, d + STRIPES.w / 2], [0, -STRIPES.lean, -1, -(d - STRIPES.w / 2)]] }; }),
+  // (the front legs' wells: the belly's skin over each, cut out along its edges; FOLD.well, below)
+  { zone: 'well', parts: ['body'], planes: [[-1, 0, 0, -FOLD.well.x[0]], [1, 0, 0, FOLD.well.x[1]], [0, 0, -1, -FOLD.well.z[0]], [0, 0, 1, FOLD.well.z[1]], [0, 1, 0, 1.2]] },
 ];
 const edge = (paint) => (f) => (f.thin ? paint + 'Edge' : paint);
 const ringOf = (c) => ENGINE_AT[c.x >= 0 ? 0 : 1], fromAxis = (c, E) => Math.hypot(c.x - E.axis[0], c.y - E.axis[1]);
@@ -103,6 +109,7 @@ const ringOf = (c) => ENGINE_AT[c.x >= 0 ? 0 : 1], fromAxis = (c, E) => Math.hyp
 export const HOUSING = { z: -6.92, r: 0.93 };
 const housing = (f) => f.c.z > HOUSING.z || fromAxis(f.c, ringOf(f.c)) > HOUSING.r;
 export const RULES = [
+  ['the front legs\' wells (open: the legs fold into them)', (f) => f.zone === 'well' && f.n.y < -0.3, 'gone'],
   ['the canopy\'s glass', (f) => f.part !== 'engines' && f.c.z > 4.3 && canopyPanes().covers(f.c, 0.12), 'glass'],
   ['the engines\' recesses', (f) => f.part === 'engines' && f.c.z < ringOf(f.c).back + 0.62 && fromAxis(f.c, ringOf(f.c)) < ringOf(f.c).mouth + 0.04, (f) => (f.n.z < -0.9 && f.c.z > ringOf(f.c).floor - 0.05 ? 'core' : 'nozzle')],
   ['the engines\' rims', (f) => f.part === 'engines' && f.n.z < -0.6 && f.c.z < -7.0 && !housing(f), 'rim'],
@@ -395,10 +402,17 @@ function hbAirlock(p, variant) {
 // hbContainer and hbClamp, so the dock can take any one of them.
 export const CARGO = { x: 1.92, y: [1.55, 3.00], z: [0.63, -3.57], out: 1.6, lift: 1.4, speed: 0.5, jaw: 1.2, gap: 0.04 };
 const MOUNT_COLOUR = { 'port upper front': 'blue', 'port upper rear': 'rust', 'port lower front': 'yellow', 'port lower rear': 'olive', 'starboard upper front': 'yellow', 'starboard upper rear': 'olive', 'starboard lower front': 'blue', 'starboard lower rear': 'rust' };
+// THE MIX (the game's maker, HAUL-2 2026-11-20: "I think that having some A and some D would be good, since D looks like
+// a liquid container, but A is recognizable"): some ribbed steel boxes, some eight-sided tanks (cargo-container.js
+// LOOKS ribbed and tank). How many of each and where was left open: the plainest even mix, four and four, the two
+// sides alike: the upper row ribbed boxes, the lower row tanks (each in its mount's own colour). A question for him.
+export const CARGO_MIX = { upper: 'ribbed', lower: 'tank' };
+// (the look drawn: 'mix' as above, or one look for all eight, the lab's chips: to compare)
+export const CARGO_LOOK = { look: 'mix' };
 export const MOUNTS = [];
 for (const side of ['port', 'starboard']) for (const row of ['upper', 'lower']) for (const end of ['front', 'rear']) {
   const name = `${side} ${row} ${end}`, sx = side === 'port' ? 1 : -1;
-  MOUNTS.push({ name, side, row, end, sx, at: [sx * CARGO.x, CARGO.y[row === 'upper' ? 1 : 0], CARGO.z[end === 'front' ? 0 : 1]], colour: MOUNT_COLOUR[name], turn: end === 'rear' });
+  MOUNTS.push({ name, side, row, end, sx, at: [sx * CARGO.x, CARGO.y[row === 'upper' ? 1 : 0], CARGO.z[end === 'front' ? 0 : 1]], colour: MOUNT_COLOUR[name], look: CARGO_MIX[row], turn: end === 'rear' });
 }
 const mountNamed = (name) => MOUNTS.find((m) => m.name === name) || MOUNTS[0];
 const CX = CONTAINER.w / 2, CY = CONTAINER.h / 2, CZ = CONTAINER.l / 2;
@@ -443,9 +457,11 @@ function hbFrames(p) {
   }
   return acc.flush(p);
 }
-// one container on its mount (variant: the mount's name): a leaf that slides straight out sideways
+// one container on its mount (variant: the mount's name): a leaf that slides straight out sideways; its look the
+// mount's own in the mix, or the one look the lab asks for
+export const lookOf = (m) => (CARGO_LOOK.look === 'mix' ? m.look : LOOKS[CARGO_LOOK.look] ? CARGO_LOOK.look : CONTAINER.look);
 function hbContainer(p, variant) {
-  const m = mountNamed(variant), c = dk(V3(...m.at)).toArray(), look = LOOKS[CONTAINER.look] ? CONTAINER.look : 'ribbed';
+  const m = mountNamed(variant), c = dk(V3(...m.at)).toArray(), look = lookOf(m);
   p.leaf(`hb:container:${look}:${m.colour}`, (lp) => containerLeaf(lp, look, m.colour), { at: c, rot: [0, m.turn ? PI : 0, 0], slide: [m.sx * CARGO.out, 0, 0], door: 'container' });
   p.door('container', c, 0, CARGO.speed);
   return p;
@@ -509,16 +525,18 @@ export function cargoStep(B, wants, clampsOpen, dt) {
   return moved;
 }
 
-// ── THE PODS: the 8k mesh's own pods. Two are the front legs' housings, one under each side of the cab (fixed, a light
-// on the side: his picture's); four are the THRUSTER PODS at the stern's corners, two high and two low, built and
-// moved as the Miner's are (miner-built.js PODS, POD_SWING, POD_JET, podJets, podStep: kit/ships/flight.js flies any
-// ship's pods by these): each on a short pylon out from the engine block's side, turning on it (yaw) and about its
-// own middle (pitch), a jet at each end. At rest they face along the ship. They stand out far enough that a pod turned
-// its whole way clears the block (POD_SWING: less yaw than the Miner's, whose pods stand clear above and below).
-export const LEG_PODS = [{ name: 'front', mesh: 'front', at: [1.50, 0.92, 4.515], scale: 1.1, glow: 'strip' }];
+// ── THE PODS: the 8k mesh's own pods, all six THRUSTER PODS (the game's maker, HAUL-5 2026-11-20: "All six turn, and
+// the front legs fold into the cab's belly instead"), built and moved as the Miner's are (miner-built.js PODS,
+// POD_SWING, POD_JET, podJets, podStep: kit/ships/flight.js flies any ship's pods by these): four at the stern's
+// corners, two high and two low, each on a short pylon out from the engine block's side; two at the front, one under
+// each side of the cab (where his picture has them), each on a pylon out from the cab's lower side. Each turns on its
+// pylon (yaw) and about its own middle (pitch), a jet at each end. At rest they face along the ship. They stand out far
+// enough that a pod turned its whole way clears the hull (POD_SWING: less yaw than the Miner's, whose pods stand clear
+// above and below): the front ones by 6.8 cm at their nearest (rigs/hauler-3/m_frontpod.js), the rear ones by 2.7 cm.
 export const PODS = [
   { name: 'top rear port', at: [2.25, 3.72, -6.35], up: 1, mesh: 'rear', scale: 0.85, glow: 'amber' }, { name: 'top rear starboard', at: [-2.25, 3.72, -6.35], up: 1, mesh: 'rear', scale: 0.85, glow: 'amber' },
   { name: 'bottom rear port', at: [2.25, 1.22, -6.35], up: -1, mesh: 'rear', scale: 1.0, glow: 'strip' }, { name: 'bottom rear starboard', at: [-2.25, 1.22, -6.35], up: -1, mesh: 'rear', scale: 1.0, glow: 'strip' },
+  { name: 'front port', at: [2.1, 0.92, 4.515], up: -1, mesh: 'front', scale: 1.1, glow: 'strip' }, { name: 'front starboard', at: [-2.1, 0.92, 4.515], up: -1, mesh: 'front', scale: 1.1, glow: 'strip' },
 ];
 export const POD_SWING = { yaw: 0.25, pitch: 0.6 };
 // (each pod's whole size at its scale, from the hull data's half sizes: as the Miner's POD.size)
@@ -553,12 +571,6 @@ function podLight(acc, F, o, d, u, v, hu, hv, col, tf = dk) {
 const podPaint = (f) => (f.kind === 'b' ? PAL.yellow : f.n.y < -0.6 ? PAL.belly : PAL.dark);
 function hbPods(p) {
   const acc = new Acc();
-  for (const P of LEG_PODS) for (const sx of [1, -1]) {
-    const F = podAt(P, sx);
-    for (const f of F) acc.tris([f.pts.map(dk)], f.n, podPaint(f));
-    const c = V3(sx * P.at[0], P.at[1], P.at[2]);
-    podLight(acc, F, c.clone().add(V3(sx * 3, 0.02, 0)), V3(-sx, 0, 0), V3(0, 0, 1), V3(0, 1, 0), 0.2 * P.scale, 0.035 * P.scale, GLOW[P.glow]);
-  }
   // (the rear legs' housings: an outrigger under each side's rear containers, a beam in to the keel)
   for (const sx of [1, -1]) {
     const lz = GEAR.at['port rear'][1];
@@ -566,13 +578,33 @@ function hbPods(p) {
     box(acc, [sx * 1.13, sx * 1.87], [0.84, 0.9], [lz - 0.52, lz + 0.52], PAL.yellow, ['v+', 'v-']);
     box(acc, [sx * 0.5, sx * 1.15], [0.64, 0.86], [lz - 0.2, lz + 0.2], PAL.dark, ['u+', 'u-']);
   }
+  // (the front legs' wells in the cab's belly: dark walls from the belly's cut edge up to the well's top, and the top,
+  // the Medic's way (medic-built.js mdWells); the belly's skin over each is cut away: ZONES 'well', RULES)
+  const belly = (x, z) => { const h = rayHull(V3(x, -1, z), V3(0, 1, 0)); return h ? h.p.y : FOLD.top; };
+  const W = FOLD.well, top = FOLD.top, cx = (W.x[0] + W.x[1]) / 2, cz = (W.z[0] + W.z[1]) / 2;
+  for (const s of [1, -1]) {
+    const X = (x) => s * x, [x0, x1] = W.x, [z0, z1] = W.z;
+    // (the belly at a point on the well's rim: sampled 3 cm outside the hole, where the skin is)
+    const rim = (x, z) => belly(X(x + 0.03 * Math.sign(x - cx)), z + 0.03 * Math.sign(z - cz)) - 0.005;
+    for (const [a, b, n] of [[[x0, z0], [x1, z0], V3(0, 0, 1)], [[x1, z1], [x0, z1], V3(0, 0, -1)], [[x0, z1], [x0, z0], V3(s, 0, 0)], [[x1, z0], [x1, z1], V3(-s, 0, 0)]]) {
+      const k = 6;
+      for (let i = 0; i < k; i++) {
+        const u0 = i / k, u1 = (i + 1) / k, pa = [a[0] + (b[0] - a[0]) * u0, a[1] + (b[1] - a[1]) * u0], pb = [a[0] + (b[0] - a[0]) * u1, a[1] + (b[1] - a[1]) * u1];
+        const ya = Math.min(top, rim(pa[0], pa[1])), yb = Math.min(top, rim(pb[0], pb[1]));
+        polyTo(acc, [V3(X(pa[0]), ya, pa[1]), V3(X(pb[0]), yb, pb[1]), V3(X(pb[0]), top, pb[1]), V3(X(pa[0]), top, pa[1])], n, PAL.black);
+      }
+    }
+    polyTo(acc, [V3(X(x0), top, z0), V3(X(x1), top, z0), V3(X(x1), top, z1), V3(X(x0), top, z1)], V3(0, -1, 0), PAL.black);
+  }
   return acc.flush(p);
 }
-// a thruster pod (variant: its name): its pylon out from the block's side (fixed), and the pod as a leaf turning on
-// the pylon's end (yaw, about up) and about its own middle (pitch, about across): door 'pod', posed by podStep
+// a thruster pod (variant: its name): its pylon out from the hull's side (fixed: from the engine block's side at the
+// stern, from the cab's lower side at the front), and the pod as a leaf turning on the pylon's end (yaw, about up) and
+// about its own middle (pitch, about across): door 'pod', posed by podStep
 function hbPod(p, name) {
   const P = podOf(name), sx = Math.sign(P.at[0]), c = V3(...P.at), half = POD_SIZE[P.name].map((v) => v / 2);
-  const acc = new Acc(), x0 = sx * (COLLAR[2][0] - 0.04), x1 = sx * (Math.abs(c.x) - half[0] + 0.03);
+  const side = P.mesh === 'front' ? (() => { const h = rayHull(V3(sx * 4, c.y, c.z), V3(-sx, 0, 0)); return h ? Math.abs(h.p.x) : 1.0; })() : COLLAR[2][0];
+  const acc = new Acc(), x0 = sx * (side - 0.04), x1 = sx * (Math.abs(c.x) - half[0] + 0.03);
   box(acc, [x0, x1], [c.y - 0.1, c.y + 0.1], [c.z - 0.14, c.z + 0.14], PAL.dark);
   box(acc, [x1 - sx * 0.06, x1], [c.y - 0.13, c.y + 0.13], [c.z - 0.17, c.z + 0.17], PAL.metal);
   acc.flush(p);
@@ -611,10 +643,18 @@ export function podStep(built, on, time, jets) {
   });
 }
 
-// ── THE LEGS: four, each a long skid pad on a boot and twin rods; they draw straight up into the pods ────────────────
-// (two leaves a leg, telescoping: the foot rises LEGS.rise, the rods less, so the rods stay inside the pod)
-export const GEAR = { speed: 0.42, at: { 'port front': [1.5, 4.515], 'starboard front': [-1.5, 4.515], 'port rear': [1.5, -4.4], 'starboard rear': [-1.5, -4.4] } };
+// ── THE LEGS: four, each a long skid pad on a boot and twin rods ─────────────────────────────────────────────────────
+// THE REAR TWO draw straight up into their housings (two leaves a leg, telescoping: the foot rises LEGS.rise, the rods
+// less, so the rods stay inside the housing).
+// THE FRONT TWO FOLD INTO THE CAB'S BELLY (the game's maker, HAUL-5 2026-11-20), each into its own well under the
+// cockpit's floor, where the belly is flat (its middle, either side of the keel). The belly is too shallow under the
+// cockpit (0.5 m) for a leg to rise straight up into it, so each folds, as the Explorer's and the Miner's do: its rods
+// (side by side, across the ship) swing forward and up about a hinge under the cockpit's floor (FOLD.hinge), and its
+// foot turns back about its ankle as they go, so it ends level, its sole in the belly's line over its well.
+export const GEAR = { speed: 0.42, at: { 'port front': [0.32, 5.25], 'starboard front': [-0.32, 5.25], 'port rear': [1.5, -4.4], 'starboard rear': [-1.5, -4.4] } };
 export const LEGS = { rise: 0.47, slip: 0.25, pad: [0.25, 0.75], sole: 0.03, top: 0.11, boot: [0.16, 0.22, 0.36], rod: 0.70 };
+// (FOLD: with the paints at the top, as the belly's skin is cut by it)
+const isFront = (which) => /front/.test(which);
 const same = (v) => v;
 function footLeaf(lp) {
   const acc = new Acc(), [hx, hz] = LEGS.pad, t = LEGS.top, y1 = 0.07;
@@ -641,10 +681,25 @@ function strutLeaf(lp) {
   for (const sz of [1, -1]) C.boxAt(acc, V3(0, (y0 + y1) / 2, sz * 0.12), AX, [0.035, (y1 - y0) / 2, 0.035], PAL.metal, ['v-', 'v+'], same);
   return acc.flush(lp);
 }
+// (a front leg's rods: from the boot up to the hinge, side by side across the ship, so folded they lie side by side
+// under the cockpit's floor; a knuckle on the hinge)
+function foldStrutLeaf(lp) {
+  const acc = new Acc(), y0 = LEGS.boot[2], y1 = FOLD.hinge;
+  for (const sx of [1, -1]) C.boxAt(acc, V3(sx * 0.12, (y0 + y1) / 2, 0), AX, [0.035, (y1 - y0) / 2, 0.035], PAL.metal, ['v-', 'v+'], same);
+  C.boxAt(acc, V3(0, y1, 0), AX, [0.17, 0.05, 0.06], PAL.legs, [], same);
+  return acc.flush(lp);
+}
 function hbGear(p, which) {
   const [cx, cz] = GEAR.at[which] || GEAR.at['port front'], o = [cx, -DECK, cz];
-  p.leaf('hb:leg foot', footLeaf, { at: o, slide: [0, LEGS.rise, 0], door: 'gear' });
-  p.leaf('hb:leg strut', strutLeaf, { at: o, slide: [0, LEGS.rise - LEGS.slip, 0], door: 'gear' });
+  if (isFront(which)) {
+    // (the rods turn about the hinge; the foot with them, and back the same about its ankle: level all the way)
+    const hinge = { at: [cx, FOLD.hinge - DECK, cz], axis: [1, 0, 0], angle: FOLD.turn }, ankle = { at: [cx, LEGS.boot[2] - DECK, cz], axis: [1, 0, 0], angle: -FOLD.turn };
+    p.leaf('hb:leg foot', footLeaf, { at: o, door: 'gear', hinge: [hinge, ankle] });
+    p.leaf('hb:leg strut fold', foldStrutLeaf, { at: o, door: 'gear', hinge });
+  } else {
+    p.leaf('hb:leg foot', footLeaf, { at: o, slide: [0, LEGS.rise, 0], door: 'gear' });
+    p.leaf('hb:leg strut', strutLeaf, { at: o, slide: [0, LEGS.rise - LEGS.slip, 0], door: 'gear' });
+  }
   p.door('gear', o, 0, GEAR.speed);
   return p;
 }
@@ -685,17 +740,17 @@ function hbMarks(p) {
   return acc.flush(p);
 }
 
-// ── THE COCKPIT: two bucket seats side by side behind the glass (the cockpit family's parts), on a floor 0.3 m over the
-// cabin's deck (the blueprints': one step up, as the Explorer's), its back wall at z `back` (the blueprints' cockpit
-// starts there). Its floor runs out to the hull's inside; under the glass the nose's own skin (drawn both ways) closes
-// it; between the glass's back edge and the back wall the CHEEKS, a dark wall each side from the floor to the roof (the
-// 3k nose is open there, behind the side windows), and a dark roof over them (no sky through a gap from the seats:
+// ── THE COCKPIT FOR FOUR (his deck plan's, the game's maker's pick, HAUL-1 2026-11-20): two bucket seats side by side
+// behind the glass (the cockpit family's parts) and two crew seats behind them (COCKPIT.rear), on a floor 0.3 m over the
+// cabin's deck (his plan's: one step up, as the Explorer's), its back wall at z `back` (the plan's cockpit starts
+// there). Its floor runs out to the hull's inside; under the glass the nose's own skin (drawn both ways) closes it;
+// between the glass's back edge and the back wall the CHEEKS, a dark wall each side from the floor to the roof (the 3k
+// nose is open there, behind the side windows), and a dark roof over them (no sky through a gap from the seats:
 // rigs/hauler-2/checks.cjs); the back wall:
-//   'two seats'          a bulkhead out to the hull's inside, a shut door in it
-//   'two seats, cabin'   with the rooms built inside (LAB.cabin): the back wall is the cabin's own (the cockpit's door in
+//   'four seats'         a bulkhead out to the hull's inside, a shut door in it (the ship with no rooms built inside:
+//                        waiting at the dock, src/haulerdock.js)
+//   'four seats, cabin'  with the rooms built inside (LAB.cabin): the back wall is the cabin's own (the cockpit's door in
 //                        it); a riser there, the step up; round the cabin's wall, a dark panel out to the hull and roof
-//   'four seats, cabin'  the same, and two crew seats behind the fliers (COCKPIT.rear): his deck plan's cockpit for four
-//                        (the blueprint hauler-his-plan asks for it: its "swap")
 export const COCKPIT = { floor: 0.3, seatsZ: 5.15, wallX: 1.2, gap: 0.40, back: 4.0, front: 7.6, tubX: 1.1, rear: { x: [0.72, -0.72], z: 4.4 }, cabinWall: { half: 1.0, top: 2.5 }, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 2.166 - DECK0 - 0.3, z: 7.787 - 5.15, slope: 0.78 } };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export const builtCockpitPlan = () => C.builtCockpitPlan(COCKPIT, COCKPIT_DROP);
@@ -703,7 +758,7 @@ function hbCockpit(p, variant) {
   const Cp = COCKPIT, cabin = /, cabin$/.test(variant || ''), zb = Cp.back, fy = DECK + Cp.floor;
   C.cockpitParts(p, builtCockpitPlan(), Cp);
   // (the cockpit for four, his deck plan's: two crew seats behind the fliers, facing forward)
-  if (variant === 'four seats, cabin') for (const x of COCKPIT.rear.x) placeInto(p, part(crewSeat, { look: 'ship', badge: 'crew' }), { at: [x, Cp.floor, COCKPIT.rear.z], rot: [0, 0, 0] });
+  for (const x of COCKPIT.rear.x) placeInto(p, part(crewSeat, { look: 'ship', badge: 'crew' }), { at: [x, Cp.floor, COCKPIT.rear.z], rot: [0, 0, 0] });
   const acc = new Acc(), out = canopyPanes().outline;
   // THE FLOOR out to the hull's inside, row by row from the back wall to the nose (under the glass the nose's own skin,
   // drawn both ways, closes the cockpit: its canopy has no roof pane, so a tub down from the glass's edges would wall
@@ -800,11 +855,11 @@ export const LAB = {
   // (the rooms built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with them (the
   // cockpit closed by the cabin's own wall, the airlock stub down to the door's jambs and head), and the ship's own door
   // as the cabin meets it: its head over the deck (the slope over it starts there), where the deck stops at its sill)
-  cabin: { swap: { hbCockpit: { 'two seats': 'two seats, cabin' }, hbAirlock: { port: 'port, cabin' } }, outer: { head: +(CREWDOOR.head - DECK).toFixed(3), sill: +(sectX(CREWDOOR.sill) - 0.01).toFixed(3) } },
+  cabin: { swap: { hbCockpit: { 'four seats': 'four seats, cabin' }, hbAirlock: { port: 'port, cabin' } }, outer: { head: +(CREWDOOR.head - DECK).toFixed(3), sill: +(sectX(CREWDOOR.sill) - 0.01).toFixed(3) } },
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
   spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] }, Cockpit: { at: [0, 3.05, 6.25], look: [0, 1.55, 4.0] } },
   doorTip: 'Open the crew door (it lifts, then the stair swings down to the ground), or shut it',
-  gearTip: 'Draw the landing legs up into their pods, or let them down',
+  gearTip: 'Fold the front legs up into the cab\'s belly and draw the rear legs up into their housings, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
   setDirt: (v) => { GRIME.dirt.value = v; },
   jets: () => [{ role: 'main', nozzles: jetNozzles(), opts: JET }, { role: 'pods', nozzles: podJets(), opts: { len: POD_JET.len, gain: POD_JET.gain } }],
@@ -820,7 +875,7 @@ export const LAB = {
       sep(), lab('Clamps'),
       chip(H.clamps === 'open' ? 'Shut clamps' : 'Open clamps', false, () => { H.clamps = H.clamps === 'open' ? 'shut' : 'open'; menu(); }, true, 'Fold the jaws back onto the posts, or swing them over the containers'),
       sep(), lab('Container'),
-      ...Object.entries(LOOKS).map(([k, L], i) => chip(`${i + 1} ${L.name}`, CONTAINER.look === k, () => { if (CONTAINER.look === k) return; CONTAINER.look = k; reload(['hbContainer']); }, true, L.about)),
+      ...[['mix', { name: 'Mix', about: 'His pick: some ribbed steel boxes and some eight-sided tanks (the upper row boxes, the lower row tanks)' }], ...Object.entries(LOOKS)].map(([k, L], i) => chip(`${i + 1} ${L.name}`, CARGO_LOOK.look === k, () => { if (CARGO_LOOK.look === k) return; CARGO_LOOK.look = k; reload(['hbContainer']); }, true, k === 'mix' ? L.about : 'All eight: ' + L.about)),
     ];
   },
   step(B, st, dt, { updateDoors, person, jets, time }) {
@@ -864,12 +919,12 @@ export const SHIP_HAULER_BUILT = {
   hbFrames: { name: 'Hauler (built): clamp frames and mounts', group: GR, at: 'free', foot: [5.2, 3.3, 8.1], variants: ['frames'], build: hbFrames },
   hbClamp: { name: 'Hauler (built): a mount\'s jaws', group: GR, at: 'free', foot: [0.3, 1.1, 3.1], variants: MOUNT_NAMES, build: hbClamp },
   hbContainer: { name: 'Hauler (built): a container on its mount', group: GR, at: 'free', foot: [CONTAINER.w, CONTAINER.h, CONTAINER.l], variants: MOUNT_NAMES, build: hbContainer },
-  hbPods: { name: 'Hauler (built): the front legs\' pods and the rear legs\' housings', group: GR, at: 'free', foot: [4.6, 3.5, 12.5], variants: ['pods'], build: hbPods },
+  hbPods: { name: 'Hauler (built): the rear legs\' housings and the front legs\' wells', group: GR, at: 'free', foot: [4.6, 3.5, 12.5], variants: ['pods'], build: hbPods },
   hbPod: { name: 'Hauler (built): thruster pod', group: GR, at: 'free', foot: [1, 1, 1.5], variants: PODS.map((q) => q.name), build: hbPod },
   hbGear: { name: 'Hauler (built): landing leg', group: GR, at: 'free', foot: [0.5, 0.7, 1.5], variants: Object.keys(GEAR.at), build: hbGear },
   hbCrewDoor: { name: 'Hauler (built): crew door', group: GR, at: 'free', foot: [0.6, 2.0, 0.85], variants: ['port'], build: (p) => hbCrewDoor(p) },
   hbStair: { name: 'Hauler (built): crew stair', group: GR, at: 'free', foot: [0.3, 2.0, 0.8], variants: ['port'], build: (p) => hbStair(p) },
   hbAirlock: { name: 'Hauler (built): crew airlock', group: GR, at: 'free', foot: [2.2, 2.0, 0.85], variants: ['port', 'port, cabin'], build: (p, v) => hbAirlock(p, v) },
-  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['two seats', 'two seats, cabin', 'four seats, cabin'], build: (p, v) => hbCockpit(p, v) },
+  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['four seats', 'four seats, cabin'], build: (p, v) => hbCockpit(p, v) },
   cargoContainer: { name: 'Cargo container (shared)', group: GR, at: 'free', foot: [CONTAINER.w, CONTAINER.h, CONTAINER.l], variants: Object.keys(LOOKS).flatMap((k) => [k, ...Object.keys(COLOURS).slice(1, 3).map((c) => `${k}:${c}`)]), build: cargoContainer },
 };

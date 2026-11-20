@@ -10,11 +10,6 @@
  },
  "sliding": true,
  "idea": "Drawn from his own deck plan: the cockpit for four (two seats, two more behind them), then the crew area and mess, which the crew door opens straight into (his plan has no airlock), one 2-high bunk as his bunk picture has, the washroom beside a short passage, and a bigger engineering at the back reaching into the engine block. No cargo bay inside: the cargo rides outside in the eight containers.",
- "swap": {
-  "hbCockpit": {
-   "two seats": "four seats, cabin"
-  }
- },
  "rooms": [
   {
    "id": "cockpit",

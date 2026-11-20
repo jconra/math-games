@@ -1,7 +1,8 @@
 // THE DOCK'S BRIDGE, LIVE: what joins the dock's questions (src/jobs/dock.js) to the bridge outside the docking port
 // (kit/dockbridge.js). While the job is up:
-//   - the camera is outside, beside the port, the bridge's plan faint from the station out to the crew module waiting at
-//     the far end (the station's own outside round the port, the sky behind);
+//   - the camera is outside, beside the port, the bridge's plan faint from the station out to the ship waiting at the
+//     far end (the station's own outside round the port, the sky behind): the Hauler (src/haulerdock.js, the game's
+//     maker's HAUL-3), or, until it has come, the stand-in crew module;
 //   - a ring slides out of the last one, wobbling: its squares can fold. The card asks its question;
 //   - THE YOUNGEST BRACE IT THEMSELVES: each wobbly square tapped (on the card, or on the ring itself) gets its brace,
 //     two triangles, and stops wobbling (its twin on the far side of the tube too); every square braced is the answer;
@@ -112,9 +113,12 @@ function make(W, frame) {
     const lo = (k) => Math.min(...P.map((p) => p[k])), hi = (k) => Math.max(...P.map((p) => p[k]));
     add(root, meshesOf(hull({ x0: lo('x'), x1: hi('x'), y0: lo('y'), y1: hi('y'), z0: lo('z'), z1: Math.min(hi('z'), -0.02) }), mats, light));
   }
-  const CM = crewModule(); add(root, [...meshesOf(CM.solid, mats, light), ...meshesOf(CM.glow, mats, light)]);
+  // (the stand-in ship at the far end, as one group: not drawn while the Hauler waits there, W.dockShip,
+  // src/haulerdock.js)
+  const module = new THREE.Group(); module.name = 'dock: the stand-in ship'; root.add(module);
+  const CM = crewModule(); add(module, [...meshesOf(CM.solid, mats, light), ...meshesOf(CM.glow, mats, light)]);
   // (the ship's docking lights: red while the bridge has not reached it; green as the try's end reaches it)
-  const shipLights = mats.glow.clone(); shipLights.color.setRGB(...SHIP_RED); add(root, meshesOf(CM.lights, { glow: shipLights }, light));
+  const shipLights = mats.glow.clone(); shipLights.color.setRGB(...SHIP_RED); add(module, meshesOf(CM.lights, { glow: shipLights }, light));
   // the plan: faint hoops where the rings will go (each its own, to light up at the try's end), three lines along
   const planMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.75, 1.3), transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, fog: false });
   const P = plan(), ghosts = P.hoops.map((g) => new THREE.Mesh(g, planMat.clone()));
@@ -145,7 +149,7 @@ function make(W, frame) {
     root.add(g);
     rings.push({ i, g, braces, glass, glassMat, glow, glowMat, stripMat, outlines, targets, flashes });
   }
-  MADE = { root, rings, ghosts, outlineMat, planMat, shipLights, ms: Math.round(performance.now() - t0) };
+  MADE = { root, rings, ghosts, outlineMat, planMat, shipLights, module, ms: Math.round(performance.now() - t0) };
   return MADE;
 }
 
@@ -157,6 +161,8 @@ export function dockLink({ W, walls = null, job, spot = null, crew = null, save 
   if (!frame) { console.warn('dock: the station has no outer docking port: the bridge has nowhere to go'); return null; }
   const M = MADE || make(W, frame);
   M.root.matrix.copy(frame); M.root.matrixWorldNeedsUpdate = true;
+  // (the Hauler waiting at the bridge's end in its place: src/haulerdock.js)
+  M.module.visible = !W.dockShip;
   W.scene.add(M.root);
   const dustWas = W.dust ? W.dust.visible : false; if (W.dust) W.dust.visible = false;
   // (the camera is out in space: the station's rooms drawn are the ones seen from inside the port, the airlock)

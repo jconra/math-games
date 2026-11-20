@@ -63,13 +63,13 @@ const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.sea
 // .space.json measured from it)
 // (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
 const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-ore-cockpit', 'miner-mess-forward', 'miner-bunks-forward'];   // (his pick first, so the lab opens on it)
-const HAULER_BPS = ['hauler-row', 'hauler-his-plan', 'hauler-bunks-forward'];   // (the first: the plainest, so the lab opens on it until the game's maker picks)
+const HAULER_BPS = ['hauler-his-plan'];   // (his own deck plan: the game's maker's pick, HAUL-1 2026-11-20; the Hauler's one plan)
 const MEDIC_BPS = ['medic-open-bench', 'medic-open', 'medic-open-daybed', 'medic-bunks-across', 'medic-side-by-side', 'medic-one-ramp'];   // (the first three: one airlock, drawn from the marks of the game's maker, the first of them the plan he chose, so the lab opens on it; the rest: the earlier two-airlock plans)
 const SHIPS = [
   { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
   { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
   { id: 'medic', name: 'Medic (built)', layout: 'ship-medic-built', shell: 'medic-built', lab: MD.LAB, bps: MEDIC_BPS, note: 'The Medic built from the 3k smart mesh with its own ring engines and the 8k\'s legs: a ramp in each side opening into the med bay (or one, the other sealed), one crew door (an airstair, on the port side), legs that rise into the belly' },
-  { id: 'hauler', name: 'Hauler (built)', layout: 'ship-hauler-built', shell: 'hauler-built', lab: HB.LAB, bps: HAULER_BPS, note: 'The Hauler built from the 3k smart mesh\'s nose and cab and the 8k\'s engines, its middle in code: a spine with eight separate containers in yellow clamp frames (each unloads on its own), a crew door that lifts with a stair that swings down, legs that draw up into their pods' },
+  { id: 'hauler', name: 'Hauler (built)', layout: 'ship-hauler-built', shell: 'hauler-built', lab: HB.LAB, bps: HAULER_BPS, note: 'The Hauler built from the 3k smart mesh\'s nose and cab and the 8k\'s engines, its middle in code: a spine with eight separate containers in yellow clamp frames (each unloads on its own), a crew door that lifts with a stair that swings down, six thruster pods that turn, the front legs folding into the cab\'s belly' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
@@ -185,7 +185,7 @@ const spaceOf = (S) => fetch(`../../assets/ships/${S.shell}.space.json`).then((r
 async function loadBuilt(S, inside) {
   const [room, space] = await Promise.all([loadRoom(`../../kit/rooms/${S.layout}.json`), spaceOf(S)]);
   // (with the cabin inside: the pieces it changes, swapped for their cabin variants: the ship's own, and over them the
-  // blueprint's own where it names any (the Hauler's plan with the cockpit for four: its "swap"))
+  // blueprint's own where it names any (its "swap"))
   const swap = inside && swapOf(S);
   if (swap) room.pieces = room.pieces.map((pl) => (swap[pl.piece]?.[pl.variant] ? { ...pl, variant: swap[pl.piece][pl.variant] } : pl));
   const built = buildRoom(room, S.lab.materials(makeMaterials(), (S.lab.dirt || EB.LAB.dirt)[st.dirt]), { bake: { voxel: 0.08, rays: 24 } });
