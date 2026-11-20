@@ -13,14 +13,24 @@
 //   to look, a stick to fly, two buttons up and down. The camera stays over the ground (never under it) and below a
 //   kilometre up; past the ground's edge it carries on over its copy (the ground repeats).
 //
+// THE WRECK (an options round for the rescue runs, the game's maker 2026-11-20: "can we take one of our ships and break
+// it into parts for a rescue situation? Like the people in need broke their ship in half. Maybe we could color it
+// differently."): one of our four ships broken apart beside the landing ring (src/planet/wreck.js, wreckship.js), or
+// none; a different one by the seed ("each rescue"), or the one picked; its colours, one of three crews' that aren't
+// ours; in two pieces or three. A view of it. Only here for now: nothing in the game has it yet.
+//
 // Address switches: ?seed=N the planet; ?kind=moon|meadow|canyon a new one of that kind; ?q=low|medium|high graphics;
-// ?view=landing|above|low; ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
-// window.LAB: { ready, planet, land, quality, timings, view(name), look(at, to), build(seed), bench(frames), step(dt) }
+// ?view=landing|above|low|wreck; ?wreck=none|any|miner|explorer|medic|hauler; ?paint=rust|olive|slate; ?pieces=2|3;
+// ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
+// window.LAB: { ready, planet, land, wreck, quality, timings, view(name), look(at, to), build(seed), bench(frames),
+//   step(dt), setWreck({ ship, paint, pieces }) }
 import * as THREE from 'three';
 import { makePlanet, makeLandAsync } from '../../src/planet/planet.js';
 import { KINDS, kindOf, newSeed, kindById } from '../../src/planet/kinds.js';
 import { WIDTH } from '../../src/planet/land.js';
 import { CURVE } from '../../src/planet/ground.js';
+import { WRECK_SHIPS, PAINTS } from '../../src/planet/wreck.js';
+import { makeWreck } from '../../src/planet/wreckship.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), RIG = q.has('rig'), HOLD = q.has('hold');
@@ -52,6 +62,12 @@ addEventListener('resize', fit); fit();
 const LAB = window.LAB = { ready: false, planet: null, land: null, quality, timings: {} };
 let planet = null, building = null, want = kept.kind && (kept.kind === 'any' || kindById(kept.kind)) ? kept.kind : 'any', ringOn = kept.ring !== false;
 if (q.get('kind') && kindById(q.get('kind'))) want = q.get('kind');
+// the wreck: which ship ('none', 'any' a different one by the seed, or one of the four), its colours, its pieces
+const SHIP_NAMES = { miner: 'Miner', explorer: 'Explorer', medic: 'Medic', hauler: 'Hauler' };
+const wreckOk = (w) => w === 'none' || w === 'any' || WRECK_SHIPS.includes(w);
+let wreck = null, wreckWant = wreckOk(q.get('wreck')) ? q.get('wreck') : wreckOk(kept.wreck) ? kept.wreck : 'none';
+let paint = PAINTS[q.get('paint')] ? q.get('paint') : PAINTS[kept.paint] ? kept.paint : 'rust';
+let breaks = [2, 3].includes(+q.get('pieces')) ? +q.get('pieces') : [2, 3].includes(kept.pieces) ? kept.pieces : 2;
 
 // ── the camera ───────────────────────────────────────────────────────────────────────────────────────────────────
 const cam = { pos: new THREE.Vector3(0, 60, 80), yaw: 0, pitch: 0.2 };
@@ -73,6 +89,16 @@ const VIEWS = {
   landing: { name: 'Landing place', at: (L, a) => { const x = L.x - Math.sin(a) * 95, z = L.z - Math.cos(a) * 95; return [[x, Math.max(ground(x, z), L.y) + 34, z], [L.x, L.y + 2, L.z]]; } },
   above: { name: 'From above', at: (L, a) => { const x = L.x - Math.sin(a) * 160, z = L.z - Math.cos(a) * 160; return [[x, L.y + 330, z], [L.x + Math.sin(a) * 60, L.y, L.z + Math.cos(a) * 60]]; } },
   low: { name: 'Low down', at: (L, a) => { const x = L.x + Math.sin(a) * (L.flat - 4), z = L.z + Math.cos(a) * (L.flat - 4); return [[x, ground(x, z) + 1.7, z], [x + Math.sin(a) * 200, ground(x, z) + 6, z + Math.cos(a) * 200]]; } },
+  // (the wreck, from a little along it and from its side the sun lights: the landing place's side, or the other; far
+  // enough off that about 34 m of ground across fits the screen's width, an upright phone's too)
+  wreck: { name: 'Wreck', at: (L, a) => {
+    const S = wreck && wreck.site; if (!S) return VIEWS.landing.at(L, a);
+    let tx = L.x - S.x, tz = L.z - S.z; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+    if (planet && tx * planet.sunDir.x + tz * planet.sunDir.z < 0) { tx = -tx; tz = -tz; }
+    const d = Math.max(27, 17 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect)), k = d / 27;
+    const x = S.x + tx * d + Math.sin(S.yaw) * 7 * k, z = S.z + tz * d + Math.cos(S.yaw) * 7 * k;
+    return [[x, Math.max(ground(x, z), S.y) + 10 * k, z], [S.x, S.y + 0.8, S.z]];
+  } },
 };
 let viewName = VIEWS[q.get('view')] ? q.get('view') : 'landing';
 function facing() {
@@ -163,10 +189,20 @@ async function build(seed, { keepView = false } = {}) {
     const t0 = performance.now();
     const land = await makeLandAsync(seed);
     const t1 = performance.now();
+    // the wreck, before the planet is drawn: built, broken and placed, and the ground under it cleared (its trees and
+    // plants: they are laid when the planet is made)
+    let W = null;
+    if (wreckWant !== 'none') {
+      say('Breaking the ship…', `${kind.name}, seed ${seed}`);
+      try { W = await makeWreck({ land, ship: wreckWant === 'any' ? null : wreckWant, pieces: breaks }); } catch (e) { console.error(e); if (window.oops) window.oops(e); W = null; }
+    }
+    const tw = performance.now();
+    if (wreck) { wreck.dispose(); wreck = LAB.wreck = null; }
     if (planet) { planet.dispose(); planet = null; }
     renderer.info.reset();
     planet = LAB.planet = await makePlanet({ renderer, scene, land, quality });
     LAB.land = land;
+    if (W) wreck = LAB.wreck = W.draw({ scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint });
     renderer.toneMappingExposure = planet.exposure;
     placeRing();
     if (!keepView) setView(viewName); else applyCam();
@@ -176,12 +212,15 @@ async function build(seed, { keepView = false } = {}) {
     const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     const t2 = performance.now();
     const T = planet.trees && planet.trees.stats;
-    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, planet: Math.round(t2 - t1), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
+    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, wreck: W ? W.stats.ms : 0, planet: Math.round(t2 - tw), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
     $('seed').value = String(seed);
-    const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind'); history.replaceState(null, '', u.href);
+    const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind');
+    if (wreckWant !== 'none') { u.searchParams.set('wreck', wreckWant); u.searchParams.set('paint', paint); u.searchParams.set('pieces', breaks); } else for (const k of ['wreck', 'paint', 'pieces']) u.searchParams.delete(k);
+    history.replaceState(null, '', u.href);
     keep({ seed });
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
-    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}. <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
+    const wr = wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}.` : '';
+    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}.${wr} <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
     loading.hidden = true; LAB.ready = true; paintChips();
   })();
   try { await building; } finally { building = null; }
@@ -192,7 +231,15 @@ function chip(label, on, click, sub = false) { const b = document.createElement(
 function paintChips() {
   $('kinds').replaceChildren(chip('Any kind', want === 'any', () => { want = 'any'; keep({ kind: want }); paintChips(); }, true),
     ...KINDS.map((k) => chip(k.name, want === k.id, () => { want = k.id; keep({ kind: want }); paintChips(); }, true)));
-  $('views').replaceChildren(...Object.entries(VIEWS).map(([id, v]) => chip(v.name, viewName === id, () => setView(id), true)));
+  $('views').replaceChildren(...Object.entries(VIEWS).filter(([id]) => id !== 'wreck' || wreck).map(([id, v]) => chip(v.name, viewName === id, () => setView(id), true)));
+  // the wreck: which ship (or none, or a different one each rescue), its colours, in how many pieces
+  const reWreck = () => { keep({ wreck: wreckWant, paint, pieces: breaks }); paintChips(); if (planet) build(planet.land.seed, { keepView: true }).then(() => { if (wreck && viewName !== 'wreck') setView('wreck'); else paintChips(); }); };
+  $('wrecks').replaceChildren(chip('None', wreckWant === 'none', () => { if (wreckWant === 'none') return; wreckWant = 'none'; if (viewName === 'wreck') viewName = 'landing'; reWreck(); }, true),
+    chip('Each rescue', wreckWant === 'any', () => { if (wreckWant === 'any') return; wreckWant = 'any'; reWreck(); }, true),
+    ...WRECK_SHIPS.map((s) => chip(SHIP_NAMES[s], wreckWant === s, () => { if (wreckWant === s) return; wreckWant = s; reWreck(); }, true)));
+  $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, paint === id, () => { paint = id; keep({ paint }); if (wreck) { wreck.paint(id); const u = new URL(location.href); u.searchParams.set('paint', id); history.replaceState(null, '', u.href); } paintChips(); }, true); b.title = P.about; return b; }));
+  $('breaks').replaceChildren(...[[2, 'In two'], [3, 'In three']].map(([n, t]) => chip(t, breaks === n, () => { if (breaks === n) return; breaks = n; reWreck(); }, true)));
+  for (const id of ['paints', 'breaks']) { const el = $(id); for (const c of el.children) c.hidden = wreckWant === 'none'; if (el.previousElementSibling) el.previousElementSibling.hidden = wreckWant === 'none'; }
   $('quality').replaceChildren(...Object.entries(QUALITY).map(([id, v]) => chip(v.name, quality === id, () => { if (id === quality) return; keep({ q: id }); const u = new URL(location.href); u.searchParams.set('q', id); location.href = u.href; }, true)));
   const r = $('ring'); r.classList.toggle('on', ringOn); r.setAttribute('aria-pressed', ringOn ? 'true' : 'false');
   fit();
@@ -242,6 +289,13 @@ LAB.bench = (frames = 90) => {
 };
 LAB.curve = CURVE;
 LAB.ring = (on) => { ringOn = !!on; if (ring) ring.visible = ringOn; paintChips(); };
+// (for the rigs: the wreck chosen and the planet made again with it; the colours alone change it where it lies)
+LAB.setWreck = async ({ ship = wreckWant, paint: p = paint, pieces = breaks } = {}) => {
+  const again = ship !== wreckWant || pieces !== breaks;
+  wreckWant = wreckOk(ship) ? ship : 'none'; paint = PAINTS[p] ? p : paint; breaks = pieces === 3 ? 3 : 2;
+  if (again && planet) await build(planet.land.seed, { keepView: true }); else if (wreck) wreck.paint(paint);
+  paintChips(); return wreck ? wreck.stats : null;
+};
 
 touchControls(); paintChips();
 const first = +q.get('seed') > 0 ? Math.floor(+q.get('seed')) : (q.get('kind') ? newSeed(want) : (kept.seed > 0 ? kept.seed : newSeed(want === 'any' ? null : want)));
