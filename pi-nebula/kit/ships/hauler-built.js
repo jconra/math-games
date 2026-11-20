@@ -188,7 +188,19 @@ let PANES = null;
 export function canopyPanes() { if (PANES) return PANES; PANES = C.buildPanes(CANOPY, canopyMesh(), outward); return PANES; }
 export function spar(p) { return C.spar(p, { out: CANOPY.spar.out, in: CANOPY.spar.in, surf: PAL.blackEdge }); }
 export const GLASS = { inset: 0.008, step: 0.6 };
-function hbCanopy(p) { return C.drawCanopy(p, canopyPanes(), CANOPY, GLASS, part(spar), dk); }
+// (and the PILLAR between each side window and the quarter pane ahead of it: the 3k's starboard side is open there, a
+// crack the sky showed through from the seats. A dark plate 2 cm inside the skin, each side: behind the skin to port)
+export const PILLAR = { inset: 0.02 };
+function hbCanopy(p) {
+  C.drawCanopy(p, canopyPanes(), CANOPY, GLASS, part(spar), dk);
+  const acc = new Acc(), K = CANOPY.corners;
+  for (const sx of [1, -1]) {
+    const pt = (k) => { const [x, y, z] = K[k].at; return V3(sx * (x - PILLAR.inset), y, z); };
+    const q = [pt('S0'), pt('B'), pt('Cc'), pt('T3'), pt('S3')], n = V3(sx, 0, 0);
+    polyTo(acc, q, n, PAL.blackEdge); polyTo(acc, q, n.clone().negate(), PAL.blackEdge);
+  }
+  return acc.flush(p);
+}
 
 // ── THE MIDDLE, IN CODE: the door section behind the cab, the core the containers hang on, its spine cap, the keel, and
 // the collar the engine block bolts to ──────────────────────────────────────────────────────────────────────────────
@@ -206,6 +218,9 @@ const doorProf = () => [[sectX(CREWDOOR.sill), CREWDOOR.sill], ...SECT.slice(4, 
 const CORE = [[0, 0.80], [1.05, 0.80], [1.2, 0.95], [1.2, 3.6], [1.05, 3.75], [0, 3.75]];
 const CAP = [[0.94, 3.75], [0.94, 3.82], [0.80, 3.92], [0, 3.92]];
 const COLLAR = [[0, 0.80], [1.27, 0.80], [1.62, 1.15], [1.62, 3.53], [1.27, 3.88], [0, 3.88]];
+// the engine block's housing's plates (his picture's): the raised cream block each side (y, z; raise: how far out),
+// its handle, the dark plate under it and the band over it with its vent, the cream plate across the top
+export const HOUSE = { raise: 0.09, cream: { y: [1.62, 3.0], z: [-6.7, -5.86] }, handle: { y: 2.2, z: [-6.55, -6.12] }, low: { y: [1.02, 1.5] }, band: { y: [3.08, 3.48] }, vent: { z: [-6.6, -6.0] }, top: { x: [-0.95, 0.95], z: [-6.62, -6.02] } };
 // his dark inset hatch on the block's face, each side (on the port side it is the crew door's own face)
 function hatchMark(acc, sx) {
   const x = sx * (SECT[6][0] + 0.006), n = V3(sx, 0, 0);
@@ -256,7 +271,28 @@ function hbBody(p) {
   skin(acc, COLLAR, k0, k1, (x, y) => (y < 0.81 ? PAL.belly : PAL.dark));
   ring(acc, COLLAR, CORE, k1, V3(0, 0, 1), PAL.dark);
   polyTo(acc, outline(COLLAR, k0), V3(0, 0, -1), PAL.dark); polyTo(acc, outline(COLLAR, k0 + 0.002).reverse(), V3(0, 0, 1), PAL.dark);
-  for (const sx of [1, -1]) quad(acc, [V3(sx * 1.626, 1.45, k0 + 0.12), V3(sx * 1.626, 1.45, k1 - 0.12), V3(sx * 1.626, 3.38, k1 - 0.12), V3(sx * 1.626, 3.38, k0 + 0.12)], V3(sx, 0, 0), PAL.skin);
+  // (its look, his picture's engine block: on each side a raised cream block of two panels with a dark handle, a dark
+  // plate under it and a dark band with a vent over it; a cream plate across the top with a dark vent; cream corners
+  // on the back round the drums, where his has the octagon's cream corners)
+  const H = HOUSE;
+  for (const sx of [1, -1]) {
+    const X = (a, b) => [sx * a, sx * b], inn = sx > 0 ? 'u-' : 'u+';
+    box(acc, X(1.58, 1.62 + H.raise), H.cream.y, H.cream.z, PAL.skin, [inn]);
+    const xf = sx * (1.62 + H.raise + 0.003), n = V3(sx, 0, 0), zm = (H.cream.z[0] + H.cream.z[1]) / 2;
+    quad(acc, [V3(xf, H.cream.y[0] + 0.02, zm - 0.012), V3(xf, H.cream.y[0] + 0.02, zm + 0.012), V3(xf, H.cream.y[1] - 0.02, zm + 0.012), V3(xf, H.cream.y[1] - 0.02, zm - 0.012)], n, PAL.black);
+    box(acc, X(1.62 + H.raise, 1.62 + H.raise + 0.04), [H.handle.y - 0.03, H.handle.y + 0.03], H.handle.z, PAL.black, [inn]);
+    box(acc, X(1.62 + H.raise, 1.62 + H.raise + 0.04), [H.handle.y - 0.12, H.handle.y + 0.03], [H.handle.z[0], H.handle.z[0] + 0.05], PAL.black, [inn]);
+    box(acc, X(1.58, 1.62 + 0.035), H.low.y, [k0 + 0.1, k1 - 0.1], PAL.darkEdge, [inn]);
+    box(acc, X(1.58, 1.62 + 0.035), H.band.y, [k0 + 0.1, k1 - 0.1], PAL.darkEdge, [inn]);
+    const xv = sx * (1.62 + 0.038);
+    quad(acc, [V3(xv, H.band.y[0] + 0.12, H.vent.z[0]), V3(xv, H.band.y[0] + 0.12, H.vent.z[1]), V3(xv, H.band.y[1] - 0.12, H.vent.z[1]), V3(xv, H.band.y[1] - 0.12, H.vent.z[0])], n, PAL.black);
+    // (the back's cream corners: inside the outline, along its slanted edges, top and bottom)
+    for (const [a, b, c, d] of [[[1.62, 3.53], [1.27, 3.88], [0.95, 3.88], [1.62, 3.21]], [[1.27, 0.80], [1.62, 1.15], [1.62, 1.47], [0.95, 0.80]]]) {
+      polyTo(acc, [a, b, c, d].map(([x, y]) => V3(sx * x, y, k0 - 0.004)), V3(0, 0, -1), PAL.skin);
+    }
+  }
+  box(acc, H.top.x, [COLLAR[4][1] - 0.02, COLLAR[4][1] + 0.05], H.top.z, PAL.skin, ['v-']);
+  quad(acc, [V3(-0.45, COLLAR[4][1] + 0.053, H.top.z[0] + 0.12), V3(0.45, COLLAR[4][1] + 0.053, H.top.z[0] + 0.12), V3(0.45, COLLAR[4][1] + 0.053, H.top.z[1] - 0.12), V3(-0.45, COLLAR[4][1] + 0.053, H.top.z[1] - 0.12)], V3(0, 1, 0), PAL.black);
   // two antennas on the cab roof's rear
   for (const [x, z, top] of [[0.14, 5.38, 4.17], [-0.12, 5.10, 4.39]]) {
     const up = rayHull(V3(x, 6, z), V3(0, -1, 0)), y0 = up ? up.p.y - 0.02 : 3.4;
@@ -320,7 +356,20 @@ function hbStair(p) {
 }
 // the airlock just inside the door: a small lit room, a shut inner door on each end wall (forward to the cockpit,
 // aft to the core), so an open door shows a room and not the empty hull
-function hbAirlock(p) {
+//   'port, cabin'   with the rooms built inside (LAB.cabin): the cabin's room at the door is the airlock (or the
+//                   crew area), its wall at x CABIN_DOOR.x with the opening in it; this is only what lies between that
+//                   wall and the hull's door: the jambs each side and the head over it (the floor is the cabin's own,
+//                   run out to the sill: LAB.cabin.outer.sill)
+export const CABIN_DOOR = { x: 1.0 };
+function hbAirlock(p, variant) {
+  if (variant === 'port, cabin') {
+    const acc = new Acc(), [z0, z1] = CREWDOOR.z, y0 = CREWDOOR.sill, y1 = CREWDOOR.head, xi = CABIN_DOOR.x - 0.01, xs = sectX(y0), xh = sectX(y1);
+    for (const [z, nz] of [[z0, 1], [z1, -1]]) polyTo(acc, [V3(xi, y0, z), ...doorProf().map(([x, y]) => V3(x, y, z)), V3(xi, y1, z)], V3(0, 0, nz), PAL.inner);
+    quad(acc, [V3(xi, y1, z0), V3(xi, y1, z1), V3(xh, y1, z1), V3(xh, y1, z0)], V3(0, -1, 0), PAL.inner);
+    quad(acc, [V3(xi, y0 - 0.002, z0), V3(xi, y0 - 0.002, z1), V3(xs, y0 - 0.002, z1), V3(xs, y0 - 0.002, z0)], V3(0, 1, 0), PAL.deck);
+    quad(acc, [V3(xs - 0.1, y0 + 0.003, z0 + 0.02), V3(xs - 0.1, y0 + 0.003, z1 - 0.02), V3(xs - 0.01, y0 + 0.003, z1 - 0.02), V3(xs - 0.01, y0 + 0.003, z0 + 0.02)], V3(0, 1, 0), PAL.yellow);
+    return acc.flush(p);
+  }
   const acc = new Acc(), [z0, z1] = CREWDOOR.z, y0 = CREWDOOR.sill, y1 = CREWDOOR.head, xi = -1.0, xs = sectX(y0), xh = sectX(y1), zm = (z0 + z1) / 2;
   quad(acc, [V3(xi, y0, z0), V3(xi, y0, z1), V3(xs, y0, z1), V3(xs, y0, z0)], V3(0, 1, 0), PAL.deck);
   quad(acc, [V3(xi, y1, z0), V3(xi, y1, z1), V3(xh, y1, z1), V3(xh, y1, z0)], V3(0, -1, 0), PAL.inner);
@@ -635,25 +684,66 @@ function hbMarks(p) {
   return acc.flush(p);
 }
 
-// ── THE COCKPIT: two bucket seats side by side behind the glass (the cockpit family's parts), on a raised floor, a
-// bulkhead with a shut door behind them ─────────────────────────────────────────────────────────────────────────────
-export const COCKPIT = { floor: 0.3, seatsZ: 5.15, wallX: 1.2, gap: 0.40, back: 4.0, front: 7.6, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 2.166 - DECK0 - 0.3, z: 7.787 - 5.15, slope: 0.78 } };
+// ── THE COCKPIT: two bucket seats side by side behind the glass (the cockpit family's parts), on a floor 0.3 m over the
+// cabin's deck (the blueprints': one step up, as the Explorer's), its back wall at z `back` (the blueprints' cockpit
+// starts there). Everything under the glass is closed (built-common.js's tub, as the Miner's: no sky through a gap from
+// the seats); between the glass's back edge and the back wall the CHEEKS, a dark wall each side from the floor to the
+// roof (the 3k nose is open there, behind the side windows), and a dark roof over them; the back wall:
+//   'two seats'          a bulkhead out to the hull's inside, a shut door in it
+//   'two seats, cabin'   with the rooms built inside (LAB.cabin): the tub cut at the back wall, which is the cabin's own
+//                        (the cockpit's door in it); a riser there, the step up; round the cabin's wall, a dark panel
+//                        out to the hull and up to the roof
+export const COCKPIT = { floor: 0.3, seatsZ: 5.15, wallX: 1.2, gap: 0.40, back: 4.0, front: 7.6, tubX: 1.1, cabinWall: { half: 1.0, top: 2.5 }, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 2.166 - DECK0 - 0.3, z: 7.787 - 5.15, slope: 0.78 } };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export const builtCockpitPlan = () => C.builtCockpitPlan(COCKPIT, COCKPIT_DROP);
-function hbCockpit(p) {
-  const Cp = COCKPIT;
+function hbCockpit(p, variant) {
+  const Cp = COCKPIT, cabin = variant === 'two seats, cabin', zb = Cp.back, fy = DECK + Cp.floor;
   C.cockpitParts(p, builtCockpitPlan(), Cp);
-  const acc = new Acc(), fy = DECK + Cp.floor, zb = Cp.back;
-  // (the floor: out to the hull's inside, row by row)
-  const half = (y, z, back) => { const h = rayHull(V3(0, y, z), V3(1, 0, 0)), h2 = rayHull(V3(0, y, z), V3(-1, 0, 0)); return [h ? h.p.x - 0.05 : back, h2 ? h2.p.x + 0.05 : -back]; };
+  const acc = new Acc(), out = canopyPanes().outline;
+  // THE FLOOR out to the hull's inside, row by row from the back wall to the nose (under the glass the nose's own skin,
+  // drawn both ways, closes the cockpit: its canopy has no roof pane, so a tub down from the glass's edges would wall
+  // off the windscreen)
+  const halfAt = (s, z, y = fy + 0.04) => { const h = rayHull(V3(0, y, z), V3(s, 0, 0)); return h ? Math.abs(h.p.x) - 0.03 : 0.5; };
   const rows = [];
-  for (let z = zb; z <= Cp.front + 1e-6; z += 0.25) { const [a, b] = half(fy + 0.03, z, 0.5); if (a - b > 0.2) rows.push([z, a, b]); }
+  for (let z = zb; z <= Cp.front + 1e-6; z += 0.25) { const a = halfAt(1, z), b = halfAt(-1, z); if (a + b > 0.2) rows.push([z, a, -b]); }
   for (let i = 0; i < rows.length - 1; i++) { const [za, pa, sa] = rows[i], [zc, pb, sb] = rows[i + 1]; quad(acc, [V3(sa, fy, za), V3(pa, fy, za), V3(pb, fy, zc), V3(sb, fy, zc)], V3(0, 1, 0), PAL.deck); }
-  // (the bulkhead behind the seats, out to the hull's inside, and its door)
-  const up = rayHull(V3(0, fy + 0.5, zb), V3(0, 1, 0)), yt = up ? up.p.y - 0.03 : fy + 2.0, sec = [];
-  for (let y = fy; y < yt; y += 0.2) sec.push([y, ...half(y + 0.01, zb, 0.3)]);
-  sec.push([yt, ...half(yt - 0.02, zb, 0.3)]);
-  for (let i = 0; i < sec.length - 1; i++) { const [ya, pa, sa] = sec[i], [yb, pb, sb] = sec[i + 1]; quad(acc, [V3(sa, ya, zb), V3(pa, ya, zb), V3(pb, yb, zb), V3(sb, yb, zb)], V3(0, 0, 1), PAL.dark); }
+  // (the cheeks stand at the narrowest the hull's inside is between the back wall and the glass, at the floor and up a
+  // seated person's height, so they never come out through the skin)
+  const zg0 = Math.min(...out.flatMap((sp) => [sp.a.z, sp.b.z])), hs = [];
+  for (let z = zb + 0.05; z <= zg0 + 0.02; z += 0.1) for (const y of [fy + 0.04, fy + 0.6, fy + 1.2]) hs.push(halfAt(1, z, y), halfAt(-1, z, y));
+  const gx = Math.min(...hs, Cp.tubX);
+  // THE CHEEKS AND THEIR ROOF, from the back wall to the glass's back edge, a little inside the skin, never through it
+  // (both faces dark: drawn twice): each cheek's top under the roof at its side, a ridge under the roof's middle
+  const zg = Math.min(...out.flatMap((sp) => [sp.a.z, sp.b.z])) + 0.02, both = (pts, n) => { polyTo(acc, pts, n, PAL.dark); polyTo(acc, pts, n.clone().negate(), PAL.dark); };
+  const roofAt = (x, z) => { for (let k = 0; k < 6; k++) { const h = rayHull(V3(x * (1 - k * 0.12), fy + 0.5, z), V3(0, 1, 0)); if (h) return h.p.y - 0.03; } return fy + 1.9; };
+  const top = (s, z) => (s ? roofAt(s * (gx - 0.05), z) : roofAt(0, z));
+  for (const s of [1, -1]) {
+    const x = s * gx;
+    both([V3(x, fy, zb), V3(x, fy, zg), V3(x, top(s, zg), zg), V3(x, top(s, zb), zb)], V3(-s, 0, 0));
+    both([V3(x, top(s, zb), zb), V3(x, top(s, zg), zg), V3(0, top(0, zg), zg), V3(0, top(0, zb), zb)], V3(-s * 0.3, -1, 0).normalize());
+  }
+  // THE BACK WALL's outline at zb: out to the cheeks, up to their tops and the ridge
+  const back = [V3(-gx, fy, zb), V3(gx, fy, zb), V3(gx, top(1, zb), zb), V3(0, top(0, zb), zb), V3(-gx, top(-1, zb), zb)];
+  const W = Cp.cabinWall, wt = DECK + W.top;
+  if (cabin) {
+    // (the riser, the step up, facing the room behind, its nosing striped; round the cabin's own wall (W.half each side,
+    // W.top over the deck), a dark panel facing the cockpit: beside it, and over it)
+    polyTo(acc, [V3(-gx, DECK, zb), V3(gx, DECK, zb), V3(gx, fy, zb), V3(-gx, fy, zb)], V3(0, 0, -1), PAL.darkEdge);
+    for (let i = 0; i < 6; i++) polyTo(acc, [V3(-gx + i * gx / 3, fy - 0.004, zb - 0.004), V3(-gx + (i + 0.5) * gx / 3, fy - 0.004, zb - 0.004), V3(-gx + (i + 0.5) * gx / 3, fy - 0.07, zb - 0.004), V3(-gx + i * gx / 3, fy - 0.07, zb - 0.004)], V3(0, 0, -1), PAL.yellow);
+    const lift = (P) => P.map((v) => V3(v.x, v.y, zb + 0.004));
+    for (const s of [1, -1]) if (gx > W.half + 1e-3) {
+      // (the part past the wall's end: under the outline's top edge from the cheek to the ridge)
+      const yAt = top(0, zb) + (top(s, zb) - top(0, zb)) * W.half / gx;
+      polyTo(acc, lift([V3(s * W.half, fy, 0), V3(s * gx, fy, 0), V3(s * gx, top(s, zb), 0), V3(s * W.half, yAt, 0)]), V3(0, 0, 1), PAL.dark);
+    }
+    const over = C.clipPlane(back, [0, -1, 0, -(wt - 0.03)])[0];   // (the part over the wall's top)
+    if (over?.length >= 3) polyTo(acc, lift(over), V3(0, 0, 1), PAL.dark);
+    for (const x of [-0.5, 0.5]) p.light([x, Cp.floor + 1.75, Cp.seatsZ - 0.3], 1.0, [1.25, 0.85, 0.55], [0, -1, 0.2], 3.0);
+    p.light([0, Cp.floor + 1.0, Cp.seatsZ + 1.0], 0.7, [0.35, 0.65, 1.0], [0, 0.2, -1], 2.5);
+    return acc.flush(p);
+  }
+  // (no cabin: a bulkhead across the whole outline, a shut door in it, a lit strip over it)
+  polyTo(acc, back, V3(0, 0, 1), PAL.dark);
   boxAt(acc, V3(0, fy + 0.95, zb + 0.03), AX, [0.42, 0.95, 0.03], PAL.door, ['w-']);
   boxAt(acc, V3(0, fy + 0.95, zb + 0.065), AX, [0.012, 0.91, 0.006], PAL.black, ['w-']);
   quad(acc, [V3(-0.38, fy + 1.96, zb + 0.062), V3(0.38, fy + 1.96, zb + 0.062), V3(0.38, fy + 2.0, zb + 0.062), V3(-0.38, fy + 2.0, zb + 0.062)], V3(0, 0, 1), GLOW.strip, 'glow');
@@ -703,7 +793,7 @@ export const LAB = {
   controls: ['thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
   cargo: { name: 'Containers', tip: 'The eight containers in their clamp frames, or all unloaded: the jaws open, each container slides out and is lifted away' },
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
-  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.78, 4.55], look: [0, 2.45, 8.0] } },
+  spots: { Canopy: { at: [4.6, 4.3, 11.8], look: [0, 2.6, 6.2] }, Door: { at: [7.0, 2.0, 6.4], look: [1.4, 1.7, 3.2] }, Clamps: { at: [7.5, 3.4, 2.6], look: [2.0, 2.3, -1.2] }, Stern: { at: [4.0, 4.2, -15.5], look: [0, 2.4, -7] }, Seats: { at: [0, 2.6, 4.85], look: [0, 2.3, 8.0] } },
   doorTip: 'Open the crew door (it lifts, then the stair swings down to the ground), or shut it',
   gearTip: 'Draw the landing legs up into their pods, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
@@ -770,7 +860,7 @@ export const SHIP_HAULER_BUILT = {
   hbGear: { name: 'Hauler (built): landing leg', group: GR, at: 'free', foot: [0.5, 0.7, 1.5], variants: Object.keys(GEAR.at), build: hbGear },
   hbCrewDoor: { name: 'Hauler (built): crew door', group: GR, at: 'free', foot: [0.6, 2.0, 0.85], variants: ['port'], build: (p) => hbCrewDoor(p) },
   hbStair: { name: 'Hauler (built): crew stair', group: GR, at: 'free', foot: [0.3, 2.0, 0.8], variants: ['port'], build: (p) => hbStair(p) },
-  hbAirlock: { name: 'Hauler (built): crew airlock', group: GR, at: 'free', foot: [2.2, 2.0, 0.85], variants: ['port'], build: (p) => hbAirlock(p) },
-  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['two seats'], build: (p) => hbCockpit(p) },
+  hbAirlock: { name: 'Hauler (built): crew airlock', group: GR, at: 'free', foot: [2.2, 2.0, 0.85], variants: ['port', 'port, cabin'], build: (p, v) => hbAirlock(p, v) },
+  hbCockpit: { name: 'Hauler (built): cockpit', group: GR, at: 'free', foot: [2.4, 2, 3.4], variants: ['two seats', 'two seats, cabin'], build: (p, v) => hbCockpit(p, v) },
   cargoContainer: { name: 'Cargo container (shared)', group: GR, at: 'free', foot: [CONTAINER.w, CONTAINER.h, CONTAINER.l], variants: Object.keys(LOOKS).flatMap((k) => [k, ...Object.keys(COLOURS).slice(1, 3).map((c) => `${k}:${c}`)]), build: cargoContainer },
 };
