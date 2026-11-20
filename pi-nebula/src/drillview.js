@@ -108,6 +108,9 @@ export const VIEWS = {
   pivot: [0, 4.4, 3],
 };
 const ROCK_R = 1.05;       // a round rock's radius, metres ("about 2 metres" across)
+const UP_Y = new THREE.Vector3(0, 1, 0), UP_X = new THREE.Vector3(1, 0, 0);
+// the ways the ore can be shown (see `oreLook` in makeDrillView)
+export const ORE_LOOKS = ['glow', 'veins', 'sparkle', 'cracks', 'crystals'];
 const HAND = { flat: 0, round: 0, long: 0.45 };   // how much further along the hand a rock's middle lies, by its shape (m)
 // (the rocks as the flying feels them: each a ball, this much of its longest half-length)
 const BALL = 0.95;
@@ -226,8 +229,25 @@ void main() {
 const ROCK_FRAG = `
 ${VEIL_GLSL}
 uniform vec3 uSun; uniform vec3 uTint; uniform float uSunK; uniform float uLamp;
+#if defined(HELD) || defined(ORE)
+uniform vec3 uSq;
+#endif
 #ifdef HELD
-uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 uGlow; uniform vec3 uSq; uniform float uScan;
+uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 uGlow; uniform float uScan;
+#endif
+#ifdef ORE
+// THE ORE ON THE ROCK'S OWN SURFACE (the looks 'sparkle', 'cracks' and 'crystals'; the game's maker's words are at
+// oreLook, below): each vein shows where its outer end comes to the surface, as a patch as big as the metal in it.
+// uVD: each vein's way out from the rock's middle; uVC: its metal's colour; uVA: the tonnes left in it; uMode: 1 the
+// sparkle (very many tiny bright dots, thickest along fine cracks, a soft glow under them), 2 the cracks (the rock's
+// own edges lit), 3 only the soft glow (under the crystals). Only what faces the eye is seen: it is the surface.
+uniform vec3 uVD[5]; uniform vec3 uVC[5]; uniform float uVA[5]; uniform int uVN; uniform float uOre; uniform float uT; uniform int uMode;
+float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+float vn3(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h31(i), h31(i + vec3(1.0, 0.0, 0.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 0.0)), h31(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(h31(i + vec3(0.0, 0.0, 1.0)), h31(i + vec3(1.0, 0.0, 1.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 1.0)), h31(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
 #endif
 varying vec3 vW; varying vec3 vL; varying vec3 vB; varying vec2 vF;
 void main() {
@@ -237,6 +257,39 @@ void main() {
   vec3 base = uTint * (0.72 + 0.56 * vF.x);
   vec3 c = base * (0.06 + uSunK * d) + base * vec3(0.16, 0.2, 0.27) * max(0.45 - 0.55 * dot(n, uSun), 0.0);
   c += base * uLamp * pow(max(dot(n, normalize(cameraPosition - vW)), 0.0), 1.5);      // (the scan's own lamp: a rock's facets read from every side)
+  #ifdef ORE
+  if (uOre > 0.0) {
+    vec3 od = normalize(vL / uSq), ore = vec3(0.0);
+    float e2 = min(vB.x, min(vB.y, vB.z)), ew = fwidth(e2), edge = 1.0 - smoothstep(ew * 0.8, ew * 2.6, e2);
+    // (a fine grid through the rock: in each of its cells one tiny bright dot, somewhere in it; far off, where a cell
+    // is smaller than a dot of the screen, the dots run together into their own glow)
+    vec3 g = vL * 36.0, cell = floor(g), fr = fract(g) - 0.5; float gw = max(fwidth(g.x), max(fwidth(g.y), fwidth(g.z))), rnd = h31(cell);
+    vec3 off = (vec3(h31(cell + 1.3), h31(cell + 2.7), h31(cell + 4.1)) - 0.5) * 0.56;
+    float spark = smoothstep(0.34, 0.04, length(fr - off)), tw = 0.72 + 0.28 * sin(uT * (1.5 + 5.0 * rnd) + rnd * 40.0), fine = 1.0 - smoothstep(0.45, 1.1, gw);
+    for (int i = 0; i < 5; i++) {
+      if (i >= uVN) break;
+      float amt = uVA[i];
+      if (amt > 0.002) {
+        // (the patch: wider for more metal, never so wide as to reach the next vein's, a right angle away)
+        float ang = acos(clamp(dot(od, uVD[i]), -1.0, 1.0)), R = min(0.78, 0.36 + 0.26 * sqrt(amt)), m = 1.0 - smoothstep(R * 0.25, R, ang);
+        if (m > 0.0) {
+          float glow = 0.3;
+          if (uMode == 2) glow = edge * (0.7 + 1.9 * m) + 0.12;
+          else if (uMode == 1) {
+            // fine cracks, a coarse lot and a finer one across them; the dots thickest along them
+            vec3 q = vL * 3.1 + uVD[i] * 7.0; float warp = vn3(q * 1.9) * 2.0 - 1.0;
+            float r1 = 1.0 - abs(vn3(q + warp * 0.7) * 2.0 - 1.0), r2 = 1.0 - abs(vn3(q * 2.3 + 5.0 - warp * 0.5) * 2.0 - 1.0);
+            float line = max(smoothstep(0.74, 0.96, r1), 0.7 * smoothstep(0.80, 0.97, r2));
+            float dens = clamp(0.1 + 0.8 * line + 0.25 * m, 0.0, 0.96);
+            glow = mix(dens * 0.4, spark * step(1.0 - dens, rnd) * tw, fine) * 3.4 + line * 1.0 + 0.2;
+          }
+          ore += uVC[i] * glow * m * min(1.25, 0.55 + 0.7 * sqrt(amt));
+        }
+      }
+    }
+    c += ore * uOre;
+  }
+  #endif
   #ifdef HELD
   float e = min(vB.x, min(vB.y, vB.z)), w = fwidth(e);
   float crack = (1.0 - smoothstep(w * 0.7, w * 2.0, e)) * step(vF.y, uCrack);
@@ -277,6 +330,30 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+// THE CRYSTALS: small shards standing out of the rock where a vein comes to its surface, each facet its own shade of
+// the metal's colour, bright at the edges and toward the point.
+const CRYSTAL_VERT = `
+varying vec3 vW; varying vec3 vC; varying float vH;
+void main() {
+  vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  #ifdef USE_INSTANCING_COLOR
+  vC = instanceColor;
+  #else
+  vC = vec3(1.0);
+  #endif
+  vW = w.xyz; vH = position.y; gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const CRYSTAL_FRAG = `
+${VEIL_GLSL}
+varying vec3 vW; varying vec3 vC; varying float vH;
+void main() {
+  if (veiled(vW)) discard;
+  vec3 n = normalize(cross(dFdx(vW), dFdy(vW))); float f = abs(dot(n, normalize(cameraPosition - vW)));
+  vec3 c = vC * (0.5 + 1.6 * pow(1.0 - f, 2.0) + 0.9 * smoothstep(0.1, 0.9, vH)) + vec3(1.0) * pow(f, 8.0) * 0.45;
+  gl_FragColor = vec4(c, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
 // THE VEINS: a flat strip from one end to the other, turned to the eye and as wide on the screen as its metal asks
 // (never thinner than a hair's breadth of the picture); hard-edged, white-hot down its middle. Drawn over its own
 // rock as the glow is.
@@ -339,8 +416,12 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // ── the rocks' materials: the ones in the field; the one in the claw (its holes, its cracks, the scan's sweep) ──
   const uni = (lamp) => ({ ...VEIL, uSun: { value: sunW }, uTint: { value: new THREE.Color(0.082, 0.076, 0.071) }, uSunK: { value: SUN_K }, uLamp: { value: lamp } });
   const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(0.45), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
-  const heldMat = new THREE.ShaderMaterial({ defines: { HELD: '' }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG,
-    uniforms: { ...uni(1.25), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
+  // (a rock that holds ore has a material of its own, for the ore on its surface: the same program, its own veins)
+  const oreUni = () => ({ uSq: { value: new THREE.Vector3(1, 1, 1) }, uVD: { value: Array.from({ length: 5 }, () => new THREE.Vector3(0, 1, 0)) }, uVC: { value: Array.from({ length: 5 }, () => new THREE.Color(0, 0, 0)) },
+    uVA: { value: [0, 0, 0, 0, 0] }, uVN: { value: 0 }, uOre: { value: 0 }, uT: { value: 0 }, uMode: { value: 1 } });
+  const rockMat = () => new THREE.ShaderMaterial({ defines: { ORE: '' }, uniforms: { ...uni(0.45), ...oreUni() }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
+  const heldMat = new THREE.ShaderMaterial({ defines: { HELD: '', ORE: '' }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG,
+    uniforms: { ...oreUni(), ...uni(1.25), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
 
   // ── beyond the field: big far rocks, and pebbles all through it (they slide by as the ship flies); a batch each ──
   // (the far ones are dim shapes against the stars, with no ore the scan can see: none of them is one to fly to)
@@ -363,13 +444,16 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // ── the rocks of the field: one small mesh each, where the plain game put it ──
   const seen = new Map();   // rock.id -> { rock, mesh, S (its look), pos (the field's frame), q, spin }
   function addSeen(rock) {
-    const S = lookOf(rock.look, rock.shape), mesh = new THREE.Mesh(rockGeo(S, 2), fieldMat), r = seeded(rock.look + 3);
-    const o = { rock, mesh, S, pos: new THREE.Vector3(...rock.pos), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(r() * 6, r() * 6, r() * 6)), spin: (r() - 0.5) * 0.12, tag: null };
+    const S = lookOf(rock.look, rock.shape), mat = rockMat(), mesh = new THREE.Mesh(rockGeo(S, 2), mat), r = seeded(rock.look + 3);
+    mat.uniforms.uSq.value.set(...S.sq);
+    // (each vein's way out from the rock's middle, by its outer lump, and two ways across it: for the ore on the surface)
+    const vd = rock.veins.map((V, v) => { const L = rock.lumps.find((q) => q.vein === v), d = new THREE.Vector3(...L.p).normalize(), a = new THREE.Vector3().crossVectors(d, Math.abs(d.y) < 0.9 ? UP_Y : UP_X).normalize(); return { d, a, b: new THREE.Vector3().crossVectors(d, a), lumps: rock.lumps.filter((q) => q.vein === v) }; });
+    const o = { rock, mesh, mat, vd, S, pos: new THREE.Vector3(...rock.pos), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(r() * 6, r() * 6, r() * 6)), spin: (r() - 0.5) * 0.12, tag: null };
     mesh.matrixAutoUpdate = false; mesh.frustumCulled = false; mesh.name = 'drill: rock ' + rock.id; FG.add(mesh);
     for (const L of rock.lumps) L.show = L.ore;
     seen.set(rock.id, o); return o;
   }
-  function dropSeen(id) { const o = seen.get(id); if (!o) return; FG.remove(o.mesh); o.mesh.geometry.dispose(); if (o.tag) o.tag.remove(); seen.delete(id); }
+  function dropSeen(id) { const o = seen.get(id); if (!o) return; FG.remove(o.mesh); o.mesh.geometry.dispose(); o.mat.dispose(); if (o.tag) o.tag.remove(); seen.delete(id); }
   function syncSeen() {
     for (const rock of run.rocks) if (!seen.has(rock.id)) addSeen(rock);
     for (const id of [...seen.keys()]) if (!run.rocks.some((r) => r.id === id) && !(H && H.rock.id === id)) dropSeen(id);
@@ -393,7 +477,53 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // colour, with short twigs off each lump; thick where much metal is left, thinner as it is drilled out, gone where
   // none is; and a small hot spot at each lump. One batch of flat strips, in the field's frame; nothing else changes
   // (the ore is where it was, a hole finds what it found). ──
-  let oreLook = ore === 'veins' ? 'veins' : 'glow';
+  // THREE MORE, ON THE ROCK'S OWN SURFACE (the game's maker, the same evening, with his picture of rocks whose ore
+  // glitters along cracks: "It looks like its made with hundreds or even thousands of very tiny dots, which ends up
+  // giving it sharp looking detail. Although Id prefer to see even more glow than in the example. Its also reasonable
+  // that you are only seeing surface detection on the rocks, so the backside and center is hidden." ... "Would using a
+  // shader help for getting an impressive glow?" and "Maybe I'd like to see your crystal and glowing line ideas too"):
+  //   'sparkle'   his picture: where a vein comes to the surface, very many tiny bright dots, thickest along fine
+  //               cracks, a soft glow under them; the patch as big as the metal in the vein (the rock's own shader)
+  //   'cracks'    the rock's own edges lit in the metal's colour, there
+  //   'crystals'  shards of the metal's colour standing out of the rock, there, with the soft glow under them
+  // In these three only the side of a rock that faces the eye shows its ore: turn the rock to see the rest. A rock
+  // far off, a few dots across, still shows its soft glow, so its metals can be told from a distance.
+  let oreLook = ORE_LOOKS.includes(ore) ? ore : 'glow';
+  const onSurface = () => oreLook === 'sparkle' || oreLook === 'cracks' || oreLook === 'crystals';
+  const veinLeft = (o, v) => { let t = 0; for (const L of o.vd[v].lumps) t += Math.max(0, L.show == null ? L.ore : L.show); return t; };
+  // a rock's ore, told to its material (U: the material's uniforms; k: how bright)
+  function oreOn(U, o, k) {
+    const on = onSurface(); U.uOre.value = on ? k : 0; if (!on) return;
+    U.uMode.value = oreLook === 'cracks' ? 2 : oreLook === 'crystals' ? 3 : 1; U.uT.value = V.clock;
+    const n = Math.min(5, o.vd.length); U.uVN.value = n;
+    for (let v = 0; v < n; v++) { U.uVD.value[v].copy(o.vd[v].d); U.uVC.value[v].copy(colOf.get(o.rock.veins[v].metal) || colOf.get('copper')); U.uVA.value[v] = veinLeft(o, v); }
+  }
+  // THE CRYSTALS: one batch of shards, in the field's frame
+  const KN = 900, crystals = (() => {
+    const g = new THREE.ConeGeometry(0.34, 1, 5, 1).translate(0, 0.4, 0).toNonIndexed();      // (a shard: its foot a little under the surface)
+    const mat = new THREE.ShaderMaterial({ uniforms: { ...VEIL }, vertexShader: CRYSTAL_VERT, fragmentShader: CRYSTAL_FRAG });
+    const im = new THREE.InstancedMesh(g, mat, KN); im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(KN * 3).fill(1), 3);
+    im.frustumCulled = false; im.count = 0; im.name = 'drill: the ore\'s crystals'; FG.add(im); return im;
+  })();
+  let crystalN = 0;
+  const _km = new THREE.Matrix4(), _kr = new THREE.Matrix4(), _kq = new THREE.Quaternion(), _kn = new THREE.Vector3(), _kp = new THREE.Vector3(), _ks = new THREE.Vector3(), _kl = new THREE.Vector3();
+  function crystalsOf(o, pos, q) {
+    const rock = o.rock, sq = o.S.sq; _kr.compose(pos, q, _ks.setScalar(ROCK_R));
+    for (let v = 0; v < Math.min(5, o.vd.length); v++) {
+      const t0 = rock.veins[v].tonnes, f = t0 > 0 ? veinLeft(o, v) / t0 : 0; if (f < 0.03) continue;
+      const col = colOf.get(rock.veins[v].metal) || colOf.get('copper'), big = Math.min(1.5, Math.sqrt(t0)), n = 3 + Math.round(4 * big), R = 0.12 + 0.2 * big, D = o.vd[v];
+      for (let k = 0; k < n && crystalN < KN; k++) {
+        const h = rock.look * 0.001 + v * 5.71 + k * 2.39, a = hash(h) * Math.PI * 2, r = R * Math.sqrt(hash(h + 1.1));
+        // (a way out near the vein's own; there, the rock's own surface; the shard leans a little its own way)
+        _kn.copy(D.d).multiplyScalar(Math.cos(r)).addScaledVector(D.a, Math.cos(a) * Math.sin(r)).addScaledVector(D.b, Math.sin(a) * Math.sin(r)).normalize();
+        const rad = radiusAt(o.S, _kn); _kp.set(_kn.x * rad * sq[0], _kn.y * rad * sq[1], _kn.z * rad * sq[2]);
+        _kl.copy(_kn).addScaledVector(D.a, (hash(h + 2.2) - 0.5) * 0.9).addScaledVector(D.b, (hash(h + 3.1) - 0.5) * 0.9).normalize();
+        const size = (0.09 + 0.13 * hash(h + 3.3)) * (0.7 + 0.45 * big) * (0.35 + 0.65 * Math.min(1, f));
+        _km.compose(_kp, _kq.setFromUnitVectors(UP_Y, _kl), _ks.set(size * 0.75, size * (1.3 + 1.3 * hash(h + 4.4)), size * 0.75)).premultiply(_kr);
+        crystals.setMatrixAt(crystalN, _km); crystals.setColorAt(crystalN, col); crystalN++;
+      }
+    }
+  }
   const VN = 2600, veins = (() => {
     const g = new THREE.BufferGeometry(), idx = new Uint32Array(VN * 6);
     for (const [k, n] of [['position', 3], ['aO', 3], ['aC', 3], ['aCol', 4], ['aW', 1], ['aR', 1], ['aS', 2]]) { const a = new THREE.BufferAttribute(new Float32Array(VN * 4 * n), n); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, a); }
@@ -406,7 +536,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   let veinN = 0;
   const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), frac = (x) => x - Math.floor(x), hash = (n) => frac(Math.sin(n * 12.9898 + 4.1414) * 43758.5453);
   // one strip from a to b (the rock's own places, its radius 1), w wide (the rock's radius 1), so bright
-  function strip(o, pos, q, big, a, b, w, col, k) {
+  // (wa, wb: how wide it is at a and at b, of w: a strip that ends in the open runs to a point there)
+  function strip(o, pos, q, big, a, b, w, col, k, wa = 1, wb = 1) {
     if (veinN >= VN) return;
     const A = veins.geometry.attributes, sq = o.S.sq, R = 0.92 * ROCK_R * big;
     _va.set(a[0] * sq[0], a[1] * sq[1], a[2] * sq[2]).multiplyScalar(R).applyQuaternion(q).add(pos);
@@ -414,7 +545,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (let i = 0; i < 4; i++) {
       const n = veinN * 4 + i, P = i < 2 ? _va : _vb, O = i < 2 ? _vb : _va;
       A.position.setXYZ(n, P.x, P.y, P.z); A.aO.setXYZ(n, O.x, O.y, O.z); A.aC.setXYZ(n, pos.x, pos.y, pos.z);
-      A.aCol.setXYZW(n, col.r, col.g, col.b, k); A.aW.setX(n, w * ROCK_R * big); A.aR.setX(n, ROCK_R * 1.1 * big);
+      A.aCol.setXYZW(n, col.r, col.g, col.b, k); A.aW.setX(n, w * (i < 2 ? wa : wb) * ROCK_R * big); A.aR.setX(n, ROCK_R * 1.1 * big);
     }
     veinN++;
   }
@@ -425,14 +556,15 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       const a = L[i], col = colOf.get(a.metal) || colOf.get('copper'), fa = a.ore0 > 0 ? a.show / a.ore0 : 0;
       if (i + 1 < L.length && L[i + 1].vein === a.vein) {
         const b = L[i + 1], least = Math.min(a.show, b.show), f = Math.min(fa, b.ore0 > 0 ? b.show / b.ore0 : 0);
-        if (f > 0.02) strip(o, pos, q, big, a.p, b.p, wide(least), col, k * (0.45 + 0.55 * Math.min(1, f)));
+        // (the vein's own two ends run to a point: "I don't really like how they have blunt ends")
+        if (f > 0.02) strip(o, pos, q, big, a.p, b.p, wide(least), col, k * (0.45 + 0.55 * Math.min(1, f)), i === 0 || L[i - 1].vein !== a.vein ? 0.2 : 1, i + 2 >= L.length || L[i + 2].vein !== a.vein ? 0.2 : 1);
       }
       if (!twigs || fa <= 0.02) continue;
       for (let t = 0; t < 3; t++) {
         const h = rock.look * 0.001 + i * 7.31 + t * 3.17, th = hash(h) * Math.PI * 2, z = hash(h + 1.7) * 2 - 1, r = Math.sqrt(1 - z * z), len = 0.12 + 0.17 * hash(h + 2.9);
         const e = [a.p[0] + r * Math.cos(th) * len, a.p[1] + z * len, a.p[2] + r * Math.sin(th) * len], m = Math.hypot(e[0], e[1], e[2]);
         if (m > 0.9) { e[0] *= 0.9 / m; e[1] *= 0.9 / m; e[2] *= 0.9 / m; }
-        strip(o, pos, q, big, a.p, e, wide(a.show) * 0.5, col, k * (0.35 + 0.45 * Math.min(1, fa)));
+        strip(o, pos, q, big, a.p, e, wide(a.show) * 0.5, col, k * (0.35 + 0.45 * Math.min(1, fa)), 1, 0.08);
       }
     }
   }
@@ -947,13 +1079,22 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       H.o.pos.copy(H.centre).applyMatrix4(here.M); H.o.q.copy(here.q).multiply(H.q);
     }
     // the glow follows the metal left
-    glowN = 0; veinN = 0;
-    const eyeAt = _c.copy(camera.position).applyMatrix4(_m.copy(at).invert());
+    glowN = 0; veinN = 0; crystalN = 0;
+    const eyeAt = _c.copy(camera.position).applyMatrix4(_m.copy(at).invert()), surf = onSurface();
+    // (the crystals of the rock in the claw first: there are only so many shards to go round)
+    if (H && S !== 'breakUp' && oreLook === 'crystals') crystalsOf(H.o, H.o.pos, H.o.q);
     for (const o of seen.values()) {
       for (const L of o.rock.lumps) { if (L.show == null) L.show = L.ore; L.show += (L.ore - L.show) * Math.min(1, dt * 3.2); }
-      if (H && o === H.o) { if (S !== 'breakUp') glowOf(o, o.pos, o.q, 1.15); }
-      else { const far = o.pos.distanceTo(eyeAt); o.far = far; glowOf(o, o.pos, o.q, 1, far < 150, bigOf(far)); }
+      if (H && o === H.o) {
+        oreOn(heldMat.uniforms, o, S === 'breakUp' ? 0 : 1.2);
+        if (S !== 'breakUp' && !surf) glowOf(o, o.pos, o.q, 1.15);
+      } else {
+        const far = o.pos.distanceTo(eyeAt), big = bigOf(far); o.far = far; oreOn(o.mat.uniforms, o, 1);
+        if (!surf) glowOf(o, o.pos, o.q, 1, far < 150, big);
+        else { if (big > 1.3) glowOf(o, o.pos, o.q, 0.8, false, big); if (oreLook === 'crystals' && big <= 1.3) crystalsOf(o, o.pos, o.q); }      // (far off: its soft glow, as the scan's picture of it)
+      }
     }
+    crystals.count = crystalN; if (crystalN) { crystals.instanceMatrix.needsUpdate = true; crystals.instanceColor.needsUpdate = true; }
     const A = glow.geometry.attributes; glow.geometry.setDrawRange(0, glowN); for (const k of ['position', 'aC', 'aCol', 'aSize', 'aR']) A[k].needsUpdate = true;
     veins.geometry.setDrawRange(0, veinN * 6); if (veinN) { const B = veins.geometry.attributes; for (const k of ['position', 'aO', 'aC', 'aCol', 'aW', 'aR']) B[k].needsUpdate = true; }
     stepChips(dt);
@@ -1072,7 +1213,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (const id of [...seen.keys()]) dropSeen(id);
     if (H) { G.remove(H.mesh); H.mesh.geometry.dispose(); H = null; }
     G.remove(built.group); scene.remove(G, FG, sun, sun.target); boom.geometry.dispose(); boom.material.dispose();
-    for (const im of backdrop.list) FG.remove(im); backdrop.geo.dispose(); farMat.dispose(); chips.geometry.dispose(); glow.geometry.dispose(); glow.material.dispose(); fieldMat.dispose(); heldMat.dispose();
+    for (const im of backdrop.list) FG.remove(im); backdrop.geo.dispose(); farMat.dispose(); chips.geometry.dispose(); glow.geometry.dispose(); glow.material.dispose(); veins.geometry.dispose(); veins.material.dispose(); crystals.geometry.dispose(); crystals.material.dispose(); for (const o of seen.values()) o.mat.dispose(); fieldMat.dispose(); heldMat.dispose();
     camera.near = was.near; camera.far = was.far; camera.fov = was.fov; camera.updateProjectionMatrix();
   }
 
@@ -1105,7 +1246,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   };
   return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
     // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
-    oreLook(name) { if (name === 'glow' || name === 'veins') oreLook = name; return oreLook; },
+    oreLook(name) { if (ORE_LOOKS.includes(name)) oreLook = name; return oreLook; },
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)
     ship: here, heldPos,
     // (put away and back: while the eye is in the seat, with a wormhole's far end opening or the jump home being worked out)

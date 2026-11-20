@@ -18,7 +18,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createSky } from '../../world/sky.js';
-import { buildShip, makeDrillView } from '../../src/drillview.js';
+import { buildShip, makeDrillView, ORE_LOOKS } from '../../src/drillview.js';
 import { startFlying } from '../../src/flying.js';
 import { makeFieldFlying } from '../../src/fieldfly.js';
 import { makeWormhole } from '../../src/wormhole.js';
@@ -59,9 +59,9 @@ const topBar = () => document.documentElement.style.setProperty('--pdr-top', doc
 new ResizeObserver(topBar).observe(document.getElementById('top')); topBar();
 
 // ── the switches ──
-// (ore: how the ore in the rocks is shown, 'glow' as the game shows it or 'veins': two looks for the game's maker to
-// choose between; ?ore=veins starts with the veins)
-const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: Q.get('ore') === 'veins' ? 'veins' : 'glow' };
+// (ore: how the ore in the rocks is shown: 'glow' as the game shows it, 'veins', 'sparkle', 'cracks' or 'crystals', for
+// the game's maker to choose between: the Ore button goes round them; ?ore=sparkle starts with that one)
+const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: ORE_LOOKS.includes(Q.get('ore')) ? Q.get('ore') : 'glow' };
 const crew = { id: 'drill-lab', name: 'Driller' };
 E.register(SCAN);
 const levelEl = $('level');
@@ -93,7 +93,7 @@ function start() {
 }
 $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
-$('ore').addEventListener('click', () => { st.ore = st.ore === 'veins' ? 'glow' : 'veins'; if (view) view.oreLook(st.ore); paint(); });
+$('ore').addEventListener('click', () => { st.ore = ORE_LOOKS[(ORE_LOOKS.indexOf(st.ore) + 1) % ORE_LOOKS.length]; if (view) view.oreLook(st.ore); paint(); });
 levelEl.addEventListener('change', () => { setLevel(levelEl.value); });
 paint();
 

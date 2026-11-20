@@ -77,6 +77,7 @@ export const DRILL = {
   field: 30,                // rocks in a field
   four: 1 / 2,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
                             // (the game's maker, 2026-11-19, picked "More: about 1 rock in 11 (every other big rock)"; it was 1 in 3)
+  lucky: 1 / 10,            // the rocks that are lucky ones: the dearest metal in such a rock is the one it has most of
   reach: 0.42,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.24,               // within this of the line, all of a lump (a tap a little off a vein still takes the whole of it)
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
@@ -145,7 +146,13 @@ export function makeRock(rand = Math.random, { kind = null, metals = null } = {}
   if (!M) {
     const x = rand(), k = total >= 4 && rand() < DRILL.four ? 4 : Math.min(total, x < 0.45 ? 1 : x < 0.85 ? 2 : 3), names = [];
     while (names.length < k) { const m = byWeight(rand, NAMES.filter((n) => !names.includes(n)), (n) => ODDS[n]); names.push(m); }
-    const t = names.map(() => 1); for (let left = total - k; left > 0; left--) t[Math.floor(rand() * k)]++;
+    // HOW MUCH OF EACH: a tonne of each metal it holds, and every tonne more to one of them by how common that metal is
+    // (ODDS), so a rock has much of its cheap metals and little of its dear ones. One rock in so many is a LUCKY one
+    // (DRILL.lucky), where it goes the other way and its dearest metal has the most. (They were shared out evenly. The
+    // game's maker, 2026-11-19: "each metal is roughly the same quantity, which seems very unlikely. Id expect to see
+    // more of the cheaper ones like iron and less of the titanium (except on random lucky rocks).")
+    const lucky = rand() < DRILL.lucky, by = [...names].sort((a, b) => ODDS[b] - ODDS[a]), share = Object.fromEntries(by.map((m, i) => [m, ODDS[lucky ? by[by.length - 1 - i] : m]]));
+    const t = names.map(() => 1); for (let left = total - k; left > 0; left--) t[names.indexOf(byWeight(rand, names, (m) => share[m]))]++;
     // (the most of it first)
     M = Object.fromEntries(names.map((m, i) => [m, t[i]]).sort((a, b) => b[1] - a[1]));
   }
