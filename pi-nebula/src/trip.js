@@ -396,8 +396,9 @@ export function startTrip(ctx, { mission: M, roles, tuneAfter = false, onEnd = (
         T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
-        // (the core's tuning still to come, home and down: the captain's last words of the run are its own, src/tune.js)
-        words('Home'); if (!tuneAfter) say(iPilot ? 'landed' : 'landedCrew');
+        // (the core's tuning still to come, home and down: the captain's last words of the run are its own, src/tune.js,
+        // and whatever he was still saying here goes, so that his next words are not written over it)
+        words('Home'); if (tuneAfter) { sayT = 0; sayEl.classList.remove('is-on'); } else say(iPilot ? 'landed' : 'landedCrew');
         next();
       }
     },

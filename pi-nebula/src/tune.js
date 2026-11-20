@@ -104,7 +104,7 @@ export function startTune(ctx, { mission: M, step, when = 'before', onPanel = ()
   const link = engineerLink({ small: () => `Adjustment ${Math.min(T.lit + 1, cards)} of ${cards}` });
   link.right = () => { T.lit++; T.log.push('card ' + T.lit + ' of ' + cards); if (T.lit >= cards) closeIn = TUNE.close; };
   function open() {
-    if (panel || T.done || closed) return false;
+    if (panel || T.done || closed || T.lit >= cards) return false;
     const C = coreNow(); if (!C) return false;
     at = C; camFresh = true; prompt.hidden = true; el.classList.add('has-panel'); onPanel(true);
     panel = openPanel(document.body, { job: ENGINEER, crew, live: link, pay: false, onSave: () => save(crew), onCredits: () => {}, onClose: () => shut() });
@@ -129,16 +129,17 @@ export function startTune(ctx, { mission: M, step, when = 'before', onPanel = ()
       const where = boarding.where(P.pos), aboard = !!where && where.startsWith(M.ship + '/');
       if (aboard && !T.aboard && T.clock - T.saidAt > TUNE.again) announce();
       T.aboard = aboard; chip.hidden = !aboard; words();
+      // (the last card answered: the card goes by itself, and the captain says so; the same if Done was pressed in that
+      // moment: the core is tuned all the same)
+      if (closeIn >= 0 && (closeIn -= dt) <= 0) { closeIn = -1; if (panel) { const was = panel; shut(); was.close(true); } T.done = true; chip.hidden = true; prompt.hidden = true; say(when === 'after' ? 'tunedAfter' : 'tunedBefore'); onDone(); return false; }
       if (panel) {
-        // (the last card answered: the card goes by itself, and the captain says so)
-        if (closeIn >= 0 && (closeIn -= dt) <= 0) { closeIn = -1; const was = panel; shut(); was.close(true); T.done = true; chip.hidden = true; prompt.hidden = true; say(when === 'after' ? 'tunedAfter' : 'tunedBefore'); onDone(); return false; }
         // standing at the core, facing it
         const k = 1 - Math.exp(-8 * dt), h = Math.atan2(at.look.x - at.pos.x, at.look.z - at.pos.z), dh = Math.atan2(Math.sin(h - P.heading), Math.cos(h - P.heading));
         P.pos.lerp(at.pos, k); P.heading += dh * k;
         return true;
       }
       const C = coreNow();
-      prompt.hidden = !(C && where === C.room && Math.abs(P.pos.y - C.pos.y) < 1 && Math.hypot(P.pos.x - C.pos.x, P.pos.z - C.pos.z) < TUNE.near);
+      prompt.hidden = !(C && T.lit < cards && where === C.room && Math.abs(P.pos.y - C.pos.y) < 1 && Math.hypot(P.pos.x - C.pos.x, P.pos.z - C.pos.z) < TUNE.near);
       return false;
     },
     // the camera while the card is up: the crew member's own eyes at the core, the core clear of the card (left of it
