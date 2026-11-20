@@ -22,10 +22,11 @@ test('the Miner\'s facts are exactly what they were before the ships shared one 
     id: 'miner', room: 'ship-miner', hangar: HANGARS[0].id, pad: [42.3, 0, HANGARS[0].z], points: box(-9.0, 6.8, 3.3, 5.1), hover: 2.6, low: 2.0,
     seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.6, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    screen: { at: [0.5, 3.47, 5.36], size: [0.34, 0.15], lean: 0.45 },
     bay: bayOf(HANGARS[0].z), floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] }, voice: 'miner', claw: [8.54, 2.94, 0],
   };
   for (const k of Object.keys(was)) assert.deepEqual(M.MINER[k], was[k], 'the Miner\'s ' + k);
+  // (the speed's small screen on the sill is gone: the speed is on the dashboard's display with the rest, tests/dash.test.mjs)
+  assert.equal(M.MINER.screen, undefined, 'no speed\'s screen of its own');
   assert.equal(M.MINER.q0, undefined, 'parked nose out, as the flight model always had it');
   const other = (id, name, i, nose, boxes) => ({ id, name, room: 'ship-' + id, hangar: HANGARS[i].id, at: [42.3, 0, HANGARS[i].z], nose, boxes, bay: bayOf(HANGARS[i].z), mass: 2, gyr: 4 });
   assert.deepEqual(M.OTHERS, [
@@ -63,7 +64,7 @@ test('every ship\'s entry is in the same shape, and true to the station file and
     const mid = [(seat.rect[0] + seat.rect[2]) / 2, (seat.rect[1] + seat.rect[3]) / 2];
     assert.ok(Math.abs(cfg.seat.eye[0] - mid[0]) < 0.01 && Math.abs(cfg.seat.eye[2] - mid[1]) < 0.02, `${s.id}: the eyes over the pilot's seat (${cfg.seat.eye} over ${mid})`);
     assert.ok(Math.abs(cfg.seat.eye[1] - (deck + floor + 1.27)) < 0.005, `${s.id}: a seated pilot's eyes over the cockpit's floor (${cfg.seat.eye[1]})`);
-    assert.ok(cfg.seat.look[2] > cfg.seat.eye[2] + 7 && cfg.screen.at[2] > cfg.seat.eye[2] + 1, s.id + ': looking ahead, the speed\'s screen in front');
+    assert.ok(cfg.seat.look[2] > cfg.seat.eye[2] + 7 && cfg.dash.at[2] > cfg.seat.eye[2] + 0.5, s.id + ': looking ahead, the dashboard\'s display in front');
     // ITS VOICE: its own clips, each a file beside the Miner's, with how long it is
     const C = SHIP_CLIPS[s.voice];
     for (const w of ['welcome', 'safety', 'reactor']) {

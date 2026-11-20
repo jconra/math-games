@@ -121,7 +121,7 @@ export const GUIDE = { near: 12, move: [0.3, 8], rise: [0.2, 4], turn: [4, 50], 
 //            the job panel up (it covers the right of a wide screen and the bottom of a phone's) and without; the other
 //            seat is the same across the ship. behind: how far back and up the camera follows, and the point of the
 //            ship it looks at (ups: under a roof, in its bay, it follows lower: the first of these heights that is clear)
-//   screen   the speed's screen, on the sill in front of the pilot: its middle, its size (m), how far it leans back
+//   dash     the dashboard's display in front of the pilot (src/dash.js; src/fleet.js has the words)
 //   bay      ITS BAY (src/flysolid.js: what it bumps into in there; its floor is the hangar's floor)
 //   floor    THE FLOOR IT CAN BE SET DOWN ON AND GOT OUT OF (none: anywhere on its hangar's floor). The Miner's is where
 //            it can be unloaded: the part of its hangar's floor where the crane can get at every canister of a ship
@@ -542,8 +542,10 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 //     a tapped trip (src/drillview.js). Nothing is asked of how the ship is turned. The reach is the whole of the
 //     nose: a rock met nose on, anywhere across it, is taken; one met by the ship's side or tail is not.
 // A rock here is a ball: { p: [x, y, z] its middle, r its size (m) }, in whatever frame the ship is flown in.
-// (the speed's screen stands a little higher there: the drill's own Miner has a deeper sill than the cabin in the hangar)
-export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, screen: { ...MINER.screen, at: [0.5, 3.585, 5.3] } };
+// (the dashboard's display stands on the drill's own Miner's dashboard top: that ship has a higher dashboard than the
+// cabin in the hangar, its top 13 cm higher and shorter, so the display is a little smaller there; measured as the
+// fleet's are, ~/pw/space-math/rigs/dashboard-1/drillprobe.cjs)
+export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: { at: [0.45, 3.378, 4.9], w: 0.62, h: 0.192, lean: 0.3, tall: { at: [0.46, 3.381, 4.915], w: 0.49, h: 0.153, lean: 0.3 } } };
 export const TAKE = { reach: 4.5, slow: 3 };
 // where the claw's hand is now
 export const clawOf = (S) => add(S.p, turn(S.q, S.cfg.claw || MINER.claw));

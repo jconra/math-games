@@ -33,17 +33,37 @@
 //     is. Down where the crane can unload it, the seat's prompt comes up (Get up, E): not by itself, so the pilot can
 //     lift off again and shuffle it. Rolled over too far, or down too near the door or a wall, there is no prompt, and
 //     the few words along the top say what to do.
-//   - THE GUIDE (flymodel.js guideOf), from the jump home until it is down, in both views:
-//       the small space, at the top left: a small model of the ship, as the pilot sees their own ship from behind, and a
+//   - THE GUIDE (flymodel.js guideOf):
+//       the small space, THE TINY SHIP: a small model of the ship, as the pilot sees their own ship from behind, and a
 //       see-through blue hologram of the goal, the ship in its proper parking place, nose out, with its pad's ring, the
 //       hangar's floor, the bay door and the door's middle line drawn round it. The two are the same size and match
 //       when the ship is on its goal; far apart they are drawn nearer together (flymodel.js guideAt), so the goal is in
-//       sight from the jump home on, and coming in the door's frame and its middle line pass round the model;
-//       the keys, under it: Q W E, A S D, Space and C, and four arrows for the mouse; each key that would bring the ship
-//       toward the goal is lit, brightly when a lot is needed, dimly when it is close, dark when it is there. On a phone
-//       the same on the sticks (a spot on each ring: push that way) and on the Up, Down and Roll buttons.
+//       sight from the jump home on, and coming in the door's frame and its middle line pass round the model. It is on
+//       the dashboard's display (below), and seen from behind it floats beside the ship; all the time the ship's power
+//       is on (out at the rocks, with no pad there, the tiny ship alone). From the jump home until it is down it asks:
+//       "Line up with the blue ship" under it, and
+//       the keys, at the top left: Q W E, A S D, Space and C, and four arrows for the mouse; each key that would bring
+//       the ship toward the goal is lit, brightly when a lot is needed, dimly when it is close, dark when it is there. On
+//       a phone the same on the sticks (a spot on each ring: push that way) and on the Up, Down and Roll buttons.
 //     It only asks. A ship set down crooked, or nose in, is down all the same. Nothing is scored and no word judges it.
 //   - ANYONE ON THE FLOOR under a ship coming down hurries out of its way (people.flee, as from the crane's load).
+//
+// THE DASHBOARD (2026-11-19, LAND-4, B: "In the cockpit, a hologram standing on the sill in front of the pilot beside
+// the speed; from behind, floating beside the ship", and: "You should use that big unused dashboard area. Like 1/3 of
+// the screen is being unused in the screenshot. I'd move the speed down into it and put the tiny ship in a display there
+// (and probably just show it all the time. ... we should show more information like fuel or distance traveled or
+// canisters full, time in route, something more than one number." NOW-4, B: "A fuel gauge for show: it goes down as
+// you fly, and there is always enough for the run." And of the speed's own screen (2026-11-20): "I'd prefer it be on a
+// big screen like where that math question is with other flight data ... It just looks out of place all by itself on
+// it's own little screen"):
+//   - ONE DISPLAY on the dashboard in front of the pilot, where the ship's own data puts it (src/fleet.js `dash`: on the
+//     empty top of the dashboard under the windscreen; on a screen held upright, its own place above a phone's
+//     buttons): three framed screens on one dark glass, light lines: THE TINY SHIP (above); THE SPEED and THE FUEL, a
+//     gauge and its percent; HOW FAR, THE CANISTERS FULL (on a run) and THE FLIGHT TIME. Their numbers are src/dash.js:
+//     the flying's own in the labs, the run's over the whole of it in the game (src/trip.js). Dark but for its frames
+//     while the ship's power is off. The speed has no screen of its own any more.
+//   - FROM BEHIND the tiny ship floats beside the ship on the screen, see-through, clear of the ship, the buttons and
+//     whatever the page asks to be kept clear of (opts.clearOf).
 //
 // THE OTHER TWO HANGARS, AND THE SHIP'S VOICE (2026-11-18, later still; asked whether the Miner should be able to fly
 // in through the other two hangar doors): "Lol, I'm sure kids will try to do this and it will make them laugh, so why
@@ -96,7 +116,11 @@
 //     goal        'leave' (out of the hangar and clear of the station) | 'land' (in and down in its hangar) | 'free' (the lab)
 //     pilot       false: the crew's pilot flies (the autopilot, and no way to switch it off)
 //     settings    { invertY }; onSettings(settings) when the crew member changes one
-//     guide       'land' (the guide is up while the goal is to land) | 'always' (whenever it is in flight: the lab)
+//     guide       'land' (the guide asks while the goal is to land) | 'always' (whenever it is in flight: the lab)
+//     dash        the dashboard's numbers (src/dash.js makeDash), kept and stepped by whoever owns them (a run: src/trip.js);
+//                 none: the flying keeps its own, from the ship's own moves ("Back on the pad", reset, fills the tank)
+//     run         () -> { cans: [full, of] }: what the dashboard says of the run (none: no canisters)
+//     clearOf     () -> [elements]: the page's own boxes the tiny ship floating beside the ship keeps clear of
 //     onClear()   once, when the ship is first clear of the station; onJump(): the Jump button; onLanded(): it is down
 //     onStand(M)  the ship stands somewhere else than it did: M, a Matrix4 from where it stood to where it stands (the
 //                 crew member's body, in its seat, is the caller's to move with it)
@@ -119,7 +143,9 @@ import { stationJob, bayOf } from './flysolid.js';
 import { standElements } from './standing.js';
 import { sound } from './sound.js';
 import { SHIP_CLIPS, clipUrl } from './voices.js';
+import { makeDash, stepDash, resetDash, dashRows } from './dash.js';
 import { DOOR } from '../kit/outside-plan.js';
+import { shipOf } from './fleet.js';
 
 export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3, glide: 0.6 };
 // THE GUIDE'S SMALL SPACE: its own small picture, drawn over the game's (W.after). Its eye is behind and above the small
@@ -128,6 +154,66 @@ export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7
 // often it looks (s)
 export const HOLO = { fov: 40, eye: [0, 2.5, 1.5], look: [0, 0.05, -0.12], back: 0x060a10, model: 0xe2e6ea, mark: 0xffb347, goal: 0x58d2ff, line: 0x7fdcff, pad: 7 };
 export const UNDER = { low: 3.4, room: 1.3, every: 0.35, away: 2.5 };
+// THE DASHBOARD'S DISPLAY: its picture's width (px; its height as the display's own shape), the tiny ship's picture's
+// width (px), how often its words are drawn again in flight (s), its colours (dark glass, light lines), its case.
+// FLOAT: the tiny ship seen from behind, floating beside the ship: how far from the ship on the screen and from the
+// screen's edges (px), and how see-through its glass is
+export const DASH = { px: 1024, pic: 512, every: 1 / 6, glass: '#04070b', screen: '#06101a', line: 'rgba(120, 220, 255, 0.78)', dim: 'rgba(120, 220, 255, 0.2)', label: '#7fd4ee', value: '#eaffff', track: 'rgba(120, 220, 255, 0.16)', case: 0x0a0d11 };
+export const FLOAT = { gap: 10, edge: 8, see: 0.62 };
+const FONT = '"Segoe UI", system-ui, Arial, sans-serif';
+const GUIDE_WORDS = 'Line up with the blue ship';
+
+// where things are on the display's picture (px): three screens in a row, the first square for the tiny ship (its
+// picture `pic`, its caption under it), then the speed and the fuel, then the rest
+export function dashLayout(CW, CH) {
+  const m = Math.round(CH * 0.05), gap = Math.round(CH * 0.05), side = CH - 2 * m, w1 = Math.round(side * 1.22), rest = CW - 2 * m - w1 - 2 * gap;
+  const s1 = { x: m, y: m, w: w1, h: side }, s2 = { x: s1.x + w1 + gap, y: m, w: Math.round(rest * 0.45), h: side };
+  const s3 = { x: s2.x + s2.w + gap, y: m, w: CW - m - (s2.x + s2.w + gap), h: side };
+  const pad = Math.round(CH * 0.03), capH = Math.round(CH * 0.13);
+  return { CW, CH, s: [s1, s2, s3], pad, cap: { x: s1.x, y: s1.y + side - capH, w: w1, h: capH }, pic: { x: s1.x + pad, y: s1.y + pad, w: w1 - 2 * pad, h: side - 2 * pad - capH } };
+}
+// a screen's frame: eight-sided, as the game's other boxes are
+function frame(g, r, k, fill, line, lw) {
+  g.beginPath(); g.moveTo(r.x + k, r.y); g.lineTo(r.x + r.w - k, r.y); g.lineTo(r.x + r.w, r.y + k); g.lineTo(r.x + r.w, r.y + r.h - k); g.lineTo(r.x + r.w - k, r.y + r.h); g.lineTo(r.x + k, r.y + r.h); g.lineTo(r.x, r.y + r.h - k); g.lineTo(r.x, r.y + k); g.closePath();
+  if (fill) { g.fillStyle = fill; g.fill(); } if (line) { g.strokeStyle = line; g.lineWidth = lw; g.stroke(); }
+}
+// (text no wider than w: made smaller until it fits)
+function fit(g, text, x, y, w, px, weight = 700) { let p = px; g.font = `${weight} ${p}px ${FONT}`; while (p > 8 && g.measureText(text).width > w) { p -= 2; g.font = `${weight} ${p}px ${FONT}`; } g.fillText(text, x, y); return g.measureText(text).width; }
+// THE DISPLAY'S PICTURE: rows from src/dash.js dashRows; lit: the ship's power is on; caption: under the tiny ship
+export function paintDash(g, L, rows, lit, caption = '') {
+  const { CW, CH, s, pad } = L, k = Math.round(CH * 0.05), lw = Math.max(2, Math.round(CH * 0.012));
+  g.fillStyle = DASH.glass; g.fillRect(0, 0, CW, CH);
+  for (const r of s) frame(g, r, k, DASH.screen, lit ? DASH.line : DASH.dim, lw);
+  if (!lit) return;
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  const by = (id) => rows.find((r) => r.id === id);
+  const lab = Math.round(CH * 0.085), big = Math.round(CH * 0.27), mid = Math.round(CH * 0.14);
+  // the tiny ship's caption
+  if (caption) { g.fillStyle = '#a9e6ff'; g.textAlign = 'center'; fit(g, caption, L.cap.x + L.cap.w / 2, L.cap.y + L.cap.h * 0.62, L.cap.w - 2 * pad, Math.round(CH * 0.07), 600); g.textAlign = 'left'; }
+  // the speed, big, and the fuel's gauge and number
+  { const r = s[1], x = r.x + pad * 1.4, w = r.w - pad * 2.8, sp = by('speed'), fu = by('fuel');
+    g.fillStyle = DASH.label; fit(g, sp.label, x, r.y + pad + lab, w, lab);
+    g.fillStyle = DASH.value; const vw = fit(g, sp.value, x, r.y + pad + lab + big * 0.98, w * 0.62, big, 800);
+    g.fillStyle = DASH.label; fit(g, sp.unit, x + vw + pad * 0.6, r.y + pad + lab + big * 0.98, w - vw - pad * 0.6, mid);
+    const fy = r.y + r.h * 0.6;
+    g.fillStyle = DASH.label; fit(g, fu.label, x, fy + lab, w, lab);
+    const bh = Math.round(CH * 0.1), bx = x, bw = Math.round(w * 0.56), byy = fy + lab + pad * 0.7;
+    g.fillStyle = DASH.track; g.fillRect(bx, byy, bw, bh);
+    g.fillStyle = DASH.label; g.fillRect(bx, byy, Math.round(bw * fu.gauge), bh);
+    g.strokeStyle = DASH.line; g.lineWidth = Math.max(1, lw * 0.6); g.strokeRect(bx, byy, bw, bh);
+    g.fillStyle = DASH.value; const fw = fit(g, fu.value, bx + bw + pad, byy + bh * 0.98, w - bw - pad * 2.6, Math.round(mid * 1.05), 800);
+    g.fillStyle = DASH.label; fit(g, fu.unit, bx + bw + pad + fw + pad * 0.3, byy + bh * 0.98, w - bw - pad * 1.3 - fw, Math.round(mid * 0.7));
+  }
+  // how far, the canisters, how long: each its label over its number
+  { const r = s[2], x = r.x + pad * 1.4, w = r.w - pad * 2.8, rest = rows.filter((q) => !['speed', 'fuel'].includes(q.id)), each = (r.h - pad * 1.2) / rest.length;
+    rest.forEach((q, i) => {
+      const y0 = r.y + pad * 0.6 + i * each, ly = y0 + (each - lab - mid * 1.05) / 2 + lab;
+      g.fillStyle = DASH.label; fit(g, q.label, x, ly, w, lab);
+      g.fillStyle = DASH.value; const vw = fit(g, q.value, x, ly + mid * 1.05, w * (q.unit ? 0.7 : 1), mid, 800);
+      if (q.unit) { g.fillStyle = DASH.label; fit(g, q.unit, x + vw + pad * 0.5, ly + mid * 1.05, w - vw - pad * 0.5, Math.round(mid * 0.7)); }
+    });
+  }
+}
 
 const CSS = `
 .pfl { position: fixed; inset: 0; z-index: 21; pointer-events: none; font: 400 15px/1.3 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; color: #eef1f4; user-select: none; -webkit-user-select: none; touch-action: none; }
@@ -185,9 +271,13 @@ const CSS = `
 /* THE GUIDE: the small space (its picture is drawn by the game under this frame) and the keys that would help */
 .pfl-guide { position: absolute; left: max(14px, env(safe-area-inset-left)); top: 66px; width: 224px; display: flex; flex-direction: column; gap: 7px; }
 .pfl-guide[hidden] { display: none; }
-.pfl-holo { position: relative; height: 204px; box-shadow: inset 0 0 0 1.5px rgba(120, 220, 255, 0.55);
+/* THE TINY SHIP SEEN FROM BEHIND: floating beside the ship (its picture is drawn by the game under this frame, see-through) */
+.pfl-float { position: absolute; left: 0; top: 0; width: 200px; }
+.pfl-fpic { height: 168px; box-shadow: inset 0 0 0 1.5px rgba(120, 220, 255, 0.6);
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
-.pfl-holo small { position: absolute; left: 0; right: 0; bottom: 5px; text-align: center; font-size: 11.5px; font-weight: 600; color: #a9e6ff; text-shadow: 0 1px 2px #000; }
+.pfl-float[hidden] { display: none; }
+.pfl-float small { display: block; margin-top: 3px; text-align: center; font-size: 12px; line-height: 1.15; font-weight: 600; color: #a9e6ff; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.pfl-float small:empty { display: none; }
 .pfl-keys { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px; background: rgba(13, 17, 23, 0.84); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.32);
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
 .pfl-keys[hidden] { display: none; }
@@ -219,9 +309,10 @@ const CSS = `
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
 .pfl-seat button kbd { margin-left: 8px; background: rgba(0, 0, 0, 0.18); color: #1c1205; }
 .pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 176px); }
+@media (max-width: 640px) { .pfl-float { width: 120px; } .pfl-fpic { height: 104px; } .pfl-float small { font-size: 10.5px; } }
+@media (max-height: 480px) { .pfl-float { width: 108px; } .pfl-fpic { height: 84px; } .pfl-float small { font-size: 10px; } }
 @media (max-width: 640px) {
   .pfl-guide { top: max(136px, calc(env(safe-area-inset-top) + 132px)); left: max(8px, env(safe-area-inset-left)); width: 152px; }
-  .pfl-holo { height: 136px; } .pfl-holo small { font-size: 9.5px; bottom: 3px; white-space: nowrap; }
   /* (the seat's prompt across a phone's screen, over the buttons' two rows) */
   .pfl-seat { left: 10px; right: 10px; transform: none; max-width: none; justify-content: space-between; } .pfl-seat b { white-space: nowrap; }
 }
@@ -276,6 +367,8 @@ export function startFlying(ctx, opts = {}) {
   let on = true, locked = false, closed = false, offered = false, everClear = false, panelUp = false, aside = false;
   let mouse = 'pointer', captured = false, hadLock = false, rightDown = false, mx = innerWidth / 2, my = innerHeight / 2;
   let seatUp = false, guideOn = false, keysOn = false, eArmed = true, underT = 0;
+  // (the ship's power on: its dashboard lit, and its tiny ship shown. Out at the rocks it always is)
+  const powered = () => !!body || S.power;
   let touch = matchMedia('(pointer: coarse)').matches;
   const canLock = !navigator.webdriver && typeof canvas.requestPointerLock === 'function';
   const held = new Set(), pend = { dx: 0, dy: 0 }, orbit = { yaw: 0, pitch: 0 }, sticks = { l: { x: 0, y: 0, id: null }, r: { x: 0, y: 0, id: null } };
@@ -283,8 +376,8 @@ export function startFlying(ctx, opts = {}) {
   // ── the buttons, the help corner, the sticks ──
   const el = document.createElement('div'); el.className = 'pfl';
   el.innerHTML = `<div class="pfl-ring" hidden></div>
-    <div class="pfl-guide" hidden><div class="pfl-holo" role="img" aria-label="A small model of your ship, and in blue where it parks"><small>Line up with the blue ship</small></div>
-      <div class="pfl-keys" aria-label="The keys that would line it up, lit"><div class="pfl-kb"><i data-k="rollLeft">Q</i><i data-k="forward">W</i><i data-k="rollRight">E</i><i data-k="left">A</i><i data-k="reverse">S</i><i data-k="right">D</i><i data-k="up" class="is-wide">Space</i><i data-k="down">C</i></div>
+    <div class="pfl-float" hidden role="img" aria-label="A small model of your ship, and in blue where it parks"><div class="pfl-fpic"></div><small></small></div>
+    <div class="pfl-guide" hidden><div class="pfl-keys" aria-label="The keys that would line it up, lit"><div class="pfl-kb"><i data-k="rollLeft">Q</i><i data-k="forward">W</i><i data-k="rollRight">E</i><i data-k="left">A</i><i data-k="reverse">S</i><i data-k="right">D</i><i data-k="up" class="is-wide">Space</i><i data-k="down">C</i></div>
         <div class="pfl-ms" aria-label="The mouse"><i data-m="up">&#9650;</i><i data-m="left">&#9664;</i><b></b><i data-m="right">&#9654;</i><i data-m="down">&#9660;</i></div></div></div>
     <div class="pfl-seat" hidden><div><b></b><small></small></div><button type="button" data-do="getup">Get up <kbd>E</kbd></button></div>
     <div class="pfl-help"><ul></ul><button type="button" class="pfl-helptab" data-do="help" aria-label="Show or hide what the keys do"><span>Keys</span> <kbd>H</kbd></button></div>
@@ -419,27 +512,53 @@ export function startFlying(ctx, opts = {}) {
     return false;
   }
 
-  // ── the ship, drawn where it is: its hull's room, its cabin, its thrusters; the speed's screen rides in it ──
+  // ── the ship, drawn where it is: its hull's room, its cabin, its thrusters; the dashboard's display rides in it ──
   const rig = new THREE.Group(); rig.name = 'flying: ' + cfg.id; rig.matrixAutoUpdate = false; if (B) rig.matrix.copy(B.M); W.scene.add(rig);
-  const screen = (() => {
-    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 112;
+  // THE DASHBOARD'S DISPLAY (the top of this file; its numbers src/dash.js): standing on the dashboard in front of the
+  // pilot where this ship's data puts it (cfg.dash), facing the pilot's eyes: three framed screens on one dark glass,
+  // the tiny ship (the guide's small space, drawn into a picture of its own: holo.toTarget), the speed and the fuel,
+  // and how far, the canisters (on a run) and how long. Dark but for its frames while the ship's power is off.
+  const dash = (() => {
+    const spec = cfg.dash, CW = DASH.px, CH = Math.round(CW * spec.h / spec.w);
+    const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
     const g = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-    const sc = cfg.screen, mesh = new THREE.Mesh(new THREE.PlaneGeometry(sc.size[0], sc.size[1]), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
-    // (it faces back at the pilot, leaning back a little)
-    mesh.position.set(...sc.at); mesh.rotation.set(-sc.lean, Math.PI, 0, 'YXZ'); rig.add(mesh);
-    let shown = null;
-    function draw(words, power) {
-      const key = words + '|' + power; if (key === shown) return; shown = key;
-      g.fillStyle = '#05090e'; g.fillRect(0, 0, 256, 112);
-      g.strokeStyle = power ? 'rgba(120, 220, 255, 0.75)' : 'rgba(120, 220, 255, 0.18)'; g.lineWidth = 3; g.strokeRect(3.5, 3.5, 249, 105);
-      if (power) {
-        g.fillStyle = '#7fd4ee'; g.font = '700 20px "Segoe UI", system-ui, Arial, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('SPEED', 16, 30);
-        g.fillStyle = '#eaffff'; g.font = '800 62px "Segoe UI", system-ui, Arial, sans-serif'; g.textAlign = 'right'; g.fillText(words.split(' ')[0], 168, 92);
-        g.fillStyle = '#7fd4ee'; g.font = '700 26px "Segoe UI", system-ui, Arial, sans-serif'; g.textAlign = 'left'; g.fillText('m/s', 178, 92);
-      }
+    const L = dashLayout(CW, CH);
+    const group = new THREE.Group(); group.name = 'the dashboard\'s display';
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
+    // (its case: a thin dark slab behind the glass, so it is a thing standing there, seen from any side)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.024, spec.h + 0.024, 0.018), new THREE.MeshBasicMaterial({ color: DASH.case, fog: false }));
+    back.position.z = -0.0105;
+    // (the tiny ship's own picture, over the first screen)
+    const rt = new THREE.WebGLRenderTarget(DASH.pic, Math.round(DASH.pic * L.pic.h / L.pic.w), { samples: 4 });
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(spec.w * L.pic.w / CW, spec.h * L.pic.h / CH), new THREE.MeshBasicMaterial({ map: rt.texture, fog: false, toneMapped: false }));
+    pic.position.set(spec.w * ((L.pic.x + L.pic.w / 2) / CW - 0.5), spec.h * (0.5 - (L.pic.y + L.pic.h / 2) / CH), 0.0012);
+    group.add(back, face, pic);
+    // (standing on its foot, leaning back toward the nose, facing the pilot; on a screen held upright where the ship's
+    // data puts it for one (`tall`): the same display, its size as that place has it)
+    let placed = null;
+    function place(tall) {
+      const s = (tall && spec.tall) || spec; if (s === placed) return; placed = s;
+      // (turned a little about upright, `turn`, to follow a curved dashboard: its port end nearer the pilot)
+      const t = s.turn || 0, up = [Math.sin(s.lean) * Math.sin(t), Math.cos(s.lean), Math.sin(s.lean) * Math.cos(t)];
+      group.position.set(s.at[0] + up[0] * s.h / 2, s.at[1] + up[1] * s.h / 2, s.at[2] + up[2] * s.h / 2); group.rotation.set(-s.lean, Math.PI + t, 0, 'YXZ');
+      group.scale.setScalar(s.w / spec.w);
+    }
+    place(false);
+    rig.add(group);
+    let shown = null, cap = null, at = -1e9;
+    function draw(rows, lit, caption, t) {
+      const key = lit ? rows.map((r) => r.value).join('|') : 'off';
+      if (key === shown && caption === cap) return;
+      // (the numbers change many times a second in flight: drawn again a few times a second, as a dashboard's are;
+      // at once when the power or the caption changes)
+      if (shown !== null && shown !== 'off' && key !== 'off' && caption === cap && t - at < DASH.every) return;
+      shown = key; cap = caption; at = t;
+      paintDash(g, L, rows, lit, caption);
+      pic.visible = lit;
       tex.needsUpdate = true;
     }
-    return { mesh, tex, draw, dispose() { mesh.geometry.dispose(); mesh.material.dispose(); tex.dispose(); } };
+    return { group, rt, aspect: L.pic.w / L.pic.h, draw, place, get words() { return shown; }, get tall() { return placed !== spec; },
+      dispose() { face.geometry.dispose(); face.material.dispose(); back.geometry.dispose(); back.material.dispose(); pic.geometry.dispose(); pic.material.dispose(); tex.dispose(); rt.dispose(); } };
   })();
   const _D = new THREE.Matrix4(), _T = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1), _acc = new THREE.Vector3(), now = new THREE.Matrix4();
   let parked = true;
@@ -524,8 +643,13 @@ export function startFlying(ctx, opts = {}) {
     const lineGeo = new THREE.BufferGeometry(), linePos = new Float32Array((fixed + own) * 6); lineGeo.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
     const lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: HOLO.line, transparent: true, opacity: 0.6, toneMapped: false, fog: false })); lines.frustumCulled = false;
     scene.add(lines, goal, model);
+    // (out at the rocks there is no pad: the tiny ship alone)
+    if (body) goal.visible = lines.visible = false;
+    // (seen from behind it floats beside the ship, see-through: a dark glass behind it, drawn first, filling its frame)
+    const glassBack = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: HOLO.back, transparent: true, opacity: FLOAT.see, depthTest: false, depthWrite: false, toneMapped: false, fog: false }));
+    glassBack.renderOrder = -1; glassBack.position.z = -1; cam.add(glassBack); scene.add(cam);
     const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _o = new THREE.Vector3(), _sz = new THREE.Vector2(), _cc = new THREE.Color();
-    const box = el.querySelector('.pfl-holo');
+    const box = el.querySelector('.pfl-fpic'), boxOf = el.querySelector('.pfl-float');
     let live = false;
     // everything put where the ship now sees it (the ship's frame [ahead, up, right] -> the picture's x right, y up, z back)
     function update() {
@@ -545,23 +669,84 @@ export function startFlying(ctx, opts = {}) {
       _x.set(T[2][2], T[2][1], -T[2][0]); _y.set(T[1][2], T[1][1], -T[1][0]); _z.set(-T[0][2], -T[0][1], T[0][0]);
       goal.matrix.makeBasis(_x, _y, _z).scale(_o.setScalar(M.GUIDE.space / (d + M.GUIDE.space))).setPosition(g[2], g[1], -g[0]); goal.matrixWorldNeedsUpdate = true;
     }
-    // drawn over the game's picture, inside its frame on the page
+    const aspectIs = (a) => { cam.aspect = a; cam.updateProjectionMatrix(); const h = 2 * Math.tan(cam.fov * Math.PI / 360); glassBack.scale.set(h * a * 1.02, h * 1.02, 1); };
+    // IN THE COCKPIT: drawn into the dashboard's own picture of it (dash.rt), the frame's picture is not touched
+    function toTarget(renderer, rt, aspect) {
+      update(); aspectIs(aspect);
+      const was = renderer.getRenderTarget(), auto = renderer.autoClear, alpha = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+      renderer.setRenderTarget(rt); renderer.autoClear = false; renderer.setClearColor(HOLO.back, 1); renderer.clear(true, true, false);
+      renderer.render(scene, cam);
+      renderer.setRenderTarget(was); renderer.setClearColor(_cc, alpha); renderer.autoClear = auto;
+    }
+    // FROM BEHIND: drawn over the game's picture, inside its frame floating beside the ship, see-through
     function draw(renderer) {
-      if (!live || el.hidden) return;
+      if (!live || el.hidden || boxOf.hidden) return;
       const r = box.getBoundingClientRect(); if (r.width < 8 || r.height < 8) return;
       update();
       renderer.getSize(_sz); const auto = renderer.autoClear, alpha = renderer.getClearAlpha(); renderer.getClearColor(_cc);
-      cam.aspect = r.width / r.height; cam.updateProjectionMatrix();
+      aspectIs(r.width / r.height);
       renderer.setRenderTarget(null); renderer.autoClear = false;
       renderer.setScissorTest(true); renderer.setScissor(r.left, _sz.y - r.bottom, r.width, r.height); renderer.setViewport(r.left, _sz.y - r.bottom, r.width, r.height);
-      renderer.setClearColor(HOLO.back, 1); renderer.clear(true, true, false);
+      renderer.clear(false, true, false);
       renderer.render(scene, cam);
       renderer.setScissorTest(false); renderer.setViewport(0, 0, _sz.x, _sz.y); renderer.setClearColor(_cc, alpha); renderer.autoClear = auto;
     }
     W.after.add(draw);
-    return { show(v) { live = !!v; }, get live() { return live; }, scene, tris: (model.geometry.index.count + ghost.index.count) / 3, draws: 4,
-      dispose() { W.after.delete(draw); model.geometry.dispose(); model.material.dispose(); ghost.dispose(); glass.material.dispose(); wire.geometry.dispose(); wire.material.dispose(); lineGeo.dispose(); lines.material.dispose(); } };
+    return { show(v) { live = !!v; }, get live() { return live; }, scene, toTarget, tris: (model.geometry.index.count + ghost.index.count) / 3, draws: 5,
+      dispose() { W.after.delete(draw); model.geometry.dispose(); model.material.dispose(); ghost.dispose(); glass.material.dispose(); wire.geometry.dispose(); wire.material.dispose(); lineGeo.dispose(); lines.material.dispose(); glassBack.geometry.dispose(); glassBack.material.dispose(); } };
   })();
+  // ── THE TINY SHIP FROM BEHIND, FLOATING BESIDE THE SHIP: its frame put each frame beside where the ship is on the
+  // screen, level with its middle, off its starboard side (or its port side if that is clearer), a little higher or
+  // lower where that is clearer: never over the ship, the flying's own buttons, sticks, help and keys, or what the page
+  // asks to be kept clear (opts.clearOf: the lab's top bar, the run's own boxes), and always on the screen. Not at all
+  // while the ship is not in sight ──
+  const floatEl = $('.pfl-float'), floatCap = floatEl.querySelector('small');
+  // (its body, the first box of its shape (src/fleet.js), in its kit frame, x to port, y up, z to the nose: its corners.
+  // A wingtip may be passed over, the body never)
+  const corners = (() => {
+    const b = (shipOf(cfg.id) || { boxes: [] }).boxes[0] || { a: [-8, 8], r: 3, h: 5 }, out = [];
+    for (const x of [-b.r, b.r]) for (const y of [0, b.h]) for (const z of b.a) out.push(new THREE.Vector3(x, y, z));
+    return out;
+  })();
+  const _fp = new THREE.Vector3();
+  let floatAt = null, floatSide = 1, clearKey = '', clear = [], clearAge = 0;
+  // (what it keeps clear of, as it is now: read again when what is shown changes, and every few frames for the page's
+  // own boxes, which come and go by themselves)
+  const keepClear = () => {
+    const k = painted + '|' + innerWidth + 'x' + innerHeight + '|' + helpEl.classList.contains('is-shut');
+    if (k !== clearKey || (opts.clearOf && ++clearAge > 8)) {
+      clearKey = k; clearAge = 0;
+      const more = opts.clearOf ? opts.clearOf() : [];
+      clear = [...$$('.pfl-btns > .pfl-b, .pfl-jump, .pfl-holds .pfl-b, .pfl-stick, .pfl-helptab, .pfl-help ul, .pfl-seat, .pfl-guide'), ...more].filter(Boolean).map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    }
+    return clear;
+  };
+  const over = (x, y, w, h, r) => Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left)) * Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top));
+  function placeFloat(camera, show) {
+    const hide = () => { if (!floatEl.hidden) floatEl.hidden = true; floatAt = null; };
+    if (!show) { hide(); return; }
+    camera.updateMatrixWorld();
+    const Wm = world(), W0 = innerWidth, H0 = innerHeight;
+    // (the ship on the screen)
+    let sx0 = Infinity, sy0 = Infinity, sx1 = -Infinity, sy1 = -Infinity;
+    for (const c of corners) { _fp.copy(c).applyMatrix4(Wm).project(camera); if (_fp.z > 1 || _fp.z < -1) { hide(); return; } const x = (_fp.x + 1) / 2 * W0, y = (1 - _fp.y) / 2 * H0; sx0 = Math.min(sx0, x); sy0 = Math.min(sy0, y); sx1 = Math.max(sx1, x); sy1 = Math.max(sy1, y); }
+    if (sx1 < 0 || sx0 > W0 || sy1 < 0 || sy0 > H0) { hide(); return; }
+    if (floatEl.hidden) floatEl.hidden = false;
+    const w = floatEl.offsetWidth, h = floatEl.offsetHeight, keep = [{ left: sx0, top: sy0, right: sx1, bottom: sy1 }, ...keepClear()], mid = (sy0 + sy1) / 2 - h / 2;
+    let best = null;
+    for (const side of [1, -1]) {
+      const x = Math.max(FLOAT.edge, Math.min(W0 - w - FLOAT.edge, side > 0 ? sx1 + FLOAT.gap : sx0 - w - FLOAT.gap));
+      for (let k = 0; k <= 16; k++) {
+        const dy = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * h * 0.25, y = Math.max(FLOAT.edge, Math.min(H0 - h - FLOAT.edge, mid + dy));
+        let score = Math.abs(y - mid) * 2 + (side !== floatSide ? w * 0.5 : 0) + (side < 0 ? w * 0.5 : 0);
+        for (const r of keep) score += over(x, y, w, h, r) * 4;
+        if (!best || score < best.score) best = { x, y, side, score };
+      }
+    }
+    floatSide = best.side;
+    floatAt = [Math.round(best.x), Math.round(best.y), w, h];
+    floatEl.style.transform = `translate(${floatAt[0]}px, ${floatAt[1]}px)`;
+  }
   // the keys lit: each by how much it is needed (a key's light is written to the page only when it changes)
   const keyEls = Object.fromEntries($$('.pfl-kb i').map((k) => [k.dataset.k, k])), mouseEls = Object.fromEntries($$('.pfl-ms i').map((k) => [k.dataset.m, k]));
   const holdEls = Object.fromEntries($$('.pfl-holds [data-hold]').map((k) => [k.dataset.hold, k])), spotEls = { l: $('.pfl-stick.is-l u'), r: $('.pfl-stick.is-r u') };
@@ -593,12 +778,15 @@ export function startFlying(ctx, opts = {}) {
     const key = [mode, auto, view, canJump, S.power, S.landed, touch, goal, locked, aside, helpShut, captured, S.settle ? 1 : 0, S.p[0] > DOOR.face + 2 ? 1 : 0, where, why, edge, there ? there.id : ''].join('|');
     if (key === painted) return; painted = key;
     el.hidden = locked || aside; el.classList.toggle('is-touch', touch); el.classList.toggle('is-seat', mode === 'seat'); el.classList.toggle('is-watch', mode === 'watch');
-    // THE SEAT'S PROMPT: home, down where the crane can unload it. THE GUIDE: coming home, until then (the lab: whenever
-    // it is in flight); its keys only for a pilot flying by hand
+    // THE SEAT'S PROMPT: home, down where the crane can unload it. THE GUIDE ASKING: coming home, until then (the lab:
+    // whenever it is in flight): the tiny ship's caption, and the keys that would line it up, lit for a pilot flying by
+    // hand. THE TINY SHIP ITSELF is shown all the time the ship's power is on: on the dashboard, and from behind beside
+    // the ship
     seatUp = !!opts.onGetUp && home && (where === 'pad' || where === 'floor');
     guideOn = (home || opts.guide === 'always') && !(S.landed && where !== 'edge');
     keysOn = guideOn && pilot && !auto;
-    $('.pfl-seat').hidden = !seatUp; $('.pfl-guide').hidden = !guideOn; $('.pfl-keys').hidden = !keysOn || touch; holo.show(guideOn);
+    $('.pfl-seat').hidden = !seatUp; $('.pfl-guide').hidden = !keysOn || touch; $('.pfl-keys').hidden = !keysOn || touch; holo.show(powered());
+    floatCap.textContent = guideOn ? GUIDE_WORDS : '';
     if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
     const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body, task: opts.task ? opts.task.words : '' });
     helpEl.querySelector('ul').innerHTML = rows.map(([k, w]) => (k ? `<li><kbd>${k}</kbd><span>${w}</span></li>` : `<li class="is-word"><span>${w}</span></li>`)).join('');
@@ -645,6 +833,7 @@ export function startFlying(ctx, opts = {}) {
     // (the view changed: the glide sets off from where the eye is now, kept in the ship's own frame as it moves)
     if (glideNext) { glideNext = false; _gi.copy(world()).invert(); glide.p.copy(camera.position).applyMatrix4(_gi); glide.q.setFromRotationMatrix(_gi).multiply(camera.quaternion); glide.fov = camera.fov; glide.t = 0; }
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
+    dash.place(tall);
     _up.set(0, 1, 0).transformDirection(now);
     let fov, near;
     if (view === 'cockpit') {
@@ -686,7 +875,25 @@ export function startFlying(ctx, opts = {}) {
       fov = glide.fov + (fov - glide.fov) * e; near = Math.min(VIEW.near.cockpit, near);
     }
     if (camera.fov !== fov || camera.near !== near || camera.far !== VIEW.far) { camera.fov = fov; camera.near = near; camera.far = VIEW.far; camera.updateProjectionMatrix(); }
+    // (the dashboard, and the tiny ship beside the ship from behind, once the eye is there)
+    if (ownDash) { _w.setFromMatrixPosition(world()); stepDash(D, { p: [_w.x, _w.y, _w.z], dt, flying: !S.landed }); }
+    dashClock += dt; dashTick();
+    placeFloat(camera, view === 'behind' && glide.t >= VIEW.glide && powered() && !el.hidden);
     return true;
+  }
+  // ── THE DASHBOARD: its numbers, stepped once a frame in aim (the flying's own in the labs, from the ship's own moves; a
+  // run's are the trip's, src/trip.js); its words and its tiny ship's picture while it can be seen from the seat, once
+  // for each picture (from update, or from aim when the ship is only watched) ──
+  const ownDash = !opts.dash, D = opts.dash || makeDash(), _w = new THREE.Vector3();
+  // (dashClock: the game's own time, for how often the words are drawn again; the picture of the tiny ship is drawn once
+  // for each picture of the game's)
+  let ticked = -1, dashClock = 0;
+  function dashTick() {
+    const on = powered();
+    dash.draw(dashRows(D, opts.run ? opts.run() : null), on, guideOn ? GUIDE_WORDS : '', dashClock);
+    if (W.renderer.info.render.frame === ticked || !on || !(view === 'cockpit' || glide.t < VIEW.glide)) return;
+    holo.toTarget(W.renderer, dash.rt, dash.aspect);
+    ticked = W.renderer.info.render.frame;
   }
   const dustWas = W.dust ? W.dust.visible : false;
   function restoreCamera() {
@@ -740,8 +947,7 @@ export function startFlying(ctx, opts = {}) {
       const clear = !body && !S.landed && M.clearOf(S.p, offered);
       if (clear !== offered) { offered = clear; painted = ''; if (clear && !everClear) { everClear = true; if (opts.onClear) opts.onClear(); if (closed || !on) return; } }
       pose(dt);
-      screen.draw(M.speedWords(S), S.power);
-      paint(); guide();
+      paint(); guide(); if (aside) dashClock += dt; dashTick();
     },
     aim,
     // just before the picture: no haze once the camera is out of the bay (after the boarding's light has had its say),
@@ -756,7 +962,7 @@ export function startFlying(ctx, opts = {}) {
     // (the crew member on their feet aboard: the top of this function, `aside`)
     aside(v) { if (closed || aside === !!v) return; aside = !!v; letGo(); setMouse('pointer'); card.hidden = true; painted = ''; if (on) paint(); else el.hidden = true; },
     // put away altogether for a while, the ship left where it is (at the rocks, while the drill's view has the eye), and back
-    pause(v) { if (closed) return; on = !v; letGo(); setMouse('pointer'); card.hidden = true; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; if (on) { pose(1 / 60); paint(); } else el.hidden = true; },
+    pause(v) { if (closed) return; on = !v; if (ownDash) D.last = null; letGo(); setMouse('pointer'); card.hidden = true; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; if (on) { pose(1 / 60); paint(); } else el.hidden = true; },
     // where the eye is now, in the ship's own kit frame (a glide out of this view starts there)
     eye(camera) {
       _inv.copy(world()).invert();
@@ -776,7 +982,7 @@ export function startFlying(ctx, opts = {}) {
     // out of the jump home: outside the station, in sight of it
     arrive() {
       if (closed) return;
-      const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15; letGo();
+      const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15; letGo(); if (ownDash) D.last = null;
       goal = 'land'; offered = false; auto = !pilot; plan = null; startIn = pilot ? 0 : 0.8; on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; painted = '';
       if (outside) outside.flying = cfg.room;
       pose(1 / 60); paint();
@@ -786,6 +992,7 @@ export function startFlying(ctx, opts = {}) {
       if (closed) return;
       M.park(S); stood(); S.power = false; S.engine = 0; auto = !pilot; plan = null; offered = false; everClear = false; letGo(); setMouse('pointer');
       voice.welcomed = false; voice.busy = 0; saying = null;      // (as newly sat down: its welcome again when the power comes on)
+      if (ownDash) resetDash(D);      // (and its tank full again, nothing flown)
       on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room;
       pose(1 / 60); painted = ''; paint();
     },
@@ -813,18 +1020,19 @@ export function startFlying(ctx, opts = {}) {
       visiting: there ? there.id : null, said: { ...voice.said }, heard: { ...heard },
       standing: M.standing(S), stands: !!(B && B.moved), field: !!body, task: !!(opts.task && pilot && on && !locked), canGetUp: M.canGetUp(S), why: M.whyNot(S), tilt: +M.tiltOf(S).toFixed(1), touching: !!S.on, seat: seatUp, guide: guideOn, keys: keysOn, yaw: +(Math.atan2(-M.turn(S.q, [1, 0, 0])[2], M.turn(S.q, [1, 0, 0])[0]) * 180 / Math.PI).toFixed(1),
       lit: hints ? Object.fromEntries(Object.entries(hints.keys).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null, arrows: hints ? Object.fromEntries(Object.entries(hints.mouse).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null,
-      help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => [...b.childNodes].filter((n) => !n.hidden).map((n) => n.textContent).join('').trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: body ? 0 : +M.boxDist(S.p).toFixed(1) }),
+      help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => [...b.childNodes].filter((n) => !n.hidden).map((n) => n.textContent).join('').trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: body ? 0 : +M.boxDist(S.p).toFixed(1),
+      dash: { on: powered(), words: dash.words, caption: guideOn ? GUIDE_WORDS : '', fuel: +D.fuel.toFixed(4), dist: +D.dist.toFixed(2), secs: +D.secs.toFixed(2), speed: +D.speed.toFixed(2), own: ownDash, float: floatAt } }),
     close() {
       if (closed) return; closed = true;
       removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('blur', onBlur);
       removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerdown', onDown); removeEventListener('pointerup', onUp); canvas.removeEventListener('contextmenu', onMenu);
       document.removeEventListener('pointerlockchange', onLock); capture(false);
       if (!body) { hull.fly(null); boarding.fly(cfg.id, null); }
-      W.scene.remove(rig); screen.dispose(); holo.dispose(); el.remove(); if (outside) outside.flying = null; restoreCamera();
+      W.scene.remove(rig); dash.dispose(); holo.dispose(); el.remove(); if (outside) outside.flying = null; restoreCamera();
       if (visit) visit.fly(null);
     },
   };
-  screen.draw(M.speedWords(S), S.power); paint(); guide();
+  paint(); guide(); dashTick();
   // (whoever keeps the other hangars is told there is a ship flying: the alarm in them is theirs, src/visit.js)
   if (visit) visit.fly(api);
   return api;
