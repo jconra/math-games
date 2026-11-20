@@ -21,11 +21,18 @@
 //                                            landing mark, which the cover keeps clear: src/planet/cover.js)
 //   PAINTS, recolour(colors, paint)          another crew's colours: our ships' light skin and yellow turned to theirs
 //   WRECK_SHIPS, shipFor(seed)               the four, and which one a seed gives
+//   wreckFor(seed)                           each rescue's wreck, all three from the planet's seed: { ship (of the
+//                                            four), paint (of the three), pieces (2 or 3) }; the game's maker
+//                                            (WRECK1-1 C, WRECK1-2 D, WRECK1-3 C): "Randomness is good"
 import { rng, subSeed } from './noise.js';
 import { wrapD } from './land.js';
 
 export const WRECK_SHIPS = ['miner', 'explorer', 'medic', 'hauler'];
 export const shipFor = (seed) => WRECK_SHIPS[Math.floor(rng(subSeed(seed, 'wreck ship'))() * WRECK_SHIPS.length)];
+// (each its own draw from the seed, so the ship, the colours and the pieces don't go together)
+export const paintFor = (seed) => PAINT_IDS[Math.floor(rng(subSeed(seed, 'wreck paint'))() * PAINT_IDS.length)];
+export const piecesFor = (seed) => (rng(subSeed(seed, 'wreck pieces'))() < 0.5 ? 2 : 3);
+export const wreckFor = (seed) => ({ ship: shipFor(seed), paint: paintFor(seed), pieces: piecesFor(seed) });
 export const WRECK = {
   ring: 6,                 // metres from the ring (the landing place's level ground) to the site's near side
   across: 10, along: 18,   // the site's half sizes (metres): across the ship and along it

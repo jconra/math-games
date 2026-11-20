@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeLand } from '../src/planet/land.js';
-import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, paintClass, hslOf, PAINTS, PAINT_IDS, WRECK, WRECK_SHIPS, shipFor, pieceAt, pastBreak, apply, fingerprint, CUT_AT } from '../src/planet/wreck.js';
+import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, paintClass, hslOf, PAINTS, PAINT_IDS, WRECK, WRECK_SHIPS, shipFor, wreckFor, pieceAt, pastBreak, apply, fingerprint, CUT_AT } from '../src/planet/wreck.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
 import * as MEDIC from '../kit/ships/medic-built.hull.js';
@@ -54,6 +54,30 @@ test('the same seed breaks the same ship the same way and lays it in the same pl
   // which ship a seed gives: the same each time, and all four come up
   const seen = new Set(); for (let s = 1; s <= 60; s++) { assert.equal(shipFor(s), shipFor(s)); seen.add(shipFor(s)); }
   assert.deepEqual([...seen].sort(), [...WRECK_SHIPS].sort());
+});
+
+// The game's maker (WRECK1-1 C, WRECK1-2 D, WRECK1-3 C): a different ship each rescue from all four, a different one of
+// the three colour schemes, in two or in three pieces a different way each rescue: "Randomness is good"
+test('each rescue: the planet\'s seed picks the ship, its colours and its pieces, the same each time, all of them coming up', () => {
+  const n = 600, count = {}, add = (k) => { count[k] = (count[k] || 0) + 1; };
+  for (let s = 1; s <= n; s++) {
+    const w = wreckFor(s);
+    assert.deepEqual(w, wreckFor(s), `seed ${s}: the same seed, the same wreck`);
+    assert.ok(WRECK_SHIPS.includes(w.ship) && PAINTS[w.paint] && (w.pieces === 2 || w.pieces === 3), `seed ${s}: ${JSON.stringify(w)}`);
+    assert.equal(w.ship, shipFor(s));
+    add(w.ship); add(w.paint); add(`in ${w.pieces}`); add(`${w.ship} ${w.paint} ${w.pieces}`);
+  }
+  // all four ships, all three colours and both piece counts, none lopsided (each within a quarter of an even share),
+  // and every one of the 24 together (the three are drawn apart, so none goes with another)
+  const even = (k, of) => assert.ok(count[k] > (n / of) * 0.75 && count[k] < (n / of) * 1.25, `${k}: ${count[k] || 0} of ${n} seeds`);
+  for (const s of WRECK_SHIPS) even(s, WRECK_SHIPS.length);
+  for (const p of PAINT_IDS) even(p, PAINT_IDS.length);
+  even('in 2', 2); even('in 3', 2);
+  for (const s of WRECK_SHIPS) for (const p of PAINT_IDS) for (const k of [2, 3]) assert.ok(count[`${s} ${p} ${k}`] > 0, `never a ${p} ${s} in ${k}`);
+  // and the wreck it makes is the same each time (the meadow, seed 7)
+  const L = LANDS.meadow, w = wreckFor(L.seed), a = wreckOn(L, w.ship, w.pieces), b = wreckOn(L, w.ship, w.pieces);
+  assert.deepEqual(a.placed.mats, b.placed.mats);
+  assert.deepEqual(a.plan, b.plan);
 });
 
 test('broken in two or three: every bit of the hull in one piece, nothing lost, each piece a real part of the ship', () => {

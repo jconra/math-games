@@ -16,11 +16,15 @@
 // THE WRECK (an options round for the rescue runs, the game's maker 2026-11-20: "can we take one of our ships and break
 // it into parts for a rescue situation? Like the people in need broke their ship in half. Maybe we could color it
 // differently."): one of our four ships broken apart beside the landing ring (src/planet/wreck.js, wreckship.js), or
-// none; a different one by the seed ("each rescue"), or the one picked; its colours, one of three crews' that aren't
-// ours; in two pieces or three. A view of it. Only here for now: nothing in the game has it yet.
+// none; its colours, one of three crews' that aren't ours; in two pieces or three. "Each rescue" (the lab's first
+// pick, so a new planet comes with its wreck) has the planet's seed pick all three, a different wreck each rescue (his
+// answers WRECK1-1 C, WRECK1-2 D, WRECK1-3 C: "Randomness is good"); the colour and pieces chips then show what the
+// seed picked. A ship, colours or pieces picked by hand (for looking) take the place of the seed's, the rest kept as it
+// was, so only what was picked changes. A view of it. Only here for now: nothing in the game has it yet.
 //
 // Address switches: ?seed=N the planet; ?kind=moon|meadow|canyon a new one of that kind; ?q=low|medium|high graphics;
-// ?view=landing|above|low|wreck; ?wreck=none|any|miner|explorer|medic|hauler; ?paint=rust|olive|slate; ?pieces=2|3;
+// ?view=landing|above|low|wreck; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
+// ?paint=rust|olive|slate and ?pieces=2|3 (with a ship by hand);
 // ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
 // window.LAB: { ready, planet, land, wreck, quality, timings, view(name), look(at, to), build(seed), bench(frames),
 //   step(dt), setWreck({ ship, paint, pieces }) }
@@ -29,7 +33,7 @@ import { makePlanet, makeLandAsync } from '../../src/planet/planet.js';
 import { KINDS, kindOf, newSeed, kindById } from '../../src/planet/kinds.js';
 import { WIDTH } from '../../src/planet/land.js';
 import { CURVE } from '../../src/planet/ground.js';
-import { WRECK_SHIPS, PAINTS } from '../../src/planet/wreck.js';
+import { WRECK_SHIPS, PAINTS, wreckFor } from '../../src/planet/wreck.js';
 import { makeWreck } from '../../src/planet/wreckship.js';
 
 const $ = (id) => document.getElementById(id);
@@ -62,12 +66,24 @@ addEventListener('resize', fit); fit();
 const LAB = window.LAB = { ready: false, planet: null, land: null, quality, timings: {} };
 let planet = null, building = null, want = kept.kind && (kept.kind === 'any' || kindById(kept.kind)) ? kept.kind : 'any', ringOn = kept.ring !== false;
 if (q.get('kind') && kindById(q.get('kind'))) want = q.get('kind');
-// the wreck: which ship ('none', 'any' a different one by the seed, or one of the four), its colours, its pieces
+// the wreck: which ship ('none', 'any' each rescue's: the seed picks the ship, its colours and its pieces; or one of
+// the four), and the colours and pieces picked by hand (for a ship picked by hand)
 const SHIP_NAMES = { miner: 'Miner', explorer: 'Explorer', medic: 'Medic', hauler: 'Hauler' };
 const wreckOk = (w) => w === 'none' || w === 'any' || WRECK_SHIPS.includes(w);
-let wreck = null, wreckWant = wreckOk(q.get('wreck')) ? q.get('wreck') : wreckOk(kept.wreck) ? kept.wreck : 'none';
+let wreck = null, wreckWant = wreckOk(q.get('wreck')) ? q.get('wreck') : wreckOk(kept.wreck) ? kept.wreck : 'any';
 let paint = PAINTS[q.get('paint')] ? q.get('paint') : PAINTS[kept.paint] ? kept.paint : 'rust';
 let breaks = [2, 3].includes(+q.get('pieces')) ? +q.get('pieces') : [2, 3].includes(kept.pieces) ? kept.pieces : 2;
+// the wreck a seed gets: none, the seed's own (each rescue), or the one picked by hand
+const wreckPick = (seed) => (wreckWant === 'none' ? null : wreckWant === 'any' ? wreckFor(seed) : { ship: wreckWant, paint, pieces: breaks });
+// (a pick by hand while each rescue is on: the wreck shown becomes the one by hand, so only what is picked changes)
+const byHand = () => { if (wreckWant !== 'any' || !planet) return false; const s = wreckFor(planet.land.seed); wreckWant = s.ship; paint = s.paint; breaks = s.pieces; return true; };
+// the address keeps it: wreck=none, wreck=any, or the ship with its colours and pieces
+function wreckAddress(u) {
+  u.searchParams.set('wreck', wreckWant);
+  if (wreckWant === 'none' || wreckWant === 'any') for (const k of ['paint', 'pieces']) u.searchParams.delete(k);
+  else { u.searchParams.set('paint', paint); u.searchParams.set('pieces', breaks); }
+  return u;
+}
 
 // ── the camera ───────────────────────────────────────────────────────────────────────────────────────────────────
 const cam = { pos: new THREE.Vector3(0, 60, 80), yaw: 0, pitch: 0.2 };
@@ -191,10 +207,10 @@ async function build(seed, { keepView = false } = {}) {
     const t1 = performance.now();
     // the wreck, before the planet is drawn: built, broken and placed, and the ground under it cleared (its trees and
     // plants: they are laid when the planet is made)
-    let W = null;
-    if (wreckWant !== 'none') {
+    let W = null; const pick = wreckPick(seed);
+    if (pick) {
       say('Breaking the ship…', `${kind.name}, seed ${seed}`);
-      try { W = await makeWreck({ land, ship: wreckWant === 'any' ? null : wreckWant, pieces: breaks }); } catch (e) { console.error(e); if (window.oops) window.oops(e); W = null; }
+      try { W = await makeWreck({ land, ship: pick.ship, pieces: pick.pieces }); } catch (e) { console.error(e); if (window.oops) window.oops(e); W = null; }
     }
     const tw = performance.now();
     if (wreck) { wreck.dispose(); wreck = LAB.wreck = null; }
@@ -202,7 +218,7 @@ async function build(seed, { keepView = false } = {}) {
     renderer.info.reset();
     planet = LAB.planet = await makePlanet({ renderer, scene, land, quality });
     LAB.land = land;
-    if (W) wreck = LAB.wreck = W.draw({ scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint });
+    if (W) wreck = LAB.wreck = W.draw({ scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint: pick.paint });
     renderer.toneMappingExposure = planet.exposure;
     placeRing();
     if (!keepView) setView(viewName); else applyCam();
@@ -215,8 +231,7 @@ async function build(seed, { keepView = false } = {}) {
     LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, wreck: W ? W.stats.ms : 0, planet: Math.round(t2 - tw), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
     $('seed').value = String(seed);
     const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind');
-    if (wreckWant !== 'none') { u.searchParams.set('wreck', wreckWant); u.searchParams.set('paint', paint); u.searchParams.set('pieces', breaks); } else for (const k of ['wreck', 'paint', 'pieces']) u.searchParams.delete(k);
-    history.replaceState(null, '', u.href);
+    history.replaceState(null, '', wreckAddress(u).href);
     keep({ seed });
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
     const wr = wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}.` : '';
@@ -232,13 +247,15 @@ function paintChips() {
   $('kinds').replaceChildren(chip('Any kind', want === 'any', () => { want = 'any'; keep({ kind: want }); paintChips(); }, true),
     ...KINDS.map((k) => chip(k.name, want === k.id, () => { want = k.id; keep({ kind: want }); paintChips(); }, true)));
   $('views').replaceChildren(...Object.entries(VIEWS).filter(([id]) => id !== 'wreck' || wreck).map(([id, v]) => chip(v.name, viewName === id, () => setView(id), true)));
-  // the wreck: which ship (or none, or a different one each rescue), its colours, in how many pieces
+  // the wreck: which ship (or none, or a different one each rescue), its colours, in how many pieces (with each rescue
+  // on, the colour and pieces chips show what the seed picked)
   const reWreck = () => { keep({ wreck: wreckWant, paint, pieces: breaks }); paintChips(); if (planet) build(planet.land.seed, { keepView: true }).then(() => { if (wreck && viewName !== 'wreck') setView('wreck'); else paintChips(); }); };
+  const shown = wreckWant === 'any' ? (planet ? wreckFor(planet.land.seed) : {}) : { paint, pieces: breaks };
   $('wrecks').replaceChildren(chip('None', wreckWant === 'none', () => { if (wreckWant === 'none') return; wreckWant = 'none'; if (viewName === 'wreck') viewName = 'landing'; reWreck(); }, true),
     chip('Each rescue', wreckWant === 'any', () => { if (wreckWant === 'any') return; wreckWant = 'any'; reWreck(); }, true),
-    ...WRECK_SHIPS.map((s) => chip(SHIP_NAMES[s], wreckWant === s, () => { if (wreckWant === s) return; wreckWant = s; reWreck(); }, true)));
-  $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, paint === id, () => { paint = id; keep({ paint }); if (wreck) { wreck.paint(id); const u = new URL(location.href); u.searchParams.set('paint', id); history.replaceState(null, '', u.href); } paintChips(); }, true); b.title = P.about; return b; }));
-  $('breaks').replaceChildren(...[[2, 'In two'], [3, 'In three']].map(([n, t]) => chip(t, breaks === n, () => { if (breaks === n) return; breaks = n; reWreck(); }, true)));
+    ...WRECK_SHIPS.map((s) => chip(SHIP_NAMES[s], wreckWant === s, () => { if (wreckWant === s) return; byHand(); wreckWant = s; reWreck(); }, true)));
+  $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, shown.paint === id, () => { if (shown.paint === id) return; const was = byHand(); paint = id; keep(was ? { wreck: wreckWant, paint, pieces: breaks } : { paint }); if (wreck) { wreck.paint(id); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); } paintChips(); }, true); b.title = P.about; return b; }));
+  $('breaks').replaceChildren(...[[2, 'In two'], [3, 'In three']].map(([n, t]) => chip(t, shown.pieces === n, () => { if (shown.pieces === n) return; byHand(); breaks = n; reWreck(); }, true)));
   for (const id of ['paints', 'breaks']) { const el = $(id); for (const c of el.children) c.hidden = wreckWant === 'none'; if (el.previousElementSibling) el.previousElementSibling.hidden = wreckWant === 'none'; }
   $('quality').replaceChildren(...Object.entries(QUALITY).map(([id, v]) => chip(v.name, quality === id, () => { if (id === quality) return; keep({ q: id }); const u = new URL(location.href); u.searchParams.set('q', id); location.href = u.href; }, true)));
   const r = $('ring'); r.classList.toggle('on', ringOn); r.setAttribute('aria-pressed', ringOn ? 'true' : 'false');
@@ -289,11 +306,15 @@ LAB.bench = (frames = 90) => {
 };
 LAB.curve = CURVE;
 LAB.ring = (on) => { ringOn = !!on; if (ring) ring.visible = ringOn; paintChips(); };
-// (for the rigs: the wreck chosen and the planet made again with it; the colours alone change it where it lies)
-LAB.setWreck = async ({ ship = wreckWant, paint: p = paint, pieces = breaks } = {}) => {
-  const again = ship !== wreckWant || pieces !== breaks;
-  wreckWant = wreckOk(ship) ? ship : 'none'; paint = PAINTS[p] ? p : paint; breaks = pieces === 3 ? 3 : 2;
-  if (again && planet) await build(planet.land.seed, { keepView: true }); else if (wreck) wreck.paint(paint);
+// (for the rigs: the wreck chosen as the chips choose it (ship 'none', 'any', or any of ship, paint, pieces by hand)
+// and the planet made again with it; the colours alone change it where it lies)
+LAB.setWreck = async ({ ship, paint: p, pieces } = {}) => {
+  const had = wreck ? `${wreck.ship} ${wreck.stats.pieces}` : 'none';
+  if (ship === 'none' || ship === 'any') wreckWant = ship;
+  else { byHand(); if (WRECK_SHIPS.includes(ship)) wreckWant = ship; if (PAINTS[p]) paint = p; if (pieces === 2 || pieces === 3) breaks = pieces; }
+  const w = planet ? wreckPick(planet.land.seed) : null;
+  if (planet && (w ? `${w.ship} ${w.pieces}` : 'none') !== had) await build(planet.land.seed, { keepView: true });
+  else if (wreck && w) { wreck.paint(w.paint); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
   paintChips(); return wreck ? wreck.stats : null;
 };
 

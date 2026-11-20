@@ -13,15 +13,17 @@
 // a break opens it, it is dark, and its paint is scorched dark along the breaks.
 //
 //   const W = await makeWreck({ land, ship, pieces, seed })   before the planet is drawn: built, broken, placed, and the
-//                                                            ground under it cleared (no trees or plants through it)
-//   W.draw({ scene, ground, sky, paint })                    once the planet is made (its ground's shared settings)
+//                                                            ground under it cleared (no trees or plants through it);
+//                                                            no ship or pieces given: the seed's (wreck.js wreckFor)
+//   W.draw({ scene, ground, sky, paint })                    once the planet is made (its ground's shared settings);
+//                                                            no paint given: the seed's
 //   W.paint(id)                                              another of the colours (src/planet/wreck.js PAINTS)
 //   W.group, W.site, W.plan, W.stats { ms, buildMs, breakMs, placeMs, tris, draws, pieces }, W.dispose()
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { HAZE_SKY_GLSL } from './cover.js';
-import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, PAINTS, shipFor, WRECK_SHIPS } from './wreck.js';
+import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, PAINTS, wreckFor, WRECK_SHIPS } from './wreck.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 const MODULES = { explorer: 'explorer-built.js', miner: 'miner-built.js', medic: 'medic-built.js', hauler: 'hauler-built.js' };
@@ -148,9 +150,10 @@ function shadowMaterial({ ground, sunDir, air }) {
 }
 
 const say = (t0) => Math.round(performance.now() - t0);
-export async function makeWreck({ land, ship = null, pieces = 2, seed = land.seed }) {
-  const t0 = performance.now();
-  ship = WRECK_SHIPS.includes(ship) ? ship : shipFor(seed);
+export async function makeWreck({ land, ship = null, pieces = null, seed = land.seed }) {
+  const t0 = performance.now(), own = wreckFor(seed);
+  ship = WRECK_SHIPS.includes(ship) ? ship : own.ship;
+  pieces = pieces === 2 || pieces === 3 ? pieces : own.pieces;
   const [L, C, S] = await Promise.all([import(KIT + 'layout.js'), import(KIT + 'ships/built-common.js'), import(KIT + 'ships/' + MODULES[ship])]);
   const room = await L.loadRoom(KIT + `rooms/ship-${ship}-built.json`);
   const tLoad = performance.now();
@@ -183,7 +186,7 @@ export async function makeWreck({ land, ship = null, pieces = 2, seed = land.see
   let skinGeos = [];
   const W = {
     ship, plan, site: placed.site, placed, group, stats, paintId: null,
-    draw({ scene, ground, sky = null, sunDir = null, paint = 'rust' }) {
+    draw({ scene, ground, sky = null, sunDir = null, paint = null }) {
       const td = performance.now();
       const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;
       if (shadow) materials.push(shadow);
@@ -217,7 +220,7 @@ export async function makeWreck({ land, ship = null, pieces = 2, seed = land.see
       return W;
     },
     paint(id) {
-      if (!PAINTS[id]) id = 'rust';
+      if (!PAINTS[id]) id = own.paint;
       W.paintId = id;
       for (const g of skinGeos) { const a = g.attributes.color; recolour(g.userData.color0, id, { out: a.array }); a.needsUpdate = true; }
     },
