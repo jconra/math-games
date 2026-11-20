@@ -17,6 +17,7 @@
 // body, a head, a hair, colours: maker.js) is saved beside the id and laid over the look's recipe by recipeOf() below.
 
 import { BAND_COLOURS as BAND } from '../kit/crew.js';
+import { brings } from './maker.js';
 
 // (each uniform look wears its own band colour (the white bands on the grey and dark uniforms): the game's maker asked for
 // tinted bands, purple among them, 2026-11-10; the two jackets keep theirs as made)
@@ -51,10 +52,14 @@ export const lookById = (id) => LOOKS.find((l) => l.id === id) || LOOKS[0];
 // THE CHARACTER MAKER (2026-11-19, maker.js) saves just such extras: a body (suit), a head, a hair (null: none) and
 // colours (hair, skin, uniform: the body's colour, eyes, freckles). A head of the player's own choosing wears its own
 // face: the look's face settings were made for the look's own head, and are left off any other.
-export function recipeOf(saved, lib = null) {
+// (under: the look as it is under a body that brings its own head (the android's: maker.js BRINGS), which is what the
+// maker's arrows step from; without it, such a body's own head and no hair are what is worn)
+export function recipeOf(saved, lib = null, { under = false } = {}) {
   const base = lookById(saved && saved.id).recipe, extra = { ...(saved || {}) };
   delete extra.id;
   if (lib && lib.entry) for (const k of ['suit', 'head', 'hair', 'hand']) if (typeof extra[k] === 'string' && !lib.entry(k, extra[k])) delete extra[k];
   const face = typeof extra.head === 'string' && extra.head !== base.head ? {} : base.face || {};
-  return { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...face, ...(extra.face || {}) } };
+  const R = { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...face, ...(extra.face || {}) } };
+  const own = under ? null : brings(R.suit);
+  return own ? { ...R, head: own.head, hair: own.hair, face: {} } : R;
 }

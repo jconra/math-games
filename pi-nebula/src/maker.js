@@ -18,8 +18,9 @@
 // brought inside THE SKIN'S RANGE (skinInRange, below): never white or near white.
 //
 // THE PARTS ARE THE CREW KIT'S OWN, as they are: nothing is re-made or re-fitted for the maker. What is left out:
-//   KEPT_BACK   parts no player wears: Vega's helmet and his coat (his own), and the three captains' bodies (whether a
-//               player may wear a captain's is the game's maker's to say: asked);
+//   KEPT_BACK   parts no player picks by themselves: the android's helmet (it comes with the android's body: BRINGS),
+//               and the three captains' bodies (whether a player may wear a captain's is the game's maker's to say:
+//               asked);
 //   APART       pairings that do not go together cleanly in the kit (a hair on one head, a head on one body): the arrows
 //               step past them. Each was looked at from the front, the side and behind (~/pw/space-math/CHARACTER_MAKER.md).
 
@@ -29,7 +30,14 @@ export const ROWS = [
   { id: 'head', part: 'head', word: 'Head' },
   { id: 'body', part: 'suit', word: 'Body' },
 ];
-export const KEPT_BACK = { suit: ['vega', 'captainMan', 'captainOld', 'captainWoman'], head: ['vega'], hair: [] };
+export const KEPT_BACK = { suit: ['captainMan', 'captainOld', 'captainWoman'], head: ['vega'], hair: [] };
+// THE ANDROID (the game's maker, 2026-11-19, of a blue-skinned crew member the checks had made: "I guess we have aliens
+// now. I wonder if we should let the player pick an android?", and then: "we already have android models"): the
+// android's body is one of the body arrows' choices. It brings its own head, the helmet with the visor (crew.json: that
+// head goes `with` this body alone), and wears no hair: so while it is worn the head and hair arrows have nothing to
+// step to, and the head and hair the player had are kept under it and are theirs again on the next body.
+export const BRINGS = { vega: { head: 'vega', hair: null } };
+export const brings = (suit) => (suit && Object.prototype.hasOwnProperty.call(BRINGS, suit) ? BRINGS[suit] : null);
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
 // (2026-11-19: all 13 heads on the 11 bodies and under the 23 hairs, each drawn from the front, the side and behind
 // and looked at. No hair is left out on any head. Two heads on a body are: the 40s man's thick neck comes through the
@@ -55,6 +63,7 @@ export const goTogether = (w) => hairGoes(w.hair, w.head) && headGoes(w.head, w.
 
 // a row's choices with the other two parts as worn (w: { suit, head, hair }): the part worn is always one of them
 export function choices(list, part, w) {
+  if (part !== 'suit' && brings(w.suit)) return [];      // (the android's body brings its own head and wears no hair)
   return wearable(list, part).filter((id) => id === w[part] || goTogether({ ...w, [part]: id }));
 }
 // the choice an arrow steps to (dir 1: the next, -1: the one before), coming round at the ends

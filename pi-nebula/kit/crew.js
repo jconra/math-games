@@ -1728,9 +1728,10 @@ float vsFace(vec2 uv) {
   return (1.0 - smoothstep(w * 0.55, w, d)) + 0.22 * exp(-max(d - w, 0.0) * 34.0);
 }
 `;
+const VISOR_OWN = 0x35f2e4;      // the colour a visor's face glows in when no eye colour is given
 function visorMaterial(src) {
   const m = new THREE.MeshStandardMaterial({ name: 'visor', color: 0x05070a, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.3 });
-  const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(0x35f2e4) } };
+  const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
   m.defines = { USE_UV: '' };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -3400,7 +3401,11 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
     // the face bones (FACE): the sliders this head has, and their values (-1..1) set
     faceSliders: faceR.sliders,
     setFace(values) { c.recipe.face = { ...(values || {}) }; applyFace(bones, faceR, c.recipe.face); },
-    setColours(col) { c.recipe.colours = { ...(c.recipe.colours || {}), ...col }; setColours(mats, c.recipe.colours); },
+    setColours(col) {
+      c.recipe.colours = { ...(c.recipe.colours || {}), ...col }; setColours(mats, c.recipe.colours);
+      // (an android's eyes are the face on its visor: an eye colour given is the colour that face glows in; none, its own)
+      if (visor) visor.userData.visor.vsCol.value.set(c.recipe.colours.eyes || VISOR_OWN);
+    },
     expression: null,
     setExpression(name) {
       const k = Object.keys(EXPRESSIONS).indexOf(name);

@@ -19,7 +19,7 @@ import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
 import { LOOKS, lookById, recipeOf } from '../looks.js';
 import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
-import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange } from '../maker.js';
+import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange, brings } from '../maker.js';
 import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
 
 const P = 'cst';
@@ -134,15 +134,17 @@ const frecklesRow = (on) => `<div class="${P}-heights ${P}-two" role="radiogroup
 </div>`;
 function makerHtml(p) {
   const lib = kit(), R = recipeOf(p.look, lib), col = R.colours || {};
+  // (an android has no hair, skin or freckles to colour: its rows are the body's colour and its eyes', the visor's face)
+  const android = !!brings(R.suit), tints = TINTS.filter((T) => !android || T.id === 'uniform' || T.id === 'eyes');
   return `<div class="${P}-maker">
     <div class="${P}-stage" role="group" aria-label="Your character: hair, head and body" data-nav="grid">
       <span class="${P}-face ${P}-full">${pic(p.look)}</span>
       <span class="${P}-face ${P}-close">${pic(p.look)}</span>
-      ${ROWS.map((row) => arrow(row, -1, !!lib) + arrow(row, 1, !!lib)).join('')}
+      ${ROWS.map((row) => { const on = !!lib && !(row.part !== 'suit' && brings(R.suit)); return arrow(row, -1, on) + arrow(row, 1, on); }).join('')}
     </div>
     <div class="${P}-tints">
-      ${TINTS.map((T) => swatches(T, col[T.id] || null)).join('')}
-      <section><h3 class="${P}-label">Freckles</h3>${frecklesRow(col.freckles)}</section>
+      ${tints.map((T) => swatches(T, col[T.id] || null)).join('')}
+      ${android ? '' : `<section><h3 class="${P}-label">Freckles</h3>${frecklesRow(col.freckles)}</section>`}
       <section><h3 class="${P}-label">Height</h3>${heightRow(sizeOf(p.look), 'setsize')}</section>
     </div>
   </div>`;
@@ -251,7 +253,8 @@ const theme = {
     part(ctx, data) {
       const p = ctx.current(), lib = kit(), row = ROWS.find((r) => r.id === data.id), dir = +data.v < 0 ? -1 : 1;
       if (!p || !lib || !row) return;
-      const worn = wornOf(recipeOf(p.look, lib)), next = step(lib.list.parts, row.part, worn, dir);
+      // (stepped from the look as it is under an android's body, so the head and hair kept under it still count)
+      const worn = wornOf(recipeOf(p.look, lib, { under: true })), next = step(lib.list.parts, row.part, worn, dir);
       if (next === worn[row.part]) return;
       lookChanged(ctx, p, withPart(p.look, row.part, next, lookById(p.look.id).recipe));
       // (the one after it in the same direction is fetched now, so the next press finds it here)

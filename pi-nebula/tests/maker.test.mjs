@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
+import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
 
 const KIT = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.meta.url), 'utf8')).parts;
 const KAI = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };      // (the look "kai"'s own recipe)
@@ -17,10 +17,11 @@ test('the arrows have three rows: hair, head and body, and the player reads thos
   for (const r of ROWS) assert.ok(!/outfit|uniform|suit/i.test(r.word), r.word);
 });
 
-test('what a player may wear: every body but the captains\' and Vega\'s, the 13 heads (never Vega\'s helmet), every hair and no hair', () => {
+test('what a player may wear: every body but the captains\' (the android\'s too), the 13 heads (the android\'s helmet only with its body), every hair and no hair', () => {
   const suits = wearable(KIT, 'suit'), heads = wearable(KIT, 'head'), hairs = wearable(KIT, 'hair');
-  assert.equal(suits.length, KIT.suit.length - 4);
-  for (const s of ['vega', 'captainMan', 'captainOld', 'captainWoman']) assert.ok(!suits.includes(s), s);
+  assert.equal(suits.length, KIT.suit.length - 3);
+  for (const s of ['captainMan', 'captainOld', 'captainWoman']) assert.ok(!suits.includes(s), s);
+  assert.ok(suits.includes('vega'), 'the android\'s body is a body a player may pick');
   assert.equal(heads.length, 13);
   assert.ok(!heads.includes('vega'));
   assert.equal(hairs.length, KIT.hair.length + 1);
@@ -31,6 +32,20 @@ test('what a player may wear: every body but the captains\' and Vega\'s, the 13 
   for (const [hair, heads2] of Object.entries(APART.hair)) { assert.ok(hairs.includes(hair), hair); for (const h of heads2) assert.ok(heads.includes(h), h); }
 });
 
+test('the android\'s body brings its own helmet and no hair: the head and hair arrows have nothing to step to while it is worn, and the body arrows go on', () => {
+  assert.deepEqual(brings('vega'), { head: 'vega', hair: null });
+  assert.equal(brings('civilian'), null); assert.equal(brings(undefined), null); assert.equal(brings('toString'), null);
+  // (what it brings is a head the kit has, and one that goes with that body alone)
+  for (const [suit, own] of Object.entries(BRINGS)) { assert.ok(KIT.suit.some((p) => p.id === suit), suit); const h = KIT.head.find((p) => p.id === own.head); assert.ok(h, own.head); assert.equal(h.with, suit); }
+  const w = { suit: 'vega', head: 't7', hair: 'ponytail' };      // (the head and hair the player had are kept under it)
+  assert.deepEqual(choices(KIT, 'head', w), []); assert.deepEqual(choices(KIT, 'hair', w), []);
+  assert.equal(step(KIT, 'head', w, 1), 't7'); assert.equal(step(KIT, 'hair', w, -1), 'ponytail');
+  const next = step(KIT, 'suit', w, 1);
+  assert.notEqual(next, 'vega'); assert.ok(wearable(KIT, 'suit').includes(next));
+  // (and the arrows reach it from the body before it and the one after it)
+  const suits = wearable(KIT, 'suit'), at = suits.indexOf('vega'), before = suits[(at - 1 + suits.length) % suits.length];
+  assert.equal(step(KIT, 'suit', { suit: before, head: 't7', hair: 'ponytail' }, 1), 'vega');
+});
 test('an arrow steps to the next choice or the one before, and a row comes round to where it began', () => {
   for (const part of ['hair', 'head', 'suit']) {
     const all = choices(KIT, part, worn());
@@ -124,7 +139,7 @@ test('a saved look is made safe: kept-back parts and colours that are no colour 
   assert.deepEqual(tidy({ id: 'kai', size: 0.9 }), { id: 'kai', size: 0.9 });
   // (a captain's body, Vega's helmet and coat: never a player's)
   assert.deepEqual(tidy({ id: 'kai', suit: 'captainMan', head: 'vega' }), { id: 'kai' });
-  assert.deepEqual(tidy({ id: 'kai', suit: 'vega' }), { id: 'kai' });
+  assert.deepEqual(tidy({ id: 'kai', suit: 'vega' }), { id: 'kai', suit: 'vega' });
   assert.deepEqual(tidy({ id: 'kai', suit: 'cook', head: 't3', hair: null }), { id: 'kai', suit: 'cook', head: 't3', hair: null });
   assert.deepEqual(tidy({ id: 'kai', suit: 7, head: '', hair: 3 }), { id: 'kai' });
   // (any colour picked with a row's + is kept as it is, but for a skin: a white one is brought inside the range)
