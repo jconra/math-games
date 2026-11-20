@@ -642,9 +642,9 @@ function partCard(H, { t, rand, who = null }) {
   const slips = t.shuffle([
     S(n, 'filled', `That is what the ${have} already in it sells for. The question is the part still empty: ${empty}.`),
     S(8, 'whole', `${credits(price)} credits is a whole tonne of ${name}. ${cap(have)} is already in the canister.`),
-    ...(left > 1 ? [S(1, 'oneEighth', `That is 1/8 of a tonne. ${cap(empty)} is ${left} lots of 1/8.`)] : []),
-    ...(left + 1 < 8 ? [S(left + 1, 'off', `That is ${ofE(left + 1)} of a tonne. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
-    ...(left - 1 >= 1 ? [S(left - 1, 'off', `That is ${ofE(left - 1)} of a tonne. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
+    ...(left > 1 ? [S(1, 'oneEighth', `That is what 1/8 of a tonne sells for. ${cap(empty)} is ${left} lots of 1/8.`)] : []),
+    ...(left + 1 < 8 ? [S(left + 1, 'off', `That is what ${ofE(left + 1)} of a tonne sells for. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
+    ...(left - 1 >= 1 ? [S(left - 1, 'off', `That is what ${ofE(left - 1)} of a tonne sells for. A full canister is 8/8: 8/8 − ${n}/8 = ${left}/8 still empty.`)] : []),
     { ...P(ans * 10), slip: 'pointLost', why: 'That is ten times too much. Count the zeros again.' },
   ]);
   const one = { op: 'mul', a: 125, b: price / 1000, say: `Then what 1/8 of a tonne of ${name} sells for: 1/8 of 1,000 is 125, so 1/8 of ${credits(price)} is ${price / 1000} lots of 125` };
