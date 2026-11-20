@@ -447,7 +447,10 @@ function liveRender() {
   _c.set(0, mid, F.headZ * size * z);
   cam.position.set(_c.x, _c.y + Math.sin(V.pitch) * d, _c.z + Math.cos(V.pitch) * d);
   cam.lookAt(_c);
-  S.renderer.setSize(Math.round(w * px), Math.round(h * px), false);
+  // (the canvas sized again only when it must: a picture taken in between, or the window's size changed; sizing it
+  // clears and remakes its drawing buffer, which a phone feels on every frame of a drag)
+  const cw = Math.round(w * px), ch = Math.round(h * px);
+  if (S.canvas.width !== cw || S.canvas.height !== ch) S.renderer.setSize(cw, ch, false);
   S.renderer.shadowMap.needsUpdate = true;
   S.renderer.render(S.scene, cam);
   live.frames++;
