@@ -47,6 +47,7 @@ import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
 import { makeMission } from './mission.js';
 import { addOutside } from './outside.js';
+import { makeAnnounce } from './announce.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
@@ -105,6 +106,8 @@ async function boot() {
   // (the other two hangars, for a Miner flown into them by hand: the alarm, the red lights, the people running, the
   // parked ship shoved and put back: src/visit.js)
   const visit = GAME.visit = makeVisit({ W, boarding, outside, people: () => people });
+  // (the station's announcements over the speakers, a chime first, about once a minute: src/announce.js)
+  const announce = GAME.announce = makeAnnounce({ sound, W, visit, people: () => people, crew: () => GAME.player });
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -223,6 +226,7 @@ async function boot() {
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
     visit.update(dt, W.camera);      // (a ship flown into another hangar: the alarm there, the parked ship where it has been shoved)
+    announce.update(dt, GAME.mode === 'play' && !!P);
     outside.update(W.camera, dt);
     W.frame(dt, now, eyes);
     GAME.frames++;
