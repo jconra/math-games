@@ -140,8 +140,10 @@ export function airlock(p, v) {
     for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * PI * 2; q.cyl('grey', 0.016, 0.014, [Math.cos(a) * (AR + 0.4), AC + Math.sin(a) * (AR + 0.4), z + 0.05], [PI / 2, 0, 0], 10); }
     // (the step up: deep enough that a person standing on the floor at its edge is clear of the raised sill, so they
     // can step onto it: src/walls.js feels a person's body as a ring 0.28 m round; at 0.32 m deep the ring met the sill
-    // before the feet reached the step)
-    q.slab('gun', -0.75, 0.75, 0, 0.235, z, z + 0.46, { r: 0.012 }); q.slab('yellow', -0.75, 0.75, 0.226, 0.236, z + 0.42, z + 0.46, { r: 0.004 });
+    // before the feet reached the step. The outer door's space side (s -1, as its red lights say) as it was: there the
+    // docking bridge's own plate is the floor, and a deeper step would reach in under the bridge's first ring)
+    const sd = outer && s < 0 ? 0.32 : 0.46;
+    q.slab('gun', -0.75, 0.75, 0, 0.235, z, z + sd, { r: 0.012 }); q.slab('yellow', -0.75, 0.75, 0.226, 0.236, z + sd - 0.04, z + sd, { r: 0.004 });
     // four docking clamps round the ring, each with an amber light
     for (const a of [PI / 4, 3 * PI / 4, 5 * PI / 4, 7 * PI / 4]) {
       const cx = Math.cos(a) * (AR + 0.6), cy = AC + Math.sin(a) * (AR + 0.6);
