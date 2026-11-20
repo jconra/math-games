@@ -68,11 +68,35 @@ test('the contract: each of the three jobs can be signed for, alone or with the 
   const S = MS.stepsFor(MINING, ['drill']);
   assert.deepEqual(S.map((s) => [s.id, s.mine]), [['out', false], ['jumpOut', false], ['field', true], ['jumpHome', false], ['home', false]]);
   assert.deepEqual(MS.stepsFor(MINING, ['pilot', 'drill']).filter((s) => s.mine).map((s) => s.id), ['jumpOut', 'field', 'jumpHome']);
-  // who does what on the trip: the crew member their own role, the captain's crew the rest
-  assert.deepEqual(MS.crewFor(MINING, ['pilot'], 'Maya').map((c) => c.name), ['Maya', 'Miner Kestrel', 'Engineer Okafor']);
+  // who does what on the trip: the crew member their own role, the captain's crew the rest (a crew of three: the one
+  // of his crew who comes along, the captain himself for any other: src/missions.js aboardOf)
+  assert.deepEqual(MS.crewFor(MINING, ['pilot'], 'Maya', 'Captain Ruiz').map((c) => c.name), ['Maya', 'Miner Kestrel', 'Captain Ruiz']);
+  assert.deepEqual(MS.crewFor(MINING, ['engineer'], 'Maya', 'Captain Ruiz').map((c) => c.name), ['Pilot Juno', 'Captain Ruiz', 'Maya']);
+  assert.deepEqual(MS.crewFor(MINING, ['pilot', 'drill'], 'Maya', 'Captain Ruiz').map((c) => c.name), ['Maya', 'Maya', 'Engineer Okafor']);
   assert.equal(MS.rolesWords(['pilot']), 'Pilot'); assert.equal(MS.rolesWords(['pilot', 'drill', 'engineer']), 'Pilot, drill operator and engineer');
   // the engineer alone takes no part in anything that is flown: the crew's pilot flies it, the crew drills
   assert.deepEqual(MS.stepsFor(MINING, ['engineer']).map((s) => [s.id, s.mine]), [['out', false], ['jumpOut', false], ['field', false], ['jumpHome', false], ['home', false]]);
+});
+
+test('who is aboard: a crew of three, the crew member, the captain and one of his crew; each job left is done by one of the two', () => {
+  // "The idea is that it's a ship with a crew of 3"; "if you are just an engineer, then the other 2 models can just sit
+  // in the chairs the entire time"; "Later on when you can hire crew ... even if they are just along for the ride"
+  const cap = { id: 'ruiz', name: 'Captain Ruiz' };
+  const subsets = [['pilot'], ['drill'], ['engineer'], ['pilot', 'drill'], ['pilot', 'engineer'], ['drill', 'engineer'], ['pilot', 'drill', 'engineer']];
+  for (const mine of subsets) {
+    const A = MS.aboardOf(MINING, mine, cap);
+    assert.equal(A.length, 2, mine.join()); assert.ok(A[0].captain && A[0].name === 'Captain Ruiz' && A[0].short === 'Ruiz');
+    const jobs = A.flatMap((a) => a.jobs);
+    // every job left is someone's, once; none of the crew member's own is
+    assert.deepEqual([...jobs].sort(), MINING.roles.filter((r) => !mine.includes(r)).sort(), mine.join());
+    for (const r of mine) assert.ok(!jobs.includes(r));
+    // his crew member is the one named for the first job left (all signed for: his pilot, along for the ride)
+    const left = MINING.roles.filter((r) => !mine.includes(r));
+    assert.equal(A[1].name, ROLES[left[0] || 'pilot'].crew); assert.deepEqual(A[1].jobs, left.length ? [left[0]] : []);
+  }
+  // signed only as engineer: the two flight-deck jobs are the other two's, one each
+  const E2 = MS.aboardOf(MINING, ['engineer'], cap);
+  assert.deepEqual(E2.map((a) => a.jobs), [['drill'], ['pilot']]); assert.equal(E2[1].short, 'Juno');
 });
 
 // ── the core's tuning: the engineer's step ───────────────────────────────────────────────────────────────────────
@@ -219,8 +243,10 @@ test('the core\'s tuning: the ship\'s own words for it, and the captain\'s', asy
   for (const w of T.tuned) assert.match(w, /seat/);
   for (const w of [...T.tune, ...T.tuned]) assert.doesNotMatch(w, /smelter|hangar|cockpit first/i);
   assert.ok(!('tunedBefore' in T) && !('tunedAfter' in T));
-  // the captain's word at the rocks names the run's engineer, whoever that is
-  assert.ok(T.field.some((w) => /\{engineer\}/.test(w))); assert.ok(!Object.values(T).flat().some((w) => /Okafor/.test(w)));
+  // the captain's word at the rocks, drilling himself while the crew member is the engineer, names the run's engineer;
+  // the one of his crew who drills is named as whoever that is
+  assert.ok(T.fieldMine.some((w) => /\{engineer\}/.test(w))); assert.ok(!Object.values(T).flat().some((w) => /Okafor|Kestrel/.test(w)));
+  for (const k of ['field', 'fieldFly']) assert.ok(T[k].every((w) => /\{driller\}/.test(w)), k);
 });
 
 // ── the trip's steps ─────────────────────────────────────────────────────────────────────────────────────────────

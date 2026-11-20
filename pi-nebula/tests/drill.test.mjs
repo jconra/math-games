@@ -595,3 +595,49 @@ test('a rock\'s card pays nothing by itself on a run, but the level and the kind
   const q2 = E.deal(crew, drill, { rand: seeded(6), live: LIVE(3) }), wrong = q2.order.coins.findIndex((c) => !c.good), w = E.answer(crew, drill, q2, wrong, { pay: false });
   assert.equal(w.right, false); assert.ok(w.why && w.why.length > 8); assert.equal(w.pay, 0);
 });
+
+// ── the crew's driller in the field itself (src/drill.js CREW: the crew member did not sign for the drill) ──────────
+test('the crew\'s driller works the field\'s own rocks: a marked rock, holes where most comes aboard, two or three rocks fill the eight', () => {
+  // "I expected it to be the same asteroid field for everyone. If you are the pilot then the drill guy will mark one
+  // for you to fly to": played as the drill's view plays it (src/drillview.js byCrew): mark, take, drill, let go
+  const counts = {}, dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let s = 1; s <= 120; s++) {
+    const R = makeRun({ rand: seed(s) }); let at = [0, 0, 0], rocks = 0;
+    for (let g = 0; g < 400 && R.stage !== 'full'; g++) {
+      if (R.stage === 'look') {
+        if (rocks >= DR.CREW.most) { assert.ok(DR.topUp(R.cans, seed(s + 9))); R.stage = 'full'; break; }
+        const r = DR.crewPick(R.rocks, R.cans, at);
+        assert.ok(r && R.rocks.includes(r), 'a rock of the field itself');
+        // (among the nearest: the one whose ore the canisters have the most room for)
+        const near = [...R.rocks].sort((a, b) => dist(a.pos, at) - dist(b.pos, at)).slice(0, DR.CREW.near);
+        assert.ok(near.includes(r)); for (const q of near) assert.ok(DR.fitOf(q, R.cans) <= DR.fitOf(r, R.cans) + 1e-9);
+        at = r.pos; R.pick(r.id); R.asked(); rocks++;
+      }
+      const d = DR.crewHole(R.held, R.cans);
+      if (!d) R.letGo(); else R.drill(d);
+    }
+    assert.equal(R.cans.filter((c) => c.t >= DRILL.can - 1e-6).length, DRILL.cans, 'all eight full, seed ' + s);
+    counts[rocks] = (counts[rocks] || 0) + 1;
+  }
+  // never more than three rocks; nearly always two or three
+  assert.ok(Object.keys(counts).every((k) => +k <= DR.CREW.most && +k >= 1), JSON.stringify(counts));
+  assert.ok((counts[2] || 0) + (counts[3] || 0) >= 114, JSON.stringify(counts));
+});
+
+test('the rest of the load is the crew\'s from further out: the canisters filled by the same rules, none of the field\'s rocks touched', () => {
+  for (let s = 1; s <= 60; s++) {
+    const R = makeRun({ rand: seed(s) });
+    // (a part skipped after one hole, or none at all)
+    if (s % 2) { const r = DR.crewPick(R.rocks, R.cans); R.pick(r.id); R.asked(); R.drill(DR.crewHole(R.held, R.cans)); }
+    const before = JSON.stringify(R.rocks.map((r) => [r.id, r.left, oreLeft(r)])), was = R.cans.map((c) => ({ ...c }));
+    assert.ok(DR.topUp(R.cans, seed(100 + s)));
+    assert.equal(R.cans.filter((c) => c.t >= DRILL.can - 1e-6).length, DRILL.cans);
+    // (one metal to a canister still; what was in a canister stays its metal's; the field as it was)
+    for (let i = 0; i < DRILL.cans; i++) if (was[i].metal) assert.equal(R.cans[i].metal, was[i].metal);
+    assert.equal(JSON.stringify(R.rocks.map((r) => [r.id, r.left, oreLeft(r)])), before, 'the field as it was');
+    assert.ok(sellsFor(storeOf(R.cans)).pay > 0);
+  }
+  // nothing worth a hole: let it go (a bare rock)
+  const R = makeRun({ rand: seed(3) }), r = R.rocks[0]; for (const L of r.lumps) L.ore = 0;
+  assert.equal(DR.crewHole(r, R.cans), null);
+});

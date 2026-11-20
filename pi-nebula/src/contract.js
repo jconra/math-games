@@ -7,7 +7,7 @@
 // taken up (src/mission.js).
 //
 //   const C = openContract(root, { mission, captain, onSign(roleIds), onLater() })   C.close(), C.el, C.state()
-import { rolesOf, shareOf, payOf } from './missions.js';
+import { rolesOf, shareOf, payOf, crewFor } from './missions.js';
 
 const CSS = `
 .pmc { position: fixed; inset: 0; z-index: 26; display: grid; place-items: center; padding: 12px; background: rgba(4, 6, 10, 0.45); opacity: 0; transition: opacity 0.2s ease;
@@ -60,6 +60,10 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   function draw() {
     // (the example: an ordinary load of the Miner's eight tonnes, the game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000)
     const share = shareOf([...mine]), sample = 24000;
+    // (who does each job left to the crew: the ship has a crew of three, the captain and one of his crew with the crew
+    // member: src/missions.js aboardOf)
+    const by = Object.fromEntries(crewFor(M, [...mine], 'You', captain).map((c) => [c.role, c.name]));
+    for (const r of roles) r.crew = by[r.id] || r.crew;
     el.innerHTML = `<section class="pmc-card">
       <header class="pmc-top"><b>${esc(M.name)}</b><small>${esc(captain)}'s contract</small></header>
       <p class="pmc-what">The Miner flies out to the rocks, fills its 8 canisters with ore and comes home. Each job on the run earns a share of what the haul sells for.</p>

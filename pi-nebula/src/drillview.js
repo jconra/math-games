@@ -86,7 +86,7 @@ import { POD } from '../kit/ships/miner-built.hull.js';
 import { makeFlight } from '../kit/ships/flight.js';
 import { openPanel } from './jobs/panel.js';
 import { JOB as SCAN } from './jobs/drill.js';
-import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, scanOf, rockSells } from './drill.js';
+import { makeRun, DRILL, ORE, SHAPES, seeded, holeWorth, scanOf, rockSells, crewPick, crewHole, topUp, CREW } from './drill.js';
 import { sellsFor, lotsWords, tonnesWords, eighthsText } from './jobs/smelter.js';
 import { priceChart } from './pricechart.js';
 import { DIR } from '../world/sky.js';
@@ -166,6 +166,13 @@ const CSS = `
 .pdr-eye i { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); background:
   linear-gradient(#9fe9ff, #9fe9ff) 0 0 / 10px 2px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 0 0 / 2px 10px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 100% 0 / 10px 2px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 100% 0 / 2px 10px no-repeat,
   linear-gradient(#9fe9ff, #9fe9ff) 0 100% / 10px 2px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 0 100% / 2px 10px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 100% 100% / 10px 2px no-repeat, linear-gradient(#9fe9ff, #9fe9ff) 100% 100% / 2px 10px no-repeat; }
+/* (the rock the crew's driller marked: amber corners and a word under them, kept on the screen's edge while it is off it) */
+.pdr-mark { position: fixed; z-index: 21; font: 700 12px/1.2 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; letter-spacing: 0.03em; color: #ffe2a0; }
+.pdr-mark[hidden] { display: none; }
+.pdr-mark i { background:
+  linear-gradient(#ffc83c, #ffc83c) 0 0 / 12px 3px no-repeat, linear-gradient(#ffc83c, #ffc83c) 0 0 / 3px 12px no-repeat, linear-gradient(#ffc83c, #ffc83c) 100% 0 / 12px 3px no-repeat, linear-gradient(#ffc83c, #ffc83c) 100% 0 / 3px 12px no-repeat,
+  linear-gradient(#ffc83c, #ffc83c) 0 100% / 12px 3px no-repeat, linear-gradient(#ffc83c, #ffc83c) 0 100% / 3px 12px no-repeat, linear-gradient(#ffc83c, #ffc83c) 100% 100% / 12px 3px no-repeat, linear-gradient(#ffc83c, #ffc83c) 100% 100% / 3px 12px no-repeat; }
+.pdr-mark span { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; padding: 2px 7px 3px; background: rgba(20, 14, 4, 0.82); box-shadow: inset 0 0 0 1px rgba(255, 200, 60, 0.6); border-radius: 3px; }
 .pdr-read { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; padding: 4px 9px 5px; font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; color: #e9f6ff; background: rgba(4, 22, 32, 0.82); box-shadow: inset 0 0 0 1.2px rgba(110, 225, 255, 0.7); border-radius: 3px; }
 .pdr-read.is-new { animation: pdr-ping 0.5s ease; }
 .pdr-read div { display: flex; align-items: baseline; } .pdr-read b { font-weight: 800; margin-left: 5px; }
@@ -498,9 +505,19 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'dots', rock = 'natural' }) {
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'dots', rock = 'natural', byCrew = null }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
+  // THE CREW'S OWN DRILLER (byCrew: { driller (a name), auto }: the crew member did not sign for the drill; src/drill.js
+  // CREW). The same field, the same rocks, the same rules; nothing of this view is on the screen but the driller's mark
+  // on the rock they want: the driller marks a rock (crew.go() starts them), whoever flies brings the claw to it (the
+  // crew member at the controls, by hand: src/fieldfly.js; else, `auto`, the crew's pilot or the autopilot, as a
+  // tapped trip), the claw takes it, the driller drills it hole by hole where the most comes aboard and lets it go,
+  // and marks the next, until the eight canisters are full (after the third rock the rest is the crew's from further
+  // out: topUp). crew.hurry(): a part skipped (the skip button), so a very short scene of a rock being drilled: the
+  // marked rock flown to at once, one hole in it, and the rest of the load the crew's.
+  if (byCrew) ask = false;
+  const C = byCrew ? { on: false, auto: !!byCrew.auto, driller: byCrew.driller || 'The driller', mark: null, rocks: 0, holes: 0, wait: 0, hurry: false, shown: true, done: false } : null;
   // FG: the field's own frame (where `at` puts it), still. G: the ship's frame, which moves through the field.
   const FG = new THREE.Group(); FG.name = 'drill: the field'; FG.matrixAutoUpdate = false; FG.matrix.copy(at); FG.updateMatrixWorld(true); scene.add(FG);
   const G = new THREE.Group(); G.name = 'drill: the ship'; G.matrixAutoUpdate = false; G.matrix.copy(at); scene.add(G); G.add(built.group);
@@ -959,15 +976,16 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const closePanel = () => { if (!panel) return; const p = panel; panel = null; for (const c of p.el.children) c.style.pointerEvents = 'none'; p.close(true); el.classList.remove('has-panel'); };
 
   // ── finding: a tap on a rock is where to fly; the full scan of the rock looked at ──
-  function pick(id) {
+  function pick(id, secs = null) {
     if (V.stage !== 'look') return false;
     const o = seen.get(id); if (!o || !run.pick(id)) return false;
     // the course: the ship turns to the rock and flies straight to where its claw's place is on the rock
     // (it ends level, its nose toward the rock, however the ship was left turned)
     const d = _v.copy(o.pos).sub(here.p), yaw1 = Math.hypot(d.x, d.z) > 1 ? Math.atan2(d.x, d.z) : yawOf(), q1 = new THREE.Quaternion().setFromAxisAngle(UP, yaw1);
     const p1 = o.pos.clone().sub(_v2.copy(heldPos).applyQuaternion(q1)), far = p1.distanceTo(here.p);
-    V.trip = { o, p0: here.p.clone(), p1, q0: here.q.clone(), q1, secs: Math.max(FLY.least, Math.min(FLY.most, far / FLY.speed)), far };
-    go('fly'); onSay('pick'); scanEl.hidden = true;
+    V.trip = { o, p0: here.p.clone(), p1, q0: here.q.clone(), q1, secs: secs || Math.max(FLY.least, Math.min(FLY.most, far / FLY.speed)), far };
+    go('fly'); if (!C) onSay('pick'); scanEl.hidden = true;
+    if (C) { C.rocks++; C.going = C.mark; C.mark = null; C.wait = 0; }
     return true;
   }
   function scan(id = V.eyed) {
@@ -1077,7 +1095,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   function hand(on, c = camera) {
     if (on) { if (V.stage !== 'look') return false; go('hand'); el.classList.add('is-hand'); eyeOn = false; return true; }
     if (V.stage !== 'hand') return false;
-    el.classList.remove('is-hand'); go('look'); eyeOn = true; eyeFrom(c); return true;
+    // (the crew's driller: the eye stays where it is, the flying's or the walking's; this view never had it)
+    el.classList.remove('is-hand'); go('look'); if (!C) { eyeOn = true; eyeFrom(c); } return true;
   }
   // the rocks as the flying feels them: a ball each, in the field's frame (not the one in the claw); worked out once a step
   const balls = []; let ballsAt = -1;
@@ -1091,9 +1110,12 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // where it is, the question is asked, and the drilling goes on from there
   function take(id, c = camera) {
     if (V.stage !== 'hand') return false;
+    // (the crew's driller: only the rock they marked; and the eye stays with the flying, the drilling watched from it)
+    if (C && id !== C.mark) return false;
     const o = seen.get(id); if (!o || !run.pick(id)) return false;
-    el.classList.remove('is-hand'); eyeOn = true; eyeFrom(c);
-    hold(o); go('grab'); armsWant = 'work'; scanT = 0; onSay('pick'); openAsk();
+    el.classList.remove('is-hand');
+    if (C) { C.rocks++; C.mark = null; C.wait = 0; } else { eyeOn = true; eyeFrom(c); }
+    hold(o); go('grab'); armsWant = 'work'; scanT = 0; if (!C) onSay('pick'); openAsk();
     return true;
   }
   let down = null;
@@ -1117,7 +1139,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     else if (V.stage === 'drill' && !V.sub) { const s = spotAt(e.clientX, e.clientY); if (s && s.claw) hint('That is the claw. Tap the rock itself.', 2.2); else if (s) drillAt(s); }
   }
   function onKey(e) {
-    if (panel) return;
+    if (panel || C) return;
     // (M: fly manually. The flying listens for the same key, to switch back: this press is not also its own)
     if (e.code === 'KeyM' && !e.repeat && !flyEl.hidden) { e.preventDefault(); e.stopImmediatePropagation(); fly(); return; }
     if ((e.key === 's' || e.key === 'S') && looking() && !scanEl.hidden && !scanEl.disabled) { e.preventDefault(); scan(); return; }
@@ -1130,6 +1152,54 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   pad.addEventListener('pointerdown', onDown); pad.addEventListener('pointermove', onMove); pad.addEventListener('pointerup', onUp); pad.addEventListener('pointercancel', () => { down = null; });
   pad.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') V.mouse = null; });
   addEventListener('keydown', onKey);
+  // (the crew's driller: nothing of this view's own on the screen, only the mark)
+  let markEl = null;
+  if (C) { el.hidden = true; markEl = document.createElement('div'); markEl.className = 'pdr-eye pdr-mark'; markEl.hidden = true; markEl.innerHTML = '<i></i><span></span>'; root.appendChild(markEl); }
+
+  // THE CREW'S DRILLER AT WORK (the top of this function: byCrew), a step a frame once crew.go() has started them
+  function crewDone() {
+    if (C.done) return; C.done = true; C.mark = null;
+    topUp(run.cans, rand); run.stage = 'full';
+    go('full'); armsWant = 'stowed'; doneEl.hidden = true; holesEl.hidden = true;
+  }
+  function crewStep(dt) {
+    const S = V.stage;
+    if (S === 'look') {
+      // (the third rock done, or a part skipped and its one hole drilled: the rest of the load is the crew's)
+      if (C.rocks >= CREW.most || (C.hurry && C.holes > 0)) { crewDone(); return; }
+      if (C.mark == null || !seen.has(C.mark)) {
+        C.wait += dt;
+        if (C.wait > (C.hurry ? 0.05 : 0.9)) { const r = crewPick(run.rocks.filter((q) => seen.has(q.id) && seen.get(q.id).mesh.visible), run.cans, here.p.toArray()); C.mark = r ? r.id : null; C.wait = 0; if (r) V.log.push('marked ' + r.id); }
+        return;
+      }
+      // (the crew's pilot, or the autopilot: to the marked rock as a tapped trip; a part skipped: at once)
+      if (C.auto || C.hurry) { C.wait += dt; if (C.wait > (C.hurry ? 0.1 : 1.1)) pick(C.mark, C.hurry ? FLY.least : null); }
+    } else if (S === 'drill' && !V.sub) {
+      C.wait += dt;
+      if (C.wait < (C.hurry ? 0.15 : 0.6)) return;
+      C.wait = 0;
+      if (C.hurry && C.holes > 0) { crewDone(); return; }
+      const d = crewHole(H.rock, run.cans);
+      if (!d) letGo(); else if (drillAt(d)) C.holes++;
+    }
+  }
+  // (the mark on the screen: where the marked rock is, kept on the screen's edge while it is off it or behind the eye)
+  const _mk = { x: 0, y: 0, z: 0 };
+  function placeMark() {
+    // (the rock marked; on the way to it, still the one it is flown to)
+    const id = C && C.on && C.shown ? (C.mark != null ? C.mark : V.stage === 'fly' ? C.going : null) : null, o = id != null ? seen.get(id) : null;
+    markEl.hidden = !o; if (!o) return;
+    proj(o.pos, _mk);
+    const behind = _mk.z >= 1 || _v.copy(o.pos).applyMatrix4(at).sub(camera.position).dot(_v2.set(0, 0, -1).applyQuaternion(camera.quaternion)) < 0;
+    let x = _mk.x, y = _mk.y;
+    if (behind) { x = innerWidth - x; y = innerHeight - y; }
+    const pad2 = 34, off = behind || x < pad2 || x > innerWidth - pad2 || y < 70 || y > innerHeight - pad2;
+    if (off) { const cx = innerWidth / 2, cy = innerHeight / 2, dx = x - cx, dy = y - cy, k = Math.min(Math.abs((innerWidth / 2 - pad2) / (dx || 1e-6)), Math.abs((innerHeight / 2 - pad2 - 20) / (dy || 1e-6))); x = cx + dx * Math.min(1, behind ? k : k); y = cy + dy * Math.min(1, behind ? k : k); }
+    const r = off ? 14 : Math.max(16, shownPx(o) * 1.2), far = Math.round(o.pos.distanceTo(here.p));
+    markEl.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    const b = markEl.firstChild; b.style.width = b.style.height = (r * 2).toFixed(0) + 'px';
+    const s = markEl.lastChild, w = `${C.driller}'s rock · ${far} m`; if (s._w !== w) { s._w = w; s.textContent = w; } s.style.top = (r + 6).toFixed(0) + 'px';
+  }
 
   syncSeen();
 
@@ -1246,6 +1316,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       if (H && V.t > 0.6) H.centre.copy(heldPos).addScaledVector(wristAxis, H.off).addScaledVector(AWAY, ease((V.t - 0.6) / 1.4) * 14);
       if (V.t > T.full && !V.ended) { V.ended = true; const { store, cans } = run.load(); onDone({ store, cans, early: run.early, sells: sellsFor(store).pay, stats: { ...run.stats }, secs: V.clock }); }
     }
+    if (C && C.on && !V.ended) crewStep(dt);
 
     // the rocks of the field, each where it lies, turning slowly; the one in the claw where the hand has it
     for (const o of seen.values()) {
@@ -1375,6 +1446,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     const words = !eyed ? 'Look at a rock to scan it' : eyed.rock.scanned ? 'Scanned' : 'Scan this rock';
     if (scanEl._w !== words) { scanEl._w = words; scanEl.innerHTML = eyed && !eyed.rock.scanned ? `${words}<kbd>S</kbd>` : words; }
     // the readouts (each beside its rock, none over another, none under the boxes at the side)
+    if (C) placeMark();
     const placed = []; let sided = false;
     for (const o of seen.values()) {
       if (!o.rock.scanned) continue;
@@ -1392,7 +1464,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   function close() {
     if (closed) return; closed = true;
-    closePanel(); removeEventListener('keydown', onKey); el.remove();
+    closePanel(); removeEventListener('keydown', onKey); el.remove(); if (markEl) markEl.remove();
     for (const id of [...seen.keys()]) dropSeen(id);
     if (H) { G.remove(H.mesh); H.mesh.geometry.dispose(); H = null; }
     if (thr) { thr.fx.rest(); built.group.remove(thr.fx.group); }
@@ -1441,7 +1513,15 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)
     ship: here, heldPos,
     // (put away and back: while the eye is in the seat, with a wormhole's far end opening or the jump home being worked out)
-    show(v) { el.hidden = !v; },
+    show(v) { el.hidden = !v || !!C; },
+    // THE CREW'S DRILLER (byCrew): go() starts them (the trip's drilling step); auto(on): the crew's pilot or the
+    // autopilot flies to the marked rock (off: the crew member at the controls flies there); hurry(): a part skipped;
+    // mark: the rock marked now (its id), or null; shown(v): the mark on the screen or not
+    crew: C ? {
+      go() { C.on = true; }, auto(v) { C.auto = !!v; }, hurry() { if (C.hurry) return false; C.hurry = true; C.holes = 0; C.wait = 0; return true; },
+      get mark() { return C.mark; }, get on() { return C.on; }, get hurried() { return C.hurry; }, shown(v) { C.shown = !!v; if (markEl && !v) markEl.hidden = true; },
+      state: () => ({ on: C.on, auto: C.auto, mark: C.mark, rocks: C.rocks, holes: C.holes, hurry: C.hurry, done: C.done, shown: !!markEl && !markEl.hidden }),
+    } : null,
     get eye() { return eyeOn; }, set eye(v) { eyeOn = !!v; },
     // (SOMEONE IS ON THEIR FEET ABOARD THE SHIP OUT HERE, src/trip.js. This view's own ship is built for outside: it
     // has a cockpit and no rooms. So while they walk, it is put away, and the ship with its rooms (the one parked in

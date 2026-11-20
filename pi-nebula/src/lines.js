@@ -63,7 +63,12 @@ export const RUN_TALK = {
     tuned: ['The core is steady. Back to your seat, {player}.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
-    field: ['Kestrel, bring that one in. {engineer}, watch the core.', 'There\'s a good one. Take it, Kestrel.'],
+    // (the crew's driller has marked a rock: {driller} is the one of his crew who drills; fieldMine, when the captain
+    // drills it himself)
+    field: ['There\'s a good one. Take it, {driller}.', 'That one, {driller}. Bring it in.'],
+    fieldMine: ['There\'s a good one. I\'ll bring it in. {engineer}, watch the core.', 'That one. I\'ll take it.'],
+    // (signed for the pilot's seat and not the drill: the rock is marked and theirs to fly to)
+    fieldFly: ['{driller} has marked one for you, {player}. Fly us over.', 'See {driller}\'s mark? Take us to it, {player}.'],
     full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
     home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
     homeCrew: ['There\'s the station. Juno has the landing.', 'Home. Juno takes her in.'],

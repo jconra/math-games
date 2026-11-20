@@ -130,8 +130,31 @@ export function rolesWords(roleIds) {
   return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 // who does each role on a trip: the crew member (their name) for the roles they signed for, the captain's own crew for
-// the rest
-export const crewFor = (M, mine, name = 'You') => M.roles.map((id) => ({ role: id, name: mine.includes(id) ? name : ROLES[id].crew, you: mine.includes(id) }));
+// the rest (aboardOf: the crew member of his who comes along, and the captain himself)
+export const crewFor = (M, mine, name = 'You', captain = null) => {
+  const A = aboardOf(M, mine, captain ? { id: 'captain', name: captain } : null);
+  return M.roles.map((id) => { const who = A.find((a) => a.jobs.includes(id)); return { role: id, name: mine.includes(id) ? name : who ? who.name : ROLES[id].crew, you: mine.includes(id) }; });
+};
+
+// WHO IS ABOARD A SHIP ON A RUN, AND WHAT EACH DOES (the game's maker, 2026-11-18: "The best scenario is that the
+// captain and another crew member get on with you ... The idea is that it's a ship with a crew of 3"; and 2026-11-19:
+// "if you are just an engineer, then the other 2 models can just sit in the chairs the entire time. But if you were a
+// pilot, driller and engineer, then when you get up to go work in the back then you should see someone else walking,
+// sitting, or laying down in the ship. Later on when you can hire crew for your own ship I want you to be able to see
+// them on your ship, even if they are just along for the ride"). Besides the crew member: the captain, and one of his
+// crew, the one whose job comes first of those the crew member left (the mission's own order: pilot, drill, engineer;
+// all three signed for: his pilot, along for the ride). That one does that job; the captain does any other left.
+// -> [{ id, name, short (the name said: 'Juno', 'Ruiz'), captain, jobs: [role ids] }]: the captain first. (Hired crew
+// would be more of these, each with their own jobs or none.)
+export function aboardOf(M, mine, captain = null) {
+  const left = M.roles.filter((id) => !mine.includes(id)), first = left[0] || M.roles[0];
+  const crewName = ROLES[first].crew, cap = captain || { id: M.captain, name: 'The captain' };
+  const short = (n) => String(n).split(' ').pop();
+  return [
+    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1) },
+    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [] },
+  ];
+}
 
 // the trip's steps for a crew member with these roles: each step, and whether it is theirs to do (`mine`: their role,
 // its game made) or the crew's. `when`: this run's moment for the core's tuning ('arrive' | 'leave': tuneWhen), if the

@@ -385,3 +385,42 @@ export function crewLoad(rand = Math.random) {
   if (R.stage !== 'full') R.home();
   return R.load();
 }
+
+// THE CREW'S DRILLER IN THE FIELD ITSELF (src/drillview.js `byCrew`: the crew member did not sign for the drill, and
+// the ship goes to the same field all the same; the game's maker, 2026-11-19: "I expected it to be the same asteroid
+// field for everyone. If you are the pilot then the drill guy will mark one for you to fly to"). The same game by the
+// same rules, on the field's own rocks, worked as a driller would: of the CREW.near rocks nearest the ship, the one
+// whose ore the canisters have most room for is marked; in the claw, a hole each time where the most comes aboard,
+// until nothing worth a hole is left or the rock crumbles. Two or three rocks fill the eight canisters, nearly always
+// (in 300 fields: two 236 times, three 62, four once); after the third, the rest of the load is the crew's from rocks
+// further out, unseen (topUp), so the run is never longer than that.
+export const CREW = { near: 10, most: 3, least: 0.005 };
+// (the tonnes of a rock's ore the canisters have room for)
+export const fitOf = (rock, cans) => Object.entries(oreBy(rock)).reduce((a, [m, t]) => a + Math.min(t, roomFor(cans, m)), 0);
+// the rock the crew's driller marks: rocks [{ id, pos }], `at` the ship's place [x, y, z] -> the rock, or null
+export function crewPick(rocks, cans, at = [0, 0, 0]) {
+  const near = [...rocks].map((r) => ({ r, d: len([r.pos[0] - at[0], r.pos[1] - at[1], r.pos[2] - at[2]]) })).sort((a, b) => a.d - b.d).slice(0, CREW.near);
+  let best = null, top = -1;
+  for (const { r } of near) { const f = fitOf(r, cans); if (f > top + 1e-9) { top = f; best = r; } }
+  return best;
+}
+// the crew's driller's next hole in the rock in the claw: a direction, or null (nothing worth a hole: let it go)
+export function crewHole(rock, cans, n = 160) {
+  if (!rock || rock.broken || rock.left <= 0) return null;
+  const b = bestHole(rock, n, (d) => holeWorth(rock, d, cans));
+  return b.worth < CREW.least ? null : b.dir;
+}
+// THE REST OF THE LOAD, the crew's (a part skipped, or the third rock done): the canisters filled as the crew's driller
+// fills them, from rocks further out than the field's own (none of the field's rocks is touched, so nothing seen goes
+// missing). The canisters are changed; -> true when all are full
+export function topUp(cans, rand = Math.random) {
+  for (let ring = 1; ring < 40 && !cans.every(isFull); ring++) {
+    const rocks = makeField(rand, { n: 12, from: DRILL.wide * (1 + 0.5 * ring), to: DRILL.wide * (1.5 + 0.5 * ring) });
+    for (let guard = 0; guard < 40 && rocks.length && !cans.every(isFull); guard++) {
+      const rock = crewPick(rocks, cans, rocks[0].pos); if (!rock) break;
+      for (let k = 0; k < 12 && !cans.every(isFull); k++) { const d = crewHole(rock, cans); if (!d) break; drillHole(rock, d, cans); }
+      rocks.splice(rocks.indexOf(rock), 1);
+    }
+  }
+  return cans.every(isFull);
+}
