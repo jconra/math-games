@@ -52,15 +52,21 @@ const padOf = (i) => [42.3, 0, HANGARS[i].z];
 //   seat         the pilot's eyes and where they look (src/flymodel.js MINER has the words); the other seat is the same
 //                across the ship
 //   behind       the view from behind
-//   dash         THE DASHBOARD'S DISPLAY in front of the pilot (src/dash.js, src/flying.js): its foot's middle, `at`
-//                (the middle of its bottom edge), how wide and how tall it is (m), and how far its top leans back
-//                toward the nose (`lean`, radians from upright), and how far it is turned about upright to follow a
-//                curved dashboard (`turn`, radians, its port end nearer the pilot; none: square to the ship): on the
-//                dashboard's empty top under the windscreen (or on its face, where it has no empty top), in the seat's
-//                view below the window and clear of the corners' buttons and help, facing the pilot's eyes. `tall`: the
-//                same on a screen held upright (a phone), where the view from the seat is narrower and looks lower
-//                (src/flying.js aim): above a phone's buttons; none, the same display. Measured from each cockpit's
-//                own surfaces (~/pw/space-math/rigs/dashboard-1/probe.cjs)
+//   dash         THE DASHBOARD'S DISPLAY in front of the pilot (src/dash.js, src/flying.js), ALONG THE DASHBOARD'S
+//                CURVE (the game's maker, DASH1-3: "If that dashboard is curved, the the tiny ship should also be
+//                curved"): `arc`, the curve's middle (x = 0, z = arc: the middle of the dashboard's arc, its kit's
+//                shipparts/cockpit/bank.js); its foot's middle, `at` (on the curve: its three screens stand along the
+//                circle through it, each turned to face the middle); how long it is along the curve and how tall (m),
+//                and how far its top leans back toward the nose (`lean`, radians from upright): on the dashboard's top
+//                under the windscreen (or on its face, where it has no top in view), in the seat's view below the window
+//                and clear of the corners' buttons and help, facing the pilot. Where the ship's kit stands its life
+//                support and the screen beside it up on the top (COCKPIT.dash.bank: the game's maker, DASH1-3, C), the
+//                display stands between them, at their level, on their curve. `tall`: the same on a screen held
+//                upright (a phone), where the view from the seat is narrower and looks lower (src/flying.js aim):
+//                above a phone's buttons; none, the same display. `rider`: in front of the other seat, for a crew
+//                member riding there (src/flying.js: pilot false), with its own `tall`; none: the pilot's across the
+//                ship. Measured from each cockpit's own surfaces (~/pw/space-math/rigs/dashboard-1/probe.cjs) and its
+//                kit's row (~/pw/space-math/rigs/dashboard-2/)
 //   floor        where on its hangar's floor it may be set down by hand and got out of (null: anywhere on it). The
 //                Miner's is where the crane can get at its canisters
 //   shove        parked, and rammed by another ship: how heavy it is beside the flown ship (which is 1) and how hard it
@@ -87,9 +93,11 @@ export const SHIPS = [
     hover: 2.6, low: 2.0,
     seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.6, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (standing on the top of its dashboard, 0.8 m ahead of the eyes: its top just under the windscreen's foot in the
-    // seat's view; held upright, further along it and smaller, its top on the windscreen's foot)
-    dash: { at: [0.45, 3.249, 4.95], w: 0.84, h: 0.26, lean: 0.4, tall: { at: [0.46, 3.283, 5.146], w: 0.66, h: 0.204, lean: 0.31 } },
+    // (standing on the top of its dashboard, 0.8 m ahead of the eyes, between its life support and its terminal (its
+    // kit's COCKPIT_BANK); held upright, further along the top, its foot above those two screens as that view sees
+    // them; riding in the other seat, beyond the terminal)
+    dash: { arc: 2.26625, at: [0.2889, 3.256, 4.9746], w: 0.6249, h: 0.1934, lean: 0.4, tall: { at: [0.4524, 3.3217, 5.256], w: 0.6282, h: 0.1944, lean: 0.31 },
+      rider: { at: [-0.5742, 3.256, 4.9288], w: 0.5297, h: 0.164, lean: 0.4, tall: { at: [-0.5622, 3.3217, 5.2373], w: 0.5299, h: 0.164, lean: 0.31 } } },
     // (src/flymodel.js MINER.floor has the words: the crane's rails, the rack, the cart)
     floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
     shove: { mass: 2, gyr: 4 }, voice: 'miner',
@@ -110,7 +118,7 @@ export const SHIPS = [
     // in front of the pilot, its foot on the screen there, leaning back less than the face, its top just in front of
     // the hood, turned with the face's curve; held upright, none of the face is above a phone's buttons, so it stands
     // on the hood's top at the windscreen's foot, over the bottom of the window)
-    dash: { at: [0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, turn: 0.124, tall: { at: [0.47, 3.098, 5.696], w: 0.5, h: 0.155, lean: 0.17 } },
+    dash: { arc: 1.94167, at: [0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [0.47, 3.098, 5.696], w: 0.5, h: 0.155, lean: 0.17 } },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'explorer',
   },
   {
@@ -123,8 +131,10 @@ export const SHIPS = [
     hover: 1.45, low: 1.0,
     seat: { eye: [0.625, 3.81, 5.375], look: [0.225, 3.15, 13.235], lookPanel: [-1.575, 3.1, 13.235], lookTall: [0.325, 2.7, 13.235], lookTallPanel: [0.325, -1.5, 13.235], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (standing on the top of its dashboard, a metre ahead of the eyes, as the Miner's)
-    dash: { at: [0.575, 3.316, 6.246], w: 0.84, h: 0.26, lean: 0.385, tall: { at: [0.58, 3.316, 6.539], w: 0.74, h: 0.229, lean: 0.31 } },
+    // (standing on the top of its dashboard, a metre ahead of the eyes, between its life support and its terminal, as
+    // the Miner's)
+    dash: { arc: 2.84958, at: [0.3588, 3.328, 6.2753], w: 0.695, h: 0.2151, lean: 0.385, tall: { at: [0.4262, 3.3207, 6.5596], w: 0.5541, h: 0.1715, lean: 0.31 },
+      rider: { at: [-0.6068, 3.328, 6.2401], w: 0.6634, h: 0.2053, lean: 0.385, tall: { at: [-0.5817, 3.3207, 6.5384], w: 0.5675, h: 0.1756, lean: 0.31 } } },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'medic',
   },
 ];

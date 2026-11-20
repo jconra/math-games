@@ -255,10 +255,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // THE DASHBOARD'S NUMBERS FOR THE WHOLE RUN (src/dash.js; the dashboard itself is the flying's, src/flying.js): one tank
   // and one count of how far and how long, from the lift-off to the landing at home, whichever flying shows them (the
   // station's, the one at the rocks); stepped here each frame from wherever the ship is (shipNow), the jump through the
-  // wormhole not flown. The canisters full are the run's own (T.filled). The boxes of the run the tiny ship floating
-  // beside the ship keeps clear of: dashClear
+  // wormhole not flown. The canisters full are the run's own (T.filled)
   const dash = makeDash(), dashRun = () => ({ cans: [T.filled, CARRIES] }), _dw = new THREE.Vector3();
-  const dashClear = () => [...document.querySelectorAll('.pmt-chip, .pmt-say.is-on, .pmt-acts > :not([hidden]), .pmt-count:not([hidden]), .pnj-prompt:not([hidden])')];
   // (the core's tuning, src/tune.js: fetched as the crew member sits down, if this run has one; `tn` while it is on)
   let tuneMod = null, tuneErr = null, tuneAsked = false, tn = null;
   const name = crew.name || 'pilot';
@@ -371,7 +369,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         if (!tuneAsked && steps.some((s) => s.kind === 'tune')) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
         if (!drillKit) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
         fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
-          dash, run: dashRun, clearOf: dashClear,
+          dash, run: dashRun,
           // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
           view: iWatch ? 'behind' : 'cockpit',
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
@@ -730,7 +728,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // otherwise)
     ff = drillKit.f.makeFieldFlying({ W, drill, startFlying: flMod.startFlying, pilot: iPilot, flier: ROLES.pilot.crew, view: T.view || 'cockpit', words,
       settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
-      byCrew: iDrill ? null : { hand: () => iPilot && !T.afoot && !drill.crew.hurried }, dash, run: dashRun, clearOf: dashClear });
+      byCrew: iDrill ? null : { hand: () => iPilot && !T.afoot && !drill.crew.hurried }, dash, run: dashRun });
     api.field = ff;
   }
   // THE CREW'S DRILLING, in the field itself (the crew member did not sign for the drill; the game's maker, 2026-11-19:

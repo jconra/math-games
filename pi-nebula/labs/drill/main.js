@@ -118,7 +118,7 @@ function frame(dt) {
   const t0 = performance.now();
   if (composer) composer.render(dt); else { renderer.info.reset(); renderer.render(scene, camera); stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles; }
   stats.ms = performance.now() - t0;
-  // (what the flying draws over the picture: the tiny ship floating beside the ship, seen from behind)
+  // (whatever is drawn over the picture once it is drawn: W.after, as the station's own frame has it)
   for (const f of LABW.after) f(renderer);
 }
 function loop(now) {

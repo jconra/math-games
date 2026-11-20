@@ -558,10 +558,13 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 //     a tapped trip (src/drillview.js). Nothing is asked of how the ship is turned. The reach is the whole of the
 //     nose: a rock met nose on, anywhere across it, is taken; one met by the ship's side or tail is not.
 // A rock here is a ball: { p: [x, y, z] its middle, r its size (m) }, in whatever frame the ship is flown in.
-// (the dashboard's display stands on the drill's own Miner's dashboard top: that ship has a higher dashboard than the
-// cabin in the hangar, its top 13 cm higher and shorter, so the display is a little smaller there; measured as the
-// fleet's are, ~/pw/space-math/rigs/dashboard-1/drillprobe.cjs)
-export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: { at: [0.45, 3.378, 4.9], w: 0.62, h: 0.192, lean: 0.3, tall: { at: [0.46, 3.381, 4.915], w: 0.49, h: 0.153, lean: 0.3 } } };
+// (the dashboard's display stands on the drill's own Miner's dashboard top: that ship's whole cockpit stands 13 cm
+// higher in its frame than the cabin's in the hangar, and nowhere else apart (~/pw/space-math/rigs/dashboard-2/
+// deckprobe.cjs), its life support and terminal up on its top as the hangar's are: so the display is the hangar's,
+// 13 cm higher, in each of its places)
+export const FIELD_UP = 0.13;
+const raised = (d) => (d ? { ...d, at: [d.at[0], +(d.at[1] + FIELD_UP).toFixed(4), d.at[2]], ...(d.tall ? { tall: raised(d.tall) } : {}), ...(d.rider ? { rider: raised(d.rider) } : {}) } : d);
+export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash) };
 export const TAKE = { reach: 4.5, slow: 3 };
 // where the claw's hand is now
 export const clawOf = (S) => add(S.p, turn(S.q, S.cfg.claw || MINER.claw));

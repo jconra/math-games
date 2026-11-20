@@ -31,11 +31,11 @@
 // The ship's place has one owner at a time: the flying while it is flown by hand, the drill's view otherwise (a tapped
 // trip); each is told where the other left it.
 //
-//   const FF = makeFieldFlying({ W, drill, startFlying, pilot, flier, settings, onSettings, words, view, byCrew, dash, run, clearOf })
+//   const FF = makeFieldFlying({ W, drill, startFlying, pilot, flier, settings, onSettings, words, view, byCrew, dash, run })
 //       W: { renderer, scene, camera, after (a Set), dust }; pilot: the crew member has the pilot's seat too
 //       byCrew: { hand: () => true while the crew member at the controls flies to the marked rock by hand }
-//       dash, run, clearOf: the dashboard's numbers kept by a run, its canisters, its boxes (src/flying.js; none: the
-//       flying keeps its own, as in the Drill Lab)
+//       dash, run: the dashboard's numbers kept by a run, and its canisters (src/flying.js; none: the flying keeps its
+//       own, as in the Drill Lab)
 //   FF.mode       'seat' | 'drill' | 'hand' | 'ride'
 //   FF.ride()     the drill's view moves the ship, the flying's views follow it (the crew's driller)
 //   FF.update(dt), FF.aim(camera, dt)   each frame, after the drill's own update
@@ -49,7 +49,7 @@ import { FIELD, rockNear, rockSolid } from './flymodel.js';
 // the ship's kit frame (x to port, y up, z to its nose) in the flight model's own [ahead, up, right]
 const KIT = new THREE.Matrix4().makeRotationY(Math.PI / 2);
 
-export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 'The pilot', settings = null, onSettings = null, words = () => {}, view = 'cockpit', byCrew = null, dash = null, run = null, clearOf = null }) {
+export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 'The pilot', settings = null, onSettings = null, words = () => {}, view = 'cockpit', byCrew = null, dash = null, run = null }) {
   const _f = new THREE.Vector3(), _q = new THREE.Quaternion(), _k = new THREE.Quaternion().setFromRotationMatrix(KIT).invert();
   // (where the drill's view has the ship: its place, and its turn as the flight model keeps it)
   const poseNow = () => { _q.copy(drill.ship.q).multiply(_k); return { p: drill.ship.p.toArray(), q: _q.toArray() }; };
@@ -59,7 +59,7 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
     // (the flying's own few words along the top only while it is flown by hand: from the seat the run's own stand)
     cfg: FIELD, goal: 'field', pilot, flier, view, settings, onSettings, words: (w) => { if (mode === 'hand') words(w); },
     // (the dashboard: a run's own numbers, if it keeps them; src/flying.js)
-    ...(dash ? { dash, run, clearOf } : {}),
+    ...(dash ? { dash, run } : {}),
     body: { at: drill.at, M0: KIT, p: drill.ship.p.toArray(), f: _f.toArray(), fly: (M) => drill.shipTo(M), solid: rockSolid(() => drill.rocksNow()) },
     task: pilot && !byCrew ? { words: 'Back to the drill', on: () => api.drill() } : null,
   });
