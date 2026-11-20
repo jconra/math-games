@@ -1050,7 +1050,13 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 // over the cabin's deck, where the port one stood in the ore station's screen and desk and the starboard one hung over
 // the step (the game's maker, MR-8: "that screen is going into another piece of equipment and that needs to be fixed").
 // 0.75 m is the shortest that keeps a side console's whole face (its screen, switches, knobs and its screen pod).
-export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85 }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
+// THE ROW ON THE DASHBOARD'S TOP (the game's maker, DASH1-3, C "Move them up beside the new display": the
+// cockpit's shipparts/cockpit/bank.js): the life support (before the pilot on the face) and the terminal's lines
+// (before the other seat) stand up on the top deck, their feet 0.32 m forward of its near edge as the flying's display's
+// are, leaning back as it does: the life support at the deck's port end, then the display in front of the pilot, then
+// the terminal; the display in front of the other seat beyond it (src/fleet.js `dash`, `rider`). The ship's x, to port.
+export const COCKPIT_BANK = { s: 0.32, lean: 0.4, screens: [{ face: 'bars', x: 0.732, w: 0.21 }, { face: 'text', x: -0.168, w: 0.23 }] };
+export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85, bank: COCKPIT_BANK }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'; the blueprint "Ore station on the flight deck"): the cabin's

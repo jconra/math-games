@@ -674,7 +674,13 @@ function mdWells(p) {
 // here is a windscreen and side windows under a solid roof, so in place of a tub the hull's inside round the cockpit
 // is drawn dark (mdHull, NOSE_IN): the floor reaches out to it, and the bulkhead behind closes the cockpit off, with
 // the cabin's door (shut) and steps down to it.
-export const COCKPIT = { floor: 0.8, seatsZ: 5.5, wallX: 1.3, gap: 0.42, back: 4.05, dash: { w: 1.7, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 3.31 - DECK - 0.8, z: 7.38 - 5.5, slope: 0.7 } };
+// THE ROW ON THE DASHBOARD'S TOP (the game's maker, DASH1-3, C "Move them up beside the new display": the
+// cockpit's shipparts/cockpit/bank.js): the life support and the terminal's lines stand up on the top deck beside the
+// flying's display, their feet where its are (0.374 m forward of the near edge), leaning back as it does: the life
+// support at the deck's port end, the display in front of the pilot, the terminal; the display in front of the other
+// seat beyond it (src/fleet.js `dash`). The ship's x, to port.
+export const COCKPIT_BANK = { s: 0.374, lean: 0.385, screens: [{ face: 'bars', x: 0.837, w: 0.21 }, { face: 'text', x: -0.133, w: 0.23 }] };
+export const COCKPIT = { floor: 0.8, seatsZ: 5.5, wallX: 1.3, gap: 0.42, back: 4.05, dash: { w: 1.7, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0, bank: COCKPIT_BANK }, canopy: { y: 3.31 - DECK - 0.8, z: 7.38 - 5.5, slope: 0.7 } };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // 'two seats, cabin': with the cabin built inside, the cabin's own wall and doorway (the plan's cockpit door, on the

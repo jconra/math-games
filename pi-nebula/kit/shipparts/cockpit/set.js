@@ -23,6 +23,7 @@ import { flightSeat, crewSeat, seatPoints } from './seats.js';
 import { flightStick, throttle, pedals, GRIP } from './controls.js';
 import { overheadPanel, sidePanel, faceOf } from './panels.js';
 import { dashboard, engineerStation, dashFace } from './consoles.js';
+import { cockpitDash } from './bank.js';
 import { cockpitLocker, handhold } from './fittings.js';
 import { seatedPose, seatedPerson, standingPerson } from './guide.js';
 
@@ -42,7 +43,7 @@ export function cockpitPlan(o = {}) {
   add('co-pilot', 'flightSeat', { ...flier, stick: 'right', throttle: three ? 'left' : null, badge: 'co-pilot' }, seatAt(xs[xs.length - 1]));   // (its own, not a mirror, so its badge reads)
   if (three) add('engineer', 'flightSeat', { look, slide, badge: 'engineer' }, seatAt(0));
   // the dashboard across the front, turned to face the seats; pedals under it before each flier
-  const dashO = { seats: three ? 3 : 2, seatsAt: xs.map((x) => -x), depth: canopy.z - gap - 0.005, deckY: canopy.y - 0.01, ...(o.dash || {}) };   // (its top deck runs on to the windscreen's foot)
+  const dashO = cockpitDash({ seats: three ? 3 : 2, gap, canopy, dash: o.dash || {} });   // (its top deck runs on to the windscreen's foot: bank.js)
   add('dashboard', 'dashboard', dashO, [0, 0, gap], [0, PI, 0]);
   for (const [i, x] of [[0, xs[0]], [1, xs[xs.length - 1]]]) add('pedals' + i, 'pedals', {}, [x, 0, gap + 0.2], [0, PI, 0]);
   // between two seats, the throttle pedestal (its quadrant at the seats' end); over them, the overhead panel, behind the

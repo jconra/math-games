@@ -10,7 +10,9 @@
 //                    ends come back, 0.17: clear of the seats' outer armrests), depth (0.7), h (the top of the face of screens, 1.12; the hood stands 0.06
 //                    over it), knee (the lip's underside, 0.66), toe (the toe board, 0.45 forward of the edge), seatsAt (the
 //                    seats' x, in its own frame: [-0.5, 0.5] or [-1, 0, 1]), deckY (the top deck's height at its far
-//                    end, h: give depth and deckY to run the deck on to a windscreen's foot)
+//                    end, h: give depth and deckY to run the deck on to a windscreen's foot), bank (the row of screens on
+//                    its top: bank.js; the face's screens it names stand up there, beside the flying's display, instead
+//                    of on the face)
 //   engineerStation(p, o)  a sit-down console against a wall (its back on z = 0, facing +z): a desk with knee room,
 //                    screens on a raised back panel, switches and a lamp hood. o: w (1.0: 1.0, 1.5, 2.0 on the ship
 //                    grid), d (0.5), h (the desk top, 0.76)
@@ -24,26 +26,12 @@ import { wallScreen } from '../../wallkit.js';
 import { part } from '../place.js';
 import { LEAN, LIT, CHAR, CHAR2, MFD, mfd, turn, glowBox, mount, bar, local } from './look.js';
 import { buttonGrid, switchRow, knobRow } from './panels.js';
+// (the dashboard's shape for options o, its arc and its section (a closed outline in (s, y), s forward from the near
+// edge, counter-clockwise; each point names the surface of the edge that ends there: null, the floor, isn't drawn), and
+// the row of screens on its top: plain sums, bank.js)
+import { dashShape, arcAt, bankOf, MFD_BEZEL, MFD_KEYS } from './bank.js';
 
 const PI = Math.PI, FIRM = { r: 0.01, seg: 1, cell: 9, loops: [] };
-
-// the dashboard's shape for options o: its arc and its section (a closed outline in (s, y), s forward from the near
-// edge, counter-clockwise; each point names the surface of the edge that ends there: null, the floor, isn't drawn)
-function dashShape(o = {}) {
-  const seats = o.seats === 3 ? 3 : 2, w = o.w ?? (seats === 3 ? 3.0 : 2.0), bow = o.bow ?? 0.17, depth = o.depth ?? 0.7, h = o.h ?? 1.12, knee = o.knee ?? 0.66, toe = o.toe ?? 0.45, deckY = o.deckY ?? h;
-  const R = (w * w / 4 + bow * bow) / (2 * bow), T = Math.asin(w / 2 / R);
-  const seatsAt = o.seatsAt || (seats === 3 ? [-1, 0, 1] : [-0.5, 0.5]);
-  const fs = 0.12, fe = fs + (h - 0.02 - knee - 0.12);   // (the face of screens rises at 45 degrees from the shelf to the hood)
-  const shelf = [[0, knee + 0.09], [fs, knee + 0.12]], face = [[fs, knee + 0.12], [fe, h - 0.02]];
-  const outline = [
-    [toe, 0, 'body'], [depth, 0, null], [depth, deckY, 'body'], [fe + 0.06, h + 0.06, 'deck'], [fe - 0.02, h + 0.05, 'black'], [fe - 0.04, h + 0.02, 'black'],
-    [fe, h - 0.02, 'black'], [fs, knee + 0.12, 'top'], [0, knee + 0.09, 'body'], [-0.03, knee + 0.07, 'black'], [-0.03, knee + 0.04, 'black'],
-    [0, knee, 'black'], [0.1, knee - 0.02, 'body'], [toe, 0.4, 'body'],
-  ];
-  return { seats, w, bow, depth, h, knee, toe, deckY, R, T, seatsAt, shelf, face, fs, fe, outline };
-}
-// a point on the arc: s forward of the near edge, at height y, at angle th round the arc
-const arcAt = (R, s, y, th) => [(R + s) * Math.sin(th), y, R - (R + s) * Math.cos(th)];
 // where a panel goes on a run of the section (from a to b in (s, y)): u along it, `off` out of it, at the arc angle
 // for x; the rot lays a panel's face (+z) on it, its top up the slope
 function onRun(S, [a, b], u, x, off = 0) {
@@ -102,12 +90,19 @@ export function dashboard(p, o = {}) {
   const screen = (x, face, w) => at(x, 'face', part(mfd, { face, w, frame: true }), len / 2 + 0.011);   // (its frame centred up the face)
   const big = 0.6, mid = 0.5, half = (w) => w / 2 + 0.034;   // (the maths the widest; the others about as tall)
   screen(0, 'sum', big);
-  const MAIN = ['bars', 'text', 'radar'];
+  const MAIN = ['bars', 'text', 'radar'], up = new Set(o.bank ? o.bank.screens.map((q) => q.face) : []);
   S.seatsAt.forEach((xs, i) => {
-    if (Math.abs(xs) > 0.01) screen(xs + Math.sign(xs) * (half(big) + half(mid) + 0.03 - Math.abs(xs) > 0 ? half(big) + half(mid) + 0.03 - Math.abs(xs) : 0), MAIN[i % 3], mid);
+    if (Math.abs(xs) > 0.01 && !up.has(MAIN[i % 3])) screen(xs + Math.sign(xs) * (half(big) + half(mid) + 0.03 - Math.abs(xs) > 0 ? half(big) + half(mid) + 0.03 - Math.abs(xs) : 0), MAIN[i % 3], mid);
     at(xs, 'shelf', part(switchRow, { n: 5, pitch: 0.045, covers: i === 0 ? 1 : 0, legend: i % 2 ? 'b' : 'a' }));
     const q = F.screens(xs, len / 2, 0.25); p.light(q.at, 0.4, [0.35, 0.65, 1], [Math.sin(-q.th), 0.2, Math.cos(q.th)], 2.4);
   });
+  // THE ROW ON THE TOP (bank.js; a ship that asks for it: the game's maker, DASH1-3): the screens it names, moved off the
+  // face, each standing on the top at its place along the arc, leaning back as the flying's display beside them does
+  // (its foot the bottom of its bezel), facing the seats
+  if (o.bank) for (const q of bankOf(S, o.bank)) {
+    const c = q.h / 2 + MFD_BEZEL + MFD_KEYS;   // (from its bezel's bottom up to its picture's middle: look.js mfd)
+    mount(p, part(mfd, { face: q.face, w: q.w }), { at: q.foot.map((v, k) => v + q.up[k] * c), rot: turn(-q.th, o.bank.lean) }, 'bank ' + q.face);
+  }
   if (S.seats === 3) for (const s of [-1, 1]) { screen(s * 0.53, s < 0 ? 'radar' : 'bars', 0.3); at(s * 0.5, 'shelf', part(buttonGrid, { cols: 5, rows: 2, pitch: 0.036, seed: s < 0 ? 4 : 6 })); }
   else at(0, 'shelf', part(buttonGrid, { cols: 6, rows: 2, pitch: 0.036, seed: 2 }));
   // the ends: past the outer screens, a small screen if one fits, else knobs and a grid
