@@ -188,6 +188,8 @@ const CSS = `
 @media (max-width: 640px) { .pmt-acts { right: 50%; transform: translateX(50%); align-items: center; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 112px); } .pmt-skip, .pmt-up, .pmt-view { height: 46px; } }
 /* (on their feet aboard, nothing of the flying's own on the screen: the buttons sit lower, clear of the walking stick on a phone) */
 .pmt.is-afoot .pmt-acts { bottom: max(14px, env(safe-area-inset-bottom)); }
+/* (a seat's or a bed's prompt is up where the count of canisters sits: the count is put away under it meanwhile) */
+.pmt.has-seat .pmt-count { display: none; }
 @media (max-width: 640px) { .pmt.is-afoot .pmt-say { top: 132px; } .pmt.is-afoot .pmt-acts { right: max(12px, env(safe-area-inset-right)); transform: none; align-items: flex-end; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); } }
 /* (at the drill: under the trip's own word along the top, clear of the store and the chart at the side; on a phone above the game's buttons (Fly manually over Scan) and line, and put away while the question is up) */
 .pmt.is-drill .pmt-say, .pmt.is-drill.has-panel .pmt-say { top: 62px; right: auto; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(300px, 40vw); }
@@ -632,7 +634,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       else if (want === 'rest') { seatEl.querySelector('b').textContent = name(near); seatEl.querySelector('small').textContent = near.kind === 'lie' ? 'Lie down for a while' : 'Sit down for a while'; seatEl.querySelector('.pnj-go').innerHTML = (near.kind === 'lie' ? 'Lie down' : 'Sit down') + '<kbd>E</kbd>'; }
       else if (want === 'rise') { seatEl.querySelector('b').textContent = name(T.rest); seatEl.querySelector('small').textContent = ask ? ask.replace(/: back to your seat$/, '') : T.rest.kind === 'lie' ? 'Lying down' : 'Sitting down'; seatEl.querySelector('.pnj-go').innerHTML = 'Get up<kbd>E</kbd>'; }
     }
-    upEl.hidden = !canUp();
+    upEl.hidden = !canUp(); el.classList.toggle('has-seat', !seatEl.hidden);
     viewEl.hidden = !T.afoot || !!(tn && tn.busy);
     const vw = T.out ? 'Inside' : 'Outside'; if (viewEl._w !== vw) { viewEl._w = vw; viewEl.innerHTML = `${vw} <kbd>V</kbd>`; }
   }
