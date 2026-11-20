@@ -309,6 +309,8 @@ const CSS = `
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
 .pfl-seat button kbd { margin-left: 8px; background: rgba(0, 0, 0, 0.18); color: #1c1205; }
 .pfl.is-touch .pfl-seat { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 176px); }
+/* (seen from the seat: the Jump button and the seat's prompt just above the dashboard's display, never over it) */
+.pfl.is-dash .pfl-jump, .pfl.is-dash .pfl-seat { bottom: var(--dash-up) !important; }
 @media (max-width: 640px) { .pfl-float { width: 120px; } .pfl-fpic { height: 104px; } .pfl-float small { font-size: 10.5px; } }
 @media (max-height: 480px) { .pfl-float { width: 108px; } .pfl-fpic { height: 84px; } .pfl-float small { font-size: 10px; } }
 @media (max-width: 640px) {
@@ -557,7 +559,15 @@ export function startFlying(ctx, opts = {}) {
       pic.visible = lit;
       tex.needsUpdate = true;
     }
-    return { group, rt, aspect: L.pic.w / L.pic.h, draw, place, get words() { return shown; }, get tall() { return placed !== spec; },
+    // (where it is on the screen, CSS px: its face's corners seen by the camera; null when it is not in front of it)
+    const _c = new THREE.Vector3(), P = face.geometry.attributes.position;
+    function onScreen(camera) {
+      face.updateWorldMatrix(true, false); camera.updateMatrixWorld();
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < P.count; i++) { _c.fromBufferAttribute(P, i).applyMatrix4(face.matrixWorld).project(camera); if (_c.z > 1 || _c.z < -1) return null; const x = (_c.x + 1) / 2 * innerWidth, y = (1 - _c.y) / 2 * innerHeight; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      return x1 < 0 || x0 > innerWidth || y1 < 0 || y0 > innerHeight ? null : { left: x0, top: y0, right: x1, bottom: y1 };
+    }
+    return { group, rt, aspect: L.pic.w / L.pic.h, draw, place, onScreen, get words() { return shown; }, get tall() { return placed !== spec; },
       dispose() { face.geometry.dispose(); face.material.dispose(); back.geometry.dispose(); back.material.dispose(); pic.geometry.dispose(); pic.material.dispose(); tex.dispose(); rt.dispose(); } };
   })();
   const _D = new THREE.Matrix4(), _T = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1), _acc = new THREE.Vector3(), now = new THREE.Matrix4();
@@ -879,6 +889,9 @@ export function startFlying(ctx, opts = {}) {
     if (ownDash) { _w.setFromMatrixPosition(world()); stepDash(D, { p: [_w.x, _w.y, _w.z], dt, flying: !S.landed }); }
     dashClock += dt; dashTick();
     placeFloat(camera, view === 'behind' && glide.t >= VIEW.glide && powered() && !el.hidden);
+    // (seen from the seat, the Jump button and the seat's prompt stand just above the display, not over it)
+    { const r = view === 'cockpit' && glide.t >= VIEW.glide && !el.hidden ? dash.onScreen(camera) : null, up = r ? Math.round(innerHeight - r.top + 10) : 0;
+      if (up !== dashUp) { dashUp = up; el.classList.toggle('is-dash', !!r); if (r) el.style.setProperty('--dash-up', up + 'px'); } }
     return true;
   }
   // ── THE DASHBOARD: its numbers, stepped once a frame in aim (the flying's own in the labs, from the ship's own moves; a
@@ -887,7 +900,7 @@ export function startFlying(ctx, opts = {}) {
   const ownDash = !opts.dash, D = opts.dash || makeDash(), _w = new THREE.Vector3();
   // (dashClock: the game's own time, for how often the words are drawn again; the picture of the tiny ship is drawn once
   // for each picture of the game's)
-  let ticked = -1, dashClock = 0;
+  let ticked = -1, dashClock = 0, dashUp = -1;
   function dashTick() {
     const on = powered();
     dash.draw(dashRows(D, opts.run ? opts.run() : null), on, guideOn ? GUIDE_WORDS : '', dashClock);
