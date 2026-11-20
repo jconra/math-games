@@ -2,11 +2,15 @@
 // place to sit or lie, read from the ship's own blueprint, and the way between two rooms through their doors. Nothing
 // of three.js, so it is tested in Node (tests/aboard.test.mjs); nothing of any one ship: any boarded ship's blueprint.
 //   placesOf(bp, { deck, cockpitFloor, jobs }) -> the places;  wayOf(bp, fromRoom, toRoom) -> the doors' middles
+//   walkStep(walker, dt, player) -> 'walk' | 'there' | 'wait' | 'back';  inTheWay(at, to, player, waited, heading)
+//   wayBack(passed, place) -> the way back to the place just left
 export const SIT = ['seat', 'bench', 'chair', 'stool', 'sofa'], LIE = ['bunk', 'bed', 'berth', 'cot'];
 // how they walk (m/s, radians a second), how near the player they come (m), how long they stay (s: sitting, lying),
-// how near a place the player must be to be offered it (m); a bed's pad over its floor (m), a body's back under its
-// middle lying (m), the feet from a bed's middle (m); a seat's front edge from its middle, where they stand to sit (m)
-export const WALK = { speed: 1.05, turn: 4, room: 0.85, sit: [20, 45], lie: [45, 90], reach: 0.95 };
+// how near a place the player must be to be offered it (m); how long someone walking waits for the player in their
+// way, the player still pressing on them, before they turn back (s: inTheWay); a bed's pad over its floor (m), a body's
+// back under its middle lying (m), the feet from a bed's middle (m); a seat's front edge from its middle, where they
+// stand to sit (m)
+export const WALK = { speed: 1.05, turn: 4, room: 0.85, sit: [20, 45], lie: [45, 90], reach: 0.95, back: 1.0 };
 export const BED = { pad: 0.42, back: 0.13, feet: 0.92 };
 export const CLIP = { stand: 'Stand_Listen', sit: 'Sit_Listen', walk: 'Walk' };
 
@@ -65,4 +69,44 @@ export function wayOf(bp, from, to) {
   if (!seen.has(to)) return null;
   const out = []; for (let r = to; seen.get(r); r = seen.get(r).r) out.unshift(seen.get(r).d.at.slice());
   return out;
+}
+// THE PLAYER IN THE WAY of someone walking aboard ("never nearer than WALK.room to the player": they wait for the player
+// to pass). at: where they are; to: the point they are walking to next; player: where the player is (each { x, z }, the
+// ship's own frame); waited: how long they have waited for the player already (s); heading: the way they face (for a
+// moment with no way to go). -> null: walk on; 'wait': the player near and ahead of them along their way; 'back': and
+// still pressing on them, nearer than WALK.room, after WALK.back seconds of waiting. A ship's passages are too narrow for
+// the player to get round someone standing in them (the Miner's mess, past its table, is 0.75 m), so then they turn
+// back to the place they just left and are out of the way there (wayBack)
+export function inTheWay(at, to, player, waited = 0, heading = 0) {
+  if (!player) return null;
+  const px = player.x - at.x, pz = player.z - at.z, d = Math.hypot(px, pz);
+  if (d >= WALK.room + 0.5) return null;
+  const vx = to.x - at.x, vz = to.z - at.z, L = Math.hypot(vx, vz);
+  const ax = L > 0.05 ? vx / L : Math.sin(heading), az = L > 0.05 ? vz / L : Math.cos(heading);
+  if (px * ax + pz * az <= 0) return null;
+  return d < WALK.room && waited >= WALK.back ? 'back' : 'wait';
+}
+// ONE STEP OF SOMEONE WALKING ABOARD (src/aboard.js, each frame), in the ship's own frame: W { pos, heading, way, leg,
+// wait, target } (pos and the way's points { x, z }; target: the place the way goes to); player: { x, z }, or null.
+// Turned toward the next point of the way and on along it at WALK.speed (slower while turned far from it) -> 'walk';
+// 'there': the way's end reached; or the player in the way (inTheWay): 'wait', or 'back' (src/aboard.js turns them
+// back, or they wait), no step taken. The last step, from where one stands by a seat onto it, is never waited over:
+// sitting down takes them out of the way (a seat is beside the way through, never on it)
+export function walkStep(W, dt, player = null) {
+  const to = W.way[W.leg], vx = to.x - W.pos.x, vz = to.z - W.pos.z, L = Math.hypot(vx, vz);
+  const want = Math.atan2(vx, vz), diff = Math.atan2(Math.sin(want - W.heading), Math.cos(want - W.heading));
+  W.heading += Math.sign(diff) * Math.min(Math.abs(diff), WALK.turn * dt);
+  const sitting = !!W.target && W.target.kind === 'sit' && W.leg === W.way.length - 1;
+  const ahead = sitting ? null : inTheWay(W.pos, to, player, W.wait, W.heading);
+  if (ahead) return ahead;
+  W.wait = 0;
+  const step = Math.min(L, WALK.speed * dt * (Math.abs(diff) > 1 ? 0.3 : 1));
+  if (L > 1e-4) { W.pos.x += vx / L * step; W.pos.z += vz / L * step; }
+  if (L - step < 0.05) { W.leg++; if (W.leg >= W.way.length) return 'there'; }
+  return 'walk';
+}
+// THE WAY BACK to the place just left: the points of the way already passed ([x, z] each, in the order walked), the
+// last first, down to where one stands by that place; a seat is sat down on from there (as on the way out to a place)
+export function wayBack(passed, p) {
+  return [...passed.slice().reverse(), ...(p.kind === 'sit' ? [[p.x, p.z]] : [])];
 }

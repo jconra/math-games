@@ -1,11 +1,12 @@
 // Who is aboard a ship (src/aboardplan.js, the plain part of src/aboard.js): every seat and bed of a ship's rooms as a
 // place to sit or lie, read from its own blueprint, for any ship that can be boarded; the cockpit's seats kept for their
-// jobs; the way between two rooms through their doors.
+// jobs; the way between two rooms through their doors; someone walking aboard met by the player in a passage too narrow
+// to pass them (they turn back to the place just left).
 //   node --test pi-nebula/tests/aboard.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { placesOf, wayOf, SIT, LIE } from '../src/aboardplan.js';
+import { placesOf, wayOf, walkStep, inTheWay, wayBack, WALK, SIT, LIE } from '../src/aboardplan.js';
 // (the ships that can be boarded, as src/boarding.js lists them: read from its text, it loads three.js)
 const SHIPS = [...readFileSync(new URL('../src/boarding.js', import.meta.url), 'utf8').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, (?:cockpit: [\w.]+, )?bp: '([\w-]+)'/g)].map((m) => ({ id: m[1], bp: m[2] }));
 
@@ -59,4 +60,88 @@ test('the way between two rooms runs through their doors, in turn; a room to its
   assert.deepEqual(wayOf(bp, 'engineering', 'mess'), [[0, -4], [0, -2], [0, 0.5]]);
   // (never out through the lift's hatch)
   assert.equal(wayOf(bp, 'cockpit', 'outside'), null);
+});
+
+// THE PLAYER IN THE WAY (WALKOUT-1): the walk out of the Miner after a run, from the cockpit through the mess to the
+// lift, stopped for good by the captain walking the other way and waiting in the mess for the player to pass (who could
+// not: past the table it is 0.75 m wide). A stand-in for the player's own walking (src/player.js loads three.js): along
+// the cabin's middle at MOVE.walk, never nearer than MOVE.near to anyone (in that passage there is no going round). The
+// one walking by the plain part's own steps (walkStep), turned back as src/aboard.js turns them (wayBack).
+const MOVE = (() => { const m = /export const MOVE = \{ walk: ([\d.]+),[^}]*near: ([\d.]+) \}/.exec(readFileSync(new URL('../src/player.js', import.meta.url), 'utf8')); return { walk: +m[1], near: +m[2] }; })();
+function meet({ from, to, me, goal, after = 0, turn = true, secs = 60 }) {
+  const bp = bpOf('miner-ore-cockpit'), P = placesOf(bp, { deck: 0, cockpitFloor: 0.62 }), place = (id) => P.find((p) => p.id === id), a = place(from), b = place(to);
+  const W = { pos: { x: a.x, z: a.z }, heading: 0, wait: 0, leg: 0, from: a, target: b, there: null, turned: 0, waitMost: 0,
+    way: [a.stand, ...wayOf(bp, a.room, b.room), b.stand, ...(b.kind === 'sit' ? [[b.x, b.z]] : [])].map(([x, z]) => ({ x, z })) };
+  const pl = { x: me[0], z: me[1] }, dt = 1 / 30;
+  let arrived = null, nearest = Infinity;
+  for (let t = 0; t < secs && !(arrived != null && W.there); t += dt) {
+    // the player, setting off `after` seconds after the walker
+    if (t >= after && arrived == null) {
+      const gx = goal[0] - pl.x, gz = goal[1] - pl.z, L = Math.hypot(gx, gz), s = Math.min(L, MOVE.walk * dt);
+      const nx = pl.x + gx / L * s, nz = pl.z + gz / L * s;
+      if (Math.hypot(nx - W.pos.x, nz - W.pos.z) >= MOVE.near) { pl.x = nx; pl.z = nz; }
+      if (Math.hypot(goal[0] - pl.x, goal[1] - pl.z) < 0.35) arrived = t;
+    }
+    // the walker
+    if (!W.there) {
+      const r = walkStep(W, dt, t >= after ? pl : null);
+      if (r === 'back' && turn) {
+        const back = wayBack(W.way.slice(0, W.leg).map((v) => [v.x, v.z]), W.from);
+        [W.from, W.target] = [W.target, W.from]; W.wait = 0; W.turned++;
+        if (back.length) { W.way = back.map(([x, z]) => ({ x, z })); W.leg = 0; } else W.there = W.target;
+      } else if (r === 'wait' || r === 'back') { W.wait += dt; if (arrived == null) W.waitMost = Math.max(W.waitMost, W.wait); }   // (the player stood still at the end of their walk is only waited for)
+      else if (r === 'there') W.there = W.target;
+      if (W.there) { W.pos = { x: W.there.x, z: W.there.z }; }
+    }
+    nearest = Math.min(nearest, Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z));
+  }
+  return { arrived, W, nearest };
+}
+// (the player's two ends of the way through the mess: just out of the cockpit's seats, as they stand up from them; the
+// lift's top in the airlock, the walk out; and just in the airlock, the walk forward)
+const COCKPIT = [0, 3.2], LIFT = [0, -0.6], AIRLOCK = [0, -0.3];
+const starts = Array.from({ length: 33 }, (_, i) => i * 0.25);
+
+test('the player in the way of someone walking aboard: waited for while near and ahead along their way; turned back from when still pressing on', () => {
+  const at = { x: 0, z: 1 }, to = { x: 0, z: 2 };
+  assert.equal(inTheWay(at, to, null), null);
+  assert.equal(inTheWay(at, to, { x: 0, z: 1 + WALK.room + 0.6 }), null, 'far enough off');
+  assert.equal(inTheWay(at, to, { x: 0, z: 0.4 }), null, 'behind them: they walk on');
+  assert.equal(inTheWay(at, to, { x: 0.3, z: 2.1 }), 'wait', 'near and ahead');
+  assert.equal(inTheWay(at, to, { x: 0.1, z: 1.6 }, 0.2), 'wait', 'pressing on, but only just met');
+  assert.equal(inTheWay(at, to, { x: 0.1, z: 1.6 }, WALK.back), 'back', 'pressing on after a moment: turned back');
+  assert.equal(inTheWay(at, to, { x: 0.1, z: 1.95 }, WALK.back + 5), 'wait', 'near, but not pressing on: waited for');
+  // (ahead along the way they walk, not the way they face: turned round for a way back, the player behind them is behind)
+  assert.equal(inTheWay(at, to, { x: 0, z: 0.6 }, WALK.back, 0), null);
+  // the way back: the points passed, the last first, then the seat (a bed is lain on from where one stands by it)
+  const seat = { kind: 'sit', x: -0.75, z: 2.25 }, bed = { kind: 'lie', x: 0.7, z: -3 };
+  assert.deepEqual(wayBack([[0.34, -2.49], [0, -2], [0, 0.5]], bed), [[0, 0.5], [0, -2], [0.34, -2.49]]);
+  assert.deepEqual(wayBack([], seat), [[-0.75, 2.25]]);
+});
+
+test('the walk out of the Miner after a run gets to the lift, whenever the captain sets off forward through the mess', () => {
+  // (he waited for the player to pass, and the player could not: the walk out stopped for good, as the rigs saw it)
+  const stuck = starts.filter((after) => meet({ from: 'bunk-p', to: 'bench-b', me: COCKPIT, goal: LIFT, after, turn: false }).arrived == null);
+  assert.ok(stuck.length > 0, 'waiting alone, some meetings in the mess never end');
+  for (const [from, to] of [['bunk-p', 'bench-b'], ['bunk-s', 'bench-a'], ['bench-a', 'bench-b']]) {
+    let turned = 0;
+    for (const after of starts) {
+      const r = meet({ from, to, me: COCKPIT, goal: LIFT, after });
+      assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: at the lift in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
+      assert.ok(r.W.waitMost < WALK.back + 1.5, `${from} -> ${to} (${after} s): never stood waiting long (${r.W.waitMost.toFixed(1)} s)`);
+      turned += r.W.turned;
+    }
+    assert.ok(turned > 0, `${from} -> ${to}: met head on, he turned back`);
+  }
+});
+
+test('the walk forward through the mess gets to the cockpit, whenever someone sets off aft through it', () => {
+  for (const [from, to] of [['bench-b', 'bunk-s'], ['bench-b', 'bench-a'], ['bench-a', 'bunk-p']]) {
+    for (const after of starts) {
+      const r = meet({ from, to, me: AIRLOCK, goal: COCKPIT, after });
+      assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: in the cockpit in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
+      // (where he ends up, sitting or lying, is out of the way: the player walked past it)
+      assert.ok(r.W.there, `${from} -> ${to} (${after} s): sitting or lying at the end`);
+    }
+  }
 });
