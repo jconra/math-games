@@ -13,8 +13,9 @@
 // Terrain Lab), fewer views on the lower tiers; on its lowest tier (potato) no models at all, every tree its picture,
 // the views fewer still and without the depth each pixel of a picture carries (cheaper on a weak graphics chip).
 //
-// The planet's own: the ground repeats every 2 km, so every tree is drawn where its copy is nearest the camera, out to
-// the tier's reach (shrinking away to nothing at its edge; past that the ground carries the woods' colour: ground.js);
+// The planet's own: the ground repeats every 2 km, so every tree is drawn at the ground's copies of it round the camera,
+// out to the tier's reach, up to 2 km (shrinking away to nothing at its edge; past that the ground carries the woods'
+// colour: ground.js);
 // the planet's curve; the ground's own light where each tree stands (its long shadows, its hollows: the light picture,
 // as the rocks and plants have it); the haze; and the colours: each tree's whole colour turned to one of the planet's
 // leaf colours, as the ground plants' are (src/planet/cover.js planetTurn), the same in the model and its picture.
@@ -25,7 +26,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { bakeImposterSteps, imposterMaterial } from './imposter.js';
-import { onGround, TURN_GLSL, turnOf, planetTurn } from './cover.js';
+import { onGround, TURN_GLSL, HAZE_SKY_GLSL, turnOf, planetTurn } from './cover.js';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { TREES } from './kinds.js';
@@ -34,12 +35,15 @@ import { TREE_STRIDE, wrapD } from './land.js';
 // per tier (the game's own three: src/station.js), after the Terrain Lab's own tiers (its src/valley.js TIER_SET: potato,
 // normal, gaming): meshAt, band: the models out to meshAt metres ahead, crossfading over band; grid: views across the
 // picture (each 192 pixels); depth: each picture's pixel set at its own depth (off on the lowest, as the Terrain Lab's
-// potato has it); reach: how far off a tree is drawn at all (under 1,024 m: the nearest copy of each is within that of
-// the camera); most: the most trees drawn as models at once
+// potato has it); reach: how far off a tree is drawn at all (up to 2,048 m: the four copies of each drawn cover that
+// much round the camera); most: the most trees drawn as models at once. (The models' reach is shorter than the Terrain Lab's:
+// High has its normal tier's 150 m, Medium 100 m. Measured on a small graphics chip, standing at the edge of the
+// thickest woods, the models were nearly all the trees' cost, each one's leaf cards drawn over each other: 300 of
+// them added 24 ms to a frame where all 14,000 trees as pictures added 5.5 ms.)
 export const TREE_QUALITY = {
-  low: { meshAt: 0, band: 0, grid: 8, cell: 192, depth: false, reach: 750, most: 0 },
-  medium: { meshAt: 150, band: 120, grid: 12, cell: 192, depth: true, reach: 950, most: 300 },
-  high: { meshAt: 260, band: 140, grid: 14, cell: 192, depth: true, reach: 1000, most: 600 },
+  low: { meshAt: 0, band: 0, grid: 8, cell: 192, depth: false, reach: 1200, most: 0 },
+  medium: { meshAt: 100, band: 80, grid: 12, cell: 192, depth: true, reach: 1700, most: 120 },
+  high: { meshAt: 150, band: 100, grid: 14, cell: 192, depth: true, reach: 2000, most: 250 },
 };
 // the Terrain Lab's: the circle of models this share of meshAt ahead; each tree's own distance within half of spread
 // either side; close by, a model whichever way you look; the leaves' normals bent half way up
@@ -77,27 +81,34 @@ function swap(text, from, to, what) {
   if (n !== 1) throw new Error(`trees: the far trees' shader changed (${what}: found ${n} times)`);
   return text.replace(from, () => to);
 }
-// THE FAR PICTURE made the planet's: the copy nearest the camera, shrinking at the reach, the curve, the ground's light,
-// the haze, the colours
+// THE FAR PICTURE made the planet's: the ground's copies of the tree round the camera, shrinking at the reach, the
+// curve, the ground's light, the haze, the colours
 function planetImposter(mat, { ground, sky, turn, reach }) {
   const U = ground.U, u = mat.uniforms;
   let v = mat.vertexShader, f = mat.fragmentShader;
   v = swap(v, 'attribute vec3 iPos;', 'attribute vec3 iPos0; uniform float uPw, uCurve, uReach; varying vec3 vPlanetP;', 'its place');
   v = swap(v, 'attribute float iScale;', 'attribute float iScale0;', 'its size');
+  v = swap(v, 'attribute float iFade;', 'attribute float iFade0;', 'its fade');
   v = swap(v, 'void main() {', `void main() {
-        // (the ground repeats: this tree where its copy is nearest the camera; shrinking to nothing at the reach)
-        vec3 iPos = iPos0; iPos.xz = cameraPosition.xz + mod(iPos0.xz - cameraPosition.xz + 0.5 * uPw, uPw) - 0.5 * uPw;
+        // (the ground repeats, so each tree is drawn four times over: where its copy is nearest the camera, and the copy
+        // past that on the other side of the camera across, along, and both: so it is drawn out to 2 km whichever way you
+        // look. Which of the four this is: its number among them. Each shrinks to nothing at the reach.)
+        int copy = gl_InstanceID - (gl_InstanceID / 4) * 4;
+        vec2 near0 = cameraPosition.xz + mod(iPos0.xz - cameraPosition.xz + 0.5 * uPw, uPw) - 0.5 * uPw;
+        vec2 other = near0 + vec2(near0.x < cameraPosition.x ? uPw : -uPw, near0.y < cameraPosition.z ? uPw : -uPw);
+        vec3 iPos = vec3(copy == 1 || copy == 3 ? other.x : near0.x, iPos0.y, copy >= 2 ? other.y : near0.y);
+        float iFade = copy == 0 ? iFade0 : 1.0;                            // (only the nearest is ever near enough to be a model)
         vec2 dFoot = iPos.xz - cameraPosition.xz;
         float iScale = iScale0 * (1.0 - smoothstep(uReach * 0.85, uReach, length(dFoot)));`, 'its main');
   v = swap(v, 'vec4 mv = viewMatrix * vec4(world, 1.0);', `vPlanetP = world;
         world.y -= dot(dFoot, dFoot) * uCurve;                              // the planet's curve, as the ground under it drops
         vec4 mv = viewMatrix * vec4(world, 1.0);`, 'its curve');
-  f = 'varying vec3 vPlanetP; uniform float uHue, uSat, uLight;\n' + TURN_GLSL + '\n' + (sky ? SKY_GLSL + HAZE_GLSL : '') + f;
+  f = 'varying vec3 vPlanetP; uniform float uHue, uSat, uLight;\n' + TURN_GLSL + '\n' + (sky ? SKY_GLSL + HAZE_GLSL + HAZE_SKY_GLSL : '') + f;
   // the ground's light where it stands: the sun (its long shadows) on the sun's light, the sky it sees on the sky's
   f = swap(f, 'float landSun = 1.0, landAll = 1.0;', 'float landSun = 1.0, landAll = 1.0, planetSky = texture2D(landShade, vLand / landShadeSize + 0.5).g;', 'its light');
   f = swap(f, 'irradiance += mix(hemisphereLights[0].groundColor', 'irradiance += planetSky * mix(hemisphereLights[0].groundColor', 'its sky light');
   f = swap(f, 'vec3 albedo = mix(col.rgb / max(col.a, 0.001) * vTint, calmCol, calm);', 'vec3 albedo = mix(planetTurn(col.rgb / max(col.a, 0.001), uHue, uSat, uLight) * vTint, calmCol, calm);', 'its colour');
-  if (sky) f = swap(f, '#include <tonemapping_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, skyAt(cameraPosition, normalize(vPlanetP - cameraPosition)), hazeAmt(cameraPosition, vPlanetP));\n        #include <tonemapping_fragment>', 'its haze');
+  if (sky) f = swap(f, '#include <tonemapping_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, hazeSky(vPlanetP), hazeAmt(cameraPosition, vPlanetP));\n        #include <tonemapping_fragment>', 'its haze');
   mat.vertexShader = v; mat.fragmentShader = f;
   Object.assign(u, { uPw: U.uP, uCurve: U.uCurve, uReach: { value: reach }, uHue: { value: turn.hue }, uSat: { value: turn.sat }, uLight: { value: turn.light },
     uHaze: U.uHaze, uHazeH: U.uHazeH, uHazeBase: U.uHazeBase });
@@ -142,10 +153,11 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
     geo.index = quad.index; geo.setAttribute('position', quad.attributes.position); geo.setAttribute('uv', quad.attributes.uv);
     const iPos = new Float32Array(list.length * 3), iYaw = new Float32Array(list.length), iScale = new Float32Array(list.length), iTint = new Float32Array(list.length * 3), iFade = new Float32Array(list.length).fill(1);
     list.forEach((t, k) => { iPos.set([t.x, t.y, t.z], k * 3); iYaw[k] = t.yaw; iScale[k] = t.s; iTint.fill(t.tint, k * 3, k * 3 + 3); });
-    geo.setAttribute('iPos0', new THREE.InstancedBufferAttribute(iPos, 3)); geo.setAttribute('iYaw', new THREE.InstancedBufferAttribute(iYaw, 1));
-    geo.setAttribute('iScale0', new THREE.InstancedBufferAttribute(iScale, 1)); geo.setAttribute('iTint', new THREE.InstancedBufferAttribute(iTint, 3));
-    const fade = new THREE.InstancedBufferAttribute(iFade, 1); fade.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('iFade', fade);
-    geo.instanceCount = list.length;
+    // (four copies of each tree, one after another: each tree's own numbers shared by its four, `per` 4)
+    const per = (a, n) => new THREE.InstancedBufferAttribute(a, n, false, 4);
+    geo.setAttribute('iPos0', per(iPos, 3)); geo.setAttribute('iYaw', per(iYaw, 1)); geo.setAttribute('iScale0', per(iScale, 1)); geo.setAttribute('iTint', per(iTint, 3));
+    const fade = per(iFade, 1); fade.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('iFade0', fade);
+    geo.instanceCount = list.length * 4;
     const mat = planetImposter(imposterMaterial(bake, { sunDir, blend: true, depth: Q.depth, shadows: false, soften: SOFTEN, wind: 0, glow: 0, sheen: 1 }), { ground, sky, turn, reach: Q.reach });
     mat.uniforms.blendDist.value = 300;
     mat.uniforms.lowSun.value = 1 - THREE.MathUtils.smoothstep(el, 8, 30);    // (a low sun: the Terrain Lab's lean of the far trees' light)
@@ -195,7 +207,9 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
       }
     });
     const cap = Q.most;
-    if (cand.length > cap) cand.sort((p, q) => p[4] - q[4]);               // more than fit: the nearest win, those ahead over those behind
+    // nearest first: more than fit, the nearest win, those ahead over those behind; and drawn in that order, the near
+    // ones hide what is behind them before it is coloured in
+    cand.sort((p, q) => p[4] - q[4]);
     const n = Math.min(cap, cand.length), ease = Math.min(cap * 0.2, cand.length - cap), used = built.map(() => 0);
     for (let i = 0; i < n; i++) {
       const [bi, k, d, Dk, , rx, rz] = cand[i], b = built[bi], t = b.list[k], slot = used[bi]++;

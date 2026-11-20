@@ -110,6 +110,11 @@ export function planetTurn([r, g, b], hue, sat, light) {
 export const LEAF_HUE = 95;
 // a leaf colour of the palette as the turn's numbers
 export const turnOf = (lf) => ({ hue: (lf.hue - LEAF_HUE) * Math.PI / 180, sat: lf.sat, light: lf.light });
+// THE HAZE'S COLOUR in front of what stands on the ground: the sky's, looking that way but no higher than the horizon
+// (the haze lies along the ground; the clouds are far above it). So the sky's clouds are never worked out for it: for a
+// tree's crown above the horizon they were twenty noise readings for every leaf, and a wood is leaves over leaves.
+export const HAZE_SKY_GLSL = /* glsl */`
+vec3 hazeSky(vec3 p) { vec3 d = normalize(p - cameraPosition); return skyAt(cameraPosition, normalize(vec3(d.x, min(d.y, 0.0) - 0.001, d.z))); }`;
 
 // ── the shared shader changes: where it stands on the light picture, the curve, the fade at its edge, the haze ───
 // plant: recoloured ({ hue, sat, light, sway, clock } as uniforms); fade: a dithered fade by its own iFade (0..1), for
@@ -145,7 +150,8 @@ export function onGround(material, { ground, sky, reach, plant = null, fade = fa
     // (the far one's complement: where this one is drawn the far picture isn't, so in the crossfade every pixel is one or the other)
     if (fade) f = f.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{ float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (vFade < dither) discard; }');
     // the haze, mixed in as the ground and the sky mix theirs: before the colours are turned into the screen's
-    if (sky) f = f.replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, skyAt(cameraPosition, normalize(vPlace - cameraPosition)), hazeAmt(cameraPosition, vPlace));\n#include <tonemapping_fragment>');
+    if (sky) f = f.replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, hazeSky(vPlace), hazeAmt(cameraPosition, vPlace));\n#include <tonemapping_fragment>');
+    if (sky) f = f.replace('void main() {', HAZE_SKY_GLSL + '\nvoid main() {');
     sh.fragmentShader = f;
   };
   material.customProgramCacheKey = () => 'planet-cover-2' + (plant ? '-plant' : '') + (sky ? '-air' : '') + (fade ? '-fade' : '') + (soften ? '-s' + soften : '');
