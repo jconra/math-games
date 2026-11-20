@@ -193,6 +193,8 @@ const CSS = `
 @media (max-width: 640px) { .pmt-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); font-size: 12px; left: 3vw; right: 3vw; transform: none; margin: 0 auto; width: fit-content; white-space: normal; height: auto; min-height: 40px; padding: 6px 12px; column-gap: 8px; row-gap: 0; flex-wrap: wrap; justify-content: center; text-align: center; line-height: 1.25; } .pmt-say { top: 108px; left: 10px !important; right: auto; max-width: 78vw; } .pmt-say p { font-size: 14px; } .pmt-count b { font-size: 22px; } }
 /* (the core's tuning: its card lies along the bottom of a phone and may reach nearly to its top: the strip and the captain's words are put away under it) */
 @media (max-width: 640px) { .pmt.is-tune.has-panel .pmt-chip, .pmt.is-tune.has-panel .pmt-say { display: none; } }
+/* (the seat's prompt out at the rocks, and the core's: as wide as their words need, up to the screen's width, so on a phone the words are a line or two and not a column of single words) */
+.pnj-prompt.pmt-wide { width: max-content; max-width: 94vw; }
 `;
 
 // a plain grey rock: a lumpy twenty-sided ball, lit from one side by a few sums of its own (no lamps in the scene)
@@ -230,7 +232,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => openCards());
   // (the seat's prompt out at the rocks, for the core's tuning: Get up, and afterwards Sit down)
-  const seatEl = document.createElement('div'); seatEl.className = 'pnj-prompt'; seatEl.hidden = true;
+  const seatEl = document.createElement('div'); seatEl.className = 'pnj-prompt pmt-wide'; seatEl.hidden = true;
   seatEl.innerHTML = '<div class="pnj-pw"><b></b><small></small></div><button type="button" class="pnj-go"></button>';
   document.body.appendChild(seatEl);
   seatEl.querySelector('.pnj-go').addEventListener('click', () => seatGo());
@@ -490,6 +492,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // (the ship with its rooms, hull and cabin, drawn where the drill's own is, which is put away meanwhile)
       _m.multiplyMatrices(ff.matrix, _m.copy(S.M0).invert()); crane.fly(_m); boarding.fly(M.ship, _m);
       W.alone = [S.zone.id]; if (drill) drill.aboard = true;
+      // (the captain's words have their ordinary place while they walk: the drill's own boxes are not on the screen)
+      el.classList.remove('is-drill');
       T.afield = true;
     }
     if (ctx.walk) ctx.walk(true);
@@ -508,6 +512,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   function fromField() {
     if (!T.afield) return;
     T.afield = false; crane.fly(null); boarding.fly(M.ship, null); W.alone = []; if (drill) drill.aboard = false;
+    if (drill && drillOn) el.classList.add('is-drill');
     const root = P() && P().c.root; if (root) { root.matrixAutoUpdate = true; root.updateMatrix(); root.matrixWorldNeedsUpdate = true; }
   }
   // IN THE SEAT AGAIN: the view from it as it was, and the run goes on

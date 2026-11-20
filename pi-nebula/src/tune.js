@@ -56,7 +56,7 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
   const clip = clipOf(M), cards = Math.max(1, step.cards || 1);
   readyTune(M);
   // (the core's own prompt, as a job's)
-  const prompt = document.createElement('div'); prompt.className = 'pnj-prompt'; prompt.hidden = true;
+  const prompt = document.createElement('div'); prompt.className = 'pnj-prompt pmt-wide'; prompt.hidden = true;      // (pmt-wide: src/trip.js, whose step this is)
   prompt.innerHTML = '<div class="pnj-pw"><b>Reactor core</b><small>Adjust the core</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => open());
