@@ -536,7 +536,9 @@ function slipCard(L, { t, rand, who = null, W, H = null }) {
 // forms (src/missions.js payoutOrder: count under 20, adding from 20, parts from 44):
 //   under 20       (counting canisters)                nothing more: the payout card has them count the canisters
 //   20 to 43       APPROXIMATELY (approxCard): each metal to the nearest whole tonne (a half up; a metal under half a
-//                  tonne is left out), "You brought approximately ... What is your approximate payout?"
+//                  tonne is left out), "You brought approximately ... What is your mission's approximate payout?"
+//                  (the game's maker, 2026-11-20, of the answer being the whole haul: "You could probably make it more
+//                  straightforward by saying "Your mission's approximate payout"")
 //   44 to 75       ONE PART (partCard): one part-full canister, "You filled a gold canister up to 3/8 of a tonne. How
 //                  much more would you have gotten if you finished filling it?", in credits, with the tip
 //   76, the top    THE EXACT QUESTION (totalCard): every metal in eighths, the total sale price, with the tip; Work it
@@ -621,7 +623,7 @@ function approxCard(H, { t, rand, who = null }) {
   ]).filter((s) => s.v !== Math.round(H.pay * 100));
   const worked = k === 1 ? `About ${ps[0].amt} × ${credits(ps[0].m.price)} = ${credits(sold)} credits.` : `About ${ps.map((p) => (p.amt === 1 ? credits(p.m.price) : `${p.amt} × ${credits(p.m.price)}`)).join(' + ')} = ${credits(sold)} credits.`;
   const o = ownOrder({
-    key: 'mine:approx', story: `You brought approximately ${list(ps.map((p) => `${u(p.amt, TONNE)} of ${p.m.name}`))}.`, ask: 'What is your approximate payout?',
+    key: 'mine:approx', story: `You brought approximately ${list(ps.map((p) => `${u(p.amt, TONNE)} of ${p.m.name}`))}.`, ask: 'What is your mission\'s approximate payout?',
     right: P(sold), slips,
     rightWhy: `${worked} The haul sold for ${credits(H.pay)} credits exactly.`,
     sum: his.steps.length ? his.steps : null, chart: chartOf(TONNE),
@@ -1103,7 +1105,7 @@ export const MAKERS = {
 
   // ── a haul the player went out for that came home with a canister part full (A HAUL THAT CAME HOME EARLY, above):
   // dealt by the smelter's own pick (pickAsk), once a haul for each kind, never from a level's mix
-  // step 1  approximately: each metal to the nearest whole tonne, the approximate payout
+  // step 1  approximately: each metal to the nearest whole tonne, the mission's approximate payout
   // step 2  one part: one part-full canister, what filling it would have brought
   // step 3  the exact question: every metal in eighths, the total sale price; Work it out his way, a running total kept
   mine: {

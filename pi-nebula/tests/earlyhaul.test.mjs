@@ -160,7 +160,7 @@ test('approximately: each metal to the nearest whole tonne (a half up, under a h
     if (!want.length) { assert.equal(roundLots(H.lots).length, 0); assert.throws(() => M.mine.make(1, { rand: seeded(n), live: hangar(round) })); flownHaul(round, null); continue; }
     if (want.length < H.lots.length) leftOut++;
     const o = M.mine.make(1, { rand: seeded(n), live: hangar(round) }); asked++;
-    assert.equal(o.key, 'mine:approx'); assert.equal(o.ask, 'What is your approximate payout?'); assert.equal(o.tip, undefined, 'no eighths asked: no tip');
+    assert.equal(o.key, 'mine:approx'); assert.equal(o.ask, 'What is your mission\'s approximate payout?'); assert.equal(o.tip, undefined, 'no eighths asked: no tip');
     assert.deepEqual(o.facts.load.parts.map((p) => [p.metal, p.amt]), want, why);
     assert.equal(o.story, `You brought approximately ${want.map(([m, t]) => `${t} ${t === 1 ? 'tonne' : 'tonnes'} of ${m}`).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`);
     assert.ok(!/\/|\d\.\d/.test(`${o.story} ${o.coins.map((c) => c.label).join(' ')}`), why);
@@ -178,6 +178,19 @@ test('approximately: each metal to the nearest whole tonne (a half up, under a h
   forget(); flownHaul(9, { store: HIS });
   const o = M.mine.make(1, { rand: seeded(2), live: hangar(9) });
   assert.equal(o.story, 'You brought approximately 4 tonnes of titanium, 1 tonne of gold, 1 tonne of iron and 1 tonne of copper.');
+  assert.equal(rightOf(o), 38000);
+  flownHaul(9, null); forget();
+});
+
+test('approximately asks for "your mission\'s approximate payout" (the game\'s maker, 2026-11-20), and its answer stays the whole haul', () => {
+  forget(); flownHaul(9, { store: HIS });
+  const o = M.mine.make(1, { rand: seeded(5), live: hangar(9) });
+  assert.equal(o.ask, 'What is your mission\'s approximate payout?');
+  // (nowhere on the card, its Help or its answers does the old wording stay)
+  const words = JSON.stringify({ story: o.story, ask: o.ask, help: o.help, why: o.rightWhy, coins: o.coins, tip: o.tip ?? null });
+  assert.ok(!/your approximate payout/i.test(words), words);
+  // the whole haul (not the player's share of it): every metal, each to the nearest tonne, at its price on the chart
+  assert.equal(rightOf(o), Object.entries(HIS).reduce((a, [m, t]) => a + Math.floor(t + 0.5) * priceOf(m), 0));
   assert.equal(rightOf(o), 38000);
   flownHaul(9, null); forget();
 });
