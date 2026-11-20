@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Flight Lab</title>
-<meta name="description" content="A space station lab: flying by hand, by itself. The Miner on its pad, the station's outside, and the game's own flight controls, with no contract to sign. Lift off, fly out through the bay door, round the station, back in, and set down by hand with the landing guide. Or into one of the other two hangars, where an alarm sounds, red lights turn and the parked ship can be shoved about. Clear of the station, Jump opens the wormhole.">
+<meta name="description" content="A space station lab: flying by hand, by itself. The Miner, the Explorer or the Medic on its pad, the station's outside, and the game's own flight controls, with no contract to sign. Lift off, fly out through the bay door, round the station, back in, and set down by hand with the landing guide. Or into one of the other two hangars, where an alarm sounds, red lights turn and the parked ship can be shoved about. Clear of the station, Jump opens the wormhole.">
 <meta name="theme-color" content="#05070b">
 <link rel="icon" href="data:,">
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
@@ -16,21 +16,24 @@
   #top h1 { margin: 0 4px 0 0; font: 700 16px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #9fdcff; }
   #top a { color: #9fdcff; font-size: 13px; margin-right: 4px; }
   #top button { font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 10px; color: #e8eef5; background: #152131; border: 1px solid rgba(79, 182, 255, 0.45); border-radius: 6px; }
+  #ships { display: inline-flex; gap: 4px; margin-right: 6px; }
+  #top #ships button.is-on { color: #10151c; background: #9fdcff; border-color: #9fdcff; }
   #note { flex: 1 1 100%; margin: 0; font-size: 12.5px; color: #a9b8c8; min-height: 1.3em; }
   #loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 18px; color: #cfe6ff; background: #05070b; }
 </style>
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
-<canvas id="c" aria-label="The Miner on its pad in its hangar, the bay door ahead"></canvas>
+<canvas id="c" aria-label="The ship on its pad in its hangar, the bay door ahead"></canvas>
 <div id="top">
   <h1>Flight Lab</h1><a href="../">All labs</a>
+  <span id="ships" role="group" aria-label="Which ship"><button type="button" data-ship="miner">Miner</button><button type="button" data-ship="explorer">Explorer</button><button type="button" data-ship="medic">Medic</button></span>
   <button type="button" id="pad">Back on the pad</button>
   <button type="button" id="home">Outside, coming home</button>
   <p id="note" aria-live="polite"></p>
 </div>
 <div id="loading">Warming the engine…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=3').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=4').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>

@@ -1,7 +1,7 @@
-// THE FLIGHT LAB: flying by hand, by itself. The game's own station (src/station.js), its own parked Miner and cabin
+// THE FLIGHT LAB: flying by hand, by itself. The game's own station (src/station.js), its own parked ships and cabins
 // (src/boarding.js, src/crane.js), its own outside (src/outside.js) and its own flying (src/flying.js, src/flymodel.js):
 // nothing here is a copy, so a change to the flying shows here and in the game alike. No contract, no jump, no pay: the
-// Miner is on its pad with the crew member in the pilot's seat.
+// ship is on its pad with the crew member in the pilot's seat.
 //
 // THE GAME'S MAKER asked for it so the flying can be tried by itself. What is the lab's own:
 //   - "Back on the pad" and "Outside, coming home" put the ship at the two places a mining run flies from;
@@ -23,28 +23,46 @@
 //     the same ships to shove, the same reset once their hangar is out of sight (src/visit.js), and the ship's own
 //     voice (its welcome as the power comes on, and again after "Back on the pad", which is the lab's way of sitting
 //     down afresh). The station's people are not in the lab, so nobody runs about here.
+//   - THE SHIP PICKER: the Miner, the Explorer or the Medic (the game's maker, 2026-11-19: "I was hoping that the ships
+//     will basically all fly the same and share the same class"). Each is flown by the very same code from its own
+//     data (src/fleet.js): its own pad, bay door, hull, engine's glow, cockpit, view from behind and voice. Picking one
+//     loads the lab again with it (the address keeps it: ?ship=). In the game itself only the Miner is flown yet (the
+//     Explorer's and the Medic's missions are still to come); here, with the Explorer or the Medic flown, the Miner
+//     waits on its pad and is not moved by a bump (src/fleet.js `shove`).
 //
-// Address switches: ?q=low|medium|high  the picture's quality; ?view=behind  start in the view from behind;
-// ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a screenshot; ?seed=N  which of the
-// outside's windows are lit. window.LAB: { ready, W, F (the flying), hole (the wormhole), boarding, crane, outside, visit, step }.
+// Address switches: ?ship=miner|explorer|medic  which ship; ?q=low|medium|high  the picture's quality; ?view=behind
+// start in the view from behind; ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a
+// screenshot; ?seed=N  which of the outside's windows are lit. window.LAB: { ready, id, cfg, W, F (the flying), hole (the
+// wormhole), boarding, crane, hull, outside, visit, step }.
 import * as THREE from 'three';
 import { loadStation } from '../../src/station.js';
 import { makeWalls } from '../../src/walls.js';
 import { makeBoarding, STANDS_ANYWHERE } from '../../src/boarding.js';
 import { makeVisit } from '../../src/visit.js';
 import { makeCrane } from '../../src/crane.js';
+import { makeHull } from '../../src/shiphull.js';
 import { addOutside } from '../../src/outside.js';
 import { startFlying } from '../../src/flying.js';
-import { MINER } from '../../src/flymodel.js';
+import { flightOf, SHIP_IDS } from '../../src/fleet.js';
 import { sound } from '../../src/sound.js';
 import { makeWormhole } from '../../src/wormhole.js';
 
 const KEEP = 'pi-nebula.flightlab';
 const q = new URLSearchParams(location.search), HOLD = q.has('hold');
 const canvas = document.getElementById('c'), note = document.getElementById('note'), loading = document.getElementById('loading');
-const LAB = window.LAB = { ready: false, F: null };
 const kept = (() => { try { return JSON.parse(localStorage.getItem(KEEP)) || {}; } catch (e) { return {}; } })();
 const keep = (s) => { try { localStorage.setItem(KEEP, JSON.stringify(s)); } catch (e) { /* blocked: not kept */ } };
+// (which ship: the address, else the one last flown here, else the Miner)
+const ID = SHIP_IDS.includes(q.get('ship')) ? q.get('ship') : SHIP_IDS.includes(kept.ship) ? kept.ship : 'miner';
+const cfg = flightOf(ID);
+const LAB = window.LAB = { ready: false, F: null, id: ID, cfg };
+
+// THE PICKER: one button for each ship, the one flown lit; another loads the lab again with it
+for (const b of document.querySelectorAll('[data-ship]')) {
+  const on = b.dataset.ship === ID; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  b.addEventListener('click', () => { if (b.dataset.ship === ID) return; keep({ ...kept, ship: b.dataset.ship }); const u = new URL(location.href); u.searchParams.set('ship', b.dataset.ship); location.href = u.href; });
+}
+canvas.setAttribute('aria-label', `The ${cfg.name} on its pad in its hangar, the bay door ahead`);
 
 const W = LAB.W = await loadStation({ canvas, quality: q.get('q'), rig: q.has('rig') || HOLD, say: (f, words) => { loading.textContent = words + '…'; } });
 const walls = makeWalls(W.built, { portals: W.R.portals, apart: STANDS_ANYWHERE });
@@ -53,24 +71,30 @@ for (const D of W.built.glides || []) D.use = null;
 const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
 const crane = LAB.crane = makeCrane({ W, walls, boarding });
 const outside = LAB.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
-// (the other two hangars, for a Miner flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js)
-const visit = LAB.visit = makeVisit({ W, boarding, outside });
+// (the other two hangars, for a ship flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js)
+const visit = LAB.visit = makeVisit({ W, boarding, outside, cfg });
 
-// someone aboard: a stand-in for the crew member (no body to draw), in the Miner's hangar until its cabin is built,
+// someone aboard: a stand-in for the crew member (no body to draw), in the ship's hangar until its cabin is built,
 // then in its cockpit, where they stay
-const pad = new THREE.Vector3(...MINER.pad), body = { pos: pad.clone().add(new THREE.Vector3(4, 0.1, 8)), c: null }, eyes = [body.pos];
-const ship = boarding.ships.find((s) => s.id === MINER.id);
+const pad = new THREE.Vector3(...cfg.pad), body = { pos: pad.clone().add(new THREE.Vector3(4, 0.1, 8)), c: null }, eyes = [body.pos];
+const ship = boarding.ships.find((s) => s.id === ID);
+// WHO KEEPS THE HULL WHERE IT IS FLOWN: the Miner's crane (its canisters ride with it), or the ship's own shared hull
+// (src/shiphull.js). With another ship flown the Miner waits on its pad, as with a contract signed.
+const hull = LAB.hull = ID === 'miner' ? crane : makeHull({ W, id: ID, kit: ship && ship.flight, boarding, eyes: () => eyes });
+if (ID !== 'miner') crane.awayHeld = true;
 W.camera.position.set(pad.x + 13, 3.2, pad.z + 11); W.camera.lookAt(pad.x, 2.6, pad.z);
 
 // (the jump's own picture, as in the game: one for the lab)
 const hole = LAB.hole = makeWormhole({ scene: W.scene, quality: W.quality });
 let F = null, now = 0;
 function begin() {
-  const sp = boarding.spots(MINER.id); body.pos.set(...sp.rooms.cockpit);
-  crane.depart();
-  F = LAB.F = startFlying({ W, boarding, crane, outside, visit }, {
-    cfg: MINER, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept, guide: 'always',
-    onSettings: (s) => keep(s), words: (w) => { note.textContent = w; },
+  const sp = boarding.spots(ID); body.pos.set(...sp.rooms.cockpit);
+  if (ID === 'miner') crane.depart();
+  // (its ways in stay up and its lift carries nobody while it is flown)
+  boarding.ride(ID, false);
+  F = LAB.F = startFlying({ W, boarding, crane, hull, outside, visit }, {
+    cfg, goal: 'free', pilot: true, view: q.get('view') === 'behind' ? 'behind' : 'cockpit', settings: kept, guide: 'always',
+    onSettings: (s) => keep({ ...kept, ...s }), words: (w) => { note.textContent = w; },
     // (the stand-in for the crew member stays in the seat of the ship as it stands)
     onStand: (moved) => { body.pos.applyMatrix4(moved); },
     // (the wormhole, as in the game; there is nowhere else to go here, so its far end opens where the jump home would
