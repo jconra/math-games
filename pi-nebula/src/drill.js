@@ -36,11 +36,15 @@
 //     the box round it), the PART OF IT THAT IS ORE (a half, a quarter, a fifth or a tenth), and so the tonnes of ore
 //     in it, always a whole number of tonnes, of one, two, three or four metals, a whole number of tonnes of each.
 //   - ITS ORE LIES IN VEINS: each vein is one metal's, a string of LUMPS (the same number in every vein of a rock),
-//     each lump a point inside the rock holding so much of that metal. The glow is the lumps: a lump's colour is its
-//     metal, and it is as big and bright as the metal left in it.
+//     each lump a point inside the rock holding so much of that metal. A vein runs from near the rock's outside in
+//     toward its middle, and the veins of a rock lie well apart (VEIN, and the game's maker's words at makeRock). The
+//     glow is the lumps: a lump's colour is its metal, and it is as big and bright as the metal left in it.
 //   - A HOLE goes from the tapped spot straight in to the rock's middle. It finds metal in every lump near its line:
-//     all of a lump within 0.1 of the line (the rock's radius is 1), less and less out to 0.34, nothing past that
-//     (take()). So a hole down the thick of a vein finds a lot, and a hole in bare rock finds nothing. What it finds
+//     all of a lump within DRILL.core of the line (0.24; the rock's radius is 1), less and less out to DRILL.reach
+//     (0.42), nothing past that (take()). So a hole tapped over a vein's outer end finds the whole vein, a hole a
+//     little off it a part of it, and a hole in bare rock nothing. (A full load used to take about eight rocks; the
+//     game's maker, 2026-11-19: "I think 4-5 would be better." With a vein to a hole it takes a careful driller three
+//     or four rocks and a careless one more: ~/pw/space-math/rigs/ore-look/sim.mjs.) What it finds
 //     of each metal is weighed in as whole hundredths of a tonne (ten kilograms); any less than that stays in the
 //     rock. So the rock, the canisters and the payout all count the same exact amounts.
 //   - A ROCK STANDS SO MANY HOLES: a flat one 4, a round one 5, a long one 6. After the last it crumbles and is gone.
@@ -73,14 +77,21 @@ export const DRILL = {
   field: 30,                // rocks in a field
   four: 1 / 2,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
                             // (the game's maker, 2026-11-19, picked "More: about 1 rock in 11 (every other big rock)"; it was 1 in 3)
-  reach: 0.34,              // how far from a hole's line metal is taken (the rock's radius is 1)
-  core: 0.1,                // within this of the line, all of a lump
+  reach: 0.42,              // how far from a hole's line metal is taken (the rock's radius is 1)
+  core: 0.24,               // within this of the line, all of a lump (a tap a little off a vein still takes the whole of it)
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
   wide: 200, ahead: 170, near: 34, thick: 46, apart: 16,   // the field: metres out from its middle, how far ahead of where the ship arrives its middle is, the nearest a rock lies to the ship's place, top to bottom, the least between two rocks
 };
 // A ROCK'S SHAPE: the box that just holds it (metres: long, wide, high), how it is drawn (its three half-lengths, of a
 // round rock's), and the holes it stands. A long rock's long way is its own z, which is the way the claw's hand holds
 // it (along the hand); a flat rock's thin way is its own x (across the hand, so the fingers shut on its two faces).
+// A VEIN'S LIE (the rock's radius is 1): how far out its outer end is and how far in its inner end; how far its
+// middle may bow off the straight line between them, and each lump jog off it; and how far a vein's way out may lean
+// from its own of the six ways (radians). The veins of a rock go out six ways at right angles to one another (as to
+// the faces of a box, the box turned any way round), at most one vein to a way, so any two are well apart; and the
+// inner ends keep clear of the middle, so a hole down one vein is out of reach of every other (DRILL.reach).
+export const VEIN = { outer: [0.8, 0.9], inner: [0.46, 0.56], bow: 0.05, jog: 0.02, lean: 0.16 };
+const SIX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 export const SHAPES = {
   flat: { box: [2, 2, 1], sq: [0.52, 1, 1], holes: 4, word: 'a flat rock' },
   round: { box: [2, 2, 2], sq: [1, 1, 1], holes: 5, word: 'a round rock' },
@@ -148,18 +159,27 @@ export function makeRock(rand = Math.random, { kind = null, metals = null } = {}
     veins.push({ metal: m, tonnes: Math.max(a, t10 - a) / 10 }, { metal: m, tonnes: Math.min(a, t10 - a) / 10 });
   });
   const each = whole(rand, [3, 5]), lumps = [];
-  // a vein: a string of lumps from a point inside the rock, wandering, kept inside it
+  // A VEIN: a string of lumps from near the rock's outside in toward its middle, a little crooked (a bow in it, and
+  // each lump a little off the line). The veins of a rock lie well apart from one another, each its own way out from
+  // the middle. (They used to wander about the middle of the rock. The game's maker, 2026-11-19: "I think it would be
+  // best if most of the ore is near the outsides of the rocks so it is obvious what ore you are attempting to drill at
+  // (and so the colors don't get combined too much)", and of the veins' look: "I do still want more of the rock to be
+  // ore and for it to not all be in the center like that." So a hole tapped over a vein's outer end goes down the
+  // length of it and finds all of it or nearly, and nothing of the next vein: VEIN above.)
+  // (the six ways, turned any way round for this rock, in an order of its own)
+  const ax = unit(rand), tmp = unit(rand), ay = norm([ax[1] * tmp[2] - ax[2] * tmp[1], ax[2] * tmp[0] - ax[0] * tmp[2], ax[0] * tmp[1] - ax[1] * tmp[0]]), az = [ax[1] * ay[2] - ax[2] * ay[1], ax[2] * ay[0] - ax[0] * ay[2], ax[0] * ay[1] - ax[1] * ay[0]];
+  const ways = SIX.map((w) => [0, 1, 2].map((k) => ax[k] * w[0] + ay[k] * w[1] + az[k] * w[2]));
+  for (let i = ways.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [ways[i], ways[j]] = [ways[j], ways[i]]; }
   veins.forEach((V, v) => {
     V.lumps = each;
-    let d = unit(rand), p = d.map((x) => x * between(rand, [0.2, 0.62]));
-    d = unit(rand);
+    const j = unit(rand), out = norm(ways[v].map((x, k) => x + j[k] * Math.tan(VEIN.lean) * rand()));
+    const up = Math.abs(out[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], sa = norm([out[1] * up[2] - out[2] * up[1], out[2] * up[0] - out[0] * up[2], out[0] * up[1] - out[1] * up[0]]);
+    const sb = [out[1] * sa[2] - out[2] * sa[1], out[2] * sa[0] - out[0] * sa[2], out[0] * sa[1] - out[1] * sa[0]];
+    const r0 = between(rand, VEIN.outer), r1 = between(rand, VEIN.inner), bow = between(rand, [-VEIN.bow, VEIN.bow]), turn = rand() * Math.PI * 2;
     const mine = [];
     for (let i = 0; i < each; i++) {
-      mine.push({ p: [...p], w: between(rand, [0.6, 1.4]), vein: v, metal: V.metal });
-      const j = unit(rand); d = norm([d[0] + j[0] * 0.45, d[1] + j[1] * 0.45, d[2] + j[2] * 0.45]);
-      let q = [p[0] + d[0] * 0.2, p[1] + d[1] * 0.2, p[2] + d[2] * 0.2];
-      if (len(q) > 0.72) { const c = norm(q); d = norm([d[0] - 1.6 * c[0], d[1] - 1.6 * c[1], d[2] - 1.6 * c[2]]); q = [p[0] + d[0] * 0.2, p[1] + d[1] * 0.2, p[2] + d[2] * 0.2]; if (len(q) > 0.72) q = norm(q).map((x) => x * 0.72); }
-      p = q;
+      const t = i / (each - 1), r = r0 + (r1 - r0) * t, th = turn + (rand() - 0.5) * 1.2, off = bow * Math.sin(Math.PI * t) + (rand() - 0.5) * 2 * VEIN.jog;
+      mine.push({ p: [0, 1, 2].map((k) => out[k] * r + (sa[k] * Math.cos(th) + sb[k] * Math.sin(th)) * off), w: between(rand, [0.6, 1.4]), vein: v, metal: V.metal });
     }
     const sum = mine.reduce((s, L) => s + L.w, 0);
     for (const L of mine) { L.ore = L.ore0 = V.tonnes * L.w / sum; delete L.w; lumps.push(L); }

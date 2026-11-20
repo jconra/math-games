@@ -11,7 +11,7 @@ import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
 import * as DR from '../src/drill.js';
 import { MISSIONS } from '../src/missions.js';
-import { DRILL, ORE, SHAPES, KINDS, ODDS, NAMES, makeRock, makeField, makeRun, drillHole, holeWorth, bestHole, take, oreLeft, oreBy, scanOf, rockSells, emptyCans, stow, roomFor, storeOf, roundCans, crewLoad, seeded as seed } from '../src/drill.js';
+import { DRILL, VEIN, ORE, SHAPES, KINDS, ODDS, NAMES, makeRock, makeField, makeRun, drillHole, holeWorth, bestHole, take, oreLeft, oreBy, scanOf, rockSells, emptyCans, stow, roomFor, storeOf, roundCans, crewLoad, seeded as seed } from '../src/drill.js';
 import { JOB as drill, SHARE } from '../src/jobs/drill.js';
 import { JOB as smelter, haulOf, flownHaul, forget, sellsFor, lotsWords, tonnesWords, eighthsText, priceOf, METALS, CARRIES, HOLD, CAN_TONNES } from '../src/jobs/smelter.js';
 import { helpPicture, PALE } from '../src/jobs/pics.js';
@@ -50,7 +50,17 @@ test('a rock has real numbers of its own: its box, its weight (half its box at s
     for (const [m, t] of ms) assert.ok(near(r.veins.filter((V) => V.metal === m).reduce((a, V) => a + V.tonnes, 0), t), `${m}: its veins`);
     const first = r.veins.filter((V) => V.metal === ms[0][0]); assert.equal(first.length, 2); assert.ok(first[0].tonnes > first[1].tonnes); for (const V of first) assert.ok(Math.round(V.tonnes * 10) % 10 !== 0 && near(V.tonnes * 10, Math.round(V.tonnes * 10)));
     assert.ok(r.each >= 3 && r.each <= 5); assert.equal(r.lumps.length, r.veins.length * r.each);
-    r.veins.forEach((V, v) => { const mine = r.lumps.filter((L) => L.vein === v); assert.equal(mine.length, r.each); assert.equal(V.lumps, r.each); assert.ok(mine.every((L) => L.metal === V.metal && L.ore > 0 && L.ore === L.ore0 && Math.hypot(...L.p) <= 0.72 + 1e-9)); assert.ok(near(mine.reduce((a, L) => a + L.ore, 0), V.tonnes)); });
+    r.veins.forEach((V, v) => { const mine = r.lumps.filter((L) => L.vein === v); assert.equal(mine.length, r.each); assert.equal(V.lumps, r.each); assert.ok(mine.every((L) => L.metal === V.metal && L.ore > 0 && L.ore === L.ore0)); assert.ok(near(mine.reduce((a, L) => a + L.ore, 0), V.tonnes));
+      // THE ORE IS NOT IN THE MIDDLE (the game's maker, 2026-11-19: "I do still want more of the rock to be ore and for it to not all be in the center like that"): a vein runs from near the outside in, none of it nearer the middle than it says, each lump further in than the last, and nearly straight
+      const far = mine.map((L) => Math.hypot(...L.p)); assert.ok(far[0] >= VEIN.outer[0] - 1e-9 && far[0] <= 0.93, `its outer end ${far[0]}`); assert.ok(far.every((d) => d >= VEIN.inner[0] - 1e-9), `its inner end ${Math.min(...far)}`);
+      for (let i = 1; i < far.length; i++) assert.ok(far[i] < far[i - 1] + 0.02, 'inward all the way');
+      const out = mine[0].p.map((x) => x / far[0]); for (const L of mine) { const t = L.p[0] * out[0] + L.p[1] * out[1] + L.p[2] * out[2]; assert.ok(Math.hypot(L.p[0] - out[0] * t, L.p[1] - out[1] * t, L.p[2] - out[2] * t) <= DRILL.core, 'a hole down it from its outer end takes the whole of every lump'); }
+    });
+    // ... and the veins of a rock lie well apart: more than 55 degrees between any two, so a hole down one finds nothing of another
+    const ends = r.veins.map((V, v) => { const L = r.lumps.find((q) => q.vein === v), d = Math.hypot(...L.p); return L.p.map((x) => x / d); });
+    for (let i = 0; i < ends.length; i++) for (let j = 0; j < i; j++) assert.ok(ends[i][0] * ends[j][0] + ends[i][1] * ends[j][1] + ends[i][2] * ends[j][2] < Math.cos(55 * Math.PI / 180), 'two veins too near one another');
+    r.veins.forEach((V, v) => { const mine = r.lumps.filter((L) => L.vein === v), rest = r.lumps.filter((L) => L.vein !== v).reduce((a, L) => a + L.ore, 0), k = makeRock(seed(s)), h = drillHole(k, mine[0].p);
+      assert.ok(near(h.took, Math.floor(V.tonnes * 100 + 1e-7) / 100, 0.011), `a hole down a vein of ${V.tonnes} t takes ${h.took}`); assert.ok(near(oreLeft(k), k.ore0 - h.took)); assert.ok(oreLeft(k) >= rest - 0.011, 'and nothing of the other veins'); });
     assert.ok(near(oreLeft(r), r.ore0)); assert.equal(r.holes, S.holes); assert.equal(r.left, r.holes); assert.deepEqual(r.made, []); assert.equal(r.broken, false); assert.equal(r.scanned, false);
   }
   assert.deepEqual([...shapes].sort(), ['flat', 'long', 'round']); assert.ok(totals.size >= 5, 'small rocks and big ones');
@@ -70,7 +80,7 @@ test('a rock has real numbers of its own: its box, its weight (half its box at s
 
 test('a hole: all of a lump on its line, less and less out to its reach, nothing past it; the metal taken is gone from the rock', () => {
   assert.equal(take(0), 1); assert.equal(take(DRILL.core), 1); assert.equal(take(DRILL.reach), 0); assert.equal(take(1), 0);
-  assert.ok(take(0.2) > take(0.3) && take(0.2) < 1 && take(0.3) > 0);
+  { const a = DRILL.core + (DRILL.reach - DRILL.core) / 3, b = DRILL.core + (DRILL.reach - DRILL.core) * 2 / 3; assert.ok(take(a) > take(b) && take(a) < 1 && take(b) > 0); assert.ok(DRILL.core < VEIN.inner[0] && DRILL.reach < VEIN.inner[0], 'a hole down one vein is out of reach of the others\' inner ends'); }
   for (let s = 1; s <= 60; s++) {
     const r = makeRock(seed(s)), before = oreLeft(r), by0 = oreBy(r), b = bestHole(r), worth = holeWorth(r, b.dir);
     assert.ok(near(worth, b.worth) && worth > 0.25, `seed ${s}: the best hole takes ${worth}`);
@@ -184,8 +194,11 @@ const C8 = (list) => list.map(([metal, t]) => ({ metal, t }));
 // a player at the drill, for these tests: the nearest rock that holds a metal the canisters have room for (choose: one
 // of the six nearest instead), a hole each time where the most would come aboard; rocks: heads home when so many rocks
 // are worked (not given: plays until all eight canisters are full)
-function playRun(s, { rocks = Infinity, choose = null, each = null } = {}) {
-  const R = makeRun({ rand: seed(s) }); let at = [0, 0, 0], g = 0;
+// (miss: the player's taps land so many radians off the best spot, each its own way: then only a part of a vein comes
+// aboard, and canisters are left part full, as a child's are)
+function playRun(s, { rocks = Infinity, choose = null, each = null, miss = 0 } = {}) {
+  const R = makeRun({ rand: seed(s) }), aim = seed(s * 31 + 7); let at = [0, 0, 0], g = 0;
+  const off = (d) => { if (!miss) return d; const j = randDir(aim), k = Math.tan(miss); const v = [d[0] + j[0] * k, d[1] + j[1] * k, d[2] + j[2] * k], l = Math.hypot(...v); return v.map((x) => x / l); };
   const far = (r) => Math.hypot(r.pos[0] - at[0], r.pos[1] - at[1], r.pos[2] - at[2]);
   const wanted = (r) => Object.entries(oreBy(r)).some(([m, t]) => t >= 0.03 && R.roomFor(m) > 1e-6);
   while (!R.done && g++ < 20000) {
@@ -196,7 +209,7 @@ function playRun(s, { rocks = Infinity, choose = null, each = null } = {}) {
     }
     const b = bestHole(R.held, 160, (d) => holeWorth(R.held, d, R.cans));
     if (b.worth < 0.005) { R.letGo(); continue; }
-    const rock = R.held, before = oreBy(rock), h = R.drill(b.dir);
+    const rock = R.held, before = oreBy(rock), h = R.drill(off(b.dir));
     if (each) each(R, h, rock, before);
   }
   return R;
@@ -293,7 +306,7 @@ test('a rock of four metals: all four come aboard, each into a canister of its o
   for (let s = 1; s <= 40 && seen < 5; s++) {
     const R = makeRun({ rand: seed(s) }), rock = R.rocks.find((r) => Object.keys(r.metals).length === 4); if (!rock) continue;
     seen++; R.pick(rock.id); R.asked(); while (R.stage === 'drill' && R.held === rock) R.drill(bestHole(rock, 240, (d) => holeWorth(rock, d, R.cans)).dir);
-    assert.ok(Object.keys(R.store()).length >= 3 && R.given === Object.keys(R.store()).length, `seed ${s}: ${JSON.stringify(R.store())}`); checkCans(R.cans);
+    assert.ok(Object.keys(R.store()).length >= 3 && R.given === Object.values(R.store()).reduce((a, t) => a + Math.ceil(t - 1e-9), 0), `seed ${s}: ${JSON.stringify(R.store())} in ${R.given} canisters`); checkCans(R.cans);
   }
   assert.equal(seen, 5);
 });
@@ -362,7 +375,7 @@ test('heading home early: each part-full canister is rounded to the nearest 1/8 
   for (let s = 1; s <= 60; s++) for (const rocks of [1, 2, 4]) {
     // (a few rocks, then home; the canisters as they were at that moment are kept to compare)
     let was = null;
-    const R = playRun(s, { rocks, each(X) { was = X.cans.map((c) => ({ ...c })); } });
+    const R = playRun(s, { rocks, miss: 0.42, each(X) { was = X.cans.map((c) => ({ ...c })); } });
     if (R.stage === 'full') continue;
     early++; assert.equal(R.stage, 'home'); assert.equal(R.early, true); assert.equal(R.done, true);
     R.cans.forEach((c, i) => {
@@ -424,7 +437,7 @@ test('home from a run at the drill: the load is one haul on every slip, the payo
   // (runs played until all eight are full, and runs that head home after one, two or three rocks)
   for (let s = 1; s <= 16; s++) for (const rocks of [Infinity, 1, 2, 3]) {
     const roles = [['drill'], ['pilot', 'drill'], ['pilot', 'drill', 'engineer']][s % 3], n = 20 + s; forget(); flownHaul(n, null);
-    const R = playRun(s, { rocks }), { store } = R.load(), crew = crewOf(); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 };
+    const R = playRun(s, { rocks, miss: 0.42 }), { store } = R.load(), crew = crewOf(); crew.mission = { id: 'mining', captain: 'ruiz', roles, state: 'signed', signed: 1 };
     const full = R.stage === 'full', total = Math.round(sumOf(store) * 1000) / 1000; if (full) fullRuns++; else earlyRuns++;
     const P = MS.land(crew, { n, store }), H = haulOf(n), why0 = `seed ${s}, ${rocks} rocks: ${JSON.stringify(store)}`;
     // the haul's facts are the load: the tonnes of each metal in the Miner's eight canisters
