@@ -560,9 +560,11 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   // (each with its own voxels and floors, and a box round them, so a step far from it costs a comparison or two)
   // (voxel: its own voxels' size, finer than the station's for a ship's narrow rooms; r: the body there)
   // (at: where it stands, if not where it is made: walls.place)
-  function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null, at = null } = {}) {
+  // (box: its voxels' box, if more than its own (a camera's line is felt by a part only from inside that box: the
+  // bridge to the Hauler gives one from the airlock to the Hauler's rooms, src/dockwalk.js)
+  function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null, at = null, box: vbox = null } = {}) {
     drop(key);
-    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [], dy: 0, fr: null };
+    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs, vbox) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [], dy: 0, fr: null };
     for (const g of [...S, ...U]) { if (!g.boundingBox) g.computeBoundingBox(); L.box.union(g.boundingBox); }
     L.box.expandByScalar(0.6); L.wbox = L.box;
     for (const d of D) { const e = { D: d.D, box: d.box, locked: false, part: key, when }; L.doors.push(e); doors.push(e); }

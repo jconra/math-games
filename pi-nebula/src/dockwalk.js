@@ -37,6 +37,9 @@ import { bridgeStands } from './jobs/dock.js';
 // where a person can walk on it: voxels as fine as a ship's cabin's (the tunnel is the door's width), and a person a
 // little slimmer than in the station (half width, m; the station's 0.28, a cabin's 0.15)
 export const WALK = { voxel: 0.05, r: 0.2 };
+// (the box its walls are felt in, in the bridge's frame: across, up, out: from 6 m back inside the airlock to past the
+// Hauler's far side)
+export const WALK_BOX = [[-3, 3], [-0.5, 4.5], [-6, 15]];
 // the hoops' line of light once built (the dock's job's, locked: src/jobs/docklink.js)
 const HOOP = [0.35 * 0.9, 0.85 * 0.9, 1.4 * 0.9];
 
@@ -76,13 +79,16 @@ export function makeDockWalk({ W, walls, crew = () => null }) {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', o.geometry.attributes.position.clone()); if (o.geometry.index) g.setIndex(o.geometry.index.clone());
       g.applyMatrix4(o.matrixWorld); solid.push(g); if (o !== glass) up.push(g);
     });
-    api.made = { root, mats, glassMat, hoopMat, stripMat, solid, up, tunnel: tn };
+    // (its voxels' box: from inside the airlock to the far side of the Hauler's rooms, so the follow camera feels the
+    // bridge's and the tunnel's walls from a head in either; WALK_BOX, in the bridge's frame)
+    const box = new THREE.Box3(); for (let i = 0; i < 8; i++) box.expandByPoint(new THREE.Vector3(WALK_BOX[0][i & 1], WALK_BOX[1][(i >> 1) & 1], WALK_BOX[2][(i >> 2) & 1]).applyMatrix4(frame));
+    api.made = { root, mats, glassMat, hoopMat, stripMat, solid, up, box, tunnel: tn };
     api.stats = { tris: Math.round(tris), draws, ms: Math.round(performance.now() - t0) };
   }
   // stood up, or taken down (the crew member playing changed): its walls, the outer door, the Hauler docked or waiting
   function set(on) {
     api.on = on;
-    if (on) { const t = performance.now(), L = walls.add('dock:bridge', { solid: api.made.solid, up: api.made.up, voxel: WALK.voxel, r: WALK.r }); api.stats.walls = { ms: Math.round(performance.now() - t), voxelsMs: L.ms }; }
+    if (on) { const t = performance.now(), L = walls.add('dock:bridge', { solid: api.made.solid, up: api.made.up, voxel: WALK.voxel, r: WALK.r, box: api.made.box }); api.stats.walls = { ms: Math.round(performance.now() - t), voxelsMs: L.ms }; }
     else walls.drop('dock:bridge');
     if (door && entry) { entry.locked = !on; if (on) W.keepShut.delete(door); else W.keepShut.add(door); }
     hauler();
