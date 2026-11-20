@@ -945,7 +945,7 @@ function crewUniforms(refs) {
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
 }
-function crewMaterial(src, kind, part, paint, atlas) {
+function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
   const m = src.clone(), refs = part && part.refs;
   const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
@@ -988,6 +988,13 @@ function crewMaterial(src, kind, part, paint, atlas) {
   else if (has.marks) m.defines.CREW_MARKS = '';
   if (!('CREW_MASKTEX' in m.defines)) { if (has.lines) m.defines.CREW_LINES = ''; if (has.panels) m.defines.CREW_PANELS = ''; }
   if (has.skin) m.defines.CREW_SKIN = '';
+  // (FRECKLES, below: on a head with skin whose recipe asks for them; every other head's shader is as it was)
+  const FK = freckles && kind === 'head' && has.skin ? freckles : null;
+  if (FK) {
+    m.defines.CREW_FRECKLES = '';
+    u.crFrecFrame = { value: FK.frame }; u.crFrecAt = { value: new THREE.Vector4(...FK.at) }; u.crFreckles = { value: 1 };
+    u.crFrecLook = { value: new THREE.Vector4(FRECKLES.cell, FRECKLES.dot[0], FRECKLES.dot[1], FRECKLES.share) }; u.crFrecTint = { value: new THREE.Vector4(...FRECKLES.tint, FRECKLES.depth) };
+  }
   if (PT) {
     m.defines.CREW_PAINT = ''; m.defines.CR_SKULL = `vec3(${SKULL.map((v) => v.toFixed(4)).join(', ')})`;
     if (PT.line) { m.defines.CR_LINE = ''; m.defines.CR_LINE_N = LINE_N; }
@@ -998,6 +1005,8 @@ function crewMaterial(src, kind, part, paint, atlas) {
     Object.assign(sh.uniforms, u);
     if (PT) sh.vertexShader = 'uniform mat4 crHeadFrame; varying vec3 vCrHead; varying vec3 vCrHeadN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
+    if (FK) sh.vertexShader = 'uniform mat4 crFrecFrame; varying vec3 vCrFrec;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  vCrFrec = (crFrecFrame * vec4(position, 1.0)).xyz;`);
     if (SL) sh.vertexShader = STRAND_VERTEX + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
   crStrandVertex();`);
     if (PB) sh.vertexShader = 'uniform vec3 crStrandSkull; varying vec3 vCrRadial;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
@@ -1017,6 +1026,9 @@ ${PAINT_GLSL}
 #endif
 #ifdef CREW_STRANDS
 ${STRAND_GLSL}
+#endif
+#ifdef CREW_FRECKLES
+${FRECKLE_GLSL}
 #endif
 float crLum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 // (a mask kept in an alpha channel between 4 and 255: lossy WebP drops the colour under a fully clear pixel)
@@ -1063,6 +1075,9 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
       if (crL > crK && crL > crL0) crO *= max(crK + (crM - crK) * (1.0 - exp(-(crL - crK) / max(crM - crK, 1e-4))), crL0) / crL;
       diffuseColor.rgb = mix(crC, crO, crA(sampledDiffuseColor.a));
     }
+  #endif
+  #ifdef CREW_FRECKLES
+    diffuseColor.rgb = mix(diffuseColor.rgb, crFreckled(diffuseColor.rgb), crA(sampledDiffuseColor.a));
   #endif
   diffuseColor.a = opacity;
 #endif
@@ -1360,6 +1375,52 @@ const STRAND_LIGHT = `
     // (dimmed toward the outline, where it lit the locks' edges like paper's)
     outgoingLight += crHi * crStrandO * (1.0 - crStrandSpec3.z * (1.0 - smoothstep(0.0, 0.4, abs(dot(normal, crV)))));
   }`;
+
+// ── FRECKLES (2026-11-19, the character maker; the game's maker, asked whether it should have eye colour and freckles:
+// "Why not, people usually like customizing characters") ───────────────────────────────────────────────────────────
+// A recipe's colours.freckles (1: on) lays freckles on the head's own skin, in the head's material, as the paint is: no
+// new texture and no change to any head. They are small soft dots a shade darker and redder than the skin under them
+// (so they suit every skin tone, and a head's own painted light and shade stay), scattered by a rule in the head's own
+// frame, placed by the head's own eyes (the balls' places, measured from the eye mesh when the person is put together:
+// their middle, their height and half the way between them, `e`): a band across the bridge of the nose and the cheeks,
+// from a little under the eyes down to the nose's tip, fading out toward the ears, and a thinner sprinkle on the
+// forehead. Only where the skin faces forward (never the sides of the head or the neck), and only on skin (the mask).
+// A head with no eyes of its own (Vega's helmet) takes none. They ride the head as its skin does: the dots are worked
+// out from each point's place at rest. Only a head whose recipe asks for them is given this shader.
+// Two sizes together: a few big ones (3 to 5 mm: these are what shows on the title's small pictures, where a true
+// freckle is less than a dot of the screen) and many small ones between them, fainter (what shows close up).
+//   cell: the big dots' grid, in `e`s (an e is about 3 cm): one dot at most in each cell, placed anywhere in it (the
+//   small ones' grid is half that); dot: the smallest and largest dot's radius, of a cell; share: how many cells have a
+//   dot; tint: what the skin is multiplied by at a dot's middle; depth: how much of that is laid on (1: all)
+export const FRECKLES = { cell: 0.34, dot: [0.16, 0.26], share: 0.62, tint: [0.52, 0.36, 0.28], depth: 0.9 };
+const FRECKLE_GLSL = `
+uniform vec4 crFrecAt, crFrecLook, crFrecTint; uniform float crFreckles;
+varying vec3 vCrFrec;
+float crFrecHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// (one layer of dots: q in e's, on a grid of cell c turned a little (so no row of dots runs level), shifted by o)
+float crFrecDots(vec2 q, float c, float o, float share) {
+  float ca = cos(0.5 + o), sa = sin(0.5 + o);
+  vec2 g = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y) / c + o, id = floor(g), f = fract(g);
+  vec2 at = 0.27 + 0.46 * vec2(crFrecHash(id + 3.1 + o), crFrecHash(id + 7.7 + o));
+  float r = mix(crFrecLook.y, crFrecLook.z, crFrecHash(id + 11.3 + o));
+  return step(1.0 - share, crFrecHash(id + o)) * (1.0 - smoothstep(r * 0.6, r, length(f - at)));
+}
+vec3 crFreckled(vec3 skin) {
+  float e = max(crFrecAt.w, 1e-4);
+  // (across from the middle of the face, up from the eyes' line, forward from the eyes' depth: all in e's)
+  vec3 q = vec3((vCrFrec.x - crFrecAt.x) / e, (vCrFrec.y - crFrecAt.y) / e, (vCrFrec.z - crFrecAt.z) / e);
+  float ax = abs(q.x);
+  // the band over the nose and cheeks: under the eyes (higher on the bridge of the nose, between them), down to the nose's tip
+  float top = mix(-0.2, -0.62, smoothstep(0.3, 0.75, ax));
+  float band = (1.0 - smoothstep(top - 0.28, top, q.y)) * smoothstep(-1.75, -1.4, q.y) * (1.0 - smoothstep(1.45, 2.35, ax));
+  // a thinner sprinkle on the forehead, over the brows
+  float brow = 0.4 * smoothstep(0.85, 1.15, q.y) * (1.0 - smoothstep(1.7, 2.3, q.y)) * (1.0 - smoothstep(1.2, 2.0, ax));
+  // (only the front of the face: nothing behind the eyes' own depth by more than an e and a half)
+  float m = max(band, brow) * smoothstep(-1.9, -1.0, q.z);
+  if (m <= 0.001) return skin;
+  float d = max(crFrecDots(q.xy, crFrecLook.x, 0.0, crFrecLook.w), 0.5 * crFrecDots(q.xy, crFrecLook.x * 0.5, 5.3, crFrecLook.w));
+  return mix(skin, skin * crFrecTint.rgb, d * m * crFrecTint.a * crFreckles);
+}`;
 
 // ── paint: stubble on the head's own skin (the buzz cut, and the scalp's shade under a hair with a line) ────────────
 // A hair entry with `paint` (crew.json: the name of one of PAINTS, and its own `colour`) has no mesh: it is a layer in
@@ -1814,7 +1875,7 @@ function applyFace(bones, rig, values = {}) {
   }
 }
 
-function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
+function setColours(mats, { job, uniform, skin, hair, eyes, freckles } = {}) {
   for (const m of mats) {
     if (m.userData.eye) { const e = m.userData.eye; e.crIris.value.copy(eyes ? lin(eyes) : e.crIrisOwn.value); }
     const u = m.userData.crew; if (!u) continue;
@@ -1828,6 +1889,8 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
     u.crSkin.value.copy(skin ? skinTone(lin(skin), m.userData.crewSkinHead || u.crSkinRef.value) : m.userData.crewSkinOf || u.crSkinRef.value);
     if (skin && m.userData.crewHand) u.crSkin.value.multiplyScalar(SKIN_LIMIT.hands);
     u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value);
+    // (FRECKLES: on a head made with them, shown or not)
+    if (u.crFreckles) u.crFreckles.value = +freckles > 0 ? 1 : 0;
   }
 }
 
@@ -3078,6 +3141,23 @@ function placeHead(tpl, { seat = 0, forward = 0, side = 0, size = 1, centre = [0
   }
   tpl.updateMatrixWorld(true);
 }
+// FRECKLES: a head's eyes in its own frame, from its eye mesh on the template (the two balls' box: its middle, and half
+// the way between the balls' centres), and that frame from the skin's own points: { frame, at: [x, y, z, half] }; null
+// for a head without eyes
+function frecklesOf(tpl) {
+  let eyes = null, skin = null;
+  tpl.traverse((o) => {
+    if (!o.isSkinnedMesh || o.userData.part !== 'head') return;
+    const n = o.material && o.material.name;
+    if (n === 'eye') eyes = o; else if (n !== 'cornea' && n !== 'visor' && (!skin || o.geometry.attributes.position.count > skin.geometry.attributes.position.count)) skin = o;
+  });
+  if (!eyes || !skin) return null;
+  const F = frameOf(eyes.userData.frame || eyes.skeleton.bones.some((b) => b.name === 'Head') ? eyes : skin), P = eyes.geometry.attributes.position, v = new THREE.Vector3(), lo = new THREE.Vector3(Infinity, Infinity, Infinity), hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(F); lo.min(v); hi.max(v); }
+  const r = (hi.y - lo.y) / 2, half = (hi.x - lo.x) / 2 - r;
+  if (!(half > 0.01 && half < 0.06)) return null;
+  return { frame: frameOf(skin), at: [(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2, half] };
+}
 // A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
 // Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
 // so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
@@ -3160,6 +3240,8 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   const src = []; tpl.traverse((t) => { if (t.isSkinnedMesh) src.push(t.material); });
   let i = 0, visor = null, painted = null;
   const hairMeshes = [];
+  // (FRECKLES: asked for by the recipe, on a head with eyes: their places in the head's own frame)
+  const freck = head && recipe.colours && +recipe.colours.freckles > 0 ? frecklesOf(tpl) : null;
   person.root.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
@@ -3174,7 +3256,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
     } else {
       // (a painted cut on the head, or a hair's buzz and the scalp's shade under it: THE PAINT FIELD)
       const pt = kind === 'head' && R.hair ? paintOf(HE, lib.buzzOf(R.hair), lib.earsOf(R.head), { atlas, marks, frame: frameOf(o), hairRefs: refsOf.hair }) : null;
-      const mat = crewMaterial(own, kind, refsOf[kind], pt, kind === 'hair' ? atlas : null); o.material = mat; mats.push(mat); meshes[kind] = o;
+      const mat = crewMaterial(own, kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
       // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
       if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       if (pt) { painted = pt; pt.mat = mat; }
