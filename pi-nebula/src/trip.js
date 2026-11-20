@@ -417,7 +417,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         T.filled = Math.min(CARRIES, Math.floor(cutT / FILL));
         countEl.querySelector('b').textContent = `${T.filled} of ${CARRIES}`;
         countEl.querySelector('em').textContent = T.filled >= CARRIES ? lotsWords(sellsFor(T.store).lots) : '';
-        if (T.filled >= CARRIES) { T.phase = 'full'; T.t = 0; armsWant = 'stowed'; say('full'); }
+        // (his word to take them home is the pilot's; with the pilot's seat left to the crew it is Juno's)
+        if (T.filled >= CARRIES) { T.phase = 'full'; T.t = 0; armsWant = 'stowed'; say(iPilot ? 'full' : 'fullCrew'); }
       }
       // (THE PILOT'S SEAT ALONE IS NO LONGER THAN IT WAS: the two wormholes take 1.8 s more between them than the old
       // flashes did, so the wait here is that much shorter. The count and what the load is stay up while the jump
@@ -537,7 +538,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // (out to the rocks, signed for the drill: the drill's own ship and field have to be there)
       ready: () => !toField || !iDrill || !!drill || !!drillErr,
       onOpen() {
-        say(toField ? (st.mine ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
+        // (at the rocks his word that the drill is theirs is only for a crew member who signed for the drill)
+        say(toField ? (st.mine || !iDrill ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
         // (home: the flying at the station is the pilot's again as the far end opens on the station)
         if (!toField && fl) fl.lock(false);
       },
