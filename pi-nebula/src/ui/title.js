@@ -18,12 +18,13 @@ import { showTitle as showShared, esc, ICONS } from '../../../shared/title/title
 import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
 import { OFFERED, lookById, recipeOf } from '../looks.js';
-import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
+import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit, liveShow, liveView, liveHide } from '../portraits.js';
+import { bindTurn } from './turn.js';
 import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange, brings, ownFor } from '../maker.js';
 import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=7', import.meta.url).href;
+const SHEET = new URL('./title.css?v=8', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -94,10 +95,13 @@ const lookRow = (cur, at) => { const k = OFFERED.some((l) => l.id === (cur || at
 // the sides for hear, head, and body. And then some color options for hair, skin, and body"; and eye colour and
 // freckles: "Why not, people usually like customizing characters"). The rules are maker.js's: which parts a player may
 // wear and which go together. Here: the whole person in a window with an arrow at each side for the hair, the head and
-// the body (the one before, the next one, coming round at the ends), their face close in the window's corner (an eye
-// colour or freckles cannot be seen on the whole person at that size), and beside them the colours as swatches. Every
-// press is saved at once with the crew member (their look), the person is drawn again (portraits.js: the part is
-// fetched then, if nobody has worn it yet) and the game builds them so (main.js).
+// the body (the one before, the next one, coming round at the ends), and beside them the colours as swatches. Every
+// press is saved at once with the crew member (their look), the person changes (portraits.js: the part is fetched
+// then, if nobody has worn it yet) and the game builds them so (main.js).
+// THE REAL PERSON, TURNED ROUND (the game's maker, asked whether a still picture was enough: "I would give it orbit
+// controls with the real model"): the window shows the 3D person the crew kit puts together (portraits.js liveShow),
+// and a drag, the wheel, two fingers or the keys turn them round and bring them nearer (ui/turn.js). Until the crew kit
+// is in, the look's picture stands in the window. (The face close in the window's corner is gone: "Take it away".)
 // ANY COLOUR (the game's maker, the same day: "for the color can we get a + that opens up the color picker so we can
 // have other colors?"): each colour row ends in a "+" swatch, which is the browser's own colour picker (a colour input
 // laid unseen over the swatch, so a tap or a click on it, or Enter on it from the keyboard, opens the picker as the
@@ -130,6 +134,10 @@ const swatches = (T, cur) => {
         <i></i>${ICONS.plus}<input type="color" value="${HEX.test(cur || '') ? cur : '#7a8a9a'}" data-pick="${T.id}" data-k="pick:${T.id}" aria-label="${T.word}: pick any color"></label>
     </div></section>`;
 };
+// (the window: what it says to a screen reader, and the small sign at its foot that it turns, till it first has)
+const TURN_SAID = 'Your character. Drag to turn them round, or use the arrow keys; plus and minus come nearer.';
+const TURN_HINT = `<i class="${P}-turnhint" aria-hidden="true"><svg viewBox="0 0 40 16"><path d="M7 5.2C10.5 3.8 15 3 20 3s9.5.8 13 2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M33 13c-3.5 1.1-8 1.8-13 1.8S10.5 14.1 7 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.2 2.6"/><path d="M29.5 1.6l4 3.7-5.1 1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></i>`;
+let turnedOnce = false, turnOff = null;
 const frecklesRow = (on) => `<div class="${P}-heights ${P}-two" role="radiogroup" aria-label="Freckles" data-nav="radio">
   ${[[0, 'No'], [1, 'Yes']].map(([v, word]) => `<button class="${P}-agech is-skip" role="radio" aria-checked="${!!on === !!v}" tabindex="${!!on === !!v ? 0 : -1}"
       data-act="freckles" data-v="${v}" data-k="freckles:${v}">${word}</button>`).join('')}
@@ -140,8 +148,7 @@ function makerHtml(p) {
   const android = !!brings(R.suit), tints = TINTS.filter((T) => !android || T.id === 'uniform' || T.id === 'eyes');
   return `<div class="${P}-maker">
     <div class="${P}-stage" role="group" aria-label="Your character: hair, head and body" data-nav="grid">
-      <span class="${P}-face ${P}-full">${pic(p.look)}</span>
-      <span class="${P}-face ${P}-close">${pic(p.look)}</span>
+      <span class="${P}-face ${P}-full" tabindex="0" role="img" aria-label="${TURN_SAID}">${pic(p.look)}${TURN_HINT}</span>
       ${ROWS.map((row) => { const on = !!lib && !(row.part !== 'suit' && brings(R.suit)); return arrow(row, -1, on) + arrow(row, 1, on); }).join('')}
     </div>
     <div class="${P}-tints">
@@ -178,10 +185,13 @@ function colourPicked(ctx, input, done) {
   if (!moved) return;
   p.look = next;
   wantPicture(next, { from: old, now: true });
-  // (the window, the close face and their card now show this look; the "+" wears the colour, and is the row's choice)
+  // (the window's person wears it at once, and their card shows this look; the "+" wears the colour, and is the row's
+  // choice)
   const key = picKey(next);
   shown.set(key, { ...next });
   for (const el of ctx.el.querySelectorAll(`.${P}-stage .${P}-pic, .${P}-rider[aria-checked="true"] .${P}-pic`)) { el.setAttribute('data-look', key); el.setAttribute('style', vars(next)); el.classList.toggle('is-coming', coming(next)); }
+  const win = ctx.el.querySelector(`.${P}-stage .${P}-full`);
+  if (win) liveShow(win, next);
   const mark = input.parentElement;
   for (const b of mark.parentElement.querySelectorAll('[role="radio"]')) b.setAttribute('aria-checked', 'false');
   mark.style.setProperty('--c', v); mark.classList.add('is-on'); mark.classList.toggle('is-dark', isDark(v)); mark.classList.toggle('is-light', !isDark(v));
@@ -196,6 +206,12 @@ const theme = {
   names: NAMES,
   // (no skin and hair dots: a look here is a whole ready-made person, shown as a picture made ahead of time)
   portrait: pic,
+  // ONE PAGE FOR THE LOOK (2026-11-19; the game's maker, asked whether the New crew member screen should have the arrows
+  // too: "Either put the arrows and customize options there or move the "Pick Your Look" to the next page. But you cant
+  // do it on both pages"): the look is chosen on the crew member's own panel only (the maker, the ready-made looks, the
+  // height). The form asks a name and where to start; the new crew member wears a ready-made look no one else on the
+  // crew has (draft, below), and the panel they land on is where it is changed. (panelReady takes the engine's row of
+  // looks off the form; the form's height row is gone.)
   lookOf: (draft, look) => withSize({ id: look.id }, draft.size || 1),      // what is saved with a new crew member
   lookCardOf: (look) => ({ id: look.id }),
   // a fresh form starts on a look no saved crew member has (two children's crew don't look the same by accident), Medium
@@ -203,8 +219,6 @@ const theme = {
     const used = new Set(players.map((p) => p.look && p.look.id)), free = OFFERED.find((l) => !used.has(l.id));
     return free ? { look: free.id, size: 1 } : { size: 1 };
   },
-  // the Height row on the new crew member's form
-  formMore: (d) => `<section><h3 class="${P}-label">Height</h3>${heightRow(d.size || 1, 'size')}</section>`,
   brand,
   when: aboard,
   cardSaid: (p) => `${esc(p.name)}, ${esc(aboard(p.last).toLowerCase())}`,
@@ -277,12 +291,25 @@ const theme = {
       if (JSON.stringify(next) !== JSON.stringify(p.look)) lookChanged(ctx, p, next);
     },
   },
-  // (ANY COLOUR: each row's "+" is a colour input of the browser's own, heard here: every move of its picker, and its close)
+  // (ANY COLOUR: each row's "+" is a colour input of the browser's own, heard here: every move of its picker, and its close.
+  // THE REAL PERSON in the maker's window, turned by ui/turn.js; none drawn while the panel shows the new crew member's
+  // form. ONE PAGE FOR THE LOOK: the form's own row of looks, which the engine always draws, taken off it)
   panelReady(panelEl, ctx) {
     for (const input of panelEl.querySelectorAll('input[data-pick]')) {
       input.addEventListener('input', () => colourPicked(ctx, input, false));
       input.addEventListener('change', () => colourPicked(ctx, input, true));
     }
+    if (turnOff) { turnOff(); turnOff = null; }
+    const win = panelEl.querySelector(`.${P}-stage .${P}-full`), p = ctx.current();
+    if (win && p && ctx.S.view !== 'new') {
+      if (turnedOnce) win.classList.add('is-turned');
+      liveShow(win, p.look);
+      turnOff = bindTurn(win, { get: () => liveView(), set: (v) => liveView(v), turned: () => { turnedOnce = true; win.classList.add('is-turned'); } });
+    } else liveHide();
+    const looks = panelEl.querySelector(`.${P}-form .${P}-looks`);
+    if (looks) { const sec = looks.closest('section'); if (sec) sec.remove(); }
+    const preview = panelEl.querySelector(`.${P}-form .${P}-preview`);
+    if (preview) preview.remove();
   },
   // (the saved crew's made looks: their pictures kept for the next visit, any not yet drawn drawn; and the arrows come
   // alive when the crew kit's list of parts is in)
@@ -303,7 +330,7 @@ const theme = {
     players: 'Crew',
     newPlayer: 'New crew member',
     formTitle: 'New crew member',
-    formLine: 'A name, a look, where to start and a height',
+    formLine: 'A name and where to start. Your look comes next.',
     difficultySmall: 'where the jobs\' questions begin',
     difficultyLine: (id) => ({
       easy: 'Easy: the very first questions. Counting, and small sums.',

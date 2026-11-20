@@ -176,14 +176,25 @@
    dimmed. */
 .cst-maker { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
 .cst-stage { position: relative; height: 322px; }
-.cst-stage .cst-face.cst-full { width: 100%; height: 100%; aspect-ratio: auto; }
-/* (the face close, in the window's corner: an eye colour or freckles cannot be seen on the whole person at this size) */
-.cst-stage .cst-face.cst-close { position: absolute; left: 8px; bottom: 8px; width: 90px; padding: 2px; background: var(--line-hi); }
-.cst-stage .cst-close .cst-pic { background-size: 175% auto, auto; background-position: 50% 26%, center; }
-/* (the person stands a little to the right of the window's middle, so their feet are clear of the face) */
-.cst-stage .cst-full .cst-pic { background-position: 68% bottom, center, center, center; }
+.cst-stage .cst-face.cst-full { position: relative; width: 100%; height: 100%; aspect-ratio: auto; }
+.cst-stage .cst-full .cst-pic { background-position: 50% bottom, center, center, center; }
 .cst-pic { transition: filter 0.12s; }
 .cst-pic.is-coming { filter: brightness(0.6) saturate(0.6); }
+/* THE REAL PERSON (portraits.js liveShow, ui/turn.js): the 3D person drawn in a canvas laid over the window's picture,
+   turned by a drag sideways (a finger's drag up or down still scrolls the page), the wheel, two fingers or the keys. Once
+   they are drawn (data-live) the picture under them gives way to the window's own backing; while the next part is on
+   its way (data-live="coming") the person before is dimmed. A small sign at the window's foot says it turns, until the
+   first turn. */
+.cst-stage .cst-full { touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; }
+.cst-stage .cst-full:active { cursor: grabbing; }
+.cst-stage .cst-full[data-live] .cst-pic { --body: none !important; }
+.cst-stage .cst-full canvas { transition: filter 0.12s; }
+.cst-stage .cst-full[data-live="coming"] canvas { filter: brightness(0.6) saturate(0.6); }
+.cst-stage .cst-full::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+.cst-stage .cst-full:focus-visible::after { box-shadow: inset 0 0 0 3px var(--focus); }
+.cst-turnhint { position: absolute; left: 50%; bottom: 6px; width: 40px; height: 16px; transform: translateX(-50%); color: var(--dim); opacity: 0.85; pointer-events: none; transition: opacity 0.4s; z-index: 1; }
+.cst-turnhint svg { display: block; width: 100%; height: 100%; }
+.cst-full.is-turned .cst-turnhint, .cst-full:not([data-live]) .cst-turnhint { opacity: 0; }
 .cst-arrow {
   --cut: 8px; --fill: rgba(40, 47, 56, 0.92);
   position: absolute; width: 44px; height: 44px; padding: 0; display: grid; place-items: center; align-content: center; gap: 1px;
@@ -236,13 +247,13 @@
 /* (a look's name is a plain description, for a screen reader; the picture says it to everyone else) */
 .cst-lname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* the new crew member's form: the whole person on the left, the name and the looks beside them */
+/* the new crew member's form: the name, then where to start (the look is chosen on the crew member's own panel: title.js
+   ONE PAGE FOR THE LOOK) */
 .cst-form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; align-items: start; }
 .cst-who { display: contents; }
 .cst-form > section, .cst-form > .cst-formbtns, .cst-form > .cst-tones { grid-column: 1 / -1; }
 .cst-preview { grid-column: 1; grid-row: 1 / span 2; }
-.cst-field { grid-column: 2; grid-row: 1; display: block; }
-.cst-form > section:first-of-type { grid-column: 2; grid-row: 2; }
+.cst-field { grid-column: 1 / -1; grid-row: 1; display: block; }
 .cst-field > span { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
 .cst-input {
   --cut: 9px; --fill: rgba(6, 8, 11, 0.66);
@@ -387,7 +398,6 @@
   .cst-looks.is-small { grid-template-columns: repeat(8, minmax(0, 44px)); }
   .cst-maker { grid-template-columns: 180px minmax(0, 1fr); gap: 12px; }
   .cst-stage { height: 232px; }
-  .cst-stage .cst-face.cst-close { width: 56px; left: 5px; bottom: 5px; }
   .cst-arrow { width: 36px; height: 36px; --cut: 7px; }
   .cst-arrow.is-prev { left: 5px; }
   .cst-arrow.is-next { right: 5px; }
@@ -445,7 +455,6 @@
   /* (the maker: the window the whole width with the arrows inside its edges, big enough for a thumb; the colours under it) */
   .cst-maker { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .cst-stage { height: 336px; }
-  .cst-stage .cst-face.cst-close { width: 104px; left: 10px; bottom: 10px; }
   .cst-arrow { width: 62px; height: 50px; --cut: 10px; }
   .cst-arrow.is-prev { left: 10px; }
   .cst-arrow.is-next { right: 10px; }

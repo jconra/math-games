@@ -17,7 +17,7 @@
 // a dark uniform stand off the dark glass), drawn at twice the size and scaled down, on a see-through background.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { makeCrew } from '../kit/crew.js';
+import { makeCrew, SIZES as HEIGHTS } from '../kit/crew.js';
 import { LOOKS, lookById, recipeOf } from './looks.js';
 import { isMade, keyOf } from './maker.js';
 
@@ -53,26 +53,35 @@ function openStudio() {
 }
 export function closeStudio() {
   if (!studio) return;
-  // (the person the character maker left standing in it, A MADE LOOK'S PICTURES below)
+  // (the person the character maker left standing in it, A MADE LOOK'S PICTURES below, and the window's canvas: THE
+  // FIGURE IN THE MAKER'S WINDOW)
+  if (LIVE.host) liveHide(false);
   if (held) { studio.scene.remove(held.c.root); held.c.dispose(); held = null; }
   studio.scene.environment.dispose(); studio.pmrem.dispose(); studio.renderer.dispose(); studio.renderer.forceContextLoss();
   studio = null;
 }
 
 const _h = new THREE.Vector3(), _t = new THREE.Vector3();
-// one person, posed, drawn as each kind asked for: { face: data address, body: ... }
-async function draw(lib, recipe, kinds, pose = null) {
+// one person, posed, drawn as each kind asked for: { face: data address, body: ... } (whoever else stands in the studio,
+// the maker's window's person, stands aside meanwhile)
+async function draw(lib, recipe, kinds, pose = null, quality = 0.9) {
   const S = openStudio(), stand = { ...POSE, ...(pose || {}) };
   const c = await makeCrew(lib, recipe);
   S.scene.add(c.root);
   c.play(stand.clip, { fade: 0 }); c.update(0); c.update(stand.at);
-  const got = snap(S, c, kinds);
+  const other = held && held.c.root;
+  if (other) other.visible = false;
+  const got = snap(S, c, kinds, quality);
+  if (other) other.visible = true;
   S.scene.remove(c.root); c.dispose();
+  liveRender();
   return got;
 }
 // a person standing in the studio, drawn as each kind asked for
 function snap(S, c, kinds, quality = 0.9) {
   const got = {};
+  // (as made: facing the front and their own height, whatever the maker's window last had them turned to)
+  c.root.rotation.set(0, 0, 0); c.root.scale.setScalar(1);
   // (a head sized on its outfit, kit/crew.js THE HEAD'S PLACE, is sized about its Head joint: its middle, and the face
   // picture's camera, are taken by that size, so every face fills its window alike. 1 for a head as made)
   const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
@@ -260,21 +269,55 @@ export function wantPicture(look, { from = null, now = false } = {}) {
   pump();
 }
 
+// (what a person is put together from, apart from their colours: two looks alike in this are one person, coloured)
+const pkOf = (recipe) => JSON.stringify([recipe.suit, recipe.head, recipe.hair, recipe.face || {}, !!(recipe.colours && recipe.colours.freckles)]);
+const coloursOf = (recipe) => ({ uniform: null, skin: null, hair: null, eyes: null, ...(recipe.colours || {}) });
+// The person left standing in the studio (held), wearing the recipe: the one standing, coloured, if it is put together
+// from the same parts; else put together afresh. One at a time (the pictures and the maker's window both ask for one).
+// (still: asked again when its turn comes, and nothing done if it says no: the looks stepped past in the window)
+let standQ = Promise.resolve();
+function standFor(recipe, still = null) {
+  const run = standQ.then(async () => {
+    const pk = pkOf(recipe);
+    if (still && !still()) return null;
+    if (!held || held.pk !== pk) {
+      const c = await makeCrew(lib, recipe), S = openStudio();
+      if (held) { S.scene.remove(held.c.root); held.c.dispose(); }
+      held = { pk, c, frame: null }; S.scene.add(c.root);
+      c.play(POSE.clip, { fade: 0 }); c.update(0);
+      posed(c); held.frame = frameOf(c);
+      if (pk === LIVE.pk) live.made++;
+    } else held.c.setColours(coloursOf(recipe));
+    return held.c;
+  });
+  standQ = run.catch(() => {});
+  return run;
+}
+// (stood as the ready-made pictures' people stand, the eyes on the face picture's camera, as after a picture)
+function posed(c) {
+  c.root.rotation.set(0, 0, 0); c.root.scale.setScalar(1);
+  if (c.person.cur) c.person.cur.time = 0;
+  c.update(0); c.update(POSE.at);
+  c.root.updateMatrixWorld(true);
+  const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
+  c.bones.Head.getWorldPosition(_h);
+  c.lookAt(_t.set(_h.x + 0.26 * k, _h.y + 0.09 * k, _h.z + 0.88 * k), { dart: false }); c.update(0.3);
+}
 async function drawMade(look) {
   const recipe = recipeOf(look, lib);
   delete recipe.size;
-  const pk = JSON.stringify([recipe.suit, recipe.head, recipe.hair, recipe.face || {}, !!(recipe.colours && recipe.colours.freckles)]);
-  if (!held || held.pk !== pk) {
-    const c = await makeCrew(lib, recipe), S = openStudio();
-    if (held) { S.scene.remove(held.c.root); held.c.dispose(); }
-    held = { pk, c }; S.scene.add(c.root);
-    c.play(POSE.clip, { fade: 0 }); c.update(0);
-  } else held.c.setColours({ uniform: null, skin: null, hair: null, eyes: null, ...(recipe.colours || {}) });
+  // (another crew member's look while the maker's window shows someone else: drawn on its own, the one in the window
+  // left standing as they are)
+  if (LIVE.host && held && pkOf(recipe) !== LIVE.pk) return draw(lib, recipe, ['body', 'face'], null, 0.86);
+  const c = await standFor(recipe);
   // (stood as the ready-made pictures' people stand, each time)
-  const c = held.c;
   if (c.person.cur) c.person.cur.time = 0;
   c.update(0); c.update(POSE.at);
-  return snap(openStudio(), c, ['body', 'face'], 0.86);
+  const got = snap(openStudio(), c, ['body', 'face'], 0.86);
+  // (the window's person in the window's own colours again, drawn again at once: the picture was taken in between)
+  if (LIVE.recipe && held && held.c === c && held.pk === LIVE.pk) c.setColours(coloursOf(LIVE.recipe));
+  liveRender();
+  return got;
 }
 async function pump() {
   if (busy || !lib || !waiting.length) return;
@@ -295,6 +338,117 @@ async function pump() {
   tell(picKey(w.look));
   await breath();
   busy = false;
-  if (waiting.length) pump(); else restTimer = setTimeout(() => { if (!busy) closeStudio(); }, REST_AFTER);
+  if (waiting.length) pump(); else rest();
 }
-export function restStudio() { clearTimeout(restTimer); if (!busy) closeStudio(); else restTimer = setTimeout(restStudio, 1500); }
+// (the studio put away a while after its last picture, unless the maker's window is showing its person)
+function rest() { clearTimeout(restTimer); restTimer = setTimeout(() => { if (!busy && !LIVE.host) closeStudio(); }, REST_AFTER); }
+// (when the game starts: the maker's window is gone with the title, and the studio with it)
+export function restStudio() { clearTimeout(restTimer); if (LIVE.host) liveHide(false); if (!busy) closeStudio(); else restTimer = setTimeout(restStudio, 1500); }
+
+// ── THE FIGURE IN THE MAKER'S WINDOW (2026-11-19; the game's maker, asked whether a still picture of the character was
+// enough: "I would give it orbit controls with the real model") ────────────────────────────────────────────────────
+// The character maker's window (ui/title.js) shows the real 3D person, put together by the crew kit as they are aboard,
+// and the player turns them round and comes nearer (ui/turn.js). To stay quick on a phone it is ONE person, the studio's
+// own (the person a made look's pictures are taken of: a part changed is put together once, for both), drawn into the
+// studio's own canvas laid in the window, only while the window is on the screen and only when something changes (a
+// turn, a part, a colour, the window's size): nothing is drawn while the player just looks. They stand as the pictures'
+// people stand (POSE) and wear the height picked; they turn on the spot under the studio's lights (the lights stay
+// with the eye, so whichever side is seen is lit as the front is in the pictures). While a new part is on its way the
+// person before stays in the window, dimmed.
+//   liveShow(el, look)   the person wearing `look` in the element `el` (the window): its canvas laid in it, and el's
+//                        data-live attribute 'ready' (drawn as worn now) or 'coming' (the one before, still drawn);
+//                        false (nothing done) until the crew kit is in
+//   liveView(v)          { yaw: radians round, pitch: radians from above, zoom: 0 the whole person .. 1 the face };
+//                        with v, the view set and drawn (each part held to LIVE_VIEW's limits); the view as it is now
+//   liveHide()           the canvas taken out of the window; nothing drawn till liveShow again
+//   live                 for the rigs: { frames drawn, made: people put together for it, view }
+// The view is kept from one look to the next (an arrow pressed with the person seen from behind still shows them from
+// behind), and starts as the pictures stand: a little turned, as a three-quarter view.
+export const LIVE_VIEW = { yaw: -0.24, pitch: 0.05, zoom: 0, pitchMost: [-0.2, 0.55], fov: 22, close: 0.6, px: 2 };
+const LIVE = { el: null, host: null, recipe: null, pk: null, size: 1, view: { yaw: LIVE_VIEW.yaw, pitch: LIVE_VIEW.pitch, zoom: LIVE_VIEW.zoom }, raf: 0, ro: null, cam: null };
+export const live = { frames: 0, made: 0, view: LIVE.view };
+const TALLEST = Math.max(...Object.values(HEIGHTS));
+// (where the person's head is, as made and facing the front: what the window frames them by)
+function frameOf(c) {
+  c.root.updateMatrixWorld(true);
+  const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
+  c.bones.Head.getWorldPosition(_h);
+  return { head: _h.y + 0.09 * k, headZ: _h.z + 0.03 * k };
+}
+export function liveShow(el, look) {
+  if (!lib || !el) return false;
+  const recipe = recipeOf(look, lib), size = +recipe.size > 0 ? +recipe.size : 1;
+  delete recipe.size;
+  const pk = pkOf(recipe);
+  LIVE.recipe = recipe; LIVE.size = size; LIVE.pk = pk;
+  const S = openStudio();
+  clearTimeout(restTimer);
+  if (LIVE.host !== el) {
+    if (LIVE.ro) LIVE.ro.disconnect();
+    if (LIVE.host && LIVE.host !== el) LIVE.host.removeAttribute('data-live');
+    LIVE.host = el;
+    LIVE.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => liveDraw()) : null;
+    if (LIVE.ro) LIVE.ro.observe(el);
+  }
+  if (S.canvas.parentElement !== el) {
+    S.canvas.setAttribute('aria-hidden', 'true');
+    S.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
+    el.appendChild(S.canvas);
+  }
+  if (held && held.pk === pk) held.c.setColours(coloursOf(recipe));
+  else standFor(recipe, () => LIVE.pk === pk).then((c) => { if (LIVE.pk === pk && held && held.c === c) { c.setColours(coloursOf(LIVE.recipe)); liveDraw(); } }).catch((e) => console.warn('Pi Nebula: the character could not be put together', e));
+  liveDraw();
+  return true;
+}
+export function liveView(v) {
+  if (v) {
+    const V = LIVE.view, M = LIVE_VIEW.pitchMost;
+    if (Number.isFinite(+v.yaw)) V.yaw = +v.yaw;
+    if (Number.isFinite(+v.pitch)) V.pitch = Math.max(M[0], Math.min(M[1], +v.pitch));
+    if (Number.isFinite(+v.zoom)) V.zoom = Math.max(0, Math.min(1, +v.zoom));
+    liveDraw();
+  }
+  return { ...LIVE.view };
+}
+export function liveHide(soon = true) {
+  if (LIVE.ro) LIVE.ro.disconnect();
+  LIVE.ro = null;
+  if (LIVE.host) LIVE.host.removeAttribute('data-live');
+  if (studio && studio.canvas.parentElement) studio.canvas.remove();
+  LIVE.host = null;
+  if (LIVE.raf) cancelAnimationFrame(LIVE.raf);
+  LIVE.raf = 0;
+  if (soon && !busy) rest();
+}
+// (drawn once, at the next frame, however many changes asked for it meanwhile)
+function liveDraw() { if (LIVE.host && !LIVE.raf) LIVE.raf = requestAnimationFrame(() => { LIVE.raf = 0; liveRender(); }); }
+const _c = new THREE.Vector3();
+function liveRender() {
+  const el = LIVE.host, S = studio;
+  if (!el || !S || !el.isConnected) return;
+  const ready = !!held && held.pk === LIVE.pk;
+  el.setAttribute('data-live', held ? (ready ? 'ready' : 'coming') : 'coming');
+  if (!held || !held.frame) return;
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w < 2 || h < 2) return;
+  const px = Math.min(LIVE_VIEW.px, (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1);
+  const c = held.c, F = held.frame, V = LIVE.view, size = ready ? LIVE.size : 1;
+  c.root.rotation.set(0, V.yaw, 0); c.root.scale.setScalar(size); c.root.updateMatrixWorld(true);
+  const cam = LIVE.cam || (LIVE.cam = new THREE.PerspectiveCamera(LIVE_VIEW.fov, 1, 0.05, 60));
+  // the whole person, with room over their head for the tallest height (so a height picked is seen), the feet at the
+  // bottom; nearer, their head and shoulders (zoom eased, so the first steps in are small)
+  const z = V.zoom * V.zoom * (3 - 2 * V.zoom);
+  const top = (F.head + 0.2) * TALLEST, bottom = -0.04;
+  const mid = (top + bottom) / 2 + ((F.head - 0.07) * size - (top + bottom) / 2) * z, tall = (top - bottom) + (LIVE_VIEW.close - (top - bottom)) * z;
+  cam.fov = LIVE_VIEW.fov; cam.aspect = w / h; cam.updateProjectionMatrix();
+  const t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+  // (the height fits, and the person's width when the window is narrow)
+  const d = Math.max(tall / 2 / t, (1.0 - 0.55 * z) / 2 / (t * cam.aspect));
+  _c.set(0, mid, F.headZ * size * z);
+  cam.position.set(_c.x, _c.y + Math.sin(V.pitch) * d, _c.z + Math.cos(V.pitch) * d);
+  cam.lookAt(_c);
+  S.renderer.setSize(Math.round(w * px), Math.round(h * px), false);
+  S.renderer.shadowMap.needsUpdate = true;
+  S.renderer.render(S.scene, cam);
+  live.frames++;
+}
