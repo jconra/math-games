@@ -1,5 +1,6 @@
 // THE LIFT, IN THE GAME: one box at three stops (the control room at the top of the tower, the main deck by the
-// junction, the store room on the lower level: kit/places-plan.js STOPS has the game's maker's words). Walked into,
+// junction, Cargo (in the code: the store) on the lower level: kit/places-plan.js STOPS has the game's maker's
+// words). Walked into,
 // its panel comes up: the two other stops. One picked, its doors shut, it says where it is going, the player is taken
 // to the same spot in the same-looking box at that stop, and its doors open there. No shaft and no ride to believe
 // ("the elevator doesn't have to be completely believable").
@@ -17,6 +18,8 @@
 //   lift.go(id)               pick a stop, as its button does (for the rigs too); false if it cannot be picked now
 //   lift.stop()               back to the title: any ride finished at once, the panel down
 //   lift.state()              { here, place, ride, doors, prompt, flyby, outsideOff } for the rigs
+//   lift.crewAt               whose people are about now: the place the player is in, or on a ride the one it goes to
+//                             once its doors are shut (src/people.js: the control room's and Cargo's people)
 import * as THREE from 'three';
 import { updateDoors } from '../kit/layout.js';
 import { STOPS, RIDE, stopIn, carry, choices, placeOf, words, boxPoint, outOf } from './liftrules.js';
@@ -149,6 +152,9 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
     get viewing() { return !ride && !!hold; },
     get here() { return here; },
     get place() { return place; },
+    // (whose people are about now, src/people.js: the place the player is in; on a ride, the one they left until its
+    // doors are shut, then the one they are going to, so each place's people come and go behind shut doors)
+    get crewAt() { return ride ? (ride.phase === 'shut' ? ride.from : ride.to) : place; },
     doors, go, flyNow: () => { fly.wait = 0; },
     update(dt, P, on = true) {
       playing = !!on && !!P;

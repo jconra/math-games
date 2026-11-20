@@ -19,6 +19,9 @@
 //   down by hand: they are marked and worked out again whenever boarding.stands changes)
 //   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson, onPatch
 //   people.plan()  everyone's spots and ways, for the plan from above (the rigs)
+//   people.update's `place` and `soon` (src/lift.js crewAt, here): the people who work in the control room or in
+//                  Cargo (life.js ROOM_CREW) are about only while `place` is theirs; `soon`: the player is in the lift,
+//                  so they are made now if they are not yet (THE PLACES ONLY THE LIFT GOES TO, below)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
 //   people.bubbles, people.say(P, words)   the chat bubbles (bubbles.js)
 //   resolve(W, walls, at) -> { pos, heading } | null                where a spot in spots.js is, by the station's names
@@ -60,7 +63,9 @@ import { makeCrew } from '../kit/crew.js';
 import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
-import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, SCAN_BED } from './life.js';
+import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED } from './life.js';
+import { placeOf, STOPS } from './liftrules.js';
+import { TOWER, STORE } from '../kit/places-plan.js';
 import { MOVES_ON, MOVES_OFF, SECS as BED_SECS, pose as onBedPose } from './onbed.js';
 import { STAND, shine } from './player.js';
 import { addMoves } from './moves.js';
@@ -230,6 +235,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const level = (x, z) => { const i = Math.floor((x - X0) / 0.25), k = Math.floor((z - Z0) / 0.25); return i >= 0 && k >= 0 && i < NX && k < NZ ? keepOff[k * NX + i] : 0; };
   const noGo = (x, z) => level(x, z) >= 1;          // (for the ways and the spots: the patches and their margins)
   const onPatch = (x, z) => level(x, z) >= 2;       // (for walking and the alarms: the patches themselves)
+  // (the map is of the main deck's floor: the control room up the tower and Cargo under the deck lie over and under the
+  // same squares and have no patches of their own, so their people (P.home) and their spots keep off none; floorOf: the
+  // floor a point is over, for "on the floor")
+  const onDeck = (p) => placeOf(p) === 'deck';
+  const floorOf = (p) => { const k = placeOf(p); return k === 'tower' ? TOWER.floor : k === 'store' ? STORE.floor : 0; };
+  const patchFor = (P, x, z) => !P.home && onPatch(x, z);
   // ALL OF THEM MARKED, and marked again whenever a ship stands somewhere else than it did (the Miner set down by hand
   // anywhere on its hangar's floor, boarding.js stand: its lift's patch and the crane's patches go with it) or the
   // crane's round is one with other places in it
@@ -317,7 +328,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     return false;
   };
-  const okSpot = (p, post = false) => p && p.y < 0.45 && !noGo(p.x, p.z) && (post || (roomy(p) && walkOut(p)));
+  const okSpot = (p, post = false) => p && p.y - floorOf(p) < 0.45 && !(onDeck(p) && noGo(p.x, p.z)) && (post || (roomy(p) && walkOut(p)));
   for (const [name, defs] of Object.entries(SPOTS)) {
     groups[name] = [];
     for (const at of defs) {
@@ -353,19 +364,35 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     seats[name] = [];
     for (const d of defs) for (const pc of pieces.filter((x) => x.piece === d.piece && x.variant === d.variant && x.room === d.room)) {
       const o = new THREE.Vector3().applyMatrix4(pc.M), f = new THREE.Vector3(0, 0, 1).transformDirection(pc.M);
+      // (a desk chair: only one at the desk it is said to be at, within 2 m of it)
+      let desk = null;
+      if (d.near) { desk = pieces.filter((x) => x.piece === d.near.piece && (!d.near.variant || x.variant === d.near.variant) && x.room === d.room).map((x) => new THREE.Vector3().applyMatrix4(x.M)).find((q) => Math.hypot(q.x - o.x, q.z - o.z) < 2) || null; if (!desk) continue; }
       const list2 = [];
       if (d.face === 'table') {
         const t = tables.reduce((b, q) => (!b || q.distanceTo(o) < b.distanceTo(o) ? q : b), null); if (!t) continue;
         const hd = Math.atan2(t.x - o.x, t.z - o.z); list2.push({ seat: o.clone(), heading: hd, back: new THREE.Vector3(-Math.sin(hd), 0, -Math.cos(hd)), table: t });
+      } else if (d.face === 'own') {
+        // (facing the way the chair faces, its desk; two at one desk sit "at one table", and may chat)
+        const hd = Math.atan2(f.x, f.z); list2.push({ seat: o.clone(), heading: hd, back: f.clone().negate(), table: desk || o.clone(), beside: true });
       } else {
         const hd = Math.atan2(f.x, f.z), side = new THREE.Vector3(Math.cos(hd), 0, -Math.sin(hd));
         for (const k of d.two ? [-0.42, 0.42] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true, table: o.clone() });
       }
       for (const s of list2) {
-        // where one stands to sit down: behind a stool (away from its table), in front of a bench
-        const dir = s.front ? s.back.clone().negate() : s.back, out = s.front ? 0.5 : 0.55;
-        const ap = walls.snap(s.seat.x + dir.x * out, s.seat.y + 0.35, s.seat.z + dir.z * out, 0.35);
-        if (!ap || noGo(ap.x, ap.z) || !roomy(ap, 0.28) || !walkOut(ap)) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
+        // where one stands to sit down: behind a stool (away from its table), in front of a bench, beside a desk chair
+        // (its back is in the way behind it, its desk in front: the side away from the desk's middle first)
+        let ap = null;
+        const clearAt = (q) => q && !(onDeck(q) && noGo(q.x, q.z)) && roomy(q, 0.28) && walkOut(q);
+        if (s.beside) {
+          const across = new THREE.Vector3(Math.cos(s.heading), 0, -Math.sin(s.heading)), out = 0.6;
+          const sides = [1, -1].sort((a, b) => Math.hypot(s.seat.x + across.x * b - s.table.x, s.seat.z + across.z * b - s.table.z) - Math.hypot(s.seat.x + across.x * a - s.table.x, s.seat.z + across.z * a - s.table.z));
+          for (const k of sides) { const q = walls.snap(s.seat.x + across.x * k * out, s.seat.y + 0.35, s.seat.z + across.z * k * out, 0.2); if (clearAt(q)) { ap = q; break; } }
+        } else {
+          const dir = s.front ? s.back.clone().negate() : s.back, out = s.front ? 0.5 : 0.55;
+          ap = walls.snap(s.seat.x + dir.x * out, s.seat.y + 0.35, s.seat.z + dir.z * out, 0.35);
+          if (!clearAt(ap)) ap = null;
+        }
+        if (!ap) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
         seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, table: s.table, who: null, bad: 0 });
       }
     }
@@ -442,13 +469,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       for (const q of pts) {
         if (T && (q === T.at[0] || q === T.at[1])) continue;
         const r = T || talkPlaces.has(q) ? LIFE.talkRoom : LIFE.room;
-        if (Math.hypot(q.x - p.x, q.z - p.z) < r) return true;
+        // (on the same floor: Cargo's spots lie under the main deck's, the control room's over the hangars')
+        if (Math.hypot(q.x - p.x, q.z - p.z) < r && Math.abs(q.y - p.y) < 1.5) return true;
       }
     }
     return false;
   };
   // (someone free to be asked over: to talk, or to run the scanner; about as P is (both near the player, or both not))
-  const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away);
+  // (and in the same place: the control room's and Cargo's people (P.home) only with each other)
+  const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away) && (q.home || null) === (P.home || null);
   function claimFor(P, step) {
     const { kind, group, n } = parse(step);
     if (kind === 'sit') {
@@ -579,11 +608,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   function avoidFor(P, to) {
     return (x, z) => {
-      if (noGo(x, z)) return true;
+      if (!P.home && noGo(x, z)) return true;
       if (Math.hypot(x - to.x, z - to.z) < 0.7) return false;
       if (P.away) return false;       // (someone away keeps off the patches, and nobody else is there for them)
       const M = stillMap(), i = Math.floor(x), k = Math.floor(z);
-      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const L = M.get((i + a) * 4096 + k + b); if (L) for (const Q of L) if (Q !== P && Math.hypot(Q.pos.x - x, Q.pos.z - z) < LIFE.keepFrom) return true; }
+      // (anyone standing still on the same floor: not someone in Cargo under the deck, or in the control room over it)
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const L = M.get((i + a) * 4096 + k + b); if (L) for (const Q of L) if (Q !== P && Math.hypot(Q.pos.x - x, Q.pos.z - z) < LIFE.keepFrom && Math.abs(Q.pos.y - P.pos.y) < 1.5) return true; }
       return false;
     };
   }
@@ -628,7 +658,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   let seeking = null;
   function presence(dt, focus, camera) {
     presenceClock -= dt; if (presenceClock > 0) return; presenceClock = PRESENCE.every;
-    const L = list.filter((P) => !P.hidden);
+    // (the control room's and Cargo's people are not counted: they are about exactly while the player is in their
+    // place, THE PLACES ONLY THE LIFT GOES TO)
+    const L = list.filter((P) => !P.hidden && !P.home);
     for (const P of L) P.rank = Math.hypot(P.pos.x - focus.x, P.pos.z - focus.z) + Math.abs(P.pos.y - focus.y) * 2;
     for (const P of L) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank ?? Infinity) : P.rank; }
     L.sort((a, b) => a.rankPair - b.rankPair || a.order - b.order);
@@ -673,7 +705,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const bubbles = makeBubbles({ camera: W.camera, walls });
   // (focus: where the nearest people are counted from, if not the player on their feet: the ship they are flying about
   // the station, src/visit.js)
-  function update(dt, { player = null, camera, now = null, focus = null }) {
+  function update(dt, { player = null, camera, now = null, focus = null, place = null, soon = false }) {
     frame++; seen.length = 0;
     clock = now != null ? now : clock + dt;
     zoneClock -= dt;
@@ -683,7 +715,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // left standing on one, or inside the ship, goes on with their day from there)
     if (markedFor !== marksKey()) {
       markAll(); stillV++;
-      for (const P of list) { if (P.hidden || P.away || P.walking || P.scripted || !P.act || P.act.kind === 'walk' || ['sat', 'sitting', 'rising'].includes(P.act.phase)) continue; if (onPatch(P.pos.x, P.pos.z) || !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.22)) { if (P.cap && P.cap.busy) endOffer(P); next(P); } }
+      for (const P of list) { if (P.hidden || P.home || P.away || P.walking || P.scripted || !P.act || P.act.kind === 'walk' || ['sat', 'sitting', 'rising'].includes(P.act.phase)) continue; if (onPatch(P.pos.x, P.pos.z) || !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.22)) { if (P.cap && P.cap.busy) endOffer(P); next(P); } }
       // (and anyone on their way across that ship's hangar: their way worked out again round the ship where it now is,
       // or, their spot now under it, something else to do)
       const hangars = new Set((boarding?.ships || []).filter((s) => (s.lifts && s.lifts.length) || s.moved).map((s) => s.hangar));
@@ -697,6 +729,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
     news.update(dt);
     presence(dt, focus || (player ? player.pos : camera.position), camera);
+    homes(dt, place, soon, camera);      // (the control room's and Cargo's people: about only while the player is there)
     for (const P of list) {
       const c = P.c;
       if (P.hidden) { P.shown = false; continue; }
@@ -1321,7 +1354,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const [s, b] of [[0.75, -0.15], [-0.75, -0.15], [0.55, -0.55], [-0.55, -0.55], [0, -0.8], [0.9, 0.1], [-0.9, 0.1]]) {
       _y.set(P.pos.x - uz * s + ux * b, P.pos.y, P.pos.z + ux * s + uz * b);
       const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26, openFor(P));
-      if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || onPatch(t.x, t.z) || someoneAt(t, P, LIFE.body)) continue;
+      if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || patchFor(P, t.x, t.z) || someoneAt(t, P, LIFE.body)) continue;
       // (the further from the line the other is walking along, the better)
       const score = Math.abs(s) - Math.max(0, b) * 0.5 + Math.random() * 0.05;
       if (score > bs) { bs = score; best = t; }
@@ -1399,9 +1432,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     let step = Math.min(gd, P.speed * slow * dt), by = null;
     // never onto a patch kept off: steering round someone that would, straight along the way instead (unless already
     // on one: off it then)
-    if (onPatch(P.pos.x + dx * step, P.pos.z + dz * step) && !onPatch(P.pos.x, P.pos.z)) {
+    if (patchFor(P, P.pos.x + dx * step, P.pos.z + dz * step) && !patchFor(P, P.pos.x, P.pos.z)) {
       const ux = gx / (gd || 1), uz = gz / (gd || 1);
-      if (!onPatch(P.pos.x + ux * step, P.pos.z + uz * step)) { dx = ux; dz = uz; } else by = 'patch';
+      if (!patchFor(P, P.pos.x + ux * step, P.pos.z + uz * step)) { dx = ux; dz = uz; } else by = 'patch';
     }
     // never to within LIFE.body of anyone (a step that would bring them closer than that is not taken)
     _d.set(P.pos.x + dx * step, 0, P.pos.z + dz * step);
@@ -1417,7 +1450,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const a = i / 16 * Math.PI * 2, vx = Math.sin(a), vz = Math.cos(a), dot = vx * ux + vz * uz;
         if (dot <= bd) continue;
         _t.copy(P.pos);
-        if (walls.move(_t, vx * step, vz * step, 0.26, openFor(P)) < step * 0.7 || onPatch(_t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
+        if (walls.move(_t, vx * step, vz * step, 0.26, openFor(P)) < step * 0.7 || patchFor(P, _t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
         bd = dot; bx = vx; bz = vz;
       }
       if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26, openFor(P));
@@ -1494,16 +1527,18 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < 0.42) alarm('inPerson', P, 'and the player');
       }
       // on a patch kept off (a job's ring, a ship's way in, under the crane, the scanner)
-      if (onPatch(P.pos.x, P.pos.z) && !sitting) alarm('onPatch', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)));
+      if (patchFor(P, P.pos.x, P.pos.z) && !sitting) alarm('onPatch', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)));
     }
   }
 
   // ── for the station: who the doors open for, who a ship's way waits for (only those about the player) ────────
   const eyeList = [];
-  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && !P.away && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
+  // (the control room's and Cargo's people open no doors (theirs is the lift's, which the lift works) and stand on no
+  // ship's way: they are not on the main deck)
+  function eyes() { eyeList.length = 0; for (const P of list) if (!P.hidden && !P.home && !P.away && (P.walking || P.req || P.yielding || (P.act && P.act.phase === 'go'))) eyeList.push(P.pos); return eyeList; }
   const _wp = new THREE.Vector3();
   function onWays(out) {
-    for (const P of list) { if (P.hidden || P.away) continue; for (const w of wayFeet) { const q = w.ship && w.ship.moved ? _wp.copy(P.pos).applyMatrix4(w.ship.Di) : P.pos; if (q.x > w.box.min.x - 0.5 && q.x < w.box.max.x + 0.5 && q.z > w.box.min.z - 0.5 && q.z < w.box.max.z + 0.5) { out.push(P.pos); break; } } }
+    for (const P of list) { if (P.hidden || P.home || P.away) continue; for (const w of wayFeet) { const q = w.ship && w.ship.moved ? _wp.copy(P.pos).applyMatrix4(w.ship.Di) : P.pos; if (q.x > w.box.min.x - 0.5 && q.x < w.box.max.x + 0.5 && q.z > w.box.min.z - 0.5 && q.z < w.box.max.z + 0.5) { out.push(P.pos); break; } } }
     return out;
   }
 
@@ -1572,6 +1607,80 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const P of list) P.away = !want.has(P);
   }
 
+  // ── THE PLACES ONLY THE LIFT GOES TO: the control room's people and Cargo's (life.js ROOM_CREW) ───────────────
+  // (the game's maker, 2026-11-20: "One crew member always sitting at the radio desk and one at traffic control, and one
+  // at the store's shipping desk", "a few people in each place"). Nobody walks there, so nobody of theirs walks away:
+  // each place's people (P.home) live their day in it, and only while the player is in it (`place` in update(): the lift's
+  // crewAt, the stop it is going to from the moment its doors are shut). MADE the first time they may be wanted (the
+  // player steps into the lift: `soon`, or is in their place), one body at a time, and kept after; until then nothing of
+  // them is loaded or built. PUT IN, each at a moment of their day picked at random, where nobody sees it happen: while
+  // their room is not drawn (the lift's doors shut on the way there), or else at a spot out of the camera's view. TAKEN
+  // OUT the moment their place is left (the doors shut on it): out of the scene, their day stopped, nothing of them
+  // worked out. They are not counted among the nearest about the player (presence): in their place nobody else is drawn.
+  const HOMES = {};
+  for (const def of ROOM_CREW) (HOMES[def.place] || (HOMES[def.place] = { id: def.place, defs: [], people: [], making: null, made: false, ms: 0, tries: 0 })).defs.push(def);
+  const stopAt = (id) => { const S = STOPS.find((s) => s.id === id); return S ? new THREE.Vector3(...S.at) : new THREE.Vector3(); };
+  function makeHome(H) {
+    if (H.making || H.made) return;
+    H.making = (async () => {
+      for (const def of H.defs) {
+        const V = def.voice && VOICES[def.voice]; if (V) for (const id of V.hellos) sound.load(id, clipUrl(id));
+        const t0 = performance.now(), P = await body(def, stopAt(H.id), 0);
+        H.ms += performance.now() - t0;
+        if (!P) continue;
+        const day = def.day.map((d) => (typeof d === 'string' ? { do: d } : d));
+        Object.assign(P, { order: list.length, day, k: 0, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false, home: H.id, hidden: true });
+        list.push(P); H.people.push(P);
+      }
+      H.made = true;
+    })().catch((e) => { console.warn('people: the ' + H.id + '\'s people were not made: ' + (e && e.message ? e.message : e)); H.made = true; });
+  }
+  // (would someone standing there be in view: their room drawn, near enough and in front of the camera, as inView)
+  const seenAt = (pos, zone, camera) => { _s.center.set(pos.x, pos.y + 0.95, pos.z); return !!(zone && zone.group.visible) && camera.position.distanceTo(pos) < SEEN && _f.intersectsSphere(_s); };
+  function putIn(P, camera, drawn) {
+    // (a moment of their day picked at random: the first step that can be had, from a step picked at random; never a
+    // walk, which would start them where another walker of the same round may be put)
+    const n = P.day.length, k0 = Math.floor(Math.random() * n);
+    let first = null;
+    for (let i = 0; i < n && !first; i++) { P.k = (k0 + i) % n; if (!/^walk:/.test(P.day[P.k].do)) first = claimFor(P, P.day[P.k]); }
+    if (!first) return false;
+    const at = first.spot.seat || first.spot.pos, zone = W.zoneAt(at);
+    // (their room drawn: only somewhere out of the camera's view, else they are left to come a moment later)
+    if (drawn && seenAt(at, zone, camera)) { release(P); return false; }
+    P.pos.copy(first.spot.pos); P.heading = first.spot.heading ?? P.heading; P.drawnY = P.pos.y;
+    Object.assign(P, { hidden: false, away: false, walking: false, way: null, req: null, yielding: null, blocker: null, pose: null, scripted: false, sitY: 0, held: 0, heldAll: 0, side: 0, jam: false, jammed: false, fleeing: null });
+    if (P.trail) P.trail.length = 0;
+    P.lastGain.copy(P.pos);
+    if (zone && zone !== P.zone) { P.zone = zone; shine(P.c, W.envAt(P.pos)); }
+    begin(P, first, true);
+    // (already some way into it, each their own: nobody's next move comes in step with anyone's)
+    if (P.act && P.act.len) P.act.t = Math.random() * P.act.len * 0.7;
+    stillV++;
+    return true;
+  }
+  function takeOut(P) {
+    release(P);
+    if (P.req) { P.req.dropped = true; P.req = null; }
+    bubbles.clear(P);
+    Object.assign(P, { act: null, walking: false, way: null, yielding: null, blocker: null, pose: null, scripted: false, hidden: true, shown: false });
+    stillV++;
+  }
+  let homeClock = 0;
+  function homes(dt, place, soon, camera) {
+    homeClock -= dt;
+    for (const H of Object.values(HOMES)) {
+      const want = place === H.id;
+      if ((want || soon) && !H.made) makeHome(H);
+      if (!want) { for (const P of H.people) if (!P.hidden) takeOut(P); continue; }
+      const waiting = H.people.filter((P) => P.hidden); if (!waiting.length) continue;
+      // (their room drawn now (the player there, the doors open): tried again every half second, out of view only)
+      const S = STOPS.find((s) => s.id === H.id), zone = S ? W.room(S.room) : null, drawn = !!(zone && zone.group.visible);
+      if (drawn && homeClock > 0) continue;
+      for (const P of waiting) { H.tries++; putIn(P, camera, drawn); }
+    }
+    if (homeClock <= 0) homeClock = 0.5;
+  }
+
   // RUNNING FROM THE CRANE (src/crane.js: the crane worked by hand brings a load down low over someone; the game's
   // maker: "If people are in the way then they should start to run away"): anyone standing or walking within r of
   // (x, z) drops what they are doing and hurries off to a free spot at least `away` metres from there (the way-finder's
@@ -1581,8 +1690,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function flee(x, z, r = 2, away = 4.5, { inside = null } = {}) {
     const sent = [];
     for (const P of list) {
-      // (someone away is out of sight and out of the crane's way; the scanner's patient is on its bed)
-      if (P.hidden || P.away || P.fleeing || P.scripted || !P.act) continue;
+      // (someone away is out of sight and out of the crane's way; the scanner's patient is on its bed; the control
+      // room's and Cargo's people are not on the main deck)
+      if (P.hidden || P.home || P.away || P.fleeing || P.scripted || !P.act) continue;
       if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
       const dx = P.pos.x - x, dz = P.pos.z - z, d = Math.hypot(dx, dz);
       if ((inside ? !inside(P.pos) : d > r) || P.pos.y > 2.4) continue;
@@ -1621,7 +1731,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function push(B, to) {
     let n = 0;
     for (const P of list) {
-      if (P.hidden || P.away || P.scripted || P.pos.y > 2.4) continue;
+      if (P.hidden || P.home || P.away || P.scripted || P.pos.y > 2.4) continue;
       if (P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising')) continue;
       if (P.pos.x < B.min.x || P.pos.x > B.max.x || P.pos.z < B.min.z || P.pos.z > B.max.z) continue;
       const t = to(P.pos); if (!t || !walls.free(t[0], P.pos.y, t[1], 0.2)) continue;
@@ -1633,11 +1743,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function runAbout(zoneId, { avoid = null } = {}) {
     const Z = W.room(zoneId); if (!Z) return 0;
     const B = Z.box, passes = (a, b) => { const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.75)); for (let i = 1; i <= n; i++) { _rb.set(a.x + (b.x - a.x) * i / n, a.y, a.z + (b.z - a.z) * i / n); if (avoid(_rb)) return true; } return false; };
-    if (!runSpots.has(zoneId)) { const L = []; for (const g of Object.values(groups)) for (const s of g) if (s && s.pos && s.pos.y < 1 && s.pos.x > B.min.x && s.pos.x < B.max.x && s.pos.z > B.min.z && s.pos.z < B.max.z && !L.some((q) => q.distanceTo(s.pos) < 0.8)) L.push(s.pos); runSpots.set(zoneId, L); }
+    if (!runSpots.has(zoneId)) { const L = []; for (const g of Object.values(groups)) for (const s of g) if (s && s.pos && s.pos.y < 1 && onDeck(s.pos) && s.pos.x > B.min.x && s.pos.x < B.max.x && s.pos.z > B.min.z && s.pos.z < B.max.z && !L.some((q) => q.distanceTo(s.pos) < 0.8)) L.push(s.pos); runSpots.set(zoneId, L); }
     const spots = runSpots.get(zoneId);
     let n = 0;
     for (const P of list) {
-      if (P.hidden || P.away || P.scripted || !P.act || P.pos.y > 2.4) continue;
+      if (P.hidden || P.home || P.away || P.scripted || !P.act || P.pos.y > 2.4) continue;
       if (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising') continue;
       if (P.pos.x < B.min.x || P.pos.x > B.max.x || P.pos.z < B.min.z || P.pos.z > B.max.z) continue;
       const under = !!avoid && avoid(P.pos);
@@ -1711,6 +1821,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   };
   const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o),
+    // (for the rigs: the control room's and Cargo's people, made or not, and what each is doing)
+    homes: () => Object.fromEntries(Object.values(HOMES).map((H) => [H.id, { made: H.made, ms: Math.round(H.ms), tries: H.tries, people: H.people.map((P) => ({ id: P.id, name: P.name, in: !P.hidden, shown: !!P.shown, act: P.act ? P.act.kind + ':' + (P.act.phase || '') + ':' + (P.act.spot?.name || '') : null, walking: !!P.walking, pos: P.pos.toArray().map((v) => +v.toFixed(2)), far: !!P.c.far })) }])),
     // (A SHIP'S CREW ABOARD, src/aboard.js: a figure built from a look as the station's people are (a roster id, a
     // recipe's name, or a recipe), standing; and one of the station's own people taken out of the station while they
     // are aboard a ship (on: they are; off: back where they were))

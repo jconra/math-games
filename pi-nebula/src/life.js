@@ -97,6 +97,32 @@ export const SPOTS = {
   // a patrol: the terminal, the hangar corridor, the junction, the spine north, the loop, the quarters' corridor, the corridor
   patrol: [{ room: 'terminal', at: [0.6, 0.15] }, { room: 'c2', at: [0.5, 0.5] }, { room: 'junction', at: [0.5, 0.5] }, { room: 'spine-n', at: [0.5, 0.6] }, { room: 'spine-n', at: [0.5, 0.25] }, { room: 'loop', at: [0.5, 0.5] }, { room: 'qc', at: [0.6, 0.5] }, { room: 'c1', at: [0.5, 0.5] }],
   guard: [{ place: 'airlock', toward: { place: 'galley' }, out: 7.6 }],
+  // ── THE CONTROL ROOM at the top of the tower (ROOM_CREW below; kit/places-plan.js TOWER, DESKS): in the room's own
+  // frame (the controlRoom piece's: its middle, on its floor; north is -z), or a desk's (a console's: its front, where
+  // people sit, toward +z) ──
+  // standing at the station readouts desk and at the announcements desk, clear of their chairs, reading them
+  readoutsStand: [{ piece: 'console', variant: 'readouts', room: 'tower', local: [-2.6, 0, 0.95], face: [0, -1] }, { piece: 'console', variant: 'readouts', room: 'tower', local: [2.6, 0, 0.95], face: [0, -1] }],
+  announceStand: [{ piece: 'console', variant: 'announce', room: 'tower', local: [-2.6, 0, 0.95], face: [0, -1] }, { piece: 'console', variant: 'announce', room: 'tower', local: [2.6, 0, 0.95], face: [0, -1] }],
+  // behind the radio desk's two chairs, looking over at its screens (none behind traffic control's: the lift's doors
+  // open toward it, and someone there stood in the way out)
+  radioBehind: [{ piece: 'console', variant: 'radio', room: 'tower', local: [0, 0, 1.75], face: [0, -1] }],
+  // at the four corner windows, where no desk stands, looking out and down at the landing pads
+  towerWindows: [[1, -1], [1, 1], [-1, 1], [-1, -1]].map(([x, z]) => ({ piece: 'controlRoom', room: 'tower', local: [5.28 * x, 0, 5.28 * z], face: [x, z] })),
+  // a walk round the room, about the lift
+  towerRound: [[1, -1], [1, 1], [-1, 1], [-1, -1]].map(([x, z]) => ({ piece: 'controlRoom', room: 'tower', local: [3.4 * x, 0, 3.4 * z] })),
+  // ── CARGO, the lower level (in the code: the store; the storeHall piece's frame is the station's own, on its floor) ──
+  // the shipping desk's printer, at the desk's end; the packing benches, both sides; by the pallets waiting on the
+  // loading floor; at the three containers' ends; on the scale by its readout; in the aisles at the racks; at the two
+  // cold store doors
+  printer: [{ piece: 'shipDesk', room: 'store', local: [1.3, 0, 0.85], face: [0, -1] }],
+  benches: [-0.9, 0.9].flatMap((x) => [{ piece: 'bench', variant: 'packing', room: 'store', all: true, local: [x, 0, -0.8], face: [0, 1] }, { piece: 'bench', variant: 'packing', room: 'store', all: true, local: [x, 0, 0.8], face: [0, -1] }]),
+  pallets: [{ piece: 'storeHall', room: 'store', local: [-0.2, 0, 16.65], face: [0, -1] }, { piece: 'storeHall', room: 'store', local: [3.2, 0, 16.65], face: [0, -1] }, { piece: 'storeHall', room: 'store', local: [1.5, 0, 18.45], face: [0, 1] }],
+  containers: [3.5, 8, 12.5].map((z) => ({ piece: 'storeHall', room: 'store', local: [-2.3, 0, z], face: [-1, 0] })),
+  scale: [{ piece: 'scale', room: 'store', local: [-0.95, 0, -0.95], face: [-1, -1] }],
+  racks: [{ piece: 'rack', room: 'store', all: true, local: [1.36, 0, 1.25], face: [0, -1] }, { piece: 'rack', room: 'store', all: true, local: [4.08, 0, -1.25], face: [0, 1] }],
+  cold: [2, 12].map((z) => ({ piece: 'storeHall', room: 'store', local: [23.4, 0, z], face: [1, 0] })),
+  // a walk: up the lane by the east wall, into an aisle, along to another
+  cargoRound: [[21.8, 24], [21.8, -4], [13, 1.95], [13, 16.95]].map(([x, z]) => ({ piece: 'storeHall', room: 'store', local: [x, 0, z] })),
 };
 
 // THE BIG SCANNER'S BED, in the scanner's own frame (kit/bigscanner.js: x across, z out from the wall; its pad's top
@@ -117,16 +143,27 @@ export const TALKS = {
   hangar: [{ piece: 'crate', variant: 'stack', room: 'hangar', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-miner', local: [2.5, 0, -3.5], face: [1, 0] }, { piece: 'crate', variant: 'stack', room: 'hangar-medic', local: [2.5, 0, -3.5], face: [1, 0] }],
   lobby: [{ room: 'smelter-lobby', at: [0.55, 0.5], face: [0, 1] }],
   medical: [{ room: 'medical', at: [0.6, 0.3], face: [1, 0] }],
+  // (the control room: between the lift and the readouts desk, and by its north-west corner window; Cargo: on the
+  // loading floor, and between the last row of racks and the benches)
+  tower: [{ piece: 'controlRoom', room: 'tower', local: [0, 0, 3.0], face: [1, 0] }, { piece: 'controlRoom', room: 'tower', local: [-5.2, 0, -5.2], face: [1, -1] }],
+  cargo: [{ piece: 'storeHall', room: 'store', local: [1.5, 0, 10.25], face: [1, 0] }, { piece: 'storeHall', room: 'store', local: [7.5, 0, 23.2], face: [1, 0] }],
 };
 export const APART = 1.15;
 
 // THE SEATS, by group: every such piece in the room; a stool faces the table nearest it, a bench seats two facing its
-// own front (the terminal's: out of the windows)
+// own front (the terminal's: out of the windows); a desk chair (face 'own') faces its own front, the desk it is set at
+// (`near`: the chairs within 2 m of that piece), and is sat on from beside it (its back is in the way behind it)
 export const SEATS = {
   cafe: [{ room: 'terminal', piece: 'chair', variant: 'stool', face: 'table' }],
   window: [{ room: 'terminal', piece: 'chair', variant: 'bench', two: true }],
   waiting: [{ room: 'medical', piece: 'chair', variant: 'bench', two: true }, { room: 'smelter-lobby', piece: 'chair', variant: 'bench', two: true }],
   control: [{ room: 'smelter-control', piece: 'chair', variant: 'stool', face: 'table' }],
+  // (the control room's four desks, two chairs at each; Cargo's shipping desk, one)
+  radioSeat: [{ room: 'tower', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'console', variant: 'radio' } }],
+  trafficSeat: [{ room: 'tower', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'console', variant: 'traffic' } }],
+  readoutsSeat: [{ room: 'tower', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'console', variant: 'readouts' } }],
+  announceSeat: [{ room: 'tower', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'console', variant: 'announce' } }],
+  shipSeat: [{ room: 'store', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'shipDesk' } }],
 };
 
 // THE CLIPS: standing (the calm one: the crew kit's CALM is made from Stand_Listen), sitting, at work, now and then
@@ -175,4 +212,41 @@ export const ROSTER = [
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:cafe', for: T(120, 240) }] },
   { id: 'diner-uma', name: 'Uma', look: { suit: 'dockWorker', head: 't7', hair: 'afro', colours: { job: 'staff', skin: '#47291a', hair: '#17110d' } }, voice: 'yw', rate: 1.06,
     day: [{ do: 'sit:cafe', for: T(180, 320) }, { do: 'stand:drinks', for: T(6, 12) }, { do: 'sit:window', for: T(40, 90) }, { do: 'talk:terminal', for: T(25, 50) }] },
+];
+
+// THE PEOPLE AT WORK IN THE CONTROL ROOM AND IN CARGO, the two places only the lift goes to (2026-11-20, the game's
+// maker, of "Should anyone work in the control room and the store room?": "One crew member always sitting at the radio
+// desk and one at traffic control, and one at the store's shipping desk", and "I'd like a few people in each place").
+// Four in each: in the control room the radio operator and the traffic controller, always at their desks, and two more
+// at the other desks, at the windows and walking about the room; in Cargo the shipping clerk, mostly at the shipping
+// desk, and three more at the packing benches, the racks, the containers, the scale and the pallets waiting. Nobody
+// walks to these places, so nobody here walks away from them: each one's day is all in their own place (`place`, the
+// lift's name for it: 'tower', 'store'). They are made the first time the player steps into the lift, and are about only
+// while the player is in their place (put there while the lift's doors are shut, each at a moment of their day picked
+// at random), out of the scene the rest of the time (src/people.js THE PLACES ONLY THE LIFT GOES TO). Otherwise they
+// are the station's own people: looks from parts the station's people already wear, the same voices and hellos.
+export const ROOM_CREW = [
+  // ── the control room ──
+  { id: 'radio-rhea', name: 'Rhea', place: 'tower', look: { suit: 'atlantis2', head: 't9', hair: 'wavy', colours: { job: 'staff', uniform: '#2ec4b6', skin: '#86522f', hair: '#17110d' } }, voice: 'yw', rate: 0.97,
+    day: [{ do: 'sit:radioSeat', for: T(240, 480) }] },
+  { id: 'traffic-milo', name: 'Milo', place: 'tower', look: { suit: 'atlantis1', head: 't2', hair: 'coil', colours: { job: 'staff', uniform: '#2ec4b6', skin: '#d9a37f', hair: '#4a2f1d' } }, voice: 'ym', rate: 1.02,
+    day: [{ do: 'sit:trafficSeat', for: T(240, 480) }] },
+  { id: 'duty-dara', name: 'Dara', place: 'tower', look: { suit: 'atlantis2', head: 't11', hair: 'braidcrown', colours: { job: 'staff', uniform: '#3f8fe8', skin: '#c48a62', hair: '#2e1f15' } }, voice: 'yw', rate: 1.08,
+    day: [{ do: 'stand:readoutsStand', for: T(15, 30), clip: 'reach' }, { do: 'walk:towerRound' }, { do: 'stand:towerWindows', for: T(20, 40) }, { do: 'sit:announceSeat', for: T(40, 80), p: 0.5 },
+      { do: 'stand:radioBehind', for: T(10, 20), p: 0.6 }, { do: 'talk:tower', for: T(20, 40), p: 0.6 }, { do: 'stand:announceStand', for: T(10, 20), clip: 'reach', p: 0.5 }] },
+  { id: 'readouts-finn', name: 'Finn', place: 'tower', look: { suit: 'atlantis1', head: 't1', hair: 'shortFull', colours: { job: 'staff', uniform: '#2ec4b6', skin: '#e8bf9f', hair: '#b4824f' } }, voice: 'ym', rate: 0.95,
+    day: [{ do: 'sit:readoutsSeat', for: T(60, 140) }, { do: 'stand:towerWindows', for: T(15, 30) }, { do: 'talk:tower', for: T(20, 40), p: 0.6 }, { do: 'sit:readoutsSeat', for: T(60, 140) },
+      { do: 'stand:announceStand', for: T(10, 20), clip: 'reach', p: 0.5 }, { do: 'walk:towerRound', p: 0.4 }] },
+  // ── Cargo ──
+  { id: 'clerk-gus', name: 'Gus', place: 'store', look: { suit: 'civilian', head: 't8', hair: 'buzz', colours: { job: 'hauler', skin: '#a66d45', hair: '#2e1f15' } }, voice: 'om', rate: 0.98,
+    day: [{ do: 'sit:shipSeat', for: T(180, 360) }, { do: 'stand:printer', for: T(6, 12), clip: 'reach', p: 0.4 }] },
+  { id: 'packer-nell', name: 'Nell', place: 'store', look: { suit: 'dockWorker', head: 't3', hair: 'ponytail', colours: { job: 'hauler', skin: '#e8bf9f', hair: '#a83c22' } }, voice: 'yw', rate: 1.01,
+    day: [{ do: 'stand:benches', for: T(30, 60), clip: 'reach' }, { do: 'stand:benches', for: T(20, 40), clip: 'reach' }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach', p: 0.6 },
+      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'stand:containers', for: T(15, 25), p: 0.4 }] },
+  { id: 'stock-sami', name: 'Sami', place: 'store', look: { suit: 'atlantis1', head: 't10', hair: 'mohawk', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } }, voice: 'ym', rate: 1.04,
+    day: [{ do: 'walk:cargoRound' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach', p: 0.7 }, { do: 'stand:cold', for: T(8, 15), p: 0.5 },
+      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }] },
+  { id: 'loader-otto', name: 'Otto', place: 'store', look: { suit: 'smelter', head: 't4', hair: 'shortFull', colours: { job: 'hauler', skin: '#d9a37f', hair: '#8f8a84' } }, voice: 'om', rate: 1.03,
+    day: [{ do: 'stand:containers', for: T(20, 40), clip: 'reach' }, { do: 'stand:scale', for: T(15, 30) }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach' }, { do: 'walk:cargoRound', p: 0.4 },
+      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }] },
 ];

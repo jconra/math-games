@@ -160,7 +160,7 @@ async function boot() {
   // the contract's card are loaded only when one is wanted)
   const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
-  // the lift by the junction: up to the control room at the top of the tower, down to the store room (src/lift.js)
+  // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
@@ -218,7 +218,9 @@ async function boot() {
     }
     if (GAME.cam) GAME.cam(W.camera, now, dt);      // (a rig's own camera, for films: GAME.cam = (camera, now, dt) => {...})
     // (the nearest people are counted from a ship flown about the station, while one is: src/visit.js)
-    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus });
+    // (and the control room's and Cargo's people about only while the player is there: the lift says where, src/lift.js
+    // crewAt; made the first time the player steps into the lift)
+    if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
     sound.ears(W.camera);
     if (GAME.player) {
       const busy = jobs.busy();
