@@ -110,7 +110,7 @@ export const VIEWS = {
 const ROCK_R = 1.05;       // a round rock's radius, metres ("about 2 metres" across)
 const UP_Y = new THREE.Vector3(0, 1, 0), UP_X = new THREE.Vector3(1, 0, 0);
 // the ways the ore can be shown (see `oreLook` in makeDrillView)
-export const ORE_LOOKS = ['glow', 'veins', 'sparkle', 'sparkle and veins', 'cracks', 'crystals'];
+export const ORE_LOOKS = ['glow', 'veins', 'sparkle', 'dots', 'sparkle and veins', 'cracks', 'crystals'];
 // the ways a rock's own skin can be drawn: its flat faces as they are, or smoothed and roughened by the shader
 export const ROCK_LOOKS = ['low poly', 'natural'];
 const HAND = { flat: 0, round: 0, long: 0.45 };   // how much further along the hand a rock's middle lies, by its shape (m)
@@ -249,7 +249,7 @@ uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 u
 // oreLook, below): each vein shows where its outer end comes to the surface, as a patch as big as the metal in it.
 // uVD: each vein's way out from the rock's middle; uVC: its metal's colour; uVA: the tonnes left in it; uMode: 1 the
 // sparkle (very many tiny bright dots, thickest along fine cracks, a soft glow under them), 2 the cracks (the rock's
-// own edges lit), 3 only the soft glow (under the crystals). Only what faces the eye is seen: it is the surface.
+// own edges lit), 3 only the soft glow (under the crystals), 4 the dots alone (no cracks: "Just a multitude of dots"). Only what faces the eye is seen: it is the surface.
 uniform vec3 uVD[5]; uniform vec3 uVC[5]; uniform float uVA[5]; uniform int uVN; uniform float uOre; uniform float uT; uniform int uMode;
 uniform float uNat; varying vec3 vN; varying mat3 vRot;
 float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
@@ -294,6 +294,10 @@ void main() {
     vec3 g = vL * 36.0, cell = floor(g), fr = fract(g) - 0.5; float gw = max(fwidth(g.x), max(fwidth(g.y), fwidth(g.z))), rnd = h31(cell);
     vec3 off = (vec3(h31(cell + 1.3), h31(cell + 2.7), h31(cell + 4.1)) - 0.5) * 0.56;
     float spark = smoothstep(0.34, 0.04, length(fr - off)), tw = 0.72 + 0.28 * sin(uT * (1.5 + 5.0 * rnd) + rnd * 40.0), fine = 1.0 - smoothstep(0.45, 1.1, gw);
+    // (a second, finer grid of smaller dots, for the look that is dots alone)
+    vec3 g2 = vL * 69.0, cell2 = floor(g2), fr2 = fract(g2) - 0.5; float rnd2 = h31(cell2 + 9.1), gw2 = max(fwidth(g2.x), max(fwidth(g2.y), fwidth(g2.z)));
+    vec3 off2 = (vec3(h31(cell2 + 3.3), h31(cell2 + 5.9), h31(cell2 + 8.2)) - 0.5) * 0.56;
+    float spark2 = smoothstep(0.32, 0.05, length(fr2 - off2)), fine2 = 1.0 - smoothstep(0.45, 1.1, gw2), tw2 = 0.7 + 0.3 * sin(uT * (2.0 + 6.0 * rnd2) + rnd2 * 31.0);
     for (int i = 0; i < 5; i++) {
       if (i >= uVN) break;
       float amt = uVA[i];
@@ -303,6 +307,11 @@ void main() {
         if (m > 0.0) {
           float glow = 0.3;
           if (uMode == 2) glow = edge * (0.7 + 1.9 * m) + 0.12;
+          else if (uMode == 4) {
+            // the dots alone, no cracks: a multitude of them, big and small, thickest at the middle of the spot
+            float dens = clamp(0.14 + 0.62 * m * m, 0.0, 0.9);
+            glow = mix(dens * 0.4, spark * step(1.0 - dens, rnd) * tw, fine) * 3.8 + mix(dens * 0.25, spark2 * step(1.0 - dens * 0.85, rnd2) * tw2, fine2) * 2.9 + 0.07;
+          }
           else if (uMode == 1) {
             // fine cracks, a coarse lot and a finer one across them; the dots thickest along them
             vec3 q = vL * 3.1 + uVD[i] * 7.0; float warp = vn3(q * 1.9) * 2.0 - 1.0;
@@ -519,7 +528,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   let oreLook = ORE_LOOKS.includes(ore) ? ore : 'glow';
   // (2026-11-19, later: "I like the sparkle effect the most", so that is how the game shows the ore; "could I see views
   // in combination with sparkles?", taken as veins: 'sparkle and veins' is the sparkle with the veins' lines too)
-  const onSurface = () => oreLook === 'sparkle' || oreLook === 'sparkle and veins' || oreLook === 'cracks' || oreLook === 'crystals';
+  const onSurface = () => oreLook === 'sparkle' || oreLook === 'dots' || oreLook === 'sparkle and veins' || oreLook === 'cracks' || oreLook === 'crystals';
   const withVeins = () => oreLook === 'veins' || oreLook === 'sparkle and veins';
   // (the game's maker, 2026-11-19, of the natural skin: "I do like the natural rock." So that is how the game draws a rock)
   let rockLook = ROCK_LOOKS.includes(rock) ? rock : 'natural';
@@ -527,7 +536,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // a rock's ore, told to its material (U: the material's uniforms; k: how bright)
   function oreOn(U, o, k) {
     const on = onSurface(); U.uOre.value = on ? k : 0; U.uNat.value = rockLook === 'natural' ? 1 : 0; if (!on) return;
-    U.uMode.value = oreLook === 'cracks' ? 2 : oreLook === 'crystals' ? 3 : 1; U.uT.value = V.clock;
+    U.uMode.value = oreLook === 'cracks' ? 2 : oreLook === 'crystals' ? 3 : oreLook === 'dots' ? 4 : 1; U.uT.value = V.clock;
     const n = Math.min(5, o.vd.length); U.uVN.value = n;
     for (let v = 0; v < n; v++) { U.uVD.value[v].copy(o.vd[v].d); U.uVC.value[v].copy(colOf.get(o.rock.veins[v].metal) || colOf.get('copper')); U.uVA.value[v] = veinLeft(o, v); }
   }

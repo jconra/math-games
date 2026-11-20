@@ -77,7 +77,8 @@ export const DRILL = {
   field: 30,                // rocks in a field
   four: 1 / 2,              // of the rocks with four tonnes of ore or more (about one rock in five), the part that holds four metals
                             // (the game's maker, 2026-11-19, picked "More: about 1 rock in 11 (every other big rock)"; it was 1 in 3)
-  lucky: 1 / 10,            // the rocks that are lucky ones: the dearest metal in such a rock is the one it has most of
+  lucky: 1 / 5,             // the rocks that are lucky ones: the dearest metal in such a rock is the one it has most of
+                            // (the game's maker, 2026-11-19: "the lucky rock should be more like 1 in 5. But you still have to notice it too.")
   reach: 0.42,              // how far from a hole's line metal is taken (the rock's radius is 1)
   core: 0.24,               // within this of the line, all of a lump (a tap a little off a vein still takes the whole of it)
   depth: 0.95,              // a hole goes this far in from the surface (nearly to the middle)
