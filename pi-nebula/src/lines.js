@@ -57,11 +57,10 @@ export const RUN_TALK = {
   mining: {
     // THE CORE'S TUNING (src/tune.js; the game's maker, 2026-11-18: "if you signed up for engineering then the captain
     // tells you the core needs to be adjusted. So you go back to mechanical and answer so questions there. Then you
-    // make your way back up to the pilot seat"). tune: as the ship says "Reactor imbalance." (before the run, or home
-    // and down after it); tunedBefore: the core tuned, the ship may leave; tunedAfter: tuned, the run done
+    // make your way back up to the pilot seat to jump the ship back home"). tune: after the ship says "Reactor
+    // imbalance.", out at the rocks (on arrival there, or before the jump home); tuned: the core tuned, back to the seat
     tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
-    tunedBefore: ['The core is steady. Come up to the cockpit, {player}.'],
-    tunedAfter: ['The core is steady. Good work, {player}. Your share is at the smelter\'s controls.'],
+    tuned: ['The core is steady. Back to your seat, {player}.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
     field: ['Kestrel, bring that one in. {engineer}, watch the core.', 'There\'s a good one. Take it, Kestrel.'],

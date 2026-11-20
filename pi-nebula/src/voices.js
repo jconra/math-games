@@ -59,7 +59,7 @@ export const clipUrl = (id) => new URL('../assets/sound/voices/' + id + '.mp3', 
 //   welcome   as its power first comes on with someone newly in the seat
 //   safety    again and again while it is in another ship's hangar ("it started saying "Safety Violation" over and
 //             over in your cockpit")
-//   reactor   to its engineer, aboard it where it is parked, when its core needs tuning (src/tune.js: heard all
+//   reactor   to its engineer, out at the place a run goes to, when its core needs tuning (src/tune.js: heard all
 //             through the ship, as the others are in the cockpit)
 // (Made and waiting for its own job, not in the game yet: ship-miner-pullup "Warning. Pull up.")
 // THE THREE SHIP VOICES (the game's maker, 2026-11-19, of the tries he was sent): "we should use 3 for one ship, 4 for

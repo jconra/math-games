@@ -555,6 +555,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // THE CANOPY'S GLASS, SEEN FROM OUTSIDE (his words, the same evening: "we should either put the player models in the
   // seats when you look at the ship, or tint the glass much darker"): much darker from outside, so the empty seats are
   // not seen; from the seats it is the smoked glass it was. (This ship's own glass: no other ship's, no window's.)
+  // (A crew member on their feet aboard, out here, never sees this glass from the rooms behind the seats: this ship
+  // has no rooms and is put away while they walk the real one, drawn in its place with its own canopy: V.aboard.)
   const glass = ship.mats && ship.mats.glass ? { mat: ship.mats.glass, opacity: ship.mats.glass.opacity, color: ship.mats.glass.color.getHex(), inside: null, inv: thr ? new THREE.Matrix4().copy(thr.frame).invert() : null } : null;
   function glassStep() {
     if (!glass) return;
@@ -1071,6 +1073,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   }
   // ── FLOWN BY HAND (src/fieldfly.js): this view keeps the field and the ship; the flying has the ship and the eye ──
   let eyeOn = true;      // (false: the flying's own view has the camera; this view still draws what hangs on the rocks)
+  let aboardOn = false; const sunWas = sun.intensity;      // (someone on their feet aboard: `aboard`, below)
   function hand(on, c = camera) {
     if (on) { if (V.stage !== 'look') return false; go('hand'); el.classList.add('is-hand'); eyeOn = false; return true; }
     if (V.stage !== 'hand') return false;
@@ -1440,6 +1443,12 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     // (put away and back: while the eye is in the seat, with a wormhole's far end opening or the jump home being worked out)
     show(v) { el.hidden = !v; },
     get eye() { return eyeOn; }, set eye(v) { eyeOn = !!v; },
+    // (SOMEONE IS ON THEIR FEET ABOARD THE SHIP OUT HERE, src/trip.js. This view's own ship is built for outside: it
+    // has a cockpit and no rooms. So while they walk, it is put away, and the ship with its rooms (the one parked in
+    // the hangar) is drawn in its very place by whoever has them walk it. This view's sun is one lamp with no walls to
+    // stop it, so it is put out meanwhile and the rooms are lit as they are in the hangar; the rocks, the dust and
+    // the sky have their own light and are as they were. Off: this ship and its sun again, as they were.)
+    get aboard() { return aboardOn; }, set aboard(v) { aboardOn = !!v; G.visible = !aboardOn; sun.intensity = aboardOn ? 0 : sunWas; },
     get glided() { return !!(glide && glide.done); }, get gliding() { return !!glide; }, get panel() { return panel; }, get stage() { return V.stage; },
     state: () => ({ stage: V.stage, sub: V.sub, t: +V.t.toFixed(2), clock: +V.clock.toFixed(2), aboard: +run.aboard.toFixed(3), full: run.full, given: run.given, cans: run.cans.map((c) => ({ ...c })), early: run.early, store: run.store(), sells: run.sells(), stats: { ...run.stats }, lastHole: V.lastHole, eyed: V.eyed,
       ship: { p: here.p.toArray().map((x) => +x.toFixed(1)), yaw: +yawOf().toFixed(3), q: here.q.toArray().map((x) => +x.toFixed(3)) }, fly: !flyEl.hidden, hand: V.stage === 'hand', eye: eyeOn, shown: !el.hidden, look: { yaw: +look.yaw.toFixed(3), pitch: +look.pitch.toFixed(3) }, rocks: run.rocks.length,

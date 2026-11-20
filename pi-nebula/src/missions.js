@@ -21,16 +21,24 @@
 // own crew. So another captain's trip is another entry here with its own steps, and a new role's game switches on with
 // its flag.
 //
-// THE ENGINEER'S STEP, 'tune', IS NOT FLOWN: the ship's reactor core is tuned on foot, with the ship parked (the game's
-// maker, 2026-11-18: "if you signed up for engineering then the captain tells you the core needs to be adjusted. So you
-// go back to mechanical and answer so questions there"; 2026-11-19: "I want the player to have to run back to
-// mechanical and click on something (press E)", and "We can make the reactor need tuning before or after missions (so
-// it isn't always the same exact sequence). This should be used for the explore, medical, and cargo missions too").
-// A mission that lists a 'tune' step has it, at the core of its own ship (found by name in the ship's blueprint:
-// src/boarding.js core): once a run, BEFORE the ship leaves or AFTER it is home and down, one or the other picked as
-// the contract is signed (pickTune, kept with the contract: `tune`). src/tune.js is its runner, started by
-// src/mission.js. Before: the seat does not start the run until the core is tuned. After: the share waits at the
-// smelter's controls as ever, and is held until the core is tuned (tuneDue). With the engineer's job left to the
+// THE ENGINEER'S STEP, 'tune', IS DONE ON FOOT, OUT AT THE FAR PLACE. The game's maker's first description of a
+// mining run (2026-11-16): "The process repeats until your canisters are full. Then you are released back into the ship
+// and if you signed up for engineering then the captain tells you the core needs to be adjusted. So you go back to
+// mechanical and answer so questions there. Then you make your way back up to the pilot seat to jump the ship back
+// home." And (2026-11-19): "I want the player to have to run back to mechanical and click on something (press E)", and
+// "We can make the reactor need tuning before or after missions (so it isn't always the same exact sequence). This
+// should be used for the explore, medical, and cargo missions too". Asked which moment he meant (2026-11-19, evening):
+// "I was thinking it would be when you are at the foreign destination. So either right after you arrive at the
+// asteroids, or sometime before you jump back home", and "Tune at the remote location (so its a more desperate
+// situation)".
+// SO a mission that lists a 'tune' step has it once a run, at the place the run goes to: ON ARRIVAL there ('arrive':
+// right after the jump out, before any of the work) or BEFORE THE JUMP HOME ('leave': the work done). One or the other
+// is picked as the contract is signed (pickTune: even chances) and kept with it (`tune`). The step is listed once in
+// the mission's data and stepsFor puts it at this run's moment, by the run's two jumps, so nothing of it is the mining
+// run's alone. The crew member gets up out of their seat there, walks back through the ship to its own core (found by
+// name in the ship's blueprint: coreIn) and answers its cards; src/tune.js is that part, run by src/trip.js as one of
+// the trip's own steps. The ship stays where it is meanwhile. Nothing at the station knows of it: the seat in the
+// hangar starts the run as ever and the share at the smelter is as ever. With the engineer's job left to the
 // captain's own crew nothing of it is seen or heard.
 //
 // THE MONEY (the game's maker, 2026-11-18: "It's as simple as add up what they came back with and multiply each type
@@ -48,7 +56,7 @@
 //
 // KEPT WITH THE CREW MEMBER (save.js keeps any field): crew.mission, one at a time:
 //   { id, captain, roles: [...], state: 'signed', signed }                the contract signed, the run not flown yet
-//   (signed as engineer on a mission with a 'tune' step: also `tune`: 'before' | 'after', and `tuned`: true once done)
+//   (signed as engineer on a mission with a 'tune' step: also `tune`: 'arrive' | 'leave', when the core's tuning comes)
 //   { ..., state: 'payout', payout: { n, canisters, tonnes, lots: [{ metal, tonnes, price, pay }] (the plain sum,
 //     metal by metal, the most tonnes first), sold, share, pay, at } }   home: the share waiting at the smelter's controls
 // A reload in the middle of a trip finds the contract still signed. Collected, the mission is cleared and the captain
@@ -82,17 +90,17 @@ export const LAMPS = ['Distance', 'Charge', 'Go'];
 // computer: `cards` cards, then the jump `to` the field or home),
 // 'work' (at the field: the roles that work there, and how long the crew takes when the player has none of them),
 // 'land' (home: flown in through the bay door and set down on the pad, the haul aboard),
-// 'tune' (not flown: the ship's reactor core tuned by its engineer, `cards` cards at the core, with the ship parked;
-// `when`: the moments of a run it may come at, one of them picked for each run)
+// 'tune' (on foot, at the far place: the ship's reactor core tuned by its engineer, `cards` cards at the core; `when`:
+// the moments of a run it may come at, one of them picked for each run: 'arrive', 'leave')
 export const MISSIONS = {
   mining: {
     id: 'mining', captain: 'ruiz', ship: 'miner', name: 'Mining run', roles: ['pilot', 'drill', 'engineer'],
     paid: 'You are paid your share of what the haul sells for, at the smelter\'s controls, when you are back.',
     steps: [
-      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['before', 'after'] },
       { id: 'out', kind: 'leave', secs: 4 },
       { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'field' },
-      // (nothing is the engineer's at the rocks yet: the core is tuned with the ship parked)
+      // (the core's tuning, out at the rocks: listed once; stepsFor puts it on arrival or before the jump home)
+      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['arrive', 'leave'] },
       { id: 'field', kind: 'work', roles: ['drill'], secs: 18 },
       { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
       { id: 'home', kind: 'land', secs: 5 },
@@ -125,16 +133,24 @@ export function rolesWords(roleIds) {
 // the rest
 export const crewFor = (M, mine, name = 'You') => M.roles.map((id) => ({ role: id, name: mine.includes(id) ? name : ROLES[id].crew, you: mine.includes(id) }));
 
-// the trip's steps for a crew member with these roles, the steps that are flown: each step, and whether it is theirs
-// to do (`mine`: their role, its game made) or the crew's
-export function stepsFor(M, mine) {
-  return M.steps.filter((s) => s.kind !== 'tune').map((s) => {
+// the trip's steps for a crew member with these roles: each step, and whether it is theirs to do (`mine`: their role,
+// its game made) or the crew's. `when`: this run's moment for the core's tuning ('arrive' | 'leave': tuneWhen), if the
+// tuning is theirs; the 'tune' step is then among the steps, at that moment (`at`), and otherwise left out
+export function stepsFor(M, mine, when = null) {
+  const steps = M.steps.filter((s) => s.kind !== 'tune').map((s) => {
     const roles = s.role ? [s.role] : s.roles || [];
     return { ...s, mine: roles.some((id) => mine.includes(id) && ROLES[id].ready) };
   });
+  const t = when ? tuneFor(M, mine) : null;
+  if (t && (t.when || []).includes(when)) {
+    // (on arrival: right after the jump out to the far place. Before leaving it: right before the jump home)
+    const i = when === 'leave' ? steps.findIndex((s) => s.kind === 'jump' && s.to === 'home') : steps.findIndex((s) => s.kind === 'jump' && s.to !== 'home') + 1;
+    if (i > 0) steps.splice(i, 0, { ...t, mine: true, at: when });
+  }
+  return steps;
 }
 // THE CORE'S TUNING (the top of this file). A mission's 'tune' step, if it lists one; that step for a crew member with
-// these roles, if it is theirs to do; and which of its moments this run's comes at
+// these roles, if it is theirs to do; and which of its moments this run's comes at (pickTune, as the contract is signed)
 export const tuneOf = (M) => (M && M.steps.find((s) => s.kind === 'tune')) || null;
 export function tuneFor(M, mine) { const s = tuneOf(M); return s && mine.includes(s.role) && ROLES[s.role].ready ? s : null; }
 // A SHIP'S OWN CORE, in its blueprint (kit/ships/<ship>.blueprint.json: the plan its cabin is built from): the reactor in
@@ -198,15 +214,20 @@ export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.ran
   crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now, ...(tune ? { tune } : {}) };
   return crew.mission;
 }
-// IS THE CORE'S TUNING DUE NOW, for this crew member? 'before' (their contract signed, the run not flown yet: the seat
-// does not start it until the core is tuned), 'after' (home and down, their share waiting: held until the core is
-// tuned), or null (not their job, done already, or not yet time). tuned(crew): it is done.
-export function tuneDue(crew) {
+// WHEN THE CORE'S TUNING COMES ON THIS CREW MEMBER'S RUN: 'arrive' or 'leave' (the top of this file), or null (not
+// their job, or no run to fly). It is what was picked as the contract was signed.
+// (CONTRACTS KEPT FROM BEFORE THE TUNING WAS MOVED OUT TO THE ROCKS, when it was done in the hangar 'before' the run or
+// 'after' it: 'before' is now on arrival and 'after' before the jump home; one whose core was already tuned in the
+// hangar (`tuned`) has no tuning left; one home already with its share waiting has none either, and the share is not
+// held for it. A contract that names no moment this build knows gets the step's first.)
+const WHEN_WAS = { before: 'arrive', after: 'leave' };
+export function tuneWhen(crew) {
   const m = contractOf(crew);
-  if (!m || m.tuned || !tuneFor(MISSIONS[m.id], m.roles)) return null;
-  return m.tune === 'before' && m.state === 'signed' ? 'before' : m.tune === 'after' && m.state === 'payout' ? 'after' : null;
+  if (!m || m.state !== 'signed' || m.tuned) return null;
+  const s = tuneFor(MISSIONS[m.id], m.roles), W = s ? s.when || [] : []; if (!W.length) return null;
+  const w = WHEN_WAS[m.tune] || m.tune;
+  return W.includes(w) ? w : W[0];
 }
-export function tuned(crew) { const m = contractOf(crew); if (!m) return null; m.tuned = true; return m; }
 // home from the run: the haul's facts set for every slip about it (flownHaul: its store), and the crew member's share
 // of what it sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); store: the
 // tonnes of each metal that came home (all eight canisters full: whole tonnes; headed home early: the rounded store,
@@ -224,7 +245,7 @@ export function land(crew, { n = 0, store = {}, now = Date.now() } = {}) {
 // mission is done. -> { pay, credits } or null (nothing waiting)
 export function collect(crew) {
   const m = contractOf(crew);
-  if (!m || m.state !== 'payout' || tuneDue(crew)) return null;      // (the share is held until the core is tuned)
+  if (!m || m.state !== 'payout') return null;
   const pay = Math.max(0, Math.floor(+m.payout.pay || 0));
   const credits = earn(crew, m.id, pay);
   jobTally(crew, m.id).n++;      // (the runs flown and paid)

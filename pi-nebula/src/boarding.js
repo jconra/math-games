@@ -12,6 +12,7 @@
 //   B.fly(id, D)                                       a ship flown (src/flying.js): its cabin drawn where it is now
 //   B.stand(id, D)                                     a ship set down somewhere else than it is parked (below)
 //   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
+//   B.ride(id, on)                                     off: its lift carries nobody (out on a run, someone on foot aboard)
 //
 // A SHIP SET DOWN BY HAND STANDS WHERE THE PILOT PUT IT (the game's maker, 2026-11-18: "I don't wan the ship taking
 // over ... if the pilot sets down and is still crooked then I would hope the crane can just compensate for it ... Even
@@ -352,7 +353,8 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     // (the player rides it; the station's people never board a ship: one standing on its tread holds a ride back)
     const riders = inCabin && player && onTread(L, at(s, player.pos), top) ? [player.pos] : [], others = inCabin ? eyes.filter((e) => e !== player?.pos && onTread(L, at(s, e), top)) : [];
     for (const p of L.carried) if (!riders.includes(p)) L.carried.delete(p);   // (stepped off: may ride again)
-    const waited = riders.map((e) => stillFor(e, dt)), ready = riders.some((e, k) => waited[k] >= RIDE.wait && !L.carried.has(e));
+    // (a ship out on a run with someone on their feet aboard, B.ride: its lift carries nobody, there is no floor under it)
+    const waited = riders.map((e) => stillFor(e, dt)), ready = !s.noRide && riders.some((e, k) => waited[k] >= RIDE.wait && !L.carried.has(e));
     for (const e of eyes) if (!riders.includes(e)) stillOf.delete(e);
     const callers = inCabin && eyes.some((e) => { if (riders.includes(e)) return false; const q = at(s, e); return q.y < D.foot.min.y + 1.0 && Math.hypot(q.x - D.sense.x, q.z - D.sense.z) < WAY_REACH; });
     const aboard = inCabin && eyes.some((e) => !riders.includes(e) && inside(e) === s);
@@ -509,6 +511,9 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
   // (a ship that is not parked yet, the Miner landing (src/crane.js): its cabin not loaded or drawn, its lift left as it
   // is, until it is down)
   function hold(id, on = true) { const s = ships.find((q) => q.id === id); if (s) s.held = !!on; return !!s; }
+  // (a ship whose lift carries nobody for a while: out on a run, the crew member on their feet aboard it, src/trip.js;
+  // on: it carries people again)
+  function ride(id, on = true) { const s = ships.find((q) => q.id === id); if (s) s.noRide = !on; return !!s; }
   // (a ship flown, src/flying.js: its cabin drawn where the ship is now. D: a Matrix4, from where it is parked to where it
   // is now; null: standing again. Where a person can walk stays where it stands: nobody walks about a ship in flight.)
   function fly(id, D) {
@@ -537,5 +542,5 @@ export function makeBoarding({ W, walls, quality = 'high' }) {
     poolKey = null; stands++;
     return true;
   }
-  return { ships, update, inside, where, core, look, spots, hold, fly, stand, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
+  return { ships, update, inside, where, core, look, spots, hold, ride, fly, stand, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
 }
