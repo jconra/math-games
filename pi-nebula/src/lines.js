@@ -61,6 +61,11 @@ export const RUN_TALK = {
     // imbalance.", out at the rocks (on arrival there, or before the jump home); tuned: the core tuned, back to the seat
     tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
     tuned: ['The core is steady. Back to your seat, {player}.'],
+    // (the core tuned, and the next part not theirs: they carry on as they like, on their feet or in a seat)
+    tunedFree: ['The core is steady. Good work, {player}.'],
+    // (on their feet when the next part is theirs: the run waits for them in their seat)
+    backJump: ['Back to your seat, {player}. The jump is yours.'],
+    backDrill: ['Back to your seat, {player}. The drill is yours.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     there: ['Here we are. The rocks.', 'That\'s the jump. We\'re at the rocks.'],
     // (the crew's driller has marked a rock: {driller} is the one of his crew who drills; fieldMine, when the captain

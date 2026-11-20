@@ -118,7 +118,7 @@ import { sound } from './sound.js';
 import { SHIP_CLIPS, clipUrl } from './voices.js';
 import { DOOR } from '../kit/outside-plan.js';
 
-export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3 };
+export const VIEW = { near: { cockpit: 0.05, behind: 0.4 }, far: 6000, follow: 7, orbit: { speed: 0.0052, back: 5, most: 1.25 }, least: 0.3, glide: 0.6 };
 // THE GUIDE'S SMALL SPACE: its own small picture, drawn over the game's (W.after). Its eye is behind and above the small
 // model, which stands in the middle, its nose away from the eye; `edge` is how far out the furthest thing is drawn.
 // under: how low over the floor a ship coming down sends anyone under it running (m), how much room round it (m), how
@@ -263,7 +263,9 @@ export function startFlying(ctx, opts = {}) {
   const set = { invertY: !!(opts.settings && opts.settings.invertY) };
   const say = opts.words || (() => {});
   let goal = opts.goal || 'leave', auto = !pilot, plan = null, startIn = pilot ? 0 : 1.4, view = opts.view === 'behind' ? 'behind' : 'cockpit';
-  let on = true, locked = false, closed = false, offered = false, everClear = false, panelUp = false;
+  // (aside: the crew member is on their feet aboard (src/trip.js): no key, button or pointer of theirs flies it, nothing
+  // of it is on the screen, and whoever has it, the autopilot or the crew's pilot, flies on)
+  let on = true, locked = false, closed = false, offered = false, everClear = false, panelUp = false, aside = false;
   let mouse = 'pointer', captured = false, hadLock = false, rightDown = false, mx = innerWidth / 2, my = innerHeight / 2;
   let seatUp = false, guideOn = false, keysOn = false, eArmed = true, underT = 0;
   let touch = matchMedia('(pointer: coarse)').matches;
@@ -356,7 +358,7 @@ export function startFlying(ctx, opts = {}) {
     if (mouse === 'fly' && captured) { pend.dx += dx; pend.dy += dy; }
   }
   function onDown(e) {
-    if (closed || !on || locked || e.pointerType === 'touch') { if (e.pointerType === 'touch') setTouch(true); return; }
+    if (closed || !on || locked || aside || e.pointerType === 'touch') { if (e.pointerType === 'touch') setTouch(true); return; }
     if (e.button === 2) { rightDown = true; return; }
     // (a click on the view itself, in flight: the mouse flies)
     if (e.button === 0 && pilot && !auto && !S.landed && mouse === 'pointer') setMouse('fly');
@@ -367,7 +369,7 @@ export function startFlying(ctx, opts = {}) {
   // ── the keys ──
   const typing = (e) => { const t = e.target; return !!(t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox'); };
   function onKey(e) {
-    if (closed || !on || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
+    if (closed || !on || aside || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
     const a = M.KEYS[e.code]; if (!a) return;
     // (the controls put away, for the jump computer's cards and the jump itself: the two views can still be changed, so
     // a jump can be watched from the cockpit or from behind)
@@ -387,10 +389,10 @@ export function startFlying(ctx, opts = {}) {
 
   const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, job.finish()) : M.planLeave(S, job.finish()));
   function press(a) {
-    if (closed || !on) return false;
+    if (closed || !on || aside) return false;
     if (a === 'controls') { card.hidden = !card.hidden; if (!card.hidden && mouse === 'fly') setMouse('pointer'); return true; }
     if (a === 'help') { helpShut = !helpEl.classList.contains('is-shut'); painted = ''; return true; }
-    if (a === 'view') { view = view === 'cockpit' ? 'behind' : 'cockpit'; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; return true; }
+    if (a === 'view') { view = view === 'cockpit' ? 'behind' : 'cockpit'; fresh = true; glideNext = true; orbit.yaw = orbit.pitch = 0; painted = ''; return true; }
     if (locked) return false;
     // (the seat's prompt: out of the seat, for the pilot and for a crew member riding alike)
     if (a === 'getup') { if (!seatUp) return false; letGo(); opts.onGetUp(); return true; }
@@ -580,9 +582,9 @@ export function startFlying(ctx, opts = {}) {
     const mode = modeNow(), canJump = offered && goal !== 'land' && pilot;
     // (home: where it stands, and why the seat does not let them out when it does not)
     const where = M.standing(S), why = M.whyNot(S), home = goal === 'land', edge = why === 'edge' ? M.edgeOf(S) : '';
-    const key = [mode, auto, view, canJump, S.power, S.landed, touch, goal, locked, helpShut, captured, S.settle ? 1 : 0, S.p[0] > DOOR.face + 2 ? 1 : 0, where, why, edge, there ? there.id : ''].join('|');
+    const key = [mode, auto, view, canJump, S.power, S.landed, touch, goal, locked, aside, helpShut, captured, S.settle ? 1 : 0, S.p[0] > DOOR.face + 2 ? 1 : 0, where, why, edge, there ? there.id : ''].join('|');
     if (key === painted) return; painted = key;
-    el.hidden = locked; el.classList.toggle('is-touch', touch); el.classList.toggle('is-seat', mode === 'seat'); el.classList.toggle('is-watch', mode === 'watch');
+    el.hidden = locked || aside; el.classList.toggle('is-touch', touch); el.classList.toggle('is-seat', mode === 'seat'); el.classList.toggle('is-watch', mode === 'watch');
     // THE SEAT'S PROMPT: home, down where the crane can unload it. THE GUIDE: coming home, until then (the lab: whenever
     // it is in flight); its keys only for a pilot flying by hand
     seatUp = !!opts.onGetUp && home && (where === 'pad' || where === 'floor');
@@ -623,11 +625,17 @@ export function startFlying(ctx, opts = {}) {
   // ── the cameras ──
   const _eye = new THREE.Vector3(), _look = new THREE.Vector3(), _up = new THREE.Vector3(), _arm = new THREE.Vector3(), _e = new THREE.Euler(), camLook = new THREE.Vector3(), camPos = new THREE.Vector3(), camUp = new THREE.Vector3(0, 1, 0), _want = new THREE.Vector3();
   let fresh = true;
+  // V GLIDES (the game's maker, 2026-11-19: "I think the player should be able to press v to go between inside and
+  // outside. A quick glide is fine"): from where the eye was, the ship's own frame, to the other view, over VIEW.glide
+  const glide = { t: 1, p: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 60 }, _gq = new THREE.Quaternion(), _gi = new THREE.Matrix4();
+  let glideNext = false;
   const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), _pos = new THREE.Vector3(), _upv = new THREE.Vector3(), _tgt = new THREE.Vector3(), _inv = new THREE.Matrix4(), nowW = new THREE.Matrix4();
   // (the ship's kit frame in the world: at the station `now` itself)
   const world = () => (body ? nowW.multiplyMatrices(body.at, now) : now);
   function aim(camera, dt = 1 / 60) {
     if (closed || !on) return false;
+    // (the view changed: the glide sets off from where the eye is now, kept in the ship's own frame as it moves)
+    if (glideNext) { glideNext = false; _gi.copy(world()).invert(); glide.p.copy(camera.position).applyMatrix4(_gi); glide.q.setFromRotationMatrix(_gi).multiply(camera.quaternion); glide.fov = camera.fov; glide.t = 0; }
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     _up.set(0, 1, 0).transformDirection(now);
     let fov, near;
@@ -663,6 +671,12 @@ export function startFlying(ctx, opts = {}) {
     if (body) { _pos.applyMatrix4(body.at); _tgt.applyMatrix4(body.at); _upv.transformDirection(body.at); }
     camera.position.copy(_pos); camera.up.copy(_upv); camera.lookAt(_tgt);
     fresh = false;
+    if (glide.t < VIEW.glide) {
+      glide.t += dt; const k = Math.min(1, glide.t / VIEW.glide), e = k * k * (3 - 2 * k), W2 = world();
+      _gq.setFromRotationMatrix(W2).multiply(glide.q);
+      camera.position.lerpVectors(_eye.copy(glide.p).applyMatrix4(W2), camera.position, e); camera.quaternion.slerpQuaternions(_gq, camera.quaternion.clone(), e);
+      fov = glide.fov + (fov - glide.fov) * e; near = Math.min(VIEW.near.cockpit, near);
+    }
     if (camera.fov !== fov || camera.near !== near || camera.far !== VIEW.far) { camera.fov = fov; camera.near = near; camera.far = VIEW.far; camera.updateProjectionMatrix(); }
     return true;
   }
@@ -731,6 +745,8 @@ export function startFlying(ctx, opts = {}) {
       if (W.dust) W.dust.visible = dustWas && !out;
     },
     lock(v) { locked = !!v; letGo(); if (locked) { setMouse('pointer'); card.hidden = true; } painted = ''; paint(); },
+    // (the crew member on their feet aboard: the top of this function, `aside`)
+    aside(v) { if (closed || aside === !!v) return; aside = !!v; letGo(); setMouse('pointer'); card.hidden = true; painted = ''; if (on) paint(); else el.hidden = true; },
     // put away altogether for a while, the ship left where it is (at the rocks, while the drill's view has the eye), and back
     pause(v) { if (closed) return; on = !v; letGo(); setMouse('pointer'); card.hidden = true; fresh = true; orbit.yaw = orbit.pitch = 0; painted = ''; if (on) { pose(1 / 60); paint(); } else el.hidden = true; },
     // where the eye is now, in the ship's own kit frame (a glide out of this view starts there)
@@ -785,7 +801,7 @@ export function startFlying(ctx, opts = {}) {
     pointer(x, y) { mx = x; my = y; },
     getUp: () => press('getup'), get hints() { return hints; }, holo,
     // (the ship's place as a matrix, from where it is parked: for the rigs' own pictures)
-    state: () => ({ on, view, auto, mouse, captured, canLock, locked, offered, everClear, goal, pilot, touch, mode: modeNow(), power: S.power, landed: S.landed, settling: !!S.settle, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(3)), speed: +M.speedOf(S).toFixed(2), bump: +S.bump.toFixed(3), legs: plan ? plan.length : 0, invertY: set.invertY,
+    state: () => ({ on, view, auto, mouse, captured, canLock, locked, aside, offered, everClear, goal, pilot, touch, mode: modeNow(), power: S.power, landed: S.landed, settling: !!S.settle, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(3)), speed: +M.speedOf(S).toFixed(2), bump: +S.bump.toFixed(3), legs: plan ? plan.length : 0, invertY: set.invertY,
       visiting: there ? there.id : null, said: { ...voice.said }, heard: { ...heard },
       standing: M.standing(S), stands: !!(B && B.moved), field: !!body, task: !!(opts.task && pilot && on && !locked), canGetUp: M.canGetUp(S), why: M.whyNot(S), tilt: +M.tiltOf(S).toFixed(1), touching: !!S.on, seat: seatUp, guide: guideOn, keys: keysOn, yaw: +(Math.atan2(-M.turn(S.q, [1, 0, 0])[2], M.turn(S.q, [1, 0, 0])[0]) * 180 / Math.PI).toFixed(1),
       lit: hints ? Object.fromEntries(Object.entries(hints.keys).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null, arrows: hints ? Object.fromEntries(Object.entries(hints.mouse).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null,

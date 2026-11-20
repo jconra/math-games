@@ -41,10 +41,13 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Sit at the controls and fly the Miner out</small></div><button type="button" class="pnj-go">Sit down<kbd>E</kbd></button>';
   // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
   let prompted = null;
+  // (signed only as the ship's engineer: no seat is theirs, the two chairs are the crew's (src/trip.js); they tell the
+  // crew they are aboard, and the run begins with them on their feet)
   const promptFor = (m) => {
-    const pilot = m.roles.includes('pilot'); if (pilot === prompted) return; prompted = pilot;
+    const pilot = m.roles.includes('pilot'), seat = pilot || m.roles.includes('drill'), key = pilot ? 'pilot' : seat ? 'seat' : 'ready'; if (key === prompted) return; prompted = key;
     prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : 'The Miner\'s cockpit';
-    prompt.querySelector('small').textContent = pilot ? 'Sit at the controls and fly the Miner out' : 'Sit down and ride out to the rocks with the crew';
+    prompt.querySelector('small').textContent = pilot ? 'Sit at the controls and fly the Miner out' : seat ? 'Sit down and ride out to the rocks with the crew' : 'Tell the crew you are aboard: they fly out to the rocks';
+    prompt.querySelector('.pnj-go').innerHTML = (seat ? 'Sit down' : 'Ready') + '<kbd>E</kbd>';
   };
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => start());

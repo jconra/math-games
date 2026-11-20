@@ -731,3 +731,17 @@ test('the cards of a run pay nothing by themselves, but the level and the kinds 
   const q = E.deal(crew, pilot, { rand: seeded(99) });
   assert.equal(E.answer(crew, pilot, q, q.order.coins.findIndex((c) => c.good), { ms: 9000 }).pay, q.worth.pay);
 });
+
+// ── on their feet aboard while it flies (src/trip.js) ────────────────────────────────────────────────────────────
+test('on their feet aboard: the captain asks them back to their seat only for a part that is theirs', async () => {
+  // "It would be best if the pilot or driller could "Get Up" at any time, but if they are expected to do the next move
+  // then it will request them to get back to the seat"
+  const { RUN_TALK } = await import('../src/lines.js'), T = RUN_TALK[MINING.id];
+  for (const w of T.backJump) { assert.match(w, /seat/); assert.match(w, /jump/); }
+  for (const w of T.backDrill) { assert.match(w, /seat/); assert.match(w, /drill/); }
+  // (the core tuned and the next part not theirs: no seat asked for; the engineer walks the ship as they like)
+  for (const w of T.tunedFree) { assert.doesNotMatch(w, /seat/); assert.match(w, /core is steady/); }
+  for (const w of [...T.backJump, ...T.backDrill, ...T.tunedFree]) assert.ok(w.length <= 90, w);
+  // signed only as engineer, no seat is theirs: both flight-deck jobs are the other two's
+  assert.ok(MS.aboardOf(MINING, ['engineer']).every((a) => a.jobs.length === 1));
+});
