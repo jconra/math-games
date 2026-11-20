@@ -110,3 +110,5 @@ import { SHIP_MINER_BUILT } from '../ships/miner-built.js';
 Object.assign(OUTSIDE, SHIP_MINER_BUILT);
 import { SHIP_MEDIC_BUILT } from '../ships/medic-built.js';
 Object.assign(OUTSIDE, SHIP_MEDIC_BUILT);
+import { SHIP_HAULER_BUILT } from '../ships/hauler-built.js';
+Object.assign(OUTSIDE, SHIP_HAULER_BUILT);
