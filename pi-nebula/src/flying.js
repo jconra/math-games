@@ -56,9 +56,9 @@
 // you fly, and there is always enough for the run." And of the speed's own screen (2026-11-20): "I'd prefer it be on a
 // big screen like where that math question is with other flight data ... It just looks out of place all by itself on
 // it's own little screen"):
-//   - ONE DISPLAY on the dashboard in front of the pilot, where the ship's own data puts it (src/fleet.js `dash`: on the
-//     empty top of the dashboard under the windscreen; on a screen held upright, its own place above a phone's
-//     buttons): three framed screens on one dark glass, light lines: THE TINY SHIP (above); THE SPEED and THE FUEL, a
+//   - ONE DISPLAY on the dashboard in front of the crew member's seat (the pilot's; riding beside the pilot, the other
+//     seat's, across the ship), where the ship's own data puts it (src/fleet.js `dash`: on the empty top of the
+//     dashboard under the windscreen; on a screen held upright, its own place above a phone's buttons): three framed screens on one dark glass, light lines: THE TINY SHIP (above); THE SPEED and THE FUEL, a
 //     gauge and its percent; HOW FAR, THE CANISTERS FULL (on a run) and THE FLIGHT TIME. Their numbers are src/dash.js:
 //     the flying's own in the labs, the run's over the whole of it in the game (src/trip.js). Dark but for its frames
 //     while the ship's power is off. The speed has no screen of its own any more.
@@ -541,8 +541,10 @@ export function startFlying(ctx, opts = {}) {
     function place(tall) {
       const s = (tall && spec.tall) || spec; if (s === placed) return; placed = s;
       // (turned a little about upright, `turn`, to follow a curved dashboard: its port end nearer the pilot)
-      const t = s.turn || 0, up = [Math.sin(s.lean) * Math.sin(t), Math.cos(s.lean), Math.sin(s.lean) * Math.cos(t)];
-      group.position.set(s.at[0] + up[0] * s.h / 2, s.at[1] + up[1] * s.h / 2, s.at[2] + up[2] * s.h / 2); group.rotation.set(-s.lean, Math.PI + t, 0, 'YXZ');
+      // (in front of the crew member's own seat: the other seat, riding beside the pilot, has it across the ship, as its
+      // eyes are)
+      const m = pilot ? 1 : -1, t = m * (s.turn || 0), up = [Math.sin(s.lean) * Math.sin(t), Math.cos(s.lean), Math.sin(s.lean) * Math.cos(t)];
+      group.position.set(m * s.at[0] + up[0] * s.h / 2, s.at[1] + up[1] * s.h / 2, s.at[2] + up[2] * s.h / 2); group.rotation.set(-s.lean, Math.PI + t, 0, 'YXZ');
       group.scale.setScalar(s.w / spec.w);
     }
     place(false);
