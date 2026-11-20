@@ -71,15 +71,17 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
     if (i >= 0 && buttons[i]) { e.preventDefault(); go(buttons[i]); }
   });
 
-  let here = null, ride = null, playing = false, place = 'deck';
+  // (hold: just come out of a ride, the ride's view kept on the box while the player stands in its middle or steps
+  // toward its doors, so the view does not jump to the back of their head against the box's back wall)
+  let here = null, ride = null, hold = null, playing = false, place = 'deck';
   function go(to) {
     const P = body();
     if (!playing || ride || !P || !here || to === here || !STOPS.some((s) => s.id === to)) return false;
-    ride = { from: here, to, phase: 'shut', t: 0 };
+    ride = { from: here, to, phase: 'shut', t: 0 }; hold = null;
     prompt.classList.add('is-going'); small.textContent = words(here, to) + '…'; goes.hidden = true;
     return true;
   }
-  function finish() { if (!ride) return; ride = null; const P = body(); if (P) snap(P.pos, P.heading); prompt.classList.remove('is-going'); small.textContent = 'Pick where to go'; goes.hidden = false; shownFor = null; }
+  function finish(keep = true) { if (!ride) return; hold = keep ? { id: ride.to, t: 0 } : null; ride = null; prompt.classList.remove('is-going'); small.textContent = 'Pick where to go'; goes.hidden = false; shownFor = null; }
 
   // a door, as the lift wants it: open while the player is near it and no ride is on (and at the end of one, in the
   // box it came to); shut while a ride is on
@@ -144,6 +146,7 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
 
   const api = {
     get busy() { return !!ride; },
+    get viewing() { return !ride && !!hold; },
     get here() { return here; },
     get place() { return place; },
     doors, go, flyNow: () => { fly.wait = 0; },
@@ -164,10 +167,15 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
         else if (ride.phase === 'go' && ride.t > RIDE.go) {
           // the moment of the change: the player taken to the same spot in the other box, its doors still shut
           const c = P ? carry(P.pos, P.heading, ride.from, ride.to) : null;
-          if (c) { const s = walls.snap(c.at[0], c.at[1] + 0.2, c.at[2], 0.6); put(s || new THREE.Vector3(...c.at), c.heading); }
+          if (c) { const s = walls.snap(c.at[0], c.at[1] + 0.2, c.at[2], 0.6); put(s || new THREE.Vector3(...c.at), c.heading); if (P) snap(P.pos, P.heading); }
           ride.phase = 'open'; ride.t = 0;
           if (P) { place = placeOf(P.pos); here = stopIn(P.pos); }
         } else if (ride.phase === 'open' && (ride.t > RIDE.open || (T && T.t >= 0.6))) finish();
+      }
+      if (hold && !ride) {
+        hold.t += dt;
+        const c = boxPoint(hold.id, [0, 0, 0]);
+        if (!P || !playing || hold.t > 5 || Math.hypot(P.pos.x - c[0], P.pos.z - c[2]) > 0.5 || Math.abs(P.pos.y - c[1]) > 1) hold = null;
       }
       doorsTo(dt, P);
       outsideFor(W.camera);
@@ -178,15 +186,15 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
     },
     // the ride's own view (main.js calls it after the follow camera, while a ride is on)
     aim(camera) {
-      if (!ride) return;
-      const id = ride.phase === 'open' ? ride.to : ride.from, a = boxPoint(id, RIDE_CAM.at), b = boxPoint(id, RIDE_CAM.look);
+      if (!ride && !hold) return;
+      const id = ride ? (ride.phase === 'open' ? ride.to : ride.from) : hold.id, a = boxPoint(id, RIDE_CAM.at), b = boxPoint(id, RIDE_CAM.look);
       camera.position.set(a[0], a[1], a[2]); camera.lookAt(b[0], b[1], b[2]);
       if (camera.fov !== RIDE_CAM.fov) { camera.fov = RIDE_CAM.fov; camera.updateProjectionMatrix(); }
     },
-    stop() { finish(); prompt.hidden = true; playing = false; if (fly.jet) fly.jet.visible = false; fly.path = null; if (outsideOff && outside) { outside.off = false; outsideOff = false; } },
+    stop() { finish(false); hold = null; prompt.hidden = true; playing = false; if (fly.jet) fly.jet.visible = false; fly.path = null; if (outsideOff && outside) { outside.off = false; outsideOff = false; } },
     state() {
       const d = Object.fromEntries(Object.entries(doors).map(([k, D]) => [k, +D.t.toFixed(2)]));
-      return { here, place, ride: ride ? { ...ride, t: +ride.t.toFixed(2) } : null, doors: d, prompt: prompt.hidden ? null : { words: prompt.innerText.replace(/\s+/g, ' ').trim(), buttons: buttons.slice() }, flyby: { on: !!fly.path, count: fly.count, wait: +fly.wait.toFixed(1), loaded: !!fly.jet, at: fly.jet && fly.path ? fly.jet.position.toArray().map((v) => +v.toFixed(1)) : null }, outsideOff };
+      return { here, place, ride: ride ? { ...ride, t: +ride.t.toFixed(2) } : null, viewing: !ride && !!hold, doors: d, prompt: prompt.hidden ? null : { words: prompt.innerText.replace(/\s+/g, ' ').trim(), buttons: buttons.slice() }, flyby: { on: !!fly.path, count: fly.count, wait: +fly.wait.toFixed(1), loaded: !!fly.jet, at: fly.jet && fly.path ? fly.jet.position.toArray().map((v) => +v.toFixed(1)) : null }, outsideOff };
     },
   };
   return api;

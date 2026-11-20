@@ -206,12 +206,12 @@ async function boot() {
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
       lift.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip);
-      if (lift.busy) lift.aim(W.camera);      // (the ride's own view, over the player's head at the shut doors)
+      if (lift.busy || lift.viewing) lift.aim(W.camera);      // (the ride's own view, over the player's head at the shut doors)
       if (onTrip) mission.aim(W.camera, dt);
       // (how far the camera that is DRAWN is from the head: at a job that is the job's own camera, not the follow camera,
       // which still runs behind the player and may be pressed against a wall there: the player vanished for about a
       // second in the arena, standing near its wall with Mathball's camera metres away)
-      const camNear = atJob || lift.busy ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
+      const camNear = atJob || lift.busy || lift.viewing ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
       P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes()) && !mission.seated;     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
