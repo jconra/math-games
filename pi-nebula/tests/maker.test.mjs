@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, ANDROIDS, OFFERED_LOOKS, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
+import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, ANDROIDS, OFFERED_LOOKS, standIn, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
 
 const KIT = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.meta.url), 'utf8')).parts;
 const KAI = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };      // (the look "kai"'s own recipe)
@@ -187,4 +187,23 @@ test('the ready-made looks: the title offers four people and four of his android
   // (a crew member saved with Sol, Ivy, Ren or Noor keeps that look exactly: still in LOOKS, its recipe as it was)
   const was = { sol: ['atlantis1', 't6', 'sidepart'], ivy: ['atlantis2', 't9', 'wavy'], ren: ['civilian', 't1', 'crop'], noor: ['atlantis2', 't7', 'braidcrown'] };
   for (const [id, r] of Object.entries(was)) { assert.ok(!OFFERED_LOOKS.includes(id), id); assert.deepEqual(lookIn(id), r, id); }
+});
+
+test('a ready-made android\'s look stepped on to a person\'s body wears a person\'s head (the first look\'s), never the android\'s', () => {
+  const KAI_R = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };
+  // (the look androidDock with the body stepped on to the smelter's, a body colour picked)
+  const R = standIn({ suit: 'smelter', head: 'androidDock', hair: null, colours: { uniform: '#3f8fe8' }, face: {} }, KAI_R);
+  assert.deepEqual([R.suit, R.head, R.hair], ['smelter', 't10', 'curlyShort']);
+  assert.deepEqual(R.colours, { skin: '#d9a37f', hair: '#2e1f15', uniform: '#3f8fe8' });
+  // (a skin the player picked is theirs)
+  assert.equal(standIn({ suit: 'smelter', head: 'androidDock', hair: null, colours: { skin: '#663b22' } }, KAI_R).colours.skin, '#663b22');
+  // (on its own body, or a person's head anywhere: as it is)
+  const own = { suit: 'androidDock', head: 'androidDock', hair: null, colours: {} };
+  assert.equal(standIn(own, KAI_R), own);
+  const p = { suit: 'smelter', head: 't3', hair: 'afro', colours: {} };
+  assert.equal(standIn(p, KAI_R), p);
+  // (an android's head is never worn on another android's body: that body brings its own, and on Vega's neither)
+  assert.equal(standIn({ suit: 'androidHeavy', head: 'androidDock', hair: null }, KAI_R).head, 't10');
+  // (and the first ready-made look is a person, so the stand-in is a person's head)
+  assert.equal(OFFERED_LOOKS[0], 'kai');
 });

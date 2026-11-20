@@ -45,6 +45,16 @@ export const BRINGS = { vega: { head: 'vega', hair: null }, ...Object.fromEntrie
 // is still worn by whoever saved it; only these eight are offered.
 export const OFFERED_LOOKS = ['kai', 'mira', 'dax', 'zuri', 'androidDock', 'androidHeavy', 'androidOld', 'androidMedical'];
 export const brings = (suit) => (suit && Object.prototype.hasOwnProperty.call(BRINGS, suit) ? BRINGS[suit] : null);
+// A HEAD THAT COMES WITH ONE BODY (an android's, Vega's: BRINGS) worn on any other body: what a ready-made android's
+// look comes to when the player steps the Body arrows on to a person's body, since that look has no head of a
+// person's own. A person stands in: the head and hair of `person` (the first ready-made look's recipe), in that look's
+// own skin and hair colours unless the player has picked theirs; R is the recipe with the look's extras laid over it.
+// The android's own head again on its own body, and any head the player steps to is theirs.
+export function standIn(R, person) {
+  const b = brings(R.suit), owned = Object.values(BRINGS).some((x) => x.head === R.head);
+  if (!owned || (b && b.head === R.head) || !person) return R;
+  return { ...R, head: person.head, hair: person.hair === undefined ? null : person.hair, colours: { ...(person.colours || {}), ...(R.colours || {}) }, face: {} };
+}
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
 // (2026-11-19: all 13 heads on the 11 bodies and under the 23 hairs, each drawn from the front, the side and behind
 // and looked at. No hair is left out on any head. Two heads on a body are: the 40s man's thick neck comes through the

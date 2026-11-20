@@ -26,7 +26,7 @@
 // body, a head, a hair, colours: maker.js) is saved beside the id and laid over the look's recipe by recipeOf() below.
 
 import { BAND_COLOURS as BAND } from '../kit/crew.js';
-import { brings, OFFERED_LOOKS } from './maker.js';
+import { brings, OFFERED_LOOKS, standIn } from './maker.js';
 
 // (each uniform look wears its own band colour (the white bands on the grey and dark uniforms): the game's maker asked for
 // tinted bands, purple among them, 2026-11-10; the two jackets keep theirs as made)
@@ -77,5 +77,7 @@ export function recipeOf(saved, lib = null, { under = false } = {}) {
   const face = typeof extra.head === 'string' && extra.head !== base.head ? {} : base.face || {};
   const R = { ...base, ...extra, colours: { ...(base.colours || {}), ...(extra.colours || {}) }, face: { ...face, ...(extra.face || {}) } };
   const own = under ? null : brings(R.suit);
-  return own ? { ...R, head: own.head, hair: own.hair, face: {} } : R;
+  // (a ready-made android's look stepped on to a person's body: the first look's head and hair stand in for its own
+  // head, maker.js standIn)
+  return own ? { ...R, head: own.head, hair: own.hair, face: {} } : standIn(R, LOOKS[0].recipe);
 }
