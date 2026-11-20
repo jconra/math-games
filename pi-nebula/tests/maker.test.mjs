@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
+import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, BRINGS, ANDROIDS, OFFERED_LOOKS, brings, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
 
 const KIT = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.meta.url), 'utf8')).parts;
 const KAI = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };      // (the look "kai"'s own recipe)
@@ -17,12 +17,16 @@ test('the arrows have three rows: hair, head and body, and the player reads thos
   for (const r of ROWS) assert.ok(!/outfit|uniform|suit/i.test(r.word), r.word);
 });
 
-test('what a player may wear: every body but the captains\' and Vega\'s, the 13 heads (never Vega\'s helmet), every hair and no hair', () => {
+test('what a player may wear: every body but Vega\'s (the captains\' and the six androids\' too), the 13 heads (never Vega\'s helmet nor an android\'s), every hair and no hair', () => {
   const suits = wearable(KIT, 'suit'), heads = wearable(KIT, 'head'), hairs = wearable(KIT, 'hair');
-  assert.equal(suits.length, KIT.suit.length - 4);
-  for (const s of ['vega', 'captainMan', 'captainOld', 'captainWoman']) assert.ok(!suits.includes(s), s);
+  // ("All 14 from the start": the fourteen bodies people wear, and the six androids)
+  assert.equal(suits.length, KIT.suit.length - 1);
+  assert.equal(suits.filter((s) => !ANDROIDS.includes(s)).length, 14);
+  assert.ok(!suits.includes('vega'));
+  for (const s of ['captainMan', 'captainOld', 'captainWoman', ...ANDROIDS]) assert.ok(suits.includes(s), s);
   assert.equal(heads.length, 13);
   assert.ok(!heads.includes('vega'));
+  for (const a of ANDROIDS) assert.ok(!heads.includes(a), a);
   assert.equal(hairs.length, KIT.hair.length + 1);
   assert.equal(hairs[hairs.length - 1], NO_HAIR);
   // (every part kept back or left apart is a part the kit really has: a name mistyped would leave nothing out)
@@ -135,8 +139,9 @@ test('a skin colour picked with the + is never white or near white: brought insi
 
 test('a saved look is made safe: kept-back parts and colours that are no colour are dropped, a skin is never near white, the rest kept', () => {
   assert.deepEqual(tidy({ id: 'kai', size: 0.9 }), { id: 'kai', size: 0.9 });
-  // (a captain's body, Vega's helmet and coat: never a player's)
-  assert.deepEqual(tidy({ id: 'kai', suit: 'captainMan', head: 'vega' }), { id: 'kai' });
+  // (Vega's helmet and coat: never a player's; a captain's body is ("Players can wear them too"), and an android's)
+  assert.deepEqual(tidy({ id: 'kai', suit: 'captainMan', head: 'vega' }), { id: 'kai', suit: 'captainMan' });
+  assert.deepEqual(tidy({ id: 'kai', suit: 'androidOld' }), { id: 'kai', suit: 'androidOld' });
   assert.deepEqual(tidy({ id: 'kai', suit: 'vega' }), { id: 'kai' });
   assert.deepEqual(tidy({ id: 'kai', suit: 'cook', head: 't3', hair: null }), { id: 'kai', suit: 'cook', head: 't3', hair: null });
   assert.deepEqual(tidy({ id: 'kai', suit: 7, head: '', hair: 3 }), { id: 'kai' });
@@ -148,4 +153,38 @@ test('a saved look is made safe: kept-back parts and colours that are no colour 
   assert.deepEqual(tidy({ id: 'kai', colours: 'red' }), { id: 'kai' });
   // (what a newer build saved beside the look is kept)
   assert.deepEqual(tidy({ id: 'kai', earned: ['hat'] }), { id: 'kai', earned: ['hat'] });
+});
+
+test('his six androids: each body brings its own head and wears no hair, and the body arrows step onto each and off again', () => {
+  assert.equal(ANDROIDS.length, 6);
+  for (const a of ANDROIDS) {
+    assert.deepEqual(brings(a), { head: a, hair: null });
+    const h = KIT.head.find((p) => p.id === a); assert.ok(h, a); assert.equal(h.with, a);
+    // (a short plain name for the Crew Lab and screen readers, no "suit" or "outfit" in it)
+    const s = KIT.suit.find((p) => p.id === a); assert.ok(s.ownHands, a); assert.ok(!/suit|outfit/i.test(s.name), s.name);
+  }
+  // stepping along the body row from a person's look reaches every android, the head and hair kept under it
+  const seen = new Set(); let w = { suit: 'civilian', head: 't7', hair: 'ponytail' };
+  for (let i = 0; i < KIT.suit.length; i++) { w = { ...w, suit: step(KIT, 'suit', w, 1) }; seen.add(w.suit); if (brings(w.suit)) { assert.deepEqual(choices(KIT, 'head', w), []); assert.deepEqual(choices(KIT, 'hair', w), []); } }
+  for (const a of ANDROIDS) assert.ok(seen.has(a), a);
+  assert.equal(w.head, 't7'); assert.equal(w.hair, 'ponytail');
+});
+
+// (src/looks.js imports the crew kit, which needs three.js: its LOOKS are read here from the file's own text)
+const LOOKS_SRC = readFileSync(new URL('../src/looks.js', import.meta.url), 'utf8');
+const lookIn = (id) => { const m = new RegExp(`\\{ id: '${id}',(?:(?!\\{ id:)[\\s\\S])*?recipe: \\{ suit: '([^']+)', head: '([^']+)', hair: ([^,} ]+)`).exec(LOOKS_SRC); return m && [m[1], m[2], m[3].replace(/'/g, '')]; };
+
+test('the ready-made looks: the title offers four people and four of his androids; the four looks that stood there still wear as before', () => {
+  assert.equal(OFFERED_LOOKS.length, 8);
+  assert.deepEqual(OFFERED_LOOKS.slice(0, 4), ['kai', 'mira', 'dax', 'zuri']);
+  for (const id of OFFERED_LOOKS.slice(4)) {
+    assert.ok(ANDROIDS.includes(id), id);
+    // (each as he made it: its own body and head, no hair, no colours of its own)
+    assert.deepEqual(lookIn(id), [id, id, 'null'], id);
+    assert.match(LOOKS_SRC, new RegExp(`id: '${id}', name: '[^']+', recipe: \\{ suit: '${id}', head: '${id}', hair: null \\} \\}`), id);
+  }
+  for (const id of OFFERED_LOOKS) assert.ok(lookIn(id), id);
+  // (a crew member saved with Sol, Ivy, Ren or Noor keeps that look exactly: still in LOOKS, its recipe as it was)
+  const was = { sol: ['atlantis1', 't6', 'sidepart'], ivy: ['atlantis2', 't9', 'wavy'], ren: ['civilian', 't1', 'crop'], noor: ['atlantis2', 't7', 'braidcrown'] };
+  for (const [id, r] of Object.entries(was)) { assert.ok(!OFFERED_LOOKS.includes(id), id); assert.deepEqual(lookIn(id), r, id); }
 });

@@ -17,7 +17,7 @@
 import { showTitle as showShared, esc, ICONS } from '../../../shared/title/title.js';
 import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
-import { LOOKS, lookById, recipeOf } from '../looks.js';
+import { OFFERED, lookById, recipeOf } from '../looks.js';
 import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
 import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange, brings } from '../maker.js';
 import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
@@ -82,11 +82,13 @@ function brand() {
 
 // the row of ready-made looks (on the chosen crew member's panel: pick one and it is saved at once, as it is: whatever
 // the maker had changed is let go). `cur` is the look worn as made, or null for a crew member who has changed theirs.
-const lookRow = (cur, at) => `<div class="${P}-looks is-small" role="radiogroup" aria-label="Ready-made looks" data-nav="radio">
-  ${LOOKS.map((l) => `<button class="${P}-look" role="radio" aria-checked="${l.id === cur}" tabindex="${l.id === (cur || at) ? 0 : -1}"
+// (OFFERED, looks.js: four people and four androids. A crew member saved with a look no longer offered keeps it; none of
+// the eight is checked for them, and the first takes the keyboard)
+const lookRow = (cur, at) => { const k = OFFERED.some((l) => l.id === (cur || at)) ? cur || at : OFFERED[0].id; return `<div class="${P}-looks is-small" role="radiogroup" aria-label="Ready-made looks" data-nav="radio">
+  ${OFFERED.map((l) => `<button class="${P}-look" role="radio" aria-checked="${l.id === cur}" tabindex="${l.id === k ? 0 : -1}"
       data-act="setlook" data-id="${l.id}" data-k="setlook:${l.id}">
     <span class="${P}-face">${pic({ id: l.id })}</span><span class="${P}-lname">${esc(l.name)}</span></button>`).join('')}
-</div>`;
+</div>`; };
 
 // THE CHARACTER MAKER (2026-11-19; the game's maker: "It would be great if it showed the character and had arrows to
 // the sides for hear, head, and body. And then some color options for hair, skin, and body"; and eye colour and
@@ -190,7 +192,7 @@ const theme = {
   prefix: P,
   css: SHEET,
   save,
-  looks: LOOKS,
+  looks: OFFERED,
   names: NAMES,
   // (no skin and hair dots: a look here is a whole ready-made person, shown as a picture made ahead of time)
   portrait: pic,
@@ -198,7 +200,7 @@ const theme = {
   lookCardOf: (look) => ({ id: look.id }),
   // a fresh form starts on a look no saved crew member has (two children's crew don't look the same by accident), Medium
   draft(players) {
-    const used = new Set(players.map((p) => p.look && p.look.id)), free = LOOKS.find((l) => !used.has(l.id));
+    const used = new Set(players.map((p) => p.look && p.look.id)), free = OFFERED.find((l) => !used.has(l.id));
     return free ? { look: free.id, size: 1 } : { size: 1 };
   },
   // the Height row on the new crew member's form
@@ -246,7 +248,7 @@ const theme = {
     // a ready-made look for the chosen crew member, as it is (the height kept), saved straight away
     setlook(ctx, data) {
       const p = ctx.current();
-      if (!p || !LOOKS.some((l) => l.id === data.id) || (p.look && p.look.id === data.id && !isMade(p.look))) return;
+      if (!p || !OFFERED.some((l) => l.id === data.id) || (p.look && p.look.id === data.id && !isMade(p.look))) return;
       lookChanged(ctx, p, withLook(p.look, data.id));
     },
     // THE CHARACTER MAKER: an arrow (the hair, the head or the body before or after the one worn) ...

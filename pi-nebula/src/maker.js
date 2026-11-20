@@ -18,8 +18,9 @@
 // brought inside THE SKIN'S RANGE (skinInRange, below): never white or near white.
 //
 // THE PARTS ARE THE CREW KIT'S OWN, as they are: nothing is re-made or re-fitted for the maker. What is left out:
-//   KEPT_BACK   parts no player wears: Captain Vega's body and his helmet (his own: "Vega is special"), and the three
-//               captains' bodies (whether a player may wear a captain's is the game's maker's to say: asked);
+//   KEPT_BACK   parts no player wears: Captain Vega's body and his helmet (his own: "Vega is special"). The three
+//               captains' bodies are a player's too (2026-11-19, the game's maker: "Players can wear them too", "They are
+//               just outfits"), and every body is open from the start ("All 14 from the start");
 //   APART       pairings that do not go together cleanly in the kit (a hair on one head, a head on one body): the arrows
 //               step past them. Each was looked at from the front, the side and behind (~/pw/space-math/CHARACTER_MAKER.md).
 
@@ -29,14 +30,20 @@ export const ROWS = [
   { id: 'head', part: 'head', word: 'Head' },
   { id: 'body', part: 'suit', word: 'Body' },
 ];
-export const KEPT_BACK = { suit: ['vega', 'captainMan', 'captainOld', 'captainWoman'], head: ['vega'], hair: [] };
+export const KEPT_BACK = { suit: ['vega'], head: ['vega'], hair: [] };
 // AN ANDROID'S BODY (the game's maker, 2026-11-19, of a blue-skinned crew member the checks had made: "I guess we have
 // aliens now. I wonder if we should let the player pick an android?"): a body that brings its own head and wears no
 // hair. While one is worn the head and hair arrows have nothing to step to, and the head and hair the player had are
-// kept under it and are theirs again on the next body. THE PLAYER'S ANDROIDS ARE TO BE HIS SIX (the dock, heavy,
-// medical, old, service and feminine ones he made: not yet in the crew kit). Captain Vega's own body is such a body
-// too, but no player wears it: "I wasn't going to let the player select Captain Vega because Vega is special."
-export const BRINGS = { vega: { head: 'vega', hair: null } };
+// kept under it and are theirs again on the next body. THE PLAYER'S ANDROIDS ARE HIS SIX (2026-11-19: the dock worker,
+// the heavy one, the old one, the medical, service and feminine ones he made; in the crew kit as a body with its own
+// hands and a head with its face plate each, crew.json `with`). Captain Vega's own body is such a body too, but no
+// player wears it: "I wasn't going to let the player select Captain Vega because Vega is special."
+export const ANDROIDS = ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine'];
+export const BRINGS = { vega: { head: 'vega', hair: null }, ...Object.fromEntries(ANDROIDS.map((id) => [id, { head: id, hair: null }])) };
+// THE READY-MADE LOOKS THE TITLE OFFERS (looks.js OFFERED: the game's maker, "We should make the bottom 4 androids"):
+// the first four people, then four of his androids as he made them (which four: asked). Every look in looks.js LOOKS
+// is still worn by whoever saved it; only these eight are offered.
+export const OFFERED_LOOKS = ['kai', 'mira', 'dax', 'zuri', 'androidDock', 'androidHeavy', 'androidOld', 'androidMedical'];
 export const brings = (suit) => (suit && Object.prototype.hasOwnProperty.call(BRINGS, suit) ? BRINGS[suit] : null);
 // pairings left out: { hair id: [head ids] } and { suit id: [head ids] }
 // (2026-11-19: all 13 heads on the 11 bodies and under the 23 hairs, each drawn from the front, the side and behind

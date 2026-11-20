@@ -12,12 +12,21 @@
 // `name` is a few plain words on what the look is, for a screen reader and for anyone who cannot see the picture; the
 // title screen does not print it (a person-like name under a picture would be taken for the player's own name).
 //
+// FOUR READY-MADE ANDROIDS (2026-11-19; the game's maker, asked whether the eight looks should stay beside the character
+// maker: "We should make the bottom 4 androids"). The title offers OFFERED: the first four people (on a phone, the top
+// row of the grid of four over four) and four of his six androids, each as he made it (its own head, no hair, its own
+// colours). Which four he did not say: the four most unlike each other were taken (the dock worker with his wide visor,
+// the heavy one with one round lens, the old worn one, the medical one; the service and feminine ones are sleek and
+// white as the medical one is): asked. The four looks that stood there (Sol, Ivy, Ren, Noor) are still in LOOKS, so a
+// crew member saved with one of them looks exactly as before; the title no longer offers them. All six androids are
+// on the character maker's Body arrows (maker.js BRINGS).
+//
 // WHAT IS SAVED with a player is { id } (save.js), not the whole recipe, so a look that is improved here improves for
 // everyone who already picked it, and the picture always matches. What a player changes in the character maker (a
 // body, a head, a hair, colours: maker.js) is saved beside the id and laid over the look's recipe by recipeOf() below.
 
 import { BAND_COLOURS as BAND } from '../kit/crew.js';
-import { brings } from './maker.js';
+import { brings, OFFERED_LOOKS } from './maker.js';
 
 // (each uniform look wears its own band colour (the white bands on the grey and dark uniforms): the game's maker asked for
 // tinted bands, purple among them, 2026-11-10; the two jackets keep theirs as made)
@@ -41,7 +50,14 @@ export const LOOKS = [
     recipe: { suit: 'civilian', head: 't1', hair: 'crop', colours: { skin: SKIN.olive, hair: HAIR.black }, face: { eyeSize: -0.3, jawWidth: -0.4 } } },
   { id: 'noor', name: 'A young woman with a black braid round her head, in a grey crew uniform',
     recipe: { suit: 'atlantis2', head: 't7', hair: 'braidcrown', colours: { skin: SKIN.brown, hair: HAIR.black, uniform: BAND.orange }, face: { noseLength: 0.5, eyeSpacing: -0.4, jawWidth: 0.5, cheekbones: -0.4 } } },
+  // (the four ready-made androids: each body brings its own head and wears no hair, maker.js BRINGS)
+  { id: 'androidDock', name: 'A big white and yellow android with a wide visor', recipe: { suit: 'androidDock', head: 'androidDock', hair: null } },
+  { id: 'androidHeavy', name: 'A heavy android with one round eye', recipe: { suit: 'androidHeavy', head: 'androidHeavy', hair: null } },
+  { id: 'androidOld', name: 'An old, worn android', recipe: { suit: 'androidOld', head: 'androidOld', hair: null } },
+  { id: 'androidMedical', name: 'A slim white android with a medical cross', recipe: { suit: 'androidMedical', head: 'androidMedical', hair: null } },
 ];
+// the eight the title offers, in the order shown (four over four on a phone: maker.js OFFERED_LOOKS)
+export const OFFERED = OFFERED_LOOKS.map((id) => LOOKS.find((l) => l.id === id)).filter(Boolean);
 
 export const lookById = (id) => LOOKS.find((l) => l.id === id) || LOOKS[0];
 
