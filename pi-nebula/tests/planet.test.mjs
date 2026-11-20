@@ -2,8 +2,9 @@
 // and every planet has a level place to land near its middle. No browser: the ground is plain numbers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeLand, finishLand, WIDTH, LANDING } from '../src/planet/land.js';
-import { KINDS, KIND_IDS, kindOf, newSeed, kindById, PLANTS } from '../src/planet/kinds.js';
+import fs from 'node:fs';
+import { makeLand, finishLand, WIDTH, LANDING, TREE_STRIDE, TREE_CLEAR, TREE_STEEP } from '../src/planet/land.js';
+import { KINDS, KIND_IDS, kindOf, newSeed, kindById, PLANTS, TREES, FAMILIAR, familiarOf } from '../src/planet/kinds.js';
 import { rng } from '../src/planet/noise.js';
 
 // a short fingerprint of a land's numbers
@@ -90,6 +91,96 @@ test('a land handed over as numbers (from the worker) reads the same', () => {
   const L = LANDS.canyon[0], M = finishLand(L.data());
   for (const [x, z] of [[0, 0], [17.3, -400], [L.landing.x, L.landing.z]]) assert.equal(M.heightAt(x, z), L.heightAt(x, z));
   assert.deepEqual(M.palette, L.palette); assert.equal(M.kind, L.kind);
+  assert.deepEqual(M.trees, L.trees); assert.equal(M.familiar, L.familiar);
+});
+
+// ── THE TREES (src/planet/land.js layTrees, drawn by src/planet/trees.js) ────────────────────────────────────────
+test('the same seed lays the same trees, a different seed different ones', () => {
+  for (const id of KIND_IDS) {
+    const again = makeLand(SEEDS[id][0], { kind: id }), L = LANDS[id][0];
+    assert.deepEqual(again.trees, L.trees, `${id}: seed ${L.seed} laid its trees differently`);
+    if (L.trees.length) assert.notDeepEqual(LANDS[id][1].trees, L.trees, `${id}: two seeds laid the same trees`);
+  }
+});
+
+test('the worlds with plants have trees, where they can stand; the moon none', () => {
+  for (const id of KIND_IDS) for (const L of LANDS[id]) {
+    const K = kindById(id), n = L.trees.length / TREE_STRIDE;
+    if (!K.cover.trees) { assert.equal(n, 0, `${id} has no trees`); continue; }
+    assert.ok(K.cover.plants.length, `${id}: trees only where there are plants`);
+    // the meadows' woods are thousands of trees, the canyons' a few hundred
+    assert.ok(id === 'meadow' ? n > 1500 && n < 20000 : n > 100 && n < 3000, `${id} seed ${L.seed}: ${n} trees`);
+    const { x: lx, z: lz, flat } = L.landing;
+    for (let k = 0; k < n; k++) {
+      const [x, y, z, h, yaw, which] = L.trees.slice(k * TREE_STRIDE, k * TREE_STRIDE + TREE_STRIDE);
+      const kind = K.cover.trees.kinds[which];
+      assert.ok(kind && TREES[kind.tree], `${id}: tree ${k} is one of its kind's`);
+      assert.ok(Math.abs(x) <= WIDTH / 2 && Math.abs(z) <= WIDTH / 2, `${id}: tree ${k} is on the ground (${x}, ${z})`);
+      const full = TREES[kind.tree].height * kind.size;
+      assert.ok(h >= full * 0.74 && h <= full * 1.26, `${id}: tree ${k} is ${h.toFixed(1)} m tall`);
+      assert.ok(yaw >= 0 && yaw < 6.3);
+      // off the landing place, with room for its crown
+      const d = Math.hypot(x - lx - WIDTH * Math.round((x - lx) / WIDTH), z - lz - WIDTH * Math.round((z - lz) / WIDTH));
+      assert.ok(d >= flat + TREE_CLEAR - 0.01, `${id} seed ${L.seed}: a tree ${(d - flat).toFixed(1)} m from the landing place's level ground`);
+      // standing on the ground: its foot at the lowest of the ground round its trunk, never in the air
+      const g = L.heightAt(x, z);
+      assert.ok(y <= g + 1e-3 && y > g - 1.5, `${id}: tree ${k}'s foot is ${(y - g).toFixed(2)} m from the ground`);
+      if (k % 7 === 0) assert.ok(L.slopeAt(x, z) < TREE_STEEP + 6, `${id}: tree ${k} stands on ground ${L.slopeAt(x, z).toFixed(0)} degrees steep`);
+    }
+    // the meadows' woods have both kinds of tree in them
+    if (K.cover.trees.kinds.length > 1) { const kinds = new Set(); for (let k = 0; k < n; k++) kinds.add(L.trees[k * TREE_STRIDE + 5]); assert.equal(kinds.size, K.cover.trees.kinds.length, `${id} seed ${L.seed}: only ${kinds.size} kind of tree`); }
+  }
+});
+
+test('one or two kinds of tree, each the Terrain Lab\'s, recoloured with the world\'s leaf colours', () => {
+  for (const K of KINDS) {
+    if (!K.cover.trees) continue;
+    assert.ok(K.cover.trees.kinds.length >= 1 && K.cover.trees.kinds.length <= 2, `${K.id}: one or two kinds`);
+    for (const L of LANDS[K.id]) for (const t of K.cover.trees.kinds) assert.ok(L.palette.leaves[t.leaf], `${K.id}: the ${t.tree}'s colour`);
+  }
+  for (const t of Object.values(TREES)) { assert.ok(fs.existsSync(new URL(`../assets/planet/${t.file}.glb`, import.meta.url)), `${t.file}.glb is in assets/planet`); assert.equal(t.leaf.length, 3); }
+});
+
+// ── THE COLOURS: mostly strange, now and then familiar (the game's maker, PLAN1-4 B) ────────────────────────────
+test('about one world with air in five has Earth\'s colours, the same each time for a seed', () => {
+  let air = 0, fam = 0;
+  for (let s = 1; s <= 4000; s++) {
+    const k = kindOf(s), f = familiarOf(s);
+    assert.equal(familiarOf(s), f, 'the same seed, the same answer');
+    if (!k.air) { assert.equal(f, false, 'a moon (no air) is never familiar'); continue; }
+    air++; if (f) fam++;
+  }
+  const share = fam / air;
+  assert.ok(share > FAMILIAR - 0.04 && share < FAMILIAR + 0.04, `familiar worlds: ${(100 * share).toFixed(1)}% of those with air`);
+  assert.ok(FAMILIAR > 0.1 && FAMILIAR < 0.34, 'mostly strange, now and then familiar');
+  // the seeds shown to the game's maker before there were familiar worlds keep the strange colours he saw
+  for (const s of [1, 2, 3, 7]) assert.equal(familiarOf(s), false, `seed ${s} kept its colours`);
+});
+
+// a colour's hue (degrees) and saturation
+function hueOf([r, g, b]) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < 1e-6) return { h: 0, s: 0 };
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: (h * 60 + 360) % 360, s: d / (1 - Math.abs(mx + mn - 1)) };
+}
+test('a familiar world has green plants and a blue sky; a strange one keeps its own colours', () => {
+  const found = { meadow: 0, canyon: 0 };
+  for (let s = 1; s <= 400; s++) {
+    const k = kindOf(s); if (!k.air || !familiarOf(s) || found[k.id] >= 2) continue;
+    found[k.id]++;
+    const L = makeLand(s, { n: 256 }), P = L.palette;
+    assert.equal(L.familiar, true); assert.equal(P.familiar, true);
+    for (const lf of P.leaves) assert.ok(lf.hue > 75 && lf.hue < 130 && lf.sat <= 1.1, `seed ${s}: a leaf colour ${lf.hue.toFixed(0)} degrees, ${lf.sat} vivid`);
+    const sky = hueOf(P.air.zenith); assert.ok(sky.h > 195 && sky.h < 230 && sky.s > 0.3, `seed ${s}: the sky overhead is ${sky.h.toFixed(0)} degrees`);
+    // (a meadow's grass tints its ground green; a canyon's ground stays sand where its plants grow)
+    if (k.id === 'meadow') { const grass = hueOf(P.grass); assert.ok(grass.h > 70 && grass.h < 135, `seed ${s}: the grass is ${grass.h.toFixed(0)} degrees`); }
+  }
+  assert.deepEqual(found, { meadow: 2, canyon: 2 }, 'familiar worlds of both kinds with air');
+  // a strange one keeps the colours it had before there were familiar worlds: seed 7, the red meadow under a green sky
+  // the game's maker saw (its colours drawn the same way, in the same order)
+  const S = makeLand(7, { n: 256 }), red = S.palette.leaves[0].hue % 360, green = hueOf(S.palette.air.zenith).h;
+  assert.equal(S.kindId, 'meadow'); assert.equal(S.familiar, false);
+  assert.ok(red > 320 || red < 25, `seed 7's leaves are ${red.toFixed(0)} degrees`); assert.ok(green > 130 && green < 190, `seed 7's sky is ${green.toFixed(0)} degrees`);
 });
 
 test('the kinds are a list to add to', () => {

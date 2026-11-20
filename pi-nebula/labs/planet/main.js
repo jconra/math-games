@@ -1,5 +1,5 @@
 // THE PLANET LAB: a planet's ground by itself, made by the game from a seed (src/planet/: land.js the ground, kinds.js
-// the kinds, ground.js its picture, cover.js the rocks and plants, planet.js all of it with its sky). The game's maker
+// the kinds, ground.js its picture, cover.js the rocks and plants, trees.js the trees, planet.js all of it with its sky). The game's maker
 // chose it for the medical and the exploring runs (2026-11-20): "The planet's ground first for both", "A different one
 // each run, made by the game", and "a few different planet surfaces, like a cratered moon, and maybe some that are more
 // interesting with assets from the terrain lab, although we could change the colors to make exotic looking plants".
@@ -170,17 +170,18 @@ async function build(seed, { keepView = false } = {}) {
     renderer.toneMappingExposure = planet.exposure;
     placeRing();
     if (!keepView) setView(viewName); else applyCam();
-    planet.update(camera, 0); planet.cover.relayNow(camera);
+    planet.update(camera, 0); planet.relayNow(camera);
     // the first picture, so the timing counts the shaders being made too
     renderer.render(scene, camera);
     const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     const t2 = performance.now();
-    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, planet: Math.round(t2 - t1), light: planet.stats.lightMs, cover: planet.stats.coverMs, total: Math.round(t2 - t0) };
+    const T = planet.trees && planet.trees.stats;
+    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, planet: Math.round(t2 - t1), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
     $('seed').value = String(seed);
     const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind'); history.replaceState(null, '', u.href);
     keep({ seed });
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
-    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}. <span class="pl-long">${land.kind.about} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
+    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}. <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
     loading.hidden = true; LAB.ready = true; paintChips();
   })();
   try { await building; } finally { building = null; }
@@ -227,7 +228,7 @@ function loop(now) {
 // for the rigs: one step of the clock, and the time a frame takes when the card is made to finish each one
 LAB.step = (dt = 1 / 60, n = 1) => { for (let k = 0; k < n; k++) frame(dt); readout(); };
 LAB.view = (name) => setView(name);
-LAB.look = (at, to) => { look(at, to); if (planet) { planet.update(camera, 0); planet.cover.relayNow(camera); } };
+LAB.look = (at, to) => { look(at, to); if (planet) { planet.update(camera, 0); planet.relayNow(camera); } };
 LAB.build = (seed) => build(seed);
 LAB.bench = (frames = 90) => {
   const gl = renderer.getContext(), px = new Uint8Array(4), times = [];
@@ -237,7 +238,7 @@ LAB.bench = (frames = 90) => {
     if (k >= 10) times.push(performance.now() - t);
   }
   times.sort((a, b) => a - b);
-  return { median: +times[Math.floor(times.length / 2)].toFixed(2), p90: +times[Math.floor(times.length * 0.9)].toFixed(2), tris: renderer.info.render.triangles, calls: renderer.info.render.calls, patches: planet.ground.stats.patches, rocks: planet.cover.stats.rocks, plants: planet.cover.stats.plants, w: renderer.domElement.width, h: renderer.domElement.height };
+  return { median: +times[Math.floor(times.length / 2)].toFixed(2), p90: +times[Math.floor(times.length * 0.9)].toFixed(2), tris: renderer.info.render.triangles, calls: renderer.info.render.calls, patches: planet.ground.stats.patches, rocks: planet.cover.stats.rocks, plants: planet.cover.stats.plants, trees: planet.trees ? planet.trees.stats.trees : 0, treeModels: planet.trees ? planet.trees.stats.models : 0, w: renderer.domElement.width, h: renderer.domElement.height };
 };
 LAB.curve = CURVE;
 LAB.ring = (on) => { ringOn = !!on; if (ring) ring.visible = ringOn; paintChips(); };

@@ -7,7 +7,7 @@ self.onmessage = (e) => {
   const { id, seed, kind } = e.data || {};
   try {
     const d = makeLand(seed, { kind }).data();
-    self.postMessage({ id, land: d }, [d.H.buffer, d.NM.buffer, d.EX.buffer]);
+    self.postMessage({ id, land: d }, [d.H.buffer, d.NM.buffer, d.EX.buffer, d.trees.buffer]);
   } catch (err) {
     self.postMessage({ id, error: String(err && err.stack || err) });
   }

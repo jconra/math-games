@@ -52,6 +52,8 @@ function rockShapes(detail) {
 
 // ── the Terrain Lab's plant sheet, cut into its sixteen plants ───────────────────────────────────────────────────
 let sheetPromise = null;
+// the sheet, fetched now if a kind of world has plants (while its ground is being made: src/planet/planet.js)
+export function preloadPlants(kind) { if (kind && kind.cover.plants.length) loadSheet().catch(() => { sheetPromise = null; }); }
 function loadSheet() {
   if (sheetPromise) return sheetPromise;
   sheetPromise = new Promise((ok, bad) => new GLTFLoader().load(new URL('../../assets/planet/groundPlants.glb', import.meta.url).href, ok, undefined, bad)).then((g) => {
@@ -82,49 +84,74 @@ function loadSheet() {
   return sheetPromise;
 }
 
+// ── THE RECOLOURING, shared by the plants and the trees (src/planet/trees.js, its near models and its far pictures) ─
+// a colour's hue turned round to the planet's own (the turn round the grey axis that a picture's "hue rotate" is), then
+// more vivid (sat), keeping how light each part of it was, then lighter or darker (light); hue in radians
+export const TURN_GLSL = /* glsl */`
+vec3 planetTurn(vec3 c, float hue, float sat, float light) {
+  float cs = cos(hue), sn = sin(hue);
+  mat3 turn = mat3(0.213 + 0.787 * cs - 0.213 * sn, 0.213 - 0.213 * cs + 0.143 * sn, 0.213 - 0.213 * cs - 0.787 * sn,
+                   0.715 - 0.715 * cs - 0.715 * sn, 0.715 + 0.285 * cs + 0.140 * sn, 0.715 - 0.715 * cs + 0.715 * sn,
+                   0.072 - 0.072 * cs + 0.928 * sn, 0.072 - 0.072 * cs - 0.283 * sn, 0.072 + 0.928 * cs + 0.072 * sn);
+  c = max(turn * c, vec3(0.0)); float Y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  return max(mix(vec3(Y), c, sat), vec3(0.0)) * light;
+}`;
+// the same on the page (linear r, g, b), for a colour worked out once (the far woods' colour on the ground)
+export function planetTurn([r, g, b], hue, sat, light) {
+  const cs = Math.cos(hue), sn = Math.sin(hue);
+  const c = [
+    Math.max(0, (0.213 + 0.787 * cs - 0.213 * sn) * r + (0.715 - 0.715 * cs - 0.715 * sn) * g + (0.072 - 0.072 * cs + 0.928 * sn) * b),
+    Math.max(0, (0.213 - 0.213 * cs + 0.143 * sn) * r + (0.715 + 0.285 * cs + 0.140 * sn) * g + (0.072 - 0.072 * cs - 0.283 * sn) * b),
+    Math.max(0, (0.213 - 0.213 * cs - 0.787 * sn) * r + (0.715 - 0.715 * cs + 0.715 * sn) * g + (0.072 + 0.928 * cs + 0.072 * sn) * b)];
+  const Y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  return c.map((v) => Math.max(0, Y + (v - Y) * sat) * light);
+}
+// the hue of a colour (degrees), for the plants' turn: green leaves (about 100) turned to the planet's leaf colour
+export const LEAF_HUE = 95;
+// a leaf colour of the palette as the turn's numbers
+export const turnOf = (lf) => ({ hue: (lf.hue - LEAF_HUE) * Math.PI / 180, sat: lf.sat, light: lf.light });
+
 // ── the shared shader changes: where it stands on the light picture, the curve, the fade at its edge, the haze ───
-function onGround(material, { ground, sky, reach, plant = null }) {
+// plant: recoloured ({ hue, sat, light, sway, clock } as uniforms); fade: a dithered fade by its own iFade (0..1), for
+// the trees' crossfade with their far pictures; soften (0..1): its normals bent this far toward up (the Terrain Lab's
+// trees' leaves, so the half of them facing away from the sun don't read as black)
+export function onGround(material, { ground, sky, reach, plant = null, fade = false, soften = 0 }) {
   const U = ground.U;
   material.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uL: U.uL, uP: U.uP, uN: U.uN, uCam: U.uCam, uCurve: U.uCurve, uHaze: U.uHaze, uHazeH: U.uHazeH, uHazeBase: U.uHazeBase, uReach: { value: reach }, uClock: plant ? plant.clock : { value: 0 } });
     if (sky) Object.assign(sh.uniforms, sky.uniforms);
     if (plant) Object.assign(sh.uniforms, { uHue: plant.hue, uSat: plant.sat, uLight: plant.light, uSway: plant.sway });
     sh.vertexShader = `uniform sampler2D uL; uniform float uP, uN, uCurve, uReach, uClock; uniform vec3 uCam;
-      ${plant ? 'uniform float uSway;' : ''}
+      ${plant ? 'uniform float uSway;' : ''}${fade ? 'attribute float iFade; varying float vFade;' : ''}
       varying float vSun, vSky; varying vec3 vPlace;\n` + sh.vertexShader
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec3 at = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
         vec2 dc = at.xz - uCam.xz; float dd = length(dc);
         transformed *= 1.0 - smoothstep(uReach * 0.78, uReach, dd);          // shrinking away at its edge
         ${plant ? 'transformed.xz += vec2(sin(uClock * 1.3 + at.x * 0.21), cos(uClock * 1.1 + at.z * 0.19)) * uSway * position.y * position.y;' : ''}
+        ${fade ? 'vFade = iFade;' : ''}
         vec4 ls = texture2D(uL, (at.xz + 0.5 * uP) / uP + 0.5 / uN); vSun = ls.r; vSky = ls.g;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         { vec4 wp = modelMatrix * instanceMatrix * vec4(transformed, 1.0); vec2 d = wp.xz - uCam.xz; vPlace = wp.xyz;
           mvPosition.xyz -= (viewMatrix * vec4(0.0, dot(d, d) * uCurve, 0.0, 0.0)).xyz; gl_Position = projectionMatrix * mvPosition; }`);
-    let f = 'varying float vSun, vSky; varying vec3 vPlace;\n' + (plant ? 'uniform float uHue, uSat, uLight;\n' : '') + (sky ? SKY_GLSL + HAZE_GLSL : '') + sh.fragmentShader;
+    let f = 'varying float vSun, vSky; varying vec3 vPlace;\n' + (fade ? 'varying float vFade;\n' : '') + (plant ? 'uniform float uHue, uSat, uLight;\n' + TURN_GLSL + '\n' : '') + (sky ? SKY_GLSL + HAZE_GLSL : '') + sh.fragmentShader;
     f = f.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin
       .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= vSun;')
       .replace(/irradiance \+= getHemisphereLightIrradiance/g, 'irradiance += vSky * getHemisphereLightIrradiance'));
-    // (a leaf seen from behind is lit as from in front: the Terrain Lab's own way with these plants)
-    if (plant) f = f.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
-    if (plant) f = f.replace('#include <map_fragment>', `#include <map_fragment>
-      { // the plant's hue turned round to the planet's own (the turn round the grey axis that a picture's "hue rotate"
-        // is), then more vivid, keeping how light each part of it was
-        vec3 c = diffuseColor.rgb; float cs = cos(uHue), sn = sin(uHue);
-        mat3 turn = mat3(0.213 + 0.787 * cs - 0.213 * sn, 0.213 - 0.213 * cs + 0.143 * sn, 0.213 - 0.213 * cs - 0.787 * sn,
-                         0.715 - 0.715 * cs - 0.715 * sn, 0.715 + 0.285 * cs + 0.140 * sn, 0.715 - 0.715 * cs + 0.715 * sn,
-                         0.072 - 0.072 * cs + 0.928 * sn, 0.072 - 0.072 * cs - 0.283 * sn, 0.072 + 0.928 * cs + 0.072 * sn);
-        c = max(turn * c, vec3(0.0)); float Y = dot(c, vec3(0.2126, 0.7152, 0.0722));
-        diffuseColor.rgb = max(mix(vec3(Y), c, uSat), vec3(0.0)) * uLight; }`);
-    if (sky) f = f.replace('#include <fog_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, skyAt(cameraPosition, normalize(vPlace - cameraPosition)), hazeAmt(cameraPosition, vPlace));');
+    // (a leaf seen from behind is lit as from in front: the Terrain Lab's own way with these plants; softened: bent up)
+    if (plant || soften) f = f.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
+      + (soften ? `\nnormal = normalize(mix(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), ${soften.toFixed(2)}));` : ''));
+    if (plant) f = f.replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = planetTurn(diffuseColor.rgb, uHue, uSat, uLight);');
+    // (the far one's complement: where this one is drawn the far picture isn't, so in the crossfade every pixel is one or the other)
+    if (fade) f = f.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{ float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (vFade < dither) discard; }');
+    // the haze, mixed in as the ground and the sky mix theirs: before the colours are turned into the screen's
+    if (sky) f = f.replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, skyAt(cameraPosition, normalize(vPlace - cameraPosition)), hazeAmt(cameraPosition, vPlace));\n#include <tonemapping_fragment>');
     sh.fragmentShader = f;
   };
-  material.customProgramCacheKey = () => 'planet-cover-1' + (plant ? '-plant' : '') + (sky ? '-air' : '');
+  material.customProgramCacheKey = () => 'planet-cover-2' + (plant ? '-plant' : '') + (sky ? '-air' : '') + (fade ? '-fade' : '') + (soften ? '-s' + soften : '');
   return material;
 }
 
-// the hue of a colour (degrees), for the plants' turn: green leaves (about 100) turned to the planet's leaf colour
-const LEAF_HUE = 95;
 // the order to visit the patches round the camera: nearest first (so with too many, the furthest go)
 function ringOrder(r) {
   const n = Math.ceil(r / CELL) + 1, out = [];
@@ -211,8 +238,8 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       // kept to the nearest 40 m and the ground's own colour carries the meadow on beyond them)
       const reach = (far ? 240 : 40) * Q.reach, most = Math.round((far ? 600 : 900) * Q.many);
       // (each plant its own material: its own colour turned to, sharing one shader)
-      const ms = list.map((p) => { const lf = leaves[p.leaf] || leaves[0];
-        return onGround(new THREE.MeshLambertMaterial({ map: sheet.map, side: THREE.DoubleSide }), { ground, sky, reach, plant: { hue: { value: (lf.hue - LEAF_HUE) * Math.PI / 180 }, sat: { value: lf.sat }, light: { value: lf.light }, sway: { value: sky ? 0.035 : 0 }, clock } }); });
+      const ms = list.map((p) => { const t = turnOf(leaves[p.leaf] || leaves[0]);
+        return onGround(new THREE.MeshLambertMaterial({ map: sheet.map, side: THREE.DoubleSide }), { ground, sky, reach, plant: { hue: { value: t.hue }, sat: { value: t.sat }, light: { value: t.light }, sway: { value: sky ? 0.035 : 0 }, clock } }); });
       const L = layer({ name: far ? 'big plants' : 'plants', shapes: list.map((p) => sheet.parts[p.k]), material: ms[0], reach, most, lay: null });
       L.meshes.forEach((m, s) => { m.material = ms[s]; });
       plantMats.push(...ms);

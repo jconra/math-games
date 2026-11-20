@@ -11,10 +11,17 @@
 //   kind.shape(ctx)    writes the heights ctx.H (metres; src/planet/shapes.js has the building blocks)
 //   kind.paint(ctx)    writes ctx.rock (0 dust or soil .. 1 bare rock), ctx.tone (-1 darker .. 1 brighter) and
 //                      ctx.growth (0 bare .. 1 thick with plants) for each sample, once the landing place is flat
-//   kind.palette(R)    the colours, from the planet's own random numbers (sRGB, 0..1); sun: a direction toward the
-//                      sun, or null for the game's own sky's sun (the moon is under the station's sky)
+//   kind.palette(R, { familiar })   the colours, from the planet's own random numbers (sRGB, 0..1); sun: a direction
+//                      toward the sun, or null for the game's own sky's sun (the moon is under the station's sky);
+//                      familiar: Earth's colours this time (green plants, a blue sky: familiarOf below)
 //   kind.cover         the rocks and plants (src/planet/cover.js); plants by their place in the Terrain Lab's sheet
-//                      of sixteen (PLANTS below)
+//                      of sixteen (PLANTS below); trees (src/planet/trees.js), where kind.paint wrote ctx.woods (the
+//                      chance a tree stands in each of the trees' cells, 0..1)
+//
+// THE COLOURS: mostly strange, now and then familiar. The game's maker, 2026-11-20 (PLAN1-4 B): "Mostly strange, but
+// now and then familiar ones too (green plants, a blue sky)", and "I think that some planets can have exotic colors and
+// some might look like Earth." So about one world with air in five (FAMILIAR) has Earth's colours; which ones is the
+// seed's own, drawn apart from the rest of its colours, so a strange world's colours are the same as they always were.
 import { fbm, ridged, smooth, subSeed, rng } from './noise.js';
 import { addField, addArray, field, craterList, stampCraters, pick, blur } from './shapes.js';
 
@@ -29,6 +36,14 @@ export const PLANTS = [
 ].map(([name, height, lit = false], k) => ({ k, name, height, lit }));
 // each model's root clump sinks this share of its height into the ground (the Terrain Lab's numbers)
 export const PLANT_SINK = [0.06, 0.06, 0.06, 0.03, 0.04, 0.03, 0.03, 0.04, 0.03, 0.06, 0.03, 0.03, 0.04, 0.03, 0.03, 0.04];
+// THE TREES: two of the Terrain Lab's (its Tree Lab's trees, the lighter "sparse" ones its phones get:
+// assets/planet/oak.glb and pine.glb, about 1 MB each, loaded only for a world that has that tree), each with its
+// height in metres as the Terrain Lab grows it (src/objects/forest.js FOREST_SPECIES). The game's maker, 2026-11-20
+// (PLAN1-2 B): "One or two kinds of tree too, recoloured", and "You can probably use the same LOD system that the
+// terrain lab has" (src/planet/trees.js). leaf: its leaves' picture's average colour (linear), for the woods seen from afar.
+export const TREES = { oak: { file: 'oak', height: 18, leaf: [0.078, 0.138, 0.025] }, pine: { file: 'pine', height: 22, leaf: [0.093, 0.15, 0.019] } };
+// about one world with air in five has Earth's colours (the seed's own draw: familiarOf)
+export const FAMILIAR = 0.2;
 
 // a colour from hue (degrees), saturation and lightness (0..1), as sRGB 0..1
 export function hsl(h, s, l) {
@@ -78,8 +93,8 @@ const MOON = {
       ctx.growth[k] = 0;
     }
   },
-  palette(R) {
-    const tint = pick(R, [[4, [1, 1, 1]], [2, [1.03, 1.0, 0.96]], [2, [0.96, 0.99, 1.04]], [1, [1.05, 1.0, 0.93]]]), b = 0.92 + 0.16 * R();
+  palette(R) {   // (always the moon's own greys: it has no air, no plants, and the station's sky)
+    const tint = pick(R,[[4, [1, 1, 1]], [2, [1.03, 1.0, 0.96]], [2, [0.96, 0.99, 1.04]], [1, [1.05, 1.0, 0.93]]]), b = 0.92 + 0.16 * R();
     return {
       dust: mul([0.5, 0.5, 0.5], mul(tint, b)), rock: mul([0.36, 0.36, 0.36], tint), bright: mul([0.72, 0.72, 0.71], tint), dark: mul([0.3, 0.3, 0.3], tint),
       sun: null, sunColor: [1.0, 0.98, 0.95], sunPower: 2.6,
@@ -91,6 +106,7 @@ const MOON = {
   cover: {
     rocks: { many: 1.0, near: 'craters', colour: 'rock' },
     plants: [],
+    trees: null,
   },
 };
 
@@ -105,9 +121,14 @@ const MEADOW_LOOKS = [
   { leaves: [215, 245, 30], soil: [30, 0.3, 0.28], zenith: [40, 0.4, 0.5], horizon: [45, 0.5, 0.8], toward: [25, 0.75, 0.75] },
   { leaves: [25, 45, 260], soil: [270, 0.12, 0.26], zenith: [265, 0.35, 0.4], horizon: [290, 0.25, 0.78], toward: [330, 0.45, 0.8] },
 ];
+// the familiar one: Earth's (green leaves, as the plants' own pictures are; brown soil; a blue sky, pale at the horizon
+// and warm toward the sun), the leaves as green as the plants are drawn, not made more vivid
+// (the grass on the ground a softer green than the strange worlds' colours are, as a field is from the air)
+const MEADOW_EARTH = { leaves: [100, 112, 104], soil: [30, 0.25, 0.27], zenith: [212, 0.55, 0.45], horizon: [205, 0.35, 0.82], toward: [40, 0.5, 0.85], vivid: [1.0, 1.05, 1.05], jitter: 5, grass: [-6, 0.32, 0.28, 0.36, 0.33] };
 const MEADOW = {
   id: 'meadow', name: 'Meadow world', air: true, weight: 1,
-  about: 'Air: a coloured sky and haze, rolling hills, the Terrain Lab\'s plants grown big in strange colours.',
+  about: 'Air: a coloured sky and haze, rolling hills, woods, the Terrain Lab\'s plants and trees in strange colours, some plants grown big.',
+  aboutEarth: 'Air: a blue sky and haze, rolling hills, woods, the Terrain Lab\'s plants and trees, green, some plants grown big.',
   shape(ctx) {
     const s = ctx.seed, R = rng(subSeed(s, 'meadow'));
     const wa = fbm({ cells: 2, n: 3, seed: subSeed(s, 'wa') }), wb = fbm({ cells: 2, n: 3, seed: subSeed(s, 'wb') });
@@ -131,15 +152,23 @@ const MEADOW = {
       ctx.tone[k] = Math.max(-1, Math.min(1, patch[k] * 1.4 + 0.03 * (H[k] - low[k])));
       ctx.growth[k] = (1 - rk) * (1 - smooth(0.3, 0.65, slope[k])) * smooth(-0.45, 0.1, bare[k]);
     }
+    // THE WOODS: where a slow noise is high, a wood (a tree in nearly every one of the trees' cells), and here and there
+    // a tree on its own in the open; only where plants grow (not on rock, nor steep ground). How much of the land is
+    // wooded is the seed's: from a few copses to woods over half the grass
+    const R = rng(subSeed(ctx.seed, 'woods')), line = -0.12 + 0.28 * R(), woods = field(ctx, fbm({ cells: 5, n: 3, seed: subSeed(ctx.seed, 'woods') }), 4);
+    for (let k = 0; k < H.length; k++) ctx.woods[k] = ctx.growth[k] * (0.025 + 0.85 * smooth(line, line + 0.1, woods[k]));
   },
-  palette(R) {
-    const L = MEADOW_LOOKS[Math.floor(R() * MEADOW_LOOKS.length)], hj = jit(R, 14);
-    const leaf = L.leaves.map((h) => h + hj + jit(R, 8));
-    const el = 24 + 30 * R(), az = R() * 360;
+  palette(R, { familiar = false } = {}) {
+    // (the strange looks drawn for every seed, so a familiar one takes nothing from the rest of its colours' numbers)
+    const strange = MEADOW_LOOKS[Math.floor(R() * MEADOW_LOOKS.length)], L = familiar ? MEADOW_EARTH : strange, hj = jit(R, L.jitter || 14);
+    const leaf = L.leaves.map((h) => h + hj + jit(R, familiar ? 4 : 8));
+    const el = 24 + 30 * R(), az = R() * 360, vivid = L.vivid || [1.25, 1.35, 1.4];
+    const [gh, gs, gl, gs2, gl2] = L.grass || [0, 0.42, 0.3, 0.5, 0.36];   // the grass's colours: hue from the leaves', saturation and lightness of the two
     return {
+      familiar,
       dust: hsl(L.soil[0], L.soil[1], L.soil[2] + 0.06), rock: hsl(L.soil[0] + 10, 0.08, 0.36), bright: hsl(L.soil[0], L.soil[1], 0.5), dark: hsl(L.soil[0], L.soil[1], 0.18),
-      grass: hsl(leaf[0], 0.42, 0.3), grass2: hsl(leaf[0] + 22, 0.5, 0.36),
-      leaves: leaf.map((h, n) => ({ hue: h, sat: [1.25, 1.35, 1.4][n], light: [0.95, 1.05, 1.1][n] })),
+      grass: hsl(leaf[0] + gh, gs, gl), grass2: hsl(leaf[0] + gh + 22, gs2, gl2),
+      leaves: leaf.map((h, n) => ({ hue: h, sat: vivid[n], light: (familiar ? [0.95, 1.0, 1.0] : [0.95, 1.05, 1.1])[n] })),
       sun: sunDir(el, az), sunColor: [1.0, 0.96, 0.9], sunPower: 2.0,
       ambient: { sky: hsl(L.zenith[0], L.zenith[1] * 0.8, 0.62), ground: hsl(L.soil[0], 0.2, 0.25), power: 0.75 },
       air: { zenith: hsl(...L.zenith), horizon: hsl(...L.horizon), toward: hsl(...L.toward), glow: hsl(L.toward[0], 0.6, 0.35), cloud: hsl(L.horizon[0], 0.15, 0.92), clouds: 0.25 + 0.3 * R(), haze: 0.0003 + 0.00018 * R(), thin: 380 },
@@ -160,6 +189,13 @@ const MEADOW = {
       { k: 7, size: 2.2, leaf: 1, share: 0.3, how: 'loner', far: true },
       { k: 13, size: 2.0, leaf: 0, share: 0.15, how: 'loner', far: true },
     ],
+    // the trees: which (TREES), how big (times the Terrain Lab's height), their colour (which of the palette's leaves),
+    // how many of each (share: how much of each the seed picks, from..to); cell: one tree at most in each square of
+    // this many metres (woods: ctx.woods the chance); crown: how much of its cell a tree's crown covers, seen from afar
+    trees: { cell: 11, crown: 1.0, kinds: [
+      { tree: 'oak', size: 1.0, leaf: 1, share: [0.2, 1] },
+      { tree: 'pine', size: 1.0, leaf: 2, share: [0.2, 1] },
+    ] },
   },
 };
 
@@ -174,9 +210,12 @@ const CANYON_LOOKS = [
   { rock: [175, 0.3, 0.36], sand: [165, 0.25, 0.6], leaves: [15, 340], zenith: [15, 0.35, 0.45], horizon: [25, 0.4, 0.78], toward: [35, 0.65, 0.8] },
   { rock: [345, 0.38, 0.44], sand: [15, 0.38, 0.64], leaves: [140, 190], zenith: [250, 0.3, 0.45], horizon: [330, 0.25, 0.8], toward: [20, 0.55, 0.82] },
 ];
+// the familiar one: Earth's desert canyons (red rock, tan sand, sage and dark green plants under a blue sky)
+const CANYON_EARTH = { rock: [14, 0.48, 0.42], sand: [28, 0.45, 0.62], leaves: [92, 110], zenith: [210, 0.5, 0.48], horizon: [200, 0.3, 0.82], toward: [35, 0.55, 0.85], vivid: 1.0, jitter: 5 };
 const CANYON = {
   id: 'canyon', name: 'Canyon world', air: true, weight: 1,
-  about: 'Air: a dusty sky, flat-topped mesas with banded cliffs, sand and dunes between them, a few tall strange plants.',
+  about: 'Air: a dusty sky, flat-topped mesas with banded cliffs, sand and dunes between them, a few trees and tall strange plants.',
+  aboutEarth: 'Air: a blue sky, red mesas with banded cliffs, sand and dunes between them, a few trees and tall plants, green.',
   shape(ctx) {
     const s = ctx.seed, R = rng(subSeed(s, 'canyon'));
     const wa = fbm({ cells: 3, n: 3, seed: subSeed(s, 'wa') }), wb = fbm({ cells: 3, n: 3, seed: subSeed(s, 'wb') });
@@ -209,24 +248,32 @@ const CANYON = {
     ctx.H.set(blur(H, N, 1, 2));
     addField(ctx, fbm({ cells: 64, n: 2, seed: subSeed(s, 'fine') }), 0.5);
   },
+  // the cliffs' bands: layers of rock by height (about 25 m from one to the next, a little wavy), drawn by the ground's
+  // picture from each point's own height (src/planet/ground.js). (Worked out here, one for each 2 m sample, they were
+  // the faint vertical streaks down the cliffs: on a cliff two samples side by side stand metres apart in height, so
+  // their bands differed, and each was drawn stretched up the whole face.)
+  bands: true,
   paint(ctx) {
-    const { slope, H, floor } = ctx, band = field(ctx, fbm({ cells: 8, n: 2, seed: subSeed(ctx.seed, 'band') }), 4);
+    const { slope, H, floor } = ctx;
     const patch = field(ctx, fbm({ cells: 12, n: 3, seed: subSeed(ctx.seed, 'patch') }), 4), patch2 = field(ctx, fbm({ cells: 24, n: 3, seed: subSeed(ctx.seed, 'patch2') }), 4);
     for (let k = 0; k < H.length; k++) {
       const rk = smooth(0.45, 0.95, slope[k]);
       ctx.rock[k] = rk;
-      // the cliffs' bands: layers of rock by height (about 25 m from one to the next), a little wavy
-      ctx.tone[k] = Math.max(-1, Math.min(1, rk * (Math.sin(H[k] * 0.25 + band[k] * 3) * 0.45 + Math.sin(H[k] * 0.9) * 0.15) + (1 - rk) * patch[k] * 0.7 - floor[k] * 0.15));
+      ctx.tone[k] = Math.max(-1, Math.min(1, (1 - rk) * patch[k] * 0.7 - floor[k] * 0.15));
       ctx.growth[k] = (1 - rk) * smooth(-0.1, 0.45, patch2[k]) * (0.35 + 0.4 * floor[k]);
+      // the trees: a few, one here and there where plants grow, more on the canyons' floors
+      ctx.woods[k] = ctx.growth[k] * 0.3;
     }
   },
-  palette(R) {
-    const L = CANYON_LOOKS[Math.floor(R() * CANYON_LOOKS.length)], hj = jit(R, 10);
+  palette(R, { familiar = false } = {}) {
+    // (the strange looks drawn for every seed, so a familiar one takes nothing from the rest of its colours' numbers)
+    const strange = CANYON_LOOKS[Math.floor(R() * CANYON_LOOKS.length)], L = familiar ? CANYON_EARTH : strange, hj = jit(R, L.jitter || 10);
     const el = 28 + 28 * R(), az = R() * 360;
     return {
+      familiar,
       dust: hsl(L.sand[0] + hj, L.sand[1], L.sand[2] - 0.1), rock: hsl(L.rock[0] + hj, L.rock[1], L.rock[2] - 0.04), bright: hsl(L.rock[0] + hj + 15, L.rock[1] * 0.8, L.rock[2] + 0.12), dark: hsl(L.rock[0] + hj - 10, L.rock[1], L.rock[2] - 0.17),
       grass: hsl(L.sand[0] + hj, L.sand[1] * 0.8, L.sand[2] - 0.2), grass2: hsl(L.sand[0] + hj + 20, L.sand[1], L.sand[2] - 0.14),
-      leaves: L.leaves.map((h, n) => ({ hue: h + jit(R, 12), sat: 1.4, light: [1.0, 1.1][n] })),
+      leaves: L.leaves.map((h, n) => ({ hue: h + jit(R, familiar ? 5 : 12), sat: L.vivid || 1.4, light: (familiar ? [0.95, 1.0] : [1.0, 1.1])[n] })),
       sun: sunDir(el, az), sunColor: [1.0, 0.95, 0.86], sunPower: 2.1,
       ambient: { sky: hsl(L.zenith[0], L.zenith[1] * 0.7, 0.62), ground: hsl(L.sand[0], 0.3, 0.35), power: 0.7 },
       air: { zenith: hsl(...L.zenith), horizon: hsl(...L.horizon), toward: hsl(...L.toward), glow: hsl(L.toward[0], 0.6, 0.35), cloud: hsl(L.horizon[0], 0.15, 0.93), clouds: 0.12 + 0.2 * R(), haze: 0.00026 + 0.00016 * R(), thin: 420 },
@@ -242,6 +289,10 @@ const CANYON = {
       { k: 4, size: 3.5, leaf: 1, share: 0.3, how: 'clump' },
       { k: 12, size: 2.0, leaf: 1, share: 0.15, how: 'clump', far: true },
     ],
+    // a few pines, smaller than the Terrain Lab's, in the colour of the saplings (one kind: one model to load)
+    trees: { cell: 14, crown: 0.25, kinds: [
+      { tree: 'pine', size: 0.6, leaf: 1, share: [1, 1] },
+    ] },
   },
 };
 
@@ -254,6 +305,12 @@ export function kindOf(seed) {
   let t = R() * total;
   for (const k of KINDS) { if ((t -= k.weight) < 0) return k; }
   return KINDS[KINDS.length - 1];
+}
+// whether a seed's world has Earth's colours (only a world with air: about one in five; the same seed, the same answer).
+// (Its own draw, named so that the seeds shown to the game's maker before there were familiar worlds, 1, 2, 3 and 7,
+// kept the strange colours he saw.)
+export function familiarOf(seed, kind = kindOf(seed)) {
+  return !!kind.air && rng(subSeed(seed, 'earthlike'))() < FAMILIAR;
 }
 // a new seed, at random, that makes the kind asked for (or any kind)
 export function newSeed(kindId = null, random = Math.random) {

@@ -133,7 +133,8 @@ void main() {
     sky += 1.0 - st / sqrt(1.0 + st * st);
   }
   vec4 ex = texture2D(uEX, vUv);
-  gl_FragColor = vec4(sun, sky / 8.0, ex.r, ex.g);
+  // (what grows, and how much the trees' crowns cover: land.EX)
+  gl_FragColor = vec4(sun, sky / 8.0, ex.r, ex.b);
 }`;
 function lightPass(renderer, land, hTex, sunDir, size) {
   const t0 = performance.now(), { N } = land;
@@ -179,8 +180,8 @@ void main() {
 const GROUND_FRAG = /* glsl */`
 uniform sampler2D uNM, uL, uDetail;
 uniform float uN, uP;
-uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2;
-uniform float uAmbPow, uAir, uFine;
+uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
+uniform float uAmbPow, uAir, uFine, uBands, uTreeFar;
 varying vec2 vXZ; varying vec3 vWorld; varying float vDist;
 #ifdef AIR
 ${SKY_GLSL}
@@ -195,12 +196,24 @@ void main() {
   // (laid on from above, so on steep faces it would smear downward: there it fades out)
   float flatK = smoothstep(0.45, 0.8, n.y);
   float nearA = (1.0 - smoothstep(40.0, 420.0, vDist)) * flatK, nearB = (1.0 - smoothstep(6.0, 70.0, vDist)) * uFine * flatK;
-  float rock = smoothstep(0.15, 0.85, nm.b), tone = nm.a * 2.0 - 1.0, grow = L.b;
+  float rock = smoothstep(0.15, 0.85, nm.b), tone = nm.a * 2.0 - 1.0, grow = L.b, wood = L.a;
+  // THE CLIFFS' BANDS (a kind with bands: the canyons): layers of rock by this point's own height, about 25 m from one
+  // to the next, a little wavy (a slow wave from the grain's picture, read once across the whole ground), the finer
+  // ones fading with distance
+  if (uBands > 0.0) {
+    float wave = (texture2D(uDetail, vXZ / uP).b - 0.5) * 5.1;
+    tone = clamp(tone + uBands * rock * (sin(vWorld.y * 0.25 + wave) * 0.45 + sin(vWorld.y * 0.9) * 0.15 * (1.0 - smoothstep(250.0, 700.0, vDist))), -1.0, 1.0);
+  }
   n = normalize(n + vec3(d1.r - 0.5, 0.0, d1.g - 0.5) * (0.22 + 0.5 * rock) * nearA + vec3(d2.r - 0.5, 0.0, d2.g - 0.5) * (0.18 + 0.4 * rock) * nearB);
   vec3 base = mix(uDust, uRock, rock);
   base = tone > 0.0 ? mix(base, uBright, tone) : mix(base, uDark, -tone);
   base = mix(base, mix(uGrass, uGrass2, smoothstep(0.3, 0.7, d1.b)), grow * (1.0 - rock));
   base *= 0.9 + 0.2 * mix(0.5, d2.a, nearA) * (0.6 + 0.4 * rock);
+  // THE WOODS (src/planet/trees.js): the ground under the trees in their shade; and past where the trees are drawn,
+  // their crowns' colour, so a far wood is still a wood
+  base *= 1.0 - 0.3 * wood;
+  // (mottled about as finely as the crowns are: their colour measured from above matched the trees' own within 5%)
+  base = mix(base, uCanopy * (0.75 + 0.5 * d1.b), wood * smoothstep(uTreeFar * 0.8, uTreeFar, length(vXZ - cameraPosition.xz)));
   float ndl = max(dot(n, uSunDir), 0.0);
   vec3 col = base * (uSunCol * ndl * L.r + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g);
   #ifdef AIR
@@ -238,7 +251,9 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     uAmbSky: { value: col(look.ambient.sky) }, uAmbGround: { value: col(look.ambient.ground) }, uAmbPow: { value: look.ambient.power },
     uDust: { value: col(look.dust) }, uRock: { value: col(look.rock) }, uBright: { value: col(look.bright) }, uDark: { value: col(look.dark) },
     uGrass: { value: col(look.grass || look.dust) }, uGrass2: { value: col(look.grass2 || look.dust) },
-    uAir: { value: look.air ? 1 : 0 }, uFine: { value: Q.fine },
+    uAir: { value: look.air ? 1 : 0 }, uFine: { value: Q.fine }, uBands: { value: land.kind.bands ? 1 : 0 },
+    // (the woods' colour from afar and how far the trees themselves are drawn: set by src/planet/trees.js)
+    uCanopy: { value: new THREE.Color(0, 0, 0) }, uTreeFar: { value: 1e9 },
     // (the haze as thick as the air says at the landing place's height, thinning above it)
     uHaze: { value: look.air ? look.air.haze : 0 }, uHazeH: { value: look.air ? look.air.thin || 450 : 450 }, uHazeBase: { value: land.landing.y },
   };

@@ -1,12 +1,12 @@
 // A PLANET, ready to look at and fly over: its ground made from a seed (src/planet/land.js, in a worker when it
 // can be), its sky, its sun and sky light, its ground's picture (src/planet/ground.js) and what stands on it
-// (src/planet/cover.js). The Planet Lab shows it by itself; the medical and exploring runs will come out of the
-// wormhole above one.
+// (src/planet/cover.js), and on the worlds with plants its trees (src/planet/trees.js). The Planet Lab shows it by
+// itself; the medical and exploring runs will come out of the wormhole above one.
 //
 //   const land = await makeLandAsync(seed, kind)            the ground's numbers, made away from the page
 //   const planet = await makePlanet({ renderer, scene, land, quality })
-//   planet.update(camera, dt) each frame;  planet.dispose()
-//   planet.land, planet.ground, planet.cover, planet.sky, planet.exposure (for the renderer), planet.stats
+//   planet.update(camera, dt) each frame; planet.relayNow(camera) after the camera jumps;  planet.dispose()
+//   planet.land, planet.ground, planet.cover, planet.trees, planet.sky, planet.exposure (for the renderer), planet.stats
 //
 // THE SKY: no air (the moon), the game's own sky (world/sky.js: the ringed planet, the nebulae, the stars) and its
 // sun; with air, the Terrain Lab's cloud sky in the planet's own colours (src/planet/cloudSky.js), its sun where the
@@ -15,13 +15,17 @@ import * as THREE from 'three';
 import { makeLand, finishLand } from './land.js';
 import { makeGround } from './ground.js';
 import { makeCloudSky } from './cloudSky.js';
-import { makeCover } from './cover.js';
+import { makeCover, preloadPlants } from './cover.js';
+import { makeTrees, preloadTrees } from './trees.js';
+import { kindById, kindOf } from './kinds.js';
 import { createSky } from '../../world/sky.js';
 
 // the ground's numbers for a seed, made in a worker (the page keeps drawing); here on the page if workers can't
 let worker = null, asks = 0;
 const waiting = new Map();
 export function makeLandAsync(seed, kind = null) {
+  // (the plants' sheet and the trees' models start loading now, while the ground is made, not after it)
+  try { const K = (kind && kindById(kind)) || kindOf(seed); preloadPlants(K); preloadTrees(K); } catch (e) { /* loaded when needed instead */ }
   try {
     if (!worker) {
       worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -66,19 +70,25 @@ export async function makePlanet({ renderer, scene, land, quality = 'medium' }) 
   // ── what stands on it ──────────────────────────────────────────────────────────────────────────────────────────
   const cover = await makeCover({ land, look, ground, quality, sky: dome });
   scene.add(cover.group); parts.push(cover.group);
+  // the trees (only a world that has them: their models are loaded only then)
+  const trees = await makeTrees({ renderer, land, look, ground, quality, sky: dome });
+  if (trees) { scene.add(trees.group); parts.push(trees.group); }
 
-  const stats = { landMs: land.ms, groundMs: ground.stats.buildMs, lightMs: ground.stats.lightMs, coverMs: cover.stats.buildMs, ms: 0 };
+  const stats = { landMs: land.ms, groundMs: ground.stats.buildMs, lightMs: ground.stats.lightMs, coverMs: cover.stats.buildMs, treesMs: trees ? trees.stats.buildMs : 0, ms: 0 };
   stats.ms = Math.round(performance.now() - t0);
   let clock = 0;
   return {
-    land, ground, cover, sky, dome, stats, sunDir, exposure: P.exposure,
+    land, ground, cover, trees, sky, dome, stats, sunDir, exposure: P.exposure,
     update(camera, dt) {
       clock += dt;
       ground.update(camera);
       cover.update(camera, dt);
+      if (trees) trees.update(camera);
       if (sky) sky.update(dt);
       if (dome) dome.update(camera, dt);
     },
-    dispose() { for (const p of parts) scene.remove(p); ground.dispose(); cover.dispose(); if (sky) sky.dispose(); if (dome) { dome.mesh.geometry.dispose(); dome.mesh.material.dispose(); } },
+    // (lays out the rocks, plants and near trees round the camera now, after a jump)
+    relayNow(camera) { cover.relayNow(camera); if (trees) trees.relayNow(camera); },
+    dispose() { for (const p of parts) scene.remove(p); ground.dispose(); cover.dispose(); if (trees) trees.dispose(); if (sky) sky.dispose(); if (dome) { dome.mesh.geometry.dispose(); dome.mesh.material.dispose(); } },
   };
 }
