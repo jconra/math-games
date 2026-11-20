@@ -3273,7 +3273,11 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
     } else {
       // (a painted cut on the head, or a hair's buzz and the scalp's shade under it: THE PAINT FIELD)
       const pt = kind === 'head' && R.hair ? paintOf(HE, lib.buzzOf(R.hair), lib.earsOf(R.head), { atlas, marks, frame: frameOf(o), hairRefs: refsOf.hair }) : null;
-      const mat = crewMaterial(own, kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
+      // (AN ANDROID'S HEAD is plated as its body is: a head part packed with a suit's colour masks (crewPart.masks.tex:
+      // the six androids') is coloured as a suit is, so the job's colours and the body's colour lie on its plating as
+      // they lie on the body's. Captain Vega's helmet is packed without them and is drawn as it was.)
+      const plated = kind === 'head' && !!(refsOf.head && refsOf.head.masks && refsOf.head.masks.tex);
+      const mat = crewMaterial(own, plated ? 'suit' : kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
       // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
       if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       // (A HAIR COLOURED BY ITS OWN LIGHT AND DARK: set before the material is first drawn, so its shader is made with it)
