@@ -19,11 +19,11 @@ import * as save from '../save.js';
 import { GAME_NAME, STATION_NAME } from '../name.js';
 import { LOOKS, lookById, recipeOf } from '../looks.js';
 import { pictureFor, picKey, coming, onPicture, wantPicture, keepPictures, kit, onKit } from '../portraits.js';
-import { ROWS, step, withPart, withColour, withLook, isMade } from '../maker.js';
+import { ROWS, step, withPart, withColour, withLook, isMade, skinInRange } from '../maker.js';
 import { SIZES, BAND_COLOURS } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=6', import.meta.url).href;
+const SHEET = new URL('./title.css?v=7', import.meta.url).href;
 
 // THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
 // three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
@@ -96,6 +96,13 @@ const lookRow = (cur, at) => `<div class="${P}-looks is-small" role="radiogroup"
 // colour or freckles cannot be seen on the whole person at that size), and beside them the colours as swatches. Every
 // press is saved at once with the crew member (their look), the person is drawn again (portraits.js: the part is
 // fetched then, if nobody has worn it yet) and the game builds them so (main.js).
+// ANY COLOUR (the game's maker, the same day: "for the color can we get a + that opens up the color picker so we can
+// have other colors?"): each colour row ends in a "+" swatch, which is the browser's own colour picker (a colour input
+// laid unseen over the swatch, so a tap or a click on it, or Enter on it from the keyboard, opens the picker as the
+// browser does on that device). The colour picked is worn at once, while the picker is still open (the person drawn
+// again as it moves), and saved when the picker closes; the "+" then wears that colour itself and is the row's chosen
+// swatch, and it starts the picker from there the next time. A skin colour picked is brought inside the skin's range
+// first (maker.js skinInRange: never white or near white).
 // THE ARROWS wait for the crew kit's list of parts (a moment after the page opens): shown, not yet pressable.
 // The player reads "Body" for an outfit (the game's maker's word), never "outfit", "uniform" or "suit".
 const HAIR_WORDS = ['black', 'dark brown', 'brown', 'chestnut', 'light brown', 'dark blond', 'blond', 'red', 'gray', 'silver'];
@@ -108,12 +115,17 @@ const TINTS = [
 const wornOf = (R) => ({ suit: R.suit, head: R.head, hair: R.hair == null ? null : R.hair });
 const arrow = (row, dir, ready) => `<button class="${P}-arrow is-${row.id} ${dir < 0 ? 'is-prev' : 'is-next'}" data-act="part" data-id="${row.id}" data-v="${dir}"
     data-k="part:${row.id}:${dir}" aria-label="${row.word}: ${dir < 0 ? 'the one before' : 'the next one'}"${ready ? '' : ' disabled'}>${ICONS.chevron}<b>${row.word}</b></button>`;
+// (a colour dark enough that a white "+" reads on it)
+const isDark = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 150; };
+const HEX = /^#[0-9a-f]{6}$/i;
 const swatches = (T, cur) => {
-  const list = save.SWATCHES[T.id], on = list.indexOf(cur);
+  const list = save.SWATCHES[T.id], on = list.indexOf(cur), own = on < 0 && HEX.test(cur || '');      // (own: a colour picked with the "+")
   return `<section><h3 class="${P}-label">${T.word}</h3>
     <div class="${P}-swatches" role="radiogroup" aria-label="${T.word}" data-nav="radio">
       ${list.map((c, i) => `<button class="${P}-swatch" role="radio" aria-checked="${i === on}" tabindex="${i === (on < 0 ? 0 : on) ? 0 : -1}" style="--c:${c}"
           aria-label="${T.word}: ${esc(T.said(i, list.length) || i + 1)}" data-act="tint" data-id="${T.id}" data-v="${c}" data-k="tint:${T.id}:${i}"><i></i></button>`).join('')}
+      <label class="${P}-swatch ${P}-pick${own ? ` is-on ${isDark(cur) ? 'is-dark' : 'is-light'}` : ''}"${own ? ` style="--c:${cur}"` : ''} title="Any color">
+        <i></i>${ICONS.plus}<input type="color" value="${HEX.test(cur || '') ? cur : '#7a8a9a'}" data-pick="${T.id}" data-k="pick:${T.id}" aria-label="${T.word}: pick any color"></label>
     </div></section>`;
 };
 const frecklesRow = (on) => `<div class="${P}-heights ${P}-two" role="radiogroup" aria-label="Freckles" data-nav="radio">
@@ -142,6 +154,34 @@ function lookChanged(ctx, p, next) {
   wantPicture(next, { from: old, now: true });
   ctx.changed(p);
   ctx.keepFocus(() => { ctx.draw.players(); ctx.draw.panel(); });
+}
+// ANY COLOUR: a colour from a row's "+" (its picker). While the picker is open (done false: it tells of every move)
+// the colour is worn and the person drawn again, the panel left as it is, since drawing the panel again would take the
+// picker's own input away from under it; when it closes (done) the look is saved and the panel drawn afresh. (A browser
+// that never says the picker closed: saved a moment after its last move.)
+let pickSoon = 0;
+function colourPicked(ctx, input, done) {
+  const p = ctx.current(), what = input.getAttribute('data-pick');
+  if (!p || !save.SWATCHES[what] || !HEX.test(input.value)) return;
+  const v = what === 'skin' ? skinInRange(input.value) : input.value.toLowerCase();
+  const old = p.look, next = withColour(old, what, v, lookById(old.id).recipe), moved = JSON.stringify(next) !== JSON.stringify(old);
+  clearTimeout(pickSoon);
+  if (done) {
+    if (moved) lookChanged(ctx, p, next);
+    else { ctx.changed(p); ctx.keepFocus(() => { ctx.draw.players(); ctx.draw.panel(); }); }
+    return;
+  }
+  if (!moved) return;
+  p.look = next;
+  wantPicture(next, { from: old, now: true });
+  // (the window, the close face and their card now show this look; the "+" wears the colour, and is the row's choice)
+  const key = picKey(next);
+  shown.set(key, { ...next });
+  for (const el of ctx.el.querySelectorAll(`.${P}-stage .${P}-pic, .${P}-rider[aria-checked="true"] .${P}-pic`)) { el.setAttribute('data-look', key); el.setAttribute('style', vars(next)); el.classList.toggle('is-coming', coming(next)); }
+  const mark = input.parentElement;
+  for (const b of mark.parentElement.querySelectorAll('[role="radio"]')) b.setAttribute('aria-checked', 'false');
+  mark.style.setProperty('--c', v); mark.classList.add('is-on'); mark.classList.toggle('is-dark', isDark(v)); mark.classList.toggle('is-light', !isDark(v));
+  pickSoon = setTimeout(() => ctx.changed(p), 1200);
 }
 
 const theme = {
@@ -231,6 +271,13 @@ const theme = {
       const next = withColour(p.look, 'freckles', +data.v ? 1 : 0, lookById(p.look.id).recipe);
       if (JSON.stringify(next) !== JSON.stringify(p.look)) lookChanged(ctx, p, next);
     },
+  },
+  // (ANY COLOUR: each row's "+" is a colour input of the browser's own, heard here: every move of its picker, and its close)
+  panelReady(panelEl, ctx) {
+    for (const input of panelEl.querySelectorAll('input[data-pick]')) {
+      input.addEventListener('input', () => colourPicked(ctx, input, false));
+      input.addEventListener('change', () => colourPicked(ctx, input, true));
+    }
   },
   // (the saved crew's made looks: their pictures kept for the next visit, any not yet drawn drawn; and the arrows come
   // alive when the crew kit's list of parts is in)

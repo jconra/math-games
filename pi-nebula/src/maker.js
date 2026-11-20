@@ -13,6 +13,9 @@
 //   suit, head     a part's id in the crew kit (crew.json)          hair   a hair's id, or null: no hair
 //   colours        { hair, skin, uniform, eyes: '#rrggbb', freckles: 1 }   (uniform: the body's colour)
 // A part stepped back to the look's own is taken out again, so a look put back as it was is the ready-made look.
+// A colour is one of the title's swatches or ANY colour picked with a row's "+" (2026-11-19, the game's maker: "for the
+// color can we get a + that opens up the color picker so we can have other colors?"). A skin colour picked that way is
+// brought inside THE SKIN'S RANGE (skinInRange, below): never white or near white.
 //
 // THE PARTS ARE THE CREW KIT'S OWN, as they are: nothing is re-made or re-fitted for the maker. What is left out:
 //   KEPT_BACK   parts no player wears: Vega's helmet and his coat (his own), and the three captains' bodies (whether a
@@ -94,19 +97,40 @@ export function withLook(look, id) {
   return l;
 }
 
+// THE SKIN'S RANGE: a skin colour picked with the "+" may be any hue (a green or blue crew member is the player's to
+// make), but never white or near white (the crew's rule: "they should have a limit on how light they can go"). So a
+// picked colour is brought inside the range, never refused: no lighter than the lightest swatch (LIGHTEST: its
+// lightness, 0.845 of the way from black to white), and the lighter it is the more colour it must have (none asked up
+// to half way; at the lightest, at least SKIN_COLOUR of full: the lightest swatch itself has 0.67), so nothing pale
+// and grey gets through; a colour with no hue of its own (a white, a grey) takes the swatches' own warm hue. A colour
+// already inside comes back as it was. (The crew kit then holds every tone short of white on the head itself: kit/crew.js
+// THE SKIN'S LIMITS.)
+export const SKIN_RANGE = { lightest: 0.845, colour: 0.55, from: 0.5, hue: 22 };
+export function skinInRange(hex, R = SKIN_RANGE) {
+  if (!HEX.test(String(hex))) return null;
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let l = (max + min) / 2, s = d < 1e-9 ? 0 : d / (1 - Math.abs(2 * l - 1)), h = R.hue;
+  if (s >= 0.08) h = (max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
+  const l2 = Math.min(l, R.lightest), need = Math.max(0, Math.min(1, (l2 - R.from) / (R.lightest - R.from))) * R.colour, s2 = Math.max(s < 0.08 && need > 0 ? 0 : s, need);
+  if (l2 === l && s2 === s) return hex.toLowerCase();
+  const c = (1 - Math.abs(2 * l2 - 1)) * s2, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l2 - c / 2, k = Math.floor(h / 60) % 6;
+  const [r2, g2, b2] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k];
+  return '#' + [r2, g2, b2].map((v) => Math.round(Math.max(0, Math.min(1, v + m)) * 255).toString(16).padStart(2, '0')).join('');
+}
+
 // A saved look made safe to wear (the game's own save runs every crew member through this): parts that are no text, or
-// kept back, are dropped; a colour that is not one of the maker's own swatches is dropped (so no skin is ever lighter
-// than the lightest swatch: the crew kit holds even that one short of white); anything else on the look is kept.
-// allowed: { hair, skin, uniform, eyes: [colours] } (left out: any '#rrggbb' is kept).
-export function tidy(look, allowed = null) {
+// kept back, are dropped; a colour that is no '#rrggbb' is dropped, and a skin colour is brought inside THE SKIN'S
+// RANGE (so no saved look, however it came to be, has a white skin); anything else on the look is kept.
+export function tidy(look) {
   const l = { ...(look || {}) };
   for (const part of ['suit', 'head']) if (has(l, part) && (typeof l[part] !== 'string' || !l[part] || KEPT_BACK[part].includes(l[part]))) delete l[part];
   if (has(l, 'hair') && l.hair !== null && (typeof l.hair !== 'string' || !l.hair)) delete l.hair;
   if (has(l, 'colours')) {
     const c = {}, from = l.colours && typeof l.colours === 'object' ? l.colours : {};
     for (const k of ['hair', 'skin', 'uniform', 'eyes']) {
-      const v = typeof from[k] === 'string' ? from[k].toLowerCase() : null;
-      if (v && HEX.test(v) && (!allowed || !allowed[k] || allowed[k].includes(v))) c[k] = v;
+      const v = typeof from[k] === 'string' && HEX.test(from[k]) ? from[k].toLowerCase() : null;
+      if (v) c[k] = k === 'skin' ? skinInRange(v) : v;
     }
     if (from.freckles) c.freckles = 1;
     if (Object.keys(c).length) l.colours = c; else delete l.colours;

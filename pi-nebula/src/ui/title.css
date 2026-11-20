@@ -174,14 +174,14 @@
    and the body (each pair about level with the part it changes); beside the window the colours as rows of small
    eight-sided swatches, then freckles and the height. A picture still on its way (.is-coming) is the one before,
    dimmed. */
-.cst-maker { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 18px; align-items: start; }
+.cst-maker { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
 .cst-stage { position: relative; height: 322px; }
 .cst-stage .cst-face.cst-full { width: 100%; height: 100%; aspect-ratio: auto; }
 /* (the face close, in the window's corner: an eye colour or freckles cannot be seen on the whole person at this size) */
-.cst-stage .cst-face.cst-close { position: absolute; left: 8px; bottom: 8px; width: 96px; padding: 2px; background: var(--line-hi); }
+.cst-stage .cst-face.cst-close { position: absolute; left: 8px; bottom: 8px; width: 90px; padding: 2px; background: var(--line-hi); }
 .cst-stage .cst-close .cst-pic { background-size: 175% auto, auto; background-position: 50% 26%, center; }
 /* (the person stands a little to the right of the window's middle, so their feet are clear of the face) */
-.cst-stage .cst-full .cst-pic { background-position: 64% bottom, center, center, center; }
+.cst-stage .cst-full .cst-pic { background-position: 68% bottom, center, center, center; }
 .cst-pic { transition: filter 0.12s; }
 .cst-pic.is-coming { filter: brightness(0.6) saturate(0.6); }
 .cst-arrow {
@@ -202,12 +202,24 @@
 .cst-arrow:disabled { opacity: 0.4; }
 .cst-tints { display: grid; gap: 10px; align-content: start; }
 .cst-tints .cst-label { margin-bottom: 6px; }
-.cst-swatches { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+.cst-swatches { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; }
 .cst-swatch { display: block; aspect-ratio: 1; padding: 2px; background: var(--line); clip-path: var(--oct); }
 .cst-swatch i { display: block; width: 100%; height: 100%; background: var(--c); clip-path: var(--oct); }
 .cst-swatch:hover { background: var(--line-hi); }
 .cst-swatch[aria-checked="true"] { background: var(--accent); padding: 3.5px; }
 .cst-swatch:focus-visible { outline: none; background: var(--focus); padding: 3.5px; }
+/* ANY COLOUR: the "+" at a row's end is the browser's own colour picker (its input laid unseen over the swatch, so a
+   tap, a click or Enter opens it); once a colour has been picked with it, it wears that colour and is the one chosen */
+.cst-swatch.cst-pick { position: relative; display: grid; place-items: center; padding: 0; color: var(--ink); cursor: pointer; }
+.cst-pick i { position: absolute; inset: 2px; width: auto; height: auto; background: rgba(46, 54, 64, 0.95); }
+.cst-pick.is-on { background: var(--accent); }
+.cst-pick.is-on i { inset: 3.5px; background: var(--c); }
+.cst-pick svg { position: relative; display: block; width: 58%; height: 58%; }
+.cst-pick.is-dark { color: #fff; }
+.cst-pick.is-light { color: #14181d; }
+.cst-pick input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.cst-pick:hover { background: var(--line-hi); }
+.cst-pick:focus-within { background: var(--focus); }
 .cst-heights.cst-two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 170px; }
 .cst-tints .cst-agech { height: 32px; font-size: 13px; }
 
@@ -336,7 +348,7 @@
   /* (a narrower panel: the maker's window over its colours, as on a phone, the swatches no bigger than a thumb needs) */
   .cst-maker { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .cst-stage { width: 100%; max-width: 340px; margin: 0 auto; }
-  .cst-swatches { grid-template-columns: repeat(10, minmax(0, 40px)); gap: 4px; }
+  .cst-swatches { grid-template-columns: repeat(11, minmax(0, 40px)); gap: 4px; }
 }
 /* a short wide screen: a smaller person, a shorter button */
 @media (max-height: 820px) and (min-width: 701px) {

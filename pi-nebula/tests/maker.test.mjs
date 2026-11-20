@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ROWS, KEPT_BACK, APART, NO_HAIR, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy } from '../src/maker.js';
+import { ROWS, KEPT_BACK, APART, NO_HAIR, SKIN_RANGE, wearable, choices, step, goTogether, isMade, keyOf, withPart, withColour, withLook, tidy, skinInRange } from '../src/maker.js';
 
 const KIT = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.meta.url), 'utf8')).parts;
 const KAI = { suit: 'civilian', head: 't10', hair: 'curlyShort', colours: { skin: '#d9a37f', hair: '#2e1f15' } };      // (the look "kai"'s own recipe)
@@ -92,18 +92,47 @@ test('a look\'s pictures go by what is in them: the height is not, every part an
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test('a saved look is made safe: kept-back parts and colours that are not swatches are dropped, the rest kept', () => {
-  const allowed = { hair: ['#17110d'], skin: ['#f2d3bd', '#663b22'], uniform: ['#6e28b2'], eyes: ['#3f6b8c'] };
-  assert.deepEqual(tidy({ id: 'kai', size: 0.9 }, allowed), { id: 'kai', size: 0.9 });
+// how light a colour is, and how much colour it has (0..1 each), as skinInRange measures them
+function lightAndColour(hex) {
+  const n = parseInt(hex.slice(1), 16), c = [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255], max = Math.max(...c), min = Math.min(...c), l = (max + min) / 2;
+  return [l, max - min < 1e-9 ? 0 : (max - min) / (1 - Math.abs(2 * l - 1))];
+}
+const SKINS = ['#f2d3bd', '#e8bf9f', '#d9a37f', '#c48a62', '#a66d45', '#86522f', '#663b22', '#47291a'];      // (the crew kit's SKIN_TONES, the title's swatches)
+
+test('a skin colour picked with the + is never white or near white: brought inside the range, not refused', () => {
+  // (every swatch is inside the range already, and comes back as it is)
+  for (const c of SKINS) assert.equal(skinInRange(c), c, c);
+  // white, near white and pale greys: no lighter than the lightest swatch, and with real colour in them
+  for (const c of ['#ffffff', '#fefefe', '#f8f8f0', '#f0f4ff', '#fff5f5', '#e6e6e6', '#d0d0d0', '#ffe0e0', '#e0ffe0']) {
+    const got = skinInRange(c), [l, col] = lightAndColour(got);
+    assert.match(got, /^#[0-9a-f]{6}$/, c);
+    assert.ok(l <= SKIN_RANGE.lightest + 0.005, `${c} > ${got}: lightness ${l.toFixed(3)}`);
+    assert.ok(l < 0.8 || col >= 0.45, `${c} > ${got}: as light as that, it has colour (${col.toFixed(2)})`);
+    const n = parseInt(got.slice(1), 16);
+    assert.ok(Math.min(n >> 16, (n >> 8) & 255, n & 255) < 0xd0, `${c} > ${got}: not near white`);
+  }
+  // (a white takes the swatches' own warm hue: it comes out close to the lightest swatch)
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(skinInRange('#ffffff').slice(i, i + 2), 16));
+  assert.ok(r > g && g > b && Math.abs(r - 0xf2) < 12 && Math.abs(g - 0xd3) < 12 && Math.abs(b - 0xbd) < 12, skinInRange('#ffffff'));
+  // any hue is the player's to pick, and a colour that is not light is not touched
+  for (const c of ['#3f8fe8', '#00ff00', '#6e28b2', '#808080', '#000000', '#a83c22']) assert.equal(skinInRange(c), c, c);
+  assert.equal(skinInRange('#D9A37F'), '#d9a37f');
+  assert.equal(skinInRange('white'), null);
+});
+
+test('a saved look is made safe: kept-back parts and colours that are no colour are dropped, a skin is never near white, the rest kept', () => {
+  assert.deepEqual(tidy({ id: 'kai', size: 0.9 }), { id: 'kai', size: 0.9 });
   // (a captain's body, Vega's helmet and coat: never a player's)
-  assert.deepEqual(tidy({ id: 'kai', suit: 'captainMan', head: 'vega' }, allowed), { id: 'kai' });
-  assert.deepEqual(tidy({ id: 'kai', suit: 'vega' }, allowed), { id: 'kai' });
-  assert.deepEqual(tidy({ id: 'kai', suit: 'cook', head: 't3', hair: null }, allowed), { id: 'kai', suit: 'cook', head: 't3', hair: null });
-  assert.deepEqual(tidy({ id: 'kai', suit: 7, head: '', hair: 3 }, allowed), { id: 'kai' });
-  // (no skin lighter than the lightest swatch: white, or any colour not a swatch, is dropped)
-  assert.deepEqual(tidy({ id: 'kai', colours: { skin: '#ffffff', hair: '#17110D', eyes: 'blue', uniform: '#6e28b2', freckles: true, more: 1 } }, allowed),
-    { id: 'kai', colours: { hair: '#17110d', uniform: '#6e28b2', freckles: 1 } });
-  assert.deepEqual(tidy({ id: 'kai', colours: 'red' }, allowed), { id: 'kai' });
+  assert.deepEqual(tidy({ id: 'kai', suit: 'captainMan', head: 'vega' }), { id: 'kai' });
+  assert.deepEqual(tidy({ id: 'kai', suit: 'vega' }), { id: 'kai' });
+  assert.deepEqual(tidy({ id: 'kai', suit: 'cook', head: 't3', hair: null }), { id: 'kai', suit: 'cook', head: 't3', hair: null });
+  assert.deepEqual(tidy({ id: 'kai', suit: 7, head: '', hair: 3 }), { id: 'kai' });
+  // (any colour picked with a row's + is kept as it is, but for a skin: a white one is brought inside the range)
+  assert.deepEqual(tidy({ id: 'kai', colours: { skin: '#ffffff', hair: '#2F6FD0', eyes: 'blue', uniform: '#12ab34', freckles: true, more: 1 } }),
+    { id: 'kai', colours: { hair: '#2f6fd0', skin: skinInRange('#ffffff'), uniform: '#12ab34', freckles: 1 } });
+  assert.notEqual(tidy({ id: 'kai', colours: { skin: '#ffffff' } }).colours.skin, '#ffffff');
+  assert.deepEqual(tidy({ id: 'kai', colours: { skin: '#663b22' } }), { id: 'kai', colours: { skin: '#663b22' } });
+  assert.deepEqual(tidy({ id: 'kai', colours: 'red' }), { id: 'kai' });
   // (what a newer build saved beside the look is kept)
-  assert.deepEqual(tidy({ id: 'kai', earned: ['hat'] }, allowed), { id: 'kai', earned: ['hat'] });
+  assert.deepEqual(tidy({ id: 'kai', earned: ['hat'] }), { id: 'kai', earned: ['hat'] });
 });

@@ -15,18 +15,18 @@ import { SIZES, HAIR_COLOURS, SKIN_TONES, BAND_COLOURS, EYE_COLOURS } from '../k
 
 export const KEY = 'calc-station.crew';
 
-// THE MAKER'S COLOURS (the title's swatches, and the only colours a saved look may name): the crew kit's own lists
+// THE MAKER'S COLOURS (the title's swatches: the crew kit's own lists; a row's "+" picks any other)
 export const SWATCHES = { hair: HAIR_COLOURS, skin: SKIN_TONES, uniform: Object.values(BAND_COLOURS), eyes: EYE_COLOURS };
 
 // this game's tidy-up of one saved crew member: a look this build knows, a height (look.size, the title's Height
 // row: one of the crew kit's SIZES; Medium, or anything else, is left out), and what the character maker laid over the
-// look (maker.js tidy: parts by name, colours from the swatches)
+// look (maker.js tidy: parts by name, colours as '#rrggbb', a skin never white or near white)
 const HEIGHTS = Object.values(SIZES).filter((v) => v !== 1);
 function fix(p) {
   const id = p.look && typeof p.look.id === 'string' ? p.look.id : null;
   if (!id || !LOOKS.some((l) => l.id === id)) p.look = { ...p.look, id: lookById(id).id };
   if (p.look && 'size' in p.look && !HEIGHTS.includes(p.look.size)) { p.look = { ...p.look }; delete p.look.size; }
-  p.look = tidy(p.look, SWATCHES);
+  p.look = tidy(p.look);
   return p;
 }
 
