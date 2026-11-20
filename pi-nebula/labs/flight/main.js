@@ -31,7 +31,13 @@
 //     data (src/fleet.js): its own pad, bay door, hull, engine's glow, cockpit, view from behind and voice. Picking one
 //     loads the lab again with it (the address keeps it: ?ship=). In the game itself only the Miner is flown yet (the
 //     Explorer's and the Medic's missions are still to come); here, with the Explorer or the Medic flown, the Miner
-//     waits on its pad and is not moved by a bump (src/fleet.js `shove`).
+//     waits on its pad, its crane at its round (no haul flies in to land meanwhile).
+//   - THE MINER SHOVED (the game's maker, 2026-11-20, SHIP2-2 B: "Shove it like the other two, with its canisters riding
+//     on it. The crane takes them off wherever it ends up, the same as when you land crooked."): the Explorer or the
+//     Medic flown into the Miner's hangar shoves it as it shoves the other one, its canisters riding on it, about the
+//     floor its crane can unload it on; the crane waits while it slides and goes on with its round from where it ends
+//     up (src/crane.js shove, src/visit.js). While the crane's grab is down at it, it is held there. It is put back with
+//     the same reset as the other two.
 //
 // Address switches: ?ship=miner|explorer|medic  which ship; ?q=low|medium|high  the picture's quality; ?view=behind
 // start in the view from behind; ?hold  no clock of its own (LAB.step(dt, n)); ?rig  keeps the picture readable for a
@@ -74,8 +80,9 @@ for (const D of W.built.glides || []) D.use = null;
 const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
 const crane = LAB.crane = makeCrane({ W, walls, boarding });
 const outside = LAB.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
-// (the other two hangars, for a ship flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js)
-const visit = LAB.visit = makeVisit({ W, boarding, outside, cfg });
+// (the other two hangars, for a ship flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js;
+// the Miner's crane keeps the Miner, shoved, its canisters riding on it)
+const visit = LAB.visit = makeVisit({ W, boarding, outside, cfg, crane });
 
 // someone aboard: a stand-in for the crew member (no body to draw), in the ship's hangar until its cabin is built,
 // then in its cockpit, where they stay

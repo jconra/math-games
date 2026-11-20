@@ -41,6 +41,16 @@
 // What does not follow: the shade it throws on the floor in the hangar's saved light, and the fuel hose on the floor,
 // both of which stay where it parks (the station's files; the same is true of the Miner).
 //
+// THE MINER, SHOVED (the game's maker, 2026-11-20, SHIP2-2 B: "Shove it like the other two, with its canisters riding
+// on it. The crane takes them off wherever it ends up, the same as when you land crooked."): a ship flown into the
+// Miner's hangar (the Explorer or the Medic: in the Flight Lab) shoves it as it shoves the other two, the same weight
+// and the same slide, about the Miner's own floor (src/fleet.js othersOf `keep`: where the crane can get at its
+// canisters). Its keeper is its crane (src/crane.js shove): the crane draws it where it is with its canisters on it,
+// waits while it slides, and goes on with its round from where it ends up; its cabin, lift and walls are told here as
+// the other two's are. While the crane's grab is down at it (taking a canister off it or putting one on) the crane has
+// hold of it and a bump does not move it (src/flymodel.js grabbed). The reset puts it back with its canisters, as it
+// puts the other two back (crane.stand), and the crane's own reset of a Miner set down crooked is followed here.
+//
 // THE RESET ("it would be reset the next time they entered into the other hanger"): the moment the game already has
 // for setting a hangar out afresh. Once the flown ship is out of that hangar and the hangar is not being drawn (flown
 // away from, or looked at from somewhere it cannot be seen), its ship is back where it is parked, with everything
@@ -50,9 +60,10 @@
 // lined up with another hangar's door and close, that hangar is asked for as the real one (outside.near), well before
 // the ship is at the door; the stand-in fades away over it.
 //
-//   const visit = makeVisit({ W, boarding, outside, people, cfg })     people: () -> the station's people, or null; cfg:
-//                                the flown ship's facts (src/fleet.js flightOf; the Miner's if none): the other
-//                                hangars and their ships are the ones it meets (cfg.others)
+//   const visit = makeVisit({ W, boarding, outside, people, cfg, crane })     people: () -> the station's people, or
+//                                null; cfg: the flown ship's facts (src/fleet.js flightOf; the Miner's if none): the
+//                                other hangars and their ships are the ones it meets (cfg.others); crane: the Miner's
+//                                (src/crane.js), its keeper when it is shoved (none: the Miner is not moved by a bump)
 //   visit.others                 the ships parked in the other hangars, as the flying shoves them (flymodel.js makeOther)
 //   visit.fly(F)                 the flying now (src/flying.js), or null
 //   visit.update(dt, camera)     once a frame, after the camera is set and before the picture
@@ -79,15 +90,18 @@ export const ALARM = {
   sound: { volume: 0.55, near: 12, far: 160, notes: [640, 480], beat: 0.42 }, run: 0.4, tell: 0.3, real: { out: 38, side: 13, outGo: 48, sideGo: 16 }, room: 1.3, low: 3.6,
 };
 
-export function makeVisit({ W, boarding = null, outside = null, people = () => null, cfg: ship = M.MINER }) {
+export function makeVisit({ W, boarding = null, outside = null, people = () => null, cfg: ship = M.MINER, crane = null }) {
   const OTHERS = ship.others || [], others = OTHERS.map(M.makeOther);
   // ── each parked ship as it is drawn: its own room, the moving parts that are its alone, its hangar ──
   const views = others.map((O) => {
     const cfg = O.cfg, zone = W.room(cfg.room), hangar = W.room(cfg.hangar);
+    // (the Miner's keeper is its crane, which draws it with its canisters on it: THE MINER, SHOVED, above. With no crane
+    // it is held where it is, as it always was)
+    const miner = cfg.id === 'miner', keeper = miner && crane && crane.shove ? crane : null;
     const mine = new Set(), shared = new Set();
     for (const D of W.built.doors) for (const leaf of D.leaves) for (const im of leaf.meshes || []) (D.zone === cfg.room ? mine : shared).add(im);
     // (drawn, told: where it was last drawn and last told to be; parked, as the station has it, nothing is touched)
-    return { O, cfg, zone, hangar, meshes: [...mine].filter((im) => !shared.has(im)), D: new THREE.Matrix4(), drawn: keyOf(O), told: [O.p[0], O.p[1], O.yaw], tellT: 0, clearT: 0, home: M.makeOther(cfg) };
+    return { O, cfg, zone, hangar, keeper, miner, meshes: keeper ? [] : [...mine].filter((im) => !shared.has(im)), D: new THREE.Matrix4(), drawn: keyOf(O), still: true, told: [O.p[0], O.p[1], O.yaw], tellT: 0, clearT: 0, home: M.makeOther(cfg) };
   }).filter((v) => v.zone && v.hangar);
   const counts = { alarms: 0, stops: 0, resets: 0, waits: 0, tells: 0, ran: 0, pushed: 0, soundAsked: 0, soundHeard: 0 };
   let flying = null, alarm = null, siren = null, sirenFor = null, phase = 0, runT = 0, near = null;
@@ -96,9 +110,11 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
   // the ship drawn where it is: one move from where it is parked (null: parked)
   function keyOf(O) { return O.p[0].toFixed(4) + ',' + O.p[1].toFixed(4) + ',' + O.yaw.toFixed(5); }
   function draw(v) {
-    const k = keyOf(v.O); if (v.drawn === k) return; v.drawn = k;
+    const k = keyOf(v.O), still = M.otherStill(v.O); if (v.drawn === k && (!v.keeper || v.still === still)) return; v.drawn = k; v.still = still;
     const e = M.otherElements(v.O);
     if (e) v.D.fromArray(e); else v.D.identity();
+    // (the Miner: its crane draws it there, its canisters with it, and goes on from where it ends up)
+    if (v.keeper) { v.keeper.shove(e ? v.D : null, { still }); return; }
     v.zone.group.matrixAutoUpdate = false; v.zone.group.matrix.copy(v.D); v.zone.group.matrixWorldNeedsUpdate = true;
     for (const im of v.meshes) { im.matrixAutoUpdate = false; im.matrix.copy(v.D); im.matrixWorldNeedsUpdate = true; }
   }
@@ -110,7 +126,18 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     v.told = [O.p[0], O.p[1], O.yaw]; counts.tells++;
     if (boarding && boarding.stand) boarding.stand(v.cfg.id, home ? null : v.D.clone());
   }
-  function reset(v) { M.resetOther(v.O); draw(v); tell(v); counts.resets++; }
+  // (the Miner held where it is: its crane's grab down at it, or its crane not at its round; with no crane, always)
+  function held(v) { return !v.keeper || v.keeper.busy || M.grabbed(v.O, v.keeper.grab); }
+  for (const v of views) if (v.miner) v.O.held = held(v);
+  // (the Miner: its crane puts it back with its canisters; while the crane cannot, it stays where it is)
+  function reset(v) { if (v.keeper && v.keeper.standing && !v.keeper.stand(null)) return; M.resetOther(v.O); draw(v); tell(v); counts.resets++; }
+  // (the Miner where its crane has it standing, when that is not where it is here: put back by the crane's own reset,
+  // or set down crooked before it was ever bumped. Nothing is told: the crane has told its cabin)
+  function follow(v) {
+    const S = v.keeper.standing, e = M.otherElements(v.O);
+    if (S ? e && e.every((x, i) => Math.abs(x - S.elements[i]) < 1e-6) : !e) return;
+    M.otherAt(v.O, S ? S.elements : null); v.drawn = keyOf(v.O); v.still = true; v.told = [v.O.p[0], v.O.p[1], v.O.yaw];
+  }
 
   // ── THE BEACONS: dark, hung under each hangar's trusses, drawn with it ──
   const red = new THREE.Color(ALARM.colour), A = ALARM;
@@ -215,6 +242,8 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
       // the ships: sliding on, drawn where they are, told where they stand
       for (const v of views) {
         const O = v.O, was = M.otherStill(O);
+        // (the Miner: where its crane has it standing, if that has changed without a bump)
+        if (v.keeper && was && !v.keeper.shoving) follow(v);
         // (it waits for nobody: whoever it comes over as it slides is pushed out of its way)
         if (!was) { M.stepOther(O, dt); const pp = people(); if (pp && pp.push) counts.pushed += pp.push(v.hangar.box, (pos) => M.pushedTo(O, [pos.x, pos.z])); }
         draw(v);
@@ -225,6 +254,8 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
           const pp = people(), on = (pos) => { _w[0] = pos.x; _w[1] = 1; _w[2] = pos.z; return M.insideOther(v.home, _w, 0.6); };
           if (pp && feetOn(v).some(([x, z]) => on({ x, z }))) { v.clearT = A.run; if (pp.flee) pp.flee(v.cfg.at[0], v.cfg.at[2], 0, 2.5, { inside: on }); counts.waits++; } else reset(v);
         }
+        // (the Miner, for the next bump: held while its crane has hold of it, and always with no crane to keep it)
+        if (v.miner) O.held = held(v);
       }
       // the alarm: on while it is in there, off the moment it is out
       if (there !== alarm) {
@@ -253,7 +284,7 @@ export function makeVisit({ W, boarding = null, outside = null, people = () => n
     },
     reset(id = null) { for (const v of views) if (!id || v.cfg.id === id) reset(v); },
     state: () => ({ alarm: alarm ? alarm.id : null, siren: !!siren, lights: !!(lit && lit.g.parent), wash: lit && lit.g.parent ? +(lit.all.visible ? lit.allMat.uniforms.a.value : lit.paneMat.opacity).toFixed(3) : 0, washAll: !!(lit && lit.g.parent && lit.all.visible), near, focus: focusOn, ...counts,
-      ships: views.map((v) => ({ id: v.cfg.id, moved: v.O.moved, still: M.otherStill(v.O), p: v.O.p.map((x) => +x.toFixed(2)), yaw: +(v.O.yaw * 180 / Math.PI).toFixed(1), hit: +v.O.hit.toFixed(1), from: [+(v.O.p[0] - v.cfg.at[0]).toFixed(2), +(v.O.p[1] - v.cfg.at[2]).toFixed(2)], seen: v.hangar.group.visible })),
+      ships: views.map((v) => ({ id: v.cfg.id, moved: v.O.moved, still: M.otherStill(v.O), held: !!v.O.held, p: v.O.p.map((x) => +x.toFixed(2)), yaw: +(v.O.yaw * 180 / Math.PI).toFixed(1), hit: +v.O.hit.toFixed(1), from: [+(v.O.p[0] - v.cfg.at[0]).toFixed(2), +(v.O.p[1] - v.cfg.at[2]).toFixed(2)], seen: v.hangar.group.visible })),
       cost: lit ? { draws: lit.draws, tris: lit.tris } : null, beacons: views.reduce((n, v) => n + v.lamps.length, 0), beaconTris: (bodyGeo.index.count / 3) * 4 }),
     dispose() { if (siren) siren.stop(); dark(); for (const v of views) v.hangar.group.remove(v.beacons); for (const o of owned) o.dispose(); },
   };

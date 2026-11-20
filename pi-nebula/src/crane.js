@@ -41,6 +41,19 @@
 //     stands within the crane's reach (for the crane worked by hand) is kept in two parts, the hangar and the ship,
 //     and the ship's part is asked where the ship stands, so nothing is marked again. With the player gone from the hangar's area and it out of sight, the Miner
 //     is back in its proper parking place (whether it goes away on a run of its own or waits for a contract).
+//   - SHOVED (the game's maker, 2026-11-20, SHIP2-2 B, of the Explorer or the Medic flown in and ramming the Miner:
+//     "Shove it like the other two, with its canisters riding on it. The crane takes them off wherever it ends up, the
+//     same as when you land crooked."). crane.shove(D, { still }): src/visit.js slides it about its floor as it slides
+//     the other two about theirs, and tells it here every frame it moves. It is drawn there at once with all that rides
+//     on it (its canisters on their mounts, its trays); while it is still sliding the round waits where it is; once it
+//     is still, the round runs on to its next moment with nothing half done and the grab all the way up (never more
+//     than a few seconds) and is taken up from there, with the crane's places on the ship where it now stands, exactly
+//     as for a ship set down crooked. A canister in the grab stays in the grab. Its next lift-off is from there (its
+//     cabin is told: src/visit.js), and it is put back in its proper parking place by the same reset as the other two
+//     (src/visit.js) or the one above. WHILE THE CRANE HAS HOLD OF IT a bump does not move it (it is felt as a wall, as
+//     the Miner always was): its grab come down from carrying height over it or over one of its trays (taking a canister
+//     off it or putting one on: crane.grab, src/flymodel.js grabbed), or the crane not at its round (crane.busy: worked
+//     by hand, the Miner landing, away or out).
 //   - DRAWN WITH ITS ROOM. The moving parts are the kit's door leaves, hung on the hangar's own room, so they are drawn
 //     only when it is.
 //   - NOBODY UNDER A LOAD, by itself. The crane knows the patch of floor it is about to work over; while anyone stands
@@ -69,6 +82,7 @@
 //   crane.fly(D, dt, how)          while it is out: the Miner drawn where it has been flown to (src/flying.js)
 //   crane.stand(D), crane.standing where the Miner stands when it is not parked in its proper place (above); the
 //                                  Matrix4 it stands by, or null
+//   crane.shove(D, { still }), crane.grab, crane.busy   the Miner shoved by a ship flown into its hangar (above)
 //   crane.awayHeld                 true: the Miner stays on its pad when the player leaves the area (a contract signed)
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
 //   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (src/jobs/crane.js toGrid)
@@ -83,6 +97,7 @@ import * as MB from '../kit/ships/miner-built.js';
 // (the Miner's hull drawn where it is, its pods, its engine and the air under it: the one shared ship piece's, as for
 // every ship; the canisters, the round and the landing below are the crane's own)
 import { makeHull, FLIGHT } from './shiphull.js';
+import { SHOVE } from './flymodel.js';
 import { SHIPS as BOARDED } from './boarding.js';
 import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
@@ -139,6 +154,8 @@ export function makeCrane({ W, walls, boarding = null }) {
   const grid = (x, z) => toGrid(site, x, z);
 
   let t = 0, rate = 1, flash = 0, mode = 'round', handAt = null, live = null, cmd = {}, voxels = null, eyesNow = [];
+  // (the Miner shoved: still sliding; the round to be taken up where it now stands: shove, takeUp)
+  let shoving = false, retake = false;
   const world = { solid: (x, y, z) => reachNow().full(x, y, z), get eyes() { return eyesNow; } };
   const oreOf = () => CAN_TONNES;   // (tonnes of metal in a full canister: one, src/jobs/smelter.js; it only weighs on the hook, nothing asks about it)
   const seen = () => room.group.visible || lookers.some((z) => z.group.visible);
@@ -354,7 +371,8 @@ export function makeCrane({ W, walls, boarding = null }) {
       const g = L.gate(t, RULES.ahead); let blocked = false;
       if (g) for (const e of eyes) if (e.y < RULES.head && Math.abs(e.x - g.x) < g.hx + RULES.margin && Math.abs(e.z - g.z) < g.hz + RULES.margin) { blocked = true; break; }
       C.waiting = blocked;
-      const want = blocked ? 0 : 1; rate += (want - rate) * Math.min(1, dt * RULES.ease); if (Math.abs(want - rate) < 0.02) rate = want;
+      // (and while the Miner is being shoved it waits too: shove, below)
+      const want = blocked || shoving ? 0 : 1; rate += (want - rate) * Math.min(1, dt * RULES.ease); if (Math.abs(want - rate) < 0.02) rate = want;
       if (blocked) { flash += dt; L.beacon(flash % RULES.flash < RULES.flash * 0.5); } else if (flash) { flash = 0; L.beacon(false); }
       if (rate > 0 && dt > 0 && t < L.length) {
         const to = Math.min(L.length, t + dt * rate);
@@ -363,6 +381,7 @@ export function makeCrane({ W, walls, boarding = null }) {
         t = to;
         L.pose(t);
       } else if (mode === 'handover' && t >= L.length - 1e-6) { goLive(); return; }
+      if (retake && !shoving && mode === 'round') takeUp();
       posePieces(L.state(t), dt);
     },
     // ── the controls ──
@@ -400,7 +419,7 @@ export function makeCrane({ W, walls, boarding = null }) {
       const done = t >= L.length - 1e-6, at = done ? L.length : loaded ? t : (L.clean(t) ?? t), S = L.state(at);
       ship.stand = D ? (ship.stand || new THREE.Matrix4()).copy(D) : null;
       L.restand(ship.stand, S);
-      t = done ? L.length : 0; rate = 1;
+      t = done ? L.length : 0; rate = 1; retake = false; shoving = false;
       if (ship.stand) standInv.copy(ship.stand).invert();
       if (boarding && boarding.stand) boarding.stand('miner', ship.stand);
       if (!aloft) { shipAt(null); L.pose(t); posePieces(L.state(t), 0); }
@@ -408,6 +427,27 @@ export function makeCrane({ W, walls, boarding = null }) {
       return true;
     },
     get standing() { return ship ? ship.stand : null; },
+    // ── SHOVED by a ship flown into its hangar (the top of this file; src/visit.js) ──
+    // D: a Matrix4 from where it is parked to where it now is (null: its proper parking place); still: it has stopped
+    // sliding. Drawn there at once with all that rides on it; the round waits while it slides, and is taken up from
+    // where it stands once it is still (takeUp). Only while the crane is at its round: false otherwise (it is held).
+    shove(D = null, { still = true } = {}) {
+      if (!ship || mode !== 'round') return false;
+      const was = ship.stand;
+      if (D ? !(was && was.equals(D)) : !!was) {
+        ship.stand = D ? (was || new THREE.Matrix4()).copy(D) : null;
+        if (ship.stand) standInv.copy(ship.stand).invert();
+        shipAt(null); L.pose(t); posePieces(L.state(t), 0);
+        retake = true;
+      }
+      shoving = !still;
+      return true;
+    },
+    get shoving() { return shoving; },
+    // where the grab is over the floor, how high, and how high it is carried (src/flymodel.js grabbed: come down over
+    // the Miner, it has hold of it); busy: not at its round (worked by hand, or the Miner not parked)
+    get grab() { const S = live ? live.state : null, h = S ? { x: S.x, y: S.hoist, z: S.z } : L.hook(t); return { x: h.x, z: h.z, h: h.y, carry: site.carry }; },
+    get busy() { return mode !== 'round'; },
     // ── a run the player crews (src/trip.js) ──
     // out, with the player aboard: what is left of the round finished out of sight, the crane parked; false while
     // someone has the crane's controls
@@ -416,6 +456,8 @@ export function makeCrane({ W, walls, boarding = null }) {
       if (mode === 'live' || mode === 'handover') return false;
       if (mode === 'leaving') { L.resume(live.state); live = null; }
       if (mode === 'landing') landed();
+      // (shoved and not yet taken up: the crane's places on the ship are where it now stands, for the next haul's round)
+      if (retake) { L.restand(ship.stand, null); retake = false; } shoving = false;
       t = L.length; L.pose(t); posePieces(L.state(t), 0);
       mode = 'out'; rate = 1; flash = 0; C.waiting = false; L.beacon(false); L.aids({});
       return true;
@@ -497,6 +539,19 @@ export function makeCrane({ W, walls, boarding = null }) {
     if (!under) return;
     const sent = people.flee(S.x, S.z, ex + 0.4);
     if (sent.length) C.violation = { at: performance.now(), n: sent.length, who: sent.map((P) => P.name || P.id) };
+  }
+  // THE ROUND TAKEN UP WHERE THE SHOVED MINER NOW STANDS (shove): at its next moment with nothing half done and the grab
+  // up at carrying height (not come down: the same line as src/flymodel.js grabbed, so the round never comes down at the
+  // ship on its old places; now, or as soon as the round, running on, gets there), from that moment's state, the
+  // crane's places on the ship moved to where it stands, as stand() does for a ship set down crooked; the round done:
+  // done there too
+  function takeUp() {
+    const done = t >= L.length - 1e-6;
+    if (!done && (L.clean(t, 0) == null || L.hook(t).y < site.carry - SHOVE.grab.down)) return false;
+    L.restand(ship.stand, L.state(done ? L.length : t)); t = done ? L.length : 0; retake = false;
+    L.pose(t); posePieces(L.state(t), 0);
+    console.info('crane: the Miner was shoved; the round goes on where it now stands');
+    return true;
   }
   function goLive() {
     live = makeDrive(L.site, L.state(t), world, { ore: oreOf });

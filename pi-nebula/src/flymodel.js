@@ -68,7 +68,7 @@
 import { OUTSIDE_BOX, DOOR } from '../kit/outside-plan.js';
 import { SKIN } from './flysolid.js';
 import { flightOf } from './fleet.js';
-import { standElements } from './standing.js';
+import { standElements, frameOf, outOf, yawOf } from './standing.js';
 
 // ── the keys, as he said them (KeyboardEvent.code -> what it does) ──
 export const KEYS = {
@@ -149,8 +149,9 @@ export const MINER = flightOf('miner');
 export const OTHERS = MINER.others;
 // A SHOVED SHIP: the most it slides and turns (m/s, radians a second), how quickly it slows by itself (m/s and radians
 // a second, each second), how far in from its bay door's line it is kept (m: the shield holds it in), how far clear of
-// it anyone it comes over is pushed (m)
-export const SHOVE = { most: 6, spin: 1.1, grip: 2.4, gripTurn: 0.6, door: 0.5, person: 0.5 };
+// it anyone it comes over is pushed (m), and the Miner's crane's grab come down over it (grabbed): how near its shape
+// (m: over one of its trays slid out, the cradle round a canister there) and how far down from carrying height (m)
+export const SHOVE = { most: 6, spin: 1.1, grip: 2.4, gripTurn: 0.6, door: 0.5, person: 0.5, grab: { near: 1.0, down: 0.05 } };
 // THE SHIP'S VOICE: how long each clip is (s), and the gap between one "Safety violation." and the next
 // (2026-11-19: the Miner's clips are the low-buzz voice the game's maker chose, with the longer pause he asked for
 // between "pilot." and "Systems ready.": 3.4 s and 1.9 s)
@@ -362,7 +363,8 @@ export const floorBelow = (S) => floorAt(S.cfg, S.p) ?? ((S.cfg.others || []).so
 // A SHIP PARKED IN ANOTHER HANGAR, as something that can be shoved: O = makeOther(cfg). Where it is: O.p [x, z] (the
 // point of it that stands on its pad's middle) and O.yaw (how far it is turned from the way it is parked, radians about
 // straight up, as three.js turns: x' = c x + s z, z' = -s x + c z); how it is sliding and turning: O.v [x, z], O.w.
-// Its boxes are kept in its own parked frame (x and z as the station's, from O.p).
+// Its boxes are kept in its own parked frame (x and z as the station's, from O.p). O.held: something has hold of it
+// for now (the Miner's crane, its grab down at it: grabbed below, src/visit.js), and a bump does not move it.
 export function makeOther(cfg) {
   const boxes = cfg.boxes.map((b) => ({ x0: cfg.nose > 0 ? b.a[0] : -b.a[1], x1: cfg.nose > 0 ? b.a[1] : -b.a[0], r: b.r, h: b.h }));
   // (the points of it that a flown ship's own hull is tried against: round each box, low down and near its top)
@@ -374,10 +376,18 @@ export function makeOther(cfg) {
       for (let k = 1; k < nz; k++) for (const x of [b.x0, b.x1]) pts.push([x, y, -b.r + 2 * b.r * k / nz]);
     }
   }
-  return { cfg, boxes, pts, p: [cfg.at[0], cfg.at[2]], yaw: 0, v: [0, 0], w: 0, moved: false, hit: 0, hits: 0 };
+  return { cfg, boxes, pts, p: [cfg.at[0], cfg.at[2]], yaw: 0, v: [0, 0], w: 0, moved: false, held: false, hit: 0, hits: 0 };
 }
 // back where it is parked, still
 export function resetOther(O) { O.p = [O.cfg.at[0], O.cfg.at[2]]; O.yaw = 0; O.v = [0, 0]; O.w = 0; O.moved = false; O.hit = 0; return O; }
+// standing, still, where a move from where it is parked has it (e: 16 numbers, src/standing.js; null: parked): what
+// otherElements gives, taken back (a ship that stands somewhere else already, the Miner set down crooked)
+export function otherAt(O, e) {
+  if (!e) return resetOther(O);
+  const at = outOf(frameOf(e), O.cfg.at[0], O.cfg.at[2]);
+  O.p = [at[0], at[1]]; O.yaw = yawOf(e); O.v = [0, 0]; O.w = 0; O.moved = true;
+  return O;
+}
 export const otherStill = (O) => !O.v[0] && !O.v[1] && !O.w;
 // where it stands, as the flight model says where a ship stands ({ p, q }; null: exactly as it is parked), and as the
 // one move from where it is parked that everything of it follows (src/standing.js: 16 numbers; null: no move at all)
@@ -389,6 +399,10 @@ const outOfOther = (O, v) => { const c = Math.cos(O.yaw), s = Math.sin(O.yaw); r
 const inBox = (b, l, k) => l[0] > b.x0 - k && l[0] < b.x1 + k && Math.abs(l[2]) < b.r + k && l[1] < b.h + k;
 // is a point of the station inside the ship (within k of it)?
 export function insideOther(O, w, k = 0) { const l = intoOther(O, w); return O.boxes.some((b) => inBox(b, l, k)); }
+// THE MINER'S CRANE HAS HOLD OF IT (src/crane.js grab: { x, z, h, carry }, the hook over the floor, how high, how high
+// it is carried): its grab come down from carrying height over it or over one of its trays (within SHOVE.grab.near of
+// its shape, where it now stands), taking a canister off it or putting one on. A bump does not move it then (O.held)
+export const grabbed = (O, grab, G = SHOVE.grab) => !!grab && grab.h < grab.carry - G.down && insideOther(O, [grab.x, 1, grab.z], G.near);
 // the shortest way out of the ship for a point inside it (within k of it), in its own frame: { d, n } or null (not
 // inside). A way out that only leads into another of its boxes is no way out.
 function wayOut(O, l, k) {
@@ -442,9 +456,9 @@ export function pushOthers(S, others) {
         // (how fast they are closing at the point, across the floor; the parked one's point moves as it slides and turns)
         const rel = (S.v[0] - (O.v[0] + O.w * rz)) * ux + (S.v[2] - (O.v[1] - O.w * rx)) * uz;
         if (rel < 0) {
-          const m = O.cfg.mass, I = m * O.cfg.gyr * O.cfg.gyr, tau = rz * ux - rx * uz, j = -rel / (1 + 1 / m + tau * tau / I);
+          const m = O.held ? Infinity : O.cfg.mass, I = m * O.cfg.gyr * O.cfg.gyr, tau = rz * ux - rx * uz, j = -rel / (1 + 1 / m + tau * tau / I);
           S.v = [S.v[0] + j * ux, S.v[1], S.v[2] + j * uz];
-          // (one no bump moves, mass Infinity, is felt as a wall)
+          // (one no bump moves, mass Infinity or held for now, is felt as a wall)
           if (Number.isFinite(m)) { O.v = [O.v[0] - j / m * ux, O.v[1] - j / m * uz]; O.w -= j * tau / I; O.moved = true; }
           O.hit = Math.max(O.hit, -rel); O.hits++;
         }
@@ -462,6 +476,7 @@ export function pushOthers(S, others) {
 // out of its way: pushedTo below says where to.
 export function stepOther(O, dt) {
   if (otherStill(O)) return O;
+  if (O.held) { O.v = [0, 0]; O.w = 0; return O; }
   const G = SHOVE, sp = Math.hypot(O.v[0], O.v[1]), cap = sp > G.most ? G.most / sp : 1;
   O.v = [O.v[0] * cap, O.v[1] * cap]; O.w = clamp(O.w, -G.spin, G.spin);
   O.p = [O.p[0] + O.v[0] * dt, O.p[1] + O.v[1] * dt]; O.yaw += O.w * dt;
@@ -490,9 +505,10 @@ export function pushedTo(O, at, k = SHOVE.person) {
   const w = outOfOther(O, [out.n[0] * (out.d + 0.01), 0, out.n[2] * (out.d + 0.01)]);
   return [at[0] + w[0], at[1] + w[2]];
 }
-// every corner of it inside its own bay, in from the door's line
+// every corner of it inside its own bay, in from the door's line (or inside what it is kept in: cfg.keep, src/fleet.js
+// othersOf, the Miner's floor)
 function keepIn(O) {
-  const B = O.cfg.bay, x1 = DOOR.x - SHOVE.door;
+  const B = O.cfg.keep || O.cfg.bay, x1 = O.cfg.keep ? B.x1 : DOOR.x - SHOVE.door;
   let lo = 0, hi = 0, near = 0, far = 0;
   for (const b of O.boxes) for (const lx of [b.x0, b.x1]) for (const lz of [-b.r, b.r]) {
     const w = outOfOther(O, [lx, 0, lz]), x = w[0] + O.p[0], z = w[2] + O.p[1];

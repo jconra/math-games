@@ -139,16 +139,22 @@ test('the Medic, parked nose in: the guide asks for nose in over its pad, and a 
   M.park(S); assert.ok(M.onPad(S)); assert.deepEqual(S.q, [0, 1, 0, 0]);
 });
 
-test('the ships each meets in the other hangars: the two that are not it; the Miner, rammed, is not moved', () => {
+test('the ships each meets in the other hangars: the two that are not it; the Miner, rammed, is shoved like the other two', () => {
   for (const s of F.SHIPS) assert.deepEqual(F.flightOf(s.id).others.map((o) => o.id), F.SHIP_IDS.filter((id) => id !== s.id), s.id);
-  const cfg = F.flightOf('explorer'), solid = solidOf(cfg), miner = solid.others.find((o) => o.cfg.id === 'miner');
-  assert.equal(miner.cfg.mass, Infinity);
-  // (the Explorer flown into the Miner's hangar and on into the Miner's nose)
+  const cfg = F.flightOf('explorer'), solid = solidOf(cfg), miner = solid.others.find((o) => o.cfg.id === 'miner'), medic = solid.others.find((o) => o.cfg.id === 'medic');
+  // (SHIP2-2 B: "Shove it like the other two": as heavy and as hard to turn as they are)
+  assert.equal(miner.cfg.mass, medic.cfg.mass); assert.equal(miner.cfg.gyr, medic.cfg.gyr);
+  // (the Explorer flown into the Miner's hangar and on into the Miner's nose, the Miner sliding as it is shoved)
   const S = M.makeShip(cfg); M.place(S, [DOOR.x - 1, 1.5, HANGARS[0].z], M.facing([-1, 0, 0]));
   let hit = false;
-  for (let t = 0; t < 8; t += DT) { M.stepShip(S, M.controlsOf(new Set(['forward'])), DT, solid); hit = hit || miner.hits > 0; }
+  for (let t = 0; t < 8; t += DT) { M.stepShip(S, M.controlsOf(new Set(['forward'])), DT, solid); for (const O of solid.others) M.stepOther(O, DT); hit = hit || miner.hits > 0; }
   assert.ok(hit, 'it ran into the Miner');
-  assert.ok(M.otherStill(miner) && !miner.moved && miner.p[0] === miner.cfg.at[0] && miner.p[1] === miner.cfg.at[2] && miner.yaw === 0, 'the Miner is where it is parked');
-  assert.ok(S.p[0] > miner.p[0] + 6.8, 'and the Explorer was stopped by it, as by a wall');
+  assert.ok(miner.moved && miner.p[0] < miner.cfg.at[0] - 1, `the Miner is shoved back along its hangar (${(miner.cfg.at[0] - miner.p[0]).toFixed(1)} m)`);
   assert.ok(M.visiting(S) && M.visiting(S).id === 'miner', 'in the Miner\'s hangar: the alarm\'s moment');
+  // ... but not while its crane has hold of it: then it stops the Explorer as a wall would
+  const solid2 = solidOf(cfg), held = solid2.others.find((o) => o.cfg.id === 'miner'); held.held = true;
+  const S2 = M.makeShip(cfg); M.place(S2, [DOOR.x - 1, 1.5, HANGARS[0].z], M.facing([-1, 0, 0]));
+  for (let t = 0; t < 8; t += DT) { M.stepShip(S2, M.controlsOf(new Set(['forward'])), DT, solid2); M.stepOther(held, DT); }
+  assert.ok(held.hits > 0 && M.otherStill(held) && !held.moved && held.p[0] === held.cfg.at[0] && held.p[1] === held.cfg.at[2] && held.yaw === 0, 'held: the Miner is where it is parked');
+  assert.ok(S2.p[0] > held.p[0] + 6.8, 'and the Explorer was stopped by it');
 });

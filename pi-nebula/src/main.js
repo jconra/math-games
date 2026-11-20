@@ -105,8 +105,9 @@ async function boot() {
   // (the smelter's ore line: the Miner hangar's crane swapping the ship's canisters by itself, src/crane.js)
   const crane = GAME.crane = makeCrane({ W, walls, boarding });
   // (the other two hangars, for a Miner flown into them by hand: the alarm, the red lights, the people running, the
-  // parked ship shoved and put back: src/visit.js)
-  const visit = GAME.visit = makeVisit({ W, boarding, outside, people: () => people });
+  // parked ship shoved and put back: src/visit.js. The crane is the Miner's keeper, should another ship ever be flown
+  // into its hangar here: in the game only the Miner flies yet, so it is never shoved)
+  const visit = GAME.visit = makeVisit({ W, boarding, outside, people: () => people, crane });
   // (the station's announcements over the speakers, a chime first, about once a minute: src/announce.js)
   const announce = GAME.announce = makeAnnounce({ sound, W, visit, people: () => people, crew: () => GAME.player });
 

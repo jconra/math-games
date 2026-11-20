@@ -64,8 +64,11 @@ const padOf = (i) => [42.3, 0, HANGARS[i].z];
 //   floor        where on its hangar's floor it may be set down by hand and got out of (null: anywhere on it). The
 //                Miner's is where the crane can get at its canisters
 //   shove        parked, and rammed by another ship: how heavy it is beside the flown ship (which is 1) and how hard it
-//                is to turn (a radius, m); null: it is not moved (the Miner, whose canisters, lift and crane round
-//                would have to follow it: not built)
+//                is to turn (a radius, m); null: it is not moved. The Miner is shoved like the other two (the game's
+//                maker, 2026-11-20, SHIP2-2 B: "Shove it like the other two, with its canisters riding on it. The crane
+//                takes them off wherever it ends up, the same as when you land crooked."): its canisters ride on it and
+//                its crane works from where it ends up (src/crane.js shove, src/visit.js), and it slides only about its
+//                `floor` (below), the floor the crane can unload it on
 //   voice        its clips in src/voices.js SHIP_CLIPS
 //   claw         (the Miner's) where its claw's hand holds a rock
 // The views for the Explorer and the Medic: the Miner's own seen from each one's pilot's seat (the eyes 1.27 m over
@@ -89,7 +92,7 @@ export const SHIPS = [
     dash: { at: [0.45, 3.249, 4.95], w: 0.84, h: 0.26, lean: 0.4, tall: { at: [0.46, 3.283, 5.146], w: 0.66, h: 0.204, lean: 0.31 } },
     // (src/flymodel.js MINER.floor has the words: the crane's rails, the rack, the cart)
     floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
-    shove: null, voice: 'miner',
+    shove: { mass: 2, gyr: 4 }, voice: 'miner',
     claw: [8.54, 2.94, 0],
   },
   {
@@ -169,12 +172,16 @@ export function flightOf(id) {
 // THE OTHER SHIPS, AS ONE FLOWN SHIP MEETS THEM PARKED IN THEIR HANGARS (src/flymodel.js makeOther, pushOthers,
 // visiting): each its hangar and its bay (as wide as its door; its ceiling at 8.4 m, as the Miner has always felt the
 // other two), where it is parked and which way its nose points there, its shape, and how heavy it is (mass: Infinity
-// for one that is not moved by a bump)
+// for one that is not moved by a bump). keep: what a shoved one is kept inside, every corner of it ({ x0, x1, z0, z1 };
+// none: its bay, in from the door's line): a ship with a floor of its own (the Miner) slides only about that floor,
+// where its crane can get at every canister of it and its trays have room to slide out (src/flymodel.js MINER.floor
+// has why: the rack, the cart, the rails' ends)
 export function othersOf(id) {
   if (others.has(id)) return others.get(id);
   const L = SHIPS.filter((s) => s.id !== id).map((s) => {
     const H = HANGARS[s.hangar];
-    return { id: s.id, name: s.name, room: 'ship-' + s.id, hangar: H.id, at: padOf(s.hangar), nose: s.nose, boxes: s.boxes, bay: bayOf(H.z), mass: s.shove ? s.shove.mass : Infinity, gyr: s.shove ? s.shove.gyr : 4 };
+    return { id: s.id, name: s.name, room: 'ship-' + s.id, hangar: H.id, at: padOf(s.hangar), nose: s.nose, boxes: s.boxes, bay: bayOf(H.z), mass: s.shove ? s.shove.mass : Infinity, gyr: s.shove ? s.shove.gyr : 4,
+      ...(s.floor ? { keep: { x0: s.floor.x[0], x1: s.floor.x[1], z0: s.floor.z[0], z1: s.floor.z[1] } } : {}) };
   });
   others.set(id, L);
   return L;
