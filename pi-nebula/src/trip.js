@@ -143,6 +143,7 @@ import { MINER, flyingOf, setFlying } from './flymodel.js';
 import { flightOf } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
+import { makeDash, stepDash } from './dash.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
@@ -249,6 +250,13 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (the wormhole: one for the trip, made as the crew member sits down. The flying at the rocks, src/fieldfly.js: from
   // the far end of the jump out until the colours of the jump home are all round)
   let wh = null, ff = null;
+  // THE DASHBOARD'S NUMBERS FOR THE WHOLE RUN (src/dash.js; the dashboard itself is the flying's, src/flying.js): one tank
+  // and one count of how far and how long, from the lift-off to the landing at home, whichever flying shows them (the
+  // station's, the one at the rocks); stepped here each frame from wherever the ship is (shipNow), the jump through the
+  // wormhole not flown. The canisters full are the run's own (T.filled). The boxes of the run the tiny ship floating
+  // beside the ship keeps clear of: dashClear
+  const dash = makeDash(), dashRun = () => ({ cans: [T.filled, CARRIES] }), _dw = new THREE.Vector3();
+  const dashClear = () => [...document.querySelectorAll('.pmt-chip, .pmt-say.is-on, .pmt-acts > :not([hidden]), .pmt-count:not([hidden]), .pnj-prompt:not([hidden])')];
   // (the core's tuning, src/tune.js: fetched as the crew member sits down, if this run has one; `tn` while it is on)
   let tuneMod = null, tuneErr = null, tuneAsked = false, tn = null;
   const name = crew.name || 'pilot';
@@ -361,6 +369,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         if (!tuneAsked && steps.some((s) => s.kind === 'tune')) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
         if (!drillKit) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
         fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+          dash, run: dashRun, clearOf: dashClear,
           // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
           view: iWatch ? 'behind' : 'cockpit',
           settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
@@ -719,7 +728,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // otherwise)
     ff = drillKit.f.makeFieldFlying({ W, drill, startFlying: flMod.startFlying, pilot: iPilot, flier: ROLES.pilot.crew, view: T.view || 'cockpit', words,
       settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
-      byCrew: iDrill ? null : { hand: () => iPilot && !T.afoot && !drill.crew.hurried } });
+      byCrew: iDrill ? null : { hand: () => iPilot && !T.afoot && !drill.crew.hurried }, dash, run: dashRun, clearOf: dashClear });
     api.field = ff;
   }
   // THE CREW'S DRILLING, in the field itself (the crew member did not sign for the drill; the game's maker, 2026-11-19:
@@ -833,6 +842,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
       if (crewA) crewA.update(dt, { player: T.afoot && P() ? P() : null });
+      // (the dashboard's numbers: in the air from the lift-off until it is down at home, wherever it is)
+      if (T.sat) { _dw.setFromMatrixPosition(shipNow()); stepDash(dash, { p: [_dw.x, _dw.y, _dw.z], dt, flying: fl && fl.on ? !fl.S.landed : !!(T.space || T.inField || (wh && wh.on)) }); }
     },
     // the camera: the pilot's eyes, looking out over the nose (turned clear of the job panel while it is up)
     aim(camera, dt = 1 / 60) {
@@ -869,7 +880,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     skipPart: () => skip(),
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
-    state: () => ({ step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
+    state: () => ({ dash: { fuel: +dash.fuel.toFixed(4), dist: +dash.dist.toFixed(2), secs: +dash.secs.toFixed(2), speed: +dash.speed.toFixed(2), cans: T.filled }, step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
       afoot: T.afoot, afield: !!T.afield, out: !!T.out, up: !upEl.hidden, seat: seatEl.hidden ? null : seatEl.dataset.as === 'tune' ? 'up' : seatEl.dataset.as, tune: tn ? tn.state() : null, strip: $('.pmt-chip').textContent, says: sayEl.classList.contains('is-on') ? $('.pmt-say p').textContent : null,
       fly: fl ? fl.state() : null, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, crew: drill && drill.crew ? drill.crew.state() : null, aboard: aboard.map((a) => ({ id: a.id, name: a.name, jobs: [...a.jobs] })), log: T.log.slice(-12) }),
