@@ -421,7 +421,7 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'sparkle', rock = 'low poly' }) {
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'sparkle', rock = 'natural' }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
   // FG: the field's own frame (where `at` puts it), still. G: the ship's frame, which moves through the field.
@@ -521,7 +521,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   // in combination with sparkles?", taken as veins: 'sparkle and veins' is the sparkle with the veins' lines too)
   const onSurface = () => oreLook === 'sparkle' || oreLook === 'sparkle and veins' || oreLook === 'cracks' || oreLook === 'crystals';
   const withVeins = () => oreLook === 'veins' || oreLook === 'sparkle and veins';
-  let rockLook = ROCK_LOOKS.includes(rock) ? rock : 'low poly';
+  // (the game's maker, 2026-11-19, of the natural skin: "I do like the natural rock." So that is how the game draws a rock)
+  let rockLook = ROCK_LOOKS.includes(rock) ? rock : 'natural';
   const veinLeft = (o, v) => { let t = 0; for (const L of o.vd[v].lumps) t += Math.max(0, L.show == null ? L.ore : L.show); return t; };
   // a rock's ore, told to its material (U: the material's uniforms; k: how bright)
   function oreOn(U, o, k) {

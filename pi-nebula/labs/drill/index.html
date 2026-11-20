@@ -30,12 +30,12 @@
   <button type="button" id="new">New field</button>
   <button type="button" id="ask" aria-pressed="true">Question: on</button>
   <button type="button" id="ore" title="How the ore in the rocks is shown: press to go round the looks">Ore: sparkle</button>
-  <button type="button" id="rock" title="How a rock's own skin is drawn: its flat faces, or a more natural rock">Rock: low poly</button>
+  <button type="button" id="rock" title="How a rock's own skin is drawn: its flat faces, or a more natural rock">Rock: natural</button>
   <select id="level" aria-label="The question's level"></select>
   <p id="note" aria-live="polite"></p>
 </div>
 <div id="loading">Unfolding the arms…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=9').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=10').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>

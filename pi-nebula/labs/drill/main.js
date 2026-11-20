@@ -61,7 +61,7 @@ new ResizeObserver(topBar).observe(document.getElementById('top')); topBar();
 // ── the switches ──
 // (ore: how the ore in the rocks is shown: 'glow' as the game shows it, 'veins', 'sparkle', 'cracks' or 'crystals', for
 // the game's maker to choose between: the Ore button goes round them; ?ore=sparkle starts with that one)
-const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: ORE_LOOKS.includes(Q.get('ore')) ? Q.get('ore') : 'sparkle', rock: ROCK_LOOKS.includes(Q.get('rock')) ? Q.get('rock') : 'low poly' };
+const st = { ask: Q.get('ask') !== '0', seed: Q.has('seed') ? +Q.get('seed') : null, n: 0, ore: ORE_LOOKS.includes(Q.get('ore')) ? Q.get('ore') : 'sparkle', rock: ROCK_LOOKS.includes(Q.get('rock')) ? Q.get('rock') : 'natural' };
 const crew = { id: 'drill-lab', name: 'Driller' };
 E.register(SCAN);
 const levelEl = $('level');
