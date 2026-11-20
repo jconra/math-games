@@ -65,8 +65,9 @@
 // (S.q: a quaternion; none: parked, nose out of the bay door), its speed (S.v, the station's frame), its turning
 // (S.w, its own frame). Its own frame here: [ahead, up, right]. cfg is the ship's own facts (MINER below): another
 // ship is another cfg. makeShip(cfg, at): standing where it was last set down ({ p, q }: standOf), not on its pad.
-import { OUTSIDE_BOX, DOOR, HANGARS } from '../kit/outside-plan.js';
-import { SKIN, bayOf } from './flysolid.js';
+import { OUTSIDE_BOX, DOOR } from '../kit/outside-plan.js';
+import { SKIN } from './flysolid.js';
+import { flightOf } from './fleet.js';
 import { standElements } from './standing.js';
 
 // ── the keys, as he said them (KeyboardEvent.code -> what it does) ──
@@ -109,60 +110,43 @@ export const LAND = { tilt: 30, touch: 0.08, grip: 9, level: 1.6, still: 0.05 };
 // metres apart is half way to its edge (src/flying.js draws it).
 export const GUIDE = { near: 12, move: [0.3, 8], rise: [0.2, 4], turn: [4, 50], roll: [3, 30], dim: 0.25, lift: 0.6, space: 16 };
 
-// ── THE MINER'S OWN FACTS ──
-const box = (a0, a1, r, u1) => { const out = []; for (const u of [0, u1]) for (const s of [-r, r]) for (const a of [a0, a0 / 2, 0, a1 / 2, a1]) out.push([a, u, s]); out.push([a1, u1 / 2, 0], [a0, u1 / 2, 0], [0, 0, 0], [0, u1, 0]); return out; };
-export const MINER = {
-  id: 'miner', room: 'ship-miner', hangar: HANGARS[0].id,
-  pad: [42.3, 0, HANGARS[0].z],      // where it is parked (the station file's places.ships.miner.at; a test holds them together)
-  // its hull as points in its own frame [ahead, up, right] (it is 15.5 m long, 6.3 m wide and 5.1 m tall on its legs,
-  // its middle 1.2 m ahead of the middle of its length)
-  points: box(-9.0, 6.8, 3.3, 5.1),
-  // how high the autopilot carries it through the bay (its top then 1.3 m under the door's lintel and 0.7 m under the
-  // crane's rail), and over its pad before it comes down (the game's own landing is at 3 m and 2 m: src/crane.js LANDING)
-  hover: 2.6, low: 2.0,
-  // THE TWO VIEWS, in the ship's own kit frame (x to port, y up from its ground line, z to the nose:
-  // ~/pw/space-math/SHIP_miner_arms.md). seat: the pilot's eyes and where they look, wide and on a phone, with the job
-  // panel up (it covers the right of a wide screen and the bottom of a phone's) and without; the other seat is the same
-  // across the ship. behind: how far back and up the camera follows, and the point of the ship it looks at.
-  seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.6, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
-  // (ups: under a roof, in its bay, it follows lower: the first of these heights that is clear)
-  behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-  // the speed's screen, on the sill in front of the pilot: its middle, its size (m), how far it leans back (radians)
-  screen: { at: [0.5, 3.47, 5.36], size: [0.34, 0.15], lean: 0.45 },
-  // ITS BAY (src/flysolid.js: what it bumps into in there; its floor is the hangar's floor)
-  bay: bayOf(HANGARS[0].z),
-  // THE FLOOR IT CAN BE UNLOADED ON: the part of its hangar's floor where the crane can get at every canister of a
-  // ship standing any way round (all of the ship must stand inside it). Toward the door the crane's rails end 2.1 m
-  // short of the door's line (the hook goes no further than x = 56.9: the station file's place `crane`, less its end
-  // stops); by the wall of sockets and the rack of empties (z = -15.7, the rack's front) a tray slid out needs 0.8 m
-  // clear; on the other side a cart stands in the bay's edge (from z = 5.0 on, about x 32.3 to 34.3: felt out in the
-  // game's own walls), and a canister in the cradle beside the ship there reaches 0.5 m past the ship's side. A test
-  // holds these to the crane's own places (tests/flying.test.mjs).
-  floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
-  // THE OTHER TWO HANGARS it can fly into by hand, and the ship parked in each (OTHERS, below)
-  others: null,
-  // ITS VOICE: its clips are named by it (src/voices.js SHIP_CLIPS: 'ship-miner-welcome', 'ship-miner-safety')
-  voice: 'miner',
-  // ITS CLAW: where its hand holds a rock, in its own frame [ahead, up, right] (src/drillview.js reads the same place
-  // off the arm itself: 1.7 m ahead of its nose, a little under its middle)
-  claw: [8.54, 2.94, 0],
-};
+// ── A SHIP'S OWN FACTS: cfg (src/fleet.js flightOf: every ship's are its data there, in the same shape) ──
+//   id, room, hangar, name   the ship, the station file's room of it, its hangar
+//   pad      where it is parked (the station file's places.ships.<id>.at; a test holds them together)
+//   q0       which way round it is parked, as a turn (none: nose out of its bay door; the Medic is parked nose in)
+//   points   its hull as points in its own frame [ahead, up, right] (src/fleet.js boxPoints)
+//   hover, low   how high the autopilot carries it through the bay, and over its pad before it comes down
+//   seat, behind   THE TWO VIEWS, in the ship's own kit frame (x to port, y up from its ground line, z to the nose:
+//            ~/pw/space-math/SHIP_miner_arms.md). seat: the pilot's eyes and where they look, wide and on a phone, with
+//            the job panel up (it covers the right of a wide screen and the bottom of a phone's) and without; the other
+//            seat is the same across the ship. behind: how far back and up the camera follows, and the point of the
+//            ship it looks at (ups: under a roof, in its bay, it follows lower: the first of these heights that is clear)
+//   screen   the speed's screen, on the sill in front of the pilot: its middle, its size (m), how far it leans back
+//   bay      ITS BAY (src/flysolid.js: what it bumps into in there; its floor is the hangar's floor)
+//   floor    THE FLOOR IT CAN BE SET DOWN ON AND GOT OUT OF (none: anywhere on its hangar's floor). The Miner's is where
+//            it can be unloaded: the part of its hangar's floor where the crane can get at every canister of a ship
+//            standing any way round (all of the ship must stand inside it). Toward the door the crane's rails end 2.1 m
+//            short of the door's line (the hook goes no further than x = 56.9: the station file's place `crane`, less
+//            its end stops); by the wall of sockets and the rack of empties (z = -15.7, the rack's front) a tray slid
+//            out needs 0.8 m clear; on the other side a cart stands in the bay's edge (from z = 5.0 on, about x 32.3 to
+//            34.3: felt out in the game's own walls), and a canister in the cradle beside the ship there reaches 0.5 m
+//            past the ship's side. A test holds these to the crane's own places (tests/flying.test.mjs).
+//   others   THE OTHER TWO HANGARS it can fly into by hand, and the ship parked in each (src/fleet.js othersOf)
+//   voice    ITS VOICE: its clips are named by it (src/voices.js SHIP_CLIPS: 'ship-miner-welcome', 'ship-miner-safety')
+//   claw     (the Miner) ITS CLAW: where its hand holds a rock, in its own frame [ahead, up, right] (src/drillview.js
+//            reads the same place off the arm itself: 1.7 m ahead of its nose, a little under its middle)
+//   model    the small model of it in the landing guide (src/flying.js)
+export const MINER = flightOf('miner');
 
-// ── THE OTHER TWO HANGARS, AND THE SHIP PARKED IN EACH ──
+// ── THE OTHER TWO HANGARS, AND THE SHIP PARKED IN EACH (as the Miner meets them: src/fleet.js othersOf) ──
 // Each: its hangar and its bay (as wide as its door, like the Miner's own: src/flysolid.js), where its ship is parked
 // (the station file's places.ships) and which way its nose points there (1: out of the bay door; -1: in), and the
 // ship's shape as a few boxes in its own frame: `a` from and to along it (metres ahead of the point of it that stands
 // on its pad's middle), `r` its half width there, `h` how tall (from the floor: nothing fits under a wing). Measured
 // from the game's own walls (~/pw/space-math/rigs/flying-3/shapes.cjs); a test holds them to the ships' own files.
-// mass: how heavy it is beside the flown ship (which is 1); gyr: how hard it is to turn (a radius, m).
-const other = (id, name, i, nose, boxes) => ({ id, name, room: 'ship-' + id, hangar: HANGARS[i].id, at: [42.3, 0, HANGARS[i].z], nose, boxes, bay: bayOf(HANGARS[i].z), mass: 2, gyr: 4 });
-export const OTHERS = [
-  // (its body with its two tail booms, the taper of its nose in two steps, its wings)
-  other('explorer', 'Explorer', 1, 1, [{ a: [-8.7, 4.0], r: 3.4, h: 6.3 }, { a: [4.0, 6.5], r: 2.4, h: 5.2 }, { a: [6.5, 8.7], r: 1.3, h: 3.8 }, { a: [-6.3, -1.7], r: 6.6, h: 2.7 }]),
-  // (its body, its tail fin, the pods on its sides by the ramps, its nose in two steps)
-  other('medic', 'Medic', 2, -1, [{ a: [-8.8, 4.5], r: 3.2, h: 6.3 }, { a: [-8.8, -6.0], r: 1.3, h: 7.5 }, { a: [-5.7, -2.9], r: 3.9, h: 2.7 }, { a: [4.5, 6.6], r: 2.6, h: 4.7 }, { a: [6.6, 8.75], r: 1.6, h: 3.8 }]),
-];
-MINER.others = OTHERS;
+// mass: how heavy it is beside the flown ship (which is 1; Infinity: a bump does not move it); gyr: how hard it is to
+// turn (a radius, m).
+export const OTHERS = MINER.others;
 // A SHOVED SHIP: the most it slides and turns (m/s, radians a second), how quickly it slows by itself (m/s and radians
 // a second, each second), how far in from its bay door's line it is kept (m: the shield holds it in), how far clear of
 // it anyone it comes over is pushed (m)
@@ -238,7 +222,12 @@ export function makeShip(cfg = MINER, at = null) {
   return park({ cfg, p: [...cfg.pad], q: [0, 0, 0, 1], v: [0, 0, 0], w: [0, 0, 0], power: false, landed: true, settle: null, engine: 0, acc: [0, 0, 0], spin: 0, bump: 0, t: 0, on: false, tilt: 0 }, at);
 }
 // exactly where it is parked, nose out?
-export const onPad = (S) => S.landed && S.q[3] === 1 && S.p[0] === S.cfg.pad[0] && S.p[1] === S.cfg.pad[1] && S.p[2] === S.cfg.pad[2];
+// (which way round it is parked: cfg.q0, none for nose out; and is it turned exactly so?)
+export const parkedTurn = (cfg) => cfg.q0 || [0, 0, 0, 1];
+const turnedAsParked = (S) => (S.cfg.q0 ? S.q.every((v, i) => v === S.cfg.q0[i]) : S.q[3] === 1);
+// the way its nose points as it is parked (the station's frame)
+export const parkedNose = (cfg) => turn(parkedTurn(cfg), [1, 0, 0]);
+export const onPad = (S) => S.landed && turnedAsParked(S) && S.p[0] === S.cfg.pad[0] && S.p[1] === S.cfg.pad[1] && S.p[2] === S.cfg.pad[2];
 // where it stands, to be kept ({ p, q }); none: on its pad as parked, or not down at all
 export const standOf = (S) => (S.landed && !onPad(S) ? { p: [...S.p], q: [...S.q] } : null);
 export const speedOf = (S) => len(S.v);
@@ -248,7 +237,7 @@ export function place(S, p, q = [0, 0, 0, 1]) { S.p = [...p]; S.q = [...q]; S.v 
 // down and still: on its pad as it is parked, or (at: { p, q }, standOf) standing where it was last set down, level on
 // its legs, turned whichever way it was left
 export function park(S, at = null) {
-  S.p = [...S.cfg.pad]; S.q = [0, 0, 0, 1];
+  S.p = [...S.cfg.pad]; S.q = [...parkedTurn(S.cfg)];
   if (at) { const f = turn(qUnit(at.q), [1, 0, 0]); S.p = [at.p[0], floorAt(S.cfg, at.p) ?? at.p[1], at.p[2]]; S.q = facing([f[0], 0, f[2]]); }
   S.v = [0, 0, 0]; S.w = [0, 0, 0]; S.landed = true; S.settle = null; S.acc = [0, 0, 0]; S.spin = 0; S.on = false; S.tilt = 0; return S;
 }
@@ -455,8 +444,9 @@ export function pushOthers(S, others) {
         if (rel < 0) {
           const m = O.cfg.mass, I = m * O.cfg.gyr * O.cfg.gyr, tau = rz * ux - rx * uz, j = -rel / (1 + 1 / m + tau * tau / I);
           S.v = [S.v[0] + j * ux, S.v[1], S.v[2] + j * uz];
-          O.v = [O.v[0] - j / m * ux, O.v[1] - j / m * uz]; O.w -= j * tau / I;
-          O.moved = true; O.hit = Math.max(O.hit, -rel); O.hits++;
+          // (one no bump moves, mass Infinity, is felt as a wall)
+          if (Number.isFinite(m)) { O.v = [O.v[0] - j / m * ux, O.v[1] - j / m * uz]; O.w -= j * tau / I; O.moved = true; }
+          O.hit = Math.max(O.hit, -rel); O.hits++;
         }
       } else { const into = dot(S.v, n); if (into < 0) S.v = sub(S.v, mul(n, into)); }
       S.p = add(S.p, mul(n, T.d)); S.bump = Math.max(S.bump, T.d);
@@ -524,12 +514,14 @@ export function clearOfOthers(a, b, r, others) {
 // ── THE SHIP'S OWN VOICE ── V = makeVoice() each time someone sits down. voiceStep -> the clip to say now, by what it
 // is ('welcome', 'safety'), or null. The welcome: once, as the power first comes on. "Safety violation.": while the
 // ship is in another hangar (there: visiting), again and again, a gap after each; it waits for the welcome to end.
+// secs: how long this ship's own clips are ({ welcome, safety, gap }: each ship speaks in its own voice; VOICE is the
+// Miner's)
 export const makeVoice = () => ({ welcomed: false, busy: 0, said: { welcome: 0, safety: 0 } });
-export function voiceStep(V, S, dt, there = null) {
+export function voiceStep(V, S, dt, there = null, secs = VOICE) {
   V.busy = Math.max(0, V.busy - dt);
   let say = null;
-  if (S.power && !V.welcomed) { V.welcomed = true; say = 'welcome'; V.busy = VOICE.welcome; }
-  else if (there && V.busy <= 0) { say = 'safety'; V.busy = VOICE.safety + VOICE.gap; }
+  if (S.power && !V.welcomed) { V.welcomed = true; say = 'welcome'; V.busy = secs.welcome; }
+  else if (there && V.busy <= 0) { say = 'safety'; V.busy = secs.safety + secs.gap; }
   if (say) V.said[say]++;
   return say;
 }
@@ -595,12 +587,12 @@ export function makeFieldShip(p = [0, 0, 0], f = [0, 0, 1], cfg = FIELD) { const
 // setting itself down: level and nose out over the pad's middle, then down onto it
 function settle(S, dt, solid) {
   const T = S.settle, P = S.cfg.pad, G = SETTLE; T.t += dt;
-  const e = vOf(S.q), ang = len(e), off = Math.hypot(S.p[0] - P[0], S.p[2] - P[2]);
+  const q0 = parkedTurn(S.cfg), e = S.cfg.q0 ? vOf(qMul(S.q, qConj(q0))) : vOf(S.q), ang = len(e), off = Math.hypot(S.p[0] - P[0], S.p[2] - P[2]);
   // (turning, it keeps its feet clear of the floor)
   // (S.padBusy: someone is standing on the pad (the view says so): it waits over it until they have gone)
   const lined = ang < 0.012 && off < 0.05 && !S.padBusy, wantY = lined ? P[1] : Math.max(P[1] + G.hold, Math.min(S.p[1], P[1] + G.low));
   const stepA = Math.min(ang, Math.max(0.05, Math.min(G.turn, ang * 3.5)) * dt);
-  S.q = ang < 1e-6 ? [0, 0, 0, 1] : qUnit(qMul(qOf(mul(e, -stepA / ang)), S.q));
+  S.q = ang < 1e-6 ? [...q0] : qUnit(qMul(qOf(mul(e, -stepA / ang)), S.q));
   const to = [P[0] - S.p[0], 0, P[2] - S.p[2]], stepM = Math.min(off, Math.max(0.05, Math.min(G.move, off * 2.2)) * dt);
   const was = [...S.p];
   if (off > 1e-6) { S.p[0] += to[0] / off * stepM; S.p[2] += to[2] / off * stepM; }
@@ -690,7 +682,7 @@ export function planLeave(S, solid = null) {
 // in through the bay door and down on the pad
 export function planLand(S, solid = null) {
   const c = S.cfg, P = c.pad, y = P[1] + c.hover;
-  const over = { to: [P[0], P[1] + c.low, P[2]], face: [1, 0, 0], speed: 3, near: 0.3, stop: true }, down = { down: true };
+  const over = { to: [P[0], P[1] + c.low, P[2]], face: parkedNose(c), speed: 3, near: 0.3, stop: true }, down = { down: true };
   if (onPad(S)) return [];
   const out = outOfOtherBay(S); if (out) return [...out.legs, ...planLand({ ...S, p: out.at, landed: false }, solid)];
   if (inBay(S.p, c)) return [{ to: [S.p[0], Math.min(Math.max(S.p[1], P[1] + c.low), y), P[2]], face: unit([turn(S.q, [1, 0, 0])[0] || 1, 0, 0]), speed: 3, near: 0.4, stop: true }, over, down];
@@ -766,7 +758,7 @@ export function guideOf(S, set = {}) {
   //   the nose round to the heading asked for, across the floor, toward its own right or left.
   // Rolled more than half way onto its side, only the roll is asked for, of all the keys: until it is the right way
   // up, "right" and "up" would mean something else to the pilot than to the ship.
-  const F = turn(S.q, [1, 0, 0]), U = turn(S.q, [0, 1, 0]), R = turn(S.q, [0, 0, 1]), want = unit(near ? [1, 0, 0] : [P[0] - S.p[0], 0, P[2] - S.p[2]]);
+  const F = turn(S.q, [1, 0, 0]), U = turn(S.q, [0, 1, 0]), R = turn(S.q, [0, 0, 1]), want = unit(near ? parkedNose(S.cfg) : [P[0] - S.p[0], 0, P[2] - S.p[2]]);
   const roll = Math.atan2(R[1], U[1]), upright = Math.cos(roll) > 0.7;
   const fh = unit([F[0], 0, F[2]]), rh = cross(fh, [0, 1, 0]);
   let up = upright ? -Math.asin(clamp(F[1], -1, 1)) : 0, right = upright && len(fh) > 0.5 && len(want) > 0.5 ? Math.atan2(dot(want, rh), dot(want, fh)) : 0;
@@ -785,7 +777,7 @@ export function guideOf(S, set = {}) {
 // more the further off it is (1: the edge of the space, never reached); close by, true to the small model's own size
 export function guideAt(S, p) { const r = unturn(S.q, sub(p, S.p)), d = len(r), g = d > 1e-9 ? 1 / (d + GUIDE.space) : 0; return [r[0] * g, r[1] * g, r[2] * g]; }
 // how the goal is turned as the ship sees it: its nose, its top and its right, each in the ship's own frame
-export function guideTurn(S) { return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => unturn(S.q, v)); }
+export function guideTurn(S) { const q0 = parkedTurn(S.cfg); return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => unturn(S.q, S.cfg.q0 ? turn(q0, v) : v)); }
 
 // ── the help corner: what the keys do, by mode ──
 // mode: 'seat' (on the pad), 'fly' (the mouse flies), 'pointer' (the mouse is a pointer), 'watch' (the autopilot has
