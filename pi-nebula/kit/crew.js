@@ -1828,12 +1828,16 @@ const VISOR_OWN = 0x35f2e4;      // the colour a visor's face glows in when no e
 // width: + to the head's left and up), size (1: as a visor's), eye (true: ONE EYE, for a plate that is one round lens:
 // a round eye that blinks, a happy arc, the turning ring of dots, a wide ring), lens (the lens's middle, out to that
 // radius in the face's own measure, taken as the eye's dark glass: his painted pupil gives way to the drawn eye).
+//   THE ONE EYE'S HAPPY ARC A SMILE (2026-11-20; the game's maker, of the heavy android's one eye: "Shouldn't the happy be
+// on the bottom side like a smile?"): the arc is the bottom of its circle (a U), where it was the top (an upside-down
+// U, as the two-eyed faces close their eyes); the same circle and length, turned over about the lens's middle. The
+// two-eyed faces (vsFace) keep their closed-eye arcs over a smile.
 const PLATE_FACE = { dark: [0.03, 0.09], rough: 0.16 };
 const PLATE_GLSL = `
 float vsEye(vec2 uv) {
   vec2 p = vec2(uv.x - 0.5, 0.5 - uv.y);
   float d = 1e3;
-  if (vsExpr == 1) d = vsArc(p, vec2(0.0, -0.05), 0.13, 0.45, 2.69);
+  if (vsExpr == 1) d = vsArc(p, vec2(0.0, 0.05), 0.13, -2.69, -0.45);
   else if (vsExpr == 2) {
     for (int i = 0; i < 8; i++) {
       float a = float(i) * 0.7853982 + vsTime * 3.0;
