@@ -124,7 +124,7 @@ void main() {
     d *= 1.13;
     if (d > 2200.0) break;
   }
-  float sun = smoothstep(-0.035, 0.035, tanSun - steepest);
+  float sun = smoothstep(-0.06, 0.06, tanSun - steepest);
   // THE SKY: the land's horizon in eight directions, near and far; the more of the sky it hides, the darker
   float sky = 0.0;
   for (int a = 0; a < 8; a++) {

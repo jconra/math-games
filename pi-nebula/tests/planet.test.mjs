@@ -65,7 +65,7 @@ test('the landing place is level, near the middle, and kept clear', () => {
       const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
       steepest = Math.max(steepest, L.slopeAt(px, pz));
       if (r <= 12) { const h = L.heightAt(px, pz); lo = Math.min(lo, h); hi = Math.max(hi, h); }
-      // (marked as the landing place, so nothing is stood on it: src/planet/cover.js leaves out anything over 0.05)
+      // (marked as the landing place, so nothing is stood on it: src/planet/cover.js leaves out anything over 0.92)
       assert.ok(L.landingAt(px, pz) > 0.95, `${id}: the landing place is not marked at ${r} m from its middle`);
     }
     assert.ok(steepest < 3, `${id} seed ${L.seed}: the landing place slopes ${steepest.toFixed(1)} degrees`);

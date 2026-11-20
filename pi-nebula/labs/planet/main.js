@@ -179,7 +179,8 @@ async function build(seed, { keepView = false } = {}) {
     $('seed').value = String(seed);
     const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind'); history.replaceState(null, '', u.href);
     keep({ seed });
-    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}. ${land.kind.about} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
+    // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
+    note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}. <span class="pl-long">${land.kind.about} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
     loading.hidden = true; LAB.ready = true; paintChips();
   })();
   try { await building; } finally { building = null; }
@@ -239,6 +240,7 @@ LAB.bench = (frames = 90) => {
   return { median: +times[Math.floor(times.length / 2)].toFixed(2), p90: +times[Math.floor(times.length * 0.9)].toFixed(2), tris: renderer.info.render.triangles, calls: renderer.info.render.calls, patches: planet.ground.stats.patches, rocks: planet.cover.stats.rocks, plants: planet.cover.stats.plants, w: renderer.domElement.width, h: renderer.domElement.height };
 };
 LAB.curve = CURVE;
+LAB.ring = (on) => { ringOn = !!on; if (ring) ring.visible = ringOn; paintChips(); };
 
 touchControls(); paintChips();
 const first = +q.get('seed') > 0 ? Math.floor(+q.get('seed')) : (q.get('kind') ? newSeed(want) : (kept.seed > 0 ? kept.seed : newSeed(want === 'any' ? null : want)));

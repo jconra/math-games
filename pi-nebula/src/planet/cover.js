@@ -25,6 +25,9 @@ import { PLANTS, PLANT_SINK } from './kinds.js';
 import { hash2 } from './noise.js';
 
 const CELL = 8;
+// nothing stands on the landing place, nor within a few metres of its edge (the mark eases out over 52 m past its
+// edge: src/planet/land.js; 0.92 is about 4 m past it)
+const CLEAR = 0.92;
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
 export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
 
@@ -143,8 +146,10 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     layers.push(L); return L;
   }
   // put an instance in a layer's shape s
+  // (the layer's own number is for all its shapes together: past it, the furthest are left out)
   const put = (L, s, x, y, z, scale, yaw, tilt, shade) => {
-    const m = L.meshes[s]; if (m.count >= L.most) return false;
+    const m = L.meshes[s]; if (L.placed >= L.most) return false;
+    L.placed++;
     dummy.position.set(x, y, z); dummy.rotation.set(tilt * Math.cos(yaw * 3), yaw, tilt * Math.sin(yaw * 2)); dummy.scale.set(scale, scale, scale); dummy.updateMatrix();
     m.setMatrixAt(m.count, dummy.matrix); m.setColorAt(m.count, shade); m.count++; return true;
   };
@@ -159,7 +164,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     const rock = land.rockAt(cx, cz), n = Math.floor((0.7 + rock * 4.5) * C.rocks.many * Q.many * 1.6 + hash2(wi, wj, 77));
     for (let q = 0; q < n; q++) {
       const x = cx + (hash2(wi, wj, 100 + q) - 0.5) * CELL, z = cz + (hash2(wi, wj, 200 + q) - 0.5) * CELL;
-      if (land.landingAt(x, z) > 0.3) continue;
+      if (land.landingAt(x, z) > CLEAR) continue;
       const s = 0.08 + 0.45 * Math.pow(hash2(wi, wj, 300 + q), 3), y = land.heightAt(x, z) - s * 0.18;
       col.copy(rockCol).lerp(dustCol, hash2(wi, wj, 400 + q) * 0.5).multiplyScalar(0.85 + 0.3 * hash2(wi, wj, 500 + q));
       if (!put(L, q & 3, x, y, z, s, hash2(wi, wj, 600 + q) * 6.28, 0.3, col)) return;
@@ -186,7 +191,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     if (hash2(wi, wj, 901) < (0.015 + rock * (C.rocks.near === 'craters' ? 0.08 : 0.35)) * C.rocks.many) list.push([hash2(wi, wj, 902) * CELL, hash2(wi, wj, 903) * CELL, 0.5 + 2.2 * Math.pow(hash2(wi, wj, 904), 2), 7]);
     for (const [ox, oz, s, q] of list) {
       const x = x0 + ox, z = z0 + oz;
-      if (land.landingAt(x, z) > 0.2) continue;
+      if (land.landingAt(x, z) > CLEAR) continue;
       const y = land.heightAt(x, z) - s * 0.22;
       col.copy(rockCol).multiplyScalar(0.8 + 0.35 * hash2(wi + q, wj, 31));
       if (!put(L, (q + wi) & 3, x, y, z, s, hash2(wi, wj + q, 32) * 6.28, 0.25, col)) return;
@@ -204,7 +209,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       const list = C.plants.filter((p) => !!p.far === far); if (!list.length) continue;
       // (each plant is 300 to 900 triangles: a phone affords about a thousand near the camera, so the close ones are
       // kept to the nearest 40 m and the ground's own colour carries the meadow on beyond them)
-      const reach = (far ? 170 : 40) * Q.reach, most = Math.round((far ? 380 : 900) * Q.many);
+      const reach = (far ? 240 : 40) * Q.reach, most = Math.round((far ? 600 : 900) * Q.many);
       // (each plant its own material: its own colour turned to, sharing one shader)
       const ms = list.map((p) => { const lf = leaves[p.leaf] || leaves[0];
         return onGround(new THREE.MeshLambertMaterial({ map: sheet.map, side: THREE.DoubleSide }), { ground, sky, reach, plant: { hue: { value: (lf.hue - LEAF_HUE) * Math.PI / 180 }, sat: { value: lf.sat }, light: { value: lf.light }, sway: { value: sky ? 0.035 : 0 }, clock } }); });
@@ -225,7 +230,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
           for (let e = 0; e < k; e++) {
             const a = hash2(wi + e, wj, 90 + q) * 6.283, d = clumpR * Math.sqrt(hash2(wi, wj + e, 95 + q));
             const x = bx + Math.cos(a) * d, z = bz + Math.sin(a) * d;
-            if (land.growthAt(x, z) < 0.05 || land.landingAt(x, z) > 0.05) continue;
+            if (land.growthAt(x, z) < 0.05 || land.landingAt(x, z) > CLEAR) continue;
             const hgt = PLANTS[p.k].height * p.size * (0.7 + 0.6 * hash2(wi + e, wj + q, 7)), y = land.heightAt(x, z) - PLANT_SINK[p.k] * hgt;
             col.setRGB(1, 1, 1).multiplyScalar(0.85 + 0.3 * hash2(wi, wj + e, 13 + q));
             if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col)) break;
@@ -242,6 +247,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     stats.rocks = stats.plants = stats.tris = 0;
     for (const L of layers) {
       for (const m of L.meshes) m.count = 0;
+      L.placed = 0;
       for (const [di, dj] of L.order) {
         const ci = ci0 + di, cj = cj0 + dj, wi = ((ci % wrapN) + wrapN) % wrapN, wj = ((cj % wrapN) + wrapN) % wrapN;
         L.lay(L, -P / 2 + (ci + 0.5) * CELL, -P / 2 + (cj + 0.5) * CELL, ci, cj, wi, wj);

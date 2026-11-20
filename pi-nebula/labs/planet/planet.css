@@ -10,5 +10,6 @@
 .kl-top { max-width: min(100%, 860px); }
 .pl-keys { color: var(--mute); font-size: 12px; }
 .touch .pl-keys { display: none; }
+@media (max-width: 640px) { .pl-long { display: none; } .kl-label:not(.pl-keep), .pl-bar .kl-sep { display: none; } .pl-bar .kl-row .chip { padding: 4px 9px; } }
 .kl-loading { flex-direction: column; gap: 10px; text-align: center; padding: 24px; }
 .kl-loading small { font: 500 14px/1.4 system-ui, sans-serif; letter-spacing: 0; color: var(--ink-2); }
