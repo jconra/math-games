@@ -90,10 +90,18 @@ function start() {
   FF = makeFieldFlying({ W: LABW, drill: view, startFlying, pilot: true, flier: 'The autopilot', settings: kept, onSettings: (set) => { try { localStorage.setItem('pi-nebula.flightlab', JSON.stringify(set)); } catch (e) { /* blocked: not kept */ } }, words: () => {} });
   if (Q.get('arrive') === '0') { hole.stop(); FF.out(0.01); } else hole.arrive({ onDone: () => { if (FF) FF.out(2.4); } });
   window.DRILLLAB.view = view; window.DRILLLAB.field = FF;
+  if (st.set) view.oreSet(st.set); paintSet();
 }
 $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
-$('ore').addEventListener('click', () => { st.ore = ORE_LOOKS[(ORE_LOOKS.indexOf(st.ore) + 1) % ORE_LOOKS.length]; if (view) view.oreLook(st.ore); paint(); });
+$('ore').addEventListener('click', () => { st.ore = ORE_LOOKS[(ORE_LOOKS.indexOf(st.ore) + 1) % ORE_LOOKS.length]; if (view) { view.oreLook(st.ore); st.set = view.oreSet(); } paint(); paintSet(); });
+// THE LOOK'S SLIDERS (the game's maker, from his phone: "give me some controls for glow and dots"): the soft glow under
+// the ore, how many dots, how big a dot, and how bright the dust round the field is. A look starts with its own.
+const RNG = ['glow', 'dots', 'size', 'dust'];
+// (put away behind one button, so a phone's screen is not full of them: pressed, they show)
+$('sliders').addEventListener('click', () => { const on = !$('top').classList.contains('is-sliders'); $('top').classList.toggle('is-sliders', on); $('sliders').setAttribute('aria-pressed', String(on)); });
+function paintSet() { if (!view) return; const S = view.oreSet(); for (const k of RNG) { const el = $(k); el.value = S[k]; el.parentElement.querySelector('b').textContent = (+S[k]).toFixed(2); } }
+for (const k of RNG) $(k).addEventListener('input', () => { if (!view) return; st.set = view.oreSet({ [k]: +$(k).value }); paintSet(); });
 $('rock').addEventListener('click', () => { st.rock = ROCK_LOOKS[(ROCK_LOOKS.indexOf(st.rock) + 1) % ROCK_LOOKS.length]; if (view) view.rockLook(st.rock); paint(); });
 levelEl.addEventListener('change', () => { setLevel(levelEl.value); });
 paint();

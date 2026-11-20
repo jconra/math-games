@@ -217,6 +217,34 @@ function rockGeo(S, detail) {
   g.computeBoundingSphere();
   return g;
 }
+// (a number from 0 to 1 for a place, and a smooth field of them: the rock's skin, its sparkle and the dust all use it)
+const NOISE_GLSL = `
+float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+float vn3(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h31(i), h31(i + vec3(1.0, 0.0, 0.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 0.0)), h31(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(h31(i + vec3(0.0, 0.0, 1.0)), h31(i + vec3(1.0, 0.0, 1.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 1.0)), h31(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
+`;
+// THE DUST: a wide band of faintly glowing dust round the whole field, thickest in the rings' own plane, in drifts.
+// Every rock is in front of it, so a rock is seen as a dark shape against it wherever the eye is in the field.
+const DUST = { r: 560, h: 300, glow: 0.36 };      // the band's radius and height (m, about the field's middle), and how bright
+const DUST_VERT = `
+varying vec3 vP; varying vec3 vW;
+void main() { vP = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const DUST_FRAG = `
+${VEIL_GLSL}
+${NOISE_GLSL}
+uniform float uK; uniform float uH; varying vec3 vP; varying vec3 vW;
+void main() {
+  if (veiled(vW)) discard;
+  float y = vP.y / (uH * 0.5), band = exp(-y * y * 3.4);
+  vec3 p = vP * 0.0105; float c = vn3(p) * 0.6 + vn3(p * 2.7 + 4.0) * 0.4, drift = smoothstep(0.28, 0.82, c);
+  vec3 col = mix(vec3(0.62, 0.46, 0.30), vec3(0.34, 0.50, 0.72), vn3(p * 0.6 + 9.0));
+  gl_FragColor = vec4(col * band * (0.22 + 0.78 * drift) * uK, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
 const ROCK_VERT = `
 attribute vec3 aBary; attribute vec2 aFace; varying vec3 vW; varying vec3 vL; varying vec3 vB; varying vec2 vF;
 #ifdef ORE
@@ -252,14 +280,25 @@ uniform float uCrack; uniform vec3 uHoles[8]; uniform int uHoleN; uniform vec3 u
 // own edges lit), 3 only the soft glow (under the crystals), 4 the dots alone (no cracks: "Just a multitude of dots"). Only what faces the eye is seen: it is the surface.
 uniform vec3 uVD[5]; uniform vec3 uVC[5]; uniform float uVA[5]; uniform int uVN; uniform float uOre; uniform float uT; uniform int uMode;
 uniform float uNat; varying vec3 vN; varying mat3 vRot;
-float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
-float vn3(vec3 p) {
-  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(h31(i), h31(i + vec3(1.0, 0.0, 0.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 0.0)), h31(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
-             mix(mix(h31(i + vec3(0.0, 0.0, 1.0)), h31(i + vec3(1.0, 0.0, 1.0)), f.x), mix(h31(i + vec3(0.0, 1.0, 1.0)), h31(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
-}
+uniform float uGlowK; uniform float uDotK; uniform float uDotS;
+${NOISE_GLSL}
 // (a rock's rough skin, anchored to the rock: big blotches, lumps, grain)
 float rockH(vec3 p) { return vn3(p) * 0.55 + vn3(p * 2.3 + 7.0) * 0.28 + vn3(p * 5.3 + 3.0) * 0.17; }
+// THE DOTS, AS CRISP FAR OFF AS NEAR (the look 'dots'): one tiny bright dot somewhere in each cell of a grid through
+// the rock. Which grid is picked by how far off the rock is, so that a cell is always a few dots of the screen wide
+// (two neighbouring grids, the finer fading into the coarser as the rock goes off), and so the dots never run
+// together into a glow: a rock far off is dotted as a near one is. px: how much of the rock one dot of the screen
+// covers; wide: a cell's width in dots of the screen; dens: the share of cells with a dot in; size: how big a dot.
+float dotIn(vec3 g, float dens, float size, float lev) {
+  vec3 cell = floor(g) + lev * 13.7, fr = fract(g) - 0.5; float rnd = h31(cell);
+  vec3 off = (vec3(h31(cell + 1.3), h31(cell + 2.7), h31(cell + 4.1)) - 0.5) * 0.5;
+  return smoothstep(min(0.5, 0.34 * size), 0.04, length(fr - off)) * step(1.0 - dens, rnd) * (0.72 + 0.28 * sin(uT * (1.5 + 5.0 * rnd) + rnd * 40.0));
+}
+float dotsAt(vec3 p, float px, float wide, float dens, float size) {
+  float lr = log2(px * wide), lv = clamp(lr, -6.2, -1.2), l0 = floor(lv), f = lv - l0;
+  float v = dotIn(p * exp2(-l0), dens, size, l0) * (1.0 - f) + dotIn(p * exp2(-l0 - 1.0), dens, size, l0 + 1.0) * f;
+  return mix(v, dens * 0.07, smoothstep(0.3, 1.6, lr + 1.2));      // (too far off for even the coarsest grid: a faint tint in their place)
+}
 #endif
 varying vec3 vW; varying vec3 vL; varying vec3 vB; varying vec2 vF;
 void main() {
@@ -276,7 +315,7 @@ void main() {
     // smooth however near the eye is)
     vec3 pl = vL * 2.4; float e = 0.07, hgt = rockH(pl);
     vec3 slope = vRot * (vec3(rockH(pl + vec3(e, 0.0, 0.0)), rockH(pl + vec3(0.0, e, 0.0)), rockH(pl + vec3(0.0, 0.0, e))) - hgt) / e;
-    vec3 ns = normalize(mix(n, normalize(vN), 0.75));
+    vec3 ns = normalize(mix(n, normalize(vN), 0.93));
     n = normalize(ns - 0.34 * (slope - ns * dot(slope, ns)));
     float pit = smoothstep(0.32, 0.5, hgt);
     base = uTint * (0.55 + 0.95 * rockH(vL * 1.5 + 11.0)) * (0.66 + 0.34 * pit) * (0.94 + 0.12 * vn3(vL * 19.0));
@@ -293,11 +332,11 @@ void main() {
     // is smaller than a dot of the screen, the dots run together into their own glow)
     vec3 g = vL * 36.0, cell = floor(g), fr = fract(g) - 0.5; float gw = max(fwidth(g.x), max(fwidth(g.y), fwidth(g.z))), rnd = h31(cell);
     vec3 off = (vec3(h31(cell + 1.3), h31(cell + 2.7), h31(cell + 4.1)) - 0.5) * 0.56;
-    float spark = smoothstep(0.34, 0.04, length(fr - off)), tw = 0.72 + 0.28 * sin(uT * (1.5 + 5.0 * rnd) + rnd * 40.0), fine = 1.0 - smoothstep(0.45, 1.1, gw);
-    // (a second, finer grid of smaller dots, for the look that is dots alone)
-    vec3 g2 = vL * 69.0, cell2 = floor(g2), fr2 = fract(g2) - 0.5; float rnd2 = h31(cell2 + 9.1), gw2 = max(fwidth(g2.x), max(fwidth(g2.y), fwidth(g2.z)));
-    vec3 off2 = (vec3(h31(cell2 + 3.3), h31(cell2 + 5.9), h31(cell2 + 8.2)) - 0.5) * 0.56;
-    float spark2 = smoothstep(0.32, 0.05, length(fr2 - off2)), fine2 = 1.0 - smoothstep(0.45, 1.1, gw2), tw2 = 0.7 + 0.3 * sin(uT * (2.0 + 6.0 * rnd2) + rnd2 * 31.0);
+    float spark = smoothstep(min(0.5, 0.34 * uDotS), 0.04, length(fr - off)), tw = 0.72 + 0.28 * sin(uT * (1.5 + 5.0 * rnd) + rnd * 40.0), fine = 1.0 - smoothstep(0.45, 1.1, gw);
+    // (how much of the rock one dot of the screen covers, the same on a face seen edge on as on one seen flat: the
+    // lesser of the two ways the screen's dots are stretched over the face. For the look that is dots alone)
+    vec3 da = dFdx(vL), db = dFdy(vL); float aa = dot(da, da), bb = dot(db, db), ab = dot(da, db), trc = aa + bb;
+    float px = sqrt(max(0.5 * (trc - sqrt(max(trc * trc - 4.0 * (aa * bb - ab * ab), 0.0))), 1e-12));
     for (int i = 0; i < 5; i++) {
       if (i >= uVN) break;
       float amt = uVA[i];
@@ -305,20 +344,22 @@ void main() {
         // (the patch: wider for more metal, never so wide as to reach the next vein's, a right angle away)
         float ang = acos(clamp(dot(od, uVD[i]), -1.0, 1.0)), R = min(0.8, 0.13 + 0.42 * sqrt(amt)), m = 1.0 - smoothstep(R * 0.25, R, ang);
         if (m > 0.0) {
-          float glow = 0.3;
-          if (uMode == 2) glow = edge * (0.7 + 1.9 * m) + 0.12;
+          // (uGlowK: the soft glow under it all; uDotK: how many dots; uDotS: how big: the lab's three sliders)
+          float glow = 0.3 * uGlowK;
+          if (uMode == 2) glow = edge * (0.7 + 1.9 * m) + 0.3 * uGlowK;
           else if (uMode == 4) {
-            // the dots alone, no cracks: a multitude of them, big and small, thickest at the middle of the spot
-            float dens = clamp(0.14 + 0.62 * m * m, 0.0, 0.9);
-            glow = mix(dens * 0.4, spark * step(1.0 - dens, rnd) * tw, fine) * 3.8 + mix(dens * 0.25, spark2 * step(1.0 - dens * 0.85, rnd2) * tw2, fine2) * 2.9 + 0.07;
+            // the dots alone, no cracks, and no glow under them unless the lab's slider gives one: a multitude of tiny
+            // ones and fewer bigger ones among them, thickest at the middle of the spot
+            float dens = clamp((0.22 + 0.7 * m) * uDotK, 0.0, 0.97);
+            glow = dotsAt(vL, px, 3.4, dens, uDotS) * 3.6 + dotsAt(vL + 3.7, px, 8.0, dens * 0.55, uDotS) * 4.6 + 0.3 * uGlowK;
           }
           else if (uMode == 1) {
             // fine cracks, a coarse lot and a finer one across them; the dots thickest along them
             vec3 q = vL * 3.1 + uVD[i] * 7.0; float warp = vn3(q * 1.9) * 2.0 - 1.0;
             float r1 = 1.0 - abs(vn3(q + warp * 0.7) * 2.0 - 1.0), r2 = 1.0 - abs(vn3(q * 2.3 + 5.0 - warp * 0.5) * 2.0 - 1.0);
             float line = max(smoothstep(0.74, 0.96, r1), 0.7 * smoothstep(0.80, 0.97, r2));
-            float dens = clamp(0.1 + 0.8 * line + 0.25 * m, 0.0, 0.96);
-            glow = mix(dens * 0.4, spark * step(1.0 - dens, rnd) * tw, fine) * 3.4 + line * 1.0 + 0.2;
+            float dens = clamp((0.1 + 0.8 * line + 0.25 * m) * uDotK, 0.0, 0.96);
+            glow = mix(dens * 0.4, spark * step(1.0 - dens, rnd) * tw, fine) * 3.4 + line * 1.0 + 0.3 * uGlowK;
           }
           ore += uVC[i] * glow * m * min(1.25, 0.55 + 0.7 * sqrt(amt));
         }
@@ -455,7 +496,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(0.45), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   // (a rock that holds ore has a material of its own, for the ore on its surface: the same program, its own veins)
   const oreUni = () => ({ uSq: { value: new THREE.Vector3(1, 1, 1) }, uVD: { value: Array.from({ length: 5 }, () => new THREE.Vector3(0, 1, 0)) }, uVC: { value: Array.from({ length: 5 }, () => new THREE.Color(0, 0, 0)) },
-    uVA: { value: [0, 0, 0, 0, 0] }, uVN: { value: 0 }, uOre: { value: 0 }, uT: { value: 0 }, uMode: { value: 1 }, uNat: { value: 0 } });
+    uVA: { value: [0, 0, 0, 0, 0] }, uVN: { value: 0 }, uOre: { value: 0 }, uT: { value: 0 }, uMode: { value: 1 }, uNat: { value: 0 }, uGlowK: { value: 0.67 }, uDotK: { value: 1 }, uDotS: { value: 1 } });
   const rockMat = () => new THREE.ShaderMaterial({ defines: { ORE: '' }, uniforms: { ...uni(0.45), ...oreUni() }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   const heldMat = new THREE.ShaderMaterial({ defines: { HELD: '', ORE: '' }, vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG,
     uniforms: { ...oreUni(), ...uni(1.25), uCrack: { value: 0 }, uHoles: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 1, 0)) }, uHoleN: { value: 0 }, uGlow: { value: new THREE.Color(1, 1, 1) }, uSq: { value: new THREE.Vector3(1, 1, 1) }, uScan: { value: 0 } } });
@@ -532,11 +573,27 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const withVeins = () => oreLook === 'veins' || oreLook === 'sparkle and veins';
   // (the game's maker, 2026-11-19, of the natural skin: "I do like the natural rock." So that is how the game draws a rock)
   let rockLook = ROCK_LOOKS.includes(rock) ? rock : 'natural';
+  // (the game's maker, 2026-11-19, from his phone: "with the dots can you removecthe glow, or give me some controls for
+  // glow and dots": so the dots have no glow under them, and the Drill Lab has three sliders for whichever look is on:
+  // glow (the soft glow under it), dots (how many), size (how big a dot). Each look's own to start with:)
+  const SET_OF = { dots: { glow: 0, dots: 1, size: 1 }, cracks: { glow: 0.4, dots: 1, size: 1 }, crystals: { glow: 1, dots: 1, size: 1 } };
+  const setOf = (look) => ({ glow: 0.67, dots: 1, size: 1, ...(SET_OF[look] || {}) });
+  let oreSet = setOf(oreLook);
+  // THE DUST (his words, the same message: "I do t like the look of the asteroid field with them all glowing. Can the
+  // just look the same from far as they do close? And can we put like a glowing dust field there so we can see them
+  // better?"): so a far rock has no glow of the scan's drawn over it any more in the looks on the rock's surface, and
+  // a band of faintly glowing dust stands round the field for the rocks to be seen against.
+  const dust = (() => {
+    const mat = new THREE.ShaderMaterial({ uniforms: { ...VEIL, uK: { value: DUST.glow }, uH: { value: DUST.h } }, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending });
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(DUST.r, DUST.r, DUST.h, 64, 1, true), mat);
+    m.position.set(0, 0, DRILL.ahead); m.updateMatrix(); m.frustumCulled = false; m.renderOrder = -2; m.name = 'drill: the dust'; FG.add(m); return m;
+  })();
   const veinLeft = (o, v) => { let t = 0; for (const L of o.vd[v].lumps) t += Math.max(0, L.show == null ? L.ore : L.show); return t; };
   // a rock's ore, told to its material (U: the material's uniforms; k: how bright)
   function oreOn(U, o, k) {
     const on = onSurface(); U.uOre.value = on ? k : 0; U.uNat.value = rockLook === 'natural' ? 1 : 0; if (!on) return;
     U.uMode.value = oreLook === 'cracks' ? 2 : oreLook === 'crystals' ? 3 : oreLook === 'dots' ? 4 : 1; U.uT.value = V.clock;
+    U.uGlowK.value = oreSet.glow; U.uDotK.value = oreSet.dots; U.uDotS.value = oreSet.size;
     const n = Math.min(5, o.vd.length); U.uVN.value = n;
     for (let v = 0; v < n; v++) { U.uVD.value[v].copy(o.vd[v].d); U.uVC.value[v].copy(colOf.get(o.rock.veins[v].metal) || colOf.get('copper')); U.uVA.value[v] = veinLeft(o, v); }
   }
@@ -1133,7 +1190,8 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
       } else {
         const far = o.pos.distanceTo(eyeAt), big = bigOf(far); o.far = far; oreOn(o.mat.uniforms, o, 1);
         if (!surf) glowOf(o, o.pos, o.q, 1, far < 150, big);
-        else { if (big > 1.3) { const was = oreLook; if (was === 'sparkle and veins') oreLook = 'sparkle'; glowOf(o, o.pos, o.q, 0.8, false, big); oreLook = was; } else if (withVeins()) glowOf(o, o.pos, o.q, 1, true, big); if (oreLook === 'crystals' && big <= 1.3) crystalsOf(o, o.pos, o.q); }      // (far off: its soft glow, as the scan's picture of it)
+        // (a far rock looks as a near one does: no glow of the scan's over it)
+        else { if (withVeins() && big <= 1.3) glowOf(o, o.pos, o.q, 1, true, big); if (oreLook === 'crystals' && big <= 1.3) crystalsOf(o, o.pos, o.q); }
       }
     }
     crystals.count = crystalN; if (crystalN) { crystals.instanceMatrix.needsUpdate = true; crystals.instanceColor.needsUpdate = true; }
@@ -1255,7 +1313,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (const id of [...seen.keys()]) dropSeen(id);
     if (H) { G.remove(H.mesh); H.mesh.geometry.dispose(); H = null; }
     G.remove(built.group); scene.remove(G, FG, sun, sun.target); boom.geometry.dispose(); boom.material.dispose();
-    for (const im of backdrop.list) FG.remove(im); backdrop.geo.dispose(); farMat.dispose(); chips.geometry.dispose(); glow.geometry.dispose(); glow.material.dispose(); veins.geometry.dispose(); veins.material.dispose(); crystals.geometry.dispose(); crystals.material.dispose(); for (const o of seen.values()) o.mat.dispose(); fieldMat.dispose(); heldMat.dispose();
+    for (const im of backdrop.list) FG.remove(im); backdrop.geo.dispose(); farMat.dispose(); chips.geometry.dispose(); glow.geometry.dispose(); glow.material.dispose(); veins.geometry.dispose(); veins.material.dispose(); FG.remove(dust); dust.geometry.dispose(); dust.material.dispose(); crystals.geometry.dispose(); crystals.material.dispose(); for (const o of seen.values()) o.mat.dispose(); fieldMat.dispose(); heldMat.dispose();
     camera.near = was.near; camera.far = was.far; camera.fov = was.fov; camera.updateProjectionMatrix();
   }
 
@@ -1288,7 +1346,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   };
   return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
     // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
-    oreLook(name) { if (ORE_LOOKS.includes(name)) oreLook = name; return oreLook; },
+    oreLook(name) { if (ORE_LOOKS.includes(name) && name !== oreLook) { oreLook = name; oreSet = setOf(name); } return oreLook; },
+    // (the look's settings: { glow, dots, size }, and dust: how bright the dust band is; given some, changes them)
+    oreSet(set) { if (set) { for (const k of ['glow', 'dots', 'size']) if (Number.isFinite(+set[k])) oreSet[k] = Math.max(0, Math.min(3, +set[k])); if (Number.isFinite(+set.dust)) dust.material.uniforms.uK.value = Math.max(0, Math.min(2, +set.dust)); } return { ...oreSet, dust: dust.material.uniforms.uK.value }; },
     // (how a rock's own skin is drawn: 'low poly' or 'natural'; given a name, changes it)
     rockLook(name) { if (ROCK_LOOKS.includes(name)) rockLook = name; return rockLook; },
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)
