@@ -18,8 +18,11 @@ import { CABIN } from './shipparts/cabin.cat.js';
 import { STATION2 } from './station2.js';
 import { SMELTER_PIECES } from './smelter.js';   // (the smelter's ore line in the Miner hangar: crane, sockets, rack, operator's chair)
 import { ARENA_PIECES } from './arena.js';       // (the arena: Mathball's court, inside the square in the loop)
+import { LIFT_PIECES } from './lift.js';         // (the lift: one box at each of its three stops)
+import { TOWER_PIECES } from './tower.js';       // (the control room at the top of the tower, and its desks)
+import { STORE_PIECES } from './store.js';       // (the store room on the lower level: its walls, racks, pallets, scale, benches, desk)
 
-export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical'];
+export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical', 'Lift', 'Tower', 'Store'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
 export const SHIP_GROUPS = ['Ship outside', 'Ship cockpit', 'Ship cabin'];
 export const PIECES = {
@@ -79,6 +82,7 @@ export const PIECES = {
   ...OUTSIDE, ...COCKPIT, ...CABIN,
   ...SMELTER_PIECES,
   ...ARENA_PIECES,
+  ...LIFT_PIECES, ...TOWER_PIECES, ...STORE_PIECES,
 };
 
 // A junction square, 2 x 2 cells round a grid point: the floors make a walkway cross, the ceilings a light over each
