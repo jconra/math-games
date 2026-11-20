@@ -265,7 +265,7 @@ void main() {
 }`;
 const ROCK_FRAG = `
 ${VEIL_GLSL}
-uniform vec3 uSun; uniform vec3 uTint; uniform float uSunK; uniform float uLamp;
+uniform vec3 uSun; uniform vec3 uTint; uniform float uSunK; uniform float uLamp; uniform float uLit;
 #if defined(HELD) || defined(ORE)
 uniform vec3 uSq;
 #endif
@@ -322,7 +322,9 @@ void main() {
   }
   #endif
   float d = max(dot(n, uSun), 0.0);
-  vec3 c = base * (0.06 + uSunK * d) + base * vec3(0.16, 0.2, 0.27) * max(0.45 - 0.55 * dot(n, uSun), 0.0);
+  // (uLit: how hard the field's light falls on a rock. The lit side comes out a cool pale grey; the side turned away
+  // is a blue-grey that is dark but not black, so the whole shape of a rock is seen: the words are at LIT, below)
+  vec3 c = (base * (0.06 + uSunK * d) * vec3(0.95, 1.0, 1.08) + base * vec3(0.17, 0.23, 0.36) * max(0.5 - 0.5 * dot(n, uSun), 0.0)) * uLit;
   c += base * uLamp * pow(max(dot(n, normalize(cameraPosition - vW)), 0.0), 1.5);      // (the scan's own lamp: a rock's facets read from every side)
   #ifdef ORE
   if (uOre > 0.0) {
@@ -492,7 +494,12 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   const yawOf = () => { _v.set(0, 0, 1).applyQuaternion(here.q); return Math.atan2(_v.x, _v.z); };
 
   // ── the rocks' materials: the ones in the field; the one in the claw (its holes, its cracks, the scan's sweep) ──
-  const uni = (lamp) => ({ ...VEIL, uSun: { value: sunW }, uTint: { value: new THREE.Color(0.082, 0.076, 0.071) }, uSunK: { value: SUN_K }, uLamp: { value: lamp } });
+  // THE LIGHT ON THE ROCKS (the game's maker, 2026-11-19, with a picture of a field of rocks lit hard from one side by
+  // a cool white light: "Can we cast a bit more light on the asteroids? They are kind of hard to see, but I dont want
+  // them to look like Christmas Tree lights either."): so it is the rock itself that is lit more, not coloured lights
+  // put on it. One number for every rock in the field (the Drill Lab's Light slider turns it).
+  const LIT = { value: 2.8 };
+  const uni = (lamp) => ({ ...VEIL, uSun: { value: sunW }, uTint: { value: new THREE.Color(0.082, 0.076, 0.071) }, uSunK: { value: SUN_K }, uLamp: { value: lamp }, uLit: LIT });
   const fieldMat = new THREE.ShaderMaterial({ uniforms: uni(0.45), vertexShader: ROCK_VERT, fragmentShader: ROCK_FRAG });
   // (a rock that holds ore has a material of its own, for the ore on its surface: the same program, its own veins)
   const oreUni = () => ({ uSq: { value: new THREE.Vector3(1, 1, 1) }, uVD: { value: Array.from({ length: 5 }, () => new THREE.Vector3(0, 1, 0)) }, uVC: { value: Array.from({ length: 5 }, () => new THREE.Color(0, 0, 0)) },
@@ -1347,8 +1354,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
   return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
     // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
     oreLook(name) { if (ORE_LOOKS.includes(name) && name !== oreLook) { oreLook = name; oreSet = setOf(name); } return oreLook; },
-    // (the look's settings: { glow, dots, size }, and dust: how bright the dust band is; given some, changes them)
-    oreSet(set) { if (set) { for (const k of ['glow', 'dots', 'size']) if (Number.isFinite(+set[k])) oreSet[k] = Math.max(0, Math.min(3, +set[k])); if (Number.isFinite(+set.dust)) dust.material.uniforms.uK.value = Math.max(0, Math.min(2, +set.dust)); } return { ...oreSet, dust: dust.material.uniforms.uK.value }; },
+    // (the look's settings: { glow, dots, size }, dust: how bright the dust band is, light: how hard the light falls on
+    // the rocks; given some, changes them)
+    oreSet(set) { if (set) { for (const k of ['glow', 'dots', 'size']) if (Number.isFinite(+set[k])) oreSet[k] = Math.max(0, Math.min(3, +set[k])); if (Number.isFinite(+set.dust)) dust.material.uniforms.uK.value = Math.max(0, Math.min(2, +set.dust)); if (Number.isFinite(+set.light)) LIT.value = Math.max(0.2, Math.min(6, +set.light)); } return { ...oreSet, dust: dust.material.uniforms.uK.value, light: LIT.value }; },
     // (how a rock's own skin is drawn: 'low poly' or 'natural'; given a name, changes it)
     rockLook(name) { if (ROCK_LOOKS.includes(name)) rockLook = name; return rockLook; },
     // (the ship's place and turn in the field's frame; where its claw holds a rock, in its own kit frame)

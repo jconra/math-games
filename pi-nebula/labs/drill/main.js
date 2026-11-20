@@ -96,8 +96,8 @@ $('new').addEventListener('click', () => { note(''); start(); });
 $('ask').addEventListener('click', () => { st.ask = !st.ask; paint(); start(); });
 $('ore').addEventListener('click', () => { st.ore = ORE_LOOKS[(ORE_LOOKS.indexOf(st.ore) + 1) % ORE_LOOKS.length]; if (view) { view.oreLook(st.ore); st.set = view.oreSet(); } paint(); paintSet(); });
 // THE LOOK'S SLIDERS (the game's maker, from his phone: "give me some controls for glow and dots"): the soft glow under
-// the ore, how many dots, how big a dot, and how bright the dust round the field is. A look starts with its own.
-const RNG = ['glow', 'dots', 'size', 'dust'];
+// the ore, how many dots, how big a dot, how hard the light falls on the rocks, and how bright the dust round the field is. A look starts with its own.
+const RNG = ['glow', 'dots', 'size', 'light', 'dust'];
 // (put away behind one button, so a phone's screen is not full of them: pressed, they show)
 $('sliders').addEventListener('click', () => { const on = !$('top').classList.contains('is-sliders'); $('top').classList.toggle('is-sliders', on); $('sliders').setAttribute('aria-pressed', String(on)); });
 function paintSet() { if (!view) return; const S = view.oreSet(); for (const k of RNG) { const el = $(k); el.value = S[k]; el.parentElement.querySelector('b').textContent = (+S[k]).toFixed(2); } }

@@ -39,12 +39,13 @@
   <label class="rng" title="The soft glow under the ore">Glow <input type="range" id="glow" min="0" max="1.5" step="0.05"><b></b></label>
   <label class="rng" title="How many dots">Dots <input type="range" id="dots" min="0.2" max="2" step="0.05"><b></b></label>
   <label class="rng" title="How big a dot is">Dot size <input type="range" id="size" min="0.5" max="1.5" step="0.05"><b></b></label>
+  <label class="rng" title="How hard the light falls on the rocks">Light <input type="range" id="light" min="0.5" max="4" step="0.1"><b></b></label>
   <label class="rng" title="How bright the dust round the field is">Dust <input type="range" id="dust" min="0" max="1" step="0.02"><b></b></label>
   <select id="level" aria-label="The question's level"></select>
   <p id="note" aria-live="polite"></p>
 </div>
 <div id="loading">Unfolding the arms…</div>
 <!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
-<script type="module">import('./main.js?v=13').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+<script type="module">import('./main.js?v=14').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
 </body>
 </html>
