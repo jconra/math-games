@@ -140,7 +140,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       trip = startTrip({ W, walls, boarding, crane, jobs, guide, outside, visit, people, crew: c, save, body, put, captainName: nameOf(m.captain),
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         onEnd: (r) => {
-          lastRun = r; crane.awayHeld = false;
+          lastRun = { ...r, aboard: undefined }; crane.awayHeld = false;
+          // (home: the crew stay aboard where they are until the crew member has left the ship)
+          if (r.aboard) kept = { A: r.aboard, captain: r.captain, ship: MISSIONS[m.id].ship };
           if (input) input.enabled = playing;
           // (home: the share waits; the captain, who waited by the ship, goes on with his day from where he is)
           if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(m.captain, null); meeting = null; }
@@ -172,6 +174,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   const hint = () => { const m = contractOf(crew()); return m && m.state === 'payout' ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
   let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
+  // THE CREW ABOARD AFTER A RUN (src/aboard.js, handed over by the trip as it ends): drawn where the ship stands, going
+  // about as they do, until the crew member is off the ship; then gone, and the captain back in the station
+  let kept = null;
+  const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard) pp.aboard(kept.captain, false); kept = null; };
   const api = {
     trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, hint, meetSpot, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
@@ -201,6 +207,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         return !!trip && trip.holds;
       }
       if (tail) { tail.update(dt); tailT -= dt; if (tailT <= 0) tail = null; }
+      if (kept) { const w = P ? boarding.where(P.pos) : null; if (!w || !w.startsWith(kept.ship + '/')) letGo(); else kept.A.update(dt, { player: P }); }
       // the pilot's seat: in the cockpit with a contract signed
       const at = playing && m && m.state === 'signed' && !card && !loading && !jobs.panel && boarding.where(P.pos) === MISSIONS[m.id].ship + '/cockpit' && crane.mode !== 'out';
       if (at) promptFor(m);
@@ -208,10 +215,13 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       return loading;
     },
     aim(camera, dt) { if (trip) trip.aim(camera, dt); },
-    late() { if (trip) trip.late(); },
+    late() { if (trip) trip.late(); else if (kept) { const S = boarding.ships.find((q) => q.id === kept.ship); if (S && S.M) kept.A.late(S.M, W.scene); } },
+    // (the crew aboard, to be walked round: src/aboard.js; and the crew member's own clip, sitting on a seat aboard)
+    get others() { const A = trip ? trip.crew : kept ? kept.A : null; return A ? A.others : null; },
+    get clip() { return trip ? trip.clip : null; },
     // (in the seat on a run, or at the ship's core with its card up: seen through their own eyes, their body put away)
     get seated() { return !!(trip && trip.seated); },
-    stop() { if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
+    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
     state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: trip && trip.tune ? trip.tune.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
       meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),
   };

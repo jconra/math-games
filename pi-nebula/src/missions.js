@@ -76,10 +76,14 @@ import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighths
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
+// (look: how the captain's crew member for a job looks aboard, a crew kit recipe as the station's people's are: src/aboard.js)
 export const ROLES = {
-  pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno' },
-  drill: { id: 'drill', name: 'Drill operator', does: 'operating the drill', share: 20, ready: true, crew: 'Miner Kestrel' },
-  engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: true, crew: 'Engineer Okafor' },
+  pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno',
+    look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'miner', skin: '#c48a62', hair: '#2a1a12' } } },
+  drill: { id: 'drill', name: 'Drill operator', does: 'operating the drill', share: 20, ready: true, crew: 'Miner Kestrel',
+    look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#8d5a3b', hair: '#3b2a1e' } } },
+  engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: true, crew: 'Engineer Okafor',
+    look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'miner', uniform: '#f0892e', skin: '#47291a', hair: '#17110d' } } },
 };
 export const CARDS = 3;      // the cards of a jump (its three lamps: distance, charge, go)
 export const LAMPS = ['Distance', 'Charge', 'Go'];
@@ -151,8 +155,8 @@ export function aboardOf(M, mine, captain = null) {
   const crewName = ROLES[first].crew, cap = captain || { id: M.captain, name: 'The captain' };
   const short = (n) => String(n).split(' ').pop();
   return [
-    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1) },
-    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [] },
+    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1), look: cap.id },
+    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [], look: ROLES[first].look || null },
   ];
 }
 

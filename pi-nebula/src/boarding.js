@@ -66,11 +66,12 @@ import { coreIn } from './missions.js';
 // doors that come down to the floor, by piece; `step`: what the ship's module does each frame to pose them, as the
 // Medic's ramp unfolds its foot). `lifts`: a way in that people ride instead (the Miner's belly lift: LIFTS below),
 // by piece, with where to stand on the hangar floor to step onto it (`foot`: in the ship's frame, x to port, z to the
-// nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.)
+// nose, on the ground; beside the open front of its side railings). (The Hauler is paused: not boarded.) `cockpit`: its
+// module's own cockpit facts (its floor over the deck: the crew aboard sit there, src/aboard.js).
 export const SHIPS = [
-  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, bp: 'explorer-c-row', ways: ['ebAirstair'] },
-  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
-  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
+  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', ways: ['ebAirstair'] },
+  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
 export const FLOWN = ['ship-miner'];

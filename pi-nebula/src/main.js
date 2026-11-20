@@ -195,7 +195,9 @@ async function boot() {
       chase.lift += ((guide.active ? CAM_LIFT : 0) - chase.lift) * Math.min(1, dt * 2);
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
       const move = ctl ? ctl.move : atJob || onTrip ? null : auto.way ? autoMove() : input.move;
-      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? people.list : [], clip: ctl && ctl.clip, clipSpeed: ctl && ctl.clipSpeed });
+      // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
+      const aboardOthers = mission.others;
+      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);

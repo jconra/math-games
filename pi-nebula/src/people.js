@@ -1710,6 +1710,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     },
   };
   const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
-    say: (P, words, o) => bubbles.say(P, words, o) };
+    say: (P, words, o) => bubbles.say(P, words, o),
+    // (A SHIP'S CREW ABOARD, src/aboard.js: a figure built from a look as the station's people are (a roster id, a
+    // recipe's name, or a recipe), standing; and one of the station's own people taken out of the station while they
+    // are aboard a ship (on: they are; off: back where they were))
+    figure: async (look) => { const def = ROSTER.find((d) => d.id === look); const recipe = recipeOf(def ? def.look : look); if (!recipe) return null; const c = await makeCrew(lib, recipe, { far: true }); shadeUnder(c.root); c.play(firstClip(c, STAND), { fade: 0 }); c.update(0); return c; },
+    aboard: (id, on) => { const P = list.find((q) => q.id === id); if (!P) return false; P.hidden = !!on; return true; } };
   return api;
 }
