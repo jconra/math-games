@@ -1,0 +1,16 @@
+/* THE LIFT'S PANEL (src/lift.js): the job prompt's own look (src/jobs/jobs.css .pnj-prompt), its two stops as two
+   buttons side by side; while the lift goes, only its words. A phone: the words over the two buttons. */
+.pnj-prompt.plf { gap: 10px; }
+.plf .plf-go { display: flex; gap: 8px; }
+.plf .plf-go[hidden] { display: none; }
+.plf .plf-btn { display: flex; align-items: center; gap: 7px; padding: 0 14px; white-space: nowrap; }
+.plf .plf-arrow { font-size: 11px; opacity: 0.75; }
+.plf .plf-name { letter-spacing: 0.06em; }
+.plf.is-going { padding-right: 18px; }
+.plf.is-going .pnj-pw small { color: var(--ink); }
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj-prompt.plf { flex-wrap: wrap; justify-content: center; padding: 8px 8px 8px 8px; row-gap: 6px; }
+  .plf .pnj-pw { flex: 1 1 100%; align-items: center; text-align: center; }
+  .plf .plf-go { flex: 1 1 100%; }
+  .plf .plf-btn { flex: 1 1 0; justify-content: center; padding: 0 8px; font-size: 13.5px; }
+}

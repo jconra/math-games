@@ -48,6 +48,7 @@ import { news } from './news.js';
 import { makeMission } from './mission.js';
 import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
+import { makeLift } from './lift.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
@@ -159,6 +160,8 @@ async function boot() {
   // the contract's card are loaded only when one is wanted)
   const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); } });
+  // the lift by the junction: up to the control room at the top of the tower, down to the store room (src/lift.js)
+  const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -183,7 +186,7 @@ async function boot() {
     else {
       const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
       const onTrip = mission.update(dt, P, GAME.mode === 'play' && !atJob);   // (on a captain's run: in the pilot's seat)
-      board.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip);
+      board.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !lift.here);      // (in the lift: its own panel, not the jobs board through its wall)
       guide.update(dt, GAME.mode === 'play' && !atJob && !onTrip ? P : null);
       if (atJob && guide.active) guide.clear();      // (at a job: there, the line done with)
       // (a job just picked on the board: the camera turned, over most of a second, to look along the way the line sets
@@ -194,18 +197,21 @@ async function boot() {
       // player's head rather than running up behind their back; eased off again as the line ends)
       chase.lift += ((guide.active ? CAM_LIFT : 0) - chase.lift) * Math.min(1, dt * 2);
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
-      const move = ctl ? ctl.move : atJob || onTrip ? null : auto.way ? autoMove() : input.move;
+      const riding = lift.busy;      // (in the lift while it goes: held still)
+      const move = ctl ? ctl.move : atJob || onTrip || riding ? null : auto.way ? autoMove() : input.move;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
       const aboardOthers = mission.others;
       P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
+      lift.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip);
+      if (lift.busy) lift.aim(W.camera);      // (the ride's own view, over the player's head at the shut doors)
       if (onTrip) mission.aim(W.camera, dt);
       // (how far the camera that is DRAWN is from the head: at a job that is the job's own camera, not the follow camera,
       // which still runs behind the player and may be pressed against a wall there: the player vanished for about a
       // second in the arena, standing near its wall with Mathball's camera metres away)
-      const camNear = atJob ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
+      const camNear = atJob || lift.busy ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
       P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes()) && !mission.seated;     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
@@ -276,7 +282,7 @@ async function boot() {
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); jobs.update(0, null, false); jobs.close();
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); jobs.update(0, null, false); jobs.close();
     board.update(0, null, false); board.stop();
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
@@ -312,7 +318,7 @@ async function boot() {
     const s = spot.at ? { pos: walls.snap(spot.at[0], spot.at[1] + 0.15, spot.at[2], 1.5) } : resolve(W, walls, spot); if (!s || !s.pos || !player) return false;
     auto.way = null; player.P.place(s.pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); return true;
   };
-  GAME.where = () => (player ? { x: +player.P.pos.x.toFixed(2), y: +player.P.pos.y.toFixed(2), z: +player.P.pos.z.toFixed(2), heading: +player.P.heading.toFixed(2), room: (W.zoneAt(player.P.pos) || {}).id || null, ship: boarding.where(player.P.pos), cam: chase.near } : null);
+  GAME.where = () => (player ? { x: +player.P.pos.x.toFixed(2), y: +player.P.pos.y.toFixed(2), z: +player.P.pos.z.toFixed(2), heading: +player.P.heading.toFixed(2), room: (W.zoneAt(player.P.pos) || {}).id || null, ship: boarding.where(player.P.pos), cam: chase.near, lift: lift.here } : null);
   // the cost test: n more people standing in a block in front of the camera (alone: the station's own people put away)
   GAME.crowd = async (n, { alone = false } = {}) => {
     if (!people) return 0;

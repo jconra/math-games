@@ -4,6 +4,7 @@
 //
 //   const chase = makeChase(camera, walls)
 //   chase.snap(feet, heading)     straight behind at once (the start); turned to a clear side if a wall is too close
+//   chase.snap(feet, heading, true)  straight behind, however close the wall behind (out of the lift)
 //   chase.update(dt, { feet, heading, speed, look: { dx, dy }, zoom })
 //   chase.near                    how far the camera is from the player's head (m): the game hides the body when close
 //   chase.yaw                     where the camera looks (radians, as a heading): "forward" for the keys and stick
@@ -55,12 +56,14 @@ export function makeChase(camera, walls) {
     C.near = C.reach;
   }
 
-  C.snap = (feet, heading) => {
+  // (straight: straight behind however near a wall is, never round to a clear side: a player stepping out of the lift,
+  // its back wall close behind them, src/lift.js)
+  C.snap = (feet, heading, straight = false) => {
     focus.set(feet.x, feet.y + C.eye, feet.z);
     C.pitch = CAM.pitch; C.zoom = 1; C.idle = 99;
     // straight behind, or the nearest clear way round to it
     let best = heading, bestT = -1;
-    for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.1, -2.1, Math.PI]) {
+    for (const off of straight ? [0] : [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.1, -2.1, Math.PI]) {
       dirOf(heading + off, tilt()); const t = clearFor(CAM.dist);
       if (t > bestT + 0.25) { best = heading + off; bestT = t; }
       if (t >= CAM.dist - 0.01) break;

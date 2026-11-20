@@ -42,6 +42,7 @@
 //                               a plain box for each small ship parked on a roof pad
 //   outside.jets                the small ships on the roof's pads this time (src/roofjets.js): [{ pad, at, yaw }];
 //                               outside.jetsDrawn: true once their file has come and they are drawn
+//   outside.jetCopy()           a promise of one more of them, for the control room's fly-past (src/lift.js)
 import * as THREE from 'three';
 import { hullMaterials } from '../kit/hull.js';
 import { shieldMaterial } from '../kit/materials.js';
@@ -107,14 +108,18 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
   // after the outside is made, drawn once for each pad that has one this time; lit by the same sun and mirroring the
   // same sky as the hull
   const jets = jetsFor(seed), jetGroup = new THREE.Group(), jetOwned = []; jetGroup.name = 'outside:jets'; out.group.add(jetGroup);
-  let jetsDrawn = false;
-  const jetTimer = jets.length ? setTimeout(() => new GLTFLoader().load(new URL(JET.file, import.meta.url).href, (g) => {
+  let jetsDrawn = false, jetFile = null;
+  // (the file, fetched once, the first time it is wanted: by the pads, or by the control room's fly-past, src/lift.js)
+  const loadJet = () => jetFile || (jetFile = new Promise((done, fail) => new GLTFLoader().load(new URL(JET.file, import.meta.url).href, (g) => {
     const src = g.scene, size = new THREE.Box3().setFromObject(src).getSize(new THREE.Vector3()), k = JET.long / Math.max(1e-6, size.x), mats = new Set();
     src.traverse((o) => { if (o.isMesh) { mats.add(o.material); jetOwned.push(o.geometry); } });
     for (const m of mats) { m.fog = false; sunlit(m, sun); if (mirror) m.envMap = mirror.texture; m.needsUpdate = true; lit.push(m); jetOwned.push(m); if (m.map) jetOwned.push(m.map); }
-    jets.forEach((j, i) => { const o = i ? src.clone() : src; o.scale.setScalar(k); o.position.set(j.at[0], j.at[1], j.at[2]); o.rotation.set(0, j.yaw, 0); o.name = 'outside:jet ' + j.pad; jetGroup.add(o); });
+    done({ src, k });
+  }, undefined, fail)));
+  const jetTimer = jets.length ? setTimeout(() => loadJet().then(({ src, k }) => {
+    jets.forEach((j) => { const o = src.clone(); o.scale.setScalar(k); o.position.set(j.at[0], j.at[1], j.at[2]); o.rotation.set(0, j.yaw, 0); o.name = 'outside:jet ' + j.pad; jetGroup.add(o); });
     jetsDrawn = true;
-  }, undefined, (e) => console.warn('the roof\'s small ships did not come: ' + (e && e.message ? e.message : e))), JET.wait) : null;
+  }).catch((e) => console.warn('the roof\'s small ships did not come: ' + (e && e.message ? e.message : e))), JET.wait) : null;
 
   // the room behind each real opening, and the way the opening faces
   const _p = new THREE.Vector3();
@@ -175,6 +180,9 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
   const api = {
     group: out.group, seed, flying: null, near: null, out: false, shown: true, off: false, mats,      // (off: put away, for the cost rigs' before and after)
     jets, get jetsDrawn() { return jetsDrawn; },
+    // one more of the same small ship, for something of the game's own (its own copy, at its size, drawn with the same
+    // sun and the same sky in its metal): the control room's fly-past (src/lift.js)
+    jetCopy: () => loadJet().then(({ src, k }) => { const o = src.clone(); o.scale.setScalar(k); return o; }),
     ms: 0, cheap,
     get stats() { return out.stats; },
     update(camera = W.camera, dt = 1 / 60) {
