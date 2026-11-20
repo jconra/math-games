@@ -17,7 +17,8 @@
 //     the floor from where you stood to the goal, credits for it); a ball it doesn't fit bounces back out, with one plain
 //     line why. The keys or the thumb stick still walk you about; dragging the view turns the camera;
 //   - the light bar runs round the room: as it reaches each goal (every 30 seconds) that goal's rule changes. Back over
-//     the door, the round ends: the score and the credits, then Play again (one tap) or Leave;
+//     the door, the round ends: the score and the credits, then Play again (one tap) or Leave; the crew member's own
+//     best round is kept with their save, and a round that beats it has the station announce it (best.js);
 //   - Help (H) shows the four goals' rules explained, any time, and holds the round still while it is open.
 //
 //   const M = openMathball({ W, walls, input, crew, lib, job, people, onClose, onSave, onCredits })
@@ -39,6 +40,8 @@ import { makeCrew } from '../../kit/crew.js';
 import { ROSTER } from '../life.js';
 import { shine } from '../player.js';
 import { makeSound } from './sound.js';
+import { keepBest } from './best.js';
+import { happened } from '../announce.js';
 
 const MID = COURT.mid;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -518,7 +521,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const tally = E.jobTally(crew, job.id);
     tally.rate = Math.round(G.rateAfter() * 10) / 10; tally.rounds = (tally.rounds || 0) + 1;
     if (e.you > e.them) tally.wins = (tally.wins || 0) + 1;
+    // (this crew member's own best round, kept with their save; beaten, the station says so: src/mathball/best.js)
+    const best = keepBest(tally, e.you);
     onSave(); sound.play('end');
+    if (best.beaten) happened('best');
     showGoals(false); say('', 0);
     showEnd({ you: e.you, them: e.them, played: Math.max(0, LADDER.findIndex((s) => s.key === set.key)) });
     if (hiddenPerson) { /* (they stay out of the station's crowd while they are here on the court) */ }

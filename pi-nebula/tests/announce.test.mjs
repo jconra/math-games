@@ -162,7 +162,8 @@ test('true where the game knows: a captain looking for crew only while still ask
   // (the welcome sends the player to a captain in the terminal: none there, none asking, no welcome)
   s = said({ vega: { state: 'signed', room: 'terminal' }, ruiz: { state: 'new', room: 'hangar-miner' }, hale: { state: 'new', room: 'med-ward' } });
   assert.ok(!s.has('welcome'));
-  // (no Mathball high score is kept: never said)
+  // (the Mathball high score only as a round beats the crew member's own best: never in the minute's turn; see
+  // tests/best.test.mjs)
   assert.ok(!said(captains()).has('highscore'));
 });
 

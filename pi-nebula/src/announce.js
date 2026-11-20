@@ -34,8 +34,10 @@
 //     (PAGE: any name with any place); a word inside a sentence (the metal, the planet, the food left somewhere, the
 //     lunch special) is a whole sentence for each word, a handful each: those lines are one group, so the station
 //     does not say "Whoever left a..." twice in ten minutes.
-//   - HELD BACK: "A new Mathball high score has been set in the arena." The game keeps no Mathball high score, so it is
-//     never said (its clip is made: QUESTIONS.md asks what a high score should be).
+//   - THE MATHBALL HIGH SCORE (2026-11-20, the game's maker: "Keep only your own best round. This plays when you beat
+//     it."): "A new Mathball high score has been set in the arena." is said once a round is over that beat the crew
+//     member's own best round (src/mathball/best.js: their first round only sets it). Mathball tells it as it happens:
+//     happened('best').
 //
 // The clips: assets/sound/station/<id>.mp3, small and mono, all at one loudness (how they were made, and checked by
 // speech-to-text: ~/pw/space-math/rigs/announce-1/make.py, check.py). Each is fetched only when its line is about to be
@@ -154,8 +156,9 @@ export const LINES = [
   { id: 'course', where: 'station', say: () => ({ clips: ['course'] }) },
   { id: 'lunch', where: 'station', say: (G, rand) => ({ clips: [pick(['lunch-soup', 'lunch-chili', 'lunch-spaghetti'], rand)] }) },
   { id: 'left', where: 'station', say: (G, rand) => ({ clips: [pick(['left-sandwich-scanner', 'left-burrito-scanner', 'left-taco-arena', 'left-pizza-airlock', 'left-banana-crane'], rand)] }) },
-  // (held back: the game keeps no Mathball high score)
-  { id: 'highscore', where: 'station', held: true, say: () => null },
+  // (a Mathball round just over that beat this crew member's own best round: src/mathball/best.js; said each time one
+  // is beaten, so its ten minutes' rest is none)
+  { id: 'highscore', event: 'best', again: 0, where: 'station', say: () => ({ clips: ['highscore'] }) },
   // ── said as it happens ──
   // (a patient's scan begun: the medic paged to the scanner room, while the scan is still on)
   { id: 'scan', event: 'scan', where: 'station', again: 300, say: (G) => (G.scan && NAMES[G.scan] ? { page: [NAMES[G.scan], 'scanner'] } : null) },
@@ -185,9 +188,15 @@ export function timeline(said) {
 }
 export const wordsOf = (said) => (said.page ? timeline(said).slice(1).map((x) => CLIPS[x.id].words).join(' ') : said.clips.map((id) => CLIPS[id].words).join(' '));
 
+// SOMETHING THAT HAPPENED ELSEWHERE IN THE GAME, told to the station's speakers as it happens (Mathball: 'best', a
+// round that beat the crew member's own best): read with the game's facts below, the next frame
+const told2 = [];
+export function happened(kind) { if (told2.length < 8) told2.push(kind); }
+
 // THE RULES, with no game: what is said, when, where, how loud. read() -> the facts now:
 //   { playing, place, math, news: [fresh news], captains: { id: { state, room } }, scan: medic's roster id | null,
-//     alarm: the alarm's hangar room id | null, events: [kinds that just happened: 'scan', 'alarm', 'shipIn', 'match'] }
+//     alarm: the alarm's hangar room id | null, events: [kinds that just happened: 'scan', 'alarm', 'shipIn', 'match',
+//     'best'] }
 export function makeAnnouncer({ sound, read, rand = Math.random }) {
   const T = ANNOUNCE;
   let t = 0, due = null, now = null, waiting = [], lastFacts = null;
@@ -302,6 +311,8 @@ export function makeAnnounce({ sound, W, visit = null, people = () => null, crew
     const doc = typeof document !== 'undefined' ? document : null, arena = !!(doc && doc.querySelector('.mbl'));
     if (arena && !arenaWas) events.push('match');
     arenaWas = arena;
+    // (told from elsewhere: a Mathball round that beat this crew member's best)
+    if (told2.length) events.push(...told2.splice(0));
     const math = arena || !!(doc && doc.querySelector('.pnj'));
     return { playing, place, math, news: news.fresh(), captains, scan: busy && busy.medic ? busy.medic.id : null, alarm, events };
   }
