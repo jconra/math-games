@@ -51,6 +51,8 @@ import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
 import { makeLift } from './lift.js';
 import { makeCargoForklift } from './cargoforklift.js';
+import { pointGap } from '../kit/forkliftround.js';
+import { STORE } from '../kit/places-plan.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
@@ -210,7 +212,7 @@ async function boot() {
       const move = ctl ? ctl.move : atJob || onTrip || riding ? null : auto.way ? autoMove() : input.move;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
       const aboardOthers = mission.others;
-      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed });
+      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed, keepOff: offForklift });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
@@ -305,6 +307,13 @@ async function boot() {
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && GAME.mode === 'play') toTitle(); });
 
   // ── for the rigs: walk the player somewhere the way a player would (the stick pushed toward the next turn) ────
+  // (the player's whole body off Cargo's forklift, as everyone's (src/people.js): never a step that ends with their middle
+  // nearer its outline than 0.26 m, and nearer than it began; its forks lie too low for the walls to feel)
+  function offForklift(x0, z0, x1, z1, y) {
+    const O = Math.abs(y - STORE.floor) < 1 && forklift.ride.outline ? forklift.ride.outline() : null; if (!O) return false;
+    for (const o of O) { const g = pointGap(o, x1, z1); if (g < 0.26 && g < pointGap(o, x0, z0) - 1e-9) return true; }
+    return false;
+  }
   const _w = new THREE.Vector3();
   function autoMove() {
     const P = player.P;

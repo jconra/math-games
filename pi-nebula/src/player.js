@@ -4,7 +4,7 @@
 //
 //   const P = await makePlayer({ lib, recipe, walls, scene })
 //   P.place(feet, heading)          stand them somewhere (a spot walls.snap gave)
-//   P.update(dt, { move, run, yaw, others, clip })   move: { x, y, mag } from the input; yaw: the camera's; others: the
+//   P.update(dt, { move, run, yaw, others, clip, keepOff })   move: { x, y, mag } from the input; yaw: the camera's; others: the
 //                                   people ({ pos } each, and `away` or `hidden`: not there), whom the player does not
 //                                   walk through (never nearer than MOVE.near: slid round them); clip: one to play
 //                                   this frame whatever the legs are doing (a throw in the arena's game), at clipSpeed
@@ -50,7 +50,7 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
   };
 
   const before = new THREE.Vector3();
-  P.update = (dt, { move = null, run = false, yaw = 0, others = [], clip = null, clipSpeed = 1 } = {}) => {
+  P.update = (dt, { move = null, run = false, yaw = 0, others = [], clip = null, clipSpeed = 1, keepOff = null } = {}) => {
     let target = 0;
     if (move && move.mag >= 0.08) {
       // the push, turned by the camera's yaw: forward is the way the camera looks
@@ -66,6 +66,8 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     if (v > 0.01) {
       before.copy(P.pos);
       got = walls.move(P.pos, Math.sin(P.heading) * v * dt, Math.cos(P.heading) * v * dt);
+      // (a machine the walls do not feel all of, Cargo's forklift's forks: a step onto it is not taken, keepOff)
+      if (keepOff && keepOff(before.x, before.z, P.pos.x, P.pos.z, P.pos.y)) { P.pos.copy(before); got = 0; }
       // not through another person: walked into, they are slid round (pushed out to MOVE.near from them, where the walls
       // allow; where they do not, the step is not taken)
       for (const o of others) {
