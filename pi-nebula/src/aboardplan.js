@@ -158,8 +158,10 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
   // (room for two to pass: the floor across wide enough for their two middles, PASS.apart either way along the way
   // from where they will come alongside (as far along as they walk at each other: where the player stands, if they stand
   // still), so they come alongside where it is: a door, or the mouth of one, is no room)
-  const need = roomFor(wall), wideAt = (x, z) => { const [l, r] = roomAt(x, z, sx, sz, ok, need); return l + r >= need; };
-  const wide = (lo, hi) => { for (let t = lo; t <= hi + 1e-9; t += 0.1) if (!wideAt(W.pos.x + ax * t, W.pos.z + az * t)) return false; return true; };
+  // (felt every 3 cm across and every 15 cm along: a cabin's walls are 5 cm voxels; a phone asks it a few hundred times
+  // a frame at most, and only while someone is met)
+  const need = roomFor(wall), wideAt = (x, z) => { const [l, r] = roomAt(x, z, sx, sz, ok, need, 0.03); return l + r >= need - 0.03; };
+  const wide = (lo, hi) => { for (let t = lo; t <= hi + 1e-9; t += 0.15) if (!wideAt(W.pos.x + ax * t, W.pos.z + az * t)) return false; return wideAt(W.pos.x + ax * hi, W.pos.z + az * hi); };
   const at = met ? met.ahead * WALK.speed / (WALK.speed + met.v) : 0;
   // (getting up, or sitting down: in the furniture, no room made; met then, they wait as before)
   const room = !met || (!loose && wide(Math.max(-PASS.apart, at - PASS.apart), Math.min(met.ahead + PASS.apart, at + PASS.apart)));

@@ -29,7 +29,8 @@
 //       toward one's left (0..1 each); slow: how much slower (1: not); null: not in the lane ahead
 //   bumps(x0, z0, x1, z1, bodies, at) -> the body a step from (x0, z0) to (x1, z1) would come nearer than PASS.apart
 //       to, and nearer than it was (a step away from someone already too near is always let be), or null
-//   roomAt(x, z, sx, sz, free, most) -> [left, right]: how far the floor is free to either side (m, sx sz: one's right)
+//   roomAt(x, z, sx, sz, free, most, step) -> [left, right]: how far the floor is free to either side (m; sx sz: one's
+//       right), felt every `step`, up to `most` in all
 //   roomFor(wall) -> the floor across two middles need to pass, where the walls feel a body `wall` m each way
 export const PASS = { apart: 0.40, comfy: 0.75, wrong: 0.2, spare: 0.02, lane: [2.0, 0.75], meet: 3.0, pair: 0.9 };
 // (the floor across, for the two middles, that two need to go by each other shoulder past shoulder, as a real pair
@@ -75,7 +76,7 @@ export function roomAt(x, z, sx, sz, free, most = 0.9, step = 0.02) {
   const out = [0, 0];
   for (let i = 0; i < 2; i++) {
     const g = i ? 1 : -1;
-    for (let k = step; k <= most + 1e-9; k += step) { if (!free(x + sx * k * g, z + sz * k * g)) break; out[i] = k; }
+    for (let k = step; k <= most - (i ? out[0] : 0) + 1e-9; k += step) { if (!free(x + sx * k * g, z + sz * k * g)) break; out[i] = k; }
   }
   return out;
 }
