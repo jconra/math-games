@@ -26,6 +26,11 @@ import { makeDust } from '../../kit/dust.js';
 import { makeBeams, beamsOf } from '../../kit/beams.js';
 import { loadForklift, standForklift } from '../../kit/forklift.js';
 import { makePallets } from '../../kit/cargopallets.js';
+import { loadPod, podMaterials, makePod } from '../../kit/stasispod.js';
+import { POD, POD_PIECES } from '../../kit/stasispod-plan.js';
+// (his stasis pod is the lab's to show for now, not the game's: its entry is added to the catalog here, in the Medical
+// group, and nothing the game loads knows of it)
+Object.assign(PIECES, POD_PIECES);
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station'], ['hull-sample', 'A sample hull'], ['ship-sample', 'A sample cabin'], ['ship-miner', 'Miner A'], ['ship-medic', 'Medic A'], ['ship-explorer', 'Explorer C'], ['ship-hauler', 'Hauler A']];
@@ -161,9 +166,10 @@ function touchControls() {
 }
 
 // ── building what's shown ────────────────────────────────────────────────────────────────────────────────────────
-function clearStage() { if (built) { built.dispose(); built = null; } if (beams) { beams.dispose(); beams = null; } STAGE.clear(); shown.model = null; shownFor++; }
-// (a model of the game's maker's own on show, his forklift: its numbers; shownFor: which stage it is for)
-const shown = { model: null };
+function clearStage() { if (built) { built.dispose(); built = null; } if (beams) { beams.dispose(); beams = null; } if (shown.sleeper) { shown.sleeper.dispose(); shown.sleeper = null; } STAGE.clear(); shown.model = null; shown.pod = null; shownFor++; }
+// (a model of the game's maker's own on show, his forklift or his stasis pod: its numbers; shownFor: which stage it is
+// for; the pod itself and whoever sleeps in it)
+const shown = { model: null, pod: null, sleeper: null };
 let shownFor = 0;
 // the beams of light with dust in them (kit/beams.js), under each light of the part that makes one; not at Low quality
 let beams = null;
@@ -195,9 +201,24 @@ async function showPart(id = state.part, variant) {
     if (my !== partBusy || stage !== shownFor) return;
     if (F) { model = standForklift(F, { at: [0, 0], floor: 0, yaw: 0 }); model.light(null, 0.9); model.group.traverse((o) => { if (o.isMesh && o.name !== 'forklift:shade') o.castShadow = true; }); STAGE.add(model.group); shown.model = F.facts; }
   }
+  // (his stasis pod, kit/stasispod.js: on the stand, its lid turned by the Doors chips (by themselves: open and shut
+  // again and again; open; shut), someone of the crew asleep in it or empty (the variants))
+  let podBox = null;
+  if (def.model === 'stasispod') {
+    loading('Fetching the ' + def.name.toLowerCase() + '…', true);
+    const stage = shownFor, P = await loadPod().catch((e) => { console.error('kit lab: the stasis pod did not come', e); return null; });
+    if (my !== partBusy || stage !== shownFor) return;
+    if (P) {
+      const pod = makePod(P, podMaterials(P)); pod.set(state.doors === 'open' ? 1 : 0); podClock = 0;
+      for (const m of pod.meshes()) m.castShadow = m.name !== 'stasispod:glass';
+      STAGE.add(pod.group); shown.model = P.facts; shown.pod = pod;
+      const [L, H, W] = P.facts.size; podBox = new THREE.Box3(new THREE.Vector3(-L / 2, 0, -W / 2), new THREE.Vector3(L / 2, H, W / 2));
+      if (variant === 'asleep') sleepIn(pod, stage);
+    }
+  }
   // frame it
   // (the model as it stands; had its file not come, the room it would take)
-  const box = model ? new THREE.Box3().setFromObject(model.group.children[0]) : def.model ? new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(0, def.foot[1] / 2, 0), new THREE.Vector3(...def.foot)) : roomBounds(room);
+  const box = model ? new THREE.Box3().setFromObject(model.group.children[0]) : podBox || (def.model ? new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(0, def.foot[1] / 2, 0), new THREE.Vector3(...def.foot)) : roomBounds(room));
   framed.c = box.getCenter(new THREE.Vector3()); framed.r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() / 2);
   cam.mode = 'orbit'; camera.fov = 45; camera.updateProjectionMatrix(); view(state.view in PVIEWS ? state.view : 'q');
   key.target.position.copy(framed.c); key.position.copy(framed.c).add(new THREE.Vector3(4, 7, 5)); renderer.shadowMap.needsUpdate = true;
@@ -234,6 +255,30 @@ async function showRoom(id = state.room) {
   if (!(state.view in (R.views || {}))) state.view = 'start';
   view(state.view); loading(''); menu(); readout();
   parkForklift();
+}
+// SOMEONE ASLEEP IN HIS STASIS POD (src/sleeper.js): one of the eight people the title offers, in turn each time the
+// pod is shown asleep (or ?sleeper=<look id>); the crew kit and the sleeper's code are fetched the first time only
+let crewLib = null, sleeperTurn = 0, podClock = 0, podHeld = false;
+async function sleepIn(pod, stage) {
+  try {
+    const [{ loadCrew }, { makeSleeper, SLEEPERS }] = await Promise.all([import('../../kit/crew.js'), import('../../src/sleeper.js')]);
+    crewLib = crewLib || loadCrew(); const lib = await crewLib;
+    if (stage !== shownFor) return;
+    const want = q.get('sleeper'), look = SLEEPERS.includes(want) ? want : SLEEPERS[sleeperTurn++ % SLEEPERS.length];
+    loading('Someone lying down…', true);
+    const S = await makeSleeper(lib, look, pod);
+    if (stage !== shownFor) { S.dispose(); return; }
+    S.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    shown.sleeper = S; renderer.shadowMap.needsUpdate = true; loading(''); readout();
+  } catch (e) { console.error('kit lab: the sleeper did not come', e); loading(''); }
+}
+// the lid by the Doors chips: open, shut, or by itself (open, a wait, shut, a wait, again)
+const POD_WAIT = 2.5;
+function podWant(dt) {
+  if (state.doors === 'open') return 1;
+  if (state.doors === 'shut') return 0;
+  podClock += dt; const cyc = 2 * (POD.swing + POD_WAIT);
+  return podClock % cyc < cyc / 2 ? 1 : 0;
 }
 // THE STATION'S CARGO: the game's maker's forklift parked in its painted place, as in the game (kit/forklift.js), lit
 // by Cargo's own picture of itself; fetched once the room is up. And its own pallets, where they stand at the start
@@ -318,7 +363,8 @@ const fps = { n: 0, t: performance.now(), v: 0, ms: 0, cpu: 0 };
 let sceneCalls = 0, sceneTris = 0;
 function stats() {
   const s = built?.stats || {};
-  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: (s.draws || 0) + (shown.model?.draws || 0), tris: (s.tris || 0) + (shown.model?.tris || 0), model: shown.model, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
+  const sl = shown.sleeper ? shown.sleeper.count() : null;
+  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: (s.draws || 0) + (shown.model?.draws || 0) + (sl ? sl.draws : 0), tris: (s.tris || 0) + (shown.model?.tris || 0) + (sl ? sl.tris : 0), model: shown.model, sleeper: sl && { look: shown.sleeper.look, ...sl }, pod: shown.pod ? { k: +shown.pod.k.toFixed(3) } : null, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
 }
 function readout() {
   const s = stats(), what = state.tab === 'parts' ? `${PIECES[state.part].name} · ${state.variant}` : state.tab === 'sky' ? 'Sky · ' + SKY_VIEWS[state.sky].name : (ROOMS.find((r) => r[0] === state.room)?.[1] || state.room);
@@ -350,6 +396,7 @@ function loop(now) {
   if (stationTick(now)) return;
   resize(); fly(dt); if (dust.visible) dust.userData.update(dt, camera.position); sky.update(dt);
   if (built && built.doors.length && state.doors === 'auto' && updateDoors(built.doors, camera.position, dt, 'auto')) renderer.shadowMap.needsUpdate = true;
+  if (shown.pod && !podHeld && shown.pod.swing(podWant(dt), dt)) renderer.shadowMap.needsUpdate = true;
   if (renderer.shadowMap.enabled) renderer.shadowMap.autoUpdate = false;
   const c0 = performance.now();
   draw(dt);
@@ -498,6 +545,10 @@ const KL = window.KL = {
   get roomData() { return roomData; }, renderer, scene, camera, mats, state,
   sky: (name) => showSky(name), skyTurn, theSky: sky, skyViews: () => Object.keys(SKY_VIEWS),
 };
+// (his stasis pod, for rigs: the pod and its sleeper on show; podAt(k) holds the lid at open k (null: the Doors chips
+// again); sleeperReady())
+Object.defineProperties(KL, { pod: { get: () => shown.pod }, sleeper: { get: () => shown.sleeper } });
+Object.assign(KL, { podAt: (k) => { podHeld = k != null; if (shown.pod && k != null) { shown.pod.set(k); renderer.shadowMap.needsUpdate = true; } }, sleeperReady: () => !!shown.sleeper });
 // (the station's tools, for rigs: a plan, holes to outside, a walk along a route, the saved bake)
 Object.assign(KL, { plan, leaks, leakPaint, walk, packBake: packBakeB64, station, unfreeze: () => { frozen = false; }, zones: () => (built?.zones || []).map((z) => ({ id: z.id, tris: Math.round(z.tris), visible: z.group.visible, from: z.bakedFrom })) });
 (async () => {
