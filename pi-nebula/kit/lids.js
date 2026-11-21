@@ -7,10 +7,13 @@
 // ball on each eye bone) behind lids that rest on the balls, as the game's maker's heads were made and built. Nothing is
 // cut or added: to shut an eye, the head's own upper lid turns down over the ball about the ball's own centre (its
 // level axis, as a real lid does) to meet the lower lid, which comes up a little; the skin over the upper lid follows
-// less and less up toward the brow, and none of the face beyond moves. Every point keeps its own distance from the
-// ball's centre (plus `push` at most: the shut lid lies just clear of the clear layer's bulge over the iris), so the lid
-// slides over the ball as skin does, its own paint (the lashes' line, the lid's colour, this person's skin tone and
-// freckles) riding with it. Open, every point is exactly where the head has it: the head as made.
+// less and less up toward the brow, and none of the face beyond moves. As it turns, the lid lies down toward the ball
+// (`flat` of the way to `push` off it: a thick fold stretches thinner over the eye, and the shut lid stays clear of the
+// clear layer's bulge over the iris), and the socket's own cup behind the lids stays inside the ball. Its own paint (this
+// person's skin tone and freckles) rides with it; shut, the upper lid's edge is drawn as the lashes' line and the lid over
+// it in its skin's own colour (its paint, the open lid's shadow and liner, would lie stretched over it), and it is shaded
+// as lying round the ball. Open, every point is exactly where the head has it: the head as made. The head's shadow is cast
+// as its lids lie.
 //   How far each point turns is worked out once a head, from the head itself (lidLines, lidTurns): the opening seen
 // from the front (the head's triangles drawn into a small depth picture round each eye, against the ball: where the ball
 // is in front, the eye is open), its top and bottom edge column by column as angles round the ball's level axis, and
@@ -56,9 +59,8 @@ export const LIDS = {
                          // standing up to the third in front of the ball (metres; none past the fourth: a brow right
                          // over the eye); past the second over its edge, `out` holds)
   out: [0.0045, 0.0095], // and fully to this far in front of the ball (metres), none past the second (the brow, the cheek)
-  push: [0.0014, 0.0003], // shut, the upper lid and the lower lie this far off the ball (metres; the clear layer bulges
-                         // 0.85 mm over the iris; the upper lid lies over the lower's edge): a lid's thick fold, open,
-                         // lies down thin over the ball shut, as a real lid stretches
+  push: [0.0014, 0.0003], // shut, the upper lid and the lower lie down toward this far off the ball (metres; the clear
+                         // layer bulges 0.85 mm over the iris; the upper lid lies over the lower's edge)
   flat: 0.5,             // shut, how far a turned point lies down onto the ball (1: to `push` off it)
   lash: [0, 0.07],       // shut, the upper lid's edge drawn as the lashes' line: dark at its edge, gone this far over it
                          // (radians)

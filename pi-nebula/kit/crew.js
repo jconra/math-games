@@ -86,8 +86,10 @@
 // triangles those moves would stretch, moves with its neighbours, so no strand is torn into spikes.
 //
 // REAL EYES (the Tripo heads, ~/pw/space-math/rigs/crew-heads/): a ball and a clear wet layer on each of the head's eye
-// bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. The gaze looks at a point or straight ahead, with
-// small darting movements, jumping and settling as eyes do (THE GAZE, below). A part's own bones (bones the suit's
+// bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. EYELIDS THAT CLOSE (2026-11-20, kit/lids.js):
+// the head's own lids turn down over the balls to shut (asleep) and blink (awake), by the head's own shader (CREW_LIDS).
+// The gaze looks at a point or straight ahead, with small darting movements, jumping and settling as eyes do (THE GAZE,
+// below). A part's own bones (bones the suit's
 // skeleton lacks, all under the Head bone) are added to the person's skeleton when it's put together. A head without
 // eyes (Vega's helmet) is as it was. (The nine older HD mesh heads, h1 to h9, were taken out 2026-11-11; the old
 // portrait set's head, outfit and hair, captain1, 2026-11-17: the game's maker, "It should only be the 13 heads". They
@@ -146,6 +148,8 @@
 //     head has: [] without), c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
+//     c.setEyes('blink' | 'open' | 'shut', { now }) and c.lids (EYELIDS THAT CLOSE, kit/lids.js: blinking now and then while
+//     awake, as made; shut while asleep), c.lidsStep(dt) (the lids alone moved on),
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, dims, turn, tilt, lean, tuck, tuckStart, hug, hugGap, placed } as
 //     lib.fitOf gives; null: as made), c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of
 //     those, how many it stopped 2 mm off the head; hugged, under, cleared, hugHeld, hugMostMm: THE HUG's }), c.fitSkirt,
