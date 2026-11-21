@@ -8,21 +8,37 @@
 // moved along the bed so the room left at the head and at the feet is the same. Posed once and left still (nothing
 // plays while they sleep: no clip runs after the pose is laid on), so one costs only its drawing. The crew kit's eyes
 // have no lids that close: they look straight up.
+// THEIR POSITION'S COLOUR (his answer STAS1-3 C: "I like it when it looks like they are wearing certain colors for their
+// position like red-Captain, purple-engineer, yellow-drill or whatever"): given a position (kit/stasispod-plan.js
+// POSITIONS), the uniform's bands (the crew kit's colours.uniform: the grey uniform's chest and side panels, the dark
+// one's stripes) take its colour; a look in a jacket (which has no bands) wears the crew uniform of its build instead
+// (CREW_UNIFORM), so every one of a crashed crew wears their position's colour.
 //
 //   SLEEPERS                                    the looks a sleeper may be (src/looks.js ids)
-//   const S = await makeSleeper(lib, look, pod, { far })   lib: the crew kit's (loadCrew); look: a looks.js id; pod: a
-//                                               kit/stasispod.js pod (its bed); S.root is added to pod.body, where it
-//                                               lies; far: the crew kit's far copies made ready
-//   S.c (the crew kit's person), S.box (its extent lying, in the pod: { min, max } [x, y, z]), S.setFar(on),
-//   S.count() -> { draws, tris } (its meshes shown), S.dispose()
+//   const S = await makeSleeper(lib, look, pod, { far, position })   lib: the crew kit's (loadCrew); look: a looks.js
+//                                               id; pod: a kit/stasispod.js pod (its bed); S.root is added to pod.body,
+//                                               where it lies; far: the crew kit's far copies made ready; position: a
+//                                               POSITIONS id (none: the look's own clothes)
+//   S.c (the crew kit's person), S.look, S.position, S.box (its extent lying, in the pod: { min, max } [x, y, z]),
+//   S.setFar(on), S.count() -> { draws, tris } (its meshes shown), S.dispose()
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
 import { addMoves } from './moves.js';
 import { pose } from './onbed.js';
 import { LOOKS, recipeOf } from './looks.js';
 import { STAND } from './player.js';     // (the clip under the scanner's patient lying: the standing one, people.js)
+import { POSITIONS } from '../kit/stasispod-plan.js';
 
 export const SLEEPERS = LOOKS.filter((l) => !/^android/.test(l.id)).map((l) => l.id);
+// the crew uniforms (the outfits with bands), by the build of the body (the suit's skeleton: 'm', 'f')
+export const CREW_UNIFORM = { m: 'atlantis1', f: 'atlantis2' };
+// a look's recipe as it sleeps in a pod: in its position's colour (a look in a jacket in the crew uniform of its build)
+export function sleeperRecipe(lib, look, position = null) {
+  const R = recipeOf({ id: look }, lib), P = POSITIONS[position];
+  if (!P) return R;
+  const suit = lib.entry ? lib.entry('suit', R.suit) : null, wear = Object.values(CREW_UNIFORM).includes(R.suit) ? R.suit : CREW_UNIFORM[suit && suit.skeleton] || R.suit;
+  return { ...R, suit: wear, colours: { ...(R.colours || {}), uniform: P.colour } };
+}
 // (the arm at rest: the wrist this share of the arm's length from the shoulder; how far the body sinks into the padded
 // bed, metres; the feet at rest: pointed past square to the shin and turned outward (radians; onbed.js's own lying
 // feet, 0.34 and 0.28, stand nearly upright, and under his lid, which comes down toward the pod's front, the toes came
@@ -33,8 +49,8 @@ const _e = new THREE.Euler();
 // bed (src/onbed.js's frame) -> the pod's: a point, a way
 const pt = (F, v) => new THREE.Vector3(...F.toPod(v[0], v[1], v[2]));
 const way = (v) => new THREE.Vector3(-v[2], v[1], v[0]);
-export async function makeSleeper(lib, look, pod, { far = false } = {}) {
-  const c = await makeCrew(lib, recipeOf({ id: look }, lib), { far });
+export async function makeSleeper(lib, look, pod, { far = false, position = null } = {}) {
+  const c = await makeCrew(lib, sleeperRecipe(lib, look, position), { far });
   const M = addMoves(c), who = M.body, F = pod.bed;
   // the legs, the hips and the head as the scanner's patient lies (its 'lying'); the arms as they are before the hands
   // go to the belly (its 'stretch' at its start: the hands flat on the bed beside the hips)
@@ -75,7 +91,7 @@ export async function makeSleeper(lib, look, pod, { far = false } = {}) {
   c.root.position.x += F.mid - (b.min.x + b.max.x) / 2; c.root.position.y -= SLEEP.sink; b = extent();
   pod.body.add(c.root);
   return {
-    c, root: c.root, look, box: { min: b.min.toArray(), max: b.max.toArray() },
+    c, root: c.root, look, position: POSITIONS[position] ? position : null, box: { min: b.min.toArray(), max: b.max.toArray() },
     setFar(on) { if (c.setFar && !!c.far !== !!on) c.setFar(!!on); },
     // (what it draws: its meshes shown, and their triangles)
     count() {

@@ -7,12 +7,15 @@
 // one side, status lights, thick hinges along one edge, scuffed and dusty. He made it with its lid open on purpose: "I
 // asked for it to be open so the door could open and close."
 //
-// HIS FILE (assets/rescue/stasispod.glb) is his, byte for byte (POD.md5): one mesh, one material, one 1024 px picture,
-// 6,146 triangles. In his units it is 1 long (x), 0.41 wide (z; its front, the screen's side, is +z), 0.46 tall with its
-// lid open (y up, its foot on 0), its middle over x = z = 0.
+// HIS FILE (assets/rescue/stasispod2.glb) is his, byte for byte (POD.md5): his second, "I just fixed it up in Blender"
+// (his answer STAS1-2 B), two meshes: the pod (6,072 triangles, his first material and his 1024 px picture) and his glass
+// (18 triangles, its own material, ".001"), the glass where his open lid has it. In his units it is 1 long (x), 0.41
+// wide (z; its front, the screen's side, is +z), 0.46 tall with its lid open (y up, its foot on 0), its middle over
+// x = z = 0. (Against his first file, Tripo's: the same picture, byte for byte; the same places; his window cut out of
+// the lid (134 of its triangles gone, 60 new ones round the hole) and made the glass; the normals as Blender wrote them.)
 //
 // THE LID is already a piece of its own in his mesh: his triangles part into 26 pieces (joined by a shared corner, or by
-// corners on the very same spot), and the lid is one of them, its window and frame together; the latches along its free
+// corners on the very same spot), and the lid is one of them, its frame round his glass; the latches along its free
 // edge, the two status strips on its back edge and the two struts with their upper brackets are pieces of their own too.
 // Every piece whose middle stands over POD.lidAbove (his units) rides on the lid; the rest is the base (its body, the
 // three hinge knuckles on its back rim, the pad, the straps, the head rest, the struts' lower mounts). Nothing is cut.
@@ -25,23 +28,32 @@
 // (5 to 10), while its two ends sink into the raised ends' tops (up to 30 thousandths, 10 cm, at the front corners,
 // inside them: not seen).
 // Shut is POD.shut degrees from as he made it; open is his own angle (lidAngle).
-// THE GLASS: his window is painted on (the texture: light grey glass in a dark frame), and in his mesh the window and
-// its frame are one piece. The window's faces are found by his paint and his edges (rigs/stasis-1/glass2.py): from the
-// window's middle on its underside, every triangle joined to it across his edges whose paint is at least a quarter glass
-// (POD.window, 104 triangles); and only where his paint on them is glass (light, hardly coloured: POD.glass) is it drawn
-// see-through, a pixel at a time, so the window's edge is his paint's edge and no triangle of his is cut or moved.
+// THE GLASS is his own piece (his second mesh), used as it is: 15 of its 18 corners are on his lid's own corners round
+// the hole, and it turns with the lid about the same hinge. His glass material carries no settings of its own (no
+// colour, no see-through), so it is drawn as tinted glass (POD.glass): the colour his first window's glass paint was
+// drawn in (that paint's mean, #bcbebf, at 35% of its brightness), a quarter of it over what is behind, shiny.
 // ITS SIZE: at his 2.2 m one of our crew does not fit (the bed inside is 0.638 of his units long: 1.40 m). It is fitted
 // so the crew lie in it with the lid shut: POD.long metres long, the bed then 2.04 m wall to wall, the longest of the
 // eight people lying (1.93 m, crown to toes) with 2 cm to spare at each end (BED: the bed's room and where the sleeper
 // lies; src/sleeper.js). His underside rises a little toward the foot end: the pod is turned POD.level to stand level.
+// ITS COLOURS (his answer STAS1-3 C: "the pods and the uniforms both in the crashed crew's colours"): beside a wreck the
+// pods take the wreck's crew's colours (src/planet/wreck.js PAINTS) by the wreck's own rule, a pixel at a time on his
+// picture: his light paint (light, hardly coloured: POD.paint.skin) to their skin colour, his orange stripes
+// (POD.paint.accent) to their stripe colour, the rest (his greys, the screen) a shade toward theirs. Alone (the Kit Lab)
+// it is in his own colours.
+// WHO SLEEPS IN IT wears their position's colour (his words: "I like it when it looks like they are wearing certain
+// colors for their position like red-Captain, purple-engineer, yellow-drill or whatever"): POSITIONS, the crew kit's
+// band colours (kit/crew.js BAND_COLOURS) on the uniform's bands.
 //
-//   POD, POD_PIECES (the Kit Lab's catalog entry), podScale(), levelY(x, y), lidAngle(k), turnLid(p, a), readGlb(buffer),
-//   podPieces(P, I) -> { tri (each triangle's piece), pieces [{ tris, mid }], lid: triangle numbers, base: triangle
-//   numbers }, bedFrame(s) (the bed in metres for src/onbed.js, and where it lies in the pod)
+//   POD, POD_PIECES (the Kit Lab's catalog entry), POSITIONS, podScale(), levelY(x, y), lidAngle(k), turnLid(p, a),
+//   readGlb(buffer) (-> his pod's P, N, UV, I, picture, and his glass's: glass { P, N, UV, I }), podPieces(P, I) -> { tri
+//   (each triangle's piece), pieces [{ tris, mid }], lid: triangle numbers, base: triangle numbers }, bedFrame(s) (the
+//   bed in metres for src/onbed.js, and where it lies in the pod)
 
 export const POD = {
-  md5: 'b2816f5d784c092848e65b25301bb4bb',
-  his: { long: 0.99951, wide: 0.40674, tris: 6146 },    // his units: x from -0.49976 to 0.49976, z from -0.20337 to 0.20337
+  md5: '875bb2dbc5eb3519414dedffb654d08d',
+  // his units: x from -0.49976 to 0.49976, z from -0.20337 to 0.20337; his pod's triangles and his glass's
+  his: { long: 0.99951, wide: 0.40674, tris: 6072, glassTris: 18 },
   long: 3.2,                // metres long, as fitted (ITS SIZE)
   lidAbove: 0.26,           // his units: a piece whose middle is higher rides on the lid (the lowest on it 0.277, the highest of the base 0.243)
   hinge: [0.229, -0.088],   // his units: the hinge line along x, through (y, z): his knuckles' middle
@@ -50,12 +62,27 @@ export const POD = {
   // his underside is not level: it rises evenly from the head end (+x, his lowest point, 0) to the foot end (0.02 at x
   // -0.45; rigs/stasis-1/bottom.mjs): the whole pod is turned this much about z (radians) so it stands level on a floor
   level: 0.0235,
-  // the window's triangles (his numbers: rigs/stasis-1/glass2.py, the pick at a quarter glass)
-  window: [157, 158, 159, 162, 163, 201, 202, 240, 241, 422, 437, 438, 439, 440, 542, 587, 593, 594, 1660, 1661, 1662, 1663, 1664, 1665, 1966, 1969, 2080, 2081, 2082, 2083, 2190, 2220, 2221, 2222, 2223, 2230, 2231, 2964, 2965, 2966, 2967, 2968, 2969, 3091, 3102, 3103, 3104, 3105, 3106, 3107, 3110, 3111, 3112, 3113, 3184, 3185, 3284, 3285, 3286, 3287, 3292, 3293, 3294, 3295, 3304, 3305, 3306, 3307, 3310, 3311, 4365, 4604, 4605, 4606, 4607, 4854, 4855, 4856, 4857, 4932, 4933, 5762, 5763, 5766, 5767, 5768, 5769, 5876, 5877, 5882, 5883, 5884, 5885, 5956, 5957, 5958, 5959, 6071, 6082, 6083, 6084, 6085, 6090, 6091],
-  // where his paint is glass: lighter than `light` (0 black, 1 white), less coloured than `sat`, eased over `soft`; the
-  // glass let through: its own paint at `paint` of its brightness, `opacity` of it over what is behind
-  glass: { light: 0.5, sat: 0.3, soft: 0.08, paint: 0.35, opacity: 0.25 },
+  // his glass drawn as glass (THE GLASS): its colour (the screen's), how much of it over what is behind, how rough
+  glass: { colour: '#757778', opacity: 0.25, roughness: 0.18 },
+  // his paint by the wreck's classes (ITS COLOURS; HSL as the screen shows it, 0..1, hue in degrees): his light paint
+  // (lighter than `light`, less coloured than `sat`: src/planet/wreck.js paintClass's own 'skin'), his orange (hue within
+  // `hue`, more coloured than `sat`, lighter than `light`: measured on his picture, his stripes are hue 23 to 28, the
+  // wreck's own accent rule is for our ships' yellow, 28 to 62); each shaded as his paint is: its lightness over `by`
+  // (the wreck's own, at most `most`)
+  paint: { skin: { light: 0.6, sat: 0.42, by: 0.82 }, accent: { hue: [15, 40], sat: 0.45, light: 0.25, by: 0.5 }, most: 1.15 },
 };
+// THE POSITIONS of whoever sleeps in a pod, and the colour each wears (the crew kit's band colours, kit/crew.js
+// BAND_COLOURS, by name): his three (red for the captain, purple for the engineer, yellow for the drill operator: the
+// crew kit's gold, its yellow) and two more the crashed crews have: blue for a pilot, green for a medic. A rescue's
+// sleepers have one captain at most (src/planet/pods.js sleeperPositions).
+export const POSITIONS = {
+  captain: { name: 'Captain', colour: '#d9463e', band: 'red' },
+  pilot: { name: 'Pilot', colour: '#3f8fe8', band: 'blue' },
+  engineer: { name: 'Engineer', colour: '#6e28b2', band: 'purple' },
+  drill: { name: 'Drill operator', colour: '#e3b341', band: 'gold' },
+  medic: { name: 'Medic', colour: '#5cbf5a', band: 'green' },
+};
+export const POSITION_IDS = Object.keys(POSITIONS);
 export const podScale = () => POD.long / POD.his.long;
 // a point of his (his units) turned level (POD.level about z): its height then
 export const levelY = (x, y) => x * Math.sin(POD.level) + y * Math.cos(POD.level);
@@ -84,7 +111,8 @@ export function bedFrame(s = podScale(), hips = 0.92) {
 }
 
 // ── his file, read without a browser (the tests; the kit uses three's loader) ──────────────────────────────────────
-// buffer: an ArrayBuffer of a .glb; -> { json, P (positions), N, UV, I (indices), image (the picture's bytes) }
+// buffer: an ArrayBuffer of a .glb; -> { json, P (positions), N, UV, I (indices), image (the picture's bytes) } of his
+// pod (the mesh with the picture), and glass: the same of his glass (the other mesh)
 export function readGlb(buffer) {
   const dv = new DataView(buffer); let off = 12; const ch = [];
   while (off < buffer.byteLength) { const l = dv.getUint32(off, true), t = dv.getUint32(off + 4, true); ch.push({ t, o: off + 8, l }); off += 8 + l; }
@@ -94,8 +122,10 @@ export function readGlb(buffer) {
     const T = { 5126: Float32Array, 5123: Uint16Array, 5125: Uint32Array }[a.componentType];
     return new T(buffer.slice(o, o + a.count * n * T.BYTES_PER_ELEMENT));
   };
-  const pr = json.meshes[0].primitives[0], iv = json.bufferViews[json.images[0].bufferView];
-  return { json, P: acc(pr.attributes.POSITION), N: acc(pr.attributes.NORMAL), UV: acc(pr.attributes.TEXCOORD_0), I: acc(pr.indices), image: new Uint8Array(buffer, bin + (iv.byteOffset || 0), iv.byteLength) };
+  const prims = json.meshes.map((m) => m.primitives[0]), painted = (pr) => !!(json.materials[pr.material]?.pbrMetallicRoughness?.baseColorTexture);
+  const read = (pr) => pr && { P: acc(pr.attributes.POSITION), N: acc(pr.attributes.NORMAL), UV: acc(pr.attributes.TEXCOORD_0), I: acc(pr.indices) };
+  const pr = prims.find(painted), iv = json.bufferViews[json.images[0].bufferView];
+  return { json, ...read(pr), glass: read(prims.find((p) => p !== pr)), image: new Uint8Array(buffer, bin + (iv.byteOffset || 0), iv.byteLength) };
 }
 
 // HIS PIECES: P his positions (x, y, z), I his triangles' corners; each triangle's piece (corners joined by a triangle,

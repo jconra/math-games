@@ -18,13 +18,15 @@
 //                                           its x, its front +z), foot ([x, y, z] its footprint's points in the world,
 //                                           each under the ground), under (each foot point's depth under the ground,
 //                                           m), wreck (m to the wreck), tilt, look (who sleeps in it: an index into
-//                                           the sleepers) }], count, tried }
+//                                           the sleepers), position (theirs in the crashed crew: a POSITIONS id) }],
+//                                           count, tried }
 //   footprintTris(plan)                     the pods' footprints as triangles in the world, for wreck.js clearUnder
 //   sleeperOrder(seed, n)                   the sleepers in the seed's order (no two pods the same person)
+//   sleeperPositions(seed, n)               each sleeper's position in the crashed crew, by the seed, one captain at most
 //   PODS                                    the numbers
 import { rng, subSeed } from './noise.js';
 import { wrapD } from './land.js';
-import { POD } from '../../kit/stasispod-plan.js';
+import { POD, POSITION_IDS } from '../../kit/stasispod-plan.js';
 
 export const PODS = {
   count: [3, 6],
@@ -112,6 +114,15 @@ export function sleeperOrder(seed, n = 8) {
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
   return o;
 }
+// THEIR POSITIONS in the crashed crew (kit/stasispod-plan.js POSITIONS; the game's maker: "red-Captain,
+// purple-engineer, yellow-drill or whatever"), by the seed (its own draw, so who sleeps where and their positions don't
+// go together): each of the n drawn from the positions alike, the captain's left out once one is drawn, so a rescue has
+// one captain at most (and some none)
+export function sleeperPositions(seed, n) {
+  const R = rng(subSeed(seed, 'pod positions')), out = []; let left = [...POSITION_IDS];
+  for (let i = 0; i < n; i++) { const p = left[Math.floor(R() * left.length)]; out.push(p); if (p === 'captain') left = left.filter((q) => q !== 'captain'); }
+  return out;
+}
 
 // ── where they lie ───────────────────────────────────────────────────────────────────────────────────────────────
 export function podsPlan(land, seed, { site, tris }) {
@@ -154,6 +165,7 @@ export function podsPlan(land, seed, { site, tris }) {
   }
   // each set on the ground: leant with the ground under its footprint (no more than PODS.tilt), then lowered until its
   // highest foot point is PODS.sink[0] under the ground there
+  const posts = sleeperPositions(seed, chosen.length);
   const pods = chosen.map((c, i) => {
     const nrm = plane(land, c.ring), ang = Math.min(PODS.tilt, Math.acos(Math.min(1, nrm[1])));
     // (the pod's own axes: x along (cos yaw, 0, -sin yaw), y up, z across (sin yaw, 0, cos yaw), then leant about the
@@ -167,7 +179,7 @@ export function podsPlan(land, seed, { site, tris }) {
     y -= Math.max(...above) + PODS.sink[0];
     const foot = at(y), under = foot.map((p) => +(land.heightAt(p[0], p[2]) - p[1]).toFixed(3));
     const mat = [X[0], X[1], X[2], 0, Y[0], Y[1], Y[2], 0, Z[0], Z[1], Z[2], 0, c.x, y, c.z, 1];
-    return { x: c.x, z: c.z, y, yaw: c.yaw, tilt: +ang.toFixed(3), mat, foot, under, wreck: +c.wreck.toFixed(2), ring: c.ring, look: order[i % order.length] };
+    return { x: c.x, z: c.z, y, yaw: c.yaw, tilt: +ang.toFixed(3), mat, foot, under, wreck: +c.wreck.toFixed(2), ring: c.ring, look: order[i % order.length], position: posts[i] };
   });
   return { pods, count: n, tried: tried.length };
 }

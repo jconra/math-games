@@ -27,7 +27,7 @@ import { makeBeams, beamsOf } from '../../kit/beams.js';
 import { loadForklift, standForklift } from '../../kit/forklift.js';
 import { makePallets } from '../../kit/cargopallets.js';
 import { loadPod, podMaterials, makePod } from '../../kit/stasispod.js';
-import { POD, POD_PIECES } from '../../kit/stasispod-plan.js';
+import { POD, POD_PIECES, POSITION_IDS } from '../../kit/stasispod-plan.js';
 // (his stasis pod is the lab's to show for now, not the game's: its entry is added to the catalog here, in the Medical
 // group, and nothing the game loads knows of it)
 Object.assign(PIECES, POD_PIECES);
@@ -257,16 +257,20 @@ async function showRoom(id = state.room) {
   parkForklift();
 }
 // SOMEONE ASLEEP IN HIS STASIS POD (src/sleeper.js): one of the eight people the title offers, in turn each time the
-// pod is shown asleep (or ?sleeper=<look id>); the crew kit and the sleeper's code are fetched the first time only
+// pod is shown asleep (or ?sleeper=<look id>), in a position's colour, the positions in turn too (or
+// ?position=captain|pilot|engineer|drill|medic; kit/stasispod-plan.js POSITIONS); the crew kit and the sleeper's code
+// are fetched the first time only
 let crewLib = null, sleeperTurn = 0, podClock = 0, podHeld = false;
 async function sleepIn(pod, stage) {
   try {
     const [{ loadCrew }, { makeSleeper, SLEEPERS }] = await Promise.all([import('../../kit/crew.js'), import('../../src/sleeper.js')]);
     crewLib = crewLib || loadCrew(); const lib = await crewLib;
     if (stage !== shownFor) return;
-    const want = q.get('sleeper'), look = SLEEPERS.includes(want) ? want : SLEEPERS[sleeperTurn++ % SLEEPERS.length];
+    const want = q.get('sleeper'), look = SLEEPERS.includes(want) ? want : SLEEPERS[sleeperTurn % SLEEPERS.length];
+    const wantP = q.get('position'), position = POSITION_IDS.includes(wantP) ? wantP : POSITION_IDS[sleeperTurn % POSITION_IDS.length];
+    sleeperTurn++;
     loading('Someone lying down…', true);
-    const S = await makeSleeper(lib, look, pod);
+    const S = await makeSleeper(lib, look, pod, { position });
     if (stage !== shownFor) { S.dispose(); return; }
     S.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     shown.sleeper = S; renderer.shadowMap.needsUpdate = true; loading(''); readout();
@@ -364,7 +368,7 @@ let sceneCalls = 0, sceneTris = 0;
 function stats() {
   const s = built?.stats || {};
   const sl = shown.sleeper ? shown.sleeper.count() : null;
-  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: (s.draws || 0) + (shown.model?.draws || 0) + (sl ? sl.draws : 0), tris: (s.tris || 0) + (shown.model?.tris || 0) + (sl ? sl.tris : 0), model: shown.model, sleeper: sl && { look: shown.sleeper.look, ...sl }, pod: shown.pod ? { k: +shown.pod.k.toFixed(3) } : null, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
+  return { tab: state.tab, what: state.tab === 'parts' ? `${state.part}:${state.variant}` : state.tab === 'sky' ? state.sky : state.room, quality: state.quality, pieces: s.pieces, meshDraws: (s.draws || 0) + (shown.model?.draws || 0) + (sl ? sl.draws : 0), tris: (s.tris || 0) + (shown.model?.tris || 0) + (sl ? sl.tris : 0), model: shown.model, sleeper: sl && { look: shown.sleeper.look, position: shown.sleeper.position, ...sl }, pod: shown.pod ? { k: +shown.pod.k.toFixed(3) } : null, sceneCalls, sceneTris, fps: Math.round(fps.v), frameMs: +fps.ms.toFixed(2), cpuMs: +fps.cpu.toFixed(2), buildMs: s.ms, bake: s.bake, lights: s.lights, doors: s.doors, problems: s.problems, ratio: renderer.getPixelRatio(), size: [canvas.width, canvas.height], sky: { ...sky.stats, shown: sky.object.visible } };
 }
 function readout() {
   const s = stats(), what = state.tab === 'parts' ? `${PIECES[state.part].name} · ${state.variant}` : state.tab === 'sky' ? 'Sky · ' + SKY_VIEWS[state.sky].name : (ROOMS.find((r) => r[0] === state.room)?.[1] || state.room);

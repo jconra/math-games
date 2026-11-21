@@ -26,8 +26,10 @@
 // ramp to 3 to 6 pods on the ground beside a crashed ship; nobody is hurt, they are asleep in the pods, safe until
 // opened): with a wreck, as many pods as the planet's seed says (3 to 6) lie on the ground beside it (src/planet/pods.js:
 // near it but clear of it, near each other with room to walk between, never on the landing place, each on the ground
-// and sunk a little into it), someone of our crew asleep in each (src/sleeper.js). The Pods row opens and shuts their
-// lids together, for looking; the Look row gets a Pods view. Only here for now: nothing in the game has them yet.
+// and sunk a little into it), someone of our crew asleep in each (src/sleeper.js). The pods in the wreck's crew's colours
+// (repainted with it), each sleeper's uniform in their position's colour (his answer STAS1-3 C). The Pods row opens and
+// shuts their lids together, for looking; the Look row gets a Pods view. Only here for now: nothing in the game has them
+// yet.
 //
 // Address switches: ?seed=N the planet; ?kind=moon|meadow|canyon a new one of that kind; ?q=low|medium|high graphics;
 // ?view=landing|above|low|wreck|pods; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
@@ -101,8 +103,8 @@ function wreckAddress(u) {
 let podPlan = null, pods = null, podsWant = q.get('pods') === 'open' ? 1 : 0, crewLib = null;
 const NUMBERS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
 // the menu's line about it: the wreck as it is shown (said again when its colours are changed where it lies), and its pods
-const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}${podPlan ? `, ${NUMBERS[podPlan.pods.length] || podPlan.pods.length} stasis pods beside it, someone asleep in each` : ''}.` : '');
-function repaint(id) { wreck.paint(id); const s = document.getElementById('wreckSay'); if (s) s.textContent = wreckSay(); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
+const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}${podPlan ? `, ${NUMBERS[podPlan.pods.length] || podPlan.pods.length} stasis pods beside it in the same colours, someone of its crew asleep in each` : ''}.` : '');
+function repaint(id) { wreck.paint(id); if (pods) pods.paint(wreck.paintId); const s = document.getElementById('wreckSay'); if (s) s.textContent = wreckSay(); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
 // the pods' lids on their way open (1) or shut (0)
 function setPods(k) { podsWant = k ? 1 : 0; if (pods) pods.open(podsWant); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); paintChips(); }
 
@@ -268,7 +270,8 @@ async function build(seed, { keepView = false } = {}) {
     LAB.land = land;
     if (W) wreck = LAB.wreck = W.draw({ scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint: pick.paint });
     // the pods drawn (shut or open as the Pods row says); someone asleep in each once the planet is up (below)
-    if (plan && await podFile) { pods = LAB.pods = await makePods({ plan, scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir }); pods.open(podsWant); for (const p of pods.pods) p.set(podsWant); }
+    // (in the wreck's crew's colours: his answer STAS1-3 C)
+    if (plan && await podFile) { pods = LAB.pods = await makePods({ plan, scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint: wreck ? wreck.paintId : pick.paint }); pods.open(podsWant); for (const p of pods.pods) p.set(podsWant); }
     renderer.toneMappingExposure = planet.exposure;
     placeRing();
     if (!keepView) setView(viewName); else applyCam();

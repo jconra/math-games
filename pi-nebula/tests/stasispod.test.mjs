@@ -1,7 +1,8 @@
 // THE STASIS PODS for the rescue runs: the game's maker's own model (kit/stasispod-plan.js, kit/stasispod.js), its lid on
 // its hinge, and 3 to 6 of them on a planet's ground beside the crashed ship (src/planet/pods.js). His answers MED-1,
 // MED-2: you walk down the Medic's ramp to 3 to 6 pods on the ground, beside a crashed ship; nobody is hurt, they are
-// asleep in the pods, safe until opened.
+// asleep in the pods, safe until opened. His second file (STAS1-2 B: "I just fixed it up in Blender"): his glass a piece
+// of its own, turning with the lid; the pods in the crashed crew's colours, each sleeper in their position's (STAS1-3 C).
 // No browser: his file read as it is, and the wreck from each ship's own hull (as tests/wreck.test.mjs builds it) laid
 // on real planets' ground. (Whoever sleeps in a pod is the crew kit's, a browser's: measured by the rigs,
 // ~/pw/space-math/STASIS_1.md.)
@@ -10,28 +11,34 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { POD, podPieces, lidAngle, turnLid, readGlb, podScale, levelY, BED } from '../kit/stasispod-plan.js';
+import { POD, POSITIONS, POSITION_IDS, podPieces, lidAngle, turnLid, readGlb, podScale, levelY, BED } from '../kit/stasispod-plan.js';
 import { makeLand } from '../src/planet/land.js';
-import { wreckPlan, breakApart, wreckSite, settle, wreckFor, apply, WRECK } from '../src/planet/wreck.js';
-import { podsPlan, podCount, sleeperOrder, footprintTris, PODS } from '../src/planet/pods.js';
+import { wreckPlan, breakApart, wreckSite, settle, wreckFor, apply, WRECK, PAINTS } from '../src/planet/wreck.js';
+import { podsPlan, podCount, sleeperOrder, sleeperPositions, footprintTris, PODS } from '../src/planet/pods.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
 import * as MEDIC from '../kit/ships/medic-built.hull.js';
 import * as HAULER from '../kit/ships/hauler-built.hull.js';
 
-const FILE = new URL('../assets/rescue/stasispod.glb', import.meta.url);
+const FILE = new URL('../assets/rescue/stasispod2.glb', import.meta.url);
 const bytes = fs.readFileSync(FILE), G = readGlb(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
-const { P, I } = G, parts = podPieces(P, I);
+const { P, I } = G, parts = podPieces(P, I), GL = G.glass;
 const pt = (v) => [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]];
 const cornersOf = (tris) => { const s = new Set(); for (const t of tris) for (let c = 0; c < 3; c++) s.add(I[t * 3 + c]); return [...s]; };
+const glassPts = Array.from({ length: GL.P.length / 3 }, (_, v) => [GL.P[v * 3], GL.P[v * 3 + 1], GL.P[v * 3 + 2]]);
 
-test('his file as he made it: one mesh, his 6,146 triangles, byte for byte his', () => {
+test('his file as he made it, his two pieces: the pod (6,072 triangles, his picture) and his glass (18), byte for byte his', () => {
   assert.equal(crypto.createHash('md5').update(bytes).digest('hex'), POD.md5);
-  assert.equal(G.json.meshes.length, 1); assert.equal(G.json.materials.length, 1); assert.equal(G.json.images.length, 1);
+  assert.equal(G.json.meshes.length, 2); assert.equal(G.json.materials.length, 2); assert.equal(G.json.images.length, 1);
   assert.equal(I.length / 3, POD.his.tris);
+  assert.equal(GL.I.length / 3, POD.his.glassTris);
+  // (the pod's material is his first, with his picture; the glass's its own, without one)
+  const mat = (k) => G.json.materials[G.json.meshes[k].primitives[0].material];
+  assert.ok(mat(0).pbrMetallicRoughness.baseColorTexture); assert.ok(!(mat(1).pbrMetallicRoughness || {}).baseColorTexture);
+  assert.match(mat(1).name, /\.001$/);
 });
 
-test('his lid is a piece of its own: every triangle on the lid or the base, nothing cut; the window all on the lid', () => {
+test('his lid is a piece of its own: every triangle on the lid or the base, nothing cut; his glass in his lid\'s hole', () => {
   assert.equal(parts.lid.length + parts.base.length, POD.his.tris);
   assert.equal(new Set([...parts.lid, ...parts.base]).size, POD.his.tris, 'no triangle in both');
   // (the lid's own piece is the second biggest of his 26, the base the biggest; whatever rides on the lid stands over
@@ -39,23 +46,36 @@ test('his lid is a piece of its own: every triangle on the lid or the base, noth
   assert.equal(parts.pieces.length, 26);
   assert.ok(parts.pieces[0].mid[1] < POD.lidAbove && parts.pieces[1].mid[1] > POD.lidAbove);
   for (const p of parts.pieces) assert.ok(Math.abs(p.mid[1] - POD.lidAbove) > 0.01, `a piece's middle ${p.mid[1].toFixed(3)} too near the line`);
-  const lid = new Set(parts.lid);
-  for (const t of POD.window) assert.ok(lid.has(t), `window triangle ${t} is not on the lid`);
-  assert.equal(new Set(POD.window).size, POD.window.length);
+  // his glass where his open lid has it: its corners round its edge on the lid's own corners (15 of its 18 places: the
+  // other three, along its middle, stand 0.046 off its frame), none on the base's
+  const lidAt = new Set(cornersOf(parts.lid).map((v) => pt(v).map((x) => x.toFixed(5)).join(','))), baseAt = new Set(cornersOf(parts.base).map((v) => pt(v).map((x) => x.toFixed(5)).join(',')));
+  const places = [...new Set(glassPts.map((p) => p.map((x) => x.toFixed(5)).join(',')))];
+  assert.equal(places.length, 18);
+  assert.equal(places.filter((k) => lidAt.has(k)).length, 15);
+  assert.equal(places.filter((k) => baseAt.has(k)).length, 0);
 });
 
-test('the lid\'s hinge: turned shut and open again it is back exactly where he made it; and back exactly to shut', () => {
-  const pts = cornersOf(parts.lid).map(pt);
+test('the lid\'s hinge, his glass on it: turned shut and open again both are back exactly where he made them; and back exactly to shut', () => {
+  // (the lid's corners, then his glass's: the glass turns with the lid, about the same hinge)
+  const lidPts = cornersOf(parts.lid).map(pt), pts = [...lidPts.slice(0, 400), ...glassPts];
   const shut = lidAngle(0), open = lidAngle(1);
   assert.equal(open, 0, 'open is as he made it');
   assert.ok(Math.abs(shut - POD.shut * Math.PI / 180) < 1e-12);
   // shut, then back open: his own points
-  for (const p of pts) { const q = turnLid(turnLid(p, shut), -shut); for (let c = 0; c < 3; c++) assert.ok(Math.abs(q[c] - p[c]) < 1e-12); }
+  for (const p of [...lidPts, ...glassPts]) { const q = turnLid(turnLid(p, shut), -shut); for (let c = 0; c < 3; c++) assert.ok(Math.abs(q[c] - p[c]) < 1e-12); }
   // shut, opened part way (any way there), then shut again: the shut place exactly
-  for (const k of [0.13, 0.5, 0.97, 1]) for (const p of pts.slice(0, 400)) {
+  for (const k of [0.13, 0.5, 0.97, 1]) for (const p of pts) {
     const s = turnLid(p, shut), part = turnLid(p, lidAngle(k)), back = turnLid(part, shut - lidAngle(k));
     for (let c = 0; c < 3; c++) assert.ok(Math.abs(back[c] - s[c]) < 1e-12);
   }
+  // the glass keeps its place on the lid all the way (each glass corner's distance to a lid corner as he made it)
+  for (const k of [0, 0.37, 1]) for (const g of glassPts) {
+    const l = lidPts[(lidPts.length * Math.abs(g[0] + 0.5)) | 0], d0 = Math.hypot(...[0, 1, 2].map((c) => g[c] - l[c]));
+    const a = turnLid(g, lidAngle(k)), b = turnLid(l, lidAngle(k)); assert.ok(Math.abs(Math.hypot(...[0, 1, 2].map((c) => a[c] - b[c])) - d0) < 1e-12);
+  }
+  // shut, his glass is inside the pod's height and over the bed: its lowest point 15 cm or more over the pad's top
+  const low = Math.min(...glassPts.map((g) => turnLid(g, shut)[1]));
+  assert.ok((low - BED.top) * podScale() > 0.15, `shut, the glass's lowest point ${((low - BED.top) * podScale()).toFixed(3)} m over the bed`);
   // the turn is about the hinge line itself: its points stay put
   const h = [0.123, POD.hinge[0], POD.hinge[1]], hs = turnLid(h, shut); for (let c = 0; c < 3; c++) assert.ok(Math.abs(hs[c] - h[c]) < 1e-12);
   // the lid's length along the hinge never changes; nothing of it goes round further than shut (k is kept 0..1)
@@ -125,6 +145,22 @@ test('how many: 3 to 6 by the planet\'s seed, each count coming up; who sleeps i
   for (let s = 1; s <= 50; s++) { const o = sleeperOrder(s); assert.deepEqual([...o].sort(), [0, 1, 2, 3, 4, 5, 6, 7]); assert.deepEqual(o, sleeperOrder(s)); }
 });
 
+test('their positions: by the seed, one captain at most, every position coming up; his three colours as he said', () => {
+  // (his words: "red-Captain, purple-engineer, yellow-drill")
+  assert.equal(POSITIONS.captain.band, 'red'); assert.equal(POSITIONS.engineer.band, 'purple'); assert.equal(POSITIONS.drill.band, 'gold');
+  assert.equal(new Set(POSITION_IDS.map((id) => POSITIONS[id].colour)).size, POSITION_IDS.length, 'each position its own colour');
+  const count = new Map(), captains = [0, 0];
+  for (let s = 1; s <= 400; s++) {
+    const n = podCount(s), p = sleeperPositions(s, n);
+    assert.equal(p.length, n); assert.deepEqual(p, sleeperPositions(s, n));
+    for (const id of p) { assert.ok(POSITIONS[id], id); count.set(id, (count.get(id) || 0) + 1); }
+    const c = p.filter((id) => id === 'captain').length; assert.ok(c <= 1, `seed ${s}: ${c} captains`); captains[c]++;
+  }
+  for (const id of POSITION_IDS) assert.ok(count.get(id) > 100, `${id} came up ${count.get(id) || 0} times`);
+  // (a captain in some rescues, none in others)
+  assert.ok(captains[0] > 50 && captains[1] > 50, `no captain ${captains[0]}, one ${captains[1]} of 400`);
+});
+
 test('the pods lie beside the wreck: never on the landing place, clear of the wreck, apart enough to walk between, near it', () => {
   for (const land of LANDS) {
     const W = WRECKS.get(land), plan = podsPlan(land, land.seed, W), L = land.landing, T = W.tris, tag = `${land.kind.id} ${land.seed}`;
@@ -162,10 +198,22 @@ test('each pod sits on the ground: leant with it, sunk a little, none of it abov
   }
 });
 
-test('the same seed and the same wreck, the same pods in the same places; another seed, other places', () => {
+test('the same seed and the same wreck, the same pods in the same places, the same colours; another seed, others', () => {
   const land = LANDS[1], W = WRECKS.get(land), a = podsPlan(land, land.seed, W), b = podsPlan(land, land.seed, W);
   assert.deepEqual(a.pods.map((p) => p.mat), b.pods.map((p) => p.mat));
   assert.deepEqual(a.pods.map((p) => p.look), b.pods.map((p) => p.look));
   const c = podsPlan(land, land.seed + 1, W);
   assert.notDeepEqual(a.pods.map((p) => p.mat), c.pods.map((p) => p.mat));
+  // the colours: the pods the wreck's (its crew's, by the seed: wreck.js wreckFor), each sleeper their position's
+  for (const L of LANDS) {
+    const W2 = WRECKS.get(L), p1 = podsPlan(L, L.seed, W2), p2 = podsPlan(L, L.seed, W2), tag = `${L.kind.id} ${L.seed}`;
+    assert.deepEqual(p1.pods.map((p) => p.position), p2.pods.map((p) => p.position), tag);
+    assert.deepEqual(p1.pods.map((p) => p.position), sleeperPositions(L.seed, p1.pods.length), tag);
+    assert.ok(p1.pods.filter((p) => p.position === 'captain').length <= 1, `${tag}: one captain at most`);
+    const paint = wreckFor(L.seed).paint; assert.equal(paint, wreckFor(L.seed).paint); assert.ok(PAINTS[paint], tag);
+    for (const k of ['skin', 'accent']) assert.match(PAINTS[paint][k], /^#[0-9a-f]{6}$/);
+  }
+  // (the colours come up differently over the seeds: all three of the wreck's, more than one set of positions)
+  const paints = new Set(), sets = new Set(); for (let s = 1; s <= 60; s++) { paints.add(wreckFor(s).paint); sets.add(sleeperPositions(s, 4).join()); }
+  assert.equal(paints.size, Object.keys(PAINTS).length); assert.ok(sets.size > 30);
 });

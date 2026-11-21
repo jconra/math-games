@@ -2,14 +2,18 @@
 // kit/stasispod.js; who sleeps in each: src/sleeper.js). Each pod is his model as it is, lit as the planet's own things
 // are (the sun and the sky's light from the ground's light picture where it lies, the haze: as src/planet/wreckship.js
 // draws the wreck), lowered by the planet's curve where it lies as seen from the camera (the ground's own rule: d^2 /
-// (2 CURVE)), with whoever sleeps in it riding in it. The lids swing open or shut together (open(k)). Fetched only when
-// a planet with a wreck is made: the pod's file, then (once the planet is up) the crew kit for the sleepers.
+// (2 CURVE)), with whoever sleeps in it riding in it. The lids swing open or shut together (open(k)). In the crashed
+// crew's colours (his answer STAS1-3 C: "the pods and the uniforms both in the crashed crew's colours"): the wreck's
+// (src/planet/wreck.js PAINTS), and each sleeper's uniform in their position's colour (the plan's, by the seed). Fetched
+// only when a planet with a wreck is made: the pod's file, then (once the planet is up) the crew kit for the sleepers.
 //
-//   const pods = await makePods({ plan, scene, ground, sky, sunDir })   plan: src/planet/pods.js podsPlan; ground,
-//                                                    sky and sunDir: the planet's (its light picture, its haze, its sun:
-//                                                    each pod's shadow); the pods are shown at once, shut, empty
-//   await pods.fill(lib)                             someone asleep in each (lib: the crew kit's, loadCrew), the far
-//                                                    copies made ready; pods.filled
+//   const pods = await makePods({ plan, scene, ground, sky, sunDir, paint })   plan: src/planet/pods.js podsPlan;
+//                                                    ground, sky and sunDir: the planet's (its light picture, its haze,
+//                                                    its sun: each pod's shadow); paint: the wreck's colours (a PAINTS
+//                                                    id; none: his own); the pods are shown at once, shut, empty
+//   pods.paint(id)                                   the pods in another of the colours (the wreck repainted)
+//   await pods.fill(lib)                             someone asleep in each (lib: the crew kit's, loadCrew), in their
+//                                                    position's colour, the far copies made ready; pods.filled
 //   pods.open(k)                                     every lid on its way to open (1) or shut (0)
 //   pods.update(camera, dt)                          each frame: the curve, the lids, the sleepers near or far
 //   pods.stats() -> { pods, draws, tris, sleepers }  (what is drawn: the pods and the sleepers shown)
@@ -18,7 +22,8 @@ import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { HAZE_SKY_GLSL } from './cover.js';
-import { loadPod, podMaterials, makePod } from '../../kit/stasispod.js';
+import { PAINTS } from './wreck.js';
+import { loadPod, podMaterials, podPaint, makePod } from '../../kit/stasispod.js';
 
 // the sleepers: drawn with the crew kit's far copy beyond `far` metres from the camera, not drawn beyond `seen` (they are
 // behind his tinted glass: from further than this they are hardly made out, and each costs about a millisecond a frame
@@ -78,9 +83,9 @@ function shadowMaterial({ ground, sunDir, air }) {
   });
 }
 
-export async function makePods({ plan, scene, ground, sky = null, sunDir = null }) {
+export async function makePods({ plan, scene, ground, sky = null, sunDir = null, paint = null }) {
   const t0 = performance.now(), P = await loadPod(), tLoad = performance.now();
-  const mats = podMaterials(P, { patch: (m, kind) => onPlanet(m, { ground, sky, kind }) });
+  const mats = podMaterials(P, { patch: (m, kind) => onPlanet(m, { ground, sky, kind }), paint: PAINTS[paint] || null });
   const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;
   const group = new THREE.Group(); group.name = 'planet:pods'; scene.add(group);
   const pods = plan.pods.map((pp) => {
@@ -94,14 +99,16 @@ export async function makePods({ plan, scene, ground, sky = null, sunDir = null 
   const api = {
     group, pods, facts: P.facts, times: { load: Math.round(tLoad - t0), made: Math.round(performance.now() - t0) },
     sleepersShown: true,     // (for the rigs: the sleepers left out, to measure them)
+    paintId: PAINTS[paint] ? paint : null,
     get filled() { return filled; }, get want() { return want; },
     open(k) { want = k ? 1 : 0; },
-    // someone asleep in each pod, one after another (each pod's own look from the plan)
+    paint(id) { api.paintId = PAINTS[id] ? id : null; podPaint(mats, PAINTS[id] || null); },
+    // someone asleep in each pod, one after another (each pod's own look and position from the plan)
     async fill(lib) {
       const t = performance.now(), { makeSleeper, SLEEPERS } = await import('../sleeper.js');
       for (const p of pods) {
         if (disposed) return;
-        p.sleeper = await makeSleeper(lib, SLEEPERS[p.plan.look % SLEEPERS.length], p, { far: true });
+        p.sleeper = await makeSleeper(lib, SLEEPERS[p.plan.look % SLEEPERS.length], p, { far: true, position: p.plan.position });
         // (the crew kit's people are lit by the scene's lights as they are; the planet's sun and sky are among them)
         p.sleeper.root.visible = false;
       }
@@ -118,7 +125,7 @@ export async function makePods({ plan, scene, ground, sky = null, sunDir = null 
     },
     stats() {
       let draws = 0, tris = 0, sleepers = 0;
-      const sh = shadow ? 2 : 0, shTris = shadow ? P.facts.tris - P.facts.windowTris : 0;
+      const sh = shadow ? 2 : 0, shTris = shadow ? P.facts.tris - P.facts.glassTris : 0;
       for (const p of pods) { draws += P.facts.draws + sh; tris += P.facts.tris + shTris; if (p.sleeper && p.sleeper.root.visible) { const c = p.sleeper.count(); draws += c.draws; tris += c.tris; sleepers++; } }
       return { pods: pods.length, draws, tris, sleepers };
     },
