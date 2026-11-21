@@ -254,7 +254,8 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
 function makeWay(W, dt, bodies, free) {
   const by = nearestOf(W.pos, bodies);
   if (!by || by.d > PASS.apart + 0.35) return false;
-  const s = WALK.side * dt, gx = (W.pos.x - by.o.x) / (by.d || 1), gz = (W.pos.z - by.o.z) / (by.d || 1);
+  // (overlapping anyone, at half speed as every step)
+  const s = WALK.side * dt * (overlaps(W.pos.x, W.pos.z, bodies) ? PASS.slow : 1), gx = (W.pos.x - by.o.x) / (by.d || 1), gz = (W.pos.z - by.o.z) / (by.d || 1);
   for (const a of [0, 0.6, -0.6, 1.2, -1.2, 1.57, -1.57]) {
     const dx = gx * Math.cos(a) - gz * Math.sin(a), dz = gz * Math.cos(a) + gx * Math.sin(a), nx = W.pos.x + dx * s, nz = W.pos.z + dz * s;
     if ((free && !free(nx, nz)) || bumps(W.pos.x, W.pos.z, nx, nz, bodies)) continue;
