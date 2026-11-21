@@ -390,7 +390,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // ship once you click the pilots seat"): the captain and one of his crew, here from now on. The captain is
         // taken out of the station meanwhile (he waited by the ship's lift)
         const pp = ctx.people ? ctx.people() : null;
-        if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: SHIP.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random })
+        if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: SHIP.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random, walls })
           .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard) pp.aboard(M.captain, true); T.log.push('aboard: ' + A.list.map((w) => w.name).join(', ')); })
           .catch((e) => { console.error(e); if (window.oops) window.oops(e); });
       }

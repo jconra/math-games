@@ -6,7 +6,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { placesOf, wayOf, walkStep, inTheWay, wayBack, WALK, SIT, LIE } from '../src/aboardplan.js';
+import { placesOf, wayOf, walkStep, inTheWay, wayBack, floorOf, WALK, SIT, LIE } from '../src/aboardplan.js';
+import { PASS } from '../src/passing.js';
 // (the ships that can be boarded, as src/boarding.js lists them: read from its text, it loads three.js)
 const SHIPS = [...readFileSync(new URL('../src/boarding.js', import.meta.url), 'utf8').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, (?:cockpit: [\w.]+, )?bp: '([\w-]+)'/g)].map((m) => ({ id: m[1], bp: m[2] }));
 
@@ -65,35 +66,51 @@ test('the way between two rooms runs through their doors, in turn; a room to its
 // THE PLAYER IN THE WAY (WALKOUT-1): the walk out of the Miner after a run, from the cockpit through the mess to the
 // lift, stopped for good by the captain walking the other way and waiting in the mess for the player to pass (who could
 // not: past the table it is 0.75 m wide). A stand-in for the player's own walking (src/player.js loads three.js): along
-// the cabin's middle at MOVE.walk, never nearer than MOVE.near to anyone (in that passage there is no going round). The
-// one walking by the plain part's own steps (walkStep), turned back as src/aboard.js turns them (wayBack).
-const MOVE = (() => { const m = /export const MOVE = \{ walk: ([\d.]+),[^}]*near: ([\d.]+) \}/.exec(readFileSync(new URL('../src/player.js', import.meta.url), 'utf8')); return { walk: +m[1], near: +m[2] }; })();
+// the cabin's middle at MOVE.walk on the blueprint's floor (floorOf), never nearer than PASS.apart to anyone: walked
+// into, slid round them (pushed out to PASS.apart where the floor allows; where it does not, the step not taken), as
+// player.js does. The one walking by the plain part's own steps (walkStep, on the same floor), turned back as
+// src/aboard.js turns them (wayBack).
+const MOVE = (() => { const m = /export const MOVE = \{ walk: ([\d.]+),/.exec(readFileSync(new URL('../src/player.js', import.meta.url), 'utf8')); return { walk: +m[1], near: PASS.apart }; })();
+function playerStep(pl, goal, bodies, free, dt) {
+  const gx = goal[0] - pl.x, gz = goal[1] - pl.z, L = Math.hypot(gx, gz); if (L < 1e-6) return;
+  const s = Math.min(L, MOVE.walk * dt), bx = pl.x, bz = pl.z;
+  let nx = pl.x + gx / L * s, nz = pl.z + gz / L * s;
+  // (a wall: slid along it)
+  if (!free(nx, nz)) { if (free(nx, pl.z)) nz = pl.z; else if (free(pl.x, nz)) nx = pl.x; else return; }
+  pl.x = nx; pl.z = nz;
+  for (const o of bodies) {
+    const dx = pl.x - o.x, dz = pl.z - o.z, d = Math.hypot(dx, dz); if (d >= MOVE.near) continue;
+    const ux = d > 1e-4 ? dx / d : -gz / L, uz = d > 1e-4 ? dz / d : gx / L, x = o.x + ux * MOVE.near, z = o.z + uz * MOVE.near;
+    if (free(x, z)) { pl.x = x; pl.z = z; } else { pl.x = bx; pl.z = bz; }
+  }
+}
 function meet({ from, to, me, goal, after = 0, turn = true, secs = 60 }) {
-  const bp = bpOf('miner-ore-cockpit'), P = placesOf(bp, { deck: 0, cockpitFloor: 0.62 }), place = (id) => P.find((p) => p.id === id), a = place(from), b = place(to);
-  const W = { pos: { x: a.x, z: a.z }, heading: 0, wait: 0, leg: 0, from: a, target: b, there: null, turned: 0, waitMost: 0,
+  const bp = bpOf('miner-ore-cockpit'), P = placesOf(bp, { deck: 0, cockpitFloor: 0.62 }), place = (id) => P.find((p) => p.id === id), a = place(from), b = place(to), free = floorOf(bp);
+  const W = { pos: { x: a.x, z: a.z }, heading: 0, wait: 0, leg: 0, from: a, target: b, there: null, turned: 0, waitMost: 0, getUp: true,
     way: [a.stand, ...wayOf(bp, a.room, b.room), b.stand, ...(b.kind === 'sit' ? [[b.x, b.z]] : [])].map(([x, z]) => ({ x, z })) };
   const pl = { x: me[0], z: me[1] }, dt = 1 / 30;
   let arrived = null, nearest = Infinity;
   for (let t = 0; t < secs && !(arrived != null && W.there); t += dt) {
-    // the player, setting off `after` seconds after the walker
-    if (t >= after && arrived == null) {
-      const gx = goal[0] - pl.x, gz = goal[1] - pl.z, L = Math.hypot(gx, gz), s = Math.min(L, MOVE.walk * dt);
-      const nx = pl.x + gx / L * s, nz = pl.z + gz / L * s;
-      if (Math.hypot(nx - W.pos.x, nz - W.pos.z) >= MOVE.near) { pl.x = nx; pl.z = nz; }
-      if (Math.hypot(goal[0] - pl.x, goal[1] - pl.z) < 0.35) arrived = t;
+    // the player, setting off `after` seconds after the walker, there within 0.35 m (and on to the very spot, as a
+    // player walks into the cockpit or onto the lift: not stopped in its doorway)
+    if (t >= after) {
+      playerStep(pl, goal, W.there ? [] : [W.pos], free, dt);
+      if (arrived == null && Math.hypot(goal[0] - pl.x, goal[1] - pl.z) < 0.35) arrived = t;
     }
     // the walker
     if (!W.there) {
-      const r = walkStep(W, dt, t >= after ? pl : null);
+      const r = walkStep(W, dt, t >= after ? pl : null, { free });
       if (r === 'back' && turn) {
         const back = wayBack(W.way.slice(0, W.leg).map((v) => [v.x, v.z]), W.from);
-        [W.from, W.target] = [W.target, W.from]; W.wait = 0; W.turned++;
+        [W.from, W.target] = [W.target, W.from]; W.wait = 0; W.turned++; W.getUp = false;
         if (back.length) { W.way = back.map(([x, z]) => ({ x, z })); W.leg = 0; } else W.there = W.target;
-      } else if (r === 'wait' || r === 'back') { W.wait += dt; if (arrived == null) W.waitMost = Math.max(W.waitMost, W.wait); }   // (the player stood still at the end of their walk is only waited for)
+      } else if (r === 'wait' || r === 'back' || r === 'aside') { W.wait += dt; if (arrived == null) W.waitMost = Math.max(W.waitMost, W.wait); }   // (the player stood still at the end of their walk is only waited for)
       else if (r === 'there') W.there = W.target;
       if (W.there) { W.pos = { x: W.there.x, z: W.there.z }; }
     }
-    nearest = Math.min(nearest, Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z));
+    // (sitting or lying, they are at the place, off the floor walked: not counted; nor before the player is on their
+    // feet there: still in the cockpit's seat, or not yet up the lift)
+    if (!W.there && t > after) nearest = Math.min(nearest, Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z));
   }
   return { arrived, W, nearest };
 }
@@ -123,15 +140,18 @@ test('the walk out of the Miner after a run gets to the lift, whenever the capta
   // (he waited for the player to pass, and the player could not: the walk out stopped for good, as the rigs saw it)
   const stuck = starts.filter((after) => meet({ from: 'bunk-p', to: 'bench-b', me: COCKPIT, goal: LIFT, after, turn: false }).arrived == null);
   assert.ok(stuck.length > 0, 'waiting alone, some meetings in the mess never end');
-  for (const [from, to] of [['bunk-p', 'bench-b'], ['bunk-s', 'bench-a'], ['bench-a', 'bench-b']]) {
+  // (coming from the bunks through the mess door he turns back; from bench to bench his way runs straight along the
+  // table's edge, as ever, PASS.apart off the player's way along the counter, and they get by each other: PASSING-1)
+  for (const [from, to, back] of [['bunk-p', 'bench-b', true], ['bunk-s', 'bench-a', true], ['bench-a', 'bench-b', false]]) {
     let turned = 0;
     for (const after of starts) {
       const r = meet({ from, to, me: COCKPIT, goal: LIFT, after });
       assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: at the lift in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
       assert.ok(r.W.waitMost < WALK.back + 1.5, `${from} -> ${to} (${after} s): never stood waiting long (${r.W.waitMost.toFixed(1)} s)`);
+      assert.ok(r.nearest >= PASS.apart - 1e-6, `${from} -> ${to} (${after} s): never in each other (${r.nearest.toFixed(3)} m)`);
       turned += r.W.turned;
     }
-    assert.ok(turned > 0, `${from} -> ${to}: met head on, he turned back`);
+    if (back) assert.ok(turned > 0, `${from} -> ${to}: met head on, he turned back`);
   }
 });
 
@@ -142,6 +162,7 @@ test('the walk forward through the mess gets to the cockpit, whenever someone se
       assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: in the cockpit in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
       // (where he ends up, sitting or lying, is out of the way: the player walked past it)
       assert.ok(r.W.there, `${from} -> ${to} (${after} s): sitting or lying at the end`);
+      assert.ok(r.nearest >= PASS.apart - 1e-6, `${from} -> ${to} (${after} s): never in each other (${r.nearest.toFixed(3)} m)`);
     }
   }
 });

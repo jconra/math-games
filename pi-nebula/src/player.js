@@ -6,13 +6,16 @@
 //   P.place(feet, heading)          stand them somewhere (a spot walls.snap gave)
 //   P.update(dt, { move, run, yaw, others, clip })   move: { x, y, mag } from the input; yaw: the camera's; others: the
 //                                   people ({ pos } each, and `away` or `hidden`: not there), whom the player does not
-//                                   walk through; clip: one to play this frame whatever the legs are doing (a throw in
-//                                   the arena's game), at clipSpeed
+//                                   walk through (never nearer than MOVE.near: slid round them); clip: one to play
+//                                   this frame whatever the legs are doing (a throw in the arena's game), at clipSpeed
 //   P.pos, P.heading, P.speed (the ground really covered, m/s), P.c (the crew kit's character)
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
+import { PASS } from './passing.js';
 
-export const MOVE = { walk: 1.6, run: 4.6, accel: 9, turn: 10, near: 0.6 };   // m/s; m/s each second; radians a second; m kept off another person
+// m/s; m/s each second; radians a second; m kept off another person, middle to middle (passing.js PASS.apart: the one
+// size of a body against another, everyone's, so the player gets by people where they get by each other; it was 0.6)
+export const MOVE = { walk: 1.6, run: 4.6, accel: 9, turn: 10, near: PASS.apart };
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // the standing clip (the listening stance: the arms by the sides; the plain Idle holds them out from the body)
