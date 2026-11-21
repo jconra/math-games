@@ -2,11 +2,11 @@
 // place to sit or lie, read from the ship's own blueprint, and the way between two rooms through their doors. Nothing
 // of three.js, so it is tested in Node (tests/aboard.test.mjs); nothing of any one ship: any boarded ship's blueprint.
 //   placesOf(bp, { deck, cockpitFloor, jobs }) -> the places;  wayOf(bp, fromRoom, toRoom) -> the doors' middles
-//   walkStep(walker, dt, player, { others, free }) -> 'walk' | 'there' | 'wait' | 'back'
+//   walkStep(walker, dt, player, { others, free, wall }) -> 'walk' | 'there' | 'wait' | 'aside' | 'back'
 //   inTheWay(at, to, player, waited, heading);  wayBack(passed, place) -> the way back to the place just left
-//   floorOf(bp, r) -> free(x, z): the blueprint's own floor for a body of half width r (the rooms, their doors, round
-//   the furniture), for Node; the game asks its walls (src/aboard.js)
-import { PASS, roomAt, bumps, facing } from './passing.js';
+//   floorOf(bp, r) -> free(x, z): the blueprint's own floor for a body of half width r (free.r; the rooms, their doors,
+//   round the furniture), for Node; the game asks its walls (src/aboard.js)
+import { PASS, roomAt, roomFor, bumps, facing } from './passing.js';
 export const SIT = ['seat', 'bench', 'chair', 'stool', 'sofa'], LIE = ['bunk', 'bed', 'berth', 'cot'];
 // how they walk (m/s, radians a second), how near the player they wait for them in a passage too narrow to pass (m),
 // how long they stay (s: sitting, lying), how near a place the player must be to be offered it (m); how long someone
@@ -95,17 +95,19 @@ export function inTheWay(at, to, player, waited = 0, heading = 0) {
 // wait, target, getUp } (pos and the way's points { x, z }; target: the place the way goes to; getUp: the way starts at
 // the place they are leaving); player: { x, z }, or null; others: the rest aboard ({ x, z, walking, heading, held: held
 // up just now, first: earlier in the list than W }); free(x, z): can a body stand there (the cabin's walls; null:
-// anywhere). Turned toward the next point of the way and on along it at WALK.speed (slower while turned far from it)
-// -> 'walk'; 'there': the way's end reached; 'wait': no step taken; 'aside': a step back out of someone's way, making
-// way (W.wait goes on counting); 'back': src/aboard.js turns them back (or they wait).
+// anywhere); wall: how near the walls let a body's middle (m: the cabin's own, src/boarding.js CABIN_WALLS.r; free.r).
+// Turned toward the next point of the way and on along it at WALK.speed (slower while turned far from it) -> 'walk';
+// 'there': the way's end reached; 'wait': no step taken; 'aside': a step back out of someone's way, making way (W.wait
+// goes on counting); 'back': src/aboard.js turns them back (or they wait).
 //   - NEVER NEARER THAN PASS.apart to anyone (passing.js): a step that would be is not taken.
 //   - MET HEAD ON (the player in their lane ahead, or another of the crew walking at them), where the floor across is
-//     wide enough for two (passing.js roomAt: PASS.apart + PASS.spare for the two middles): a step to their own right
+//     wide enough for two as a real pair would find it (passing.js roomFor: 0.62 m for the two middles where the walls
+//     let a body as near as 0.15 m: the Miner's airlock, not its bunks' aisle nor a door): a step to their own right
 //     at WALK.side, until the one met is PASS.comfy to their left or the floor runs out (the player coming down their
 //     right side already: to their left), and on past them. Wide enough all the way from just behind them to just past
 //     the one met, so they come alongside where it is (not in a door, nor the mouth of one); the player standing still,
 //     just round where they stand.
-//   - WHERE IT IS TOO NARROW FOR TWO (the Miner's mess past its table, its doors): as before, they wait for the player
+//   - WHERE IT IS TOO NARROW FOR TWO (the Miner's mess past its table, its bunks' aisle, its doors): as before, they wait for the player
 //     to pass (inTheWay) and, still pressed on after a moment, turn back ('back'); two of the crew so met: the one later
 //     in the list turns back after WALK.back, the other after three times that, should the first have nowhere to go.
 //     Held up against the one met where it looked wide enough, after twice the while: turned back the same way.
@@ -115,7 +117,7 @@ export function inTheWay(at, to, player, waited = 0, heading = 0) {
 // step onto a seat, and any step from or toward a point where a body is not free (the spot one stands at by a bunk is
 // in its edge) make no room (met there, they wait), and the last step onto a seat is never waited over: sitting down
 // takes them out of the way (a seat is beside the way through, never on it).
-export function walkStep(W, dt, player = null, { others = [], free = null } = {}) {
+export function walkStep(W, dt, player = null, { others = [], free = null, wall = (free && free.r) || 0.15 } = {}) {
   // (a point of the way they are at already (turned back just past it), or passed abreast, stepped aside to make room
   // beside it: on to the next)
   let to = W.way[W.leg];
@@ -143,11 +145,12 @@ export function walkStep(W, dt, player = null, { others = [], free = null } = {}
   W.seen = player ? { x: player.x, z: player.z } : null;
   // (making way for a while (below): only that, till it is over)
   if (W.giving > 0) { W.giving -= dt; return makeWay(W, dt, bodies, free) ? 'aside' : 'wait'; }
-  // met head on: the player in the lane ahead (not walking on ahead of them), or another walking at them (the nearest)
+  // met head on: the player in the lane ahead (not walking on ahead of them), or another walking at them (the nearest),
+  // from PASS.meet ahead
   let met = null;
   if (!sitting) for (const o of bodies) {
     const ox = o.x - W.pos.x, oz = o.z - W.pos.z, ahead = ox * ax + oz * az, lat = ox * sx + oz * sz;
-    if (ahead <= 0 || ahead > PASS.lane[0] || Math.abs(lat) > PASS.lane[1]) continue;
+    if (ahead <= 0 || ahead > PASS.meet || Math.abs(lat) > PASS.lane[1]) continue;
     if (o === player ? pv < -0.2 : !(o.walking && facing(o.heading, myH))) continue;
     const d = Math.hypot(ox, oz);
     if (!met || d < met.d) met = { o, ahead, lat, d, player: o === player, v: o === player ? Math.max(0, pv) : WALK.speed };
@@ -155,7 +158,7 @@ export function walkStep(W, dt, player = null, { others = [], free = null } = {}
   // (room for two to pass: the floor across wide enough for their two middles, PASS.apart either way along the way
   // from where they will come alongside (as far along as they walk at each other: where the player stands, if they stand
   // still), so they come alongside where it is: a door, or the mouth of one, is no room)
-  const wideAt = (x, z) => { const [l, r] = roomAt(x, z, sx, sz, ok, PASS.apart + PASS.spare); return l + r >= PASS.apart + PASS.spare; };
+  const need = roomFor(wall), wideAt = (x, z) => { const [l, r] = roomAt(x, z, sx, sz, ok, need); return l + r >= need; };
   const wide = (lo, hi) => { for (let t = lo; t <= hi + 1e-9; t += 0.1) if (!wideAt(W.pos.x + ax * t, W.pos.z + az * t)) return false; return true; };
   const at = met ? met.ahead * WALK.speed / (WALK.speed + met.v) : 0;
   // (getting up, or sitting down: in the furniture, no room made; met then, they wait as before)
@@ -243,12 +246,14 @@ export function floorOf(bp, r = 0.18, frame = 0.1) {
     const [A, B] = d.rooms.map((q) => byId.get(q).rect);
     return { at: d.at, half: d.width / 2 - frame - r, alongX: Math.abs(A[3] - B[1]) < 1e-6 || Math.abs(A[1] - B[3]) < 1e-6 };
   });
-  return (x, z) => {
+  const free = (x, z) => {
     let inRoom = rooms.some((q) => x >= q.rect[0] + r && x <= q.rect[2] - r && z >= q.rect[1] + r && z <= q.rect[3] - r);
     if (!inRoom) inRoom = doors.some((d) => (d.alongX ? Math.abs(x - d.at[0]) <= d.half && Math.abs(z - d.at[1]) <= r + 0.05 : Math.abs(z - d.at[1]) <= d.half && Math.abs(x - d.at[0]) <= r + 0.05));
     if (!inRoom) return false;
     return !items.some((it) => x > it.rect[0] - r && x < it.rect[2] + r && z > it.rect[1] - r && z < it.rect[3] + r);
   };
+  free.r = r;      // (how near its walls let a body's middle: walkStep's `wall`)
+  return free;
 }
 // THE WAY BACK to the place just left: the points of the way already passed ([x, z] each, in the order walked), the
 // last first, down to where one stands by that place; a seat is sat down on from there (as on the way out to a place)

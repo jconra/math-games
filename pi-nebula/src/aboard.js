@@ -19,15 +19,16 @@
 //     Hired crew would be more of the list, each with their jobs or none.
 //   - THE PLACES (placesOf): every seat, bench (one place to each 0.6 m of it) and bed (the lower berth of a bunk) of
 //     the ship's rooms. A place someone is using is nobody else's; the crew member's own seat for their job is theirs.
-//   - WALKING: from a place to the next through the rooms' doors, at an easy pace, on the cabin's floor (walls: its
-//     walls as the player feels them); never nearer than PASS.apart to anyone (src/passing.js: the player, each other).
-//     MET HEAD ON, the player coming or another of the crew, where the floor is wide enough for two (the airlock, the
-//     mess by its benches, the aisle between the bunks): each keeps to their own right and they pass (the game's maker,
+//   - WALKING: from a place to the next through the rooms' doors, at an easy pace (a step aside asks the cabin's walls
+//     as the player feels them); never nearer than PASS.apart to anyone (src/passing.js: the player, each other).
+//     MET HEAD ON, the player coming or another of the crew, where the floor is wide enough for two to go by each other
+//     shoulder past shoulder (the Miner's airlock): each keeps to their own right and they pass (the game's maker,
 //     2026-11-20: "If everyone walked toward the right side then they should be able to pass eachother"; the player is
 //     not steered, the crew make room on their right). WHERE IT IS TOO NARROW FOR TWO (the Miner's mess past its
-//     table, its doors) they wait for the player to pass; the player still coming on at them after a moment (WALK.back)
-//     they turn back to the place they just left and sit or lie there again, out of the way (aboardplan.js walkStep,
-//     inTheWay, wayBack); on again as ever once their while there is up; two of the crew so met, one turns back. The
+//     table, its bunks' aisle, its doors: 0.75 to 0.8 m) they wait for the player to pass; the player still coming on
+//     at them after a moment (WALK.back), they turn back to the place they just left and sit or lie there again, out
+//     of the way (aboardplan.js walkStep, inTheWay, wayBack); on again as ever once their while there is up; two of the
+//     crew so met, one turns back; two in each other's way otherwise, the later in the list makes way. The
 //     last step, from beside a seat onto it, is never waited over: sitting down takes them out of the way. (Waiting
 //     alone, the two stood face to face for good: the walk out of the Miner after a run, through its mess to the lift,
 //     was stopped by the captain standing in it, 2026-11-20.)
@@ -69,6 +70,8 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   // that opens counted open (they walk through as ever); no walls handed over: the blueprint's own floor)
   const _fp = new THREE.Vector3();
   const floor = walls ? (x, z) => { _fp.set(x, s.space.deck, z).applyMatrix4(s.M); return walls.free(_fp.x, _fp.y, _fp.z, undefined, true); } : floorOf(bp);
+  // (how near its walls let a body's middle: the cabin's own, as walls.js has it (src/boarding.js CABIN_WALLS.r))
+  const cabin = walls && walls.parts ? walls.parts.get('cabin:' + s.id) : null, wall = cabin && cabin.r ? cabin.r : floor.r || 0.15;
   // (the rest aboard, as someone walking meets them: where each is, walking or not, which way, and whether they come
   // before W in the list: two who cannot pass, the later turns back first)
   const othersOf = (W) => list.filter((Q) => Q !== W).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.doing === 'walk', heading: Q.heading, held: Q.doing === 'walk' && Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(W) }));
@@ -118,7 +121,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
         // (on along the way: aboardplan.js walkStep. Met head on where it is wide enough for two, the player or another
         // of the crew: each to their own right, and past. Where it is too narrow: they wait for the player to pass;
         // still coming on after a moment: turned back to the place just left, out of their way)
-        const r = walkStep(W, dt, pp, { others: othersOf(W), free: floor });
+        const r = walkStep(W, dt, pp, { others: othersOf(W), free: floor, wall });
         if (r === 'back' && turnBack(W)) { if (W.doing === 'walk') play(W, CLIP.walk); }
         else if (r === 'wait' || r === 'back') { play(W, CLIP.stand); W.wait += dt; }
         else if (r === 'aside') { play(W, CLIP.walk); W.wait += dt; }      // (making way: a step back out of someone's way)

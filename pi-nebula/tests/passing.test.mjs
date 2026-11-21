@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PASS, passBy, bumps, roomAt, facing } from '../src/passing.js';
+import { PASS, passBy, bumps, roomAt, roomFor, facing } from '../src/passing.js';
 import { placesOf, wayOf, walkStep, wayBack, floorOf } from '../src/aboardplan.js';
 
 // THE GAME'S MAKER (2026-11-20): "It would be nice if people had hitboxes small enough to allow them to walk by each
@@ -121,13 +121,22 @@ const bp = JSON.parse(readFileSync(new URL('../kit/ships/miner-ore-cockpit.bluep
 const free = floorOf(bp), P = placesOf(bp, { deck: 0, cockpitFloor: 0.62 }), place = (id) => P.find((p) => p.id === id);
 const band = (z) => { const [l, r] = roomAt(0.1, z, -1, 0, free, 1.5); return l + r; };
 
-test('the Miner\'s floor for two: the airlock and the bunks\' aisle wide enough for two to pass, its mess past the table and its doors not', () => {
-  // (the game's walls, measured across the cabin every 10 cm (rigs/passing-1/cabin.cjs): the mess past its table 0.38 to
-  // 0.41 m for a body's middle, the airlock 1.29 to 1.59, the aisle between the bunks 0.49)
-  for (const z of [1.2, 1.5, 1.8]) assert.ok(band(z) < PASS.apart + PASS.spare, `the mess past its table at z ${z}: ${band(z).toFixed(2)} m, too narrow for two`);
-  for (const z of [-1.2, -0.5]) assert.ok(band(z) >= 1.2, `the airlock at z ${z}: ${band(z).toFixed(2)} m`);
-  assert.ok(band(-3) >= PASS.apart + PASS.spare, `the bunks' aisle: ${band(-3).toFixed(2)} m`);
-  for (const z of [0.5, -2, 3]) assert.ok(band(z) < PASS.apart + PASS.spare, `the door at z ${z}: ${band(z).toFixed(2)} m`);
+test('room for two as a real pair finds it: in a station hall, the bodies\' own size; in a ship\'s cabin (its walls let a body nearer), more', () => {
+  // (a pair shoulder past shoulder: 0.9 m across; the station's people are 0.52 m across against its walls, a ship's
+  // cabin lets a body to 0.15 m of its walls)
+  assert.equal(roomFor(0.26), PASS.apart + PASS.spare);
+  assert.ok(Math.abs(roomFor(0.15) - 0.62) < 1e-9);
+});
+
+test('the Miner\'s floor for two: its airlock wide enough for two to pass; its mess past the table, its bunks\' aisle and its doors not', () => {
+  // (the game's walls, measured across the cabin every 5 cm (rigs/passing-1/cabin.cjs): the mess past its table 0.38 to
+  // 0.41 m for a body's middle, the airlock 1.29 to 1.59, the aisle between the bunks 0.49, the doors (open) 0.48; two
+  // middles need roomFor(0.15) = 0.62 there. Here, the blueprint's own floor, its walls a voxel thicker: floorOf, r 0.18)
+  const need = roomFor(free.r);
+  for (const z of [1.2, 1.5, 1.8]) assert.ok(band(z) < PASS.apart, `the mess past its table at z ${z}: ${band(z).toFixed(2)} m, too narrow even for two bodies`);
+  for (const z of [-1.2, -0.5]) assert.ok(band(z) >= need, `the airlock at z ${z}: ${band(z).toFixed(2)} m`);
+  assert.ok(band(-3) < need, `the bunks' aisle: ${band(-3).toFixed(2)} m, too narrow for a pair`);
+  for (const z of [0.5, -2, 3]) assert.ok(band(z) < need, `the door at z ${z}: ${band(z).toFixed(2)} m`);
 });
 
 // (two of the crew aboard, each walking from one place to another as src/aboard.js walks them, met with each other (and
@@ -160,9 +169,9 @@ function crewTwo({ a: [af, at], b: [bf, bt], after = 0, secs = 40 }) {
   return { A, B, nearest, abreast };
 }
 
-test('two of the crew meeting head on where the Miner is wide enough (its airlock, between the bunks) pass on their rights, never in each other', () => {
+test('two of the crew meeting head on where the Miner is wide enough (its airlock) pass on their rights, never in each other', () => {
   // A: from the bench by the mess door aft to a bunk; B: from the other bunk forward to the bench by the cockpit, set
-  // off so they meet in the airlock (and, later, between the bunks)
+  // off so they meet in the airlock (or elsewhere, and one turns back)
   let passed = 0;
   for (const after of [0, 0.5, 1, 1.5, 2, 2.5, 3]) {
     const r = crewTwo({ a: ['bench-a', 'bunk-p'], b: ['bunk-s', 'bench-b'], after });
