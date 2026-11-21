@@ -122,3 +122,90 @@ test('the turns: the upper lid down past the meeting line, the lower lid up to i
   assert.equal(at(0, 0.0195)[1], 0, 'nothing turns far over the lid');
   assert.ok(Math.abs(at(0, 0.0115)[1]) < Math.abs(top[1]), 'less and less turn up toward the brow');
 });
+
+// ROUND 2 (2026-11-21; the game's maker: "The visor's face goes dark while they sleep.", and of Tripo 11's shut eyes:
+// "It isn't grabbing enough of the eyelid. It looks like it is just stretching the center of the eyelid and leaving the
+// inner part of the eyelid alone.")
+
+test('asleep, an android\'s face goes dark: L.sleep rises to 1 falling asleep and back to 0 waking; a blink awake leaves it 0', async () => {
+  const L = makeLids(seeded(5));
+  let most = 0, shutMost = 0; for (let i = 0; i < 60 * 30; i++) { L.update(FRAME); most = Math.max(most, L.sleep); shutMost = Math.max(shutMost, L.shut); }
+  assert.ok(shutMost > 0.9, 'awake, the blinks shut the eyes');
+  assert.equal(most, 0, 'awake, the face never darkens, even mid-blink');
+  L.set('shut');
+  let ch = false; for (let i = 0; i < 6; i++) ch = L.update(FRAME) || ch;
+  assert.ok(ch && L.sleep > 0 && L.sleep < 1, 'falling asleep, the face dims (and the change is told, so it is drawn)');
+  watch(L, BLINK.sleep + 0.1); assert.equal(L.sleep, 1, 'asleep, dark');
+  L.set('blink'); watch(L, BLINK.wake + 0.05); assert.equal(L.sleep, 0, 'woken, lit again');
+  const S = makeLids(seeded(6)); assert.equal(S.set('shut', { now: true }), true); assert.equal(S.sleep, 1, 'a sleeper put to sleep at once: dark at once');
+  // (the faces drawn on a visor or a face plate fade by it, every expression; each person's own, from their lids)
+  const fs = await import('node:fs'), src = fs.readFileSync(new URL('../kit/crew.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/34\.0\)\) \* \(1\.0 - vsSleep\);/g) || []).length, 2, 'the two-eyed face (vsFace) and the one eye (vsEye) both fade');
+  assert.ok(/vsSleep\.value = lids\.sleep/.test(src), 'each person\'s face dims by their own lids');
+  assert.equal((src.match(/vsSleep: \{ value: 0 \}/g) || []).length, 2, 'the visor and the face plate both have it');
+});
+
+// A head whose opening runs on past the ball's side toward the nose (Tripo 11's: the inner corner a pocket beyond the
+// ball): the left ball (r 13 mm) behind a sheet with an almond hole from 17 mm toward the nose to 11 mm the other way; the
+// sheet never nearer the ball's centre's depth than 6.5 mm.
+function pocketHead() {
+  const H = madeUp(), r = H.r, P = [], I = [], s = 0.0005, n = 80, cx = -0.003, a = 0.014, b = 0.004;
+  const z = (x, y) => Math.sqrt(Math.max(0.25 * r * r, (r + 0.001) ** 2 - x * x - y * y));
+  const inHole = (x, y) => ((x - cx) / a) ** 2 + (y / b) ** 2 < 1;
+  for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) { const x = (i - n / 2) * s, y = (j - n / 2) * s; P.push(x + 0.033, y, z(x, y)); }
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const x = (i - n / 2 + 0.5) * s, y = (j - n / 2 + 0.5) * s; if (inHole(x, y)) continue;
+    const k = i * (n + 1) + j; I.push(k, k + n + 1, k + 1, k + 1, k + n + 1, k + n + 2);
+  }
+  return { ball: H.ball, P: Float64Array.from(P), I: Uint32Array.from(I), r, cx, a, b };
+}
+const pointAt = (H, T, x, y) => { let best = -1, bd = Infinity; for (let i = 0; i < H.P.length / 3; i++) { const d = Math.hypot(H.P[i * 3] - 0.033 - x, H.P[i * 3 + 1] - y); if (d < bd) { bd = d; best = i; } } return [T[best * 4], T[best * 4 + 1], T[best * 4 + 2], T[best * 4 + 3]]; };
+
+test('Tripo 11: the inner corner\'s pocket taken into the opening (deep), so the inner part of the upper lid comes down with the rest', () => {
+  const H = pocketHead(), E = eyesOf(H.ball), K = { deep: [0.005, 0.85] };
+  const L0 = lidLines(H.P, H.I, E[0]), L1 = lidLines(H.P, H.I, E[0], K);
+  // (the left eye's nose is toward -x)
+  assert.ok(L0.x0 > -H.r - 0.0006, `as before, the opening stops at the ball's side: ${L0.x0}`);
+  assert.ok(Math.abs(L1.x0 - (H.cx - H.a)) < 0.0012, `with the pocket, at the hole's own inner corner: ${L1.x0}`);
+  assert.ok(Math.abs(L1.x1 - L0.x1) < 1e-9, 'the outer corner as before');
+  const T0 = lidTurns(H.P, E, [L0, L0]), T1 = lidTurns(H.P, E, [L1, L1], K);
+  // (over the hole's top edge, 14.5 mm toward the nose: past the ball's side)
+  const x = -0.0145, y = H.b * Math.sqrt(1 - ((x - H.cx) / H.a) ** 2) + 0.0006;
+  assert.equal(pointAt(H, T0, x, y)[1], 0, 'as before, the lid over the pocket stays where it is');
+  const inner = pointAt(H, T1, x, y)[1], middle = pointAt(H, T1, H.cx, H.b + 0.0006)[1];
+  assert.ok(inner < -0.3, `with it, the lid over the pocket turns down: ${inner}`);
+  assert.ok(inner > middle - 0.05, `and no further than the middle of the lid: ${inner} ${middle}`);
+  assert.equal(pointAt(H, T1, H.cx - H.a - 0.004, 0)[1], 0, 'nothing past the inner corner');
+  assert.ok(pointAt(H, T1, x, -y)[1] > 0, 'the lower lid under the pocket comes up');
+});
+
+test('a head\'s own lids: the fold smoothed over its triangles (relax), the lid itself held; its skin colour over all that turns (cover); none of it on any other head', () => {
+  const H = madeUp(), E = eyesOf(H.ball), L = lidLines(H.P, H.I, E[0]);
+  const T = lidTurns(H.P, E, [L, L]), most = Math.min(...Array.from(T).filter((v, k) => k % 4 === 1));
+  // (every other head: no numbers of its own, the triangles given or not, the same turns as ever)
+  assert.deepEqual(Array.from(lidTurns(H.P, E, [L, L], {}, H.I)), Array.from(T), 'no head numbers: as before');
+  assert.deepEqual(Array.from(lidTurns(H.P, E, [L, L], { relax: 0, cover: 0, deep: [0, 1] }, H.I)), Array.from(T), 'all off: as before');
+  const R = lidTurns(H.P, E, [L, L], { relax: 12 }, H.I), at = (A, x, y) => pointAt(H, A, x, y);
+  assert.deepEqual(at(R, 0, H.b + 0.0006), at(T, 0, H.b + 0.0006), 'the upper lid\'s edge turns as it did');
+  assert.deepEqual(at(R, 0, -H.b - 0.0006), at(T, 0, -H.b - 0.0006), 'the lower lid as it was');
+  let grew = 0, moved = 0, rough0 = 0, rough1 = 0;
+  for (let i = 0; i < H.P.length / 3; i++) {
+    if (T[i * 4 + 1] === 0 && R[i * 4 + 1] !== 0) grew++;
+    if (R[i * 4 + 1] !== T[i * 4 + 1]) moved++;
+    assert.ok(R[i * 4 + 1] <= 0 || R[i * 4 + 1] === T[i * 4 + 1], 'none of the upper side turns up');
+    assert.ok(R[i * 4 + 1] >= most - 1e-6, 'none turns further than the lid itself');
+  }
+  assert.equal(grew, 0, 'no point turns that did not before');
+  assert.ok(moved > 20, `the skin over the lid smoothed: ${moved} points`);
+  // (smoother: the turn changes less from row to row going up over the lid)
+  for (let y = H.b + 0.001; y < 0.0195; y += 0.0005) { rough0 += (at(T, 0, y + 0.0005)[1] - at(T, 0, y)[1]) ** 2; rough1 += (at(R, 0, y + 0.0005)[1] - at(R, 0, y)[1]) ** 2; }
+  assert.ok(rough1 < rough0, `the fold smoother going up over the lid: ${rough1} < ${rough0}`);
+  const C = lidTurns(H.P, E, [L, L], { cover: 2 }, H.I);
+  assert.ok(at(C, 0, H.b + 0.0006)[3] < -0.3, 'covered, the lashes\' line kept');
+  let covered = 0;
+  for (let i = 0; i < H.P.length / 3; i++) {
+    if (T[i * 4 + 1] < 0 && T[i * 4 + 3] >= 0) { assert.ok(C[i * 4 + 3] >= T[i * 4 + 3] && C[i * 4 + 3] > 0.99, 'all the upper lid that turns wears its skin\'s colour'); covered++; }
+    if (T[i * 4 + 1] > 0) assert.equal(C[i * 4 + 3], T[i * 4 + 3], 'the lower lid as painted');
+  }
+  assert.ok(covered > 20);
+});

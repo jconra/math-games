@@ -32,7 +32,8 @@
 //     the eyes are open at its end (or shut, asleep), never caught in a blink; the next blink a fresh wait away.
 //
 //   import { LIDS, BLINK, makeLids, blinkShut, lidLines, lidTurns, eyesOf } from './lids.js'   (plain numbers: tested in Node)
-//   const L = makeLids(rand)  L.mode ('blink' | 'open' | 'shut'), L.shut (0..1 now), L.set(mode, { now }) (now: at once),
+//   const L = makeLids(rand)  L.mode ('blink' | 'open' | 'shut'), L.shut (0..1 now), L.sleep (0..1: how far asleep, no blink
+//                             in it: an android's face dark), L.set(mode, { now }) (now: at once),
 //                             L.update(dt) -> whether L.shut changed, L.next() -> seconds until the lids next move
 //                             (0: moving now; Infinity: not till something changes), L.pace (this person's mean wait, s)
 //   blinkShut(t)              how shut a blink is t seconds after it starts (0 open, 1 shut; 0 after BLINK.close + open)
@@ -77,6 +78,15 @@ export const LIDS = {
                          // takes its push in full only from the ball's surface out, none from this far inside it)
   corner: 0.1,           // past each corner the turn fades to nothing over this share of the ball's radius
   smooth: 6,             // the edges' angles smoothed over this many columns either side
+  // (for one head alone, its entry's `lids` in crew.json; none of these on any other head: as they were)
+  deep: [0, 1],          // the opening takes in, further toward the nose than the second (in balls' radii from its
+                         // centre), skin lying less than the first in front of the ball's centre (metres): the inner
+                         // corner's pocket, on a head whose opening runs on past the ball, so the inner part of the upper
+                         // lid comes down with the rest
+  cover: 0,              // shut, the upper lid's skin colour over every point of it that turns, and this many rings of
+                         // points round them (the brow, by `brow`, kept)
+  relax: 0,              // the turns smoothed over the head's own triangles this many rounds (the lid itself, up to
+                         // `fold`'s first over its edge, held): a fold with no sharp creases
 };
 // (seconds; every: the waits' range; own: each person's own mean wait drawn from this; vary: each wait this far either
 // side of the person's own mean; first: the first blink at least this long after a person is made)
@@ -97,17 +107,18 @@ export function makeLids(rand = Math.random) {
   const pace = BLINK.own[0] + rand() * (BLINK.own[1] - BLINK.own[0]);
   const wait = () => clamp(pace + (rand() * 2 - 1) * BLINK.vary, BLINK.every[0], BLINK.every[1]);
   // (rest: 0 awake .. 1 asleep, eased as it goes; blink: seconds into a blink, or -1; till: seconds to the next blink)
-  const L = { mode: 'blink', shut: 0, pace, rest: 0, blink: -1, till: Math.max(BLINK.first, wait() * rand()) };
-  const shutNow = () => { const r = L.rest * L.rest * (3 - 2 * L.rest); return Math.max(r, L.blink >= 0 ? blinkShut(L.blink) : 0); };
+  const L = { mode: 'blink', shut: 0, sleep: 0, pace, rest: 0, blink: -1, till: Math.max(BLINK.first, wait() * rand()) };
+  // (L.sleep: how far asleep, 0..1, eased as the lids are: no blink in it)
+  const shutNow = () => { const r = L.rest * L.rest * (3 - 2 * L.rest); L.sleep = r; return Math.max(r, L.blink >= 0 ? blinkShut(L.blink) : 0); };
   L.set = (mode, { now = false } = {}) => {
     mode = mode === 'shut' || mode === 'open' ? mode : 'blink';
     if (mode !== L.mode) { L.mode = mode; if (mode !== 'blink') L.blink = -1; else if (L.till < BLINK.first) L.till = wait(); }
     if (now) { L.rest = mode === 'shut' ? 1 : 0; L.blink = -1; }
-    const s = shutNow(), was = L.shut; L.shut = s; return s !== was;
+    const was = [L.shut, L.sleep], s = shutNow(); L.shut = s; return s !== was[0] || L.sleep !== was[1];
   };
   L.update = (dt) => {
     dt = +dt || 0; if (dt <= 0) return false;
-    const was = L.shut;
+    const was = L.shut, wasSleep = L.sleep;
     if (dt > BLINK.jump) {
       // (a step, not a frame: the lids where they come to rest, never caught in a blink)
       L.rest = L.mode === 'shut' ? 1 : 0; L.blink = -1; if (L.till <= dt) L.till = wait(); else L.till -= dt;
@@ -118,7 +129,7 @@ export function makeLids(rand = Math.random) {
       if (L.mode === 'blink' && L.rest === 0 && L.blink < 0) { L.till -= dt; if (L.till <= 0) { L.blink = Math.min(-L.till, BLINK.close); L.till = wait(); } }
     }
     L.shut = shutNow();
-    return L.shut !== was;
+    return L.shut !== was || L.sleep !== wasSleep;
   };
   L.next = () => {
     if (L.blink >= 0 || (L.mode === 'shut' ? L.rest < 1 : L.rest > 0)) return 0;
@@ -184,10 +195,12 @@ export function lidLines(P, I, eye, o = {}) {
       if (z > Z[y * W + x]) Z[y * W + x] = z;
     }
   }
-  // (open: the ball's front in front of every surface there)
-  const open = new Uint8Array(W * H);
+  // (open: the ball's front in front of every surface there; K.deep: past the ball's side toward the nose, the inner
+  // corner's pocket too)
+  const open = new Uint8Array(W * H), toNose = eye.side > 0 ? -1 : 1;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const u = x0w + (x + 0.5) * s - c[0], v = y0w + (y + 0.5) * s - c[1], q = r * r - u * u - v * v;
+    if (K.deep[0] > 0 && u * toNose > K.deep[1] * r && Z[y * W + x] - c[2] < K.deep[0]) { open[y * W + x] = 1; continue; }
     if (q <= 0) continue;
     if (c[2] + Math.sqrt(q) > Z[y * W + x] - K.rim) open[y * W + x] = 1;
   }
@@ -203,14 +216,15 @@ export function lidLines(P, I, eye, o = {}) {
   }
   // (each column's top and bottom edge, as angles round the level axis on the ball)
   let first = -1, last = -1; const top = new Float32Array(W).fill(NaN), bot = new Float32Array(W).fill(NaN);
-  const ang = (u, v) => Math.atan2(v, Math.sqrt(Math.max(r * r - u * u - v * v, r * r * 0.02)));
+  // (past the ball's side, the pocket's edges by the skin's own depth just outside them)
+  const ang = (u, v, z) => (K.deep[0] > 0 && u * toNose > K.deep[1] * r && Number.isFinite(z) ? Math.atan2(v, Math.max(z - c[2], r * 0.14)) : Math.atan2(v, Math.sqrt(Math.max(r * r - u * u - v * v, r * r * 0.02))));
   for (let x = 0; x < W; x++) {
     let lo = -1, hi = -1;
     for (let y = 0; y < H; y++) if (mark[y * W + x]) { if (lo < 0) lo = y; hi = y; }
     if (lo < 0) continue;
     if (first < 0) first = x; last = x;
     const u = x0w + (x + 0.5) * s - c[0];
-    top[x] = ang(u, y0w + (hi + 1) * s - c[1]); bot[x] = ang(u, y0w + lo * s - c[1]);
+    top[x] = ang(u, y0w + (hi + 1) * s - c[1], Z[Math.min(H - 1, hi + 1) * W + x]); bot[x] = ang(u, y0w + lo * s - c[1], Z[Math.max(0, lo - 1) * W + x]);
   }
   if (first < 0 || last - first < 4) return null;
   const n = last - first + 1, up = new Float32Array(n), lo = new Float32Array(n);
@@ -230,8 +244,10 @@ function edgeAt(L, x) {
   return [L.up[i] + (L.up[i + 1] - L.up[i]) * t, L.lo[i] + (L.lo[i + 1] - L.lo[i]) * t];
 }
 // THE TURNS: each of the head's points, its eye, how far it turns shut and how far out it is pushed
-export function lidTurns(P, eyes, lines, o = {}) {
+// (I: the head's triangles, for K.relax and K.cover)
+export function lidTurns(P, eyes, lines, o = {}, I = null) {
   const K = { ...LIDS, ...o }, n = P.length / 3, out = new Float32Array(n * 4);
+  const relax = (K.relax > 0 || K.cover > 0) && I ? { near: new Int8Array(n), hold: new Uint8Array(n), brow: new Float32Array(n) } : null;
   for (let i = 0; i < n; i++) {
     const p = [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
     let e = -1, bd = Infinity;
@@ -239,6 +255,7 @@ export function lidTurns(P, eyes, lines, o = {}) {
     const E = eyes[e], L = lines[e]; if (!L) continue;
     const vx = p[0] - E.c[0], vy = p[1] - E.c[1], vz = p[2] - E.c[2], dist = Math.hypot(vx, vy, vz);
     if (dist > 2.6 * E.r || vz < 0.05 * E.r) continue;
+    if (relax) { relax.near[i] = E.side; relax.brow[i] = 1 - smooth(K.brow[0], K.brow[1], dist - E.r); }
     // (the edges where this point's column is; past a corner, the corner's own, faded out over K.corner radii)
     let fade = 1, xx = vx;
     if (vx < L.x0 + L.step) { fade = 1 - (L.x0 + L.step - vx) / (K.corner * E.r); xx = L.x0 + L.step; }
@@ -252,16 +269,63 @@ export function lidTurns(P, eyes, lines, o = {}) {
     let turn, w, paint = 0;
     if (psi >= mid) {
       w = 1 - smooth(K.up[0], K.up[1], psi - up); turn = -(up - meet + K.past);
+      if (relax && psi - up < K.fold[0]) relax.hold[i] = 1;
       // (the lid itself, up to its fold, turns whole however thick; only over it does the distance in front count)
       wOut = wOut + (1 - smooth(K.fold[2], K.fold[3], front) - wOut) * (1 - smooth(K.fold[0], K.fold[1], psi - up));
       // (the upper lid's paint shut: the lashes' line at its edge (minus), its skin's own colour over it (plus), the
       // brow kept)
       const over = psi - up, lash = 1 - smooth(K.lash[0], K.lash[1], over), skin = smooth(K.skin[0], K.skin[1], over) * (1 - smooth(K.brow[0], K.brow[1], front));
       paint = (lash > skin ? -lash : skin) * fade;
-    } else { w = 1 - smooth(K.low[0], K.low[1], lo - psi); turn = meet - lo; }
+    } else { w = 1 - smooth(K.low[0], K.low[1], lo - psi); turn = meet - lo; if (relax) relax.hold[i] = 1; }
     w *= wOut * fade;
     if (w <= 0.001 && Math.abs(paint) <= 0.001) continue;
     out[i * 4] = E.side; out[i * 4 + 1] = turn * w; out[i * 4 + 2] = w * smooth(-K.cup, 0, front); out[i * 4 + 3] = paint;
   }
+  if (relax) relaxTurns(out, P, I, relax, K.relax, K.cover);
   return out;
+}
+// (K.relax: each point's turn as the mean of its own and its neighbours' over the head's triangles, round after round;
+// only over the eyes (near: which eye's, 0 none), the upper lid itself and all under the opening's middle held (the lower
+// lid as it was); how far a point lies down onto the ball kept as it was; the points at one place (a seam in the paint's
+// layout splits a point in two) taken as one, so they move as one)
+function relaxTurns(T, P, I, { near, hold, brow }, rounds, cover) {
+  const n = near.length, nb = Array.from({ length: n }, () => []), one = new Int32Array(n), at = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(P[i * 3] * 1e6)},${Math.round(P[i * 3 + 1] * 1e6)},${Math.round(P[i * 3 + 2] * 1e6)}`;
+    if (!at.has(k)) at.set(k, i); one[i] = at.get(k);
+  }
+  for (let i = 0; i < n; i++) if (hold[i]) hold[one[i]] = 1;
+  for (let t = 0; t < I.length; t += 3) for (let a = 0; a < 3; a++) {
+    const p = one[I[t + a]], q = one[I[t + (a + 1) % 3]];
+    if (p !== q && near[p] && near[q] === near[p]) { nb[p].push(q); nb[q].push(p); }
+  }
+  // (free: the skin over the upper lid that turns at all, as found; all else keeps its turn: the lid itself its own, the
+  // skin round about none)
+  const tu = new Float32Array(n), free = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { tu[i] = T[i * 4 + 1]; if (T[i * 4 + 1] < 0) free[one[i]] = 1; }
+  for (let i = 0; i < n; i++) if (hold[i]) free[i] = 0;
+  for (let r = 0; r < rounds; r++) {
+    const t2 = Float32Array.from(tu);
+    for (let i = 0; i < n; i++) {
+      if (one[i] !== i || !free[i] || !nb[i].length) continue;
+      let a = tu[i]; for (const q of nb[i]) a += tu[q];
+      t2[i] = a / (nb[i].length + 1);
+    }
+    tu.set(t2);
+  }
+  for (let i = 0; i < n; i++) if (free[one[i]]) T[i * 4 + 1] = tu[one[i]];
+  // (K.cover: the upper lid's skin colour, shut, over every point of it that turns down and this many rings of points
+  // round them, the brow kept: the skin stretched between the lid and the brow is no longer its paint stretched)
+  if (!(cover > 0)) return;
+  const skin = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const j = one[i]; if (T[i * 4 + 1] < 0 && T[i * 4 + 3] >= 0) skin[j] = Math.max(skin[j], brow[j]); }
+  for (let r = 0; r < cover; r++) {
+    const s2 = Float32Array.from(skin);
+    for (let i = 0; i < n; i++) if (one[i] === i && skin[i] > 0) for (const q of nb[i]) s2[q] = Math.max(s2[q], brow[q] * skin[i]);
+    skin.set(s2);
+  }
+  for (let i = 0; i < n; i++) {
+    const j = one[i]; if (!(skin[j] > 0) || T[i * 4 + 3] < 0 || T[i * 4 + 1] > 0) continue;
+    T[i * 4 + 3] = Math.max(T[i * 4 + 3], skin[j]); if (!T[i * 4]) T[i * 4] = near[i];
+  }
 }
