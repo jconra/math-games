@@ -523,7 +523,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (kind === 'drive') {
       // (a machine of their room's to drive, rides[group]: Cargo's forklift, src/cargoforklift.js; to the spot beside its
-      // seat if it is in and has something to carry; the rest, on and off and the ride, is the machine's: RIDES below)
+      // seat if it is in and has something to carry; the rest, on and off and the ride, is the machine's: RIDES)
       const R = rides[group], s = R && R.claim(P); if (!s) return null;
       P.claim = s; s.who = P; taken.set(P, [s.pos]); return { kind, step, spot: s, ride: R };
     }
