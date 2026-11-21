@@ -364,8 +364,13 @@ const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
 // Miner's), the life support and the terminal either side of it: the life support, the flight's screen (src/flying.js
 // shows the flight's numbers on it) and the terminal, in a row the seat sees whole on a wide screen. The ship's x, to
 // port.
-const COCKPIT_UP = { on: 'face', u: 0.238, screens: [{ face: 'bars', x: 0.5, w: 0.19 }, { face: 'flight', x: 0.181, w: 0.36, aspect: 3.2 }, { face: 'text', x: -0.137, w: 0.17 }] };
-export const COCKPIT = { floor: 0.3, seatsZ: 4.9, wallX: 1.3, gap: 0.45, dash: { w: 2.0, h: 1.0, knee: 0.64, bow: 0.15, depth: 1.8, up: COCKPIT_UP }, canopy: { y: 2.64 - DECK - 0.3, z: 8.0 - 4.9, slope: 0.7 }, tubX: 1.5 };
+// EVENLY SPACED, AND SOMETHING BEFORE THE OTHER SEAT (the game's maker, DASH3-2, as the Miner's): 3 cm between each two
+// bezels, set out from the flight's screen along the curve (bank.js upOf `gap`); the holo table's planet low-poly before
+// the other seat, its lens in the hood, 5 cm outboard of that seat's middle (bank.js holoOf): with no raised face behind
+// it, it stands over the hood in the foot of the window, so it is a little smaller (16 cm across) and its cone a third
+// as tall (`lift`), its top just under the seat's eyes.
+const COCKPIT_UP = { on: 'face', u: 0.238, gap: 0.03, screens: [{ face: 'bars', w: 0.19 }, { face: 'flight', x: 0.181, w: 0.36, aspect: 3.2 }, { face: 'text', w: 0.17 }] };
+export const COCKPIT = { floor: 0.3, seatsZ: 4.9, wallX: 1.3, gap: 0.45, dash: { w: 2.0, h: 1.0, knee: 0.64, bow: 0.15, depth: 1.8, up: COCKPIT_UP, holo: { k: 0.5, lens: 0.35, x: -0.55, lift: 0.35 } }, canopy: { y: 2.64 - DECK - 0.3, z: 8.0 - 4.9, slope: 0.7 }, tubX: 1.5 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'): the tub cut at the cabin's wall (CABIN_TUB.z, the wall the

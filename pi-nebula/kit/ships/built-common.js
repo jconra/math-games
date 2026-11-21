@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
-import { U as KU, kitTextures } from '../materials.js';
+import { U as KU, kitTextures, spinVertex } from '../materials.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
 
 export const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -577,6 +577,7 @@ export function grimeMaterials(mats, { dirt, streaks, deck, grime, key = 'ebgrim
   M.glassInst = M.glass;
   M.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   M.glow.onBeforeCompile = (sh) => {
+    spinVertex(sh);   // (a hologram's parts turn, as the kit's own glow: kit/materials.js SPIN)
     sh.uniforms.uEngine = ENGINE.color;
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uEngine;')
       .replace('#include <color_fragment>', '#include <color_fragment>\n  if ( vColor.r < -0.5 ) diffuseColor.rgb = uEngine * ( -vColor.r - 1.0 );');

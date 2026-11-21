@@ -21,8 +21,8 @@ test('the Miner\'s facts are exactly what they were before the ships shared one 
   const was = {
     id: 'miner', room: 'ship-miner', hangar: HANGARS[0].id, pad: [42.3, 0, HANGARS[0].z], points: box(-9.0, 6.8, 3.3, 5.1), hover: 2.6, low: 2.0,
     // (the view from the seat as it was; held upright (a phone), from in front of the dashboard's flight screen and a
-    // little lower, since dashboard-3: tests/dash.test.mjs)
-    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], eyeTall: [0.154, 3.71, 4.14], lookTall: [0.154, 1.85, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
+    // little lower, since dashboard-3, and 2 cm further to port with it since dashboard-4: tests/dash.test.mjs)
+    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], eyeTall: [0.174, 3.71, 4.14], lookTall: [0.174, 1.85, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
     bay: bayOf(HANGARS[0].z), floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] }, voice: 'miner', claw: [8.54, 2.94, 0],
   };

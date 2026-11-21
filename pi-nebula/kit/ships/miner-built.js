@@ -1060,8 +1060,15 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 // the pilot as the seat sees it, so all three are whole from the pilot's seat on a wide screen (the eyes are 0.85 m
 // from them: centred on the dashboard, the terminal would be cut by the edge of the view), and the flight's screen
 // whole from the other seat too. The ship's x, to port.
-const COCKPIT_UP = { riser: { s0: 0.33, len: 0.23, lean: 0.4 }, u: 0.125, screens: [{ face: 'bars', x: 0.615, w: 0.26 }, { face: 'flight', x: 0.155, w: 0.5, aspect: 3.2 }, { face: 'text', x: -0.27, w: 0.26 }] };
-export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85, up: COCKPIT_UP }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
+// EVENLY SPACED, AND SOMETHING BEFORE THE OTHER SEAT (the game's maker, DASH3-2: "They don't seem to be spaced evenly.
+// It would be nice if there was something in front of the co-pilot too. Like the low-poly planet or something."): the
+// flight's screen 2 cm further to port than it was (so the terminal stays whole at 16:10) and the other two set out from
+// it along the curve, 3 cm between each two bezels (bank.js upOf `gap`); and the dashboard's `holo`, the holo table's
+// planet low-poly, times 0.6 (the planet 19 cm across), its lens set into the hood before the other seat, standing in
+// front of the raised face's plain part, 10 cm outboard of that seat's middle (nearer, and from that seat it would stand
+// over the terminal), as big as the room there lets it be (bank.js holoOf).
+const COCKPIT_UP = { riser: { s0: 0.33, len: 0.23, lean: 0.4 }, u: 0.125, gap: 0.03, screens: [{ face: 'bars', w: 0.26 }, { face: 'flight', x: 0.175, w: 0.5, aspect: 3.2 }, { face: 'text', w: 0.26 }] };
+export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85, up: COCKPIT_UP, holo: { k: 0.6, lens: 0.35, x: -0.6 } }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'; the blueprint "Ore station on the flight deck"): the cabin's

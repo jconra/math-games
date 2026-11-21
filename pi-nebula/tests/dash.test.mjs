@@ -1,8 +1,9 @@
 // THE SHIP'S DASHBOARD (src/dash.js, its numbers; src/fleet.js `dash`, the flight's screen each ship's kit sets into its
 // dashboard): the fuel goes down as the ship flies and never runs out, however long the run; how far and how long count
 // what is flown from the lift-off; the words are plain numbers with their units; every ship's three screens are set
-// into its dashboard and whole from the seat, the flight's screen clear of the page's buttons; the life-size blue ship
-// only while landing. No browser: plain numbers.
+// into its dashboard, evenly spaced along its curve and whole from the seat, the flight's screen clear of the page's
+// buttons; the low-poly planet before the other seat; the life-size blue ship only while landing. No browser: plain
+// numbers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -163,8 +164,20 @@ test('every ship\'s flight screen is its dashboard\'s own middle screen: the lif
     // (facing the middle of the dashboard's curve, as the flying turns its glass)
     const phi = Math.atan2(d.at[0], d.at[2] - d.arc), n = [-Math.cos(d.lean) * Math.sin(phi), Math.sin(d.lean), -Math.cos(d.lean) * Math.cos(phi)];
     assert.ok(dot(n, q.n) > 0.99999, id + ': facing as the kit\'s screen faces');
-    // (side by side, a little gap between each, within the dashboard's ends)
-    for (let i = 0; i < 2; i++) { const g = K.screens[i].x0 - K.screens[i + 1].x1; assert.ok(g > 0.01 && g < 0.06, `${id}: ${K.screens[i].face} and ${K.screens[i + 1].face} side by side (${(g * 100).toFixed(1)} cm apart)`); }
+    // (EVENLY SPACED, the game's maker, DASH3-2: "They don't seem to be spaced evenly": the life support and the flight's
+    // screen exactly as far apart as the flight's screen and the terminal, the kit's `gap` between each two bezels' facing
+    // edges, measured straight across at the pictures' middle height)
+    const up = kitOf(id).C.dash.up, gaps = [0, 1].map((i) => Math.hypot(...sub(K.screens[i].e0, K.screens[i + 1].e1)));
+    assert.ok(up.gap >= 0.02 && up.gap <= 0.04, `${id}: a gap of ${up.gap} m`);
+    for (const [i, g] of gaps.entries()) assert.ok(Math.abs(g - up.gap) < 1e-6, `${id}: ${K.screens[i].face} and ${K.screens[i + 1].face} ${(g * 100).toFixed(3)} cm apart (the kit's ${up.gap * 100} cm)`);
+    // (and the row along the curve evenly: every picture's middle at the same height and as far from the curve's middle,
+    // each facing it, in order port to starboard)
+    for (const s of K.screens) {
+      assert.ok(Math.abs(s.mid[1] - q.mid[1]) < 1e-9 && Math.abs(s.r - q.r) < 1e-9, `${id}: the ${s.face} screen as high and as far round the curve as the flight's`);
+      const toMid = unit([-s.mid[0], 0, K.cz - s.mid[2]]), flat = unit([s.n[0], 0, s.n[2]]);
+      assert.ok(dot(toMid, flat) > 0.99999, `${id}: the ${s.face} screen facing the curve's middle`);
+    }
+    assert.ok(K.screens[0].x1 > K.screens[1].x1 && K.screens[1].x1 > K.screens[2].x1, id + ': port to starboard');
     const run = K.S.top, end = (K.S.R + run[1][0]) * Math.sin(K.S.T);
     for (const s of K.screens) assert.ok(s.x1 < end && s.x0 > -end, `${id}: the ${s.face} screen within the dashboard's ends`);
   }
@@ -226,6 +239,66 @@ test('riding in the Miner\'s other seat (the only seat anyone rides in), the fli
     const b = boxOf(bezel(K.screens[1]), view);
     assert.ok(inside(b, size === '400 x 860' ? { x0: 0.03, x1: 0.97, y0: 0.45, y1: 586 / 860 } : SCREEN), `the other seat at ${size}: the flight's screen whole (${fmt(b)})`);
   }
+});
+
+// (the hologram's outline as points, kit frame: what turns as an upright cylinder of its reach from the lowest it gets to
+// its top, the cone of light, the lens's rim; and the planet alone)
+function holoPts(H) {
+  const all = [], planet = [], [ax, ay, az] = H.at;
+  for (let i = 0; i < 24; i++) {
+    const a = i / 24 * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    for (const h of [H.low, H.tall]) all.push([ax + c * H.reach, ay + h, az + s * H.reach]);
+    all.push([ax + c * H.cone[1], ay + H.cone[0], az + s * H.cone[1]], [ax + c * H.rim, ay, az + s * H.rim]);
+    for (const u of [-0.7, 0, 0.7]) { const w = Math.sqrt(1 - u * u); planet.push([ax + c * H.planet * w, ay + H.mid + u * H.planet, az + s * H.planet * w]); }
+  }
+  planet.push([ax, ay + H.mid + H.planet, az], [ax, ay + H.mid - H.planet, az]);
+  return { all, planet };
+}
+test('something in front of the other seat (the game\'s maker, DASH3-2: "Like the low-poly planet or something"): the holo table\'s planet, low-poly and big, its lens in the hood before the co-pilot\'s seat; clear of the screens and the raised face; the planet whole from that seat, and nothing of it over the three screens from the pilot\'s', () => {
+  for (const id of SHIPS) {
+    const { C, K } = kitOf(id), H = K.holo, S = K.S, cfg = F.flightOf(id), st = cfg.seat;
+    assert.ok(H && C.dash.holo, id + ': its dashboard has the hologram');
+    // (before the other seat: the co-pilot's, across the ship from the pilot's (the ship's x to port), at most 10 cm
+    // further out than its middle line)
+    const other = -st.eye[0] < 0 ? -0.5 : 0.5;
+    assert.ok(Math.abs(H.x - other) <= 0.1 + 1e-9 && Math.abs(H.at[0] - H.x) < 1e-9, `${id}: before the other seat (x ${H.x}, the seat's ${other})`);
+    // (its lens in the hood's top, between its lip and where the deck goes on, lying on it)
+    const [lip, hood] = H.run;
+    assert.ok(H.s - H.rim > lip[0] && H.s + H.rim < hood[0], `${id}: the lens (${(H.rim * 200).toFixed(1)} cm across) within the hood's top (${lip[0].toFixed(3)}..${hood[0].toFixed(3)}: at ${H.s.toFixed(3)})`);
+    assert.ok(Math.abs(H.tilt - Math.atan2(hood[1] - lip[1], hood[0] - lip[0])) < 1e-12, id + ': lying on the hood as it slopes');
+    // (big: the planet at least 15 cm across; its top under the other seat's eyes)
+    assert.ok(H.planet * 2 >= 0.15, `${id}: the planet ${(H.planet * 200).toFixed(1)} cm across`);
+    assert.ok(H.at[1] + H.tall < st.eye[1], `${id}: its top (${(H.at[1] + H.tall).toFixed(3)}) under the eyes (${st.eye[1]})`);
+    // (the room it turns in: clear of the terminal's bezel (in plan, from its upright middle line to the terminal's
+    // starboard end, less its reach), of the raised face behind it (at the lowest that turns, and at the cone's top), and
+    // within the dashboard's end)
+    const e0 = K.screens[2].e0, toText = Math.hypot(e0[0] - H.at[0], e0[2] - H.at[2]) - H.reach;
+    assert.ok(toText > 0.05, `${id}: ${(toText * 100).toFixed(1)} cm clear of the terminal`);
+    if (S.rise) {
+      const [[s0, y0], [s1, y1]] = S.rise, faceAt = (y) => s0 + Math.max(0, y - y0) * (s1 - s0) / (y1 - y0);
+      const a = faceAt(H.y + H.low) - H.s - H.reach, b = faceAt(H.y + H.cone[0]) - H.s - H.cone[1];
+      assert.ok(a > 0.02 && b > 0.02, `${id}: clear of the raised face (${(a * 100).toFixed(1)} cm, the cone ${(b * 100).toFixed(1)} cm)`);
+    }
+    assert.ok(Math.abs(H.x) + H.reach < (S.R + H.s) * Math.sin(S.T), id + ': within the dashboard\'s end');
+    const { all, planet } = holoPts(H);
+    // (from the pilot's seat at every size: nothing of it over any of the three screens)
+    for (const [size, view] of views(cfg)) {
+      const hb = boxOf(all, view);
+      for (const q of K.screens) assert.ok(!overlaps(hb, boxOf(bezel(q), view)), `${id} at ${size}, the pilot's seat: the hologram (${fmt(hb)}) over the ${q.face} screen`);
+    }
+    // (from the other seat, wide and on a phone on its side: the planet whole, clear of the page's boxes, a good size;
+    // nothing of the hologram over the flight's screen)
+    for (const [size, view] of views(cfg, 'rider').filter(([s]) => s !== '400 x 860')) {
+      const pb = boxOf(planet, view), hb = boxOf(all, view), px = (pb.x1 - pb.x0) * view.W;
+      assert.ok(inside(pb, SCREEN), `${id} at ${size}, the other seat: the planet whole (${fmt(pb)})`);
+      for (const [what, o] of pageOf(view.W, view.H)) assert.ok(!overlaps(pb, o), `${id} at ${size}, the other seat: ${what} over the planet (${fmt(pb)})`);
+      assert.ok(px > view.H * 0.15, `${id} at ${size}, the other seat: the planet ${Math.round(px)} px across (a sixth of the screen's height or more)`);
+      assert.ok(!overlaps(hb, boxOf(bezel(K.screens[1]), view)), `${id} at ${size}, the other seat: the hologram over the flight's screen`);
+    }
+  }
+  // (the Miner's other seat, held upright: from in front of the flight's screen, as the pilot's: the hologram not over it)
+  const { K } = kitOf('miner'), view = views(F.flightOf('miner'), 'rider')[3][1];
+  assert.ok(!overlaps(boxOf(holoPts(K.holo).all, view), boxOf(bezel(K.screens[1]), view)), 'the Miner\'s other seat held upright: the hologram clear of the flight\'s screen');
 });
 
 test('the drill\'s own Miner at the rocks: its cockpit stands 13 cm higher in its frame, and so does its flight\'s screen', () => {

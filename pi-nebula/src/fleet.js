@@ -87,10 +87,11 @@ export const SHIPS = [
     // (its top then 1.3 m under the door's lintel and 0.7 m under the crane's rail; the game's own landing is at 3 m
     // and 2 m: src/crane.js LANDING)
     hover: 2.6, low: 2.0,
-    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], eyeTall: [0.154, 3.71, 4.14], lookTall: [0.154, 1.85, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
+    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], eyeTall: [0.174, 3.71, 4.14], lookTall: [0.174, 1.85, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (set into the dashboard's raised face, 0.88 m ahead of the eyes, between its life support and its terminal)
-    dash: { arc: 2.26625, at: [0.15401, 3.37053, 5.02273], w: 0.5, h: 0.15625, lean: 0.4 },
+    // (set into the dashboard's raised face, 0.88 m ahead of the eyes, between its life support and its terminal; 2 cm
+    // further to port than dashboard-3 had it, so with the three evenly spaced the terminal is still whole at 16:10)
+    dash: { arc: 2.26625, at: [0.17388, 3.37053, 5.02155], w: 0.5, h: 0.15625, lean: 0.4 },
     // (src/flymodel.js MINER.floor has the words: the crane's rails, the rack, the cart)
     floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
     shove: { mass: 2, gyr: 4 }, voice: 'miner',

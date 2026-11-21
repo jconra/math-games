@@ -13,7 +13,8 @@
 //                    seats' x, in its own frame: [-0.5, 0.5] or [-1, 0, 1]), deckY (the top deck's height at its far
 //                    end, h: give depth and deckY to run the deck on to a windscreen's foot), up (its three screens set
 //                    up where the seat sees them, in place of the face's: into a raised face of its top, or higher in
-//                    its face: bank.js)
+//                    its face: bank.js), holo ({ k, lens, x, lift }: the holo table's planet, low-poly, set into its hood before the
+//                    other seat: bank.js holoOf)
 //   engineerStation(p, o)  a sit-down console against a wall (its back on z = 0, facing +z): a desk with knee room,
 //                    screens on a raised back panel, switches and a lamp hood. o: w (1.0: 1.0, 1.5, 2.0 on the ship
 //                    grid), d (0.5), h (the desk top, 0.76)
@@ -24,13 +25,15 @@
 import * as THREE from 'three';
 import { MeshData } from '../../geo.js';
 import { wallScreen } from '../../wallkit.js';
-import { part } from '../place.js';
+import { part, placeInto } from '../place.js';
 import { LEAN, LIT, CHAR, CHAR2, MFD, mfd, turn, glowBox, mount, bar, local } from './look.js';
 import { buttonGrid, switchRow, knobRow } from './panels.js';
 // (the dashboard's shape for options o, its arc and its section (a closed outline in (s, y), s forward from the near
 // edge, counter-clockwise; each point names the surface of the edge that ends there: null, the floor, isn't drawn), and
 // the screens set up in it: plain sums, bank.js)
-import { dashShape, arcAt, upOf } from './bank.js';
+import { dashShape, arcAt, upOf, holoOf } from './bank.js';
+// (the holo table's lens and hologram, the cabin's science area: the small one before the other seat)
+import { holoLens, holoLight } from '../cabin/science.js';
 
 const PI = Math.PI, FIRM = { r: 0.01, seg: 1, cell: 9, loops: [] };
 // where a panel goes on a run of the section (from a to b in (s, y)): u along it, `off` out of it, at the arc angle
@@ -106,6 +109,15 @@ export function dashboard(p, o = {}) {
   // life support, the flight's screen and the terminal, each set into the top (or its raised face) at its place along
   // the arc, facing the seats
   if (o.up) for (const q of upOf(S, o.up)) mount(p, part(mfd, { face: q.face, w: q.w, aspect: q.w / q.h }), { at: q.at.map((v, k) => v + q.n[k] * nudge), rot: turn(-q.th, q.lean) }, 'up ' + q.face);
+  // SOMETHING BEFORE THE OTHER SEAT (the game's maker, DASH3-2: "It would be nice if there was something in front of the
+  // co-pilot too. Like the low-poly planet or something."): the holo table's planet in its cone of light, low-poly (80
+  // dark facets, their edges light lines), its lens set into the hood before the other seat (its place and size: the
+  // ship's kit, bank.js holoOf); the planet turns slowly (kit/materials.js SPIN)
+  if (o.holo) {
+    const H = holoOf(S, o.holo);
+    placeInto(p, part(holoLens, { k: H.lk, tilt: H.tilt }), { at: H.at, rot: [0, -H.th, 0] });
+    placeInto(p, part(holoLight, { show: 'planet', k: H.k, foot: H.foot, lift: H.lift, facets: true, turn: true }), { at: H.at, rot: [0, -H.th, 0] });
+  }
   if (S.seats === 3) for (const s of [-1, 1]) { screen(s * 0.53, s < 0 ? 'radar' : 'bars', 0.3); at(s * 0.5, 'shelf', part(buttonGrid, { cols: 5, rows: 2, pitch: 0.036, seed: s < 0 ? 4 : 6 })); }
   else at(0, 'shelf', part(buttonGrid, { cols: 6, rows: 2, pitch: 0.036, seed: 2 }));
   // the ends: past the outer screens, a small screen if one fits, else knobs and a grid

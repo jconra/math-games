@@ -54,6 +54,25 @@ export function hoopLit(set, on = true) {
   for (const k of ['solid', 'floor', 'decal']) { const m = set?.[k]; if (!m || ('KIT_HOOP' in m.defines) === on) continue; if (on) m.defines.KIT_HOOP = ''; else delete m.defines.KIT_HOOP; m.needsUpdate = true; }
 }
 
+// A HOLOGRAM THAT TURNS SLOWLY (the holo table's planet set small into a ship's dashboard before the other seat:
+// kit/shipparts/cabin/science.js holoLight o.turn). Its parts stay merged with their room, so it flies with its ship,
+// and it is turned on the graphics card by the one clock (U.time): nothing is done for it each frame. Each corner of a
+// part that turns carries, where a picture's place would be (the glow and the shield take no picture), SPIN.mark and how
+// far it is from the hologram's middle, and as its normal the way out from that middle to it (both turn with the piece
+// as it is placed); the glow's and the shield's vertex shaders turn it about the upright line through that middle, once
+// in SPIN.turn seconds. (A glow made elsewhere without spinVertex shows it standing still.)
+export const SPIN = { mark: 1000, turn: 40 };
+const SPIN_GLSL = `if ( uv.x > ${(SPIN.mark - 0.5).toFixed(1)} ) {
+  vec3 spinOff = normalize( normal ) * uv.y, spinMid = transformed - spinOff;
+  float spinA = uSpinTime * ${(2 * Math.PI / SPIN.turn).toFixed(6)}, spinS = sin( spinA ), spinC = cos( spinA );
+  transformed = spinMid + vec3( spinC * spinOff.x + spinS * spinOff.z, spinOff.y, spinC * spinOff.z - spinS * spinOff.x );
+}`;
+// (for a material's onBeforeCompile: its vertex shader turns such corners; three.js's own shaders, after begin_vertex)
+export function spinVertex(sh) {
+  sh.uniforms.uSpinTime = U.time;
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uSpinTime;').replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SPIN_GLSL);
+}
+
 function patch(mat, { rmw = false, inst = false, wear = null } = {}) {
   mat.defines = { ...(mat.defines || {}), ...(rmw ? { KIT_RMW: '' } : {}), ...(inst ? { KIT_INST: '' } : {}) };
   mat.onBeforeCompile = (sh) => {
@@ -162,7 +181,7 @@ export function makeMaterials() {
   M.decal = decal(false); M.decalInst = decal(true);
   M.screen = new THREE.MeshBasicMaterial({ map: T.screen.map, vertexColors: true });
   M.screenInst = M.screen;
-  M.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
+  M.glow = new THREE.MeshBasicMaterial({ vertexColors: true }); M.glow.onBeforeCompile = spinVertex;   // (a hologram's parts turn: SPIN)
   M.glowInst = M.glow;
   // (a machine's glowing heart, each kind its own mesh: a ship reactor's core, moving (kit/shipparts/cabin/livecore.js:
   // its look is in its vertices), and the glow at the end of its drive, which glows steadily as the strips do)
@@ -188,13 +207,19 @@ export const BAKED = new Set(['solid', 'floor', 'decal']);
 
 // THE SHIELD across the hangar's open door: a sheet of faint blue light that holds the air in. Added on top of what is
 // behind it (space shows through), a fine hexagon mesh, slow ripples running across it, brighter toward its edges
-// (where its emitters are). Its pattern follows the world (metres), so any sheet of it matches. One draw.
+// (where its emitters are). Its pattern follows the world (metres), so any sheet of it matches. One draw. (A hologram's
+// planet in it turns: SPIN; it is lit as the middle of a sheet.)
 export function shieldMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: { uTime: U.time, uColor: { value: new THREE.Color(0.18, 0.55, 1.0) } },
+    uniforms: { uTime: U.time, uSpinTime: U.time, uColor: { value: new THREE.Color(0.18, 0.55, 1.0) } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-    vertexShader: `varying vec3 vW; varying vec2 vUv;
-void main() { vUv = uv; vec4 w = modelMatrix * vec4( position, 1.0 ); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    vertexShader: `uniform float uSpinTime; varying vec3 vW; varying vec2 vUv;
+void main() {
+  vUv = uv; vec3 transformed = position;
+  ${SPIN_GLSL}
+  if ( uv.x > ${(SPIN.mark - 0.5).toFixed(1)} ) vUv = vec2( 0.5 );
+  vec4 w = modelMatrix * vec4( transformed, 1.0 ); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;
+}`,
     fragmentShader: `uniform float uTime; uniform vec3 uColor; varying vec3 vW; varying vec2 vUv;
 #include <common>
 float hexLine( vec2 p ) {
