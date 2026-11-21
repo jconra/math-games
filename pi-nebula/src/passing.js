@@ -20,24 +20,49 @@
 //     ahead: to the right of someone standing, to the left of someone walking on ahead). The player is not steered:
 //     the others make room on their right, unless the player is already coming down that side (more than PASS.wrong
 //     to their right), when crossing in front of them would not make room: then on their left.
-//   - WHERE THE FLOOR IS TOO NARROW FOR TWO as a real pair would find it (roomFor), nobody steps aside to make room:
-//     the crew aboard wait and turn back as before (src/aboardplan.js walkStep), the station's people make way as before
-//     (src/people.js makeWay).
+//   - WHERE THE FLOOR IS TOO NARROW FOR TWO to pass forward as a real pair would (roomFor), THEY SQUEEZE PAST EACH OTHER
+//     (the game's maker, 2026-11-21: "In the narrow places too, he turns side-on and you squeeze past each other";
+//     "Turning sideways is pretty natural behavior in tight quarters. I think its fine if people can sort of clip
+//     through each others models on the outer 50% of them but it should slow them down to half speed"): each turns
+//     side-on, facing the other (sideOn), and they go by, their middles as near as PASS.squeeze (half of PASS.apart:
+//     each body's outer half may be in the other's, never its inner half). Where even that does not fit (squeezeFor),
+//     the crew aboard wait and turn back as before (src/aboardplan.js walkStep).
+//   - OVERLAPPING (two middles nearer than PASS.apart), BOTH GO AT HALF SPEED (PASS.slow): the station's people, the crew
+//     aboard and the player alike (overlaps).
 //
 //   passBy(dx, dz, ox, oz, { coming, player, walking, lane }) -> { steer, slow, ahead, lat } | null
 //       dx, dz: the way walked (a unit vector); ox, oz: where the other is, from here. steer: + toward one's right, -
 //       toward one's left (0..1 each); slow: how much slower (1: not); null: not in the lane ahead
-//   bumps(x0, z0, x1, z1, bodies, at) -> the body a step from (x0, z0) to (x1, z1) would come nearer than PASS.apart
-//       to, and nearer than it was (a step away from someone already too near is always let be), or null
+//   bumps(x0, z0, x1, z1, bodies, at, apart) -> the body a step from (x0, z0) to (x1, z1) would come nearer than
+//       `apart` (PASS.apart; squeezing, PASS.squeeze) to, and nearer than it was (a step away from someone already too
+//       near is always let be), or null
+//   overlaps(x, z, bodies, at) -> is anyone's middle nearer than PASS.apart (their bodies overlapping: half speed)
+//   sideOn(lat) -> the turn from the way walked (radians) that faces the one squeezed past: + to one's left
+//   squeezeFor() -> the floor across two middles need to squeeze past each other
 //   roomAt(x, z, sx, sz, free, most, step) -> [left, right]: how far the floor is free to either side (m; sx sz: one's
 //       right), felt every `step`, up to `most` in all
 //   roomFor(wall) -> the floor across two middles need to pass, where the walls feel a body `wall` m each way
-export const PASS = { apart: 0.40, comfy: 0.75, wrong: 0.2, spare: 0.02, lane: [2.0, 0.75], meet: 3.0, pair: 0.9 };
+export const PASS = { apart: 0.40, comfy: 0.75, wrong: 0.2, spare: 0.02, lane: [2.0, 0.75], meet: 3.0, pair: 0.9,
+  // (squeezing past: the middles never nearer than half the body (each body's outer half in the other's at most); both
+  // at half speed while their bodies overlap; turned side-on from this far off, and turned back once this far apart
+  // again (m))
+  squeeze: 0.20, slow: 0.5, turnAt: 1.0, turnOff: 0.55 };
 // (the floor across, for the two middles, that two need to go by each other shoulder past shoulder, as a real pair
 // would (PASS.pair: two people's shoulders, 0.45 m each), where the walls feel a body `wall` m across each way: a
 // station's hall (0.26) asks no more than the bodies' own PASS.apart; a ship's cabin, whose walls let a body as near as
 // 0.15 m, 0.60 m (its airlock: 1.3 m and more; its bunks' aisle, its doors, 0.48; its mess past the table, 0.38 to 0.41))
 export const roomFor = (wall) => Math.max(PASS.apart, PASS.pair - 2 * wall) + PASS.spare;
+// (the floor across that two middles need to squeeze past each other, side-on: PASS.squeeze, however near the walls let
+// a body (its own outer half is what goes into the other's))
+export const squeezeFor = () => PASS.squeeze + PASS.spare;
+// (turned side-on, facing the one squeezed past: toward the side they are on (lat: + on one's right), the left when
+// dead ahead (each keeps right, so the other goes by on the left). The heading's + turn is toward one's left: one's right
+// is the heading less a quarter turn)
+export const sideOn = (lat) => (lat > 0.02 ? -1 : 1) * Math.PI / 2;
+export function overlaps(x, z, bodies, at = (b) => b) {
+  for (const b of bodies) { const p = at(b); if (p && Math.hypot(p.x - x, p.z - z) < PASS.apart - 1e-9) return true; }
+  return false;
+}
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // (two headings more or less opposite: walking at each other)
@@ -63,11 +88,11 @@ export function passBy(dx, dz, ox, oz, { coming = false, player = false, walking
   return { steer: (lat > 0.05 ? -1 : lat < -0.05 ? 1 : walking ? -1 : 1) * w, slow, ahead, lat };
 }
 
-export function bumps(x0, z0, x1, z1, bodies, at = (b) => b) {
+export function bumps(x0, z0, x1, z1, bodies, at = (b) => b, apart = PASS.apart) {
   for (const b of bodies) {
     const p = at(b); if (!p) continue;
     const d1 = Math.hypot(p.x - x1, p.z - z1);
-    if (d1 < PASS.apart && d1 < Math.hypot(p.x - x0, p.z - z0) - 1e-9) return b;
+    if (d1 < apart && d1 < Math.hypot(p.x - x0, p.z - z0) - 1e-9) return b;
   }
   return null;
 }

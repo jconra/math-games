@@ -17,7 +17,8 @@
 //   people.captain.meet(id, where)  a captain gone to wait by their ship (MEET, below); meet(id, null): no longer
 //   (the patches kept off, the ways and the spots all follow a ship that stands somewhere else than it is parked, set
 //   down by hand: they are marked and worked out again whenever boarding.stands changes)
-//   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson, onPatch
+//   people.alarms  the loud alarms, counted as they happen: stuck (over 3 s with a way to go), inWall, inPerson (deeper
+//                  than the bodies' outer halves), onPatch
 //   people.plan()  everyone's spots and ways, for the plan from above (the rigs)
 //   people.update's `place` and `soon` (src/lift.js crewAt, here): the people who work in the control room or in
 //                  Cargo (life.js ROOM_CREW) are about only while `place` is theirs; `soon`: the player is in the lift,
@@ -73,7 +74,7 @@ import { TOWER, STORE } from '../kit/places-plan.js';
 import { pointGap } from '../kit/forkliftround.js';
 import { MOVES_ON, MOVES_OFF, SECS as BED_SECS, pose as onBedPose } from './onbed.js';
 import { STAND, shine } from './player.js';
-import { PASS, passBy, bumps, facing } from './passing.js';
+import { PASS, passBy, bumps, facing, overlaps, roomAt, roomFor, sideOn } from './passing.js';
 import { addMoves } from './moves.js';
 import { makeBubbles } from './bubbles.js';
 import { pickTalk } from './chatter.js';
@@ -783,7 +784,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // bed, lying)
       P.drawnY = Math.abs(P.pos.y - P.drawnY) > 0.6 ? P.pos.y : damp(P.drawnY, P.pos.y, 14, dt);
       if (P.pose) { c.root.position.copy(P.pose.root); c.root.quaternion.copy(P.pose.q); }
-      else { c.root.position.set(P.pos.x, P.drawnY + P.sitY, P.pos.z); c.root.rotation.set(0, P.heading, 0); }
+      else { c.root.position.set(P.pos.x, P.drawnY + P.sitY, P.pos.z); c.root.rotation.set(0, P.heading + (P.walking ? P.sideOn || 0 : 0), 0); }
       // (THE FAR COPY beyond a few metres, on Low always; the eyes and the clear layer over them, two draws each, only
       // close up and never on the far copy)
       const wantFar = far > (c.far ? farAt - 0.5 : farAt);
@@ -1419,11 +1420,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // (a step as it was taken (walls.move slides along a wall, so it can end elsewhere than it was aimed): undone if it
   // ended nearer than LIFE.body to anyone, and nearer than it began -> who, or null)
-  function unbump(P, from) {
-    const b = bumps(from.x, from.z, P.pos.x, P.pos.z, others, posOf);
+  function unbump(P, from, apart = LIFE.body) {
+    const b = bumps(from.x, from.z, P.pos.x, P.pos.z, others, posOf, apart);
     if (b) P.pos.copy(from);
     return b;
   }
+  // (the floor across at someone, sx sz their right, too narrow for two middles to pass forward: passing.js roomFor, a
+  // body 0.26 m across each way against the walls, as they walk)
+  const narrowAt = (P, sx, sz) => { const need = roomFor(0.26), [l, r] = roomAt(P.pos.x, P.pos.z, sx, sz, (x, z) => walls.free(x, P.pos.y, z, 0.26), need, 0.03); return l + r < need - 0.03; };
   const _u = new THREE.Vector3();
   function walk(P, dt) {
     P.walkT = (P.walkT || 0) + dt;
@@ -1487,7 +1491,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const want = Math.atan2(dx, dz), diff = wrap(want - P.heading);
     P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
     if (Math.abs(diff) > 1.3) { play(P, STAND); return; }
-    let step = Math.min(gd, P.speed * slow * dt), by = null;
+    // (their body overlapping someone's (middles nearer than LIFE.body, squeezing past): at half speed, PASS.slow)
+    let step = Math.min(gd, P.speed * slow * dt * (overlaps(P.pos.x, P.pos.z, others, posOf) ? PASS.slow : 1)), by = null;
     // never onto a patch kept off: steering round someone that would, straight along the way instead (unless already
     // on one: off it then)
     if (patchFor(P, P.pos.x + dx * step, P.pos.z + dz * step) && !patchFor(P, P.pos.x, P.pos.z)) {
@@ -1498,9 +1503,22 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // slid along a wall, ends that near)
     _d.set(P.pos.x + dx * step, 0, P.pos.z + dz * step);
     if (!by) by = bumps(P.pos.x, P.pos.z, _d.x, _d.z, others, posOf);
+    // SQUEEZED PAST (the game's maker, 2026-11-21: "In the narrow places too, he turns side-on and you squeeze past each
+    // other"): held by someone walking (or the player) where the floor across is too narrow for two to pass forward
+    // (passing.js roomFor; the station's halls never are, a ship's cabin's narrow places are), the middles as near as
+    // PASS.squeeze, turned side-on facing them (P.sideOn), at half speed while overlapping (above)
+    let apart = LIFE.body;
+    if (by && typeof by === 'object' && (by === playerNow || by.walking) && narrowAt(P, sx, sz)) {
+      apart = PASS.squeeze; alarms.squeezes = (alarms.squeezes || 0) + 1;
+      if (!P.sideOnAim) P.sideOnAim = sideOn((by.pos.x - P.pos.x) * sx + (by.pos.z - P.pos.z) * sz);
+      by = bumps(P.pos.x, P.pos.z, _d.x, _d.z, others, posOf, apart);
+    }
     if (!by && byTruck(P, P.pos.x, P.pos.z, _d.x, _d.z)) by = 'truck';
     let got = 0;
-    if (!by) { _u.copy(P.pos); got = walls.move(P.pos, dx * step, dz * step, 0.26, openFor(P)); const b = unbump(P, _u); if (b) { by = b; got = 0; } else if (byTruck(P, _u.x, _u.z, P.pos.x, P.pos.z)) { P.pos.copy(_u); by = 'truck'; got = 0; } }
+    if (!by) { _u.copy(P.pos); got = walls.move(P.pos, dx * step, dz * step, 0.26, openFor(P)); const b = unbump(P, _u, apart); if (b) { by = b; got = 0; } else if (byTruck(P, _u.x, _u.z, P.pos.x, P.pos.z)) { P.pos.copy(_u); by = 'truck'; got = 0; } }
+    // (turned side-on till nobody is within PASS.turnOff, eased round)
+    if (P.sideOnAim && !others.some((Q) => Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < PASS.turnOff)) P.sideOnAim = 0;
+    { const sd = (P.sideOnAim || 0) - (P.sideOn || 0); P.sideOn = (P.sideOn || 0) + Math.sign(sd) * Math.min(Math.abs(sd), 5 * dt); }
     // (pressed into a corner, or steered into one: the freest small step near the way wanted, never back the way they
     // came, onto a patch or toward anyone)
     if (!by && got < step * 0.3) {
@@ -1547,7 +1565,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       P.heldAll = Math.max(0, (P.heldAll || 0) - dt * 0.5);
       P.held = Math.max(0, P.held - dt * 2); if (P.held === 0) { P.side *= Math.exp(-dt * 1.5); if (Math.abs(P.side) < 0.05) P.side = 0; }
       const v = got / Math.max(dt, 1e-4);
-      if (v < 0.35) play(P, STAND); else play(P, CLIPS.walk, { speed: Math.max(0.6, Math.min(1.5, v / P.c.stride.Walk)) });
+      if (v < 0.35) play(P, STAND); else if (Math.abs(P.sideOn || 0) > 0.8) play(P, P.sideOn > 0 ? 'Run_Right' : 'Run_Left', { speed: 0.4 });
+      else play(P, CLIPS.walk, { speed: Math.max(0.6, Math.min(1.5, v / P.c.stride.Walk)) });
     }
   }
 
@@ -1580,14 +1599,16 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // in a wall (a sitter is on a seat: not counted)
       const sitting = P.act && (P.act.phase === 'sat' || P.act.phase === 'sitting' || P.act.phase === 'rising');
       if (!sitting && !walls.free(P.pos.x, P.pos.y, P.pos.z, 0.18, true)) alarm('inWall', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (P.act ? P.act.kind + ' ' + (P.act.phase || '') + ' ' + (P.act.spot?.name || '') : '-') + (P.walking ? ', walking' : '') + (P.yielding ? ', making way' : '') + ')');
-      // in another person (or the player): nearer than their bodies (LIFE.body, a centimetre given), only among those
-      // about (someone away is not there to bump into), on the same floor (the player in Cargo is not in someone on the
-      // main deck over their head: counted so before, 2026-11-20)
+      // in another person (or the player): deeper than the outer half of their bodies (PASS.squeeze, a centimetre
+      // given: squeezing past, the outer halves may overlap; alarms.overlaps counts those quietly, nearer than LIFE.body),
+      // only among those about (someone away is not there to bump into), on the same floor (the player in Cargo is not
+      // in someone on the main deck over their head: counted so before, 2026-11-20)
       if (!P.away) {
         const what = (X) => X.id + ' at ' + X.pos.toArray().map((v) => v.toFixed(2)) + ' (' + (X.act ? X.act.kind + ' ' + (X.act.phase || '') + ' ' + (X.act.spot?.name || '') : '-') + (X.walking ? ', walking' : '') + (X.yielding ? ', making way' : '') + ')';
-        const inside = LIFE.body - 0.01;
-        for (const Q of list) if (Q !== P && !Q.hidden && !Q.away && !Q.scripted && Q.id > P.id && Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z) < inside && Math.abs(Q.pos.y - P.pos.y) < 1) alarm('inPerson', P, what(P) + ' and ' + what(Q));
-        if (playerNow && Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z) < inside && Math.abs(playerNow.pos.y - P.pos.y) < 1) alarm('inPerson', P, 'and the player');
+        const inside = PASS.squeeze - 0.01, over = LIFE.body - 0.01;
+        const check = (Q, d, who) => { if (d < inside) alarm('inPerson', P, who); else if (d < over) alarms.overlaps = (alarms.overlaps || 0) + 1; };
+        for (const Q of list) if (Q !== P && !Q.hidden && !Q.away && !Q.scripted && Q.id > P.id && Math.abs(Q.pos.y - P.pos.y) < 1) { const d = Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z); if (d < over) check(Q, d, what(P) + ' and ' + what(Q)); }
+        if (playerNow && Math.abs(playerNow.pos.y - P.pos.y) < 1) { const d = Math.hypot(playerNow.pos.x - P.pos.x, playerNow.pos.z - P.pos.z); if (d < over) check(playerNow, d, 'and the player'); }
       }
       // on a patch kept off (a job's ring, a ship's way in, under the crane, the scanner)
       if (patchFor(P, P.pos.x, P.pos.z) && !sitting) alarm('onPatch', P, 'at ' + P.pos.toArray().map((v) => v.toFixed(2)));

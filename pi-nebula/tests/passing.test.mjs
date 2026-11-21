@@ -1,12 +1,14 @@
 // Two people meeting (src/passing.js, the plain part of src/people.js's walking, src/aboardplan.js's and src/player.js's
 // bodies): never nearer than PASS.apart, middle to middle; met head on, each keeps to their own right and they pass;
-// where the floor is too narrow for two (the Miner's mess past its table), the crew aboard turn back as before.
+// where the floor is too narrow for two to pass forward (the Miner's mess past its table, its bunks' aisle, its doors),
+// they squeeze past each other side-on, their middles never nearer than PASS.squeeze, at half speed while their bodies
+// overlap; where even that does not fit, the crew aboard turn back as before.
 //   node --test pi-nebula/tests/passing.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PASS, passBy, bumps, roomAt, roomFor, facing } from '../src/passing.js';
-import { placesOf, wayOf, walkStep, wayBack, floorOf } from '../src/aboardplan.js';
+import { PASS, passBy, bumps, roomAt, roomFor, squeezeFor, sideOn, overlaps, facing } from '../src/passing.js';
+import { placesOf, wayOf, walkStep, wayBack, floorOf, WALK } from '../src/aboardplan.js';
 
 // THE GAME'S MAKER (2026-11-20): "It would be nice if people had hitboxes small enough to allow them to walk by each
 // other, but not walk directly through each other. If everyone walked toward the right side then they should be able to
@@ -176,24 +178,86 @@ test('two of the crew meeting head on where the Miner is wide enough (its airloc
   for (const after of [0, 0.5, 1, 1.5, 2, 2.5, 3]) {
     const r = crewTwo({ a: ['bench-a', 'bunk-p'], b: ['bunk-s', 'bench-b'], after });
     assert.ok(r.A.there && r.B.there, `(${after} s) both get there`);
-    assert.ok(r.nearest >= PASS.apart - 1e-9, `(${after} s) never nearer than PASS.apart (${r.nearest.toFixed(3)})`);
+    assert.ok(r.nearest >= PASS.squeeze - 1e-9, `(${after} s) never deeper than the bodies' outer halves (${r.nearest.toFixed(3)})`);
     // (walking aft, -z, A's right is +x; walking forward, B's right is -x)
     if (r.abreast && r.abreast.z < 0.2 && r.abreast.z > -1.9 && r.A.turned + r.B.turned === 0) { assert.ok(r.abreast.a > r.abreast.b, `(${after} s) in the airlock, each on their own right: ${JSON.stringify(r.abreast)}`); passed++; }
   }
   assert.ok(passed > 0, 'some met in the airlock and passed there');
 });
 
-test('a passage too narrow for two keeps the turn-back: two of the crew met in the Miner\'s mess past its table, one turns back, never in each other', () => {
-  let turned = 0;
+test('two of the crew met in the Miner\'s mess past its table squeeze past each other: nobody turns back, never deeper than the outer halves', () => {
+  // (the game's maker, 2026-11-21: "In the narrow places too, he turns side-on and you squeeze past each other")
   for (const after of [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5]) {
-    // A: from the bench by the cockpit aft to a bunk; B: from the bench by the mess door forward to the cockpit's step
-    // bench, both through the mess past its table
+    // A: from the bench by the cockpit aft to a bunk; B: from the other bunk forward to the same bench, both through
+    // the mess past its table
     const r = crewTwo({ a: ['bench-b', 'bunk-p'], b: ['bunk-s', 'bench-b'], after: after + 1.5 });
     assert.ok(r.A.there && r.B.there, `(${after} s) both get somewhere to sit or lie`);
-    assert.ok(r.nearest >= PASS.apart - 1e-9, `(${after} s) never nearer than PASS.apart (${r.nearest.toFixed(3)})`);
-    turned += r.A.turned + r.B.turned;
+    assert.ok(r.nearest >= PASS.squeeze - 1e-9, `(${after} s) never nearer than PASS.squeeze (${r.nearest.toFixed(3)})`);
+    assert.equal(r.A.turned + r.B.turned, 0, `(${after} s) squeezed past, nobody turned back`);
   }
-  assert.ok(turned > 0, 'met in the narrow mess, one turned back');
+});
+
+// ── SQUEEZING PAST (PASSING-2): a straight passage `wide` m across (x = 0 its middle, along z), its walls felt as the
+// Miner's blueprint floor feels them (a body's middle 0.18 m off, floorOf): 0.75 m leaves 0.39 m for the two middles,
+// as the Miner's mess past its table (0.38 to 0.41 in the game) ─────────────────────────────────────────────────────
+const passage = (wide) => { const f = (x, z) => Math.abs(x) <= wide / 2 - 0.18 + 1e-9 && Math.abs(z) <= 3.5; f.r = 0.18; return f; };
+function squeezeTwo(wide, { offA = 0, offB = 0, after = 0, secs = 30 } = {}) {
+  const free = passage(wide), dt = 1 / 30;
+  const mk = (x, z0, z1, first) => ({ pos: { x, z: z0 }, heading: z1 > z0 ? 0 : Math.PI, wait: 0, leg: 0, way: [{ x, z: z0 }, { x: 0, z: z1 }], turned: 0, first, there: false });
+  const A = mk(offA, -3, 3, true), B = mk(offB, 3, -3, false);
+  let nearest = Infinity, overSpeed = 0, overFrames = 0, side = { A: 0, B: 0 }, abreast = null;
+  for (let t = 0; t < secs && !(A.there && B.there); t += dt) {
+    const z0 = B.pos.z - A.pos.z;
+    for (const [W, Q, k] of [[A, B, 'A'], [B, A, 'B']]) {
+      if (W.there || (W === B && t < after)) continue;
+      const was = { ...W.pos }, over = !Q.there && Math.hypot(W.pos.x - Q.pos.x, W.pos.z - Q.pos.z) < PASS.apart - 1e-9;
+      const r = walkStep(W, dt, null, { others: Q.there ? [] : [{ x: Q.pos.x, z: Q.pos.z, walking: true, heading: Q.heading, held: Q.wait > 0.3, first: Q.first }], free });
+      if (over) { overFrames++; overSpeed = Math.max(overSpeed, Math.hypot(W.pos.x - was.x, W.pos.z - was.z) / dt); }
+      if (Math.hypot(W.pos.x - Q.pos.x, W.pos.z - Q.pos.z) < 0.5) side[k] = Math.max(side[k], Math.abs(W.side || 0));
+      if (r === 'back') { W.turned++; W.way = [{ ...W.pos }, { ...W.way[0] }]; W.leg = 0; W.wait = 0; }
+      else if (r === 'wait' || r === 'aside') W.wait += dt;
+      else if (r === 'there') W.there = true;
+    }
+    if (!A.there && !B.there) nearest = Math.min(nearest, Math.hypot(A.pos.x - B.pos.x, A.pos.z - B.pos.z));
+    if (abreast == null && !A.there && !B.there && Math.sign(B.pos.z - A.pos.z) !== Math.sign(z0)) abreast = { a: A.pos.x, b: B.pos.x, sideA: A.side, sideB: B.side };
+  }
+  return { A, B, nearest, overSpeed, overFrames, side, abreast };
+}
+
+test('a squeeze in a 0.75 m passage: both pass, their middles never nearer than PASS.squeeze, both at half speed while their bodies overlap, each turned side-on facing the other', () => {
+  // (the rule: middles never nearer than half the body, PASS.squeeze = PASS.apart / 2; overlapping, PASS.slow)
+  assert.equal(PASS.squeeze, PASS.apart / 2);
+  assert.equal(PASS.slow, 0.5);
+  assert.ok(roomAt(0, 0, -1, 0, passage(0.75), 1)[0] + roomAt(0, 0, -1, 0, passage(0.75), 1)[1] < roomFor(0.18), 'too narrow for two to pass forward');
+  for (const [offA, offB, after] of [[0, 0, 0], [0.05, -0.05, 0], [-0.05, 0.05, 0.4], [0, 0.1, 1.1], [0.1, 0, 2]]) {
+    const r = squeezeTwo(0.75, { offA, offB, after }), what = `(${offA}, ${offB}, ${after} s)`;
+    assert.ok(r.A.there && r.B.there, `${what} both get through`);
+    assert.equal(r.A.turned + r.B.turned, 0, `${what} nobody turned back`);
+    assert.ok(r.nearest >= PASS.squeeze - 1e-9 && r.nearest < PASS.apart, `${what} squeezed past: ${r.nearest.toFixed(3)} m middle to middle`);
+    assert.ok(r.overFrames > 0 && r.overSpeed <= WALK.speed * PASS.slow + 1e-6, `${what} overlapping, at most half speed (${r.overSpeed.toFixed(2)} m/s, ${r.overFrames} steps)`);
+    // (each to their own right: A walking +z has its right at -x; side-on, facing the other: A's turn to its left (+))
+    assert.ok(r.abreast && r.abreast.a < r.abreast.b, `${what} each on their own right: ${JSON.stringify(r.abreast)}`);
+    assert.ok(r.side.A > 1.2 && r.side.B > 1.2, `${what} both turned side-on (${r.side.A.toFixed(2)}, ${r.side.B.toFixed(2)} rad)`);
+    assert.ok(r.abreast.sideA > 0 && r.abreast.sideB > 0, `${what} facing each other (each turned to their left, where the other goes by)`);
+  }
+});
+
+test('where even a squeeze does not fit (a passage leaving under squeezeFor for the two middles), the turn-back stays: one turns back, never nearer than PASS.apart', () => {
+  // (0.55 m: 0.19 m for the two middles, under squeezeFor (0.22))
+  assert.ok(0.55 - 2 * 0.18 < squeezeFor());
+  const r = squeezeTwo(0.55);
+  assert.ok(r.A.turned + r.B.turned > 0, 'one turned back');
+  assert.ok(r.nearest >= PASS.apart - 1e-9, `never in each other (${r.nearest.toFixed(3)})`);
+  assert.ok(r.A.there && r.B.there, 'both get to an end of it');
+});
+
+test('the plain parts of squeezing: overlapping is nearer than PASS.apart; side-on faces the one squeezed past; bumps at the squeeze', () => {
+  assert.ok(overlaps(0, 0, [{ x: 0.3, z: 0 }]) && !overlaps(0, 0, [{ x: 0.4, z: 0 }]));
+  assert.equal(sideOn(-0.2), Math.PI / 2, 'the other on one\'s left: turned to the left');
+  assert.equal(sideOn(0.2), -Math.PI / 2, 'on one\'s right: to the right');
+  const Q = { x: 0, z: 0.45 };
+  assert.equal(bumps(0, 0, 0, 0.2, [Q], undefined, PASS.squeeze), null, 'squeezing: to 0.25 m let be');
+  assert.equal(bumps(0, 0, 0, 0.3, [Q], undefined, PASS.squeeze), Q, 'squeezing: never within PASS.squeeze');
 });
 
 test('the player met head on in the Miner\'s airlock: the walker makes room on their right and walks on, never turned back', () => {

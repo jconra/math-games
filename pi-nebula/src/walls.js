@@ -615,7 +615,9 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   const tA = performance.now();
   for (const [id, S] of own) add('room:' + id, { solid: S.solid, up: S.up });
   stats.apartMs = Math.round(performance.now() - tA);
-  return { V, floorAt, free, move, snap, path, plan, reach, doors, stats, add, drop, lift, place, parts, solidAt: (x, y, z) => full(x, y, z), steps: () => STEPS.size };
+  // (radius(x, y, z): a person's half width against the walls there, BODY.r, or a ship's cabin's own where they are in one)
+  return { V, floorAt, free, move, snap, path, plan, reach, doors, stats, add, drop, lift, place, parts, solidAt: (x, y, z) => full(x, y, z), steps: () => STEPS.size,
+    radius: (x, y, z, r = BODY.r) => (extra.length ? radiusAt(x, y, z, r) : r) };
 }
 
 // THE FLOORS of a set of geometries: every triangle that faces up, sorted into half-metre squares; at(x, z, top, drop)

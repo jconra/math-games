@@ -1,7 +1,7 @@
 // Who is aboard a ship (src/aboardplan.js, the plain part of src/aboard.js): every seat and bed of a ship's rooms as a
 // place to sit or lie, read from its own blueprint, for any ship that can be boarded; the cockpit's seats kept for their
 // jobs; the way between two rooms through their doors; someone walking aboard met by the player in a passage too narrow
-// to pass them (they turn back to the place just left).
+// to pass forward (they squeeze past each other; where even that does not fit, they turn back to the place just left).
 //   node --test pi-nebula/tests/aboard.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,22 +67,25 @@ test('the way between two rooms runs through their doors, in turn; a room to its
 // lift, stopped for good by the captain walking the other way and waiting in the mess for the player to pass (who could
 // not: past the table it is 0.75 m wide). A stand-in for the player's own walking (src/player.js loads three.js): along
 // the cabin's middle at MOVE.walk on the blueprint's floor (floorOf), never nearer than PASS.apart to anyone: walked
-// into, slid round them (pushed out to PASS.apart where the floor allows; where it does not, the step not taken), as
-// player.js does. The one walking by the plain part's own steps (walkStep, on the same floor), turned back as
+// into, slid round them (pushed out to PASS.apart, or no further than they were, where the floor allows; where it does
+// not, squeezed past them, never nearer than PASS.squeeze; at half speed while overlapping), as player.js does. The one walking by the plain part's own steps (walkStep, on the same floor), turned back as
 // src/aboard.js turns them (wayBack).
 const MOVE = (() => { const m = /export const MOVE = \{ walk: ([\d.]+),/.exec(readFileSync(new URL('../src/player.js', import.meta.url), 'utf8')); return { walk: +m[1], near: PASS.apart }; })();
 function playerStep(pl, goal, bodies, free, dt) {
   const gx = goal[0] - pl.x, gz = goal[1] - pl.z, L = Math.hypot(gx, gz); if (L < 1e-6) return;
-  const s = Math.min(L, MOVE.walk * dt), bx = pl.x, bz = pl.z;
+  const s = Math.min(L, MOVE.walk * dt * (bodies.some((o) => Math.hypot(o.x - pl.x, o.z - pl.z) < PASS.apart - 1e-9) ? PASS.slow : 1)), bx = pl.x, bz = pl.z;
   let nx = pl.x + gx / L * s, nz = pl.z + gz / L * s;
   // (a wall: slid along it)
   if (!free(nx, nz)) { if (free(nx, pl.z)) nz = pl.z; else if (free(pl.x, nz)) nx = pl.x; else return; }
   pl.x = nx; pl.z = nz;
   for (const o of bodies) {
-    const dx = pl.x - o.x, dz = pl.z - o.z, d = Math.hypot(dx, dz); if (d >= MOVE.near) continue;
-    const ux = d > 1e-4 ? dx / d : -gz / L, uz = d > 1e-4 ? dz / d : gx / L, x = o.x + ux * MOVE.near, z = o.z + uz * MOVE.near;
-    if (free(x, z)) { pl.x = x; pl.z = z; } else { pl.x = bx; pl.z = bz; }
+    const dx = pl.x - o.x, dz = pl.z - o.z, d = Math.hypot(dx, dz), R = Math.min(MOVE.near, Math.max(Math.hypot(bx - o.x, bz - o.z), PASS.squeeze)); if (d >= R - 1e-9) continue;
+    const ux = d > 1e-4 ? dx / d : -gz / L, uz = d > 1e-4 ? dz / d : gx / L, out = (k) => { const x = o.x + ux * k, z = o.z + uz * k; if (!free(x, z)) return false; pl.x = x; pl.z = z; return true; };
+    if (!out(R) && d < PASS.squeeze && !out(PASS.squeeze)) { pl.x = bx; pl.z = bz; }
   }
+  // (overlapping: the slide round is part of the half-speed step)
+  const got = Math.hypot(pl.x - bx, pl.z - bz);
+  if (s < MOVE.walk * dt - 1e-9 && got > s + 1e-9) { const k = s / got, x = bx + (pl.x - bx) * k, z = bz + (pl.z - bz) * k; if (free(x, z) && !bodies.some((o) => Math.hypot(x - o.x, z - o.z) < PASS.squeeze)) { pl.x = x; pl.z = z; } }
 }
 function meet({ from, to, me, goal, after = 0, turn = true, secs = 60 }) {
   const bp = bpOf('miner-ore-cockpit'), P = placesOf(bp, { deck: 0, cockpitFloor: 0.62 }), place = (id) => P.find((p) => p.id === id), a = place(from), b = place(to), free = floorOf(bp);
@@ -138,20 +141,21 @@ test('the player in the way of someone walking aboard: waited for while near and
 
 test('the walk out of the Miner after a run gets to the lift, whenever the captain sets off forward through the mess', () => {
   // (he waited for the player to pass, and the player could not: the walk out stopped for good, as the rigs saw it)
+  // (squeezing past each other in the mess (PASSING-2), every meeting ends even with no turning back at all)
   const stuck = starts.filter((after) => meet({ from: 'bunk-p', to: 'bench-b', me: COCKPIT, goal: LIFT, after, turn: false }).arrived == null);
-  assert.ok(stuck.length > 0, 'waiting alone, some meetings in the mess never end');
-  // (coming from the bunks through the mess door he turns back; from bench to bench his way runs straight along the
-  // table's edge, as ever, PASS.apart off the player's way along the counter, and they get by each other: PASSING-1)
-  for (const [from, to, back] of [['bunk-p', 'bench-b', true], ['bunk-s', 'bench-a', true], ['bench-a', 'bench-b', false]]) {
+  assert.deepEqual(stuck, [], 'with no turning back, no meeting in the mess is left unended');
+  // (coming from the bunks through the mess door, or from bench to bench along the table's edge: they squeeze past
+  // each other, his middle never nearer the player's than PASS.squeeze; he never turns back)
+  for (const [from, to] of [['bunk-p', 'bench-b'], ['bunk-s', 'bench-a'], ['bench-a', 'bench-b']]) {
     let turned = 0;
     for (const after of starts) {
       const r = meet({ from, to, me: COCKPIT, goal: LIFT, after });
       assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: at the lift in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
       assert.ok(r.W.waitMost < WALK.back + 1.5, `${from} -> ${to} (${after} s): never stood waiting long (${r.W.waitMost.toFixed(1)} s)`);
-      assert.ok(r.nearest >= PASS.apart - 1e-6, `${from} -> ${to} (${after} s): never in each other (${r.nearest.toFixed(3)} m)`);
+      assert.ok(r.nearest >= PASS.squeeze - 1e-6, `${from} -> ${to} (${after} s): never deeper than the bodies' outer halves (${r.nearest.toFixed(3)} m)`);
       turned += r.W.turned;
     }
-    if (back) assert.ok(turned > 0, `${from} -> ${to}: met head on, he turned back`);
+    assert.equal(turned, 0, `${from} -> ${to}: met head on, they squeezed past, nobody turned back`);
   }
 });
 
@@ -162,7 +166,39 @@ test('the walk forward through the mess gets to the cockpit, whenever someone se
       assert.ok(r.arrived != null && r.arrived - after < 12, `${from} -> ${to}, the player off ${after} s after him: in the cockpit in ${r.arrived == null ? 'never' : (r.arrived - after).toFixed(1) + ' s'}`);
       // (where he ends up, sitting or lying, is out of the way: the player walked past it)
       assert.ok(r.W.there, `${from} -> ${to} (${after} s): sitting or lying at the end`);
-      assert.ok(r.nearest >= PASS.apart - 1e-6, `${from} -> ${to} (${after} s): never in each other (${r.nearest.toFixed(3)} m)`);
+      assert.ok(r.nearest >= PASS.squeeze - 1e-6, `${from} -> ${to} (${after} s): never deeper than the bodies' outer halves (${r.nearest.toFixed(3)} m)`);
     }
+  }
+});
+
+test('the player and someone walking aboard squeeze past each other in a 0.75 m passage: never nearer than PASS.squeeze, both at half speed while their bodies overlap, he turned side-on', () => {
+  // (a straight passage, x = 0 its middle, along z, its walls felt as the Miner's blueprint floor feels them (0.18 m):
+  // 0.39 m for the two middles, as the Miner's mess past its table; the game's maker, 2026-11-21: "it should slow them
+  // down to half speed")
+  const free = (x, z) => Math.abs(x) <= 0.75 / 2 - 0.18 + 1e-9 && Math.abs(z) <= 3.5; free.r = 0.18;
+  for (const [px, after] of [[0, 0], [0.1, 0.5], [-0.1, 1], [0, 1.6]]) {
+    const W = { pos: { x: 0, z: -3 }, heading: 0, wait: 0, leg: 0, way: [{ x: 0, z: -3 }, { x: 0, z: 3 }], turned: 0 };
+    const pl = { x: px, z: 3 }, goal = [px, -3], dt = 1 / 30;
+    let nearest = Infinity, there = false, got = null, overW = 0, overP = 0, side = 0;
+    for (let t = 0; t < 30 && !(there && got != null); t += dt) {
+      const over = Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z) < PASS.apart - 1e-9, pw = { ...pl };
+      if (t >= after && got == null) { playerStep(pl, goal, there ? [] : [W.pos], free, dt); if (Math.hypot(goal[0] - pl.x, goal[1] - pl.z) < 0.05) got = t; }
+      if (!there) {
+        // (overlapping as he steps: the player has stepped already this frame)
+        const overNow = Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z) < PASS.apart - 1e-9, w0 = { ...W.pos };
+        const r = walkStep(W, dt, pl, { free });
+        if (overNow) overW = Math.max(overW, Math.hypot(W.pos.x - w0.x, W.pos.z - w0.z) / dt);
+        assert.notEqual(r, 'back', `the player at ${px}, off ${after} s: squeezed past, never turned back`);
+        if (r === 'wait' || r === 'aside') W.wait += dt; else if (r === 'there') there = true;
+      }
+      if (over) overP = Math.max(overP, Math.hypot(pl.x - pw.x, pl.z - pw.z) / dt);
+      if (!there) { const d = Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z); nearest = Math.min(nearest, d); if (d < 0.5) side = Math.max(side, Math.abs(W.side || 0)); }
+    }
+    const what = `the player at ${px}, off ${after} s`;
+    assert.ok(there && got != null, `${what}: both get through`);
+    assert.ok(nearest >= PASS.squeeze - 1e-6 && nearest < PASS.apart, `${what}: squeezed past (${nearest.toFixed(3)} m)`);
+    assert.ok(overP > 0 && overP <= MOVE.walk * PASS.slow + 1e-6, `${what}: the player at half speed overlapping (${overP.toFixed(2)} m/s)`);
+    assert.ok(overW <= WALK.speed * PASS.slow + 1e-6, `${what}: he at half speed overlapping (${overW.toFixed(2)} m/s)`);
+    assert.ok(side > 1.2, `${what}: he turned side-on (${side.toFixed(2)} rad)`);
   }
 });

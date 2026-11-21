@@ -24,11 +24,15 @@
 //     MET HEAD ON, the player coming or another of the crew, where the floor is wide enough for two to go by each other
 //     shoulder past shoulder (the Miner's airlock): each keeps to their own right and they pass (the game's maker,
 //     2026-11-20: "If everyone walked toward the right side then they should be able to pass eachother"; the player is
-//     not steered, the crew make room on their right). WHERE IT IS TOO NARROW FOR TWO (the Miner's mess past its
-//     table, its bunks' aisle, its doors: 0.75 to 0.8 m) they wait for the player to pass; the player still coming on
-//     at them after a moment (WALK.back), they turn back to the place they just left and sit or lie there again, out
-//     of the way (aboardplan.js walkStep, inTheWay, wayBack); on again as ever once their while there is up; two of the
-//     crew so met, one turns back; two in each other's way otherwise, the later in the list makes way. The
+//     not steered, the crew make room on their right). WHERE IT IS TOO NARROW FOR TWO TO PASS FORWARD (the Miner's
+//     mess past its table, its bunks' aisle, its doors: 0.75 to 0.8 m) they squeeze past each other (the game's maker,
+//     2026-11-21: "In the narrow places too, he turns side-on and you squeeze past each other"; "it should slow them
+//     down to half speed"): each to the side of the passage, turned side-on facing the other, stepping sideways, their
+//     middles as near as PASS.squeeze, both at half speed while their bodies overlap. Only where even that does not fit
+//     (nowhere in the Miner), or the player stands square in the way, they wait and, the player still coming on at them
+//     after a moment (WALK.back), turn back to the place they just left and sit or lie there again, out of the way
+//     (aboardplan.js walkStep, inTheWay, wayBack); on again as ever once their while there is up; two of the crew so
+//     met, one turns back; two in each other's way otherwise, the later in the list makes way. The
 //     last step, from beside a seat onto it, is never waited over: sitting down takes them out of the way. (Waiting
 //     alone, the two stood face to face for good: the walk out of the Miner after a run, through its mess to the lift,
 //     was stopped by the captain standing in it, 2026-11-20.)
@@ -75,12 +79,12 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   // (the rest aboard, as someone walking meets them: where each is, walking or not, which way, and whether they come
   // before W in the list: two who cannot pass, the later turns back first)
   const othersOf = (W) => list.filter((Q) => Q !== W).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.doing === 'walk', heading: Q.heading, held: Q.doing === 'walk' && Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(W) }));
-  const play = (W, n, fade = 0.35) => { if (W.clip !== n) { W.c.play(n, { fade }); W.clip = n; } };
+  const play = (W, n, fade = 0.35, speed = 1) => { if (W.clip !== n) { W.c.play(n, { fade, speed }); W.clip = n; } };
   const take = (p, who) => { for (const [k, v] of users) if (v === who) users.delete(k); if (p) users.set(p.id, who); };
   // (a place as a figure uses it: where its root is and which way it is turned, in the ship's own frame)
   function seatAt(W, p) { W.place = p; W.doing = p.kind; W.pos.set(p.x, p.y, p.z); W.heading = p.heading; play(W, p.kind === 'sit' ? CLIP.sit : CLIP.stand, 0); }
   // (there, and how long they stay)
-  function arrive(W, p) { W.way = null; seatAt(W, p); W.t = 0; W.stay = p.kind === 'lie' ? WALK.lie[0] + rand() * (WALK.lie[1] - WALK.lie[0]) : WALK.sit[0] + rand() * (WALK.sit[1] - WALK.sit[0]); }
+  function arrive(W, p) { W.way = null; W.side = 0; W.sideAim = 0; seatAt(W, p); W.t = 0; W.stay = p.kind === 'lie' ? WALK.lie[0] + rand() * (WALK.lie[1] - WALK.lie[0]) : WALK.sit[0] + rand() * (WALK.sit[1] - WALK.sit[0]); }
   // POP IN (the game's maker: "it is fine to just have them pop into existence on the ship"): each in the seat their
   // job has, or the others somewhere along for the ride
   for (const W of list) {
@@ -127,8 +131,10 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
         else if (r === 'aside') { play(W, CLIP.walk); W.wait += dt; }      // (making way: a step back out of someone's way)
         else {
           // (walking, on the cabin's deck; there, at the place's own height: a bunk's bed, the flight deck's seats. The
-          // deck was set after arriving once, so someone who walked to a bunk lay 0.42 m low, in its base)
-          play(W, CLIP.walk); W.pos.y = s.space.deck;
+          // deck was set after arriving once, so someone who walked to a bunk lay 0.42 m low, in its base. Turned
+          // side-on squeezing past someone: stepping sideways, CLIP.side)
+          if (Math.abs(W.side || 0) > 0.8) play(W, W.side > 0 ? CLIP.side[1] : CLIP.side[0], 0.2, CLIP.sideSpeed); else play(W, CLIP.walk);
+          W.pos.y = s.space.deck;
           if (r === 'there') arrive(W, W.target);
         }
       } else if (W.t > W.stay && !(pp && W.place && Math.hypot(pp.x - W.place.stand[0], pp.z - W.place.stand[1]) < WALK.room)) { W.t = 0; goNext(W); }
@@ -137,7 +143,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
         const h = W.heading, hx = Math.sin(h), hz = Math.cos(h);
         _q.setFromEuler(_e.set(-Math.PI / 2, Math.atan2(-hx, -hz), 0, 'YXZ'));
         _m.compose(_v.set(W.pos.x - hx * BED.feet, W.pos.y + BED.back, W.pos.z - hz * BED.feet), _q, _s);
-      } else { _q.setFromEuler(_e.set(0, W.heading, 0)); _m.compose(W.pos, _q, _s); }
+      } else { _q.setFromEuler(_e.set(0, W.heading + (W.doing === 'walk' ? W.side || 0 : 0), 0)); _m.compose(W.pos, _q, _s); }
       W.local = (W.local || new THREE.Matrix4()).copy(_m);
       W.c.root.matrix.copy(_m); W.c.root.matrixWorldNeedsUpdate = true; W.c.root.updateMatrixWorld(true);
       W.c.setEyes(W.doing === 'lie' ? 'shut' : 'blink');     // (lying on a bed to rest: eyes shut, kit/lids.js)
@@ -167,6 +173,6 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   function dispose() { for (const W of list) { if (W.c.root.parent) W.c.root.parent.remove(W.c.root); W.c.dispose(); } list.length = 0; users.clear(); }
   return { places, list, update, late, near, poseOf, take, free: (who) => take(null, who), user: (p) => users.get(p.id) || null, mine: mineP, dispose,
     // (for the player's own walking: the crew are people to walk round, where they are just now)
-    get others() { return list.map((W) => ({ pos: W.posW, hidden: false, away: false })); },
+    get others() { return list.map((W) => ({ pos: W.posW, hidden: false, away: false, walking: W.doing === 'walk' })); },
     state: () => ({ list: list.map((W) => ({ id: W.id, jobs: W.jobs, doing: W.doing, place: W.place ? W.place.id : W.target ? '-> ' + W.target.id : null, pos: W.pos.toArray().map((v) => +v.toFixed(2)), wait: +W.wait.toFixed(1), turned: W.turned })), places: places.map((p) => ({ id: p.id, kind: p.kind, room: p.room, job: p.job, user: users.get(p.id) || null })) }) };
 }

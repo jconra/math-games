@@ -6,12 +6,14 @@
 //   P.place(feet, heading)          stand them somewhere (a spot walls.snap gave)
 //   P.update(dt, { move, run, yaw, others, clip, keepOff })   move: { x, y, mag } from the input; yaw: the camera's; others: the
 //                                   people ({ pos } each, and `away` or `hidden`: not there), whom the player does not
-//                                   walk through (never nearer than MOVE.near: slid round them); clip: one to play
+//                                   walk through (never nearer than MOVE.near: slid round them; where the walls leave
+//                                   no room to slide round, squeezed past, never nearer than PASS.squeeze, at half
+//                                   speed while overlapping, turned side-on to someone walking); clip: one to play
 //                                   this frame whatever the legs are doing (a throw in the arena's game), at clipSpeed
 //   P.pos, P.heading, P.speed (the ground really covered, m/s), P.c (the crew kit's character)
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
-import { PASS } from './passing.js';
+import { PASS, roomAt, roomFor, sideOn } from './passing.js';
 
 // m/s; m/s each second; radians a second; m kept off another person, middle to middle (passing.js PASS.apart: the one
 // size of a body against another, everyone's, so the player gets by people where they get by each other; it was 0.6)
@@ -40,11 +42,11 @@ export function shine(c, env) {
 export async function makePlayer({ lib, recipe, walls, scene }) {
   const c = await makeCrew(lib, recipe);
   scene.add(c.root);
-  const P = { c, pos: new THREE.Vector3(), heading: 0, speed: 0, want: 0, drawnY: 0, clip: '' };
+  const P = { c, pos: new THREE.Vector3(), heading: 0, speed: 0, want: 0, drawnY: 0, clip: '', side: 0, sideAim: 0 };
   const play = (name, speed = 1) => { if (P.clip !== name) { c.play(name, { fade: 0.25, speed }); P.clip = name; } else c.play(name, { speed }); };
 
   P.place = (feet, heading = 0) => {
-    P.pos.copy(feet); P.drawnY = feet.y; P.heading = heading; P.speed = 0; P.want = 0;
+    P.pos.copy(feet); P.drawnY = feet.y; P.heading = heading; P.speed = 0; P.want = 0; P.side = 0; P.sideAim = 0;
     c.root.position.copy(feet); c.root.rotation.set(0, heading, 0);
     play(STAND); c.update(0);
   };
@@ -61,7 +63,15 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     }
     const v0 = P.want;
     P.want = target > P.want ? Math.min(target, P.want + MOVE.accel * dt) : Math.max(target, P.want - MOVE.accel * 1.5 * dt);
-    const v = (v0 + P.want) / 2;
+    // (the player's body overlapping someone's, squeezing past them: at half speed, PASS.slow, as they are; the game's
+    // maker, 2026-11-21: "it should slow them down to half speed")
+    let near = null, nd = PASS.turnAt;
+    for (const o of others) {
+      if (o.hidden || o.away || Math.abs(P.pos.y - o.pos.y) > 1.5) continue;
+      const d = Math.hypot(P.pos.x - o.pos.x, P.pos.z - o.pos.z);
+      if (d < nd) { nd = d; near = o; }
+    }
+    const slowed = !!near && nd < PASS.apart - 1e-9, v = (v0 + P.want) / 2 * (slowed ? PASS.slow : 1);
     let got = 0;
     if (v > 0.01) {
       before.copy(P.pos);
@@ -70,15 +80,26 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
       if (keepOff && keepOff(before.x, before.z, P.pos.x, P.pos.z, P.pos.y)) { P.pos.copy(before); got = 0; }
       // not through another person: walked into, they are slid round (pushed out to MOVE.near from them, where the walls
       // allow; where they do not, the step is not taken)
+      // SQUEEZED PAST, where the walls leave no room to slide round them at MOVE.near (a ship's narrow mess, its bunks'
+      // aisle, a door: the game's maker, 2026-11-21, "In the narrow places too, he turns side-on and you squeeze past
+      // each other"): the step as the walls let it, the middles never nearer than PASS.squeeze (each body's outer half
+      // in the other's at most); slid round to no further off than they were before the step (no jump out of a squeeze)
       for (const o of others) {
         // (someone away, out of sight with their day going on out of the way (people.js), is not there for the player)
         if (o.hidden || o.away || Math.abs(P.pos.y - o.pos.y) > 1.5) continue;
-        const dx = P.pos.x - o.pos.x, dz = P.pos.z - o.pos.z, d1 = Math.hypot(dx, dz);
-        if (d1 >= MOVE.near) continue;
+        const dx = P.pos.x - o.pos.x, dz = P.pos.z - o.pos.z, d1 = Math.hypot(dx, dz), d0 = Math.hypot(before.x - o.pos.x, before.z - o.pos.z);
+        const R = Math.min(MOVE.near, Math.max(d0, PASS.squeeze));
+        if (d1 >= R - 1e-9) continue;
         const nx = d1 > 1e-4 ? dx / d1 : Math.sin(P.heading + Math.PI / 2), nz = d1 > 1e-4 ? dz / d1 : Math.cos(P.heading + Math.PI / 2);
-        const x = o.pos.x + nx * MOVE.near, z = o.pos.z + nz * MOVE.near, f = walls.floorAt(x, z, P.pos.y + 0.32, 0.8);
-        if (f !== null && walls.free(x, f, z)) { P.pos.set(x, f, z); } else { P.pos.copy(before); }
+        const out = (k) => { const x = o.pos.x + nx * k, z = o.pos.z + nz * k, f = walls.floorAt(x, z, P.pos.y + 0.32, 0.8); if (f !== null && walls.free(x, f, z)) { P.pos.set(x, f, z); return true; } return false; };
+        if (!out(R) && d1 < PASS.squeeze && !out(PASS.squeeze)) P.pos.copy(before);
         got = Math.hypot(P.pos.x - before.x, P.pos.z - before.z);
+      }
+      // (overlapping, the slide round them is part of the half-speed step: no further in all than v * dt, where that
+      // point is free and keeps PASS.squeeze off everyone)
+      if (slowed && got > v * dt + 1e-6) {
+        const k = v * dt / got, x = before.x + (P.pos.x - before.x) * k, z = before.z + (P.pos.z - before.z) * k, f = walls.floorAt(x, z, P.pos.y + 0.32, 0.8);
+        if (f !== null && walls.free(x, f, z) && !others.some((o) => !o.hidden && !o.away && Math.abs(P.pos.y - o.pos.y) <= 1.5 && Math.hypot(x - o.pos.x, z - o.pos.z) < PASS.squeeze)) { P.pos.set(x, f, z); got = v * dt; }
       }
       if (got < v * dt * 0.3) P.want = Math.min(P.want, got / Math.max(dt, 1e-4) + 0.3);   // (held up: ready to set off again)
     }
@@ -86,8 +107,18 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     P.speed = damp(P.speed, got / Math.max(dt, 1e-4), 25, dt);
     // the body: stairs eased (the feet's height steps a riser at a time)
     P.drawnY = Math.abs(P.pos.y - P.drawnY) > 0.6 ? P.pos.y : damp(P.drawnY, P.pos.y, 18, dt);
-    c.root.position.set(P.pos.x, P.drawnY, P.pos.z); c.root.rotation.set(0, P.heading, 0);
+    // TURNED SIDE-ON squeezing past someone walking, where the floor across is too narrow for two to pass forward
+    // (passing.js roomFor, the walls' own half width there): facing them from PASS.turnAt off, till PASS.turnOff apart
+    // again; P.side, the turn from the way walked (+ to the left), eased round; the way walked and the camera are as ever
+    if (near && near.walking && !P.sideAim) {
+      const rx = -Math.cos(P.heading), rz = Math.sin(P.heading), lat = (near.pos.x - P.pos.x) * rx + (near.pos.z - P.pos.z) * rz;
+      const need = roomFor(walls.radius ? walls.radius(P.pos.x, P.pos.y, P.pos.z) : 0.28), [l, r] = roomAt(P.pos.x, P.pos.z, rx, rz, (x, z) => walls.free(x, P.pos.y, z), need, 0.03);
+      if (l + r < need - 0.03) P.sideAim = sideOn(lat);
+    } else if (P.sideAim && !(near && near.walking && nd < PASS.turnOff)) P.sideAim = 0;
+    const sd = (P.sideAim || 0) - P.side; P.side += Math.sign(sd) * Math.min(Math.abs(sd), 5 * dt);
+    c.root.position.set(P.pos.x, P.drawnY, P.pos.z); c.root.rotation.set(0, P.heading + P.side, 0);
     if (clip) play(clip, clipSpeed);
+    else if (Math.abs(P.side) > 0.8 && P.speed > 0.15) play(P.side > 0 ? 'Run_Right' : 'Run_Left', Math.max(0.3, Math.min(0.8, P.speed / 2)));
     else if (P.speed > 2.6) play('Run', Math.max(0.6, Math.min(1.6, P.speed / c.stride.Run)));
     else if (P.speed > 0.15) play('Walk', Math.max(0.5, Math.min(1.8, P.speed / c.stride.Walk)));
     else play(STAND);
