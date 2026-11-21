@@ -197,20 +197,25 @@ test('a passage too narrow for two keeps the turn-back: two of the crew met in t
 });
 
 test('the player met head on in the Miner\'s airlock: the walker makes room on their right and walks on, never turned back', () => {
-  // (the player standing in the airlock's middle, just aft of the mess door; the captain coming aft through it)
-  const a = place('bench-b'), b = place('bunk-p');
-  const W = { pos: { x: a.x, z: a.z }, heading: 0, wait: 0, leg: 0, from: a, target: b, there: null, turned: 0, getUp: true,
-    way: [a.stand, ...wayOf(bp, a.room, b.room), b.stand].map(([x, z]) => ({ x, z })) };
-  const pl = { x: 0, z: -1.0 }, dt = 1 / 30;
-  let nearest = Infinity, side = null, r;
-  for (let t = 0; t < 20 && r !== 'there'; t += dt) {
-    r = walkStep(W, dt, pl, { free });
-    assert.notEqual(r, 'back', 'room to pass: no turning back');
-    nearest = Math.min(nearest, Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z));
-    if (side == null && W.pos.z < pl.z) side = W.pos.x;
+  // (the player standing in the airlock: in its middle, and just aft of the mess door's mouth, where the game showed him
+  // stepped aside beside the door and still turned back, the room felt from where he stood rather than from the way's
+  // line (PASSING-1); the captain coming aft through the door from either bench)
+  for (const [from, at] of [['bench-b', [0, -1.0]], ['bench-b', [0.04, -0.1]], ['bench-a', [0.04, -0.1]], ['bench-a', [-0.1, -0.2]]]) {
+    const a = place(from), b = place('bunk-p');
+    const W = { pos: { x: a.x, z: a.z }, heading: 0, wait: 0, leg: 0, from: a, target: b, there: null, turned: 0, getUp: true,
+      way: [a.stand, ...wayOf(bp, a.room, b.room), b.stand].map(([x, z]) => ({ x, z })) };
+    const pl = { x: at[0], z: at[1] }, dt = 1 / 30;
+    let nearest = Infinity, side = null, r;
+    for (let t = 0; t < 20 && r !== 'there'; t += dt) {
+      r = walkStep(W, dt, pl, { free });
+      assert.notEqual(r, 'back', `${from}, the player at ${at}: room to pass, no turning back`);
+      if (r === 'wait' || r === 'aside') W.wait += dt;
+      nearest = Math.min(nearest, Math.hypot(pl.x - W.pos.x, pl.z - W.pos.z));
+      if (side == null && W.pos.z < pl.z) side = W.pos.x - pl.x;
+    }
+    assert.equal(r, 'there', `${from}, the player at ${at}`);
+    assert.ok(nearest >= PASS.apart - 1e-9, nearest);
+    // (walking aft, -z: their right is +x)
+    assert.ok(side > PASS.apart - 0.01, `${from}, the player at ${at}: went by the player on their right (${side.toFixed(2)} m to +x)`);
   }
-  assert.equal(r, 'there');
-  assert.ok(nearest >= PASS.apart - 1e-9, nearest);
-  // (walking aft, -z: their right is +x)
-  assert.ok(side > PASS.apart - 0.01, `went by the player on their right: x ${side.toFixed(2)}`);
 });
