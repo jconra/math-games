@@ -70,6 +70,7 @@ import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED } from './life.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
+import { pointGap } from '../kit/forkliftround.js';
 import { MOVES_ON, MOVES_OFF, SECS as BED_SECS, pose as onBedPose } from './onbed.js';
 import { STAND, shine } from './player.js';
 import { PASS, passBy, bumps, facing } from './passing.js';
@@ -89,6 +90,8 @@ const SEEN = 46;        // people further than this from the camera are not draw
 // again, and giving up (s); how long a planned way may take each frame, for everyone (ms)
 export const LIFE = {
   speed: [1.05, 1.35], turn: 3, body: PASS.apart, keepFrom: 0.75, lane: PASS.lane, sidestep: 1.0, replan: 2.0, stillWait: 0.8, replanEvery: 1.5, giveUp: 7,
+  clear: 0.26,          // (m: a person's middle never nearer a machine's outline, Cargo's forklift's: their whole body off it, as the
+                        // walls keep it off any furniture, walls.move(..., 0.26); its forks lie too low for the walls to feel)
   planMs: 2.5, planMost: 250, sit: 0.7, room: 0.75,     // (room: no two spots anyone has are nearer than this, m)
   near: 12, mid: 24,    // m from the camera: clips played every frame nearer, every other frame to `mid`, every fourth beyond
   drawn: { low: 8, medium: 12, high: 20 },   // the most drawn at once, the nearest (?drawn=N for the cost rigs)
@@ -625,6 +628,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return (x, z) => {
       if (!P.home && noGo(x, z)) return true;
       if (Math.hypot(x - to.x, z - to.z) < 0.7) return false;
+      if (nearTruck(P, x, z)) return true;      // (Cargo's forklift, where it is as the way is worked out)
       if (P.away) return false;       // (someone away keeps off the patches, and nobody else is there for them)
       const M = stillMap(), i = Math.floor(x), k = Math.floor(z);
       // (anyone standing still on the same floor: not someone in Cargo under the deck, or in the control room over it)
@@ -726,6 +730,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     zoneClock -= dt;
     const findZones = zoneClock <= 0; if (findZones) zoneClock = 0.4;
     playerNow = player;
+    truckNow = rides.forklift && rides.forklift.outline ? rides.forklift.outline() : null;      // (Cargo's forklift, where it is)
     // (a ship stands somewhere else, or the crane's round has other places in it: the patches marked again, and anyone
     // left standing on one, or inside the ship, goes on with their day from there)
     if (markedFor !== marksKey()) {
@@ -1373,7 +1378,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     for (const [s, b] of [[0.75, -0.15], [-0.75, -0.15], [0.55, -0.55], [-0.55, -0.55], [0, -0.8], [0.9, 0.1], [-0.9, 0.1]]) {
       _y.set(P.pos.x - uz * s + ux * b, P.pos.y, P.pos.z + ux * s + uz * b);
       const t = P.pos.clone(); walls.move(t, _y.x - P.pos.x, _y.z - P.pos.z, 0.26, openFor(P));
-      if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || patchFor(P, t.x, t.z) || someoneAt(t, P, LIFE.body)) continue;
+      if (Math.hypot(t.x - _y.x, t.z - _y.z) > 0.1 || patchFor(P, t.x, t.z) || someoneAt(t, P, LIFE.body) || nearTruck(P, t.x, t.z)) continue;
       // (the further from the line the other is walking along, the better)
       const score = Math.abs(s) - Math.max(0, b) * 0.5 + Math.random() * 0.05;
       if (score > bs) { bs = score; best = t; }
@@ -1395,6 +1400,23 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return others;
   }
   const posOf = (Q) => Q.pos;
+  // CARGO'S FORKLIFT (src/cargoforklift.js ride.outline(): its body, carriage, forks or the pallet on them, where it is
+  // just now): nobody's whole body on it (the coordinator's replay, 2026-11-20: Sami walked by it waiting, his middle
+  // 0.12 m from its forks, too low for the walls to feel). A step that would bring someone's middle nearer than
+  // LIFE.clear to it, and nearer than it was, is not taken; ways are worked out round it. Not its driver on the way to
+  // its seat (they get on it), nor anyone not on Cargo's floor.
+  let truckNow = null;
+  const truckFor = (P) => !!truckNow && !(P.act && P.act.kind === 'drive') && Math.abs(P.pos.y - STORE.floor) < 1;
+  function byTruck(P, x0, z0, x1, z1) {
+    if (!truckFor(P)) return false;
+    for (const o of truckNow) { const g = pointGap(o, x1, z1); if (g < LIFE.clear && g < pointGap(o, x0, z0) - 1e-9) return true; }
+    return false;
+  }
+  function nearTruck(P, x, z) {
+    if (!truckFor(P)) return false;
+    for (const o of truckNow) if (pointGap(o, x, z) < LIFE.clear + 0.05) return true;
+    return false;
+  }
   // (a step as it was taken (walls.move slides along a wall, so it can end elsewhere than it was aimed): undone if it
   // ended nearer than LIFE.body to anyone, and nearer than it began -> who, or null)
   function unbump(P, from) {
@@ -1415,6 +1437,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         othersOf(P); _u.copy(P.pos);
         let g = walls.move(P.pos, yx / yd * s, yz / yd * s, 0.26, openFor(P));
         if (unbump(P, _u)) g = 0;
+        else if (byTruck(P, _u.x, _u.z, P.pos.x, P.pos.z)) { P.pos.copy(_u); g = 0; }
         if (g < s * 0.3) { Y.t = 2; play(P, STAND); } else play(P, CLIPS.walk, { speed: 0.8 });   // (blocked: no walking on the spot)
       } else {
         const Q = Y.for; play(P, STAND);
@@ -1438,7 +1461,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const gx = goal.x - P.pos.x, gz = goal.z - P.pos.z, gd = Math.hypot(gx, gz);
     othersOf(P);
     // (there: on the spot itself, unless that would put them into someone standing at its edge: there as they are)
-    if (P.wi >= W2.length - 1 && gd < 0.08) { if (!bumps(P.pos.x, P.pos.z, goal.x, goal.z, others, posOf)) { P.pos.x = goal.x; P.pos.z = goal.z; } arrive(P); stillV++; return; }
+    if (P.wi >= W2.length - 1 && gd < 0.08) { if (!bumps(P.pos.x, P.pos.z, goal.x, goal.z, others, posOf) && !byTruck(P, P.pos.x, P.pos.z, goal.x, goal.z)) { P.pos.x = goal.x; P.pos.z = goal.z; } arrive(P); stillV++; return; }
     let dx = gx / (gd || 1), dz = gz / (gd || 1);
     // in the lane ahead (passing.js passBy): met head on by someone walking the other way, or by the player coming at
     // them, each keeps to their own right (the player is not steered: they make room on their right, or, the player
@@ -1475,8 +1498,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // slid along a wall, ends that near)
     _d.set(P.pos.x + dx * step, 0, P.pos.z + dz * step);
     if (!by) by = bumps(P.pos.x, P.pos.z, _d.x, _d.z, others, posOf);
+    if (!by && byTruck(P, P.pos.x, P.pos.z, _d.x, _d.z)) by = 'truck';
     let got = 0;
-    if (!by) { _u.copy(P.pos); got = walls.move(P.pos, dx * step, dz * step, 0.26, openFor(P)); const b = unbump(P, _u); if (b) { by = b; got = 0; } }
+    if (!by) { _u.copy(P.pos); got = walls.move(P.pos, dx * step, dz * step, 0.26, openFor(P)); const b = unbump(P, _u); if (b) { by = b; got = 0; } else if (byTruck(P, _u.x, _u.z, P.pos.x, P.pos.z)) { P.pos.copy(_u); by = 'truck'; got = 0; } }
     // (pressed into a corner, or steered into one: the freest small step near the way wanted, never back the way they
     // came, onto a patch or toward anyone)
     if (!by && got < step * 0.3) {
@@ -1486,7 +1510,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const a = i / 16 * Math.PI * 2, vx = Math.sin(a), vz = Math.cos(a), dot = vx * ux + vz * uz;
         if (dot <= bd) continue;
         _t.copy(P.pos);
-        if (walls.move(_t, vx * step, vz * step, 0.26, openFor(P)) < step * 0.7 || patchFor(P, _t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
+        if (walls.move(_t, vx * step, vz * step, 0.26, openFor(P)) < step * 0.7 || patchFor(P, _t.x, _t.z) || byTruck(P, P.pos.x, P.pos.z, _t.x, _t.z) || others.some((Q) => Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < LIFE.body && Math.hypot(Q.pos.x - _t.x, Q.pos.z - _t.z) < Math.hypot(Q.pos.x - P.pos.x, Q.pos.z - P.pos.z))) continue;
         bd = dot; bx = vx; bz = vz;
       }
       if (bx || bz) got += walls.move(P.pos, bx * step, bz * step, 0.26, openFor(P));
@@ -1505,8 +1529,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // by someone standing still (they will not move) or by a wall: the way worked out again at once, round them; and
     // someone standing where they were going: somewhere else instead.
     if (got < step * 0.3) {
-      P.held += dt; P.by = by && by === playerNow ? 'player' : by === 'patch' ? 'patch' : by ? 'person' : 'wall';
-      const still = !by || by === 'patch' || (by !== playerNow && !by.walking), end = P.way[P.way.length - 1];
+      P.held += dt; P.by = by && by === playerNow ? 'player' : by === 'patch' ? 'patch' : by === 'truck' ? 'forklift' : by ? 'person' : 'wall';
+      const still = !by || by === 'patch' || by === 'truck' || (by !== playerNow && !by.walking), end = P.way[P.way.length - 1];
       // (the scanner's patient and medic keep at it: a scan is not dropped for someone standing near; they work the way
       // out again round them, and give up only after twice as long)
       const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic' || P.act.kind === 'drive');
@@ -1685,8 +1709,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (!first) return false;
     const at = first.spot.seat || first.spot.pos, zone = W.zoneAt(at);
     // (their room drawn: only somewhere out of the camera's view, else they are left to come a moment later; never
-    // where someone is standing, the player or one of theirs walking by: a moment later too)
-    if ((drawn && seenAt(at, zone, camera)) || someoneAt(first.spot.pos, P, LIFE.body, true) || someoneAt(at, P, LIFE.body, true)) { release(P); return false; }
+    // where someone is standing, the player or one of theirs walking by, nor by the forklift as it stands just now: a
+    // moment later too)
+    const onTruck = !!truckNow && Math.abs(first.spot.pos.y - STORE.floor) < 1 && truckNow.some((o) => pointGap(o, first.spot.pos.x, first.spot.pos.z) < LIFE.clear + 0.05);
+    if ((drawn && seenAt(at, zone, camera)) || someoneAt(first.spot.pos, P, LIFE.body, true) || someoneAt(at, P, LIFE.body, true) || onTruck) { release(P); return false; }
     P.pos.copy(first.spot.pos); P.heading = first.spot.heading ?? P.heading; P.drawnY = P.pos.y;
     Object.assign(P, { hidden: false, away: false, walking: false, way: null, req: null, yielding: null, blocker: null, pose: null, scripted: false, sitY: 0, held: 0, heldAll: 0, side: 0, jam: false, jammed: false, fleeing: null });
     if (P.trail) P.trail.length = 0;

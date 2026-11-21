@@ -10,7 +10,9 @@
 //   forklift.ride         FOR CARGO'S PEOPLE (src/people.js, a day's 'drive:forklift'): claim(P) -> the spot beside
 //                         its seat to walk to, or null (it is out, or has nothing to carry); step(P, a, dt, H) their
 //                         part once there (on, the ride, off); release(P) they are taken away (its round finished at
-//                         once, where nobody sees it: the player has left Cargo)
+//                         once, where nobody sees it: the player has left Cargo); outline() where it is just now (its
+//                         boxes, for everyone walking by to keep their whole body off: src/people.js), or null
+//                         while it is not in; driver() who is on it, or null
 //   forklift.state()      { asked, fetched, standing, warmed, ms, facts, wallsKB, error, round, rounds, waits, ... }
 // PUT IN where nobody sees it come: while Cargo is not drawn (the lift's doors are shut on the way down), or else
 // while its place is out of the camera's view; and never onto someone standing there (a slow phone's player could be
@@ -302,6 +304,10 @@ export function makeCargoForklift({ W, walls }) {
       finishNow(); driver = null; spot = null; rest = RIDE.rest * 0.5;
       if (P.pose) P.pose = null; P.scripted = false;
     },
+    // (where it is just now, for everyone walking by: its outline (kit/forkliftround.js), or null while it is not in;
+    // the driver is driver())
+    outline: () => (made ? outline(pose, !!(job && job.carrying)) : null),
+    driver: () => driver,
   };
 
   // ── A PALLET ARRIVING on the loading floor: one set on the shelf longest ago (the first shelf's first), where nobody
