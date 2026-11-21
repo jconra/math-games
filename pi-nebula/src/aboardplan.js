@@ -157,8 +157,10 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
   if (!sitting) for (const o of bodies) {
     const ox = o.x - W.pos.x, oz = o.z - W.pos.z, ahead = ox * ax + oz * az, lat = ox * sx + oz * sz;
     if (ahead <= 0 || ahead > PASS.meet || Math.abs(lat) > PASS.lane[1]) continue;
-    if (o === player ? pv < -0.2 : !(o.walking && facing(o.heading, myH))) continue;
+    // (another of the crew: walking at them; or, near (PASS.turnAt), walking any way but theirs: two coming at the same
+    // door turn toward its middle, across each other's way)
     const d = Math.hypot(ox, oz);
+    if (o === player ? pv < -0.2 : !(o.walking && (facing(o.heading, myH) || (d < PASS.turnAt && Math.cos(o.heading - myH) < 0.3)))) continue;
     if (!met || d < met.d) met = { o, ahead, lat, d, player: o === player, v: o === player ? Math.max(0, pv) : WALK.speed };
   }
   // (room for two to pass: the floor across wide enough for their two middles, PASS.apart either way along the way
@@ -189,7 +191,9 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
   };
   let squeeze = !room && loose;
   if (!room && !loose) { squeeze = true; for (let t = lo; t <= hi + 1e-9; t += 0.15) if (!wideS(ox + ax * t, oz + az * t)) { squeeze = false; break; } }
-  const apart = squeeze ? PASS.squeeze : PASS.apart;
+  // (squeezing past, or still turned side-on from a squeeze till PASS.turnOff apart again: the middles as near as
+  // PASS.squeeze)
+  const apart = squeeze || W.sideAim ? PASS.squeeze : PASS.apart;
   // (turned side-on, facing the one met, from PASS.turnAt off; so till they are PASS.turnOff apart again: W.side, the
   // turn from the way walked, + to their left, eased round; src/aboard.js draws it)
   if (squeeze && met.d < PASS.turnAt) { if (!W.sideAim) W.sideAim = sideOn(met.lat); }
@@ -209,7 +213,9 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
   // PASS.comfy the other side, as far as the floor goes (one met clear on their right already is passed as they are);
   // squeezing, to the side of the passage the same way, as far as it goes
   if (met && (room || (squeeze && !loose)) && !(!met.player && met.lat >= PASS.apart)) {
-    const g = met.player && met.lat > PASS.wrong ? -1 : 1, need = g > 0 ? met.lat + PASS.comfy : PASS.comfy - met.lat;
+    // (squeezing: only till the one met is PASS.apart to the side, as far as the floor goes; one already that far off
+    // the way, beside it rather than in it, is gone by as they are)
+    const g = met.player && met.lat > PASS.wrong ? -1 : 1, off = room ? PASS.comfy : PASS.apart, need = g > 0 ? met.lat + off : off - met.lat;
     if (need > 0) {
       const s = Math.min(need, WALK.side * dt * pace), nx = W.pos.x + sx * g * s, nz = W.pos.z + sz * g * s;
       if (ok(nx, nz) && !bumps(W.pos.x, W.pos.z, nx, nz, bodies, undefined, apart)) { W.pos.x = nx; W.pos.z = nz; moved += s; }
