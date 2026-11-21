@@ -21,9 +21,14 @@
 // under it and lifts it, carries it to its place on the shelf and sets it down, backs off, drives back, backs into its
 // place, gets off and goes on with their day. Its wheels turn as it goes (its back wheels steer); its forks go up and
 // down. Carefully: slow, and it stops for anyone (the player too) in its way, or about to be, and waits till they
-// have gone. A PALLET ARRIVING: a pallet set on the shelf comes back to the loading floor now and then, so the loading
-// floor never runs out: moved where nobody sees it (both places out of the camera's view, nobody near the place it
-// comes to), while the forklift is parked.
+// have gone. THE FIRST SHELF (2026-11-20, the game's maker, FORK2-1, B: "It lifts them onto the first shelf, the forks'
+// frame rising past the top of the mast as in the right picture"): it sets a pallet on the first shelf while there is
+// room there, close to the rack lifting it a little over the shelf's beam, slowly in, down onto the shelf, slowly back
+// out and the forks down (kit/forkliftround.js); on the racks' floor level only when the first shelf has no room. A
+// pallet brought back from the shelf comes down from the first shelf the same way, while there is one there. A PALLET
+// ARRIVING: a pallet set on the shelf comes back to the loading floor now and then, so the loading floor never runs
+// out: moved where nobody sees it (both places out of the camera's view, nobody near the place it comes to), while the
+// forklift is parked; one from the first shelf first, so the first shelf has room for the next round.
 import * as THREE from 'three';
 import { loadForklift, standForklift } from '../kit/forklift.js';
 import { STORE, forkliftBox, CARGO, PALLET } from '../kit/places-plan.js';
@@ -96,7 +101,7 @@ export function makeCargoForklift({ W, walls }) {
     CARGO.pallets.forEach((d, i) => { here.set(d.at, i); since.set(d.at, 0); });
     // (each place in the walls while a pallet stands in it)
     for (const q of PLACES) {
-      const g = new THREE.BoxGeometry(PALLET.wide, PALLET.top, PALLET.long).translate(q.at[0], STORE.floor + PALLET.top / 2, q.at[1]);
+      const g = new THREE.BoxGeometry(PALLET.wide, PALLET.top, PALLET.long).translate(q.at[0], STORE.floor + q.y + PALLET.top / 2, q.at[1]);
       walls.add('cargo:pallet:' + q.id, { solid: [g], when: () => here.has(q.id) });
     }
     building.t += performance.now() - t;
@@ -114,10 +119,12 @@ export function makeCargoForklift({ W, walls }) {
     const still = Math.abs(pose.x - PARKED.x) < 1e-6 && Math.abs(pose.z - PARKED.z) < 1e-6 && Math.abs(pose.h - PARKED.h) < 1e-9;
     if (still) { walls.place(KEY, null); walls.place(KEY + ':load', null); } else { _mv.multiplyMatrices(poseMatrix(pose, _M), _P0i); walls.place(KEY, _mv); walls.place(KEY + ':load', _mv); }
     // (the pallet on its forks; in the rack's shade as far as it is in under the shelf, its light between the shelf
-    // place's and the loading floor's)
+    // place's and the loading floor's. Taken up or set down, it stands on its place, the floor or the first shelf,
+    // while the forks are under it lower than its deck)
     if (job && job.carrying) {
       const f = [Math.cos(pose.h), -Math.sin(pose.h)], px = pose.x + f[0] * ON_FORKS.x, pz = pose.z + f[1] * ON_FORKS.x;
-      pallets.move(job.pallet, px, STORE.floor + palletFoot(parts.lift), pz, pose.h);   // (its skids along the forks)
+      const L = job.R.legs[job.li], Q = L && L.kind === 'forks' ? placeById(L.take || L.leave || '') : null;
+      pallets.move(job.pallet, px, STORE.floor + palletFoot(parts.lift, Q ? Q.y : 0), pz, pose.h);   // (its skids along the forks)
       const sh = placeById(job.R.back ? job.from : job.to), op = placeById(job.R.back ? job.to : job.from);
       const d = Math.max(0, Math.min(1, (sh.at[1] + PALLET.long - 0.05 - pz) / (PALLET.long - 0.05)));
       if (job.shade == null || Math.abs(d - job.shade) > 0.01 || (d !== job.shade && (d === 0 || d === 1))) { job.shade = d; pallets.blend(job.pallet, op.id, sh.id, d); }
@@ -128,12 +135,14 @@ export function makeCargoForklift({ W, walls }) {
   // ── A ROUND ──────────────────────────────────────────────────────────────────────────────────────────────────
   // job: { from, to, pallet, R (the round), li (its leg), s (m along it), v (m/s), carrying, wait, clear, pause }
   let job = null, driver = null, state = 'parked', rest = 0;
-  // (a pallet waiting to a place free on the shelf, as his words have it; or, when there is none to take or nowhere to
-  // put it (nothing has arrived back unseen: the player has been watching), one from the shelf back to the loading floor)
+  // (a pallet waiting to a place free on the shelf, as his words have it: on the first shelf while it has room, on the
+  // racks' floor level when it has none; or, when there is none to take or nowhere to put it (nothing has arrived back
+  // unseen: the player has been watching), one from the shelf back to the loading floor, from the first shelf first)
   const any = (L) => L[Math.floor(Math.random() * L.length)];
+  const upFirst = (L) => (L.some((q) => q.up) ? L.filter((q) => q.up) : L);
   function pickJob() {
-    let full = PLACES.filter((q) => !q.shelf && here.has(q.id)), empty = PLACES.filter((q) => q.shelf && !here.has(q.id));
-    if (!full.length || !empty.length) { full = PLACES.filter((q) => q.shelf && here.has(q.id)); empty = PLACES.filter((q) => !q.shelf && !here.has(q.id)); }
+    let full = PLACES.filter((q) => !q.shelf && here.has(q.id)), empty = upFirst(PLACES.filter((q) => q.shelf && !here.has(q.id)));
+    if (!full.length || !empty.length) { full = upFirst(PLACES.filter((q) => q.shelf && here.has(q.id))); empty = PLACES.filter((q) => !q.shelf && !here.has(q.id)); }
     if (!full.length || !empty.length) return null;
     const A = any(full), B = any(empty);
     const R = round(A.id, B.id); if (!R) return null;
@@ -295,13 +304,14 @@ export function makeCargoForklift({ W, walls }) {
     },
   };
 
-  // ── A PALLET ARRIVING on the loading floor: one set on the shelf longest ago, where nobody sees it go or come ──
+  // ── A PALLET ARRIVING on the loading floor: one set on the shelf longest ago (the first shelf's first), where nobody
+  // sees it go or come ──
   let arriveClock = RIDE.arrive;
-  const _b = new THREE.Box3(), placeBox = (q) => _b.set(new THREE.Vector3(q.at[0] - 0.7, STORE.floor, q.at[1] - 0.8), new THREE.Vector3(q.at[0] + 0.7, STORE.floor + 1.3, q.at[1] + 0.8));
+  const _b = new THREE.Box3(), placeBox = (q) => _b.set(new THREE.Vector3(q.at[0] - 0.7, STORE.floor + q.y, q.at[1] - 0.8), new THREE.Vector3(q.at[0] + 0.7, STORE.floor + q.y + 1.3, q.at[1] + 0.8));
   function arrive(feet) {
     if (state !== 'parked' || !pallets) return;
     const empty = PLACES.filter((q) => !q.shelf && !here.has(q.id));
-    const onShelf = PLACES.filter((q) => q.shelf && here.has(q.id)).sort((a, b) => since.get(a.id) - since.get(b.id));
+    const onShelf = PLACES.filter((q) => q.shelf && here.has(q.id)).sort((a, b) => (b.up - a.up) || since.get(a.id) - since.get(b.id));
     if (!empty.length || !onShelf.length) return;
     const from = onShelf[0];
     if (seenBox(placeBox(from))) return;

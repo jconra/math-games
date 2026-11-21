@@ -107,15 +107,22 @@ export const PALLET = { long: 1.2, wide: 1, deck: 0.1, top: 1.04 };
 //            each from the south
 //   shelf    where it sets them: the floor level of the last row of racks (row 6), from its south side, the open floor
 //            between the racks and the benches. (Not the aisles: they are 3.7 m wide and it is 3.7 m long with a pallet
-//            on its forks, so it cannot turn in one. Not the shelves over the floor: the first is 1.37 m up, and its
-//            forks' frame would have to rise 0.4 m over the top of its mast to set a pallet there.) [x, z]: a pallet's
-//            middle there, 0.75 m in from a post (so the forklift's front wheels pass the posts by 10 cm), its front
-//            edge 5 cm proud of the rack's face (so its body stops short of the face)
-//   pallets  each pallet's load and where it is at the start: 'w<n>' a waiting place, 's<n>' a place on the shelf
+//            on its forks, so it cannot turn in one.) [x, z]: a pallet's middle there, 0.75 m in from a post (so the
+//            forklift's front wheels pass the posts by 10 cm), its front edge 5 cm proud of the rack's face (so its
+//            body stops short of the face)
+//   up       THE FIRST SHELF (2026-11-20, the game's maker, question FORK2-1, B: "It lifts them onto the first shelf,
+//            the forks' frame rising past the top of the mast as in the right picture", and "It looks good to me. I
+//            don't see it going up past the top of the mast"): over the two places on the floor level whose first shelf
+//            is free (the room's own pallets stand on it over the other two), the same [x, z]; a pallet there stands
+//            on the shelf's deck, upY over the floor (the first beam's top: 1.37 m). It sets a pallet on the first
+//            shelf while it has room, on the floor level when it has none (src/cargoforklift.js)
+//   pallets  each pallet's load and where it is at the start: 'w<n>' a waiting place, 's<n>' a place on the racks'
+//            floor level, 'u<n>' a place on the first shelf
 // (A pallet carried to the shelves comes back to the loading floor now and then, as one arriving: src/cargoforklift.js.)
 export const CARGO = {
   waiting: FLOOR.waiting,
   shelf: [[13.61, 19.55], [15.11, 19.55], [16.33, 19.55], [17.83, 19.55]],
+  up: [[16.33, 19.55], [17.83, 19.55]], upY: RACKS.levels[1] + RACKS.beam,
   pallets: [{ load: 'wrapped', at: 'w0' }, { load: 'crates', at: 'w1' }, { load: 'boxes', at: 'w2' }, { load: 'totes', at: 'w3' }, { load: 'boxes', at: 's0' }, { load: 'boxes', at: 's1' }, { load: 'drums2', at: 's3' }],
 };
 // (a pallet of the forklift's, as it stands at a place: [x0, x1, z0, z1], its skids along z)
@@ -142,8 +149,11 @@ export const palletBox = ([x, z]) => [x - PALLET.wide / 2, x + PALLET.wide / 2, 
 //   wheelZ    the wheels' middles out from its middle line
 //   seat      the middle of its seat's cushion, on top [x, y]
 //   blade     the top of the forks' blades (at their heel; they lie from 0.017 up)
+//   nose      how far forward the rest of it reaches, its carriage left out (its body, the foot of its mast and the
+//             top of it), along x: with the carriage up, nothing of it in front of this lower down
+//             (~/pw/space-math/rigs/forklift-3/front.py)
 export const FORKLIFT = { raw: [0.9995, 0.6079, 0.3296], mast: 2.1, at: [6.9, 32.9], yaw: 0, forks: [0.22, 0.5, -0.096, 0.095],
-  face: 0.233, carriage: 0.185, axles: [[0.111, 0.086, 0.084], [-0.394, 0.075, 0.075]], wheelZ: 0.131, seat: [-0.195, 0.315], blade: 0.03 };
+  face: 0.233, carriage: 0.185, axles: [[0.111, 0.086, 0.084], [-0.394, 0.075, 0.075]], wheelZ: 0.131, seat: [-0.195, 0.315], blade: 0.03, nose: 0.2087 };
 export const forkliftScale = () => FORKLIFT.mast / FORKLIFT.raw[1];
 // its foot on the floor at its place, [x0, x1, z0, z1] (m, the station's frame; a quarter turn at most)
 export function forkliftBox() {
