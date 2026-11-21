@@ -87,7 +87,7 @@ import { referenceFigure } from './reference.js';
 import { figureOf } from './sweeps.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, ref: false, recipe: null, look: q.has('look'), dirty: false };
+const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, ref: false, recipe: null, look: q.has('look'), dirty: false, eyes: ['open', 'shut'].includes(q.get('eyes')) ? q.get('eyes') : 'blink' };
 // (the clips in the Pose window, grouped as the people use them)
 const CLIP_GROUPS = [
   ['Stand', ['Idle', 'Idle_Neutral', 'Wave', 'Interact', 'Stand_Listen', 'Stand_Clap']],
@@ -205,6 +205,7 @@ async function show(recipe) {
   setPaint(st.paint); setBones(st.bones); c.paintView(buzzSt.view);
   c.play(st.clip in c.person.actions ? st.clip : 'Idle', { fade: 0 }); c.update(0);
   if (!st.look) c.lookAt(null);
+  c.setEyes(st.eyes, { now: true });
   if (st.ref) setRef(true);
   triCount(); menu();
 }
@@ -410,12 +411,17 @@ function coloursWin() {
     sec('Skin', row(swatch('linear-gradient(135deg,#d9a37f,#86522f)', !C.skin, () => colours({ skin: null }), 'Their own skin'), ...SKIN_TONES.map((s) => swatch(s, C.skin === s, () => colours({ skin: s }), 'Skin ' + s)))),
     sec('Hair colour', row(swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'The hair\'s own colour'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)))),
     st.crew?.gaze ? sec('Eyes', row(swatch(ownIris || '#4a2e18', !C.eyes, () => colours({ eyes: null }), 'Their own eyes'), ...EYE_COLOURS.map((s) => swatch(s, C.eyes === s, () => colours({ eyes: s }), 'Eyes ' + s)),
-      chip('Look at camera', st.look, () => look(!st.look), true, 'The eyes follow the camera (off: straight ahead)'))) : sec('Eyes', note('This head has no eyes of its own to colour.'))];
+      chip('Look at camera', st.look, () => look(!st.look), true, 'The eyes follow the camera (off: straight ahead)')), lidsRow()) : sec('Eyes', note('This head has no eyes of its own to colour.'), st.crew?.meshes.visor ? lidsRow() : null)];
 }
 // (a height picked: the person put together again at that size)
 async function resize2(v) { if (!st.recipe) return; if (v === 1) delete st.recipe.size; else st.recipe.size = v; await show(st.recipe); }
 async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
+// (EYELIDS THAT CLOSE, kit/lids.js: awake and blinking now and then, awake and open, or asleep with the eyes shut;
+// paused, the lids still move)
+const LID_MODES = { blink: ['Blinking', 'Awake, blinking now and then (every 2 to 6 s), as in the game'], open: ['Open', 'Awake, never blinking'], shut: ['Shut', 'Asleep: the eyes shut'] };
+function lidsRow() { return row(lab('Lids'), ...Object.entries(LID_MODES).map(([k, [t, tip]]) => chip(t, st.eyes === k, () => eyes(k), true, tip))); }
+function eyes(k) { st.eyes = k; st.crew?.setEyes(k); for (const t of LU ? LU.slots : []) t.crew?.setEyes(k); menu(); }
 function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu(); }
 // (a colour set back to the part's own (null) is left out of the recipe, but passed on as null: the person merges what it's
 // given into its own colours, so a key left out would keep the colour it had)
@@ -1037,6 +1043,7 @@ renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   const c = st.crew, fo = FOLLOW[st.cam];
   if (c && st.look && c.gaze) c.lookAt(camera.position);
+  if (c && st.paused) c.lidsStep(dt);
   if (c && !st.paused) {
     if (fo) anchorAt(fo[0], _prev);
     c.update(dt);
@@ -1090,8 +1097,8 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'ref') setRef(on); if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
-  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), face: (v) => { face(v); menu(); },
-  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
+  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), eyes: (k) => eyes(k), face: (v) => { face(v); menu(); },
+  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, lids: st.eyes, shut: st.crew?.lids.shut, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
     look: st.look, eyes: !!st.crew?.gaze, faceSliders: st.crew?.faceSliders || [], face: st.recipe?.face || {}, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
     cam: st.cam, shown: shownSeq === showSeq }),
   buzz: () => ({ open: M.isOpen('hair'), view: { ...buzzSt.view }, hair: st.recipe?.hair, wearing: st.crew?.buzz ?? null, shown: st.crew ? { ...st.crew.paintShown } : null, mine: copy(lib.buzzes), text: fitsText(), note: fitSt.note }),

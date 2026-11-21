@@ -6,8 +6,8 @@
 // the belly, the elbows out on the bed, which here reach through the pod's sides: his bed is 0.53 m wide); laid on by
 // src/moves.js as for the scanner (people.js bedPoseOf), the head at the head rest's end, and then the whole person
 // moved along the bed so the room left at the head and at the feet is the same. Posed once and left still (nothing
-// plays while they sleep: no clip runs after the pose is laid on), so one costs only its drawing. The crew kit's eyes
-// have no lids that close: they look straight up.
+// plays while they sleep: no clip runs after the pose is laid on), so one costs only its drawing. Their eyes are shut
+// (the crew kit's lids, kit/lids.js).
 // THEIR POSITION'S COLOUR (his answer STAS1-3 C: "I like it when it looks like they are wearing certain colors for their
 // position like red-Captain, purple-engineer, yellow-drill or whatever"): given a position (kit/stasispod-plan.js
 // POSITIONS), the uniform's bands (the crew kit's colours.uniform: the grey uniform's chest and side panels, the dark
@@ -68,6 +68,7 @@ export async function makeSleeper(lib, look, pod, { far = false, position = null
   M.bed = D;
   c.play(STAND, { fade: 0 });
   c.lookAt(null);
+  c.setEyes('shut', { now: true });
   for (let k = 0; k < 3; k++) { c.root.updateMatrixWorld(true); c.update(1 / 60); }
   // (the crew kit turns the upper arms out after the moves, by its standing clip's own angle, so standing arms clear the
   // hips: lying, that carries the hands off the bed and through the pod's side. The person's own update once more, the

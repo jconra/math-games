@@ -184,6 +184,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { Person, STRIDE } from '../../mathwood-valley/world/objects/people.js';
+import { makeLids, eyesOf, lidLines, lidTurns, LIDS } from './lids.js';
 
 export const CREW_DIR = new URL('../assets/crew/', import.meta.url).href;
 export const PEOPLE_DIR = new URL('../../mathwood-valley/models/people/', import.meta.url).href;
@@ -1111,7 +1112,7 @@ function crewUniforms(refs) {
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
 }
-function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
+function crewMaterial(src, kind, part, paint, atlas, freckles = null, lids = null) {
   const m = src.clone(), refs = part && part.refs;
   const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
@@ -1161,6 +1162,13 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
     u.crFrecFrame = { value: FK.frame }; u.crFrecAt = { value: new THREE.Vector4(...FK.at) }; u.crFreckles = { value: 1 };
     u.crFrecLook = { value: new THREE.Vector4(FRECKLES.cell, FRECKLES.dot[0], FRECKLES.dot[1], FRECKLES.share) }; u.crFrecTint = { value: new THREE.Vector4(...FRECKLES.tint, FRECKLES.depth) };
   }
+  // (EYELIDS THAT CLOSE (kit/lids.js): a head with real eyes; each point's turn shut in the attribute crLid)
+  const LD = lids && kind === 'head' ? lids : null;
+  if (LD) {
+    m.defines.CREW_LIDS = '';
+    u.crLidFrame = { value: LD.frame }; u.crLidBack = { value: LD.frame.clone().invert() };
+    u.crLidC0 = { value: new THREE.Vector4(...LD.eyes[0].c, LD.eyes[0].r) }; u.crLidC1 = { value: new THREE.Vector4(...LD.eyes[1].c, LD.eyes[1].r) }; u.crLidShut = { value: 0 }; 
+  }
   if (PT) {
     m.defines.CREW_PAINT = ''; m.defines.CR_SKULL = `vec3(${SKULL.map((v) => v.toFixed(4)).join(', ')})`;
     if (PT.line) { m.defines.CR_LINE = ''; m.defines.CR_LINE_N = LINE_N; }
@@ -1171,7 +1179,7 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
   const FP = !!(part && part.kind === 'head' && part.face === 'plate');
   if (FP) {
     m.defines.CREW_FACE = '';
-    m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
+    m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsShut: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
     Object.assign(u, m.userData.visor, { crFaceAt: { value: new THREE.Vector4(0, 0, 1, 0) }, crFaceLook: { value: new THREE.Vector4(...PLATE_FACE.dark, 0, PLATE_FACE.rough) } });
   }
   m.onBeforeCompile = (sh) => {
@@ -1185,6 +1193,11 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
     if (FK) sh.vertexShader = 'uniform mat4 crFrecFrame; varying vec3 vCrFrec;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   vCrFrec = (crFrecFrame * vec4(position, 1.0)).xyz;`);
+    // (EYELIDS: the point turned about its ball's level axis, in the head's frame, by its own turn times how shut, and
+    // laid down onto the ball; its normal turned alike and leant out from the ball's centre; before the bones carry it,
+    // so the clips, the face's sliders and the head's place carry the lids as they carry the rest)
+    if (LD) sh.vertexShader = LIDS_VERTEX + sh.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n' + LIDS_MOVE).replace('#include <begin_vertex>', `#include <begin_vertex>
+  if (crLidOn) transformed = crLidP;`);
     if (SL) sh.vertexShader = STRAND_VERTEX + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
   crStrandVertex();`);
     if (PB) sh.vertexShader = 'uniform vec3 crStrandSkull; varying vec3 vCrRadial;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
@@ -1195,6 +1208,7 @@ function crewMaterial(src, kind, part, paint, atlas, freckles = null) {
 #endif
     vCrRadial = (modelViewMatrix * vec4(crR, 0.0)).xyz;
   }`);
+    if (LD) sh.fragmentShader = 'varying vec2 vCrLid; varying vec4 vCrLidQ;\n' + sh.fragmentShader;
     sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow, crHairOwn; uniform vec3 crSkinLook;
 #ifdef CREW_MASKTEX
 uniform sampler2D crMaskMap;
@@ -1264,6 +1278,14 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
       float crL = crLum(crO), crK = crSkinLook.x, crM = crSkinLook.y;
       if (crL > crK && crL > crL0) crO *= max(crK + (crM - crK) * (1.0 - exp(-(crL - crK) / max(crM - crK, 1e-4))), crL0) / crL;
       diffuseColor.rgb = mix(crC, crO, crA(sampledDiffuseColor.a));
+    }
+  #endif
+  #ifdef CREW_LIDS
+    // (EYELIDS: the upper lid shut in its skin's own colour (the tone worn), its paint's light and dark kept a little, and
+    // its edge the lashes' dark line)
+    if (vCrLid.y > 0.0) {
+      diffuseColor.rgb = mix(diffuseColor.rgb, crSkin * clamp(crLum(diffuseColor.rgb) / max(crLum(crSkin), 1e-4), 0.9, 1.04), clamp(vCrLid.x, 0.0, 1.0) * vCrLid.y);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.018, 0.012, 0.009), clamp(-vCrLid.x, 0.0, 1.0) * vCrLid.y);
     }
   #endif
   #ifdef CREW_FRECKLES
@@ -1601,6 +1623,44 @@ const STRAND_LIGHT = `
 // dot's radius 0.26 -> 0.21 of a cell, so the biggest are about 4 mm across, not 5; the smallest, the cells and the
 // share as they were)
 export const FRECKLES = { cell: 0.34, dot: [0.16, 0.21], share: 0.62, tint: [0.52, 0.36, 0.28], depth: 0.9 };
+// (EYELIDS THAT CLOSE, kit/lids.js: each head point's eye (crLid.x: 1 left, -1 right, 0 none), its turn shut (.y,
+// radians round the ball's level axis) and its push shut (.z, metres); the head's frame and back; the balls' centres
+// in it; how shut (0 open .. 1 shut))
+const LIDS_VERTEX = 'attribute vec4 crLid; uniform mat4 crLidFrame, crLidBack; uniform vec4 crLidC0, crLidC1; uniform float crLidShut; varying vec2 vCrLid; varying vec4 vCrLidQ;\n';
+// (the point moved: crLidP, its normal turned and leant (objectNormal), the varyings for the lid's paint)
+const LIDS_MOVE = `  vec3 crLidP = position; bool crLidOn = crLidShut > 0.0 && crLid.x != 0.0;
+  vCrLid = vec2(crLid.w, crLidShut); vCrLidQ = vec4(1.0, 1.0, 1.0, 0.0);
+  if (crLidShut > 0.0) {
+    // (every point: where it lies from its nearer ball's centre, and whether it is over that centre, the upper lid's side:
+    // shut, whatever of it lies near the ball is shaded as lying round it)
+    vec3 crQ = (crLidFrame * vec4(position, 1.0)).xyz, crQ0 = crQ - crLidC0.xyz, crQ1 = crQ - crLidC1.xyz;
+    crQ = dot(crQ0, crQ0) < dot(crQ1, crQ1) ? crQ0 : crQ1;
+    vCrLidQ = vec4(crQ, crQ.y > 0.0 || crLid.y < 0.0 ? 1.0 : 0.0);
+  }
+  if (crLidOn) {
+    float crLa = crLid.y * crLidShut, crLc = cos(crLa), crLs = sin(crLa);
+    vec4 crLcc = crLid.x > 0.0 ? crLidC0 : crLidC1;
+    vec3 crH = (crLidFrame * vec4(position, 1.0)).xyz - crLcc.xyz;
+    crH = vec3(crH.x, crH.y * crLc + crH.z * crLs, crH.z * crLc - crH.y * crLs);
+    // (laid down onto the ball, LIDS.push off it: a thick fold stretched thin over it, the edge just clear of its bulge)
+    float crL = length(crH);
+    crH *= mix(crL, crLcc.w + (crLid.y < 0.0 ? ${LIDS.push[0].toFixed(6)} : ${LIDS.push[1].toFixed(6)}), crLid.z * crLidShut * ${LIDS.flat.toFixed(3)}) / max(crL, 1e-6);
+    crLidP = (crLidBack * vec4(crH + crLcc.xyz, 1.0)).xyz;
+    // (where it lies now)
+    vCrLidQ.xyz = crH;
+    vec3 crN = mat3(crLidFrame) * objectNormal;
+    objectNormal = mat3(crLidBack) * vec3(crN.x, crN.y * crLc + crN.z * crLs, crN.z * crLc - crN.y * crLs);
+  }
+  if (crLidShut > 0.0) {
+    // (shaded as lying round the ball: the normal leant out from its centre, as far as the point turns with the lid, and
+    // all over the upper lid's side up to the brow, however far its triangles stretch)
+    float crLay = max(min(1.0, crLid.z * ${LIDS.reach.toFixed(2)}), vCrLidQ.w * (1.0 - smoothstep(${LIDS.lay[0].toFixed(4)}, ${LIDS.lay[1].toFixed(4)}, length(vCrLidQ.xyz) - crLidC0.w))
+      * (1.0 - smoothstep(1.0, 1.45, abs(vCrLidQ.x) / crLidC0.w)));
+    if (crLay > 0.0) {
+      vec3 crN = normalize(mat3(crLidFrame) * objectNormal);
+      objectNormal = mat3(crLidBack) * normalize(mix(crN, normalize(vCrLidQ.xyz), crLay * crLidShut * ${LIDS.round.toFixed(3)}));
+    }
+  }`;
 const FRECKLE_GLSL = `
 uniform vec4 crFrecAt, crFrecLook, crFrecTint; uniform float crFreckles;
 varying vec3 vCrFrec;
@@ -1879,11 +1939,13 @@ vec3 crPaint(vec3 skin) {
 // distances to strokes: a stroke's core and a soft glow round it, added to the light the glass gives off. The eyes are
 // 0.38 apart; each expression is the sheet's:
 //   neutral    two upright eyes and a short straight mouth (the character sheet shows none: a plain one), blinking now and then
+//              (EYELIDS THAT CLOSE, kit/lids.js, 2026-11-20: by the person's own blinks, vsShut, as a real-eyed head's lids
+//              go, and shut while asleep; it blinked every 4.3 s by its own clock before)
 //   happy      eyes closed in arcs (upside-down U's) and a smile
 //   thinking   one eye a dash, the other a ring of dots turning as a loading ring does, the mouth a small frown
 //   surprised  round eyes, a small round mouth
 const VISOR_GLSL = `
-uniform int vsExpr; uniform float vsTime, vsGlow; uniform vec3 vsCol;
+uniform int vsExpr; uniform float vsTime, vsGlow, vsShut; uniform vec3 vsCol;
 float vsSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
 // (an arc of the circle round c of radius r, from angle a0 to a1 (radians, a0 < a1): a stroke's distance)
 float vsArc(vec2 p, vec2 c, float r, float a0, float a1) {
@@ -1910,7 +1972,7 @@ float vsFace(vec2 uv) {
     d = min(d, length(p - vec2(0.19, 0.06)) - 0.052);
     d = min(d, abs(length(p - vec2(0.0, -0.17)) - 0.042));
   } else {
-    float b = fract(vsTime / 4.3); b = 1.0 - smoothstep(0.0, 0.025, b) * (1.0 - smoothstep(0.035, 0.06, b));
+    float b = 1.0 - vsShut;
     float e = 0.045 * b;
     d = min(d, vsSeg(p, vec2(-0.19, 0.06 - e), vec2(-0.19, 0.06 + e)) - 0.012);
     d = min(d, vsSeg(p, vec2(0.19, 0.06 - e), vec2(0.19, 0.06 + e)) - 0.012);
@@ -1949,7 +2011,7 @@ float vsEye(vec2 uv) {
     }
   } else if (vsExpr == 3) d = min(abs(length(p) - 0.17), length(p) - 0.04);
   else {
-    float b = fract(vsTime / 4.3); b = 1.0 - smoothstep(0.0, 0.025, b) * (1.0 - smoothstep(0.035, 0.06, b));
+    float b = 1.0 - vsShut;
     d = length(vec2(p.x, p.y / max(b, 0.12))) - 0.09;
   }
   float w = 0.024;
@@ -1962,7 +2024,7 @@ float crPlateFace(vec2 uv) {
 `;
 function visorMaterial(src) {
   const m = new THREE.MeshStandardMaterial({ name: 'visor', color: 0x05070a, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.3 });
-  const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
+  const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsShut: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(VISOR_OWN) } };
   m.defines = { USE_UV: '' };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -3406,6 +3468,40 @@ function frecklesOf(tpl) {
   if (!(half > 0.01 && half < 0.06)) return null;
   return { frame: frameOf(skin), at: [(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2, half] };
 }
+// (EYELIDS: the head's shadow cast as its lids lie: its depth drawn with the same move, the same numbers)
+function lidsDepth(u, Kind) {
+  const m = new Kind(Kind === THREE.MeshDepthMaterial ? { depthPacking: THREE.RGBADepthPacking } : {});
+  m.onBeforeCompile = (sh) => {
+    for (const k of ['crLidFrame', 'crLidBack', 'crLidC0', 'crLidC1', 'crLidShut']) sh.uniforms[k] = u[k];
+    sh.vertexShader = LIDS_VERTEX + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec3 objectNormal = vec3(0.0, 0.0, 1.0);\n' + LIDS_MOVE + '\n  if (crLidOn) transformed = crLidP;');
+  };
+  m.customProgramCacheKey = () => 'crew-lids-' + Kind.name;
+  return m;
+}
+// EYELIDS THAT CLOSE (kit/lids.js): a head with real eyes, its balls in its own frame (from its eye mesh on the
+// template) and each of its points' turn shut, worked out once a head part and kept with its points (the attribute
+// crLid, shared by every person wearing it, near and far alike): { frame, eyes } or null (no eyes, or no opening found)
+function lidsOf(tpl) {
+  let eyes = null, skin = null;
+  tpl.traverse((o) => {
+    if (!o.isSkinnedMesh || o.userData.part !== 'head') return;
+    const n = o.material && o.material.name;
+    if (n === 'eye') eyes = o; else if (n !== 'cornea' && n !== 'visor' && (!skin || o.geometry.attributes.position.count > skin.geometry.attributes.position.count)) skin = o;
+  });
+  if (!eyes || !skin) return null;
+  const g = skin.geometry, frame = frameOf(skin);
+  if (g.userData.crLids === undefined) {
+    g.userData.crLids = null;
+    const pts = (m) => { const A = m.geometry.attributes.position, F = frameOf(m), v = new THREE.Vector3(), P = new Float64Array(A.count * 3); for (let i = 0; i < A.count; i++) { v.fromBufferAttribute(A, i).applyMatrix4(F); P[i * 3] = v.x; P[i * 3 + 1] = v.y; P[i * 3 + 2] = v.z; } return P; };
+    const P = pts(skin), balls = eyesOf(pts(eyes)), I = g.index ? g.index.array : null;
+    const lines = balls && I ? balls.map((e) => lidLines(P, I, e)) : null;
+    if (lines && lines[0] && lines[1]) {
+      g.setAttribute('crLid', new THREE.BufferAttribute(lidTurns(P, balls, lines), 4));
+      g.userData.crLids = { eyes: balls.map((e) => ({ c: e.c, r: e.r })) };
+    } else console.warn('crew: no eye opening found on a head with eyes: its lids stay open');
+  }
+  return g.userData.crLids ? { frame, eyes: g.userData.crLids.eyes } : null;
+}
 // A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
 // Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
 // so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
@@ -3490,6 +3586,8 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   const hairMeshes = [];
   // (FRECKLES: asked for by the recipe, on a head with eyes: their places in the head's own frame)
   const freck = head && recipe.colours && +recipe.colours.freckles > 0 ? frecklesOf(tpl) : null;
+  // (EYELIDS THAT CLOSE: a head with real eyes, its lids' turns)
+  const lidsAt = head ? lidsOf(tpl) : null, lids = makeLids();
   person.root.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
@@ -3508,9 +3606,11 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       // the six androids') is coloured as a suit is, so the job's colours and the body's colour lie on its plating as
       // they lie on the body's. Captain Vega's helmet is packed without them and is drawn as it was.)
       const plated = kind === 'head' && !!(refsOf.head && refsOf.head.masks && refsOf.head.masks.tex);
-      const mat = crewMaterial(own, plated ? 'suit' : kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null); o.material = mat; mats.push(mat); meshes[kind] = o;
+      const mat = crewMaterial(own, plated ? 'suit' : kind, refsOf[kind], pt, kind === 'hair' ? atlas : null, kind === 'head' ? freck : null, kind === 'head' && o.geometry.attributes.crLid ? lidsAt : null); o.material = mat; mats.push(mat); meshes[kind] = o;
       // (A FACE PLATE: the head's own material draws the face, as a visor's is drawn (its expressions, its eye colour);
       // where on the plate and how big from crew.json's head entry `plateFace`; its layout read as the attribute crFace)
+      // (EYELIDS: the head's shadow cast as its lids lie)
+      if (mat.defines.CREW_LIDS !== undefined) { o.customDepthMaterial = lidsDepth(mat.userData.crew, THREE.MeshDepthMaterial); o.customDistanceMaterial = lidsDepth(mat.userData.crew, THREE.MeshDistanceMaterial); mats.push(o.customDepthMaterial, o.customDistanceMaterial); }
       if (mat.userData.visor) {
         visor = mat; meshes.visor = o;
         if (o.geometry.attributes.uv1 && !o.geometry.attributes.crFace) o.geometry.setAttribute('crFace', o.geometry.attributes.uv1);
@@ -3636,7 +3736,17 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       if (armsAny) armsOutApply(dt);
       if (visor) visor.userData.visor.vsTime.value += dt;
       if (gaze) gaze.update(dt);
+      // (EYELIDS THAT CLOSE: blinking now and then while awake, shut while asleep)
+      if (lids.update(dt)) showLids();
     },
+    // EYELIDS THAT CLOSE (kit/lids.js): c.lids (mode 'blink' | 'open' | 'shut', shut 0..1 now, next(): seconds until
+    // they next move); c.setEyes(mode, { now }): 'blink' awake and blinking now and then (as made), 'open' awake and
+    // never blinking, 'shut' asleep (closing over a moment; now: at once). A head with real eyes turns its own lids; a
+    // visor's or a face plate's drawn eyes close as its blink closes them; a head with neither has nothing to shut.
+    // c.lidsStep(dt): the lids alone moved on (no clip played), whether they changed (the maker's still window)
+    lids,
+    setEyes(mode, o) { if (lids.set(mode, o)) showLids(); return lids.shut; },
+    lidsStep(dt) { const ch = lids.update(dt); if (ch) showLids(); return ch; },
     // where the eyes look (a head with real eyes): a point in the world (copied: call again to follow it), or null
     // (straight ahead); dart: the small darting movements while it holds (on unless false)
     gaze,
@@ -3698,6 +3808,12 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
     },
   };
   let fitting = 0, farWanted = false;
+  // (EYELIDS: how shut, on the head's lids and on a drawn face alike)
+  function showLids() {
+    const u = meshes.head && meshes.head.material && meshes.head.material.userData.crew;
+    if (u && u.crLidShut) u.crLidShut.value = lids.shut;
+    if (visor) visor.userData.visor.vsShut.value = lids.shut;
+  }
   function applyFar(on) {
     on = !!on && farMeshes.length > 0;
     if (on === c.far) return;
@@ -3735,6 +3851,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   const hairFit = hairMeshes.map((m) => [m, m.geometry, frameOf(m)]);
   c.setColours(recipe.colours || {});
   c.setExpression(recipe.expression || 'neutral');
+  showLids();
   if (faceR.sliders.length) c.setFace(recipe.face || {});
   await c.setFit(lib.fitOf(R.hair, R.head));
   return c;

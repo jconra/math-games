@@ -361,12 +361,15 @@ export function restStudio() { clearTimeout(restTimer); if (LIVE.host) liveHide(
 //   liveView(v)          { yaw: radians round, pitch: radians from above, zoom: 0 the whole person .. 1 the face };
 //                        with v, the view set and drawn (each part held to LIVE_VIEW's limits); the view as it is now
 //   liveHide()           the canvas taken out of the window; nothing drawn till liveShow again
-//   live                 for the rigs: { frames drawn, made: people put together for it, view }
+//   live                 for the rigs: { frames drawn, made: people put together for it, view, blinks: of the frames,
+//                        those drawn while a blink moved the lids }
+// THE PERSON BLINKS (EYELIDS THAT CLOSE, kit/lids.js): now and then, every 2 to 6 s, as everyone does in the game; drawn
+// only while the lids move (a blink is about 0.15 s: some ten frames), and nothing in between.
 // The view is kept from one look to the next (an arrow pressed with the person seen from behind still shows them from
 // behind), and starts as the pictures stand: a little turned, as a three-quarter view.
 export const LIVE_VIEW = { yaw: -0.24, pitch: 0.05, zoom: 0, pitchMost: [-0.2, 0.55], fov: 22, close: 0.6, px: 2 };
 const LIVE = { el: null, host: null, recipe: null, pk: null, size: 1, view: { yaw: LIVE_VIEW.yaw, pitch: LIVE_VIEW.pitch, zoom: LIVE_VIEW.zoom }, raf: 0, ro: null, cam: null };
-export const live = { frames: 0, made: 0, view: LIVE.view };
+export const live = { frames: 0, made: 0, view: LIVE.view, blinks: 0 };
 const TALLEST = Math.max(...Object.values(HEIGHTS));
 // (where the person's head is, as made and facing the front: what the window frames them by)
 function frameOf(c) {
@@ -417,7 +420,7 @@ export function liveHide(soon = true) {
   if (studio && studio.canvas.parentElement) studio.canvas.remove();
   LIVE.host = null;
   if (LIVE.raf) cancelAnimationFrame(LIVE.raf);
-  LIVE.raf = 0;
+  LIVE.raf = 0; liveBlink(false);
   if (soon && !busy) rest();
 }
 // (drawn once, at the next frame, however many changes asked for it meanwhile)
@@ -454,4 +457,32 @@ function liveRender() {
   S.renderer.shadowMap.needsUpdate = true;
   S.renderer.render(S.scene, cam);
   live.frames++;
+  if (!LIVE.blinkRaf) liveBlink();
+}
+// (the next blink: a wait as the person's own lids say, then their lids moved on frame by frame and drawn while they
+// move; off: no blink waited for)
+function liveBlink(on = true) {
+  clearTimeout(LIVE.blinkT); LIVE.blinkT = 0;
+  if (LIVE.blinkRaf) cancelAnimationFrame(LIVE.blinkRaf);
+  LIVE.blinkRaf = 0;
+  const c = held && held.c;
+  if (!on || !LIVE.host || !c || !c.lidsStep) return;
+  const wait = c.lids.next();
+  if (!Number.isFinite(wait)) return;
+  const at = performance.now();
+  LIVE.blinkT = setTimeout(() => {
+    LIVE.blinkT = 0;
+    if (!LIVE.host || !held || held.c !== c) return;
+    // (the wait gone by, as frames: a step longer than a frame would be taken as a pose laid on, the blink skipped)
+    for (let left = (performance.now() - at) / 1000; left > 0; left -= 0.1) c.lidsStep(Math.min(0.1, left));
+    let t0 = performance.now();
+    const step = (now) => {
+      LIVE.blinkRaf = 0;
+      if (!LIVE.host || !held || held.c !== c) return;
+      c.lidsStep(Math.min(0.05, Math.max(0, (now - t0) / 1000))); t0 = now;
+      live.blinks++; LIVE.blinkRaf = -1; liveRender(); LIVE.blinkRaf = 0;
+      if (c.lids.next() === 0) LIVE.blinkRaf = requestAnimationFrame(step); else liveBlink();
+    };
+    LIVE.blinkRaf = requestAnimationFrame(step);
+  }, Math.max(0, wait * 1000));
 }

@@ -140,6 +140,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
       } else { _q.setFromEuler(_e.set(0, W.heading, 0)); _m.compose(W.pos, _q, _s); }
       W.local = (W.local || new THREE.Matrix4()).copy(_m);
       W.c.root.matrix.copy(_m); W.c.root.matrixWorldNeedsUpdate = true; W.c.root.updateMatrixWorld(true);
+      W.c.setEyes(W.doing === 'lie' ? 'shut' : 'blink');     // (lying on a bed to rest: eyes shut, kit/lids.js)
       W.c.update(dt);
       W.posW.copy(W.pos).applyMatrix4(s.M);      // (for the player's own walking: someone is there)
     }
