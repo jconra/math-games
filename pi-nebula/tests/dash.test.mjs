@@ -1,7 +1,8 @@
-// THE SHIP'S DASHBOARD (src/dash.js, its numbers; src/fleet.js `dash`, where each ship's display stands): the fuel goes
-// down as the ship flies and never runs out, however long the run; how far and how long count what is flown from the
-// lift-off; the words are plain numbers with their units; every ship's display is in front of its pilot, below the
-// window and clear of the screen's edges and the phone's buttons, in the seat's own view. No browser: plain numbers.
+// THE SHIP'S DASHBOARD (src/dash.js, its numbers; src/fleet.js `dash`, the flight's screen each ship's kit sets into its
+// dashboard): the fuel goes down as the ship flies and never runs out, however long the run; how far and how long count
+// what is flown from the lift-off; the words are plain numbers with their units; every ship's three screens are set
+// into its dashboard and whole from the seat, the flight's screen clear of the page's buttons; the life-size blue ship
+// only while landing. No browser: plain numbers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -110,142 +111,145 @@ test('the words: plain numbers with their units, the canisters on a run', () => 
   assert.equal(rows.find((r) => r.id === 'fuel').gauge, 0.5, 'the gauge beside the number');
 });
 
-// ── each ship's display in its seat's own view: a plain camera at the pilot's eyes looking where the seat looks ──
+// ── THE SCREENS SET INTO THE DASHBOARD (each ship's kit, its COCKPIT_UP read from its source as the kit has it:
+// kit/shipparts/cockpit/bank.js shipUp), and the flight's screen among them (src/fleet.js `dash`), in each seat's own
+// view: a plain camera at the eyes looking where the seat looks ──
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], unit = (a) => { const l = Math.hypot(...a); return a.map((v) => v / l); };
 function onScreen(eye, look, fov, aspect, p) {
   const f = unit(sub(look, eye)), r = unit(cross(f, [0, 1, 0])), u = cross(r, f), v = sub(p, eye), z = dot(v, f), t = Math.tan(fov * Math.PI / 360);
   return [0.5 + dot(v, r) / z / (t * aspect) / 2, 0.5 - dot(v, u) / z / t / 2];
 }
-// (the display's glasses along the dashboard's curve, as src/flying.js stands them: their corners in the kit frame)
-const cutsOf = (d) => D.dashCuts(D.dashLayout(1024, Math.round(1024 * d.h / d.w)));
-const panelsOf = (s, d) => D.dashPanels(s, d.arc, cutsOf(d));
-const cornersOf = (s, d) => panelsOf(s, d).flatMap((q) => q.corners);
-// (each of its places: the pilot's and the other seat's (none of its own: the pilot's across the ship), wide and held
-// upright, with the eyes of that seat; the other seat looks where the pilot's does, as src/flying.js aim has it)
-const across = (q) => ({ ...q, at: [-q.at[0], q.at[1], q.at[2]] }), acrossV = (v) => [-v[0], v[1], v[2]];
-function placesOf(cfg) {
-  const d = cfg.dash, st = cfg.seat, r = d.rider, out = [];
-  for (const [who, m] of [['the pilot', 1], ['riding in the other seat', -1]]) {
-    const wide = m > 0 ? d : r || across(d), tall = m > 0 ? d.tall : r ? r.tall || r : across(d.tall), eye = m > 0 ? st.eye : acrossV(st.eye);
-    out.push([who, '1280 x 800', wide, eye, st.look, st.fov, 1.6, { x0: 0.23, x1: 0.97, y0: 0.55, y1: 0.925 }]);
-    // (on a phone on its side, between the sticks and above the help's tab in the middle)
-    out.push([who, '860 x 400', wide, eye, st.look, st.fov, 2.15, { x0: 0.17, x1: 0.83, y0: 0.55, y1: 0.905 }]);
-    out.push([who, '400 x 860', tall, eye, st.lookTall, st.fovTall, 400 / 860, { x0: 0.02, x1: 0.98, y0: 0.45, y1: 0.68 }]);
-  }
-  return out;
-}
-const SHIPS = [...F.SHIPS.map((s) => [s.id, F.flightOf(s.id)]), ['miner at the rocks', M.FIELD]];
-test('every ship\'s display stands in front of the crew member, below the window, clear of the screen\'s edges, the help, the buttons and a phone\'s buttons', () => {
-  for (const [id, cfg] of SHIPS) {
-    const d = cfg.dash;
-    for (const k of ['arc', 'at', 'w', 'h', 'lean']) assert.ok(d[k] !== undefined, `${id}: its display's ${k}`);
-    assert.ok(d.tall, id + ': and where it stands on a screen held upright');
-    // (the same display: the same shape, its size as that place has it)
-    for (const [what, q] of [['held upright', d.tall], ['in front of the other seat', d.rider], ['in front of the other seat, held upright', d.rider && d.rider.tall]]) if (q) assert.ok(Math.abs(q.w / q.h - d.w / d.h) < 0.06 * d.w / d.h, `${id}: the same shape ${what} (${(d.w / d.h).toFixed(2)}, ${(q.w / q.h).toFixed(2)})`);
-    for (const [who, size, s, eye, look, fov, aspect, box] of placesOf(cfg)) {
-      const c = cornersOf(s, d).map((p) => onScreen(eye, look, fov, aspect, p));
-      for (const [fx, fy] of c) assert.ok(fx > box.x0 && fx < box.x1 && fy > box.y0 && fy < box.y1, `${id}, ${who}, at ${size}: a corner at ${fx.toFixed(3)}, ${fy.toFixed(3)} is inside ${JSON.stringify(box)}`);
-      // (in front of the eyes and below them: it stands on the dashboard)
-      for (const p of cornersOf(s, d)) assert.ok(p[2] > eye[2] + 0.4 && p[1] < eye[1], `${id}, ${who}, at ${size}: in front of the crew member and below the eyes`);
-    }
-  }
-});
-
-test('the display is curved as the dashboard is: three glasses along its curve, each turned to face its middle, meeting edge to edge', () => {
-  for (const [id, cfg] of SHIPS) {
-    const d = cfg.dash;
-    for (const s of [d, d.tall, d.rider, d.rider && d.rider.tall].filter(Boolean)) {
-      const P = panelsOf(s, d), r = Math.hypot(s.at[0], s.at[2] - d.arc);
-      assert.equal(P.length, 3, id + ': the tiny ship, the speed and the fuel, and the rest, each a glass of its own');
-      for (const q of P) {
-        // (its two ends on the curve, at the display's own height; facing the curve's middle)
-        for (const c of [q.corners[0], q.corners[2]]) assert.ok(Math.abs(Math.hypot(c[0], c[2] - d.arc) - r) < 1e-9 && Math.abs(c[1] - s.at[1]) < 1e-12, `${id}: a glass's ends on the curve`);
-        const face = [-Math.sin(q.phi), 0, -Math.cos(q.phi)], toMid = unit([-q.foot[0], 0, d.arc - q.foot[2]]);
-        assert.ok(dot(face, toMid) > 0.999999, `${id}: a glass faces the curve's middle`);
-      }
-      // (turned one after the other, port to starboard as the seat sees them, and their edges meet)
-      assert.ok(P[0].phi > P[1].phi && P[1].phi > P[2].phi, id + ': turned in turn along the curve');
-      for (let i = 0; i < 2; i++) { const a = P[i].corners[0], b = P[i + 1].corners[2]; assert.ok(Math.hypot(...sub(a, b)) < 1e-9, `${id}: glass ${i + 1} meets glass ${i + 2}`); }
-      // (as long along the curve as the display is: its glasses' widths, a hair shorter than their arcs)
-      const sum = P.reduce((n, q) => n + q.w, 0); assert.ok(sum < s.w && sum > s.w * 0.995, `${id}: its glasses' widths ${sum.toFixed(3)} for ${s.w}`);
-    }
-  }
-});
-
-// ── THE ROW ON THE DASHBOARD'S TOP: the kit's own screens (its COCKPIT_BANK, read from its source as the kit has it)
-// and the flying's display between them ──
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 function kitOf(id) {
   const kit = read(`../kit/ships/${id}-built.js`), cfg = F.flightOf(id), floor = +kit.match(/export const COCKPIT = \{ floor: ([\d.]+)/)[1], deck = cfg.seat.eye[1] - floor - 1.27;
-  const bm = kit.match(/export const COCKPIT_BANK = (\{.*\});/), BANK = bm ? Function('return ' + bm[1])() : undefined;
-  const C = Function('DECK', 'COCKPIT_BANK', 'return ' + kit.match(/export const COCKPIT = (\{.*\});/)[1])(deck, BANK);
-  return { C, base: deck + floor, bank: B.shipBank(C, deck + floor) };
+  const um = kit.match(/^const COCKPIT_UP = (\{.*\});/m), UP = um ? Function('return ' + um[1])() : undefined;
+  const C = Function('DECK', 'COCKPIT_UP', 'return ' + kit.match(/export const COCKPIT = (\{.*\});/)[1])(deck, UP);
+  return { C, base: deck + floor, K: B.shipUp(C, deck + floor) };
 }
-// (a flat panel standing along a circle about (0, cz): its ends at x0, x1, its feet at y, h tall leaning back by lean)
-function standing(cz, r, x0, x1, y, h, lean) {
-  const out = [];
-  for (const x of [x0, x1]) { const ph = Math.asin(x / r), f = [x, y, cz + r * Math.cos(ph)], up = [Math.sin(lean) * Math.sin(ph), Math.cos(lean), Math.sin(lean) * Math.cos(ph)]; out.push(f, f.map((v, k) => v + up[k] * h)); }
+// (a screen's bezel's corners, kit frame: across it, up it from its picture's middle)
+function bezel(q) {
+  const ac = unit(cross(q.up, q.n)), hw = q.w / 2 + B.MFD_BEZEL, out = [];
+  for (const a of [-hw, hw]) for (const b of [-(q.h / 2 + B.MFD_BEZEL + B.MFD_KEYS), q.h / 2 + B.MFD_BEZEL]) out.push(q.mid.map((v, k) => v + ac[k] * a + q.up[k] * b));
   return out;
 }
-// (where a display's feet reach along the top: its glasses' bottom corners)
-const spanOf = (s, d) => { const P = panelsOf(s, d), xs = P.flatMap((q) => [q.corners[0][0], q.corners[2][0]]); return [Math.min(...xs), Math.max(...xs)]; };
-test('the life support and the terminal stand up on the dashboard\'s top, the display between them: one row, on one curve, at one level', () => {
-  const rows = F.SHIPS.map((s) => [s.id, kitOf(s.id)]).filter(([, k]) => k.bank);
-  assert.deepEqual(rows.map(([id]) => id), ['miner', 'medic'], 'the Miner and the Medic (the Explorer\'s display stands on its face of screens: no room beside it, tests below)');
-  for (const [id, K] of rows) {
-    const d = F.flightOf(id).dash, S = B.dashShape(B.cockpitDash({ seats: 2, gap: K.C.gap, canopy: K.C.canopy, dash: K.C.dash }));
-    assert.deepEqual(K.bank.screens.map((q) => q.face), ['bars', 'text'], id + ': the life support and the terminal (the screen the questions called the radar)');
-    // ONE CURVE: the display's about the dashboard's own arc, its feet as far out as the kit's screens', at their level
-    assert.ok(Math.abs(d.arc - K.bank.cz) < 1e-4, `${id}: the display's curve is the dashboard's (${d.arc} and ${K.bank.cz.toFixed(5)})`);
-    const r = Math.hypot(d.at[0], d.at[2] - d.arc);
-    assert.ok(Math.abs(r - K.bank.r) < 0.003, `${id}: its feet where the kit's screens' are, as far along the top (${r.toFixed(4)}, ${K.bank.r.toFixed(4)})`);
-    assert.ok(d.at[1] - K.bank.y > 0.005 && d.at[1] - K.bank.y < 0.02, `${id}: standing on the top as they do (its case's foot on it: ${d.at[1]}, the top ${K.bank.y.toFixed(4)})`);
-    assert.ok(Math.abs(d.lean - K.bank.lean) < 1e-9, id + ': leaning back as they do');
-    // ON THE TOP: the kit's screens on the deck itself (not the hood), within the dashboard's ends
-    assert.ok(K.bank.s > S.fe + 0.06 && K.bank.s < S.depth, id + ': their feet on the top deck');
-    const end = K.bank.r * Math.sin(S.T) + 0.002;
-    for (const q of K.bank.screens) assert.ok(q.x0 > -end && q.x1 < end, `${id}: the ${q.face} screen within the dashboard's ends`);
-    // THE ROW: the life support, the display, the terminal, then the other seat's display; a little gap between each
-    const [ls, tm] = K.bank.screens, [p0, p1] = spanOf(d, d), [r0, r1] = spanOf(d.rider, d);
-    const gaps = [['the life support', 'the display', ls.x0 - p1], ['the display', 'the terminal', p0 - tm.x1], ['the terminal', 'the other seat\'s display', tm.x0 - r1]];
-    for (const [a, b, g] of gaps) assert.ok(g > 0.005 && g < 0.04, `${id}: ${a} and ${b} side by side (${(g * 100).toFixed(1)} cm apart)`);
-    // (the other seat's display a little further along the top than the row: within the dashboard's end there)
-    assert.ok(r0 > -(Math.hypot(d.rider.at[0], d.rider.at[2] - d.arc) * Math.sin(S.T) + 0.002), id + ': the other seat\'s display within the dashboard\'s end');
+const boxOf = (pts, view) => { const c = pts.map((p) => onScreen(view.eye, view.look, view.fov, view.aspect, p)); return { x0: Math.min(...c.map((v) => v[0])), x1: Math.max(...c.map((v) => v[0])), y0: Math.min(...c.map((v) => v[1])), y1: Math.max(...c.map((v) => v[1])) }; };
+const fmt = (b) => [b.x0, b.y0, b.x1, b.y1].map((v) => v.toFixed(3)).join(', ');
+const inside = (b, o) => b.x0 > o.x0 && b.x1 < o.x1 && b.y0 > o.y0 && b.y1 < o.y1;
+const overlaps = (b, o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0;
+const SCREEN = { x0: 0, x1: 1, y0: 0, y1: 1 };
+// (the page's own boxes (src/flying.js CSS, CSS px), as fractions of a W x H screen: on a wide screen the help corner
+// at the bottom left (its card over its tab) and the row of buttons at the bottom right, seated (the widest: Power, Lift
+// off, Autopilot, View, Controls); on a phone, the Help tab at the bottom middle and the sticks in the bottom corners
+// (flying by hand), the Up, Down and Roll buttons over them)
+const pageOf = (W, H) => W > 640 && H > 480 ? [['the help corner', { x0: 0, x1: 282 / W, y0: (H - 155) / H, y1: 1 }], ['the buttons', { x0: (W - 627) / W, x1: 1, y0: (H - 58) / H, y1: 1 }]]
+  : [['the Help tab', { x0: (W / 2 - 32) / W, x1: (W / 2 + 32) / W, y0: (H - 40) / H, y1: 1 }], ['the left stick', { x0: 0, x1: 136 / W, y0: (H - 140) / H, y1: 1 }], ['the right stick', { x0: (W - 136) / W, x1: 1, y0: (H - 140) / H, y1: 1 }],
+    ['the Up and Down buttons', { x0: 0, x1: 150 / W, y0: (H - 216) / H, y1: (H - 168) / H }], ['the Roll buttons', { x0: (W - 190) / W, x1: 1, y0: (H - 216) / H, y1: (H - 168) / H }]];
+const SHIPS = F.SHIPS.map((s) => s.id);
+const views = (cfg, who = 'pilot') => {
+  const st = cfg.seat, pilot = who === 'pilot', wide = F.seatView(st, { pilot }), tall = F.seatView(st, { pilot, tall: true });
+  return [['1280 x 800', { ...wide, aspect: 1.6, W: 1280, H: 800 }], ['1920 x 1080', { ...wide, aspect: 16 / 9, W: 1920, H: 1080 }], ['860 x 400', { ...wide, aspect: 2.15, W: 860, H: 400 }], ['400 x 860', { ...tall, aspect: 400 / 860, W: 400, H: 860 }]];
+};
+
+test('every ship\'s flight screen is its dashboard\'s own middle screen: the life support, the flight\'s screen and the terminal set into it, side by side along its curve', () => {
+  for (const id of SHIPS) {
+    const { K } = kitOf(id), d = F.flightOf(id).dash;
+    assert.ok(K, id + ': its kit sets its screens into its dashboard (COCKPIT_UP)');
+    assert.deepEqual(K.screens.map((q) => q.face), ['bars', 'flight', 'text'], id + ': the life support, the flight\'s screen, the terminal, port to starboard');
+    const q = K.screens[1];
+    // (the flying's numbers are shown exactly over the kit's screen)
+    for (let k = 0; k < 3; k++) assert.ok(Math.abs(d.at[k] - q.mid[k]) < 2e-5, `${id}: the flight's screen where the kit's is (${d.at} and ${q.mid.map((v) => v.toFixed(5))})`);
+    assert.ok(Math.abs(d.w - q.w) < 1e-9 && Math.abs(d.h - q.h) < 2e-5 && Math.abs(d.lean - q.lean) < 2e-5 && Math.abs(d.arc - K.cz) < 2e-5, `${id}: as wide, as tall, leaning and turned as the kit's`);
+    // (facing the middle of the dashboard's curve, as the flying turns its glass)
+    const phi = Math.atan2(d.at[0], d.at[2] - d.arc), n = [-Math.cos(d.lean) * Math.sin(phi), Math.sin(d.lean), -Math.cos(d.lean) * Math.cos(phi)];
+    assert.ok(dot(n, q.n) > 0.99999, id + ': facing as the kit\'s screen faces');
+    // (side by side, a little gap between each, within the dashboard's ends)
+    for (let i = 0; i < 2; i++) { const g = K.screens[i].x0 - K.screens[i + 1].x1; assert.ok(g > 0.01 && g < 0.06, `${id}: ${K.screens[i].face} and ${K.screens[i + 1].face} side by side (${(g * 100).toFixed(1)} cm apart)`); }
+    const run = K.S.top, end = (K.S.R + run[1][0]) * Math.sin(K.S.T);
+    for (const s of K.screens) assert.ok(s.x1 < end && s.x0 > -end, `${id}: the ${s.face} screen within the dashboard's ends`);
+  }
+  // (no sum on any dashboard: its middle screen is the flight's)
+  assert.ok(!/'sum'/.test(read('../kit/shipparts/cockpit/consoles.js')), 'the dashboard draws no "6 x 7 = ?"');
+});
+
+test('the Miner\'s and the Medic\'s screens are set into a raised face of the dashboard\'s top, the Explorer\'s moved up in its own face; nothing stands on the top', () => {
+  for (const id of SHIPS) {
+    const { C, base, K } = kitOf(id), S = K.S, up = C.dash.up;
+    assert.equal(C.dash.bank, undefined, id + ': no row standing on the top');
+    if (id === 'explorer') { assert.equal(up.on, 'face', 'the Explorer: in its face'); assert.equal(S.rise, null); assert.deepEqual(S.top, S.face); }
+    else {
+      assert.ok(S.rise, id + ': a raised face');
+      // (it steps up from the top behind the hood, leaning back, into the dashboard's own outline)
+      const [[s0, y0], [s1, y1]] = S.rise, lean = Math.atan2(s1 - s0, y1 - y0);
+      assert.ok(s0 > S.fe + 0.06 && s1 < S.depth && y1 > y0 + 0.15 && lean > 0.3 && lean < 0.6, `${id}: just behind the hood, leaning back ${lean.toFixed(2)}`);
+      assert.ok(S.outline.some(([s, y, k]) => s === s1 && y === y1 && k === 'deck') && S.outline.some(([s, y, k]) => s === s0 && y === y0 && k === 'top'), id + ': part of the dashboard\'s own outline');
+      // (its top under the line from the eyes to the windscreen's foot, or within a centimetre of it: the window kept)
+      const z0 = C.seatsZ + C.gap, cfg = F.flightOf(id);
+      for (const e of [cfg.seat.eye, cfg.seat.eyeTall]) {
+        const yl = e[1] + (base + S.deckY - e[1]) * (z0 + s1 - e[2]) / (z0 + S.depth - e[2]);
+        assert.ok(base + y1 < yl + 0.01, `${id}: the raised face's top (${(base + y1).toFixed(3)}) under the window's foot as the eyes see it (${yl.toFixed(3)})`);
+      }
+    }
+    // (each screen set into its run: its picture just out of the face, its bezel within the face's length)
+    const run = S.top, L = Math.hypot(run[1][0] - run[0][0], run[1][1] - run[0][1]), u = up.u;
+    for (const q of K.screens) assert.ok(u - q.h / 2 - B.MFD_BEZEL - B.MFD_KEYS > 0 && u + q.h / 2 + B.MFD_BEZEL < L, `${id}: the ${q.face} screen within its face (${L.toFixed(3)} m long)`);
   }
 });
 
-test('from the seat the whole row is in view, at 1280 x 800 and on a phone on its side; held upright, the kit\'s screens never cover the display', () => {
-  for (const id of ['miner', 'medic']) {
-    const cfg = F.flightOf(id), K = kitOf(id), d = cfg.dash;
-    for (const [who, size, s, eye, look, fov, aspect] of placesOf(cfg)) {
-      const kitBoxes = K.bank.screens.map((q) => { const c = standing(K.bank.cz, K.bank.r, q.x0, q.x1, K.bank.y, q.hb, K.bank.lean).map((p) => onScreen(eye, look, fov, aspect, p)); return { face: q.face, x0: Math.min(...c.map((v) => v[0])), x1: Math.max(...c.map((v) => v[0])), y0: Math.min(...c.map((v) => v[1])), y1: Math.max(...c.map((v) => v[1])) }; });
+test('from the pilot\'s seat every one of the three screens is whole, the flight\'s screen clear of the page\'s help, sticks and buttons; held upright, the flight\'s screen is whole above a phone\'s buttons', () => {
+  for (const id of SHIPS) {
+    const { K } = kitOf(id), cfg = F.flightOf(id);
+    for (const [size, view] of views(cfg)) {
+      // (each screen's whole bezel, its keys too)
+      const boxes = K.screens.map((q) => [q.face, boxOf(bezel(q), view)]), fl = boxes[1][1];
+      // (in front of the eyes and below them)
+      for (const p of bezel(K.screens[1])) assert.ok(p[2] > view.eye[2] + 0.4 && p[1] < view.eye[1], `${id} at ${size}: the flight's screen ahead and below the eyes`);
       if (size === '400 x 860') {
-        // (the display held upright stands further along the top than they do: where one is in front of it, it is
-        // below the display's foot)
-        const c = cornersOf(s, d).map((p) => onScreen(eye, look, fov, aspect, p)), D0 = { x0: Math.min(...c.map((v) => v[0])), x1: Math.max(...c.map((v) => v[0])), y1: Math.max(...c.map((v) => v[1])) };
-        for (const k of kitBoxes) if (k.x1 > D0.x0 && k.x0 < D0.x1) assert.ok(k.y0 > D0.y1, `${id}, ${who}, held upright: the ${k.face} screen's top (${k.y0.toFixed(3)}) below the display's foot (${D0.y1.toFixed(3)})`);
-        continue;
+        // (held upright: the flight's screen whole, in the middle of the narrow view, above the phone's buttons (the row
+        // flying by hand at 586 px, the sticks' buttons below it) and below the page's top bar)
+        assert.ok(inside(fl, { x0: 0.03, x1: 0.97, y0: 0.45, y1: 586 / 860 }), `${id} held upright: the flight's screen at ${fmt(fl)}`);
+        assert.ok(Math.abs((fl.x0 + fl.x1) / 2 - 0.5) < 0.05, `${id} held upright: in the middle`);
+      } else for (const [face, b] of boxes) assert.ok(inside(b, SCREEN), `${id} at ${size}: the ${face} screen whole (${fmt(b)})`);
+      for (const [what, o] of pageOf(view.W, view.H)) {
+        if (!overlaps(fl, o)) continue;
+        // (the Explorer's, low in a wide view: the row of buttons stands above it there (src/flying.js, is-dash-btns),
+        // over the dashboard's hood, below the middle of the window)
+        assert.ok(id === 'explorer' && what === 'the buttons' && fl.y0 > 0.7, `${id} at ${size}: ${what} over the flight's screen (${fmt(fl)})`);
       }
-      // (the pilot sees both, whole: the help corner at the bottom left kept clear)
-      if (who !== 'the pilot') continue;
-      for (const k of kitBoxes) assert.ok(k.x0 > (size === '1280 x 800' ? 0.225 : 0.17) && k.x1 < 0.97 && k.y0 > 0.55 && k.y1 < 0.975, `${id} at ${size}: the ${k.face} screen in view (${[k.x0, k.y0, k.x1, k.y1].map((v) => v.toFixed(3))})`);
     }
   }
 });
 
-test('the drill\'s own Miner at the rocks: its cockpit stands 13 cm higher in its frame, and so does its display, in every one of its places', () => {
-  const a = M.MINER.dash, b = M.FIELD.dash;
-  for (const [x, y] of [[a, b], [a.tall, b.tall], [a.rider, b.rider], [a.rider.tall, b.rider.tall]]) {
-    assert.ok(Math.abs(y.at[1] - x.at[1] - M.FIELD_UP) < 1e-9 && y.at[0] === x.at[0] && y.at[2] === x.at[2] && y.w === x.w && y.h === x.h && y.lean === x.lean, 'the same place, 13 cm higher');
+test('riding in the Miner\'s other seat (the only seat anyone rides in), the flight\'s screen is whole too', () => {
+  const { K } = kitOf('miner'), cfg = F.flightOf('miner');
+  for (const [size, view] of views(cfg, 'rider')) {
+    const b = boxOf(bezel(K.screens[1]), view);
+    assert.ok(inside(b, size === '400 x 860' ? { x0: 0.03, x1: 0.97, y0: 0.45, y1: 586 / 860 } : SCREEN), `the other seat at ${size}: the flight's screen whole (${fmt(b)})`);
   }
+});
+
+test('the drill\'s own Miner at the rocks: its cockpit stands 13 cm higher in its frame, and so does its flight\'s screen', () => {
+  const a = M.MINER.dash, b = M.FIELD.dash;
+  assert.ok(Math.abs(b.at[1] - a.at[1] - M.FIELD_UP) < 1e-9 && b.at[0] === a.at[0] && b.at[2] === a.at[2] && b.w === a.w && b.h === a.h && b.lean === a.lean, 'the same screen, 13 cm higher');
   assert.equal(b.arc, a.arc, 'on the same curve');
 });
 
-test('the Explorer\'s display stands on its face of screens, curved along it; its face keeps its own screens', () => {
-  const K = kitOf('explorer'), d = F.flightOf('explorer').dash, S = B.dashShape(B.cockpitDash({ seats: 2, gap: K.C.gap, canopy: K.C.canopy, dash: K.C.dash }));
-  assert.equal(K.bank, null, 'no row on its top');
-  assert.ok(Math.abs(d.arc - (K.C.seatsZ + K.C.gap - S.R)) < 1e-4, 'its curve is the dashboard\'s');
-  const s = Math.hypot(d.at[0], d.at[2] - d.arc) - S.R;
-  assert.ok(s > S.fs && s < S.fe, `its foot on the face of screens (${s.toFixed(3)} forward of the near edge)`);
+test('landing (the life-size blue ship from behind only then): not on the pad, not flying out, from the jump home until it is down, never at the rocks', () => {
+  const cfg = F.flightOf('miner'), solid = stationSolid({ bay: cfg.bay, bays: cfg.others.map((o) => o.bay) }), S = M.makeShip(cfg);
+  const seen = (goal, everClear = false) => M.isLanding(S, { goal, everClear });
+  assert.equal(seen('leave'), false, 'on the pad');
+  M.setPower(S, true);
+  let out = 0;
+  autofly(S, M.planLeave(S, solid), solid, () => { if (seen('leave')) out++; });
+  assert.ok(M.clearOf(S.p) && out === 0, 'never on the way out');
+  const A = M.arrival(cfg); M.place(S, A.p, A.q);
+  let n = 0, all = 0;
+  autofly(S, M.planLand(S, solid), solid, () => { all++; if (seen('land') === !S.landed) n++; });
+  assert.ok(M.onPad(S) && n === all && all > 100, `from the jump home: landing every frame until it is down, then not (${n} of ${all})`);
+  assert.equal(seen('land'), false, 'down on its pad: not');
+  // (the lab: once it has been out, flying back in is landing; a hop on the pad before that is not)
+  const H = M.makeShip(cfg); M.setPower(H, true); H.landed = false;
+  assert.equal(M.isLanding(H, { goal: 'free', everClear: false }), false, 'the lab: a hop before it has been out');
+  assert.equal(M.isLanding(H, { goal: 'free', everClear: true }), true, 'the lab: back in after it has been out');
+  assert.equal(M.isLanding(H, { goal: 'land', field: true }), false, 'at the rocks: never');
 });

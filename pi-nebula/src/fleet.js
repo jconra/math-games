@@ -50,23 +50,19 @@ const padOf = (i) => [42.3, 0, HANGARS[i].z];
 //                then under its hangar's ceiling and its door's lintel, its belly its skin (src/flysolid.js SKIN) over
 //                the door's sill
 //   seat         the pilot's eyes and where they look (src/flymodel.js MINER has the words); the other seat is the same
-//                across the ship
+//                across the ship. On a screen held upright (a phone) the view from the seat is narrow: its eyes,
+//                `eyeTall`, are moved sideways to in front of the flight's screen (below), for both seats, and look
+//                straight ahead (`lookTall`) and a little lower, so that screen is whole in the middle of the view and
+//                above a phone's buttons
 //   behind       the view from behind
-//   dash         THE DASHBOARD'S DISPLAY in front of the pilot (src/dash.js, src/flying.js), ALONG THE DASHBOARD'S
-//                CURVE (the game's maker, DASH1-3: "If that dashboard is curved, the the tiny ship should also be
-//                curved"): `arc`, the curve's middle (x = 0, z = arc: the middle of the dashboard's arc, its kit's
-//                shipparts/cockpit/bank.js); its foot's middle, `at` (on the curve: its three screens stand along the
-//                circle through it, each turned to face the middle); how long it is along the curve and how tall (m),
-//                and how far its top leans back toward the nose (`lean`, radians from upright): on the dashboard's top
-//                under the windscreen (or on its face, where it has no top in view), in the seat's view below the window
-//                and clear of the corners' buttons and help, facing the pilot. Where the ship's kit stands its life
-//                support and the screen beside it up on the top (COCKPIT.dash.bank: the game's maker, DASH1-3, C), the
-//                display stands between them, at their level, on their curve. `tall`: the same on a screen held
-//                upright (a phone), where the view from the seat is narrower and looks lower (src/flying.js aim):
-//                above a phone's buttons; none, the same display. `rider`: in front of the other seat, for a crew
-//                member riding there (src/flying.js: pilot false), with its own `tall`; none: the pilot's across the
-//                ship. Measured from each cockpit's own surfaces (~/pw/space-math/rigs/dashboard-1/probe.cjs) and its
-//                kit's row (~/pw/space-math/rigs/dashboard-2/)
+//   dash         THE FLIGHT'S SCREEN ON THE DASHBOARD (src/dash.js, src/flying.js: the game's maker, DASH2-1, "So maybe we
+//                can just put the content of the 3 small screens in the 6x7"): the dashboard's own middle screen, set
+//                into it by the ship's kit (COCKPIT.dash.up, its shipparts/cockpit/bank.js shipUp: between the life
+//                support and the terminal, up where the seat sees it whole), dark until the flight's numbers are shown
+//                on it. `at`, the middle of its picture (kit frame); its picture's width and height (m); how far it
+//                leans back toward the nose (`lean`, radians from upright); `arc`, the middle of the dashboard's curve
+//                (x = 0, z = arc: the screen is turned to face it). Read from the kit and held to it by
+//                tests/dash.test.mjs; one screen for both seats
 //   floor        where on its hangar's floor it may be set down by hand and got out of (null: anywhere on it). The
 //                Miner's is where the crane can get at its canisters
 //   shove        parked, and rammed by another ship: how heavy it is beside the flown ship (which is 1) and how hard it
@@ -91,14 +87,10 @@ export const SHIPS = [
     // (its top then 1.3 m under the door's lintel and 0.7 m under the crane's rail; the game's own landing is at 3 m
     // and 2 m: src/crane.js LANDING)
     hover: 2.6, low: 2.0,
-    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], lookTall: [0.2, 2.6, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
+    seat: { eye: [0.5, 3.71, 4.14], look: [0.1, 3.05, 12], lookPanel: [-1.7, 3.0, 12], eyeTall: [0.154, 3.71, 4.14], lookTall: [0.154, 1.85, 12], lookTallPanel: [0.2, -1.6, 12], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (standing on the top of its dashboard, 0.8 m ahead of the eyes, between its life support and its terminal (its
-    // kit's COCKPIT_BANK); held upright, further along the top, its foot above those two screens as that view sees
-    // them; riding in the other seat, beyond the terminal and a little further along the top, so that seat's view (its
-    // look is the pilot's: src/flying.js aim) has it above a phone's help tab)
-    dash: { arc: 2.26625, at: [0.2889, 3.256, 4.9746], w: 0.6249, h: 0.1934, lean: 0.4, tall: { at: [0.4524, 3.3217, 5.256], w: 0.6282, h: 0.1944, lean: 0.31 },
-      rider: { at: [-0.5978, 3.2735, 5.0055], w: 0.5433, h: 0.1682, lean: 0.4, tall: { at: [-0.5118, 3.3217, 5.2464], w: 0.5079, h: 0.1572, lean: 0.31 } } },
+    // (set into the dashboard's raised face, 0.88 m ahead of the eyes, between its life support and its terminal)
+    dash: { arc: 2.26625, at: [0.15401, 3.37053, 5.02273], w: 0.5, h: 0.15625, lean: 0.4 },
     // (src/flymodel.js MINER.floor has the words: the crane's rails, the rack, the cart)
     floor: { x: [23.5, 56.9], z: [HANGARS[0].z - 9.9, HANGARS[0].z + 9.3] },
     shove: { mass: 2, gyr: 4 }, voice: 'miner',
@@ -113,16 +105,11 @@ export const SHIPS = [
     hover: 1.8, low: 1.4,
     // (it looks a little higher than the Miner does, so more is seen out of the window and less of its tall dashboard:
     // the game's maker, SHIP2-4, "Look a little higher in the Explorer")
-    seat: { eye: [0.5, 3.31, 4.875], look: [0.1, 3.2, 12.735], lookPanel: [-1.7, 3.15, 12.735], lookTall: [0.2, 2.75, 12.735], lookTallPanel: [0.2, -1.45, 12.735], fov: 62, fovTall: 78 },
+    seat: { eye: [0.5, 3.31, 4.875], look: [0.1, 3.2, 12.735], lookPanel: [-1.7, 3.15, 12.735], eyeTall: [0.183, 3.31, 4.875], lookTall: [0.183, 1.2, 12.735], lookTallPanel: [0.2, -1.45, 12.735], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (its dashboard has no empty top: its tall face of screens is in the seat's view, so the display stands on the face
-    // in front of the pilot, its foot on the screen there, leaning back less than the face, its top just in front of
-    // the hood, turned with the face's curve; held upright, none of the face is above a phone's buttons, so it stands
-    // on the hood's top at the windscreen's foot, over the bottom of the window)
-    // (riding in the other seat, across the ship, on its face's other screen; held upright, a little nearer the middle,
-    // as that seat's view looks where the pilot's does)
-    dash: { arc: 1.94167, at: [0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [0.47, 3.098, 5.696], w: 0.5, h: 0.155, lean: 0.17 },
-      rider: { at: [-0.465, 2.99, 5.578], w: 0.485, h: 0.15, lean: 0.38, tall: { at: [-0.4, 3.098, 5.7041], w: 0.5, h: 0.155, lean: 0.17 } } },
+    // (set into its face of screens just under the hood, 0.74 m ahead of the eyes, between its life support and its
+    // terminal: the top band of the face the seat sees, as tall as that band lets it be)
+    dash: { arc: 1.94167, at: [0.18307, 2.98491, 5.61712], w: 0.36, h: 0.1125, lean: 0.7854 },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'explorer',
   },
   {
@@ -133,17 +120,23 @@ export const SHIPS = [
     // (it is carried low: its tail fin, 7.5 m, leaves only 1.5 m of its 9 m door; carried at 1.45 m its belly keeps its
     // skin off the door's sill (as the flying feels it, about half a metre high) and its fin is 5 cm under the lintel)
     hover: 1.45, low: 1.0,
-    seat: { eye: [0.625, 3.81, 5.375], look: [0.225, 3.15, 13.235], lookPanel: [-1.575, 3.1, 13.235], lookTall: [0.325, 2.7, 13.235], lookTallPanel: [0.325, -1.5, 13.235], fov: 62, fovTall: 78 },
+    seat: { eye: [0.625, 3.81, 5.375], look: [0.225, 3.15, 13.235], lookPanel: [-1.575, 3.1, 13.235], eyeTall: [0.257, 3.81, 5.375], lookTall: [0.257, 1.6, 13.235], lookTallPanel: [0.325, -1.5, 13.235], fov: 62, fovTall: 78 },
     behind: { back: 27, up: 8.5, ups: [8.5, 5.6, 3.4], look: [0, 3.2, 3], fov: 60, fovTall: 74 },
-    // (standing on the top of its dashboard, a metre ahead of the eyes, between its life support and its terminal, as
+    // (set into the dashboard's raised face, 0.87 m ahead of the eyes, between its life support and its terminal, as
     // the Miner's)
-    dash: { arc: 2.84958, at: [0.3588, 3.328, 6.2753], w: 0.695, h: 0.2151, lean: 0.385, tall: { at: [0.4262, 3.3207, 6.5596], w: 0.5541, h: 0.1715, lean: 0.31 },
-      rider: { at: [-0.6227, 3.3248, 6.3653], w: 0.6713, h: 0.2078, lean: 0.385, tall: { at: [-0.5363, 3.3182, 6.6423], w: 0.5357, h: 0.1658, lean: 0.31 } } },
+    dash: { arc: 2.84958, at: [0.25688, 3.4333, 6.24001], w: 0.46, h: 0.14375, lean: 0.45 },
     floor: null, shove: { mass: 2, gyr: 4 }, voice: 'medic',
   },
 ];
 export const SHIP_IDS = SHIPS.map((s) => s.id);
 export const shipOf = (id) => SHIPS.find((s) => s.id === id) || null;
+// THE VIEW FROM A SEAT (src/flying.js, src/trip.js): the eyes and where they look, in the ship's kit frame, and the
+// view's width: the pilot's, or the other seat's across the ship (it looks where the pilot's does); with the job's
+// panel up, aside; on a screen held upright, from in front of the flight's screen (seat.eyeTall), for both seats
+export function seatView(seat, { pilot = true, tall = false, panel = false } = {}) {
+  const eye = tall && seat.eyeTall ? seat.eyeTall : pilot ? seat.eye : [-seat.eye[0], seat.eye[1], seat.eye[2]];
+  return { eye, look: tall ? (panel ? seat.lookTallPanel : seat.lookTall) : panel ? seat.lookPanel : seat.look, fov: tall ? seat.fovTall : seat.fov };
+}
 
 // ── the points a ship bumps by: each box's corners and edges, top and bottom ──
 // (along each box: its ends, its middle and half way to each; the middle of a box that reaches across the ship's own

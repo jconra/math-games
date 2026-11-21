@@ -140,7 +140,7 @@ import { stepsFor, land, LAMPS, ROLES, aboardOf } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
 import { MINER, flyingOf, setFlying } from './flymodel.js';
-import { flightOf } from './fleet.js';
+import { flightOf, seatView } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 import { makeDash, stepDash } from './dash.js';
@@ -704,7 +704,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // drill's own ship was not built by then, from the seat as soon as it is.
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
   // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship)
-  const seatEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640; return { eye: [iPilot ? SHIP.seat.eye[0] : -SHIP.seat.eye[0], SHIP.seat.eye[1], SHIP.seat.eye[2]], look: tall ? SHIP.seat.lookTall : SHIP.seat.look, fov: tall ? SHIP.seat.fovTall : SHIP.seat.fov }; };
+  const seatEye = () => seatView(SHIP.seat, { pilot: iPilot, tall: innerHeight > innerWidth * 1.05 || innerWidth <= 640 });
   // (the flying's own view from behind, in the same frame: where the eye goes back to for whoever came out to the rocks
   // in that view, so the jump home is theirs to watch from behind too)
   const behindEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, b = SHIP.behind; return { eye: [b.look[0], b.up, -b.back], look: b.look, fov: tall ? b.fovTall : b.fov }; };
@@ -856,11 +856,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // (near the station: the flying's own two views)
       if (fl && fl.on) { fl.aim(camera, dt); camFresh = true; return; }
       if (!api.seated || !S.M) return;
-      const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, up = !!panel;
-      _eye.copy(inShip(iPilot ? SHIP.seat.eye : [-SHIP.seat.eye[0], SHIP.seat.eye[1], SHIP.seat.eye[2]])); _look.copy(inShip(tall ? (up ? SHIP.seat.lookTallPanel : SHIP.seat.lookTall) : up ? SHIP.seat.lookPanel : SHIP.seat.look));
+      const sv = seatView(SHIP.seat, { pilot: iPilot, tall: innerHeight > innerWidth * 1.05 || innerWidth <= 640, panel: !!panel });
+      _eye.copy(inShip(sv.eye)); _look.copy(inShip(sv.look));
       if (camFresh) { camLook.copy(_look); camFresh = false; } else camLook.lerp(_look, 1 - Math.exp(-3 * dt));
       camera.position.copy(_eye); camera.lookAt(camLook);
-      const fov = tall ? SHIP.seat.fovTall : SHIP.seat.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      const fov = sv.fov; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     },
     // just before the picture: no haze out there (after the boarding's light has had its say)
     late() {

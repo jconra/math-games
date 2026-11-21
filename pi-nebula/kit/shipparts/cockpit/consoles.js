@@ -1,7 +1,8 @@
 // COCKPIT CONSOLES: the curved dashboard, the engineer's station and a small wall console. Their screens are the
 // station's screen sheet (look.js's MFD crops, and the station's own wall screen), their panels panels.js's.
 //   dashboard(p, o)  the curved dashboard across the front of the cockpit, for two or three seats: a row of big framed
-//                    screens filling its face (the biggest, in the middle, shows the maths), switches on the shelf. Its near edge (the
+//                    screens filling its face (the biggest, in the middle, the flight's: dark until a flown ship shows
+//                    its numbers on it), switches on the shelf. Its near edge (the
 //                    seats' side) runs along an arc whose ends come back toward the seats; it faces +z, its near edge's
 //                    middle at x = 0, z = 0, reaching forward (-z) toward the nose. Its section, from the seats: a
 //                    padded lip over the knees, a shelf of switches, a sloped face of screens (two before each seat), a
@@ -10,9 +11,9 @@
 //                    ends come back, 0.17: clear of the seats' outer armrests), depth (0.7), h (the top of the face of screens, 1.12; the hood stands 0.06
 //                    over it), knee (the lip's underside, 0.66), toe (the toe board, 0.45 forward of the edge), seatsAt (the
 //                    seats' x, in its own frame: [-0.5, 0.5] or [-1, 0, 1]), deckY (the top deck's height at its far
-//                    end, h: give depth and deckY to run the deck on to a windscreen's foot), bank (the row of screens on
-//                    its top: bank.js; the face's screens it names stand up there, beside the flying's display, instead
-//                    of on the face)
+//                    end, h: give depth and deckY to run the deck on to a windscreen's foot), up (its three screens set
+//                    up where the seat sees them, in place of the face's: into a raised face of its top, or higher in
+//                    its face: bank.js)
 //   engineerStation(p, o)  a sit-down console against a wall (its back on z = 0, facing +z): a desk with knee room,
 //                    screens on a raised back panel, switches and a lamp hood. o: w (1.0: 1.0, 1.5, 2.0 on the ship
 //                    grid), d (0.5), h (the desk top, 0.76)
@@ -28,8 +29,8 @@ import { LEAN, LIT, CHAR, CHAR2, MFD, mfd, turn, glowBox, mount, bar, local } fr
 import { buttonGrid, switchRow, knobRow } from './panels.js';
 // (the dashboard's shape for options o, its arc and its section (a closed outline in (s, y), s forward from the near
 // edge, counter-clockwise; each point names the surface of the edge that ends there: null, the floor, isn't drawn), and
-// the row of screens on its top: plain sums, bank.js)
-import { dashShape, arcAt, bankOf, MFD_BEZEL, MFD_KEYS } from './bank.js';
+// the screens set up in it: plain sums, bank.js)
+import { dashShape, arcAt, upOf } from './bank.js';
 
 const PI = Math.PI, FIRM = { r: 0.01, seg: 1, cell: 9, loops: [] };
 // where a panel goes on a run of the section (from a to b in (s, y)): u along it, `off` out of it, at the arc angle
@@ -81,28 +82,30 @@ export function dashboard(p, o = {}) {
   strip(S.toe - 0.004, 0.33, S.toe - 0.004, 0.345, [1, 0], LIT.blue);                 // (a footwell light along the toe board)
   for (let i = 1; i < n; i += 2) { const th = -T + 2 * T * i / n, c = arcAt(R, S.toe - 0.005, 0.27, th), g = new THREE.BoxGeometry(0.03, 0.02, 0.004); g.rotateY(-th); g.translate(...c); p.add('glow', g, i % 4 === 1 ? LIT.amber : LIT.green); }   // (lamps down the toe board)
   // the face: one row of big screens, each in its own charcoal frame, filling the face as the bays of screens in his
-  // pictures: the biggest in the middle shows the maths; a large one before each flier (with three abreast, the
+  // pictures: the biggest in the middle is the flight's; a large one before each flier (with three abreast, the
   // engineer's is the big one, and the gaps get one each); a small one at each end; nothing stands above the face, so
-  // the windscreen is clear. A row of switches on the shelf before each seat.
+  // the windscreen is clear (a dashboard given `up` has its screens set up where the seat sees them instead: below). A
+  // row of switches on the shelf before each seat.
   const len = Math.hypot(S.fe - S.fs, S.h - S.knee - 0.14), faceR = R + (S.fs + S.fe) / 2;
   const nudge = o.nudge || 0;   // (for the checks only: every panel pushed out of its face by this much)
   const at = (x, run, src, u) => { const q = run === 'shelf' ? F.shelf(x, u, 0.002 + nudge) : F.screens(x, u, 0.002 + nudge); mount(p, src, { at: q.at, rot: q.rot }, run + ' ' + x.toFixed(2)); return q; };
   const screen = (x, face, w) => at(x, 'face', part(mfd, { face, w, frame: true }), len / 2 + 0.011);   // (its frame centred up the face)
-  const big = 0.6, mid = 0.5, half = (w) => w / 2 + 0.034;   // (the maths the widest; the others about as tall)
-  screen(0, 'sum', big);
-  const MAIN = ['bars', 'text', 'radar'], up = new Set(o.bank ? o.bank.screens.map((q) => q.face) : []);
+  const big = 0.6, mid = 0.5, half = (w) => w / 2 + 0.034;   // (the middle one the widest; the others about as tall)
+  // THE MIDDLE SCREEN IS THE FLIGHT'S (the game's maker, DASH2-1: "Having a permanent 6 x 7 = doesn't look good either. So
+  // maybe we can just put the content of the 3 small screens in the 6x7"): dark until the ship is flown, when
+  // src/flying.js shows the flight's numbers on it
+  if (!o.up) screen(0, 'flight', big);
+  const MAIN = ['bars', 'text', 'radar'];
   S.seatsAt.forEach((xs, i) => {
-    if (Math.abs(xs) > 0.01 && !up.has(MAIN[i % 3])) screen(xs + Math.sign(xs) * (half(big) + half(mid) + 0.03 - Math.abs(xs) > 0 ? half(big) + half(mid) + 0.03 - Math.abs(xs) : 0), MAIN[i % 3], mid);
+    if (Math.abs(xs) > 0.01 && !o.up) screen(xs + Math.sign(xs) * (half(big) + half(mid) + 0.03 - Math.abs(xs) > 0 ? half(big) + half(mid) + 0.03 - Math.abs(xs) : 0), MAIN[i % 3], mid);
     at(xs, 'shelf', part(switchRow, { n: 5, pitch: 0.045, covers: i === 0 ? 1 : 0, legend: i % 2 ? 'b' : 'a' }));
     const q = F.screens(xs, len / 2, 0.25); p.light(q.at, 0.4, [0.35, 0.65, 1], [Math.sin(-q.th), 0.2, Math.cos(q.th)], 2.4);
   });
-  // THE ROW ON THE TOP (bank.js; a ship that asks for it: the game's maker, DASH1-3): the screens it names, moved off the
-  // face, each standing on the top at its place along the arc, leaning back as the flying's display beside them does
-  // (its foot the bottom of its bezel), facing the seats
-  if (o.bank) for (const q of bankOf(S, o.bank)) {
-    const c = q.h / 2 + MFD_BEZEL + MFD_KEYS;   // (from its bezel's bottom up to its picture's middle: look.js mfd)
-    mount(p, part(mfd, { face: q.face, w: q.w }), { at: q.foot.map((v, k) => v + q.up[k] * c), rot: turn(-q.th, o.bank.lean) }, 'bank ' + q.face);
-  }
+  // THE SCREENS SET UP IN THE TOP (bank.js; a ship whose face is too short for them and out of the seat's view asks for
+  // it: the game's maker, DASH2-1, "If there is still a lot of blank dashboard then lets move the screens up"): the
+  // life support, the flight's screen and the terminal, each set into the top (or its raised face) at its place along
+  // the arc, facing the seats
+  if (o.up) for (const q of upOf(S, o.up)) mount(p, part(mfd, { face: q.face, w: q.w, aspect: q.w / q.h }), { at: q.at.map((v, k) => v + q.n[k] * nudge), rot: turn(-q.th, q.lean) }, 'up ' + q.face);
   if (S.seats === 3) for (const s of [-1, 1]) { screen(s * 0.53, s < 0 ? 'radar' : 'bars', 0.3); at(s * 0.5, 'shelf', part(buttonGrid, { cols: 5, rows: 2, pitch: 0.036, seed: s < 0 ? 4 : 6 })); }
   else at(0, 'shelf', part(buttonGrid, { cols: 6, rows: 2, pitch: 0.036, seed: 2 }));
   // the ends: past the outer screens, a small screen if one fits, else knobs and a grid

@@ -1050,13 +1050,18 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 // over the cabin's deck, where the port one stood in the ore station's screen and desk and the starboard one hung over
 // the step (the game's maker, MR-8: "that screen is going into another piece of equipment and that needs to be fixed").
 // 0.75 m is the shortest that keeps a side console's whole face (its screen, switches, knobs and its screen pod).
-// THE ROW ON THE DASHBOARD'S TOP (the game's maker, DASH1-3, C "Move them up beside the new display": the
-// cockpit's shipparts/cockpit/bank.js): the life support (before the pilot on the face) and the terminal's lines
-// (before the other seat) stand up on the top deck, their feet 0.32 m forward of its near edge as the flying's display's
-// are, leaning back as it does: the life support at the deck's port end, then the display in front of the pilot, then
-// the terminal; the display in front of the other seat beyond it (src/fleet.js `dash`, `rider`). The ship's x, to port.
-export const COCKPIT_BANK = { s: 0.32, lean: 0.4, screens: [{ face: 'bars', x: 0.732, w: 0.21 }, { face: 'text', x: -0.168, w: 0.23 }] };
-export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85, bank: COCKPIT_BANK }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
+// THE SCREENS SET UP IN THE DASHBOARD (the game's maker, DASH2-1: "Those 3 little screens look like they got glued on
+// the top of the dashboard ... So maybe we can just put the content of the 3 small screens in the 6x7. If there is
+// still a lot of blank dashboard then lets move the screens up": the cockpit's shipparts/cockpit/bank.js). This
+// dashboard's face is 3 cm tall and below the seat's view, its long top blank above it: so the top steps up just
+// behind the hood into a face of its own (0.33 m forward of the near edge, 0.23 m long, leaning back 0.4 rad, its top
+// just under the line from the eyes to the windscreen's foot), and its three screens are set into that: the life
+// support, the flight's screen (src/flying.js shows the flight's numbers on it) and the terminal, in a row in front of
+// the pilot as the seat sees it, so all three are whole from the pilot's seat on a wide screen (the eyes are 0.85 m
+// from them: centred on the dashboard, the terminal would be cut by the edge of the view), and the flight's screen
+// whole from the other seat too. The ship's x, to port.
+const COCKPIT_UP = { riser: { s0: 0.33, len: 0.23, lean: 0.4 }, u: 0.125, screens: [{ face: 'bars', x: 0.615, w: 0.26 }, { face: 'flight', x: 0.155, w: 0.5, aspect: 3.2 }, { face: 'text', x: -0.27, w: 0.26 }] };
+export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85, up: COCKPIT_UP }, side: { len: 0.75 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'; the blueprint "Ore station on the flight deck"): the cabin's

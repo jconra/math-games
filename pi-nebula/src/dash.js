@@ -28,19 +28,13 @@
 //   dashRows(D, run)                         what the dashboard says: [{ id, label, value, unit, gauge }]; run: null, or
 //                                            { cans: [full, of] }
 //
-// AND WHERE IT STANDS, CURVED (the game's maker, 2026-11-20, DASH1-3: "One thing that is kind of bugging me is that the
-// new displays (tiny ship, speed, and distance) are in a perfect line, while the displays under them are curving. If
-// that dashboard is curved, the the tiny ship should also be curved."): its three screens each a flat glass of their
-// own, standing along the dashboard's curve and turned to face its middle, as the screens of the dashboard's face are
-// (kit/shipparts/cockpit/consoles.js), with the life support and the screen beside it standing in the same row
-// (kit/shipparts/cockpit/bank.js).
+// AND WHERE IT IS SHOWN (the game's maker, 2026-11-20, DASH2-1: "How about you put the information from those 3 little
+// screens there? Those 3 little screens look like they got glued on the top of the dashboard. They are covering over
+// the other screens. That doesn't look good. Having a permanent 6 x 7 = doesn't look good either. So maybe we can just
+// put the content of the 3 small screens in the 6x7."): on the dashboard's own middle screen, set into the dashboard
+// between the life support and the terminal (kit/shipparts/cockpit/bank.js; src/fleet.js `dash`), in three framed parts
+// of the one screen, as the three small screens had it.
 //   dashLayout(CW, CH)                       where things are on its picture (px)
-//   dashCuts(L)                              where along its picture (0 .. 1, left to right as the seat sees it) one
-//                                            screen's glass ends and the next one's begins: half way across each gap
-//   dashPanels(P, cz, cuts)                  each screen's glass placed: P { at (the middle of its foot), w, h, lean }
-//                                            (src/fleet.js `dash`), cz the dashboard's curve's middle (x = 0, z = cz, the
-//                                            ship's kit frame) -> [{ u0, u1, phi (its turn), w (its glass's width), h,
-//                                            foot, up, corners }]
 export const FUEL = { perSec: 0.0006, perMetre: 0.00012, low: 0.3, floor: 0.12 };
 // (a move longer than this in one step is the ship put somewhere else: the jump, a part skipped, the lab's buttons)
 export const JUMPED = 20;
@@ -104,31 +98,12 @@ export function dashRows(D, run = null) {
   return rows;
 }
 
-// where things are on the display's picture (px): three screens in a row, the first square for the tiny ship (its
-// picture `pic`, its caption under it), then the speed and the fuel, then the rest
+// where things are on the screen's picture (px): three framed parts in a row, the first for the tiny ship (its picture
+// `pic`, its caption under it), then the speed and the fuel, then the rest
 export function dashLayout(CW, CH) {
   const m = Math.round(CH * 0.05), gap = Math.round(CH * 0.05), side = CH - 2 * m, w1 = Math.round(side * 1.22), rest = CW - 2 * m - w1 - 2 * gap;
   const s1 = { x: m, y: m, w: w1, h: side }, s2 = { x: s1.x + w1 + gap, y: m, w: Math.round(rest * 0.45), h: side };
   const s3 = { x: s2.x + s2.w + gap, y: m, w: CW - m - (s2.x + s2.w + gap), h: side };
   const pad = Math.round(CH * 0.03), capH = Math.round(CH * 0.13);
   return { CW, CH, s: [s1, s2, s3], pad, cap: { x: s1.x, y: s1.y + side - capH, w: w1, h: capH }, pic: { x: s1.x + pad, y: s1.y + pad, w: w1 - 2 * pad, h: side - 2 * pad - capH } };
-}
-export function dashCuts(L) {
-  const [a, b, c] = L.s;
-  return [0, (a.x + a.w + b.x) / 2 / L.CW, (b.x + b.w + c.x) / 2 / L.CW, 1];
-}
-export function dashPanels(P, cz, cuts) {
-  const r = Math.hypot(P.at[0], P.at[2] - cz), mid = Math.atan2(P.at[0], P.at[2] - cz), sl = Math.sin(P.lean), cl = Math.cos(P.lean);
-  // (along the curve from its left end, the port side as the seat sees it: x grows to port)
-  const phiAt = (u) => mid + (0.5 - u) * P.w / r;
-  const out = [];
-  for (let i = 0; i + 1 < cuts.length; i++) {
-    // (a flat glass across its stretch of the curve: its two ends on the curve, so the next glass's end meets it)
-    const u0 = cuts[i], u1 = cuts[i + 1], a = phiAt(u0), b = phiAt(u1), phi = (a + b) / 2, w = 2 * r * Math.sin((a - b) / 2), rc = r * Math.cos((a - b) / 2);
-    const foot = [rc * Math.sin(phi), P.at[1], cz + rc * Math.cos(phi)], up = [sl * Math.sin(phi), cl, sl * Math.cos(phi)], across = [Math.cos(phi), 0, -Math.sin(phi)];
-    const corners = [];
-    for (const e of [-0.5, 0.5]) for (const k of [0, 1]) corners.push([0, 1, 2].map((j) => foot[j] + across[j] * e * w + up[j] * k * P.h));
-    out.push({ u0, u1, phi, w, h: P.h, foot, up, corners });
-  }
-  return out;
 }

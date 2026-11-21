@@ -558,12 +558,11 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 //     a tapped trip (src/drillview.js). Nothing is asked of how the ship is turned. The reach is the whole of the
 //     nose: a rock met nose on, anywhere across it, is taken; one met by the ship's side or tail is not.
 // A rock here is a ball: { p: [x, y, z] its middle, r its size (m) }, in whatever frame the ship is flown in.
-// (the dashboard's display stands on the drill's own Miner's dashboard top: that ship's whole cockpit stands 13 cm
-// higher in its frame than the cabin's in the hangar, and nowhere else apart (~/pw/space-math/rigs/dashboard-2/
-// deckprobe.cjs), its life support and terminal up on its top as the hangar's are: so the display is the hangar's,
-// 13 cm higher, in each of its places)
+// (the flight's screen is the drill's own Miner's dashboard's: that ship's whole cockpit stands 13 cm higher in its
+// frame than the cabin's in the hangar, and nowhere else apart (~/pw/space-math/rigs/dashboard-2/deckprobe.cjs), its
+// screens set into its dashboard as the hangar's are: so the screen is the hangar's, 13 cm higher)
 export const FIELD_UP = 0.13;
-const raised = (d) => (d ? { ...d, at: [d.at[0], +(d.at[1] + FIELD_UP).toFixed(4), d.at[2]], ...(d.tall ? { tall: raised(d.tall) } : {}), ...(d.rider ? { rider: raised(d.rider) } : {}) } : d);
+const raised = (d) => (d ? { ...d, at: [d.at[0], +(d.at[1] + FIELD_UP).toFixed(5), d.at[2]] } : d);
 export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash) };
 export const TAKE = { reach: 4.5, slow: 3 };
 // where the claw's hand is now
@@ -793,6 +792,13 @@ export function guideOf(S, set = {}) {
   const mouse = { up: set.invertY ? k.noseDown : k.noseUp, down: set.invertY ? k.noseUp : k.noseDown, left: k.noseLeft, right: k.noseRight };
   const sx = k.right - k.left, sy = k.reverse - k.forward, sl = Math.hypot(sx, sy);
   return { to, turn: [up, right], roll, flat, near, keys: k, mouse, stick: { x: sl > 1e-6 ? sx / sl : 0, y: sl > 1e-6 ? sy / sl : 0, k: Math.min(1, Math.max(k.right, k.left, k.reverse, k.forward)) }, done: Object.values(k).every((v) => v === 0) };
+}
+// IS IT LANDING? (src/flying.js: the guide's goal life size is shown from behind only then: the game's maker, 2026-11-20,
+// DASH2-2, "It's only for landing, so it should only be there when in the process of landing."): coming in to set down
+// in its hangar, until it is down. goal: the flying's ('leave' | 'land' | 'free': the lab, landing once it has been
+// clear of the station, everClear); field: at the rocks (no pad: never)
+export function isLanding(S, { goal, everClear = false, field = false }) {
+  return !field && !S.landed && (goal === 'land' || (goal === 'free' && everClear));
 }
 // where a point of the station is drawn in the guide's small space: the ship's own frame [ahead, up, right], shrunk the
 // more the further off it is (1: the edge of the space, never reached); close by, true to the small model's own size

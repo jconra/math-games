@@ -8,11 +8,12 @@
 //                     for a grid of buttons)
 //   MFD[face]         a screen face for a multi-function display: a crop of the station's screen sheet (kit/tex.js), so
 //                     no new faces are drawn: 'scope' (the radar's rings), 'radar' (the whole radar), 'bars' (life support
-//                     bars, the whole face), 'text' (the terminal's lines, the whole face), 'sum' (the math station's sum).
-//                     { rect, aspect }
+//                     bars, the whole face), 'text' (the terminal's lines, the whole face), 'sum' (the math station's sum:
+//                     the Kit Lab's loose screen only), 'flight' (the dashboard's middle screen: no picture of its own,
+//                     dark glass, src/flying.js shows the flight's numbers on it). { rect, aspect }
 //   mfd(p, opts)      a screen in a dark bezel with a row of keys under it, centred on x = 0, y = 0, its back on z = 0,
 //                     facing +z. opts: face ('scope'), w (the face's width, 0.22), gain (1.6), frame (false: true adds
-//                     a chunky charcoal frame round it)
+//                     a chunky charcoal frame round it), aspect (its face's own, unless given)
 //   turn(yaw, tilt)   a rot [rx, ry, rz] (the kit's put() order) that leans a part's face back by `tilt` (it looks up
 //                     as well as out) and then turns it by `yaw` about the up axis
 //   CHAR, CHAR2       the cockpit consoles' charcoal body and top
@@ -46,14 +47,17 @@ export const MFD = {
   bars: { rect: SCREEN_RECT.status, aspect: 2 },
   text: { rect: SCREEN_RECT.terminal, aspect: 2 },
   sum: { rect: crop(SCREEN_RECT.math, 0.03, 0.27, 0.97, 0.99), aspect: 2.6 },
+  // (the dashboard's middle screen, the flight's: dark glass, no picture of its own; src/flying.js shows the flight's
+  // numbers on it while the ship is flown)
+  flight: { rect: null, aspect: 3.2 },
 };
 
-export function mfd(p, { face = 'scope', w = 0.22, gain = 1.6, frame = false } = {}) {
-  const F = MFD[face] || MFD.scope, h = w / F.aspect, b = 0.012, z = frame ? 0.016 : 0, fr = 0.022;
+export function mfd(p, { face = 'scope', w = 0.22, gain = 1.6, frame = false, aspect = null } = {}) {
+  const F = MFD[face] || MFD.scope, h = w / (aspect || F.aspect), b = 0.012, z = frame ? 0.016 : 0, fr = 0.022;
   if (frame) p.slab('black', -w / 2 - b - fr, w / 2 + b + fr, -h / 2 - b - 0.022 - fr, h / 2 + b + fr, 0, z, { r: 0.006, seg: 1, cell: 9, loops: [] });
   p.slab(frame ? CHAR2 : 'black', -w / 2 - b, w / 2 + b, -h / 2 - b - 0.022, h / 2 + b, z, z + 0.02, FLAT);
   p.slab('dark', -w / 2 - 0.002, w / 2 + 0.002, -h / 2 - 0.002, h / 2 + 0.002, z + 0.02, z + 0.021, { r: 0 });
-  p.screen(F.rect, w, h, [0, 0, z + 0.0215], null, gain);
+  if (F.rect) p.screen(F.rect, w, h, [0, 0, z + 0.0215], null, gain);
   // the keys along the bottom of the bezel (one lit)
   const n = Math.max(3, Math.min(6, Math.round(w / 0.045)));
   for (let i = 0; i < n; i++) {

@@ -357,7 +357,15 @@ const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
 // the dash, sets the look down ahead (about 9 degrees below level). Its deck runs 1.8 m forward (the family's would run
 // on to the windscreen's foot, 2.6 m: its ends, which fan out, would come through the nose's sides); the tub's dark
 // floor shows ahead of it, under the chin of the glass.
-export const COCKPIT = { floor: 0.3, seatsZ: 4.9, wallX: 1.3, gap: 0.45, dash: { w: 2.0, h: 1.0, knee: 0.64, bow: 0.15, depth: 1.8 }, canopy: { y: 2.64 - DECK - 0.3, z: 8.0 - 4.9, slope: 0.7 }, tubX: 1.5 };
+// ITS SCREENS MOVED UP IN ITS FACE (the game's maker, DASH2-1, "If there is still a lot of blank dashboard then lets move
+// the screens up": the cockpit's shipparts/cockpit/bank.js): from the seat, which looks a little higher in this ship
+// (SHIP2-4), only the top 14 cm of the face is in view, so its three screens are set into the face just under the hood,
+// the flight's screen as tall as that band lets it be (the face is close: on the screen it is about as big as the
+// Miner's), the life support and the terminal either side of it: the life support, the flight's screen (src/flying.js
+// shows the flight's numbers on it) and the terminal, in a row the seat sees whole on a wide screen. The ship's x, to
+// port.
+const COCKPIT_UP = { on: 'face', u: 0.238, screens: [{ face: 'bars', x: 0.5, w: 0.19 }, { face: 'flight', x: 0.181, w: 0.36, aspect: 3.2 }, { face: 'text', x: -0.137, w: 0.17 }] };
+export const COCKPIT = { floor: 0.3, seatsZ: 4.9, wallX: 1.3, gap: 0.45, dash: { w: 2.0, h: 1.0, knee: 0.64, bow: 0.15, depth: 1.8, up: COCKPIT_UP }, canopy: { y: 2.64 - DECK - 0.3, z: 8.0 - 4.9, slope: 0.7 }, tubX: 1.5 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 // THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'): the tub cut at the cabin's wall (CABIN_TUB.z, the wall the

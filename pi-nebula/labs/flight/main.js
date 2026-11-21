@@ -15,9 +15,11 @@
 //     flight, so a hop about the hangar is enough to try it (in the game it is up coming home);
 //   - THE DASHBOARD (src/flying.js, src/dash.js) is the game's own: the tiny ship, the speed, the fuel, how far and the
 //     flight time, counted here from the lift-off; there is no run, so no canisters. "Back on the pad" fills the tank
-//     and starts the count again. Its three screens curve along the dashboard, and on the Miner and the Medic the life
-//     support and the terminal stand up beside them (the ships' own cockpits: kit/shipparts/cockpit/bank.js). From
-//     behind, the ship's goal stands life size on its pad, in blue, as the tiny ship's goal on the display;
+//     and starts the count again. It is on the dashboard's own middle screen, between the life support and the
+//     terminal, the three set into the dashboard where the seat sees them whole (the ships' own cockpits:
+//     kit/shipparts/cockpit/bank.js). From behind, while landing (here: after "Outside, coming home", or flying back
+//     in once it has been out), the ship's goal stands life size on its pad, in blue, as the tiny ship's goal on the
+//     screen;
 //   - set down by hand the ship stands where it was put, as in the game; there is nobody here to get up out of the
 //     seat. "Back on the pad" parks it properly again.
 //   - THE OTHER TWO HANGARS are open to it here as in the game (the game's maker, 2026-11-18: "Lol, I'm sure kids will
