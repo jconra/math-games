@@ -15,7 +15,9 @@ import { ROOM_CREW, SPOTS, TALKS, APART } from '../src/life.js';
 const S = JSON.parse(readFileSync(new URL('../kit/rooms/station.json', import.meta.url), 'utf8'));
 const store = S.rooms.find((r) => r.id === 'store');
 const waiting = PLACES.filter((q) => !q.shelf), shelf = PLACES.filter((q) => q.shelf);
-const all = () => waiting.flatMap((A) => shelf.map((B) => round(A.id, B.id)));
+// (every round: each pallet waiting to each place on the shelf, and the other way, each shelf place back to each
+// place waiting)
+const all = () => [...waiting.flatMap((A) => shelf.map((B) => round(A.id, B.id))), ...shelf.flatMap((A) => waiting.map((B) => round(A.id, B.id)))];
 // how near it may come to each thing (m): its carriage's face stops a few centimetres short of a rack's face (nothing of
 // the rack stands out there at the floor's level but its posts' feet), its front wheels pass a rack's posts by 10 cm
 const MARGIN = { 'rack 6': 0.05, 'rack 6\'s posts': 0.09, 'the pallet it takes or leaves': -0.001, 'the walls': 0.6, 'the lift': 0.2 };
@@ -65,6 +67,8 @@ test('its forks: in under a pallet low, carrying it clear of the shelf\'s first 
 });
 
 test('every round stays inside Cargo, clear of everything in it, and parks back in its bay as it stood', () => {
+  assert.equal(all().filter(Boolean).length, 32, 'sixteen rounds each way');
+  assert.equal(round('w0', 'w1'), null, 'never from the loading floor to the loading floor');
   for (const R of all()) {
     const name = R.from + ' to ' + R.to, drives = R.legs.filter((L) => L.kind === 'drive');
     // (from where it parks, back to where it parks, exactly; each leg on from where the one before ended)
@@ -73,7 +77,7 @@ test('every round stays inside Cargo, clear of everything in it, and parks back 
     for (let i = 1; i < drives.length; i++) { const a = drives[i - 1].way.at(-1), b = drives[i].way[0]; assert.ok(Math.hypot(a.x - b.x, a.z - b.z) < 1e-6 && Math.abs(Math.sin(a.h - b.h)) < 1e-6, name + ': leg ' + i + ' goes on from where the last ended'); }
     // (never a jump along a way: each pose a little on from the last, its turn too)
     for (const L of drives) for (let i = 1; i < L.way.length; i++) { const a = L.way[i - 1], b = L.way[i]; assert.ok(Math.hypot(a.x - b.x, a.z - b.z) < 0.08 && Math.abs(Math.sin(b.h - a.h)) < 0.05, name + ': a smooth way'); }
-    // (it takes the pallet waiting up and sets it down in its place on the shelf)
+    // (it takes the pallet up where it stands and sets it down in its new place)
     assert.deepEqual(R.legs.filter((L) => L.take || L.leave).map((L) => L.take || L.leave), [R.from, R.to]);
     // (carrying only between)
     let carrying = false; for (const L of R.legs) { if (L.take) carrying = true; if (L.leave) carrying = false; if (L.kind === 'drive') assert.equal(L.carrying, carrying, name + ': carrying as it should'); }

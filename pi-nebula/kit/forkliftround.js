@@ -17,6 +17,9 @@
 //           of the rack
 //   home    backing out south, its back end swinging east, till it faces west; west along the lane, south past the
 //           lift, round to face east just past its place, and backing into its place
+// (and THE OTHER WAY, round(a shelf place, a waiting place): a pallet from the shelf back to the loading floor, the same
+// runs and turns the other way about; src/cargoforklift.js drives one only when the loading floor has no pallet to
+// carry or the shelf no place free, and no pallet could arrive back there unseen)
 // clearOf(round) measures every pose of it against the room: the tests ask that it never comes near the racks, the
 // containers, the benches, the desk, the scale, the lift, the walls or the other pallets.
 import { FORKLIFT, forkliftScale, STORE, RACKS, FLOOR, SLOT, STOPS, LIFT, PALLET, CARGO, baysOf, palletBox } from './places-plan.js';
@@ -148,11 +151,28 @@ export const placeById = (id) => PLACES.find((q) => q.id === id) || null;
 //   { kind: 'drive', dir, way: [poses], speed, carrying, forks }   (forks: where the forks are as it goes)
 //   { kind: 'forks', to, take | leave: place id }                  (the forks to a height: taking a pallet up or setting it down)
 export function round(fromId, toId) {
-  const A = placeById(fromId), B = placeById(toId); if (!A || !B) return null;
-  const [ax, az] = A.at, [bx, bz] = B.at, r = TURN.r, lane = TURN.lane, west = TURN.west;
+  const A = placeById(fromId), B = placeById(toId); if (!A || !B || A.shelf === B.shelf) return null;
+  const [ax] = A.at, [bx] = B.at, r = TURN.r, lane = TURN.lane, west = TURN.west;
   const P0 = axleOf(PARKED), pick = axleOf(poseFor(A.at, A.h)), drop = axleOf(poseFor(B.at, B.h));
   const legs = [];
   const drive = (dir, pts, speed, carrying, forks, rr = r) => legs.push({ kind: 'drive', dir, way: walk(rounded(pts, rr), dir), speed, carrying, forks });
+  if (A.shelf) {
+    // THE OTHER WAY, from the shelf back to the loading floor (src/cargoforklift.js: only when nothing has arrived
+    // back on the loading floor and the shelf has no place free): out and east along the lane, north to the rack, in
+    // under the pallet and up; backing out, its back end swinging east; west along the lane, north to its place
+    // waiting, down; backing out, its back end swinging west; east, south past the lift, and backing into its place
+    drive(1, [P0, [west, P0[1]], [west, lane], [ax, lane], [ax, pick[1] + TURN.short]], DRIVE.fast, false, FORKS.rest);
+    drive(1, [[ax, pick[1] + TURN.short], pick], DRIVE.slow, false, FORKS.low);
+    legs.push({ kind: 'forks', to: FORKS.carry, take: A.id });
+    drive(-1, [pick, [ax, lane], [ax + r + 0.01, lane]], DRIVE.back, true, FORKS.carry);
+    drive(1, [[ax + r + 0.01, lane], [bx, lane], [bx, drop[1] + TURN.short]], DRIVE.fast, true, FORKS.carry);
+    drive(1, [[bx, drop[1] + TURN.short], drop], DRIVE.slow, true, FORKS.carry);
+    legs.push({ kind: 'forks', to: FORKS.low, leave: B.id });
+    drive(-1, [drop, [bx, lane], [bx - r - 0.01, lane]], DRIVE.back, false, FORKS.low);
+    drive(1, [[bx - r - 0.01, lane], [west, lane], [west, P0[1]], [west + r + TURN.past, P0[1]]], DRIVE.fast, false, FORKS.rest);
+    drive(-1, [[west + r + TURN.past, P0[1]], P0], DRIVE.back, false, FORKS.rest);
+    return { from: A.id, to: B.id, back: true, legs, length: legs.reduce((n, L) => n + (L.way ? L.way[L.way.length - 1].s : 0), 0) };
+  }
   // out: east out of its place, north past the lift's west side, west along the lane, north to the pallet
   drive(1, [P0, [west, P0[1]], [west, lane], [ax, lane], [ax, pick[1] + TURN.short]], DRIVE.fast, false, FORKS.rest);
   drive(1, [[ax, pick[1] + TURN.short], pick], DRIVE.slow, false, FORKS.low);

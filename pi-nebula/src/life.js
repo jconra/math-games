@@ -247,11 +247,11 @@ export const ROOM_CREW = [
       { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'stand:containers', for: T(15, 25), p: 0.4 }] },
   { id: 'stock-sami', name: 'Sami', place: 'store', look: { suit: 'atlantis1', head: 't10', hair: 'mohawk', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } }, voice: 'ym', rate: 1.04,
     day: [{ do: 'walk:cargoRound' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach' }, { do: 'stand:racks', for: T(15, 30), clip: 'reach', p: 0.7 }, { do: 'stand:cold', for: T(8, 15), p: 0.5 },
-      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'drive:forklift', p: 0.25 }] },
+      { do: 'talk:cargo', for: T(20, 40), p: 0.5 }, { do: 'drive:forklift', p: 0.4 }] },
   // (Otto, the loader, drives the forklift most often: 'drive:forklift', a pallet from the loading floor to the shelves
   // and back to park, src/cargoforklift.js; the game's maker, FORK1-1, C: "Now and then one of Cargo's people drives it
   // to carry a pallet: from the loading floor by the containers to the shelves, then parks it again")
   { id: 'loader-otto', name: 'Otto', place: 'store', look: { suit: 'smelter', head: 't4', hair: 'shortFull', colours: { job: 'hauler', skin: '#d9a37f', hair: '#8f8a84' } }, voice: 'om', rate: 1.03,
-    day: [{ do: 'stand:containers', for: T(20, 40), clip: 'reach' }, { do: 'stand:scale', for: T(15, 30) }, { do: 'drive:forklift', p: 0.5 }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach' }, { do: 'walk:cargoRound', p: 0.4 },
+    day: [{ do: 'stand:containers', for: T(20, 40), clip: 'reach' }, { do: 'stand:scale', for: T(15, 30) }, { do: 'drive:forklift', p: 0.75 }, { do: 'stand:pallets', for: T(15, 30), clip: 'reach' }, { do: 'walk:cargoRound', p: 0.4 },
       { do: 'talk:cargo', for: T(20, 40), p: 0.5 }] },
 ];

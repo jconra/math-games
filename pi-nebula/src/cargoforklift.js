@@ -37,11 +37,12 @@ const SHINE = 1.25;
 // CAREFUL: anyone this near its outline (m, to their middle) where it is or along the next stretch of its way (a metre
 // and its stopping distance) stops it; it goes on once nobody has been there for `clear` seconds
 const CARE = { near: 0.5, ahead: 1.1, clear: 0.8 };
-// GETTING ON AND OFF (s); where its driver stands to get on (m out from its left side, beside the seat); a desk chair's
-// cushion over the floor (kit/furniture.js): a person sits on its seat as on a chair, lifted by the difference
+// GETTING ON AND OFF (s), the first part of it turning to face ahead (of the whole); where its driver stands to get on
+// (m out from its left side, beside the seat); a desk chair's cushion over the floor (kit/furniture.js): a person sits
+// on its seat as on a chair, lifted by the difference
 // NOW AND THEN: after a round, this long before another (s); how often a pallet may arrive (s), and nobody nearer the
 // place it comes to than `clear` (m)
-const RIDE = { on: 1.4, off: 1.2, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6 };
+const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6 };
 
 export function makeCargoForklift({ W, walls }) {
   const zone = W.room('store');
@@ -112,10 +113,14 @@ export function makeCargoForklift({ W, walls }) {
     // (in the walls where it now stands: its part, made where it parks, stood here)
     const still = Math.abs(pose.x - PARKED.x) < 1e-6 && Math.abs(pose.z - PARKED.z) < 1e-6 && Math.abs(pose.h - PARKED.h) < 1e-9;
     if (still) { walls.place(KEY, null); walls.place(KEY + ':load', null); } else { _mv.multiplyMatrices(poseMatrix(pose, _M), _P0i); walls.place(KEY, _mv); walls.place(KEY + ':load', _mv); }
-    // (the pallet on its forks)
+    // (the pallet on its forks; in the rack's shade as far as it is in under the shelf, its light between the shelf
+    // place's and the loading floor's)
     if (job && job.carrying) {
-      const f = [Math.cos(pose.h), -Math.sin(pose.h)];
-      pallets.move(job.pallet, pose.x + f[0] * ON_FORKS.x, STORE.floor + palletFoot(parts.lift), pose.z + f[1] * ON_FORKS.x, pose.h);   // (its skids along the forks)
+      const f = [Math.cos(pose.h), -Math.sin(pose.h)], px = pose.x + f[0] * ON_FORKS.x, pz = pose.z + f[1] * ON_FORKS.x;
+      pallets.move(job.pallet, px, STORE.floor + palletFoot(parts.lift), pz, pose.h);   // (its skids along the forks)
+      const sh = placeById(job.R.back ? job.from : job.to), op = placeById(job.R.back ? job.to : job.from);
+      const d = Math.max(0, Math.min(1, (sh.at[1] + PALLET.long - 0.05 - pz) / (PALLET.long - 0.05)));
+      if (job.shade == null || Math.abs(d - job.shade) > 0.01 || (d !== job.shade && (d === 0 || d === 1))) { job.shade = d; pallets.blend(job.pallet, op.id, sh.id, d); }
     }
     if (driver) seatDriver(driver);
   }
@@ -123,10 +128,14 @@ export function makeCargoForklift({ W, walls }) {
   // ── A ROUND ──────────────────────────────────────────────────────────────────────────────────────────────────
   // job: { from, to, pallet, R (the round), li (its leg), s (m along it), v (m/s), carrying, wait, clear, pause }
   let job = null, driver = null, state = 'parked', rest = 0;
+  // (a pallet waiting to a place free on the shelf, as his words have it; or, when there is none to take or nowhere to
+  // put it (nothing has arrived back unseen: the player has been watching), one from the shelf back to the loading floor)
+  const any = (L) => L[Math.floor(Math.random() * L.length)];
   function pickJob() {
-    const full = PLACES.filter((q) => !q.shelf && here.has(q.id)), empty = PLACES.filter((q) => q.shelf && !here.has(q.id));
+    let full = PLACES.filter((q) => !q.shelf && here.has(q.id)), empty = PLACES.filter((q) => q.shelf && !here.has(q.id));
+    if (!full.length || !empty.length) { full = PLACES.filter((q) => q.shelf && here.has(q.id)); empty = PLACES.filter((q) => !q.shelf && !here.has(q.id)); }
     if (!full.length || !empty.length) return null;
-    const A = full[Math.floor(Math.random() * full.length)], B = empty[Math.floor(Math.random() * empty.length)];
+    const A = any(full), B = any(empty);
     const R = round(A.id, B.id); if (!R) return null;
     return { from: A.id, to: B.id, pallet: here.get(A.id), R, li: 0, s: 0, v: 0, carrying: false, wait: 0, clear: 0, pause: 0, waiting: false };
   }
@@ -221,15 +230,16 @@ export function makeCargoForklift({ W, walls }) {
     return walls.snap(x, STORE.floor + 0.35, z, 0.4) || new THREE.Vector3(x, STORE.floor, z);
   }
   let spot = null;
-  // a person on its seat, as on a chair (`k` of the way from standing beside it to sitting on it)
+  // a person on its seat, as on a chair (`k` of the way from standing beside it to sitting on it): first turned, on
+  // their feet beside it, to face the way it faces; then up and across into the seat, sitting down as they go
+  const ease = (t) => t * t * (3 - 2 * t);
   function seatPose(P, k) {
     const f = [Math.cos(pose.h), -Math.sin(pose.h)];
     const sx = pose.x + f[0] * TRUCK.seat.x, sz = pose.z + f[1] * TRUCK.seat.x, sy = STORE.floor + TRUCK.seat.y - RIDE.chair;
-    const b = spot.pos, u = k * k * (3 - 2 * k), lift = Math.min(1, k * 1.6);
+    const b = spot.pos, turn = ease(Math.min(1, k / RIDE.turn)), u = ease(Math.max(0, (k - RIDE.turn) / (1 - RIDE.turn))), lift = ease(Math.min(1, u * 1.5));
     const pp = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
-    pp.root.set(b.x + (sx - b.x) * u, b.y + (sy - b.y) * (lift * lift * (3 - 2 * lift)), b.z + (sz - b.z) * u);
-    // (from facing its side to facing ahead, with it)
-    const h0 = spot.heading, h1 = pose.h + Math.PI / 2, h = h0 + wrap(h1 - h0) * u;
+    pp.root.set(b.x + (sx - b.x) * u, b.y + (sy - b.y) * lift, b.z + (sz - b.z) * u);
+    const h0 = spot.heading, h1 = pose.h + Math.PI / 2, h = h0 + wrap(h1 - h0) * turn;
     pp.q.setFromAxisAngle(UP, h);
     P.pos.set(pp.root.x, STORE.floor, pp.root.z); P.heading = h;
     return pp;
@@ -259,7 +269,7 @@ export function makeCargoForklift({ W, walls }) {
       }
       if (a.phase === 'on') {
         const k = Math.min(1, a.t / RIDE.on); seatPose(P, k);
-        H.play(P, k > 0.3 ? H.clips.sit : H.clips.stand, { fade: 0.45 });
+        H.play(P, k > RIDE.turn + 0.05 ? H.clips.sit : H.clips.stand, { fade: 0.45 });
         if (k >= 1) { a.phase = 'ride'; a.t = 0; state = 'round'; job.li = 0; job.s = 0; job.v = 0; job.pause = 0.5; }
         return;
       }
@@ -313,7 +323,11 @@ export function makeCargoForklift({ W, walls }) {
         if (warm < 2) warmUp();
         if (rest > 0 && state === 'parked') rest -= dt;
         const all = driver ? feet().filter((p) => p !== driver.pos) : feet();
-        if (state === 'round' && job) drive(dt, all);
+        if (state === 'round' && job) {
+          // (what a frame of driving costs: for the rigs)
+          const t1 = performance.now(); drive(dt, all); const u = performance.now() - t1;
+          S.ms.drive = S.ms.drive || { n: 0, sum: 0, most: 0 }; S.ms.drive.n++; S.ms.drive.sum += u; S.ms.drive.most = Math.max(S.ms.drive.most, u);
+        }
         else if (state === 'home' && !driver) state = 'parked';
         if ((arriveClock -= dt) <= 0) { arriveClock = RIDE.arrive; arrive(all); }
         return;
@@ -325,7 +339,7 @@ export function makeCargoForklift({ W, walls }) {
       }
       if (F && !seen(camera) && !inTheWay(feet())) put();
     },
-    state: () => ({ ...S, ms: { ...S.ms }, now: state, pose: { x: +pose.x.toFixed(2), z: +pose.z.toFixed(2), h: +pose.h.toFixed(3) }, lift: +parts.lift.toFixed(3), steer: +parts.steer.toFixed(3),
+    state: () => ({ ...S, ms: { ...S.ms, drive: S.ms.drive ? { frames: S.ms.drive.n, avg: +(S.ms.drive.sum / S.ms.drive.n).toFixed(3), most: +S.ms.drive.most.toFixed(2) } : null }, now: state, pose: { x: +pose.x.toFixed(2), z: +pose.z.toFixed(2), h: +pose.h.toFixed(3) }, lift: +parts.lift.toFixed(3), steer: +parts.steer.toFixed(3),
       leg: job ? job.li : null, legs: job ? job.R.legs.length : null, waiting: !!(job && job.waiting), carrying: !!(job && job.carrying), driver: driver ? driver.id : null, rest: +rest.toFixed(1),
       places: Object.fromEntries(PLACES.map((q) => [q.id, here.has(q.id) ? here.get(q.id) : null])) }),
     // (for the rigs: the round's ways, and a round started now with whoever of Cargo's people is asked)
