@@ -206,7 +206,7 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
     if (met.player && segGap(player, W.pos, to) < PASS.apart + PASS.spare) { const r = inTheWay(W.pos, { x: W.pos.x + ax, z: W.pos.z + az }, player, W.wait, W.heading); if (r) return r; }
     else if (!met.player && met.d < WALK.room + 0.5) return W.wait >= WALK.back * (met.o.first ? 1 : 3) ? 'back' : 'wait';
   }
-  let moved = 0;
+  let moved = 0; const x0 = W.pos.x, z0 = W.pos.z;
   // (their bodies overlapping anyone's (middles nearer than PASS.apart): every step at half speed, PASS.slow)
   const pace = overlaps(W.pos.x, W.pos.z, bodies) ? PASS.slow : 1;
   // making room: a step to their own right (or left, the player coming down their right already), till the one met is
@@ -235,6 +235,12 @@ export function walkStep(W, dt, player = null, { others = [], free = null, wall 
       if ((asked && (!free || !ok(nx, nz))) || bumps(W.pos.x, W.pos.z, nx, nz, bodies, undefined, apart)) continue;
       W.pos.x = nx; W.pos.z = nz; moved += step; break;
     }
+  }
+  // (overlapping: the step aside and the step on together no further than half speed, PASS.slow; the two can point
+  // much the same way)
+  if (pace < 1) {
+    const got = Math.hypot(W.pos.x - x0, W.pos.z - z0), most = WALK.speed * pace * dt;
+    if (got > most + 1e-9) { const k = most / got, nx = x0 + (W.pos.x - x0) * k, nz = z0 + (W.pos.z - z0) * k; if (bumps(x0, z0, nx, nz, bodies, undefined, apart)) { W.pos.x = x0; W.pos.z = z0; moved = 0; } else { W.pos.x = nx; W.pos.z = nz; moved = most; } }
   }
   if (Math.hypot(to.x - W.pos.x, to.z - W.pos.z) < 0.05) { W.leg++; W.getUp = false; if (W.leg >= W.way.length) return 'there'; }
   if (moved > 1e-6) { W.wait = 0; return 'walk'; }
