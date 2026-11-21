@@ -19,6 +19,8 @@
 //                                                            no paint given: the seed's
 //   W.paint(id)                                              another of the colours (src/planet/wreck.js PAINTS)
 //   W.group, W.site, W.plan, W.stats { ms, buildMs, breakMs, placeMs, tris, draws, pieces }, W.dispose()
+//   W.world                                                  [{ tris }]: each piece's triangles where it lies (x, y, z
+//                                                            corners), as cleared under (the stasis pods keep off them)
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
@@ -185,7 +187,7 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
   const geos = [], materials = [];
   let skinGeos = [];
   const W = {
-    ship, plan, site: placed.site, placed, group, stats, paintId: null,
+    ship, plan, site: placed.site, placed, group, stats, paintId: null, world,
     draw({ scene, ground, sky = null, sunDir = null, paint = null }) {
       const td = performance.now();
       const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;

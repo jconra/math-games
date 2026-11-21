@@ -22,19 +22,29 @@
 // seed picked. A ship, colours or pieces picked by hand (for looking) take the place of the seed's, the rest kept as it
 // was, so only what was picked changes. A view of it. Only here for now: nothing in the game has it yet.
 //
+// THE STASIS PODS (the game's maker's own model, kit/stasispod.js; his answers MED-1, MED-2: you walk down the Medic's
+// ramp to 3 to 6 pods on the ground beside a crashed ship; nobody is hurt, they are asleep in the pods, safe until
+// opened): with a wreck, as many pods as the planet's seed says (3 to 6) lie on the ground beside it (src/planet/pods.js:
+// near it but clear of it, near each other with room to walk between, never on the landing place, each on the ground
+// and sunk a little into it), someone of our crew asleep in each (src/sleeper.js). The Pods row opens and shuts their
+// lids together, for looking; the Look row gets a Pods view. Only here for now: nothing in the game has them yet.
+//
 // Address switches: ?seed=N the planet; ?kind=moon|meadow|canyon a new one of that kind; ?q=low|medium|high graphics;
-// ?view=landing|above|low|wreck; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
-// ?paint=rust|olive|slate and ?pieces=2|3 (with a ship by hand);
+// ?view=landing|above|low|wreck|pods; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
+// ?paint=rust|olive|slate and ?pieces=2|3 (with a ship by hand); ?pods=shut|open (their lids);
 // ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
-// window.LAB: { ready, planet, land, wreck, quality, timings, view(name), look(at, to), build(seed), bench(frames),
-//   step(dt), setWreck({ ship, paint, pieces }) }
+// window.LAB: { ready, planet, land, wreck, pods, podsPlan, quality, timings, view(name), look(at, to), build(seed),
+//   bench(frames), step(dt), setWreck({ ship, paint, pieces }), setPods(open 0|1), podsFilled() }
 import * as THREE from 'three';
 import { makePlanet, makeLandAsync } from '../../src/planet/planet.js';
 import { KINDS, kindOf, newSeed, kindById } from '../../src/planet/kinds.js';
 import { WIDTH } from '../../src/planet/land.js';
 import { CURVE } from '../../src/planet/ground.js';
-import { WRECK_SHIPS, PAINTS, wreckFor } from '../../src/planet/wreck.js';
+import { WRECK_SHIPS, PAINTS, wreckFor, clearUnder } from '../../src/planet/wreck.js';
 import { makeWreck } from '../../src/planet/wreckship.js';
+import { podsPlan, footprintTris } from '../../src/planet/pods.js';
+import { makePods } from '../../src/planet/podsdraw.js';
+import { loadPod } from '../../kit/stasispod.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), RIG = q.has('rig'), HOLD = q.has('hold');
@@ -82,11 +92,19 @@ function wreckAddress(u) {
   u.searchParams.set('wreck', wreckWant);
   if (wreckWant === 'none' || wreckWant === 'any') for (const k of ['paint', 'pieces']) u.searchParams.delete(k);
   else { u.searchParams.set('paint', paint); u.searchParams.set('pieces', breaks); }
+  // (the pods' lids: open kept in the address, shut as they start)
+  if (podsWant) u.searchParams.set('pods', 'open'); else u.searchParams.delete('pods');
   return u;
 }
-// the menu's line about it: the wreck as it is shown (said again when its colours are changed where it lies)
-const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}.` : '');
+// THE PODS: the plan for this planet's (where they lie), the pods drawn, their lids wanted open (1) or shut (0); the crew
+// kit for their sleepers, fetched the first time
+let podPlan = null, pods = null, podsWant = q.get('pods') === 'open' ? 1 : 0, crewLib = null;
+const NUMBERS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
+// the menu's line about it: the wreck as it is shown (said again when its colours are changed where it lies), and its pods
+const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}${podPlan ? `, ${NUMBERS[podPlan.pods.length] || podPlan.pods.length} stasis pods beside it, someone asleep in each` : ''}.` : '');
 function repaint(id) { wreck.paint(id); const s = document.getElementById('wreckSay'); if (s) s.textContent = wreckSay(); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); }
+// the pods' lids on their way open (1) or shut (0)
+function setPods(k) { podsWant = k ? 1 : 0; if (pods) pods.open(podsWant); history.replaceState(null, '', wreckAddress(new URL(location.href)).href); paintChips(); }
 
 // ── the camera ───────────────────────────────────────────────────────────────────────────────────────────────────
 const cam = { pos: new THREE.Vector3(0, 60, 80), yaw: 0, pitch: 0.2 };
@@ -117,6 +135,21 @@ const VIEWS = {
     const d = Math.max(27, 17 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect)), k = d / 27;
     const x = S.x + tx * d + Math.sin(S.yaw) * 7 * k, z = S.z + tz * d + Math.cos(S.yaw) * 7 * k;
     return [[x, Math.max(ground(x, z), S.y) + 10 * k, z], [S.x, S.y + 0.8, S.z]];
+  } },
+  // (the pods, from the landing place's side, a little over a person's height: far enough off that all of them fit
+  // across the screen, an upright phone's too; looked at a little from above their middle, so they stand in the middle
+  // of what the menu leaves showing)
+  pods: { name: 'Pods', at: (L, a) => {
+    const P = podPlan && podPlan.pods; if (!P || !P.length) return VIEWS.landing.at(L, a);
+    const cx = P.reduce((s, p) => s + p.x, 0) / P.length, cz = P.reduce((s, p) => s + p.z, 0) / P.length;
+    const spread = Math.max(...P.map((p) => Math.hypot(p.x - cx, p.z - cz))) + 2.5;
+    let rx = cx - L.x, rz = cz - L.z; const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
+    const half = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect)), d = Math.max(8, spread / Math.tan(half) * 0.9);
+    const x = cx - rx * d, z = cz - rz * d, y = ground(x, z) + 3.2, ty = ground(cx, cz) + 0.3;
+    // (the menu's share of the screen's height: the pods' middle put halfway down what is above it)
+    const bar = Math.min(0.6, ($('bar').offsetHeight || 0) / Math.max(1, innerHeight)), down = Math.atan(bar * Math.tan(camera.fov * Math.PI / 360));
+    const pitch = Math.atan2(y - ty, d) + down;
+    return [[x, y, z], [cx, y - Math.tan(pitch) * d, cz]];
   } },
 };
 let viewName = VIEWS[q.get('view')] ? q.get('view') : 'landing';
@@ -211,27 +244,41 @@ async function build(seed, { keepView = false } = {}) {
     // the wreck, before the planet is drawn: built, broken and placed, and the ground under it cleared (its trees and
     // plants: they are laid when the planet is made)
     let W = null; const pick = wreckPick(seed);
+    // (the pods' file fetched now, while the ship is broken: only for a planet with a wreck)
+    const podFile = pick ? loadPod().catch((e) => { console.error('planet lab: the stasis pod did not come', e); return null; }) : null;
     if (pick) {
       say('Breaking the ship…', `${kind.name}, seed ${seed}`);
       try { W = await makeWreck({ land, ship: pick.ship, pieces: pick.pieces }); } catch (e) { console.error(e); if (window.oops) window.oops(e); W = null; }
     }
+    // the pods beside it: where they lie, and the ground under them cleared (before the planet is drawn, as the wreck's)
+    let plan = null; const tp = performance.now();
+    if (W) {
+      const all = W.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
+      plan = podsPlan(land, seed, { site: W.site, tris });
+      clearUnder(land, footprintTris(plan));
+    }
+    const tpd = performance.now();
     const tw = performance.now();
+    if (pods) { pods.dispose(); pods = LAB.pods = null; }
     if (wreck) { wreck.dispose(); wreck = LAB.wreck = null; }
     if (planet) { planet.dispose(); planet = null; }
+    podPlan = LAB.podsPlan = plan;
     renderer.info.reset();
     planet = LAB.planet = await makePlanet({ renderer, scene, land, quality });
     LAB.land = land;
     if (W) wreck = LAB.wreck = W.draw({ scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, paint: pick.paint });
+    // the pods drawn (shut or open as the Pods row says); someone asleep in each once the planet is up (below)
+    if (plan && await podFile) { pods = LAB.pods = await makePods({ plan, scene, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir }); pods.open(podsWant); for (const p of pods.pods) p.set(podsWant); }
     renderer.toneMappingExposure = planet.exposure;
     placeRing();
     if (!keepView) setView(viewName); else applyCam();
-    planet.update(camera, 0); planet.relayNow(camera);
+    planet.update(camera, 0); planet.relayNow(camera); if (pods) pods.update(camera, 0);
     // the first picture, so the timing counts the shaders being made too
     renderer.render(scene, camera);
     const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     const t2 = performance.now();
     const T = planet.trees && planet.trees.stats;
-    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, wreck: W ? W.stats.ms : 0, planet: Math.round(t2 - tw), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
+    LAB.timings = { ground: Math.round(t1 - t0), landInWorker: land.ms, wreck: W ? W.stats.ms : 0, podsPlan: plan ? Math.round(tpd - tp) : 0, pods: pods ? pods.times : null, planet: Math.round(t2 - tw), light: planet.stats.lightMs, cover: planet.stats.coverMs, trees: T ? T.buildMs : 0, treesLoad: T ? T.loadMs : 0, treesBake: T ? T.bakeMs : 0, total: Math.round(t2 - t0) };
     $('seed').value = String(seed);
     const u = new URL(location.href); u.searchParams.set('seed', seed); u.searchParams.delete('kind');
     history.replaceState(null, '', wreckAddress(u).href);
@@ -239,8 +286,20 @@ async function build(seed, { keepView = false } = {}) {
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
     note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}.<span id="wreckSay">${wreckSay()}</span> <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
     loading.hidden = true; LAB.ready = true; paintChips();
+    if (pods) fillPods(pods);
   })();
   try { await building; } finally { building = null; }
+}
+// SOMEONE ASLEEP IN EACH POD, once the planet is up: the crew kit fetched the first time (only for a planet with pods),
+// then each pod's sleeper (they come one by one; a planet made again meanwhile leaves the old pods' unmade)
+async function fillPods(P) {
+  const t0 = performance.now();
+  try {
+    if (!crewLib) crewLib = import('../../kit/crew.js').then((m) => m.loadCrew());
+    const lib = await crewLib; if (P !== pods) return;
+    await P.fill(lib);
+    if (P === pods) LAB.timings.sleepers = { ...P.times, total: Math.round(performance.now() - t0) };
+  } catch (e) { console.error('planet lab: the sleepers did not come', e); crewLib = null; }
 }
 
 // ── the menu ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -248,12 +307,15 @@ function chip(label, on, click, sub = false) { const b = document.createElement(
 function paintChips() {
   $('kinds').replaceChildren(chip('Any kind', want === 'any', () => { want = 'any'; keep({ kind: want }); paintChips(); }, true),
     ...KINDS.map((k) => chip(k.name, want === k.id, () => { want = k.id; keep({ kind: want }); paintChips(); }, true)));
-  $('views').replaceChildren(...Object.entries(VIEWS).filter(([id]) => id !== 'wreck' || wreck).map(([id, v]) => chip(v.name, viewName === id, () => setView(id), true)));
+  $('views').replaceChildren(...Object.entries(VIEWS).filter(([id]) => (id !== 'wreck' || wreck) && (id !== 'pods' || podPlan)).map(([id, v]) => chip(v.name, viewName === id, () => setView(id), true)));
+  // the pods' lids: shut or open, all together, swinging (only with a wreck: the pods are its crew's)
+  $('pods').replaceChildren(...[[0, 'Shut'], [1, 'Open']].map(([k, t]) => chip(t, podsWant === k, () => { if (podsWant === k) return; setPods(k); }, true)));
+  $('podsRow').style.display = podPlan ? '' : 'none';
   // the wreck: which ship (or none, or a different one each rescue), its colours, in how many pieces (with each rescue
   // on, the colour and pieces chips show what the seed picked)
   const reWreck = () => { keep({ wreck: wreckWant, paint, pieces: breaks }); paintChips(); if (planet) build(planet.land.seed, { keepView: true }).then(() => { if (wreck && viewName !== 'wreck') setView('wreck'); else paintChips(); }); };
   const shown = wreckWant === 'any' ? (planet ? wreckFor(planet.land.seed) : {}) : { paint, pieces: breaks };
-  $('wrecks').replaceChildren(chip('None', wreckWant === 'none', () => { if (wreckWant === 'none') return; wreckWant = 'none'; if (viewName === 'wreck') viewName = 'landing'; reWreck(); }, true),
+  $('wrecks').replaceChildren(chip('None', wreckWant === 'none', () => { if (wreckWant === 'none') return; wreckWant = 'none'; if (viewName === 'wreck' || viewName === 'pods') viewName = 'landing'; reWreck(); }, true),
     chip('Each rescue', wreckWant === 'any', () => { if (wreckWant === 'any') return; wreckWant = 'any'; reWreck(); }, true),
     ...WRECK_SHIPS.map((s) => chip(SHIP_NAMES[s], wreckWant === s, () => { if (wreckWant === s) return; byHand(); wreckWant = s; reWreck(); }, true)));
   $('paints').replaceChildren(...Object.entries(PAINTS).map(([id, P]) => { const b = chip(P.name, shown.paint === id, () => { if (shown.paint === id) return; const was = byHand(); paint = id; keep(was ? { wreck: wreckWant, paint, pieces: breaks } : { paint }); if (wreck) repaint(id); paintChips(); }, true); b.title = P.about; return b; }));
@@ -275,6 +337,7 @@ function frame(dt) {
   if (!planet) return;
   fly(dt);
   planet.update(camera, dt);
+  if (pods) pods.update(camera, dt);
   renderer.info.reset();
   renderer.render(scene, camera);
 }
@@ -300,13 +363,18 @@ LAB.bench = (frames = 90) => {
   const gl = renderer.getContext(), px = new Uint8Array(4), times = [];
   for (let k = 0; k < frames + 10; k++) {
     const t = performance.now();
-    planet.update(camera, 1 / 60); renderer.info.reset(); renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    planet.update(camera, 1 / 60); if (pods) pods.update(camera, 1 / 60); renderer.info.reset(); renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     if (k >= 10) times.push(performance.now() - t);
   }
   times.sort((a, b) => a - b);
   return { median: +times[Math.floor(times.length / 2)].toFixed(2), p90: +times[Math.floor(times.length * 0.9)].toFixed(2), tris: renderer.info.render.triangles, calls: renderer.info.render.calls, patches: planet.ground.stats.patches, rocks: planet.cover.stats.rocks, plants: planet.cover.stats.plants, trees: planet.trees ? planet.trees.stats.trees : 0, treeModels: planet.trees ? planet.trees.stats.models : 0, w: renderer.domElement.width, h: renderer.domElement.height };
 };
 LAB.curve = CURVE;
+// (for the rigs: the pods' lids, as the Pods row sets them; whether everyone is asleep in them yet; the pods drawn and
+// their sleepers (their numbers))
+LAB.setPods = (k) => setPods(k);
+LAB.podsFilled = () => !!(pods && pods.filled);
+LAB.podsStats = () => (pods ? pods.stats() : null);
 LAB.ring = (on) => { ringOn = !!on; if (ring) ring.visible = ringOn; paintChips(); };
 // (for the rigs: the wreck chosen as the chips choose it (ship 'none', 'any', or any of ship, paint, pieces by hand)
 // and the planet made again with it; the colours alone change it where it lies)
