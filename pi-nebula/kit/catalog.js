@@ -21,7 +21,23 @@ import { ARENA_PIECES } from './arena.js';       // (the arena: Mathball's court
 import { LIFT_PIECES } from './lift.js';         // (the lift: one box at each of its three stops)
 import { TOWER_PIECES } from './tower.js';       // (the control room at the top of the tower, and its desks)
 import { STORE_PIECES } from './store.js';       // (the store room on the lower level: its walls, racks, pallets, scale, benches, desk)
+import { growPod, growPodSize } from './shipparts/cabin/growpod.js';
+import { part, placeInto } from './shipparts/place.js';
+import { FACE } from './shipparts/cabin/ship.js';
 
+// THE GROW PODS IN A STATION WALL: the ships' own piece (kit/shipparts/cabin/growpod.js, the rotary garden the game's
+// maker chose: "The rotary garden looks awesome"), a row of them on a mounting plate hung on a wall panel. The game's
+// maker (2026-11-10): "It might be cool to have some of those plant pods in the station cafeteria area also (and the
+// other ships)". Drawn with the row's middle at x = 0, its bottom at y = 0 (the layout lifts it with `off`), its back on
+// the panel's face. A station panel's slabs stand up to 2.5 cm out of its face, past a pod's glass (1.45 cm out), so the
+// row stands on a plate (POD_MOUNT: `mount` metres thick, its surface `look`, `edge` metres round the frames) and no slab
+// crosses a pod's glass. Each variant a row: its pods' size, how many, the gap between their frames, which garden
+// (seed), and `rings` (three: the deepest ring, faint behind the frost, left out to keep it cheap, as in the Medic).
+export const STATION_PODS = {
+  pair: { size: 0.40, n: 2, gap: 0.234, rings: 3, seed: 1 },
+  'pair 2': { size: 0.40, n: 2, gap: 0.234, rings: 3, seed: 2 },
+};
+const POD_MOUNT = { mount: 0.03, edge: 0.04, look: 'grey2' };
 export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar', 'Medical', 'Lift', 'Tower', 'Cargo'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
 export const SHIP_GROUPS = ['Ship outside', 'Ship cockpit', 'Ship cabin'];
@@ -43,6 +59,7 @@ export const PIECES = {
   pipe: { name: 'Pipe run', group: 'Wall kit', at: 'free', variants: ['straight', 'elbow', 'elbow-r', 'elbow-in', 'elbow-in-r', 'flange', 'sleeve', 'valve'], foot: [2, 0.4, 0.4], build: pipe },
   tray: { name: 'Cable tray', group: 'Wall kit', at: 'wall', variants: ['cables'], foot: [2, 0.25, 0.25], build: cableTray },
   sign: { name: 'Lit sign', group: 'Wall kit', at: 'wall', variants: SIGNS.flatMap((n) => [n, n + ' big']), foot: [2.4, 0.6, 0.1], build: sign },
+  growpod: { name: 'Grow pods', group: 'Wall kit', at: 'wall', variants: Object.keys(STATION_PODS), foot: [1.3, 0.6, 0.08], build: stationGrowPods },
   // windows: wall panels with a window band at eye level; a run is end-left + middles + end-right (a stadium)
   pane: { name: 'Window wall', group: 'Windows', at: 'edge', variants: ['middle', 'end-left', 'end-right', 'single', 'short', 'long'], foot: [2, 3, 0.4], build: pane },
   // big rooms (two storeys, 7 m: the ordinary panels stacked, deck 0 and deck 1, the filler band between)
@@ -107,3 +124,9 @@ function junction(v) {
 }
 
 export const pieceList = (group) => Object.entries(PIECES).filter(([, d]) => !group || d.group === group).map(([id]) => id);
+
+function stationGrowPods(p, v) {
+  const o = { ...(STATION_PODS[v] || STATION_PODS.pair), plate: false }, [w, h] = growPodSize(o), { mount, edge, look } = POD_MOUNT;
+  p.slab(look, -w / 2 - edge, w / 2 + edge, 0, h + 2 * edge, 0, mount, { r: 0.012 });
+  placeInto(p, part(growPod, { ...o, y: +(h / 2 + edge).toFixed(4) }), { at: [0, 0, mount - FACE] });
+}

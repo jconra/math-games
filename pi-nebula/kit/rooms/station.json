@@ -762,6 +762,7 @@
         {"piece":"counter","cell":[4.5,15.5],"turn":0,"variant":"end"},
         {"piece":"dispenser","cell":[5.5,16],"turn":3,"variant":"drinks","off":[0,0,0.24]},
         {"piece":"jobs","cell":[5.5,15],"turn":3,"variant":"menu","off":[0,2.45,0.24]},
+        {"piece":"growpod","cell":[5.5,14],"turn":3,"variant":"pair","off":[0,1.087,0]},
         {"piece":"plinth","cell":[1,13.5],"turn":2,"variant":"face"},
         {"piece":"rail","cell":[1,13.5],"turn":2,"variant":"run","off":[0,0.72,-0.15]},
         {"piece":"plinth","cell":[2,13.5],"turn":2,"variant":"face"},
