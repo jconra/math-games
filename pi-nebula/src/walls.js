@@ -36,6 +36,11 @@
 //   makeWalls(built, { apart })       apart: [room id]: rooms of the station that can be stood somewhere else (a parked
 //                                     ship that flies). Each is left out of the station's own walls and added as a part
 //                                     of its own, 'room:<id>', its doors with it, to be placed with walls.place.
+//   makeWalls(built, { ground })      ground(x, z): A GROUND UNDER EVERYTHING, its height (a planet's land: src/planet/
+//                                     land.js heightAt), a floor everywhere as the station's floors are (a step up or down
+//                                     it as on a ramp; too steep, as a wall), and a camera's line stopped at it. With
+//                                     no station (built: { zones: [], doors: [] }) only the ground and the parts added
+//                                     later (a ship set down on it, the pods, the wreck, the rocks: src/planet/onfoot.js).
 //
 // HOW: two things are made once, when the station has loaded.
 //   - Voxels (the kit's own, kit/bake.js) of every wall, floor, window and piece of furniture, 0.1 m across. A person
@@ -62,7 +67,7 @@ const FC = 0.5;                  // the floors' squares (m)
 // a person walking head on into a door's frame is eased sideways into the opening, up to `most` (m), in steps of `step`
 export const NUDGE = { most: 0.24, step: 0.02 };
 
-export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {}) {
+export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], ground = null } = {}) {
   const t0 = performance.now();
   // ── the walls and the floors: the station's, and the parts added later (each its own, tried after it) ──────────
   const solid = [], up = [], own = new Map();
@@ -72,7 +77,8 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
     for (const k of ['solid', 'floor', 'glass', 'shield']) if (z.merged[k]) (S ? S.solid : solid).push(z.merged[k]);
     for (const k of ['solid', 'floor']) if (z.merged[k]) (S ? S.up : up).push(z.merged[k]);
   }
-  const V = makeVoxels(solid, voxel);
+  // (no walls of the station's own, a planet's ground alone: nothing is full, a line goes on)
+  const V = solid.length ? makeVoxels(solid, voxel) : { full: () => false, march: () => -1, bricks: 0, bytes: 0 };
   const tV = performance.now();
   const F0 = makeFloors(up);
   const parts = new Map();
@@ -85,6 +91,7 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   // (c lx + s lz + x, -s lx + c lz + z))
   function floorAt(x, z, top = Infinity, drop = Infinity) {
     let best = F0.at(x, z, top, drop);
+    if (ground) { const g = ground(x, z); if (g <= top && g >= top - drop && (best === null || g > best)) best = g; }
     for (const L of extra) {
       const fr = L.fr; let lx = x, lz = z, dy = L.dy;
       if (fr) { const dx = x - fr.x, dz = z - fr.z; lx = fr.c * dx - fr.s * dz; lz = fr.s * dx + fr.c * dz; dy += fr.y; }
@@ -532,6 +539,8 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [] } = {
   function reach(from, dir, len) {
     let t = V.march(from.x, from.y, from.z, dir.x, dir.y, dir.z, len, voxel * 0.5);
     if (t < 0) t = len;
+    // (the ground under everything: the line stops a little over it)
+    if (ground) for (let u = 0.2; u <= t; u += 0.2) if (from.y + dir.y * u < ground(from.x + dir.x * u, from.z + dir.z * u) + 0.25) { t = Math.max(0, u - 0.2); break; }
     for (const L of extra) {
       if (!L.V || !live(L)) continue;
       const fr = L.fr; let u;

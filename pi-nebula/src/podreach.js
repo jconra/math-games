@@ -11,6 +11,8 @@
 //     aim()       (optional) the screen's height, -1 to 1, of the middle of what can be seen: a menu over the bottom of the
 //                 screen moves it up (the Planet Lab's: the share of the screen its menu takes); else the middle, 0
 //   R.update()    each frame: which pod (if any) is offered now -> it, or null
+//   R.eye         (optional, set any time) () -> a Vector3: ON FOOT, the player's own eyes (src/planet/onfoot.js): the
+//                 reach is then from there, the look still the camera's (it is behind the player); null: the camera's
 //   R.busy(on)    while a lock is open nothing is offered or tapped
 //   R.tapped()    true just after a tap opened a pod's lock (so the page doesn't also take that click for itself)
 //   R.dispose()
@@ -47,11 +49,13 @@ export function makePodReach({ camera, canvas, pods, onPick, reach = REACH.reach
       camera.getWorldPosition(_e);
       const y = typeof aim === 'function' ? Number(aim()) || 0 : 0;
       if (y) _f.set(0, Math.max(-0.95, Math.min(0.95, y)), 0.5).unproject(camera).sub(_e).normalize(); else camera.getWorldDirection(_f);
+      const from = typeof R.eye === 'function' ? R.eye() : null;
       for (const p of pods() || []) {
         if (!p || p.open || !p.group) continue;
         const m = middle(p);
-        if (!inReach(_e.toArray(), _f.toArray(), m.toArray(), { reach, cone })) continue;
-        const d = m.distanceTo(_e); if (d < bestD) { bestD = d; best = p; }
+        if (!inReach(_e.toArray(), _f.toArray(), m.toArray(), { reach: from ? Infinity : reach, cone })) continue;
+        const d = m.distanceTo(from || _e); if (from && d > reach) continue;
+        if (d < bestD) { bestD = d; best = p; }
       }
     }
     if (best !== now) {
@@ -86,7 +90,8 @@ export function makePodReach({ camera, canvas, pods, onPick, reach = REACH.reach
   canvas.addEventListener('pointerdown', onDown, true);
   canvas.addEventListener('pointermove', onMove, true);
   canvas.addEventListener('pointerup', onUp, true);
-  return {
+  const R = {
+    eye: null,
     el, update, get now() { return now; },
     tapped: () => performance.now() - tappedAt < 400,   // (a tap just opened a lock: the lab takes no pointer lock for it)
     busy(on) { busy = !!on; if (busy) { el.hidden = true; now = null; } },
@@ -94,4 +99,5 @@ export function makePodReach({ camera, canvas, pods, onPick, reach = REACH.reach
     tapAt: (x, y) => { onDown({ clientX: x, clientY: y, pointerId: -7 }); onUp({ clientX: x, clientY: y, pointerId: -7, preventDefault() {} }); },
     dispose() { el.remove(); removeEventListener('keydown', onKey); canvas.removeEventListener('pointerdown', onDown, true); canvas.removeEventListener('pointermove', onMove, true); canvas.removeEventListener('pointerup', onUp, true); },
   };
+  return R;
 }

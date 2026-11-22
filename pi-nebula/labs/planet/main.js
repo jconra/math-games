@@ -64,6 +64,7 @@ import { makePodReach } from '../../src/podreach.js';
 import { makeSearch } from '../../src/planet/search.js';
 import { flyOver } from '../../src/planet/flyover.js';
 import { flightOf } from '../../src/fleet.js';
+import { makeWalkLab } from './walk.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), RIG = q.has('rig'), HOLD = q.has('hold');
@@ -192,7 +193,7 @@ function setView(name) {
 const canLock = !navigator.webdriver && typeof canvas.requestPointerLock === 'function';
 {
   let drag = null;
-  canvas.addEventListener('pointerdown', (e) => { if (drag || document.pointerLockElement === canvas) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerdown', (e) => { if (drag || document.pointerLockElement === canvas || walk.on) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener('pointermove', (e) => {
     if (document.pointerLockElement === canvas) { turn(e.movementX, e.movementY, 0.0022); return; }
     if (!drag || e.pointerId !== drag.id) return;
@@ -207,7 +208,7 @@ function turn(dx, dy, k) { k *= camera.fov / 60; cam.yaw -= dx * k; cam.pitch = 
 const FLY = { KeyW: [0, 0, 1], KeyS: [0, 0, -1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0], Space: [0, 1, 0], KeyC: [0, -1, 0] };
 const keys = new Set(), vel = new THREE.Vector3(), stickV = { x: 0, y: 0 }, vert = { v: 0 }; let fast = false;
 const typing = (t) => t && ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName);
-addEventListener('keydown', (e) => { fast = e.shiftKey; if (!FLY[e.code] || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return; keys.add(e.code); e.preventDefault(); });
+addEventListener('keydown', (e) => { fast = e.shiftKey; if (!FLY[e.code] || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || walk.on) return; keys.add(e.code); e.preventDefault(); });
 addEventListener('keyup', (e) => { fast = e.shiftKey; keys.delete(e.code); if (e.code === 'Space' && e.target && e.target.tagName === 'BUTTON') e.preventDefault(); });
 addEventListener('blur', () => keys.clear());
 const MAX_UP = 1000;
@@ -359,7 +360,8 @@ $('ring').addEventListener('click', (e) => { ringOn = !ringOn; keep({ ring: ring
 const frameMs = []; let shown = 0;
 function frame(dt) {
   if (!planet) return;
-  if (flown) { flown.update(dt); flown.aim(camera, dt); } else fly(dt);
+  // (on foot, the camera is the walk's: ./walk.js; the Medic set down and the rescued go on whichever)
+  if (flown) { flown.update(dt); flown.aim(camera, dt); walk.frame(dt); } else if (!walk.frame(dt)) fly(dt);
   planet.update(camera, dt);
   if (pods) pods.update(camera, dt);
   if (reach) reach.update();
@@ -487,6 +489,12 @@ function stopFlying() {
 LAB.find = () => findWreck();
 LAB.fly = () => flyMedic(); LAB.unfly = () => stopFlying();
 LAB.cam = () => ({ x: cam.pos.x, y: cam.pos.y, z: cam.pos.z, dx: -Math.sin(cam.yaw), dz: -Math.cos(cam.yaw) });
+
+// ── ON FOOT (./walk.js: the Medic set down beside the wreck, the player walking down its ramp to the pods, the rescued
+// coming aboard by themselves; the game's own pieces, src/planet/medicdown.js, onfoot.js, src/rescued.js): its own row
+// of the menu; while on foot the flying above rests (walk.on)
+const walk = makeWalkLab({ LAB, scene, camera, canvas, renderer, quality,
+  lab: () => ({ planet, wreck, pods, podPlan, crewLib: () => (crewLib || (crewLib = import('../../kit/crew.js').then((m) => m.loadCrew()))) }) });
 
 touchControls(); paintChips();
 const first = +q.get('seed') > 0 ? Math.floor(+q.get('seed')) : (q.get('kind') ? newSeed(want) : (kept.seed > 0 ? kept.seed : newSeed(want === 'any' ? null : want)));

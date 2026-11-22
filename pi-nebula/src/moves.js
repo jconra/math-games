@@ -275,3 +275,39 @@ export function addMoves(c) {
   }
   return M;
 }
+
+// A MOVE'S POSE ON A BED, OUT OF THE BED'S OWN FRAME INTO THE WORLD (src/onbed.js pose(): x across the bed, + the side
+// it is got onto from; y up; z along it from its head end), for M.bed: the same sums as the scanner's patient's
+// (people.js bedPoseOf) and the sleeper's (src/sleeper.js), here once for anyone else (src/rescued.js: the rescued
+// getting out of a stasis pod, and onto the Medic's patient beds).
+//   bedPose(M, p, frame, { mirror, D }) -> D
+//     p       onbed.js pose(move, t, bed, M.body)
+//     frame   a Matrix4: the bed's own frame in the world (a turn and a move: no scale)
+//     mirror  the bed got onto from its other side (its -x): the very same moves the other way round, each left and
+//             right swapped (a bed whose open side is on the lying person's left, where the scanner's is on their right)
+//     D       the record to fill (M.bed's shape; made if none)
+//   D.root, D.q: the person's root, placed from where the clips put the hip joints (M.hipAt) and turned as the pose says
+//   (its heading and lean); D.heading: the way they face in the world (0 along +z)
+const _bq = new THREE.Quaternion(), _bs = new THREE.Vector3(), _bp = new THREE.Vector3(), _be = new THREE.Euler();
+export function bedPose(M, p, frame, { mirror = false, D = null } = {}) {
+  const sx = mirror ? -1 : 1, sw = (a) => (a && mirror ? [a[1], a[0]] : a);
+  frame.decompose(_bp, _bq, _bs);
+  const P = (v, o) => o.set(v[0] * sx, v[1], v[2]).applyMatrix4(frame), W3 = (v, o) => o.set(v[0] * sx, v[1], v[2]).applyQuaternion(_bq);
+  const V = () => new THREE.Vector3(), two = () => [V(), V()];
+  D = D || {};
+  if (!D.hips) Object.assign(D, { hips: V(), feet: two(), pole: V(), ahead: V(), hands: two(), fingersV: two(), elbowsV: two(), lookV: V(), root: V(), q: new THREE.Quaternion() });
+  const feet = sw(p.feet), hands = sw(p.hands), fingers = sw(p.fingers), elbows = sw(p.elbows);
+  P(p.hips, D.hips); P(feet[0], D.feet[0]); P(feet[1], D.feet[1]); W3(p.pole, D.pole);
+  W3([Math.sin(p.heading), 0, Math.cos(p.heading)], D.ahead);
+  if (hands) { P(hands[0], D.hands[0]); P(hands[1], D.hands[1]); }
+  D.fingers = fingers ? fingers.map((f, i) => W3(f, D.fingersV[i])) : null;
+  D.elbows = elbows ? elbows.map((f, i) => W3(f, D.elbowsV[i])) : null;
+  D.legs = p.legs; D.flat = p.flat; D.arms = p.hands ? p.arms : 0; D.chin = p.chin || 0;
+  D.point = p.point; D.pitch = p.pitch || 0; D.roll = p.roll || 0; D.curl = p.curl || 0;
+  D.armsLR = p.hands && p.armsLR ? sw(p.armsLR) : null; D.turn = (p.turn || 0) * sx; D.twist = (p.twist || 0) * sx;
+  D.look = p.look ? P(p.look, D.lookV) : null;
+  D.heading = Math.atan2(D.ahead.x, D.ahead.z);
+  D.q.setFromEuler(_be.set(-p.lean, D.heading, 0, 'YXZ'));
+  D.root.copy(M.hipAt).applyQuaternion(D.q).negate().add(D.hips);
+  return D;
+}

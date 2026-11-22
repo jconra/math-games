@@ -34,7 +34,8 @@ export const PODS_DRAW = { far: 7, seen: 25 };
 
 // THE PLANET'S LIGHT on a pod's material (as wreckship.js onGround does it for the wreck, the curve left to the pod's own
 // place): how much of the sun and the sky reach the ground where it lies, and the haze between it and the camera
-function onPlanet(mat, { ground, sky, kind }) {
+// (shared: the Medic set down on a planet is lit so too, src/planet/medicdown.js)
+export function onPlanet(mat, { ground, sky, kind }) {
   const U = ground.U, prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey && mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => '';
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev.call(mat, sh, r);

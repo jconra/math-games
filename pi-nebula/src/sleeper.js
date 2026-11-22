@@ -20,7 +20,9 @@
 //                                               where it lies; far: the crew kit's far copies made ready; position: a
 //                                               POSITIONS id (none: the look's own clothes)
 //   S.c (the crew kit's person), S.look, S.position, S.box (its extent lying, in the pod: { min, max } [x, y, z]),
+//   S.moves (its src/moves.js, the bed pose laid on: S.moves.bed, in the pod's frame), S.lean (the root's lean),
 //   S.setFar(on), S.count() -> { draws, tris } (its meshes shown), S.dispose()
+//   (woken, src/rescued.js takes the person out of the pod and on from this very pose)
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
 import { addMoves } from './moves.js';
@@ -90,7 +92,7 @@ export async function makeSleeper(lib, look, pod, { far = false, position = null
   c.root.position.x += F.mid - (b.min.x + b.max.x) / 2; c.root.position.y -= SLEEP.sink; b = extent();
   pod.body.add(c.root);
   return {
-    c, root: c.root, look, position: POSITIONS[position] ? position : null, box: { min: b.min.toArray(), max: b.max.toArray() },
+    c, root: c.root, look, position: POSITIONS[position] ? position : null, box: { min: b.min.toArray(), max: b.max.toArray() }, moves: M, lean: p.lean,
     setFar(on) { if (c.setFar && !!c.far !== !!on) c.setFar(!!on); },
     // (what it draws: its meshes shown, and their triangles)
     count() {
