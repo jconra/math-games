@@ -36,6 +36,14 @@
 // lockboxes"): fly up to a pod and look at it (the prompt over the menu, or E), or tap the pod: its lock is Mathwood's
 // lock box in this game's look; solved, that pod's lid opens (the Pods row shuts them all again). The lab's own medic's
 // level on the ladder is kept in this browser.
+// THE WAY TO THE WRECK (src/planet/search.js, guide.js; the sensors' card src/jobs/sensors.js; his answers RESC1-3 C and
+// RESC1-4 C): "Find the wreck" in the Rescue row comes out of the jump over the planet with the sensors' card up, the
+// ship (the camera) where the card's grid has it; answered, the beam rises from the wreck, the arrow and the radar's dot
+// show, and the blue ship stands on the landing place to set down on. Over a planet with a wreck there is no edge: the
+// camera no longer jumps to the ground's copy past its edge, so the wreck is always the one the arrow points back to.
+// ?find opens the card as the planet is made. "Fly the Medic" flies it from where the camera is, with the game's own
+// flying (src/planet/flyover.js): set down on the blue ship by hand, or the autopilot (T) sets it down there; down,
+// Get up (E) gives the camera back. The menu is put away while it is flown.
 // ?view=landing|above|low|wreck|pods; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
 // ?paint=rust|olive|slate and ?pieces=2|3 (with a ship by hand); ?pods=shut|open (their lids);
 // ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
@@ -53,6 +61,9 @@ import { makePods } from '../../src/planet/podsdraw.js';
 import { loadPod } from '../../kit/stasispod.js';
 import { openPodLock, labMedic } from '../../src/podlock.js';
 import { makePodReach } from '../../src/podreach.js';
+import { makeSearch } from '../../src/planet/search.js';
+import { flyOver } from '../../src/planet/flyover.js';
+import { flightOf } from '../../src/fleet.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), RIG = q.has('rig'), HOLD = q.has('hold');
@@ -209,7 +220,8 @@ function fly(dt) {
   vel.lerp(_w, 1 - Math.exp(-6 * dt));
   if (vel.lengthSq() > 1e-6) cam.pos.addScaledVector(vel, dt);
   // over the ground, never in it, and below a kilometre; past the edge, over its copy (the same ground)
-  const P = WIDTH; if (cam.pos.x > P / 2) cam.pos.x -= P; if (cam.pos.x < -P / 2) cam.pos.x += P; if (cam.pos.z > P / 2) cam.pos.z -= P; if (cam.pos.z < -P / 2) cam.pos.z += P;
+  // (not over a planet with a wreck: no edge, the wreck stays the one the arrow points back to)
+  const P = WIDTH; if (!search) { if (cam.pos.x > P / 2) cam.pos.x -= P; if (cam.pos.x < -P / 2) cam.pos.x += P; if (cam.pos.z > P / 2) cam.pos.z -= P; if (cam.pos.z < -P / 2) cam.pos.z += P; }
   const g = ground(cam.pos.x, cam.pos.z); cam.pos.y = THREE.MathUtils.clamp(cam.pos.y, g + 1.2, g + MAX_UP);
   applyCam();
 }
@@ -296,6 +308,7 @@ async function build(seed, { keepView = false } = {}) {
     keep({ seed });
     // (on a narrow screen only the first sentence, so the menu leaves room for the planet)
     note.innerHTML = `<b>${land.kind.name}</b>, seed ${seed}${land.familiar ? ', in Earth\'s colours' : ''}.<span id="wreckSay">${wreckSay()}</span> <span class="pl-long">${land.familiar ? land.kind.aboutEarth : land.kind.about}${T ? ` ${T.trees.toLocaleString()} trees.` : ''} The ground is 2 km across (2,048 m) and repeats past its edges: flying straight across it at the Miner's top speed takes 51 seconds. The landing place is the level ground in the ring, ${2 * land.landing.flat} m across. </span>Made in ${(LAB.timings.total / 1000).toFixed(1)} s.`;
+    searchFor();
     loading.hidden = true; LAB.ready = true; paintChips();
     if (pods) fillPods(pods);
   })();
@@ -346,10 +359,11 @@ $('ring').addEventListener('click', (e) => { ringOn = !ringOn; keep({ ring: ring
 const frameMs = []; let shown = 0;
 function frame(dt) {
   if (!planet) return;
-  fly(dt);
+  if (flown) { flown.update(dt); flown.aim(camera, dt); } else fly(dt);
   planet.update(camera, dt);
   if (pods) pods.update(camera, dt);
   if (reach) reach.update();
+  if (search) search.update(camera, dt, flown ? { ahead: flown.nose() } : {});
   renderer.info.reset();
   renderer.render(scene, camera);
 }
@@ -418,6 +432,60 @@ function openLock(i) {
 // (for the rigs: a pod's lock opened as a tap opens it; the one open now; the pod offered now; a rung to deal)
 LAB.lock = (i) => openLock(i);
 Object.defineProperties(LAB, { lockNow: { get: () => lock }, reach: { get: () => reach } });
+
+// ── THE WAY TO THE WRECK: found by the sensors' card on arrival, then the beam, the arrow, the radar, the blue ship ──
+let search = null;
+const searchBox = () => { const t = $('top'), b = $('bar'); return { left: 0, top: t.offsetTop + t.offsetHeight, right: innerWidth, bottom: innerHeight - (b.offsetHeight || 0) }; };
+// (each planet with a wreck has its own: made with it, gone with it)
+function searchFor() {
+  if (flown) stopFlying();
+  if (search) { search.dispose(); search = LAB.search = null; }
+  const row = $('searchRow'); if (row) row.style.display = wreck ? '' : 'none';
+  if (!wreck || !planet) return;
+  const P = podPlan && podPlan.pods.length ? podPlan.pods : null;
+  search = LAB.search = makeSearch({ scene, ground: planet.ground, land: planet.land, wreck: wreck.site, cfg: flightOf('medic'), bounds: searchBox,
+    pods: P ? [P.reduce((a, p) => a + p.x, 0) / P.length, P.reduce((a, p) => a + p.z, 0) / P.length] : null,
+    // (the ship's view looking a little lower by the menu's share of the screen, as the Pods view does: what it looks at
+    // stands in the middle of what the menu leaves showing)
+    place: (at, to) => {
+      vel.set(0, 0, 0); look(at, to);
+      const bar = Math.min(0.6, ($('bar').offsetHeight || 0) / Math.max(1, innerHeight)); cam.pitch += Math.atan(bar * Math.tan(camera.fov * Math.PI / 360)); applyCam();
+      planet.update(camera, 0); planet.relayNow(camera); if (pods) pods.update(camera, 0);
+    } });
+  if (q.has('find') && !LAB.found0) { LAB.found0 = true; findWreck(); }
+}
+function findWreck() { if (!search || flown) return; keys.clear(); search.start({ ahead: [-Math.sin(cam.yaw), -Math.cos(cam.yaw)] }); }
+// THE MEDIC FLOWN from where the camera is (a little up off the ground), its nose the camera's way; the menu put away
+let flown = null, flying = false;
+async function flyMedic() {
+  if (flown || flying || !planet || !wreck) return null;
+  flying = true; keys.clear(); vel.set(0, 0, 0);
+  const g = ground(cam.pos.x, cam.pos.z), P = podPlan && podPlan.pods.length ? podPlan.pods : null;
+  try {
+    flown = LAB.flown = await flyOver({ renderer, scene, camera, land: planet.land, at: [cam.pos.x, Math.max(cam.pos.y, g + 25), cam.pos.z], ahead: [-Math.sin(cam.yaw), -Math.cos(cam.yaw)],
+      toward: P ? [P.reduce((a, p) => a + p.x, 0) / P.length, P.reduce((a, p) => a + p.z, 0) / P.length] : null, onGetUp: () => stopFlying() });
+  } catch (e) { console.error('planet lab: the Medic did not come', e); if (window.oops) window.oops(e); flying = false; return null; }
+  flying = false; $('bar').style.display = 'none'; document.body.classList.remove('touch');
+  return flown;
+}
+// (the camera given back where the flying's view left it)
+function stopFlying() {
+  if (!flown) return;
+  flown.close(); flown = LAB.flown = null;
+  camera.getWorldDirection(_v); cam.pos.copy(camera.position); cam.yaw = Math.atan2(-_v.x, -_v.z); cam.pitch = Math.asin(THREE.MathUtils.clamp(-_v.y, -1, 1));
+  camera.up.set(0, 1, 0); camera.fov = 60; camera.near = 0.25; camera.far = 20000; camera.updateProjectionMatrix(); applyCam();
+  $('bar').style.display = ''; document.body.classList.toggle('touch', TOUCH); fit();
+}
+{
+  const row = document.createElement('div'); row.className = 'kl-row'; row.id = 'searchRow'; row.style.display = 'none';
+  row.innerHTML = '<span class="kl-label pl-keep">Rescue</span>';
+  row.append(chip('Find the wreck', false, findWreck, true), chip('Fly the Medic', false, flyMedic, true));
+  $('bar').insertBefore(row, $('note').parentElement);
+}
+// (for the rigs: the card as a tap on Find the wreck opens it; the way lit at once)
+LAB.find = () => findWreck();
+LAB.fly = () => flyMedic(); LAB.unfly = () => stopFlying();
+LAB.cam = () => ({ x: cam.pos.x, y: cam.pos.y, z: cam.pos.z, dx: -Math.sin(cam.yaw), dz: -Math.cos(cam.yaw) });
 
 touchControls(); paintChips();
 const first = +q.get('seed') > 0 ? Math.floor(+q.get('seed')) : (q.get('kind') ? newSeed(want) : (kept.seed > 0 ? kept.seed : newSeed(want === 'any' ? null : want)));

@@ -124,6 +124,11 @@
 //     body        at the rocks, in place of boarding and crane: { at (Matrix4: the field's own frame in the world), M0
 //                 (Matrix4: the ship's kit frame in the flight model's), p, f (where it is and the way its nose points,
 //                 the field's frame), fly(M) (the ship drawn there: M, its kit frame in the field's), solid }
+//                 OVER A PLANET (cfg.planet: src/planet/landing.js planetPad, the level ground beside a wreck as its pad
+//                 and floor): the same body, with plan(S) (the autopilot's way down: planDown) and far (how far the eye
+//                 sees, m). Then the guide asks as when landing at home (the tiny ship's goal, the keys lit), the
+//                 autopilot sets it down on its pad, and the blue ship life size is the planet's own
+//                 (src/planet/guide.js), bent with the ground.
 //     task        { words, on() }: one more button (M), for a pilot who also has another job out there
 //     visit       the other two hangars' keeper (src/visit.js), or none: then nothing is parked in them
 //     goal        'leave' (out of the hangar and clear of the station) | 'land' (in and down in its hangar) | 'free' (the lab)
@@ -332,13 +337,29 @@ export function solidFor(cfg, outside = null) {
   return SOLIDS.get(key);
 }
 
+// THE SHIP'S SMALL MODEL as the landing guide draws it (the tiny ship, and its blue goal): its boxes (src/fleet.js
+// `model`: [from, to along it, from, to across it, from, to up, part]) in one geometry, each part in its colour, in the
+// small space's frame (x right, y up, z back: its nose toward -z), GUIDE.space times smaller than the ship (k: the
+// scale; 1 is life size). Also the planets' blue ship to set down on (src/planet/guide.js).
+export function modelShape(boxes, colours, k = 1 / M.GUIDE.space) {
+  const pos = [], nor = [], col = [], idx = [], c = new THREE.Color();
+  for (const [a0, a1, r0, r1, u0, u1, part] of boxes) {
+    const g = new THREE.BoxGeometry((r1 - r0) * k, (u1 - u0) * k, (a1 - a0) * k).translate((r0 + r1) / 2 * k, (u0 + u1) / 2 * k, -(a0 + a1) / 2 * k), base = pos.length / 3;
+    for (const v of g.attributes.position.array) pos.push(v); for (const v of g.attributes.normal.array) nor.push(v);
+    c.set(colours[part] ?? colours.body); for (let i = 0; i < g.attributes.position.count; i++) col.push(c.r, c.g, c.b);
+    for (const i of g.index.array) idx.push(base + i); g.dispose();
+  }
+  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); out.setIndex(idx);
+  return out;
+}
+
 export function startFlying(ctx, opts = {}) {
   // (hull: whoever keeps the ship's hull where it is flown and stands, its thrusters and its pad: the Miner's crane, or
   // the ship's own shared hull, src/shiphull.js)
   const { W, boarding, crane = null, hull = crane, outside = null, people = () => null, visit = null } = ctx;
   const cfg = opts.cfg || M.MINER, pilot = opts.pilot !== false, canvas = W.renderer.domElement;
   // (at the rocks: a body of its own, the top of this file; then there is no cabin, no crane and no station here)
-  const body = opts.body || null;
+  const body = opts.body || null, overPlanet = !!(body && cfg.planet);
   const B = body ? null : boarding.ships.find((s) => s.id === cfg.id);
   if (!body && (!B || !B.M)) throw new Error('flying: the ' + cfg.id + '\'s cabin is not in');
   if (!document.getElementById('pfl-css')) { const st = document.createElement('style'); st.id = 'pfl-css'; st.textContent = CSS; document.head.appendChild(st); }
@@ -377,7 +398,7 @@ export function startFlying(ctx, opts = {}) {
   // from the jump home on; in the lab, its "Outside, coming home"), or in the lab flying back in after it has been out.
   // Not while it stands on a floor, not on the way out, never at the rocks. The goal life size is shown from behind
   // only then: the game's maker, 2026-11-20, DASH2-2)
-  const landing = () => M.isLanding(S, { goal, everClear, field: !!body });
+  const landing = () => M.isLanding(S, { goal, everClear, field: !!body && !overPlanet });
   let touch = matchMedia('(pointer: coarse)').matches;
   const canLock = !navigator.webdriver && typeof canvas.requestPointerLock === 'function';
   const held = new Set(), pend = { dx: 0, dy: 0 }, orbit = { yaw: 0, pitch: 0 }, sticks = { l: { x: 0, y: 0, id: null }, r: { x: 0, y: 0, id: null } };
@@ -496,7 +517,7 @@ export function startFlying(ctx, opts = {}) {
   addEventListener('pointermove', onMove); canvas.addEventListener('pointerdown', onDown); addEventListener('pointerup', onUp); canvas.addEventListener('contextmenu', onMenu);
   document.addEventListener('pointerlockchange', onLock);
 
-  const planFor = () => (goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, job.finish()) : M.planLeave(S, job.finish()));
+  const planFor = () => (overPlanet && body.plan ? body.plan(S) : goal === 'land' || (goal === 'free' && everClear && !S.landed) ? M.planLand(S, job.finish()) : M.planLeave(S, job.finish()));
   function press(a) {
     if (closed || !on || aside) return false;
     if (a === 'controls') { card.hidden = !card.hidden; if (!card.hidden && mouse === 'fly') setMouse('pointer'); return true; }
@@ -508,7 +529,7 @@ export function startFlying(ctx, opts = {}) {
     if (!pilot) return false;
     // (at the rocks, a pilot with another job as well: back to it)
     if (a === 'task') { if (!opts.task) return false; letGo(); opts.task.on(); return true; }
-    if (body && a === 'autopilot') return false;
+    if (body && !overPlanet && a === 'autopilot') return false;
     if (a === 'power') { if (!S.landed) return false; M.setPower(S, !S.power); painted = ''; return true; }
     if (a === 'autopilot') {
       auto = !auto; plan = auto ? planFor() : null;
@@ -618,19 +639,7 @@ export function startFlying(ctx, opts = {}) {
   // (the ship's own shape in a few boxes, metres in its own frame: [from, to] along it, across it and up, and what it is)
   const holo = (() => {
     // (the ship's own: src/fleet.js `model`)
-    const BOXES = cfg.model;
-    const k = 1 / M.GUIDE.space, c = new THREE.Color();
-    function shape(colours) {
-      const pos = [], nor = [], col = [], idx = [];
-      for (const [a0, a1, r0, r1, u0, u1, part] of BOXES) {
-        const g = new THREE.BoxGeometry((r1 - r0) * k, (u1 - u0) * k, (a1 - a0) * k).translate((r0 + r1) / 2 * k, (u0 + u1) / 2 * k, -(a0 + a1) / 2 * k), base = pos.length / 3;
-        for (const v of g.attributes.position.array) pos.push(v); for (const v of g.attributes.normal.array) nor.push(v);
-        c.set(colours[part] ?? colours.body); for (let i = 0; i < g.attributes.position.count; i++) col.push(c.r, c.g, c.b);
-        for (const i of g.index.array) idx.push(base + i); g.dispose();
-      }
-      const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); out.setIndex(idx);
-      return out;
-    }
+    const shape = (colours) => modelShape(cfg.model, colours);
     const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(HOLO.fov, 1, 0.05, 20);
     cam.position.set(...HOLO.eye); cam.lookAt(...HOLO.look);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4658, 1.5)); const sun = new THREE.DirectionalLight(0xffffff, 1.9); sun.position.set(-1.4, 2.4, 1.5); scene.add(sun);
@@ -648,7 +657,7 @@ export function startFlying(ctx, opts = {}) {
     const seg = (a, b, step = 1.5) => { const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / step)), out = []; for (let i = 0; i <= n; i++) out.push([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, a[2] + (b[2] - a[2]) * i / n]); return out; };
     { const ring = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; ring.push([P[0] + Math.cos(a) * HOLO.pad, y0, P[2] + Math.sin(a) * HOLO.pad]); } run(ring); }
     run(seg([P[0] - 2.5, y0, P[2]], [P[0] + 2.5, y0, P[2]])); run(seg([P[0], y0, P[2] - 2.5], [P[0], y0, P[2] + 2.5]));
-    if (B2) {
+    if (B2 && !overPlanet) {
       const z0 = P[2] - DOOR.w / 2, z1 = P[2] + DOOR.w / 2, xb = B2.x0, xd = DOOR.x;
       run([...seg([xd, y0, z0], [xb, y0, z0]), ...seg([xb, y0, z0], [xb, y0, z1]), ...seg([xb, y0, z1], [xd, y0, z1])]);
       run([...seg([xd, y0, z0], [xd, DOOR.h, z0]), ...seg([xd, DOOR.h, z0], [xd, DOOR.h, z1]), ...seg([xd, DOOR.h, z1], [xd, y0, z1]), ...seg([xd, y0, z1], [xd, y0, z0])]);
@@ -659,7 +668,7 @@ export function startFlying(ctx, opts = {}) {
     const lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: HOLO.line, transparent: true, opacity: 0.6, toneMapped: false, fog: false })); lines.frustumCulled = false;
     scene.add(lines, goal, model);
     // (out at the rocks there is no pad: the tiny ship alone)
-    if (body) goal.visible = lines.visible = false;
+    if (body && !overPlanet) goal.visible = lines.visible = false;
     scene.add(cam);
     const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _o = new THREE.Vector3(), _cc = new THREE.Color();
     let live = false;
@@ -745,15 +754,15 @@ export function startFlying(ctx, opts = {}) {
     const capOn = guideOn && landing() && view === 'behind' && powered();
     $('.pfl-seat').hidden = !seatUp; $('.pfl-guide').hidden = !(keysOn && !touch) && !capOn; $('.pfl-keys').hidden = !keysOn || touch; holo.show(powered());
     { const c = $('.pfl-gcap'); c.hidden = !capOn; c.textContent = GUIDE_WORDS; }
-    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
-    const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body, task: opts.task ? opts.task.words : '' });
+    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = overPlanet ? 'Down beside the wreck' : where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
+    const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body && !overPlanet, task: opts.task ? opts.task.words : '' });
     helpEl.querySelector('ul').innerHTML = rows.map(([k, w]) => (k ? `<li><kbd>${k}</kbd><span>${w}</span></li>` : `<li class="is-word"><span>${w}</span></li>`)).join('');
     helpEl.classList.toggle('is-shut', helpShut == null ? touch : helpShut);
     $('.pfl-helptab span').textContent = touch ? 'Help' : 'Keys';
     const b = (name) => $(`.pfl-btns [data-do="${name}"]`), flying = pilot && !auto && !S.landed;
     b('power').hidden = !(pilot && S.landed && !auto); b('power').classList.toggle('is-on', S.power);
     $('[data-lift]').hidden = !(pilot && S.landed && !auto);
-    b('autopilot').hidden = !pilot || !!body; b('autopilot').classList.toggle('is-on', auto);
+    b('autopilot').hidden = !pilot || (!!body && !overPlanet); b('autopilot').classList.toggle('is-on', auto);
     { const tb = b('task'), show = !!(opts.task && pilot); tb.hidden = !show; if (show && tb._w !== opts.task.words) { tb._w = opts.task.words; tb.innerHTML = `${opts.task.words} <kbd>M</kbd>`; } }
     b('mouse').hidden = !(flying && !touch); b('mouse').classList.toggle('is-on', mouse === 'fly');
     b('controls').hidden = !pilot;
@@ -832,7 +841,8 @@ export function startFlying(ctx, opts = {}) {
       camera.position.lerpVectors(_eye.copy(glide.p).applyMatrix4(W2), camera.position, e); camera.quaternion.slerpQuaternions(_gq, camera.quaternion.clone(), e);
       fov = glide.fov + (fov - glide.fov) * e; near = Math.min(VIEW.near.cockpit, near);
     }
-    if (camera.fov !== fov || camera.near !== near || camera.far !== VIEW.far) { camera.fov = fov; camera.near = near; camera.far = VIEW.far; camera.updateProjectionMatrix(); }
+    const far = (body && body.far) || VIEW.far;
+    if (camera.fov !== fov || camera.near !== near || camera.far !== far) { camera.fov = fov; camera.near = near; camera.far = far; camera.updateProjectionMatrix(); }
     // (the dashboard; and from behind, once the eye is there, the goal life size on the pad)
     if (ownDash) { _w.setFromMatrixPosition(world()); stepDash(D, { p: [_w.x, _w.y, _w.z], dt, flying: !S.landed }); }
     dashClock += dt; dashTick();
@@ -882,7 +892,7 @@ export function startFlying(ctx, opts = {}) {
       let C = M.noControls();
       if (!locked) {
         if (auto) {
-          if (body) C = M.noControls();      // (at the rocks, riding: the ship holds where it is)
+          if (body && !overPlanet) C = M.noControls();      // (at the rocks, riding: the ship holds where it is)
           else if (startIn > 0) startIn -= dt;
           else { if (!plan) plan = planFor(); C = M.fly(S, plan, dt) || M.noControls(); }
         } else if (pilot) {
