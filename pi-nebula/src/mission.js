@@ -240,6 +240,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         return { right: true, first: q.misses === 0, pay: r.pay, worth: r.pay, credits: r.credits, moved: 0, up: false, down: false, level: null, why: q.order.rightWhy };
       } };
   }
+  // (its top, at a job whose own cards are not pay slips (the triage desk's are patient charts): a pay slip's, as at the
+  // smelter's controls)
+  const payoutHead = (o) => (o && o.payout != null && o.facts && o.facts.from === 'Your share' ? '<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Your share</small></header>' : null);
   const hint = (at = 'smelter') => { const m = contractOf(crew()); return m && m.state === 'payout' && (MISSIONS[m.id].payAt || 'smelter') === at ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
   let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
@@ -248,7 +251,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   let kept = null;
   const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard) pp.aboard(kept.captain, false); kept = null; };
   const api = {
-    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, hint, meetSpot, keeperOf, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
+    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P; lastDt = dt;
       const c = crew(), m = c ? contractOf(c) : null;

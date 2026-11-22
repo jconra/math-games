@@ -160,7 +160,7 @@ async function boot() {
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     // (and a rescue's share at the triage desk: src/missions.js payAt)
-    live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null) } },
+    live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null), head: (o) => (mission ? mission.payoutHead(o) : null) } },
     hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null) }, crane, lib, people: () => people });
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)

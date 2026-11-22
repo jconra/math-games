@@ -42,7 +42,7 @@
 //   site.update(dt), site.aim(camera, dt), site.late()   each frame
 //   site.phase    'made' | 'above' | 'fly' | 'hover' | 'down' | 'pods' | 'lift' | 'up'
 //   site.count    { aboard, of }      the rescued aboard, of all asleep in the pods
-//   site.matrix   the ship's kit frame in the world;  site.fl  the flying;  site.down  on the ground
+//   site.matrix   the ship's kit frame in the world;  site.fl  the flying;  site.down  on the ground (the pods' part)
 //   site.words    what is going on, for the strip along the top;  site.state();  site.close()
 import * as THREE from 'three';
 import { makePlanet, makeLandAsync } from './planet/planet.js';
@@ -124,7 +124,9 @@ export function makeSite(ctx, opts = {}) {
   const _D = new THREE.Matrix4(), _i = new THREE.Matrix4(), _acc = new THREE.Vector3(), _v = new THREE.Vector3();
   function drawShip(M, dt = 0) {
     _D.multiplyMatrices(M, _i.copy(S.M0).invert());
-    keeper.fly(_D, dt, { acc: _acc, spin: 0, hold: st.phase === 'down' || st.phase === 'pods' ? 0 : 0.6, engine: st.phase === 'down' || st.phase === 'pods' ? 0.15 : 0.45, heat: 1, x: 0, z: 0, height: null });
+    // (on the ground: its engine idling; in the air: held up and pushed along)
+    const onGround = st.phase === 'pods';
+    keeper.fly(_D, dt, { acc: _acc, spin: 0, hold: onGround ? 0 : 0.6, engine: onGround ? 0.15 : 0.45, heat: 1, x: 0, z: 0, height: null });
     boarding.fly(S.id, _D);
   }
   // WHAT IT BUMPS INTO OUT HERE, as the flying asks (the view from behind is kept clear of the ground: clear(a, b), how
@@ -167,7 +169,7 @@ export function makeSite(ctx, opts = {}) {
 
   const api = {
     get ready() { return st.ready; }, get failed() { return st.failed; }, get phase() { return st.phase; }, get words() { return st.words; },
-    get count() { return { aboard: st.aboard, of: st.of }; }, get fl() { return fl; }, get down() { return st.phase === 'down' || st.phase === 'pods'; },
+    get count() { return { aboard: st.aboard, of: st.of }; }, get fl() { return fl; }, get down() { return st.phase === 'pods'; },
     get matrix() { return fl ? fl.matrix : S.M; }, get canSkip() { return !!fl && ['fly', 'hover', 'down', 'pods'].includes(st.phase); },
     open,
     go() { if (st.phase === 'above') setPhase('fly'); },
