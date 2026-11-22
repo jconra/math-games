@@ -1551,7 +1551,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     P.pos.copy(ward.foot); P.drawnY = P.pos.y; P.lastGain.copy(P.pos);
     const to = B ? B.walkTo : wardHome.pos; P.heading = Math.atan2(to.x - P.pos.x, to.z - P.pos.z);
     P.zone = W.zoneAt(P.pos); if (P.zone) shine(P.c, W.envAt(P.pos));
-    r.state = B ? 'toBed' : 'home'; r.since = clock; r.from = P.pos.clone(); r.unseen = 0;
+    r.state = B ? 'toBed' : 'home'; r.since = clock; r.from = P.pos.clone(); r.unseen = 0; if (B) B.P = P;
     list.push(P); ward.list.push(P); ward.counts.came++; if (!B) ward.counts.home++;
     begin(P, B ? bedAct(B) : homeAct());
     ward.last = clock; stillV++;
@@ -1599,7 +1599,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // beds to the first; the rest home. -> { beds: how many have one, saved: [{ look, position, bed, until }] (for the crew
   // member's save: those in bed, until when on the wall clock) }
   function wardAdmit(who = []) {
-    const taken = new Set(wardBeds.map((B, i) => (B.P || ward.queue.some((r) => r.bed === i) ? i : -1)).filter((i) => i >= 0));
+    // (a bed is taken by whoever is on their way to it or in it, or still to come down the ramp to it)
+    const taken = new Set([...ward.list.filter((P) => P.rescued.state === 'toBed' || P.rescued.state === 'lying').map((P) => P.rescued.bed), ...ward.queue.map((r) => r.bed)].filter((i) => i >= 0));
     const beds = assign(who.length, wardBeds.map((B) => ({ n: B.n, side: B.walkTo ? B.side : 0 })), taken);
     ward.foot = wardFoot();
     const saved = [];
