@@ -446,6 +446,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!PLANET && T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
       // (a rescue's planet: made as soon as its piece has come, while the jump out is worked out)
       if (PLANET && st.to !== 'home' && !site) { if (siteErr) { abort(); return; } if (siteMod) makeSite(); }
+      // (in the colours, the planet made after they came all round: shown now; it could not be made: the run given up)
+      if (PLANET && T.phase === 'jumping' && T.inField && site && !site.fl && wh && wh.jump && wh.jump.shut) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
     },
     // at the rocks: the crew member's own drilling (signed for the drill: runDrill), or the crew's (runCrew)
     work(dt, st) {
@@ -744,7 +746,13 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     T.view = fl ? fl.view : 'cockpit';
     if (fl) { fl.away(); fl.view = 'cockpit'; }
     space(true); camFresh = true;
-    if (!site || !site.open(T.view || 'cockpit')) { console.error('trip: the planet never came'); abort(); }
+    // (the planet not made yet by the time the colours are all round: they go on, and it is shown as soon as it is: the
+    // jump's runner, below)
+    openPlanet();
+  }
+  function openPlanet() {
+    if (!site || site.fl || !site.ready) return;
+    if (!site.open(T.view || 'cockpit')) { console.error('trip: the planet could not be shown'); abort(); }
   }
   function endSite() { if (site) { site.close(); site = null; api.site = null; } }
   // ARRIVING home (the colours all round): outside the station, in sight of it; the flying there is back, to come in and land
