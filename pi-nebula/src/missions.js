@@ -73,6 +73,7 @@
 //   missions.ready(id)               whether that captain's mission can be flown (its data is here)
 import { ownOrder, earn, jobTally } from './jobs/engine.js';
 import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighthsText, eighthsOf } from './jobs/smelter.js';
+import { EXPLORE } from './exploreplan.js';
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
@@ -91,6 +92,11 @@ export const ROLES = {
   // each pod's lock, src/podlock.js, at the planet: src/rescue.js. Its id stays 'medic', as contracts already kept name it)
   medic: { id: 'medic', name: 'Paramedic', does: 'opening the stasis pods', share: 20, ready: true, crew: 'Paramedic Teo',
     look: { suit: 'atlantis1', head: 't2', hair: 'coil', colours: { job: 'medic', skin: '#86522f', hair: '#17110d' } } },
+  // (the exploring run's own job: the sensor operator's scan at the Explorer's survey table, src/jobs/survey.js; the
+  // game's maker, RESC3-1: "For the explorer the 3rd job is the sensor operator, to help find the next location to jump
+  // to and discover the secrets (detect radio signals, scan asteroid fields, detect mysterious gravity)")
+  sensor: { id: 'sensor', name: 'Sensor operator', does: 'scanning for where to go next', share: 20, ready: true, crew: 'Sensor operator Arlo',
+    look: { suit: 'civilian', head: 't10', hair: 'crop', colours: { job: 'explorer', skin: '#e0b08f', hair: '#5a3a22' } } },
 };
 // A ROLE AS ONE MISSION HAS IT: its own crew member for it (who does it for that captain, and how they look) and its own
 // words for what it does, where the mission says (MISSIONS[..].jobs); otherwise the role as above. Its share and
@@ -152,8 +158,35 @@ export const MISSIONS = {
       { id: 'home', kind: 'land', secs: 5 },
     ],
   },
-  // (the other captains' trips go here, each its own data: exploring for Captain Vega)
+  // CAPTAIN VEGA'S EXPLORING RUN (the plan: ~/pw/space-math/EXPLORE_PLAN.md; what each run is about: src/exploreplan.js).
+  // Out of the Explorer's hangar; a jump out to where a lead points; there, the sensor operator's scan at the survey
+  // table ('scan': src/jobs/survey.js, on foot at the table as the engineer is at the core) finds the next lead or the
+  // finding; 1 to 3 jumps out as the run's scenario has it (`legs`: stepsFor repeats the jump and the scan for each); the
+  // core's tuning out there; the jump home and the landing in its own hangar; paid so much for each place explored
+  // (EXPLORE), at the survey table aboard. Its crew wear their own clothes (his EXPL1-3 A: kit/positions.js CREWS).
+  explore: {
+    id: 'explore', captain: 'vega', ship: 'explorer', name: 'Exploring run', roles: ['pilot', 'sensor', 'engineer'], payAt: 'survey', place: 'explore', legs: true,
+    about: 'The Explorer follows a lead past the edge of the charts: a faint signal, a hunch, a strange pull. Wherever it jumps, the sensor operator scans for the next lead, until something is found. Each job on the run earns a share of what the run pays.',
+    paid: 'You are paid your share of the run, at the Explorer\'s survey table, when you are back.',
+    jobs: {
+      pilot: { does: 'piloting out and home', crew: 'Pilot Wren', she: true, look: { suit: 'dockWorker', head: 't7', hair: 'braidcrown', colours: { job: 'explorer', skin: '#b5805a', hair: '#2a1a12' } } },
+      sensor: { crew: 'Sensor operator Arlo', she: false },
+      engineer: { crew: 'Engineer Nia', she: true, look: { suit: 'spaceWoman', head: 't3', hair: 'q_bob', colours: { job: 'explorer', skin: '#7a4a2c', hair: '#17110d' } } },
+    },
+    steps: [
+      { id: 'out', kind: 'leave', secs: 4 },
+      { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'lead' },
+      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['arrive', 'leave'] },
+      // (at each place: the scan, `cards` cards at the survey table; at the last, the finding)
+      { id: 'scan', kind: 'scan', role: 'sensor', cards: CARDS },
+      { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
+      { id: 'home', kind: 'land', secs: 5 },
+    ],
+  },
 };
+// WHAT AN EXPLORING RUN PAYS: so much for each place explored (src/exploreplan.js EXPLORE)
+MISSIONS.explore.perPlace = EXPLORE.perPlace;
+MISSIONS.explore.folk = [{ name: 'Captain Vega', she: false }, ...Object.values(MISSIONS.explore.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
 // WHAT A RESCUE PAYS (the game's maker, 2026-11-22, RESC1-2: "It needs to be a similar payout to what a mining mission
 // pays. So it would be nice to know how long it takes and use that to figure out how much it should pay. But it should
 // always pay the same per person. If there are more people then that is just getting lucky."). One amount for each
@@ -216,8 +249,8 @@ export function aboardOf(M, mine, captain = null) {
 // the trip's steps for a crew member with these roles: each step, and whether it is theirs to do (`mine`: their role,
 // its game made) or the crew's. `when`: this run's moment for the core's tuning ('arrive' | 'leave': tuneWhen), if the
 // tuning is theirs; the 'tune' step is then among the steps, at that moment (`at`), and otherwise left out
-export function stepsFor(M, mine, when = null) {
-  const steps = M.steps.filter((s) => s.kind !== 'tune').map((s) => {
+export function stepsFor(M, mine, when = null, plan = null) {
+  const steps = legSteps(M, plan).filter((s) => s.kind !== 'tune').map((s) => {
     const roles = s.role ? [s.role] : s.roles || [];
     return { ...s, mine: roles.some((id) => mine.includes(id) && ROLES[id].ready) };
   });
@@ -228,6 +261,24 @@ export function stepsFor(M, mine, when = null) {
     if (i > 0) steps.splice(i, 0, { ...t, mine: true, at: when });
   }
   return steps;
+}
+// AN EXPLORING RUN'S LEGS (a mission with `legs`: src/exploreplan.js planOf): the jump out and the scan, once for each
+// place the run goes to, in turn (`leg`: which; the first keeps its own ids, the next 'jumpOut2', 'scan2' ...); a place
+// with nothing to scan (the station in distress, out in open space) has a scan of no cards: the finding alone. Any
+// other mission, or no plan: its steps as they are.
+export function legSteps(M, plan = null) {
+  if (!M.legs || !plan || !Array.isArray(plan.legs) || !plan.legs.length) return M.steps;
+  const out = [], jump = M.steps.find((s) => s.kind === 'jump' && s.to !== 'home'), scan = M.steps.find((s) => s.kind === 'scan');
+  for (const s of M.steps) {
+    if (s === scan) continue;
+    if (s !== jump) { out.push(s); continue; }
+    plan.legs.forEach((L, i) => {
+      const k = i ? String(i + 1) : '';
+      out.push({ ...jump, id: jump.id + k, leg: i });
+      if (scan) out.push({ ...scan, id: scan.id + k, leg: i, last: !!L.last, cards: L.scan === false ? 0 : scan.cards });
+    });
+  }
+  return out;
 }
 // THE CORE'S TUNING (the top of this file). A mission's 'tune' step, if it lists one; that step for a crew member with
 // these roles, if it is theirs to do; and which of its moments this run's comes at (pickTune, as the contract is signed)
@@ -247,6 +298,20 @@ export function coreIn(bp) {
   const room = bp && (bp.rooms || []).find((r) => r.kind === 'engineering'); if (!room) return null;
   const items = (bp.items || []).filter((it) => it.room === room.id), machines = items.filter((it) => it.kind === 'machine');
   const it = machines.find((m) => /reactor/i.test(m.name || '')) || machines[0]; if (!it) return null;
+  return standBefore(room, it, items);
+}
+// A SHIP'S SURVEY TABLE, in its blueprint, the same way (the exploring run's scan: src/tune.js): the holo table of its
+// science room (by its kind, 'holo', or a name with "survey" in it), and where a person stands before it; look: the
+// middle of its top. null: a ship with none (only the Explorer has one).
+export function surveyIn(bp) {
+  const room = bp && (bp.rooms || []).find((r) => r.kind === 'science'); if (!room) return null;
+  const items = (bp.items || []).filter((it) => it.room === room.id);
+  const it = items.find((m) => m.kind === 'holo') || items.find((m) => /survey/i.test(m.name || '')); if (!it) return null;
+  const C = standBefore(room, it, items); if (C) C.look[1] = Math.min(+it.h || 0.9, 1.2);
+  return C;
+}
+// (where a person stands before a fitting of a room, as the top of this part says)
+function standBefore(room, it, items) {
   const [X0, Z0, X1, Z1] = room.rect, mx = (it.rect[0] + it.rect[2]) / 2, mz = (it.rect[1] + it.rect[3]) / 2;
   const far = (r, x, z) => Math.hypot(Math.max(r[0] - x, 0, x - r[2]), Math.max(r[1] - z, 0, z - r[3]));      // (from a fitting's plan to a point)
   const others = items.filter((o) => o !== it && o.y == null);
@@ -293,12 +358,12 @@ export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.ran
   const tune = pickTune(M, roles, rand);
   // (a run to a planet: which planet, its seed, picked now and kept, so a reload goes to the same one: src/planet/kinds.js
   // newSeed's own way, any seed from 1 to 999,999)
-  const seed = M.place === 'planet' ? 1 + Math.floor(seedRand() * 999999) : null;
+  const seed = M.place === 'planet' || M.legs ? 1 + Math.floor(seedRand() * 999999) : null;
   crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now, ...(tune ? { tune } : {}), ...(seed ? { seed } : {}) };
   return crew.mission;
 }
 // the planet a contract's run goes to (its seed), or null (a run that goes to no planet, or no contract)
-export function seedOf(crew) { const m = contractOf(crew); return m && MISSIONS[m.id].place === 'planet' ? (Number.isFinite(+m.seed) && +m.seed > 0 ? Math.floor(+m.seed) : 1) : null; }
+export function seedOf(crew) { const m = contractOf(crew); return m && (MISSIONS[m.id].place === 'planet' || MISSIONS[m.id].legs) ? (Number.isFinite(+m.seed) && +m.seed > 0 ? Math.floor(+m.seed) : 1) : null; }
 // WHEN THE CORE'S TUNING COMES ON THIS CREW MEMBER'S RUN: 'arrive' or 'leave' (the top of this file), or null (not
 // their job, or no run to fly). It is what was picked as the contract was signed.
 // (CONTRACTS KEPT FROM BEFORE THE TUNING WAS MOVED OUT TO THE ROCKS, when it was done in the hangar 'before' the run or
@@ -319,10 +384,18 @@ export function tuneWhen(crew) {
 // in eighths of a tonne). -> the payout, or null (no contract signed)
 // A RESCUE (a mission with `perPerson`): people, how many were brought home; the pay is so much for each of them
 // (RESCUE), the crew member's share of that: { kind: 'rescue', people, per, sold (what the rescue paid), share, pay, at }
-export function land(crew, { n = 0, store = {}, people = 0, now = Date.now() } = {}) {
+export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = null, now = Date.now() } = {}) {
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
   const M = MISSIONS[m.id];
+  // (AN EXPLORING RUN, a mission with `perPlace`: places, how many places it explored; so much for each (EXPLORE):
+  // { kind: 'explore', places, per, sold (what the run paid), share, pay, at, find (what it found) })
+  if (M.perPlace) {
+    const k = Math.max(1, Math.floor(+places || 1)), sold = k * M.perPlace, share = shareOf(m.roles);
+    m.state = 'payout';
+    m.payout = { kind: 'explore', places: k, per: M.perPlace, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}) };
+    return m.payout;
+  }
   if (M.perPerson) {
     const k = Math.max(0, Math.floor(+people || 0)), sold = k * M.perPerson, share = shareOf(m.roles);
     m.state = 'payout';
@@ -375,6 +448,8 @@ const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ meta
 export function payoutLines(P, ask = null) {
   // (a rescue's: how many came home, what each is worth, what the rescue paid, the share)
   if (P.kind === 'rescue') return [['Brought home', `${P.people} ${P.people === 1 ? 'person' : 'people'}`], ['Each person', `${say(P.per)} credits`], ['The rescue paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+  // (an exploring run's: how many places it explored, what each is worth, what the run paid, the share)
+  if (P.kind === 'explore') return [['Places explored', `${P.places} ${P.places === 1 ? 'place' : 'places'}`], ['Each place', `${say(P.per)} credits`], ['The run paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   const lots = lotsOf(P), e = inEighths(lots);
   // (a row is one sum, kept short enough for one line on a phone: "3 tonnes × 3,000 = 9,000"; home early, an eighth
   // as a fraction: "2 5/8 tonnes × 2,000 = 5,250", "3/4 tonne × 4,000 = 3,000")
@@ -391,54 +466,62 @@ function cansOf(P) {
 // TIMES, so many people at so much each (what the rescue paid); A PART and PERCENT of what the rescue paid, as a haul's
 // (the forms below, in the rescue's own words). Every rescue pays a whole number of credits to every share (so much a
 // person is a whole thousand), so the share is always asked.
-const PEOPLE = ['person', 'people'];
+// AN EXPLORING RUN'S, at the Explorer's survey table: the same, so many places explored at so much each (PER_WORDS).
+const PEOPLE = ['person', 'people'], PLACES = ['place', 'places'];
+const PER_WORDS = {
+  rescue: { n: (P) => P.people, unit: PEOPLE, pic: 'people', key: 'people', perKey: 'perPerson', home: (n) => `Your crew is home with ${n} people from the pods.`, pays: 'The rescue pays', paid: 'the rescue', ask: 'How many people did your crew bring home?', each: 'person', one: 'for one person', many: 'people', title: 'Person by person', brought: 'Each person brought home is', count: 'Touch each person once as you count: 1, 2, 3 ...' },
+  explore: { n: (P) => P.places, unit: PLACES, pic: 'places', key: 'places', perKey: 'perPlace', home: (n) => `Your crew is home from ${n === 1 ? 'one place' : `${n} places`} nobody had explored.`, pays: 'The run pays', paid: 'the run', ask: 'How many places did your crew explore?', each: 'place', one: 'for one place', many: 'places', title: 'Place by place', brought: 'Each place explored is', count: 'Touch each place once as you count: 1, 2, 3 ...' },
+};
 function rescueOrder(m, grade, rand, paid) {
-  const P = m.payout, n = P.people, per = P.per, form = payoutForm(grade), top = { from: 'Your share' };
+  const P = m.payout, U = PER_WORDS[P.kind] || PER_WORDS.rescue, n = U.n(P), per = P.per, form = payoutForm(grade), top = { from: 'Your share' };
   const done = (o) => Object.assign(o, { payout: P.pay, form });
   if (form === 'count') {
     return done(ownOrder({
-      key: 'payout:people',
-      story: `Your crew is home. The rescue paid ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
-      ask: 'How many people did your crew bring home?',
-      right: N(n, PEOPLE),
+      key: 'payout:' + U.key,
+      story: `Your crew is home. ${U.paid[0].toUpperCase() + U.paid.slice(1)} paid ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
+      ask: U.ask,
+      right: N(n, U.unit),
       slips: [
-        { ...N(n + 1, PEOPLE), slip: 'off', why: 'One too many. Count again, touching each one once.' },
-        { ...N(n - 1, PEOPLE), slip: 'off', why: 'One short. Count again, touching each one once.' },
-        { ...N(n + 2, PEOPLE), slip: 'off', why: 'Too many. Count again, touching each one once.' },
+        { ...N(n + 1, U.unit), slip: 'off', why: 'One too many. Count again, touching each one once.' },
+        ...(n > 1 ? [{ ...N(n - 1, U.unit), slip: 'off', why: 'One short. Count again, touching each one once.' }] : []),
+        { ...N(n + 2, U.unit), slip: 'off', why: 'Too many. Count again, touching each one once.' },
+        ...(n > 1 ? [] : [{ ...N(n + 3, U.unit), slip: 'off', why: 'Too many. Count again, touching each one once.' }]),
       ],
-      rightWhy: `${say(n)} people. ${paid}`,
+      rightWhy: `${say(n)} ${n === 1 ? U.unit[0] : U.unit[1]}. ${paid}`,
       lines: payoutLines(P),
-      picFirst: true, help: { title: 'Count them', pic: { kind: 'people', n }, line: 'Touch each person once as you count: 1, 2, 3 ...' },
+      picFirst: true, help: { title: 'Count them', pic: { kind: U.pic, n }, line: U.count },
       own: { strand: 'number', at: 6 }, facts: { ...top, form, n, pay: P.pay },
     }, rand, 3));
   }
   if (form === 'add') {
-    // (so many people at so much each: the rescue's pay)
+    // (so many people at so much each: the rescue's pay; so many places: an exploring run's)
+    const are = n === 1 ? `There is ${n} ${U.each}` : `There are ${n} ${U.many}`;
     return done(ownOrder({
-      key: 'payout:perPerson',
-      story: `Your crew is home with ${n} people from the pods. The rescue pays ${say(per)} credits for each person.`,
-      ask: 'How many credits did the rescue pay?',
+      key: 'payout:' + U.perKey,
+      story: `${U.home(n)} ${U.pays} ${say(per)} credits for each ${U.each}.`,
+      ask: `How many credits did ${U.paid} pay?`,
       right: N(P.sold, CREDIT),
       slips: [
-        { ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is for one person. There are ${n} people.` },
-        { ...N(per + n, CREDIT), slip: 'added', why: `That adds the people to the pay. Each person is ${say(per)} credits: multiply.` },
-        { ...N(P.sold + per, CREDIT), slip: 'groupOff', why: `That is one person too many. There are ${n} people.` },
-        { ...N(P.sold - per, CREDIT), slip: 'groupOff', why: `That is one person short. There are ${n} people.` },
+        ...(n > 1 ? [{ ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is ${U.one}. ${are}.` }] : []),
+        { ...N(per + n, CREDIT), slip: 'added', why: `That adds the ${U.many} to the pay. Each ${U.each} is ${say(per)} credits: multiply.` },
+        { ...N(P.sold + per, CREDIT), slip: 'groupOff', why: `That is one ${U.each} too many. ${are}.` },
+        { ...N(P.sold - per, CREDIT), slip: 'groupOff', why: `That is one ${U.each} short. ${are}.` },
+        ...(n > 1 ? [] : [{ ...N(P.sold + 2 * per, CREDIT), slip: 'groupOff', why: `That is two ${U.many} too many. ${are}.` }]),
       ].filter((s) => s.v > 0),
       rightWhy: `${n} × ${say(per)} = ${say(P.sold)} credits. ${paid}`,
       sum: { op: 'mul', a: n, b: per },
       lines: payoutLines(P, 'sold'),
-      help: { title: 'Person by person', pic: { kind: 'people', n }, line: `Each person brought home is ${say(per)} credits: ${n} lots of ${say(per)}.`, steps: [`${n} lots of ${say(per)}: ${n} × ${say(per)}`] },
+      help: { title: U.title, pic: { kind: U.pic, n }, line: `${U.brought} ${say(per)} credits: ${n} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}.`, steps: [`${n} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}: ${n} × ${say(per)}`] },
       own: { strand: 'words', at: 26 }, facts: { ...top, form, n, per, pay: P.pay },
     }, rand));
   }
   return null;
 }
 export function payoutOrder(m, grade = 0, rand = Math.random) {
-  const P = m.payout, who = rolesWords(m.roles), tenths = P.share / 10, lots = P.kind === 'rescue' ? [] : lotsOf(P);
-  // (what the whole came to, in its own words: a haul sold, a rescue paid)
-  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : 'The haul sold for';
-  if (P.kind === 'rescue') { const r = rescueOrder(m, grade, rand, `Your share, ${P.share}%, is ${say(P.pay)} credits.`); if (r) return r; }
+  const P = m.payout, per = P.kind === 'rescue' || P.kind === 'explore', who = rolesWords(m.roles), tenths = P.share / 10, lots = per ? [] : lotsOf(P);
+  // (what the whole came to, in its own words: a haul sold, a rescue paid, an exploring run paid)
+  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : P.kind === 'explore' ? 'The run paid' : 'The haul sold for';
+  if (per) { const r = rescueOrder(m, grade, rand, `Your share, ${P.share}%, is ${say(P.pay)} credits.`); if (r) return r; }
   // (A HALF CREDIT: a haul headed home early can sell for an odd 125 credits (1/8 of a tonne of nickel is 375), and a
   // tenth of that is not a whole credit. The pay is in whole credits, as it always was (payOf: to the nearest one), the
   // card says so, and it asks what the haul sold for rather than a share that does not come out whole)

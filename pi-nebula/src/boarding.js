@@ -64,7 +64,7 @@ import * as HB from '../kit/ships/hauler-built.js';
 import { POD as MB_POD } from '../kit/ships/miner-built.hull.js';
 import { shine } from './player.js';
 import { frameOf } from './standing.js';
-import { coreIn } from './missions.js';
+import { coreIn, surveyIn } from './missions.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
 // meets its hull: kit/ships/<ship>-built.js), the blueprint the game's maker picked, and its ways in (the ship's
@@ -537,12 +537,13 @@ export function makeBoarding({ W, walls, quality = 'high', dock = null }) {
   const where = (p) => { const s = inside(p); if (!s) return null; const r = roomOf(s, p); return s.id + '/' + (r ? r.id : '?'); };
 
   // A SHIP'S OWN CORE: the reactor in its engineering room, found by name in its blueprint (src/missions.js coreIn).
+  // (which: 'survey', its survey table instead, the same way: surveyIn, the exploring run's scan)
   // -> { room ('miner/engineering'), pos (where a person stands before it, on the nearest floor there), look (the
   // glowing core itself) }, in the station's frame, where the ship stands; null while its cabin is not in. (The
   // engineer's tuning of the core: src/tune.js.)
-  function core(id) {
+  function core(id, which = 'core') {
     const s = ships.find((q) => q.id === id); if (!s || s.state !== 'in' || !s.bpData || !s.M) return null;
-    const C = coreIn(s.bpData); if (!C) return null;
+    const C = (which === 'survey' ? surveyIn : coreIn)(s.bpData); if (!C) return null;
     const deck = s.space.deck + C.floor, at = new THREE.Vector3(C.stand[0], deck, C.stand[1]).applyMatrix4(s.M);
     const pos = walls.snap(at.x, at.y + 0.25, at.z, 0.8, CABIN_WALLS.r) || at;
     return { room: s.id + '/' + C.room, pos: new THREE.Vector3(pos.x, pos.y, pos.z), look: new THREE.Vector3(C.look[0], deck + C.look[1], C.look[2]).applyMatrix4(s.M) };

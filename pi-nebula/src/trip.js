@@ -134,9 +134,20 @@
 //     if the crew member has gone off), the station's news has the rescue, how many came home and from where (news.js,
 //     announce.js).
 //
+//   - CAPTAIN VEGA'S EXPLORING RUN (src/missions.js 'explore'; what each run is about: src/exploreplan.js) is these same
+//     steps again: out of the Explorer's hangar, and then, once for each place the run goes to (1 to 3), the jump
+//     ('jump', its cards told of the lead it follows) and the sensor operator's scan there ('scan'). Each place is made
+//     unseen while its jump is worked out (src/explore.js: above land, or out in space), as a rescue's planet is, and
+//     shown as the colours are all round. The scan is on foot at the Explorer's survey table when it is the crew
+//     member's (the core's walk: src/tune.js), or done by his own sensor operator in plain sight (or skipped, K); its
+//     answer is the next lead, or at the last place the finding: lit (the beam on a find on the ground), flown over to
+//     or round, and said. Then the jump home and the landing. Home, so much is paid for each place explored, and what
+//     was found is kept with the crew member (a new world is the station's news).
+//
 //   const T = startTrip(ctx, { mission, roles, tune, onEnd })     ctx: { W, walls, boarding, crane, keeper (the run's
 //       ship's hull keeper: the crane, or its own hull), jobs, guide, people, crew, save, body, put, walk(on), onCredits,
-//       seed (a run to a planet: which), lib (the crew kit) }; the crew member is in the ship's cockpit
+//       seed (a run to a planet: which), lib (the crew kit), plan (an exploring run's: src/exploreplan.js planOf) };
+//       the crew member is in the ship's cockpit
 //       tune: when the core's tuning comes on this run ('arrive' | 'leave'), or null (missions.js tuneWhen)
 //       walk(on): the crew member's own walking handed back to them (on their feet at the rocks) and taken again
 //   T.update(dt) each frame; T.aim(camera, dt) after the game's own camera; T.late() just before the picture
@@ -163,6 +174,7 @@ import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 import { makeDash, stepDash } from './dash.js';
 import { recipeOf } from './looks.js';
+import { keepFind } from './exploreplan.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
@@ -244,11 +256,23 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   const keeper = ctx.keeper || crane;
   // (where the run goes: the rocks, or a planet (a rescue run: src/rescue.js); and the captain's own pilot, by name)
   const PLANET = M.place === 'planet', TO = PLANET ? 'the planet' : 'the rocks', flier = roleOf(M, 'pilot').crew, flierShort = String(flier).split(' ').pop();
+  // (an exploring run: its places, one after another (src/explore.js), and its plan; the jump to a place is to the lead
+  // it follows. FIELD: the mining run's rocks)
+  const EXPLORE = M.place === 'explore', FIELD = !PLANET && !EXPLORE, plan = EXPLORE ? ctx.plan || null : null;
+  const toOf = (st) => (EXPLORE && st && st.leg != null && plan && plan.legs[st.leg] ? plan.legs[st.leg].lead : TO);
+  // ON FOOT AT A PART OF THE SHIP (RUN.tune): the core's tuning, and an exploring run's scan at the survey table when it
+  // is the crew member's: the strip's words, the seat's prompt; the phases of it; how long the captain's own sensor
+  // operator scans (s); what a place's scan is of (the land below, or out in space the rocks), and what its card's top says
+  const FOOT = { tune: { chip: 'Reactor imbalance', small: 'Go back to Engineering and adjust the core' }, scan: { chip: 'Survey table', small: 'Go back to the survey table and scan the land below' } };
+  const FOOT_PHASES = new Set(['call', 'seat', 'afoot', 'back']), SCAN = { crew: 8 };
+  const onFoot = (st) => !!st && (st.kind === 'tune' || (st.kind === 'scan' && st.mine && !!st.cards && (!T.phase || FOOT_PHASES.has(T.phase))));
+  const scanWhat = (st) => (plan && st && plan.legs[st.leg] && plan.legs[st.leg].place.where === 'space' ? 'the rocks' : 'the land below');
+  const scanAbout = (st) => ({ small: `Scan ${scanWhat(st)}`, away: `Scan ${scanWhat(st)} at the survey table`, head: `Following ${toOf(st)}` });
   if (!document.getElementById('pmt-css')) { const st = document.createElement('style'); st.id = 'pmt-css'; st.textContent = CSS; document.head.appendChild(st); }
   const S = boarding.ships.find((s) => s.id === M.ship);
   // (the run's ship's own facts, as the shared ship piece flies it: src/fleet.js)
   const SHIP = flightOf(M.ship) || MINER;
-  const steps = stepsFor(M, roles, tune), TALK = RUN_TALK[M.id] || {};
+  const steps = stepsFor(M, roles, tune, plan), TALK = { ...(RUN_TALK[M.id] || {}), ...((plan && plan.talk) || {}) };
   const el = document.createElement('div'); el.className = 'pmt';
   el.innerHTML = `<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>${PLANET ? 'Rescued aboard' : 'Canisters full'}</small><b></b><em></em></div><div class="pmt-acts"><button type="button" class="pmt-skip" hidden></button><button type="button" class="pmt-up" hidden>Get up <kbd>E</kbd></button><button type="button" class="pmt-view" hidden></button></div>`;
   document.body.appendChild(el);
@@ -293,19 +317,37 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (a rescue's far place, the planet: src/rescue.js, fetched as the crew member sits down and made as the jump out is
   // worked out, unseen, so the wormhole's far end opens on it)
   let site = null, siteMod = null, siteErr = null;
+  // (an exploring run's next place, being made while the jump to it is worked out: src/explore.js)
+  let nextSite = null;
   // THE DASHBOARD'S NUMBERS FOR THE WHOLE RUN (src/dash.js; the dashboard itself is the flying's, src/flying.js): one tank
   // and one count of how far and how long, from the lift-off to the landing at home, whichever flying shows them (the
   // station's, the one at the rocks); stepped here each frame from wherever the ship is (shipNow), the jump through the
   // wormhole not flown. The canisters full are the run's own (T.filled)
-  const dash = makeDash(), dashRun = () => (PLANET ? {} : { cans: [T.filled, CARRIES] }), _dw = new THREE.Vector3();
+  const dash = makeDash(), dashRun = () => (FIELD ? { cans: [T.filled, CARRIES] } : {}), _dw = new THREE.Vector3();
   // (the core's tuning, src/tune.js: fetched as the crew member sits down, if this run has one; `tn` while it is on)
   let tuneMod = null, tuneErr = null, tuneAsked = false, tn = null;
   const name = crew.name || 'pilot';
   // (who opens a rescue's pods: the crew member, signed for it, or one of the captain's own)
   const medicShort = roles.includes('medic') ? name : doer('medic') ? doer('medic').short : 'the medic';
-  const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, engineer: engineer || name, driller: driller ? driller.short : name, pilot: flierShort, medic: medicShort, ...more }[k] ?? ''));
+  // (who scans at the survey table on an exploring run: the crew member, one of the captain's own, or the captain himself,
+  // who then says he will: "I'll scan the land below")
+  const sensorDoer = roles.includes('sensor') ? null : doer('sensor'), sensorShort = roles.includes('sensor') ? name : sensorDoer ? sensorDoer.short : 'the sensor operator', sensorCap = !!(sensorDoer && sensorDoer.captain);
+  const fill = (s, more = {}) => String(sensorCap ? String(s).replace(/Scan ([^,.]+), \{sensor\}/g, 'I\'ll scan $1') : s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, engineer: engineer || name, driller: driller ? driller.short : name, pilot: flierShort, medic: medicShort, sensor: sensorShort, name: (plan && plan.name) || '', ...more }[k] ?? ''));
   const pick = (L) => (L && L.length ? L[Math.floor(Math.random() * L.length)] : '');
   function say(key, more) { const w = fill(pick(TALK[key]), more); if (!w) return; $('.pmt-say small').textContent = ctx.captainName || 'The captain'; $('.pmt-say p').textContent = w; sayEl.classList.add('is-on'); sayT = Math.min(8, 2.4 + w.length * 0.06); T.log.push('says: ' + w); }
+  // LINES IN TURN (an exploring run's: the finding's two lines, the radio, one after the other, each as long as a bubble
+  // stays): queued, and said as the one before goes. at: the line for this place (its leg) of a list, in story order;
+  // who: who says it (the captain, or the radio)
+  const sayQ = [];
+  function queue(key, { who = null, at = null, all = false } = {}) {
+    const L = TALK[key]; if (!L || !L.length) return;
+    for (const w of at != null ? [L[Math.min(at, L.length - 1)]] : all ? L : [pick(L)]) sayQ.push({ w: fill(w), who });
+  }
+  function sayNext() {
+    const q = sayQ.shift(); if (!q || !q.w) return;
+    $('.pmt-say small').textContent = q.who || ctx.captainName || 'The captain'; $('.pmt-say p').textContent = q.w; sayEl.classList.add('is-on'); sayT = Math.min(8, 2.4 + q.w.length * 0.06); T.log.push((q.who ? q.who + ' says: ' : 'says: ') + q.w);
+  }
+  const talking = () => sayT > 0 || sayQ.length > 0;
   const words = (w) => { $('.pmt-chip span').textContent = w; };
   const P = () => ctx.body();
   const inShip = (v) => new THREE.Vector3(...v).applyMatrix4(S.M);
@@ -330,8 +372,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   const lampsHtml = () => `<div class="pnj-lamps" aria-label="The jump's three lamps">${LAMPS.map((n, k) => { const s = T.lamps[k]; return `<span class="pnj-lamp${s ? ' is-' + s : k === T.lit ? ' is-now' : ''}" title="${n}${s === 'lit' ? ': lit at the first try' : s === 'late' ? ': lit' : ''}"><i></i><span>${n}</span></span>`; }).join('')}</div>`;
   const link = {
     // (where the jump goes, and the ship and crew the cards speak of: src/jobs/pilot.js)
-    now: () => ({ lamp: LAMPS[Math.min(T.lit, LAMPS.length - 1)].toLowerCase(), to: steps[T.i].to, ship: SHIP.name, far: M.place, folk: M.folk || null }),
-    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Jump computer</b><small>${steps[T.i].to === 'home' ? 'The jump home' : `The jump to ${TO}`}</small></header>${lampsHtml()}`,
+    now: () => ({ lamp: LAMPS[Math.min(T.lit, LAMPS.length - 1)].toLowerCase(), to: steps[T.i].to, ship: SHIP.name, far: M.place, folk: M.folk || null, ...(EXPLORE ? { lead: toOf(steps[T.i]) } : {}) }),
+    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Jump computer</b><small>${steps[T.i].to === 'home' ? 'The jump home' : `The jump to ${toOf(steps[T.i])}`}</small></header>${lampsHtml()}`,
     right(q) {
       const first = q.misses === 0, st = steps[T.i];
       T.lamps[T.lit] = first ? 'lit' : 'late'; T.lit++;
@@ -370,6 +412,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (k === 'land' && !iPilot && T.phase === 'fly' && fl && fl.on && !fl.S.landed) return 'Skip the landing';
     // (at the planet: what is not theirs of the crew's setting down, the pods and everyone coming aboard, all at once)
     if (k === 'rescue' && T.phase === 'crew' && site && site.canSkip) return site.skipWords;
+    // (an exploring run: the captain's own sensor operator's scan; the flying over to the finding, or round it)
+    if (k === 'scan' && T.phase === 'crewScan') return 'Skip the scan';
+    if (k === 'scan' && T.phase === 'find' && site && site.canSkip) return 'Skip ahead';
     return null;
   }
   function skip() {
@@ -382,6 +427,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // drill's own view, the marked rock is flown to at once and drilled, a hole, and the rest of the load is the crew's)
     else if (k === 'work') { drill.crew.hurry(); T.hurry = true; if (ff && !T.afoot) { T.scene = true; T.viewWas = ff.fl.view; ff.out(GLIDE.skip); } }
     else if (k === 'rescue') { site.skip(); T.hurry = true; }
+    else if (k === 'scan') { if (T.phase === 'crewScan') T.scanT = 1e9; else site.skip(); }
     else fl.skip();
     T.log.push('skipped: ' + what); skipEl.hidden = true;
     return true;
@@ -415,10 +461,12 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (the field and its ship, the drill's game, for everyone (the same field whatever the jobs): fetched and its
         // ship built now, so the field does not wait)
         // (the core's tuning, if this run has one: fetched now too, and the ship's own words for it)
-        if (!tuneAsked && steps.some((s) => s.kind === 'tune')) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
+        if (!tuneAsked && steps.some((s) => s.kind === 'tune' || (s.kind === 'scan' && s.mine && s.cards))) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
         // (a rescue: the planet's own piece instead, src/rescue.js; the planet itself is made as the jump out is worked out)
         if (PLANET && !siteMod && !siteErr) import('./rescue.js').then((m) => { siteMod = m; }).catch((e) => { siteErr = e; console.error(e); if (window.oops) window.oops(e); });
-        if (!drillKit && !PLANET) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
+        // (an exploring run: its places' own piece, src/explore.js; each place is made as the jump to it is worked out)
+        if (EXPLORE && !siteMod && !siteErr) import('./explore.js').then((m) => { siteMod = m; }).catch((e) => { siteErr = e; console.error(e); if (window.oops) window.oops(e); });
+        if (!drillKit && FIELD) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
         fl = flMod.startFlying({ W, boarding, crane, hull: keeper, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier, words,
           dash, run: dashRun,
           // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
@@ -455,7 +503,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!T.phase) {
         // (the ship steadies itself and holds where it is while the jump is worked out: the flying's controls put away)
         if (fl && fl.on) fl.lock(true);
-        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : `Work out the jump to ${TO}`) : (st.to === 'home' ? `${flierShort} plots the jump home` : `${flierShort} plots the jump`));
+        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : `Work out the jump to ${toOf(st)}`) : (st.to === 'home' ? `${flierShort} plots the jump home` : `${flierShort} plots the jump`));
         if (st.mine) { T.phase = 'cards'; T.hurry = false; openCards(); } else T.phase = 'crew';
       }
       // (a pilot of the captain's own: the lamps light by themselves; all at once after a part skipped: T.hurry)
@@ -467,9 +515,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       }
       // (the wormhole itself is stepped with everything else: api.update. Its far end, opened, moves the run on)
       // (the place ahead not made by the time the colours are all round: they go on, and it is opened as soon as it is)
-      if (!PLANET && T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
+      if (FIELD && T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
       // (a rescue's planet: made as soon as its piece has come, while the jump out is worked out)
       if (PLANET && st.to !== 'home' && !site) { if (siteErr) { abort(); return; } if (siteMod) makeSite(); }
+      // (an exploring run's next place: made as soon as its piece has come, while the jump to it is worked out)
+      if (EXPLORE && st.to !== 'home' && T.legMade !== st.id) { if (siteErr) { abort(); return; } if (siteMod && flMod) makeLeg(st); }
     },
     // at the rocks: the crew member's own drilling (signed for the drill: runDrill), or the crew's (runCrew)
     work(dt, st) {
@@ -493,10 +543,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (the hangar's canisters are the ones that came home: how full each is; the payout is their plain sum. A rescue:
         // so much for each person brought home)
         T.n = keeper.arrive({ flown: true, fills: T.cans ? T.cans.map((c) => c.t) : null });
-        T.payout = land(crew, { n: T.n, store: T.store, people: T.rescued || 0 }); save(crew);
+        T.payout = land(crew, { n: T.n, store: T.store, people: T.rescued || 0, places: plan ? plan.places : 0, find: plan ? plan.scenario : null }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         // (the station's news: a haul, or the rescue (its people talk of it, and the speakers say so: src/announce.js))
-        if (PLANET) rescuedHome();
+        if (EXPLORE) { try { keepFind(crew, plan); save(crew); if (plan && plan.scenario === 'world' && plan.name) news.add({ kind: 'planet', planet: plan.name }); } catch (e) { console.error(e); } }
+        else if (PLANET) rescuedHome();
         else try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Home'); say(iPilot ? 'landed' : 'landedCrew');
         next();
@@ -540,29 +591,60 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!T.phase) {
         if (tuneErr) { abort(); return; }
         if (!tuneMod) return;      // (still on its way: a moment more in the seat)
-        T.phase = 'call'; T.t = 0; el.classList.add('is-tune'); $('.pmt-chip b').textContent = 'Reactor imbalance';
+        T.phase = 'call'; T.t = 0; el.classList.add('is-tune'); $('.pmt-chip b').textContent = FOOT[st.kind].chip;
         // (the count of canisters is put away until they are seated again: the seat's prompt comes up where it is)
         T.countUp = !countEl.hidden; countEl.hidden = true;
         // (tuned: the captain asks them back to their seat only if the next part is theirs; else they carry on as they like)
         const then = steps[T.i + 1], theirs = !!then && ((then.kind === 'jump' && then.mine) || (then.kind === 'work' && iDrill) || (then.kind === 'rescue' && iPilot));
-        tn = tuneMod.startTune({ boarding, crew, save }, { mission: M, step: st, say: (key, more) => say(key === 'tuned' && !theirs ? 'tunedFree' : key, more), strip: words,
+        tn = tuneMod.startTune({ boarding, crew, save }, { mission: M, step: st, say: (key, more) => say(key === 'tuned' && !theirs ? 'tunedFree' : key, more), strip: words, about: st.kind === 'scan' ? scanAbout(st) : null,
           onPanel: (up) => { el.classList.toggle('has-panel', up); if (ctx.walk) ctx.walk(!up && T.afoot && !T.out); },
           // (tuned: the strip is the run's own again, and asks them back if the next part is theirs)
           onDone: () => { T.phase = 'back'; $('.pmt-chip b').textContent = M.name; words(theirs ? 'Back to your seat' : ''); el.classList.remove('is-tune'); } });
-        api.tune = tn; T.log.push('the core needs tuning: ' + st.at);
+        api.tune = tn; T.log.push(st.kind === 'scan' ? 'the scan: ' + st.id : 'the core needs tuning: ' + st.at);
       }
       const busy = tn.update(dt, P(), T.afoot);
       // (the captain has told them: the seat lets them up; already on their feet, they go straight to the core)
       if (T.phase === 'call' && tn.told) T.phase = T.afoot ? 'afoot' : 'seat';
       // (tuned: the run goes on at once, with them on their feet; the next part asks them back to their seat if it is
       // theirs: needSeat)
-      if (T.phase === 'back' && !busy) { if (tn) { tn.close(); tn = null; api.tune = null; } countEl.hidden = !T.countUp; next(); return; }
+      // (the scan done, at the survey table: what it found, next: RUN.scan)
+      if (T.phase === 'back' && !busy) { if (tn) { tn.close(); tn = null; api.tune = null; } countEl.hidden = !T.countUp; if (st.kind === 'scan') { T.phase = 'reveal'; T.t = 0; } else next(); return; }
       if (T.phase === 'seat' && seatEl.dataset.as !== 'tune') {
         seatEl.dataset.as = 'tune'; seatEl.hidden = false;
-        seatEl.querySelector('b').textContent = 'Reactor imbalance'; seatEl.querySelector('small').textContent = 'Go back to Engineering and adjust the core';
+        seatEl.querySelector('b').textContent = FOOT[st.kind].chip; seatEl.querySelector('small').textContent = st.kind === 'scan' ? `Go back to the survey table and scan ${scanWhat(st)}` : FOOT.tune.small;
         seatEl.querySelector('.pnj-go').innerHTML = 'Get up<kbd>E</kbd>';
       }
     },
+  };
+  // ── AN EXPLORING RUN'S SCAN, at each place (src/missions.js 'scan'; the plan: src/exploreplan.js). The crew member's,
+  // signed as the sensor operator: on foot at the survey table, as the core's tuning (RUN.tune, src/tune.js), its
+  // cards the surveyor's; else the captain's own sensor operator scans while they watch (SCAN.crew s, or K). Then what
+  // it found: at a place on the way, the next lead (his line, and on to its jump); at the last, the finding, lit and
+  // flown over to (or round), his lines (and the radio's, at the old station; and, the station's radio tower not
+  // repaired, his word that with it they might hear more), then the jump home. A place with nothing to scan (the old
+  // station, out in open space) has the finding alone.
+  RUN.scan = function scan(dt, st) {
+    const L = (plan && plan.legs[st.leg]) || { last: true };
+    // (the place not shown yet: a moment more where the ship is)
+    if (!T.phase && (!site || !site.fl)) { if (!site || site.failed) { console.error('trip: the place never came'); abort(); } return; }
+    if (st.mine && st.cards && (!T.phase || FOOT_PHASES.has(T.phase))) { RUN.tune(dt, st); return; }
+    if (!T.phase) {
+      if (!st.cards) T.phase = 'reveal';
+      else { T.phase = 'crewScan'; T.scanT = 0; words(`${sensorCap ? 'The captain' : sensorShort} scans ${scanWhat(st)}`); countEl.querySelector('small').textContent = 'The scan'; countEl.querySelector('em').textContent = ''; countEl.hidden = false; }
+    }
+    // (his sensor operator's scan, as it goes: how much of it is done, where the canisters' count is on a mining run)
+    if (T.phase === 'crewScan') { T.scanT += dt; countEl.querySelector('b').textContent = `${Math.min(100, Math.floor(T.scanT / SCAN.crew * 100))}%`; if (T.scanT < SCAN.crew) return; T.phase = 'reveal'; words(''); countEl.hidden = true; }
+    if (T.phase === 'reveal') {
+      T.phase = L.last ? 'find' : 'lead'; T.t = 0; T.log.push('found: ' + (L.last ? plan && plan.find.what : 'the next lead'));
+      if (L.last) { site.reveal(); site.go(); queue('found', { all: true }); queue('radio', { who: 'Radio', all: true }); queue('tower'); }
+      else queue('lead', { at: st.leg });
+    }
+    // (a lead: said, and on to the jump it points to at once)
+    if (T.phase === 'lead') { next(); return; }
+    if (T.phase === 'find') {
+      if (site.words) words(site.words);
+      if (site.held && !talking()) { words(''); queue(iPilot ? 'homeward' : 'homewardCrew'); next(); }
+    }
   };
   // ── ON THEIR FEET ABOARD WHILE IT FLIES (the game's maker, 2026-11-19, in chat: "We already have walking on the ship.
   // In order to walk on it while it flies wouldn't we just need to add its position and rotation with the player?";
@@ -601,7 +683,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   function atControls() {
     const st = steps[T.i]; if (!st || T.done || !T.sat || T.afoot) return true;
     if (panel || (tn && tn.busy) || (st.kind === 'jump' && st.mine && T.phase === 'cards')) return true;
-    if (st.kind === 'tune' && T.phase !== 'seat') return true;
+    // (on foot at the core or the survey table, or asked to go there: the seat's own prompt has Get up meanwhile)
+    if (onFoot(st)) return true;
     if (st.kind === 'land' && fl && fl.S.landed) return true;      // (down: the flying's own Get up ends the flight)
     if (site && site.fl) return site.atControls;      // (at the planet: the sensors' card up, or flying down by hand)
     if (ff) return ff.mode === 'hand' || ff.mode === 'drill' || (drill && drill.gliding);
@@ -776,7 +859,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // the seat's prompt while they are on their feet: Sit down, in the cockpit, with a seat of their own (the tuning's
   // own prompt has it while the core is being seen to)
   function paintSeat() {
-    if (T.done || (steps[T.i] && steps[T.i].kind === 'tune' && T.phase === 'seat')) return;
+    if (T.done || (onFoot(steps[T.i]) && T.phase === 'seat')) return;
     // (at the core with its prompt up, its prompt alone: the Medic has a stool within reach of its core)
     const me = stationPos(), inCockpit = T.afoot && !!me && boarding.where(me) === M.ship + '/cockpit', free = !(tn && (tn.busy || (tn.prompting && !T.rest))) && !T.out;
     // (their own seat in the cockpit; else any free seat or bed within reach; resting, getting up again)
@@ -799,12 +882,14 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     const toField = st.to !== 'home';
     countEl.hidden = true;
     wh.begin({
-      onShut() { T.inField = toField; if (toField) (PLANET ? arrivePlanet() : arriveField()); else arriveHome(); },
+      onShut() { T.inField = toField; if (toField) (EXPLORE ? arriveLeg() : PLANET ? arrivePlanet() : arriveField()); else arriveHome(); },
       // (out to the rocks: the field and its ship have to be there; to a planet, the planet made)
-      ready: () => !toField || (PLANET ? !!siteErr || (!!site && (site.ready || site.failed)) : !!drill || !!drillErr),
+      ready: () => !toField || (EXPLORE ? !!siteErr || (!!nextSite && (nextSite.ready || nextSite.failed)) : PLANET ? !!siteErr || (!!site && (site.ready || site.failed)) : !!drill || !!drillErr),
       onOpen() {
         // (at the rocks his word that the drill is theirs is only for a crew member who signed for the drill)
-        say(toField ? (st.mine || !iDrill ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
+        // (an exploring run: what is there, said as each place's own line; the last place's own)
+        if (EXPLORE && toField) { const L = plan && plan.legs[st.leg]; queue(L && L.last ? 'there' : 'arrive', { at: st.leg }); }
+        else say(toField ? (st.mine || !iDrill ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
         // (home: the flying at the station is the pilot's again as the far end opens on the station)
         if (!toField && fl) fl.lock(false);
       },
@@ -876,6 +961,25 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       news.add({ kind: 'rescue', ship: SHIP.name, captain: ctx.captainName || 'Captain Hale', crew: `${numberWord(n)} stranded crew`,
         people: n === 1 ? 'one person' : `${numberWord(n)} people`, from: fromWords(T.kind), count: n, resting });
     } catch (e) { /* no news */ }
+  }
+  // AN EXPLORING RUN'S PLACES (src/explore.js): the next one made, unseen, as the jump to it is worked out; ARRIVING (the
+  // colours all round): the place before put away, this one shown, seen from the seat or from behind as the view was
+  function makeLeg(st) {
+    T.legMade = st.id;
+    if (nextSite) nextSite.close();
+    const L = plan.legs[st.leg];
+    nextSite = siteMod.makePlace({ W, boarding, keeper, ship: S, cfg: SHIP, lib: ctx.lib || null, startFlying: flMod.startFlying },
+      { place: L.place, leg: st.leg, pilot: iPilot, flier: iPilot ? 'The autopilot' : flierShort, settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); }, dash, run: dashRun });
+    api.next = nextSite;
+  }
+  function arriveLeg() {
+    const view = site && site.fl ? site.fl.view : fl ? fl.view : 'cockpit';
+    if (!site && fl) { fl.away(); fl.view = 'cockpit'; }
+    endSite();
+    site = nextSite; nextSite = null; api.site = site; api.next = null;
+    T.view = view;
+    space(true); camFresh = true;
+    openPlanet();
   }
   // ARRIVING home (the colours all round): outside the station, in sight of it; the flying there is back, to come in and land
   function arriveHome() {
@@ -991,7 +1095,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (tn) { tn.close(); tn = null; api.tune = null; }
     seatEl.remove(); upEl.hidden = true; viewEl.hidden = true;
     endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
-    endSite();
+    endSite(); if (nextSite) { nextSite.close(); nextSite = null; api.next = null; }
     if (fl) { fl.close(); fl = null; api.fly = null; }
     jobs.show(true);
     if (panel) { panel.close(true); panel = null; }
@@ -1026,6 +1130,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       T.clock += dt; T.dt = dt;
       // (the captain's bubble outlives the trip a moment)
       if (sayT > 0) { sayT -= dt; if (sayT <= 0) sayEl.classList.remove('is-on'); }
+      if (sayT <= 0 && sayQ.length) sayNext();
       if (T.done) { if (!T.aborted && (T.endT += dt) > 7 && el.parentNode) el.remove(); else if (!T.aborted) $('.pmt-chip').style.display = 'none'; return; }
       if (T.i < 0) next();
       T.t += dt;
@@ -1045,7 +1150,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // go on for it, up to the wormhole's longest: src/wormplan.js JUMP.most): shown as soon as it is; it could not be
       // made: the run given up)
       if (site) { if (site.fl) site.fl.panel = !!panel; site.update(dt); }
-      if (PLANET && T.inField && site && !site.fl) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
+      if ((PLANET || EXPLORE) && T.inField && site && !site.fl) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
       // (a rescue, the Medic down: the crew aboard stay where they sit or lie meanwhile (one on their way somewhere gets
@@ -1106,7 +1211,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     state: () => ({ dash: { fuel: +dash.fuel.toFixed(4), dist: +dash.dist.toFixed(2), secs: +dash.secs.toFixed(2), speed: +dash.speed.toFixed(2), cans: T.filled }, step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
       afoot: T.afoot, ground: !!T.ground, lockUp: !!T.lockUp, afield: !!T.afield, out: !!T.out, up: !upEl.hidden, seat: seatEl.hidden ? null : seatEl.dataset.as === 'tune' ? 'up' : seatEl.dataset.as, tune: tn ? tn.state() : null, strip: $('.pmt-chip').textContent, says: sayEl.classList.contains('is-on') ? $('.pmt-say p').textContent : null,
       fly: fl ? fl.state() : null, site: site ? site.state() : null, rescued: T.rescued || 0, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
-      panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, crew: drill && drill.crew ? drill.crew.state() : null, aboard: aboard.map((a) => ({ id: a.id, name: a.name, jobs: [...a.jobs] })), log: T.log.slice(-12) }),
+      panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, plan: plan ? { scenario: plan.scenario, places: plan.places, name: plan.name, legs: plan.legs.map((L) => (L.place.where === 'space' ? L.place.show : L.place.kind + (L.place.show ? ':' + L.place.show : ''))) } : null, next: nextSite ? nextSite.state() : null, queued: sayQ.length, crew: drill && drill.crew ? drill.crew.state() : null, aboard: aboard.map((a) => ({ id: a.id, name: a.name, jobs: [...a.jobs] })), log: T.log.slice(-12) }),
   };
   return api;
 }

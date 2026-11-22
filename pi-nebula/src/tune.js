@@ -28,6 +28,12 @@
 // NOTHING ELSE: no timer, no score, nothing lost by a wrong answer, no pay of its own (the share of the haul is the pay
 // for all the work of a run: pay: false). The level and the kinds of math hear every card, as on every job.
 //
+// THE SENSOR OPERATOR'S SCAN on Captain Vega's exploring run (src/missions.js 'explore': its 'scan' step) is the same
+// walk to another part of the ship: THE SURVEY TABLE in the Explorer's science lab (src/boarding.js core(ship, 'survey'):
+// the holo table, found by name in its blueprint, as the reactor is), its own prompt and the surveyor's cards
+// (src/jobs/survey.js, its card's top saying what the scan follows), no voice of the ship's, and the captain's own words
+// for it (`scan`, `scanned`). WORK: what is the core's and what is the table's; the rest of this file is both's.
+//
 //   readyTune(mission)     its ship's clip fetched ahead (as the crew member sits down in the hangar)
 //   const T = startTune({ boarding, crew, save }, { mission, step, say(key), strip(words), onPanel(up), onDone() })
 //     mission: its data (MISSIONS[..]: its ship); step: its 'tune' step; say: the captain's bubble, by the line's name;
@@ -39,6 +45,8 @@ import * as THREE from 'three';
 import { openPanel, ensureCss } from './jobs/panel.js';
 import { JOB as ENGINEER } from './jobs/engineer.js';
 import { engineerLink } from './jobs/engview.js';
+import { JOB as SURVEY } from './jobs/survey.js';
+import { surveyLink } from './jobs/surveyview.js';
 import { SHIP_CLIPS, clipUrl } from './voices.js';
 import { sound } from './sound.js';
 
@@ -46,44 +54,52 @@ import { sound } from './sound.js';
 // ship's (s: its clip is 1.3 s); close: the card goes this long after the last right answer (s: the jump's own pause);
 // eye: a person's eyes above their feet, and how far back from where they stand (m)
 export const TUNE = { near: 1.3, captain: 1.5, close: 0.95, eye: 1.5, back: 0.2 };
+// THE TWO KINDS OF WORK ON FOOT ABOARD, by the step's kind: where (boarding.core's `which`), its prompt, its cards and
+// their top, the words along the top, whether the ship says it first, the captain's two lines; tall: on a phone the
+// eye looks down at it (a machine taller than the eyes: the core) or across it (a table)
+const WORK = {
+  tune: { which: 'core', title: 'Reactor core', small: 'Adjust the core', job: ENGINEER, link: (small) => engineerLink({ small }), each: 'Adjustment', away: 'Adjust the core in Engineering', voice: true, sayKey: 'tune', doneKey: 'tuned', drop: 1.1 },
+  scan: { which: 'survey', title: 'Survey table', small: 'Scan the land below', job: SURVEY, link: (small) => surveyLink({ small }), each: 'Scan', away: 'Scan the land below at the survey table', voice: false, sayKey: 'scan', doneKey: 'scanned', drop: 0.55 },
+};
 
 const clipOf = (M) => (SHIP_CLIPS[M.ship] || {}).reactor || null;
 export function readyTune(M) { const clip = clipOf(M); if (clip) sound.load(clip.id, clipUrl(clip.id)); }
 
-export function startTune(ctx, { mission: M, step, say = () => {}, strip = () => {}, onPanel = () => {}, onDone = () => {} }) {
+export function startTune(ctx, { mission: M, step, say = () => {}, strip = () => {}, onPanel = () => {}, onDone = () => {}, about = null }) {
   const { boarding, crew, save = () => {} } = ctx;
   ensureCss();
-  const clip = clipOf(M), cards = Math.max(1, step.cards || 1);
-  readyTune(M);
-  // (the core's own prompt, as a job's)
+  const K = WORK[step.kind] || WORK.tune;
+  const clip = K.voice ? clipOf(M) : null, cards = Math.max(1, step.cards || 1);
+  if (K.voice) readyTune(M);
+  // (the core's own prompt, as a job's; the survey table's)
   const prompt = document.createElement('div'); prompt.className = 'pnj-prompt pmt-wide'; prompt.hidden = true;      // (pmt-wide: src/trip.js, whose step this is)
-  prompt.innerHTML = '<div class="pnj-pw"><b>Reactor core</b><small>Adjust the core</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  prompt.innerHTML = `<div class="pnj-pw"><b>${K.title}</b><small>${about ? about.small || K.small : K.small}</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>`;
   document.body.appendChild(prompt);
   prompt.querySelector('.pnj-go').addEventListener('click', () => open());
 
   // THE SHIP SAYS IT NOW, then the captain (a clip asked for before the page may make a sound is tried again for a moment)
   const T = { clock: 0, lit: 0, done: false, said: 1, heard: 0, told: false, log: ['the ship: ' + (clip ? clip.words : '(no voice)')] };
   let panel = null, at = null, closeIn = -1, sayIn = clip ? TUNE.captain : 0.01, voicing = clip ? { t: 1.5 } : null, closed = false, coreKey = null, coreAt = null, shown = '';
-  const words = () => { const w = panel ? `Adjustment ${Math.min(T.lit + 1, cards)} of ${cards}` : 'Adjust the core in Engineering'; if (w !== shown) { shown = w; strip(w); } };
+  const words = () => { const w = panel ? `${K.each} ${Math.min(T.lit + 1, cards)} of ${cards}` : (about && about.away) || K.away; if (w !== shown) { shown = w; strip(w); } };
   // where the core is, worked out again only when the ship's cabin comes in or the ship stands somewhere else
   function coreNow() {
     const s = boarding.ships.find((q) => q.id === M.ship), key = s && s.state === 'in' ? 'in:' + (boarding.stands ?? 0) : null;
-    if (key !== coreKey) { coreKey = key; coreAt = key ? boarding.core(M.ship) : null; }
+    if (key !== coreKey) { coreKey = key; coreAt = key ? boarding.core(M.ship, K.which) : null; }
     return coreAt;
   }
 
   // ── the card: the engineer's questions, the core display on each ──
-  const link = engineerLink({ small: () => `Adjustment ${Math.min(T.lit + 1, cards)} of ${cards}` });
+  const link = K.link(() => `${about && about.head ? about.head + ' · ' : ''}${K.each} ${Math.min(T.lit + 1, cards)} of ${cards}`);
   link.right = () => { T.lit++; T.log.push('card ' + T.lit + ' of ' + cards); if (T.lit >= cards) closeIn = TUNE.close; };
   function open() {
     if (panel || T.done || closed || T.lit >= cards || prompt.hidden) return false;
     const C = coreNow(); if (!C) return false;
     at = C; camFresh = true; prompt.hidden = true; onPanel(true);
-    panel = openPanel(document.body, { job: ENGINEER, crew, live: link, pay: false, onSave: () => save(crew), onCredits: () => {}, onClose: () => shut() });
+    panel = openPanel(document.body, { job: K.job, crew, live: link, pay: false, onSave: () => save(crew), onCredits: () => {}, onClose: () => shut() });
     words();
     return true;
   }
-  function shut() { const v = link.view(); if (v) v.stop(); panel = null; onPanel(false); if (!T.done) words(); }
+  function shut() { const v = link.view ? link.view() : null; if (v) v.stop(); panel = null; onPanel(false); if (!T.done) words(); }
   function onKey(e) { if (!prompt.hidden && !panel && !closed && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); open(); } }
   addEventListener('keydown', onKey);
   words();
@@ -95,12 +111,12 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
       if (closed) return false;
       T.clock += dt;
       if (voicing) { const h = sound.play(clip.id, { volume: 0.95 }); if (h) { T.heard++; voicing = null; } else if ((voicing.t -= dt) <= 0) voicing = null; }
-      if (sayIn > 0) { sayIn -= dt; if (sayIn <= 0) { say('tune'); T.told = true; T.log.push('the captain: tune'); } }
+      if (sayIn > 0) { sayIn -= dt; if (sayIn <= 0) { say(K.sayKey); T.told = true; T.log.push('the captain: ' + K.sayKey); } }
       if (T.done) return false;
       if (!P || !afoot) { prompt.hidden = true; return false; }
       // (the last card answered: the card goes by itself, and the captain says so; the same if Done was pressed in that
       // moment: the core is tuned all the same)
-      if (closeIn >= 0 && (closeIn -= dt) <= 0) { closeIn = -1; T.done = true; if (panel) { const was = panel; shut(); was.close(true); } prompt.hidden = true; say('tuned'); T.log.push('the captain: tuned'); onDone(); return false; }
+      if (closeIn >= 0 && (closeIn -= dt) <= 0) { closeIn = -1; T.done = true; if (panel) { const was = panel; shut(); was.close(true); } prompt.hidden = true; say(K.doneKey); T.log.push('the captain: ' + K.doneKey); onDone(); return false; }
       words();
       if (panel) {
         // standing at the core, facing it
@@ -119,7 +135,7 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
       const dx = at.look.x - at.pos.x, dz = at.look.z - at.pos.z, L = Math.hypot(dx, dz) || 1, fx = dx / L, fz = dz / L, rx = -fz, rz = fx;
       const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
       want.set(at.pos.x - fx * TUNE.back, at.pos.y + TUNE.eye, at.pos.z - fz * TUNE.back);
-      if (tall) wantLook.set(at.look.x, at.look.y - 1.1, at.look.z); else wantLook.set(at.look.x + rx * 0.55, at.look.y + 0.12, at.look.z + rz * 0.55);
+      if (tall) wantLook.set(at.look.x, at.look.y - K.drop, at.look.z); else wantLook.set(at.look.x + rx * 0.55, at.look.y + 0.12, at.look.z + rz * 0.55);
       if (camFresh) { camAt.copy(camera.position); camLook.copy(camera.position).add(camera.getWorldDirection(_d)); camFresh = false; }
       const k = 1 - Math.exp(-5 * dt);
       camAt.lerp(want, k); camLook.lerp(wantLook, k);
@@ -129,8 +145,8 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
     // (its prompt is up: the core is within reach; nothing else aboard is offered meanwhile, src/trip.js)
     get prompting() { return !closed && !prompt.hidden; },
     close() { if (closed) return; closed = true; if (panel) { const was = panel; shut(); was.close(true); } removeEventListener('keydown', onKey); prompt.remove(); },
-    state: () => ({ done: T.done, lit: T.lit, cards, prompt: !prompt.hidden, strip: shown, said: T.said, heard: T.heard, told: T.told,
-      core: coreAt ? { room: coreAt.room, pos: coreAt.pos.toArray().map((v) => +v.toFixed(2)), look: coreAt.look.toArray().map((v) => +v.toFixed(2)) } : null, panel: panel ? panel.state() : null, view: link.view() ? link.view().state() : null, log: T.log.slice(-10) }),
+    state: () => ({ work: step.kind, done: T.done, lit: T.lit, cards, prompt: !prompt.hidden, strip: shown, said: T.said, heard: T.heard, told: T.told,
+      core: coreAt ? { room: coreAt.room, pos: coreAt.pos.toArray().map((v) => +v.toFixed(2)), look: coreAt.look.toArray().map((v) => +v.toFixed(2)) } : null, panel: panel ? panel.state() : null, view: link.view && link.view() ? link.view().state() : null, log: T.log.slice(-10) }),
   };
   return api;
 }

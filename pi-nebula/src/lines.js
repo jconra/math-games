@@ -30,7 +30,12 @@ export const NUDGES = ['So, what do you say?', 'Take your time!', 'No rush. Thin
 export const CAPTAINS = {
   vega: { ship: 'Explorer', mission: 'exploring', what: 'Join his crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
-    no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!' },
+    no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!',
+    // (his run is made, src/missions.js 'explore': as Captain Ruiz's and Captain Hale's, his contract, then he walks to the
+    // Explorer and waits by its airstair; home, his word while the share is still waiting at its survey table. Bubbles:
+    // no clips of these yet)
+    contract: 'Wonderful. Here is my contract. Have a look.', signed: 'Glad to have you. I\'ll meet you at the Explorer.',
+    payout: 'Good work out there. Your share is waiting at the Explorer\'s survey table.' },
   ruiz: { ship: 'Miner', mission: 'mining', what: 'Join his crew for a mining run?',
     offer: { clip: 'ruiz-pitch' }, yes: { clip: 'ruiz-ready' }, hello: { clip: 'ruiz-hello' },
     no: 'No worries. You know where to find me.', again: 'Still need hands for that mining run. Interested?', waiting: 'The Miner\'s nearly ready. Soon!',
@@ -125,6 +130,24 @@ export const RUN_TALK = {
     homeCrew: ['There\'s the station. {pilot} has the landing.', 'Home. {pilot} takes her in.'],
     landed: ['We\'re home, {player}. Your share is at the triage desk.'],
     landedCrew: ['Good work, {player}. Your share is at the triage desk.'],
+  },
+  // CAPTAIN VEGA'S EXPLORING RUN (src/missions.js 'explore'): the lines every run of his has. What each run is about,
+  // and his words for it (out, at each place, the lead, the finding), are the run's own scenario's, laid over these:
+  // src/exploreplan.js SCENARIOS. {sensor}: whoever scans at the survey table (the crew member, or his own)
+  explore: {
+    tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
+    tuned: ['The core is steady. Back to your seat, {player}.'],
+    tunedFree: ['The core is steady. Good work, {player}.'],
+    backJump: ['Back to your seat, {player}. The jump is yours.'],
+    out: ['We\'re clear of the station. Work out the jump, pilot.'],
+    crewOut: ['We\'re clear of the station. {pilot} has the jump.'],
+    // (the sensor operator's scan, out at a place: to the survey table, and done)
+    scan: ['To the survey table, {player}. The scan is yours.'],
+    scanned: ['Good reading, {player}.'],
+    home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
+    homeCrew: ['There\'s the station. {pilot} has the landing.', 'Home. {pilot} takes her in.'],
+    landed: ['We\'re home, {player}. Your share is at the survey table.'],
+    landedCrew: ['Good work, {player}. Your share is at the survey table.'],
   },
 };
 

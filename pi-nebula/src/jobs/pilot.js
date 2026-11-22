@@ -86,16 +86,20 @@ const destOf = (live, t) => DEST[live && DEST[live.to] ? live.to : t.pick(['fiel
 // The words of the cards that name the Miner or the asteroid field are put so (reword: once a card is made, in the
 // words it shows, never in its numbers or its kinds), and who is aboard is the run's own crew (folk).
 DEST.planet = { key: 'planet', name: 'the crashed ship', is: 'The crashed ship is', to: 'to the crashed ship', from: 'the station' };
-const FAR_WORDS = { planet: [['We have authorization to mine at', 'The crashed ship\'s distress call comes from'], ['The asteroid field', 'The crashed ship'], ['the asteroid field', 'the crashed ship'], ['an asteroid field', 'the crashed ship'], ['a dense field', 'the crashed ship'], ['The field', 'The crashed ship'], ['the field', 'the crashed ship'], ['The rocks are', 'The crashed ship is'], ['the rocks', 'the crashed ship']] };
+// AN EXPLORING RUN'S JUMPS OUT (src/missions.js 'explore': live.far 'explore', live.to 'lead', live.lead the lead the
+// jump follows, "the faint signal", "the strange pull" ...): the same, told of the lead (its own words: src/exploreplan.js)
+DEST.lead = { ...DEST.field, key: 'lead' };
+const LEAD_WORDS = (live) => { const L = String(live.lead || 'the signal'), C = L[0].toUpperCase() + L.slice(1); return [['We have authorization to mine at', `${C} is at`], ['The asteroid field', C], ['the asteroid field', L], ['an asteroid field', L], ['a dense field', L], ['The field', C], ['the field', L], ['The rocks are', `${C} is`], ['the rocks', L]]; };
+const FAR_WORDS = { explore: LEAD_WORDS, planet: [['We have authorization to mine at', 'The crashed ship\'s distress call comes from'], ['The asteroid field', 'The crashed ship'], ['the asteroid field', 'the crashed ship'], ['an asteroid field', 'the crashed ship'], ['a dense field', 'the crashed ship'], ['The field', 'The crashed ship'], ['the field', 'the crashed ship'], ['The rocks are', 'The crashed ship is'], ['the rocks', 'the crashed ship']] };
 const WORD_KEYS = new Set(['story', 'ask', 'why', 'rightWhy', 'line', 'title', 'label', 'say', 'steps', 'lines', 'help', 'coins', 'slips', 'sum', 'pic', 'tap', 'map', 'points', 'pts']);
 export function reword(o, live) {
   if (!live) return o;
-  const pairs = [...(FAR_WORDS[live.far] || []), ...(live.ship && live.ship !== 'Miner' ? [['The Miner', `The ${live.ship}`], ['the Miner', `the ${live.ship}`]] : [])];
+  const fw = FAR_WORDS[live.far], pairs = [...(typeof fw === 'function' ? fw(live) : fw || []), ...(live.ship && live.ship !== 'Miner' ? [['The Miner', `The ${live.ship}`], ['the Miner', `the ${live.ship}`]] : [])];
   if (!pairs.length) return o;
   const say = (str) => pairs.reduce((a, [f, t]) => a.split(f).join(t), str);
   // (only the words shown: a label 'field' on a map becomes the crashed ship's)
   const walk = (v, key) => {
-    if (typeof v === 'string') return key === 'label' && v === 'field' && live.far === 'planet' ? 'wreck' : say(v);
+    if (typeof v === 'string') return key === 'label' && v === 'field' && live.far === 'planet' ? 'wreck' : key === 'label' && v === 'field' && live.far === 'explore' ? String(live.lead || 'signal').split(' ').pop() : say(v);
     if (Array.isArray(v)) return v.map((x) => walk(x, key));
     if (v && typeof v === 'object') { for (const k of Object.keys(v)) if (WORD_KEYS.has(k) || typeof v[k] === 'object') v[k] = walk(v[k], k); return v; }
     return v;

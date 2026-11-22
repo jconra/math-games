@@ -21,6 +21,11 @@
 //     The Medic is flown by the one shared ship piece with its own hull as its keeper (src/shiphull.js: keeperOf), and
 //     meets the other hangars with a keeper of its own for the run (src/visit.js: visitOf); the Miner's crane is left
 //     to its own round.
+//   - CAPTAIN VEGA'S EXPLORING RUN (src/missions.js 'explore') the same way, its ship the Explorer, by its airstair; the
+//     run's plan (src/exploreplan.js planOf: its scenario and places, from the contract's seed, whether the station's
+//     radio tower is repaired, and what the crew member has found before) is made as they sit down; home, the share
+//     waits AT THE EXPLORER'S OWN SURVEY TABLE aboard (payAt 'survey': its prompt there, Start (E), and the payout card
+//     on the survey table's own card, asked at the crew member's level at the table), the line leading to it.
 //
 //   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people, crew, save, body, put, lib })
 //   mission.update(dt, P, playing) -> true while a trip has the player (seated: no walking, the trip's camera); on
@@ -39,14 +44,17 @@ import { JOB as medical } from './jobs/medical.js';
 import { makeHull } from './shiphull.js';
 import { shipOf as shipFacts, flightOf } from './fleet.js';
 import { makeVisit } from './visit.js';
+import { planOf, antennaUp, foundOf } from './exploreplan.js';
+import { JOB as survey } from './jobs/survey.js';
+import { openPanel } from './jobs/panel.js';
 
 // (the line on the floor: to the run's ship, and to where the share waits)
 const LINE = { ship: '#ffd560', payout: '#ff8a3a' };
 // THE STATION JOBS WHERE A RUN'S SHARE WAITS (src/missions.js `payAt`): its payout card is the first card there (the
 // panel's `card` hook), asked at the crew member's own level of that job
-const PAY_AT = { smelter, medical };
+const PAY_AT = { smelter, medical, survey };
 // (where each run goes, as the seat's prompt says it)
-const PLACE_WORDS = { field: 'the rocks', planet: 'the planet' };
+const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts' };
 const shipName = (M) => (shipFacts(M.ship) || {}).name || 'ship';
 // (a run of the Miner's: its crane holds it on its pad for the run, and takes its canisters off it after)
 const minerRun = (m) => !!m && MISSIONS[m.id].ship === 'miner';
@@ -153,7 +161,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (at) { guide.to(at, { near: 1.6, label: 'mission', colour: LINE.ship }, P.pos); lineTo = sp ? 'lift' : 'hangar'; }
     } else {
       const job = (m && MISSIONS[m.id].payAt) || 'smelter', s = jobs.spots.find((x) => x.job.id === job);
-      if (s) { guide.to(s.pos, { near: 1.6, label: 'mission', colour: LINE.payout }, P.pos); lineTo = job; }
+      // (an exploring run's: the survey table aboard the Explorer, where it stands)
+      const T = job === 'survey' ? boarding.core(shipOf(m), 'survey') : null;
+      if (T) { guide.to(T.pos, { near: 1.0, label: 'mission', colour: LINE.payout }, P.pos); lineTo = job; }
+      else if (s) { guide.to(s.pos, { near: 1.6, label: 'mission', colour: LINE.payout }, P.pos); lineTo = job; }
     }
   }
 
@@ -203,7 +214,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (keeper: who keeps the run's ship's hull where it is flown, the Miner's crane or the ship's own: keeperOf)
       // (seed: the planet a run to a planet goes to, kept with the contract; lib: the crew kit, for whoever sleeps in its pods)
       // (input: the keys and the thumb stick, for walking on a planet's ground, src/rescue.js: the trip walks them there)
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib, input,
+      // (plan: an exploring run's, from its seed and what is so for this crew member now: src/exploreplan.js)
+      const plan = MISSIONS[m.id].legs ? planOf(seedOf(c), { antenna: antennaUp(c), found: foundOf(c) }) : null;
+      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib, input, plan,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         onEnd: (r) => {
           const mine = MISSIONS[m.id].ship === 'miner', v = visits.get(MISSIONS[m.id].ship);
@@ -246,6 +259,52 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   const payoutHead = (o) => (o && o.payout != null && o.facts && o.facts.from === 'Your share' ? '<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Your share</small></header>' : null);
   const hint = (at = 'smelter') => { const m = contractOf(crew()); return m && m.state === 'payout' && (MISSIONS[m.id].payAt || 'smelter') === at ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
+  // ── THE EXPLORER'S SURVEY TABLE, where an exploring run's share waits (payAt 'survey'): standing at it aboard, the
+  // table's prompt (as a job spot's: Start, E); pressed, the job panel with the survey table's own card and, as its first
+  // card, the payout card (the smelter's way: payoutCard). Paid, the panel goes by itself; Done puts it away unpaid, the
+  // share still waiting ──
+  const table = { prompt: document.createElement('div'), panel: null };
+  table.prompt.className = 'pnj-prompt'; table.prompt.hidden = true;
+  table.prompt.innerHTML = '<div class="pnj-pw"><b>Survey table</b><small></small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  document.body.appendChild(table.prompt);
+  table.prompt.querySelector('.pnj-go').addEventListener('click', () => tableOpen());
+  addEventListener('keydown', (e) => { if (!table.prompt.hidden && !table.panel && playing && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); tableOpen(); } });
+  const TABLE_NEAR = 1.2;
+  function tableAt(P) {
+    const c = crew(), m = c && contractOf(c);
+    if (!P || !m || m.state !== 'payout' || MISSIONS[m.id].payAt !== 'survey' || trip || card) return null;
+    const T = boarding.core(MISSIONS[m.id].ship, 'survey');
+    return T && boarding.where(P.pos) === T.room && Math.abs(P.pos.y - T.pos.y) < 1 && Math.hypot(P.pos.x - T.pos.x, P.pos.z - T.pos.z) < TABLE_NEAR ? T : null;
+  }
+  function tableOpen() {
+    const c = crew(); if (table.panel || !c || !tableAt(body())) return false;
+    table.prompt.hidden = true; if (input) input.enabled = false; tw.fresh = true;
+    let paid = false;
+    table.panel = openPanel(document.body, { job: survey, crew: c, onSave: () => save(c), onCredits: () => {},
+      live: { card: () => (paid ? null : payoutCard('survey')), head: (o) => payoutHead(o), right: (q) => { if (q && q.order && q.order.payout != null) { paid = true; setTimeout(() => { if (table.panel) table.panel.close(); }, 1200); } } },
+      onClose: () => { table.panel = null; if (input) input.enabled = playing; } });
+    return true;
+  }
+  // (the camera while the table's card is up: their own eyes over the table, the table clear of the card: left of it on a
+  // wide screen, above it on a phone; as at the ship's core, src/tune.js)
+  const tw = { at: new THREE.Vector3(), look: new THREE.Vector3(), cam: new THREE.Vector3(), camLook: new THREE.Vector3(), fresh: true, d: new THREE.Vector3() };
+  function tableAim(camera, dt) {
+    const T = boarding.core(shipOf(contractOf(crew())), 'survey'), P = body(); if (!T || !P) return;
+    const dx = T.look.x - P.pos.x, dz = T.look.z - P.pos.z, L = Math.hypot(dx, dz) || 1, fx = dx / L, fz = dz / L, tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
+    tw.at.set(P.pos.x - fx * 0.15, P.pos.y + 1.5, P.pos.z - fz * 0.15);
+    if (tall) tw.look.set(T.look.x, T.look.y - 0.5, T.look.z); else tw.look.set(T.look.x - fz * 0.5, T.look.y + 0.1, T.look.z + fx * 0.5);
+    if (tw.fresh) { tw.cam.copy(camera.position); tw.camLook.copy(camera.position).add(camera.getWorldDirection(tw.d)); tw.fresh = false; }
+    const k = 1 - Math.exp(-5 * dt); tw.cam.lerp(tw.at, k); tw.camLook.lerp(tw.look, k);
+    camera.position.copy(tw.cam); camera.lookAt(tw.camLook);
+  }
+  function tableShut() { if (table.panel) { const p = table.panel; table.panel = null; p.close(true); } table.prompt.hidden = true; }
+  function tableStep(P) {
+    if (table.panel) return;
+    const T = playing && !jobs.panel ? tableAt(P) : null;
+    if (T) table.prompt.querySelector('small').textContent = hint('survey') || 'Your share is waiting';
+    table.prompt.hidden = !T;
+  }
+
   let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
   // THE CREW ABOARD AFTER A RUN (src/aboard.js, handed over by the trip as it ends): drawn where the ship stands, going
   // about as they do, until the crew member is off the ship; then gone, and the captain back in the station
@@ -285,9 +344,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       const at = playing && m && m.state === 'signed' && !card && !loading && !jobs.panel && boarding.where(P.pos) === MISSIONS[m.id].ship + '/cockpit' && !(minerRun(m) && crane.mode === 'out');
       if (at) promptFor(m);
       prompt.hidden = !at;
-      return loading;
+      tableStep(P);
+      return loading || !!table.panel;
     },
-    aim(camera, dt) { if (trip) trip.aim(camera, dt); },
+    aim(camera, dt) { if (trip) trip.aim(camera, dt); else if (table.panel) tableAim(camera, dt); },
     late() {
       if (trip) trip.late(); else if (kept) { const S = boarding.ships.find((q) => q.id === kept.ship); if (S && S.M) kept.A.late(S.M, W.scene); }
       for (const v of visits.values()) v.update(lastDt, W.camera);
@@ -296,8 +356,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     get others() { const A = trip ? trip.crew : kept ? kept.A : null; return A ? A.others : null; },
     get clip() { return trip ? trip.clip : null; },
     // (in the seat on a run, or at the ship's core with its card up: seen through their own eyes, their body put away)
-    get seated() { return !!(trip && trip.seated); },
-    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; playing = false; },
+    get seated() { return !!(trip && trip.seated) || !!table.panel; },
+    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; tableShut(); playing = false; },
+    get table() { return { prompt: !table.prompt.hidden, panel: table.panel ? table.panel.state() : null }; },
     state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: trip && trip.tune ? trip.tune.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
       meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),
   };

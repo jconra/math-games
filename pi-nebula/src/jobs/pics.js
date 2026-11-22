@@ -129,6 +129,17 @@ Object.assign(DRAW, {
     }
     return { svg: svg(y0 + rows * dy - 4, s), line: '' };
   },
+  // THE PLACES AN EXPLORING RUN WENT TO, to count (src/missions.js, the exploring run's payout card): a small planet for
+  // each, its ring round it, up to four to a row
+  places({ n }) {
+    const cols = Math.min(4, Math.max(1, n)), rows = Math.ceil(n / cols), dx = 70, dy = 60, x0 = W / 2 - dx * (cols - 1) / 2, y0 = 30;
+    let s = '';
+    for (let i = 0; i < n; i++) {
+      const x = x0 + (i % cols) * dx, y = y0 + Math.floor(i / cols) * dy;
+      s += `<circle cx="${x}" cy="${y}" r="16" fill="${K.FILL2}" stroke="${K.INK}" stroke-width="1.3"/><ellipse cx="${x}" cy="${y + 1}" rx="27" ry="7" fill="none" stroke="${K.INK}" stroke-width="1.3" transform="rotate(-14 ${x} ${y})"/>`;
+    }
+    return { svg: svg(y0 + (rows - 1) * dy + 30, s), line: '' };
+  },
   // a load cut into d equal parts, n of them taken: each part a "?" until it is worked out
   // (unit: what the load is counted in, 'tonnes' or 'canisters'; it: what it is called over the bar, or none: "12 tonnes in all")
   fracbar({ whole, n, d, it = 'load', unit = 'tonnes' }) {

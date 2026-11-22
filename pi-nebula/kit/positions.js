@@ -46,6 +46,8 @@ export const CREW_UNIFORM = { m: 'atlantis1', f: 'atlantis2' };
 export const CREWS = {
   medic: { name: 'the Medic', captain: 'hale', standard: true, captainToo: true, positions: ['pilot', 'medic', 'engineer'] },
   miner: { name: 'the Miner', captain: 'ruiz', standard: false, positions: ['pilot', 'drill', 'engineer'] },
+  // (Captain Vega's crew wear their own clothes, as the Miner's do: the game's maker, 2026-11-22, EXPL1-3 A)
+  explorer: { name: 'the Explorer', captain: 'vega', standard: false, positions: ['pilot', 'sensor', 'engineer'] },
 };
 
 export function wearPosition(R, position = null, lib = null) {
