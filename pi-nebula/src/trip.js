@@ -446,8 +446,6 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!PLANET && T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
       // (a rescue's planet: made as soon as its piece has come, while the jump out is worked out)
       if (PLANET && st.to !== 'home' && !site) { if (siteErr) { abort(); return; } if (siteMod) makeSite(); }
-      // (in the colours, the planet made after they came all round: shown now; it could not be made: the run given up)
-      if (PLANET && T.phase === 'jumping' && T.inField && site && !site.fl && wh && wh.jump && wh.jump.shut) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
     },
     // at the rocks: the crew member's own drilling (signed for the drill: runDrill), or the crew's (runCrew)
     work(dt, st) {
@@ -485,7 +483,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // or skipped (K). The rescued are counted aboard as they come.
     rescue(dt, st) {
       if (!T.phase) {
-        if (!site || site.failed || !site.fl) { console.error('trip: the planet never came'); abort(); return; }
+        if (!site || site.failed) { console.error('trip: the planet never came'); abort(); return; }
+        // (still being made: a moment more where the ship is, as at the rocks)
+        if (!site.fl) return;
         T.phase = 'crew'; T.rescued = 0; site.go(); countEl.hidden = false; countEl.querySelector('em').textContent = '';
         say(iPilot ? 'downAuto' : 'down');
       }
@@ -912,8 +912,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // (at the rocks: the drill's view, the flying kept there; and the wormhole, whose two ends change the place)
       if (drill && drillOn) drill.update(dt);
       if (ff) { ff.fl.panel = !!panel; ff.update(dt); el.classList.toggle('is-hand', ff.mode === 'hand'); }
-      // (at a rescue's planet: the ship where the captain's crew has it)
+      // (at a rescue's planet: the ship where the captain's crew has it. Made after the colours came all round (they
+      // go on for it, up to the wormhole's longest: src/wormplan.js JUMP.most): shown as soon as it is; it could not be
+      // made: the run given up)
       if (site) { if (site.fl) site.fl.panel = !!panel; site.update(dt); }
+      if (PLANET && T.inField && site && !site.fl) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
       if (crewA) crewA.update(dt, { player: T.afoot && P() ? P() : null });
