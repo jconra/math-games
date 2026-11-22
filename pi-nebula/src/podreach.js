@@ -38,8 +38,9 @@ export function makePodReach({ camera, canvas, pods, onPick, reach = REACH.reach
     document.head.appendChild(st);
   }
   let now = null, busy = false, tappedAt = -1e9;
-  const _e = new THREE.Vector3(), _f = new THREE.Vector3(), _c = new THREE.Vector3(), _box = new THREE.Box3();
-  const middle = (p) => _box.setFromObject(p.group).getCenter(_c);
+  const _e = new THREE.Vector3(), _f = new THREE.Vector3(), _c = new THREE.Vector3();
+  // (a pod's middle: half a metre over the middle of its foot, its group's origin: kit/stasispod.js makePod)
+  const middle = (p) => { p.group.updateWorldMatrix(true, false); return p.group.localToWorld(_c.set(0, 0.5, 0)); };
   function update() {
     let best = null, bestD = Infinity;
     if (!busy) {
