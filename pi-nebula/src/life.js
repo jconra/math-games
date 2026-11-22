@@ -27,8 +27,9 @@
 // done each time round (left out: always).
 // A POSITION (position: a kit/positions.js POSITIONS id: 'captain', 'pilot', 'engineer', 'drill', 'medic'; the game's
 // maker, of the stasis pods' sleepers in their positions' colours: "Let's do them all"): they wear its colour on the crew
-// uniform's bands (an outfit without bands: the crew uniform of its build; kit/positions.js wearPosition). The people
-// whose work is none of those keep their own clothes.
+// uniform's bands. Everyone keeps their own body (his answer JOB1-1 B: the captains and the medic in their own bodies and
+// their own colours): in any other outfit no colour is added (kit/positions.js wearPosition, keep). The people whose work
+// is none of those keep their own clothes.
 // A CAPTAIN (captain: { ship, mission }) wears a yellow marker over their head and speaks to the player who comes near:
 // who they are, what they want crew for, and are you interested (lines.js CAPTAINS; missions.js takes the answer).
 import { wearPosition } from '../kit/positions.js';
@@ -36,10 +37,11 @@ import { wearPosition } from '../kit/positions.js';
 export const NEAR = { low: 4, medium: 6, high: 8 };
 
 // a person's look as a crew kit recipe: a look by name (assets/crew/crew.json's recipes) or its own, in their
-// position's colour (kit/positions.js; position: theirs, else the recipe's own). lib: the crew kit's (loadCrew)
+// position's colour if they wear the crew uniform (their own body kept: kit/positions.js; position: theirs, else the
+// recipe's own). lib: the crew kit's (loadCrew)
 export function lookRecipe(look, position = null, lib = null) {
   const R = typeof look === 'string' ? ((lib && lib.list && lib.list.recipes) || {})[look] : look;
-  return R ? wearPosition(R, position, lib) : null;
+  return R ? wearPosition(R, position, lib, { keep: true }) : null;
 }
 
 // (a hangar's spots: in front of each of its crates and carts and lockers, all along its walls; a crate stacked on
@@ -199,9 +201,8 @@ export const ROSTER = [
     day: [{ do: 'sit:window', for: T(50, 90) }, { do: 'stand:windows', for: T(20, 40) }, { do: 'stand:medicShip', for: T(40, 80) }, { do: 'stand:medicalFloor', for: T(20, 40), p: 0.5 }, { do: 'stand:board', for: T(15, 25), p: 0.5 }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
   // (Captain Adair, the security captain on the jobs board, her ship down for maintenance for now (the game's maker,
   // 2026-11-17: "Add Captain Adair walking about too ... You could just say their ship is down for maintenance for now"):
-  // about the terminal and walking the station's rounds; a captain, so in the captain's red as the others (her captain's
-  // uniform's colour was the security crew's blue, #2f6db3)
-  { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, position: 'captain', voice: 'adair', captain: { ship: 'security' },
+  // the captains' uniform in the security crew's blue, about the terminal and walking the station's rounds)
+  { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { uniform: '#2f6db3', skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, position: 'captain', voice: 'adair', captain: { ship: 'security' },
     // (security, on her feet: the station's rounds, a look out of the windows, at a screen, over the hangar. Not at the
     // captains' board (she isn't hiring, and its one free spot is the others') and not on the terminal's seats: with
     // her on them too, ten minutes on a phone had 16 to 21 jams at them, against main's 5 to 11)
@@ -218,7 +219,8 @@ export const ROSTER = [
     day: [{ do: 'sit:waiting', for: T(20, 40) }, { do: 'scan', for: T(40, 60) }, { do: 'sit:cafe', for: T(120, 200) }, { do: 'stand:windows', for: T(20, 40) }, { do: 'talk:terminal', for: T(25, 40) }] },
   { id: 'traveller', name: 'Lin', look: { suit: 'civilian', head: 't1', hair: 'shortFull', colours: { job: 'explorer', skin: '#c48a62', hair: '#8f8a84' } }, voice: 'om', rate: 1.05,
     day: [{ do: 'stand:board', for: T(12, 25) }, { do: 'sit:window', for: T(40, 90) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(120, 240) }, { do: 'talk:terminal', for: T(25, 45) }] },
-  { id: 'mechanic', name: 'Jon', look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'hauler', uniform: '#f0892e', skin: '#a66d45', hair: '#17110d' }, size: 1.07 }, voice: 'om', rate: 1.0,
+  // (Jon, at the parked ships' engines, in the engineer's purple: the game's maker, JOB1-2 B)
+  { id: 'mechanic', name: 'Jon', look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'hauler', uniform: '#f0892e', skin: '#a66d45', hair: '#17110d' }, size: 1.07 }, position: 'engineer', voice: 'om', rate: 1.0,
     day: [{ do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'post:mechanic', clip: 'reach', for: T(15, 30) }, { do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.6 }, { do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach', p: 0.5 }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
   { id: 'crew-ada', name: 'Ada', look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } }, voice: 'yw', rate: 1.03,
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:quarters', for: T(10, 25) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(140, 280) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(25, 50) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },

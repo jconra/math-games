@@ -77,7 +77,8 @@ import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighths
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
 // (look: how the captain's crew member for a job looks aboard, a crew kit recipe as the station's people's are: src/aboard.js;
-// worn in their job's colour, the role's id being its position: kit/positions.js POSITIONS, aboardOf)
+// in their job's colour on the crew uniform's bands, their own body kept: the role's id is its position, kit/positions.js
+// POSITIONS, aboardOf)
 export const ROLES = {
   pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno',
     look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'miner', skin: '#c48a62', hair: '#2a1a12' } } },
