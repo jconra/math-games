@@ -39,8 +39,8 @@ test('the contract: the three roles and their shares, as the game\'s maker gave 
   for (const id of MINING.roles) { const R = ROLES[id]; assert.ok(R.name && R.does && R.crew && Number.isInteger(R.share) && typeof R.ready === 'boolean', id); }
   assert.match(MINING.paid, /share of what the haul sells for/); assert.match(MINING.paid, /smelter/);
   assert.equal(MINING.captain, 'ruiz'); assert.equal(CAPTAINS.ruiz.mission, 'mining'); assert.equal(missions.ready('ruiz'), true);
-  // the other captains' trips are not made yet: their offers end as before
-  assert.equal(missions.ready('vega'), false); assert.equal(missions.ready('hale'), false);
+  // Captain Hale's rescue run is made too (its own tests: tests/rescue.test.mjs); Captain Vega's is not yet
+  assert.equal(missions.ready('vega'), false); assert.equal(missions.ready('hale'), true);
 });
 
 test('the contract: each of the three jobs can be signed for, alone or with the others; a job whose game is not made is his crew\'s, by one flag', () => {

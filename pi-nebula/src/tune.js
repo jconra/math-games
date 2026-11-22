@@ -126,6 +126,8 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
       camera.position.copy(camAt); camera.lookAt(camLook);
     },
     open,
+    // (its prompt is up: the core is within reach; nothing else aboard is offered meanwhile, src/trip.js)
+    get prompting() { return !closed && !prompt.hidden; },
     close() { if (closed) return; closed = true; if (panel) { const was = panel; shut(); was.close(true); } removeEventListener('keydown', onKey); prompt.remove(); },
     state: () => ({ done: T.done, lit: T.lit, cards, prompt: !prompt.hidden, strip: shown, said: T.said, heard: T.heard, told: T.told,
       core: coreAt ? { room: coreAt.room, pos: coreAt.pos.toArray().map((v) => +v.toFixed(2)), look: coreAt.look.toArray().map((v) => +v.toFixed(2)) } : null, panel: panel ? panel.state() : null, view: link.view() ? link.view().state() : null, log: T.log.slice(-10) }),

@@ -81,6 +81,30 @@ const DEST = {
   home: { key: 'home', name: 'the station', is: 'The station is', to: 'home to the station', from: 'the rocks' },
 };
 const destOf = (live, t) => DEST[live && DEST[live.to] ? live.to : t.pick(['field', 'home'])];
+// A RESCUE RUN'S JUMPS (src/missions.js 'rescue': live.far 'planet', live.ship 'Medic'). Its cards are this job's own,
+// told of where that run goes and of the ship flown: out to the crashed ship on the planet, home from it, the Medic.
+// The words of the cards that name the Miner or the asteroid field are put so (reword: once a card is made, in the
+// words it shows, never in its numbers or its kinds), and who is aboard is the run's own crew (folk).
+DEST.planet = { key: 'planet', name: 'the crashed ship', is: 'The crashed ship is', to: 'to the crashed ship', from: 'the station' };
+const FAR_WORDS = { planet: [['We have authorization to mine at', 'The crashed ship\'s distress call comes from'], ['The asteroid field', 'The crashed ship'], ['the asteroid field', 'the crashed ship'], ['an asteroid field', 'the crashed ship'], ['a dense field', 'the crashed ship'], ['The field', 'The crashed ship'], ['the field', 'the crashed ship'], ['The rocks are', 'The crashed ship is'], ['the rocks', 'the crashed ship']] };
+const WORD_KEYS = new Set(['story', 'ask', 'why', 'rightWhy', 'line', 'title', 'label', 'say', 'steps', 'lines', 'help', 'coins', 'slips', 'sum', 'pic', 'tap', 'map', 'points', 'pts']);
+export function reword(o, live) {
+  if (!live) return o;
+  const pairs = [...(FAR_WORDS[live.far] || []), ...(live.ship && live.ship !== 'Miner' ? [['The Miner', `The ${live.ship}`], ['the Miner', `the ${live.ship}`]] : [])];
+  if (!pairs.length) return o;
+  const say = (str) => pairs.reduce((a, [f, t]) => a.split(f).join(t), str);
+  // (only the words shown: a label 'field' on a map becomes the crashed ship's)
+  const walk = (v, key) => {
+    if (typeof v === 'string') return key === 'label' && v === 'field' && live.far === 'planet' ? 'wreck' : say(v);
+    if (Array.isArray(v)) return v.map((x) => walk(x, key));
+    if (v && typeof v === 'object') { for (const k of Object.keys(v)) if (WORD_KEYS.has(k) || typeof v[k] === 'object') v[k] = walk(v[k], k); return v; }
+    return v;
+  };
+  for (const k of ['story', 'ask', 'rightWhy', 'help', 'coins', 'lines', 'tap']) if (o[k] != null) o[k] = walk(o[k], k);
+  return o;
+}
+// who is aboard, for the cards that name someone: the run's own crew (live.folk), else the Miner's
+const folkFor = (live) => (live && Array.isArray(live.folk) && live.folk.length ? live.folk : FOLK);
 // near misses of a whole answer, one or two off either way, in a random order (so the right one is not always the
 // middle button): [{ ...face, slip: 'off', why }]
 const nearOf = (t, v, face, why, lo = 1) => t.shuffle([v + 1, v - 1, v + 2, v - 2]).filter((x) => x >= lo).map((x) => ({ ...face(x), slip: 'off', why: why(x) }));
@@ -752,7 +776,7 @@ export function pickAsk(mix, { rand = Math.random, last = null, live = null } = 
 export const JOB = {
   // (not one of the station's job spots, src/jobs/index.js JOBS: its seat is aboard a captain's ship, and its cards
   // come up on the run, src/trip.js. Its levels are on the crew screen's list with the others': src/ui/title.js)
-  id: 'pilot', name: 'Jump computer', short: 'Pilot', open: true, pickAsk, seated: true,
+  id: 'pilot', name: 'Jump computer', short: 'Pilot', open: true, pickAsk, reword, folkFor, seated: true,
   spot: null, sign: 'Pilot\'s seat', hint: 'Work out the jump',
   place: PLACE, setting: SETTING, makers: MAKERS,
   card: 'jump',

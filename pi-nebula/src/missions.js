@@ -86,7 +86,16 @@ export const ROLES = {
     look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#8d5a3b', hair: '#3b2a1e' } } },
   engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: true, crew: 'Engineer Okafor',
     look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'miner', uniform: '#f0892e', skin: '#47291a', hair: '#17110d' } } },
+  // (the rescue run's own job: each stasis pod's lock, src/podlock.js. Not in the run yet (walking down the ramp to the
+  // pods is still to come), so the captain's own medic does it)
+  medic: { id: 'medic', name: 'Medic', does: 'opening the stasis pods', share: 20, ready: false, crew: 'Medic Teo',
+    look: { suit: 'atlantis1', head: 't2', hair: 'coil', colours: { job: 'medic', skin: '#86522f', hair: '#17110d' } } },
 };
+// A ROLE AS ONE MISSION HAS IT: its own crew member for it (who does it for that captain, and how they look) and its own
+// words for what it does, where the mission says (MISSIONS[..].jobs); otherwise the role as above. Its share and
+// whether its game is made are the role's own, whoever's run it is.
+export const roleOf = (M, id) => (M && M.jobs && M.jobs[id] ? { ...ROLES[id], ...M.jobs[id], share: ROLES[id].share, ready: ROLES[id].ready } : ROLES[id]);
+const rolesFor = (M) => Object.fromEntries(Object.keys(ROLES).map((id) => [id, roleOf(M, id)]));
 export const CARDS = 3;      // the cards of a jump (its three lamps: distance, charge, go)
 export const LAMPS = ['Distance', 'Charge', 'Go'];
 
@@ -98,9 +107,12 @@ export const LAMPS = ['Distance', 'Charge', 'Go'];
 // 'land' (home: flown in through the bay door and set down on the pad, the haul aboard),
 // 'tune' (on foot, at the far place: the ship's reactor core tuned by its engineer, `cards` cards at the core; `when`:
 // the moments of a run it may come at, one of them picked for each run: 'arrive', 'leave')
+// (the contract's card says what the run is (`about`) and how it pays (`paid`); the share is paid at the controls of a
+// station job (`payAt`: its job's id), where the payout card waits)
 export const MISSIONS = {
   mining: {
-    id: 'mining', captain: 'ruiz', ship: 'miner', name: 'Mining run', roles: ['pilot', 'drill', 'engineer'],
+    id: 'mining', captain: 'ruiz', ship: 'miner', name: 'Mining run', roles: ['pilot', 'drill', 'engineer'], payAt: 'smelter', place: 'field',
+    about: 'The Miner flies out to the rocks, fills its 8 canisters with ore and comes home. Each job on the run earns a share of what the haul sells for.',
     paid: 'You are paid your share of what the haul sells for, at the smelter\'s controls, when you are back.',
     steps: [
       { id: 'out', kind: 'leave', secs: 4 },
@@ -112,8 +124,42 @@ export const MISSIONS = {
       { id: 'home', kind: 'land', secs: 5 },
     ],
   },
-  // (the other captains' trips go here, each its own data: exploring for Captain Vega, rescue for Captain Hale)
+  // CAPTAIN HALE'S RESCUE RUN (the plan: ~/pw/space-math/RESCUE_PLAN.md). Out of the Medic's hangar, the jump, out of
+  // the wormhole above a planet made from the run's seed (src/planet/: its ground, a crashed ship and 3 to 6 stasis pods
+  // beside it, someone asleep in each), the Medic set down beside the wreck, everyone in the pods brought aboard, the
+  // jump home, down in the Medic's hangar; paid so much for each person brought home (RESCUE). 'rescue': all that is
+  // done at the planet, by her own crew until its parts are made (her pilot sets the Medic down, her medic opens the
+  // pods and the rescued come aboard): src/rescue.js. The core's tuning is out there too, as on the mining run.
+  rescue: {
+    id: 'rescue', captain: 'hale', ship: 'medic', name: 'Rescue run', roles: ['pilot', 'medic', 'engineer'], payAt: 'medical', place: 'planet',
+    about: 'The Medic flies out to a planet where a crew is stranded by their crashed ship, asleep in stasis pods, brings everyone aboard and comes home. Each job on the run earns a share of what the rescue pays.',
+    paid: 'You are paid your share of the rescue, at the triage desk in the medical centre, when you are back.',
+    // (her own crew, for the jobs left to them: their names and how they look aboard; the pilot's words for this run)
+    jobs: {
+      pilot: { does: 'piloting to the planet and home', crew: 'Pilot Cass', she: true, look: { suit: 'atlantis2', head: 't9', hair: 'wavy', colours: { job: 'medic', skin: '#d9a37f', hair: '#4a2f1d' } } },
+      medic: { crew: 'Medic Teo', she: false },
+      engineer: { crew: 'Engineer Mara', she: true, look: { suit: 'atlantis2', head: 't7', hair: 'afro', colours: { job: 'medic', skin: '#663b22', hair: '#17110d' } } },
+    },
+    steps: [
+      { id: 'out', kind: 'leave', secs: 4 },
+      { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'planet' },
+      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['arrive', 'leave'] },
+      { id: 'site', kind: 'rescue', roles: ['medic'] },
+      { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
+      { id: 'home', kind: 'land', secs: 5 },
+    ],
+  },
+  // (the other captains' trips go here, each its own data: exploring for Captain Vega)
 };
+// WHAT A RESCUE PAYS (the game's maker, 2026-11-22, RESC1-2: "It needs to be a similar payout to what a mining mission
+// pays. So it would be nice to know how long it takes and use that to figure out how much it should pay. But it should
+// always pay the same per person. If there are more people then that is just getting lucky."). One amount for each
+// person brought home, the same on every rescue; how many there are is the planet's (3 to 6 pods: src/planet/pods.js),
+// never an answer's. Set from the two runs' lengths and the mining run's pay: ~/pw/space-math/RESCUE_2.md.
+export const RESCUE = { perPerson: 6000 };
+MISSIONS.rescue.perPerson = RESCUE.perPerson;
+// (who the jump computer's cards speak of on her run: her and her crew; src/jobs/pilot.js folkFor)
+MISSIONS.rescue.folk = [{ name: 'Captain Hale', she: true }, ...Object.values(MISSIONS.rescue.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
 export const missionOf = (captainId) => Object.values(MISSIONS).find((M) => M.captain === captainId) || null;
 
 const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
@@ -121,7 +167,7 @@ const say = (n) => Number(n).toLocaleString('en-US');
 
 // ── the contract ──
 // the roles of a mission as the contract shows them: [{ ...role, open }], open: the player can sign for it
-export const rolesOf = (M) => M.roles.map((id) => ({ ...ROLES[id], open: !!ROLES[id].ready }));
+export const rolesOf = (M) => M.roles.map((id) => ({ ...roleOf(M, id), open: !!ROLES[id].ready }));
 // the roles a crew member may sign for, of those asked (in the mission's own order); none asked: every open one
 export function openRoles(M, asked = null) {
   const open = M.roles.filter((id) => ROLES[id].ready);
@@ -139,7 +185,7 @@ export function rolesWords(roleIds) {
 // the rest (aboardOf: the crew member of his who comes along, and the captain himself)
 export const crewFor = (M, mine, name = 'You', captain = null) => {
   const A = aboardOf(M, mine, captain ? { id: 'captain', name: captain } : null);
-  return M.roles.map((id) => { const who = A.find((a) => a.jobs.includes(id)); return { role: id, name: mine.includes(id) ? name : who ? who.name : ROLES[id].crew, you: mine.includes(id) }; });
+  return M.roles.map((id) => { const who = A.find((a) => a.jobs.includes(id)); return { role: id, name: mine.includes(id) ? name : who ? who.name : roleOf(M, id).crew, you: mine.includes(id) }; });
 };
 
 // WHO IS ABOARD A SHIP ON A RUN, AND WHAT EACH DOES (the game's maker, 2026-11-18: "The best scenario is that the
@@ -153,6 +199,8 @@ export const crewFor = (M, mine, name = 'You', captain = null) => {
 // -> [{ id, name, short (the name said: 'Juno', 'Ruiz'), captain, jobs: [role ids] }]: the captain first. (Hired crew
 // would be more of these, each with their own jobs or none.)
 export function aboardOf(M, mine, captain = null) {
+  // (the roles as this mission has them: its captain's own crew member for each)
+  const ROLES = rolesFor(M);
   const left = M.roles.filter((id) => !mine.includes(id)), first = left[0] || M.roles[0];
   const crewName = ROLES[first].crew, cap = captain || { id: M.captain, name: 'The captain' };
   const short = (n) => String(n).split(' ').pop();
@@ -234,15 +282,20 @@ export function contractOf(crew) {
 // the contract signed for these roles (only roles whose game is made) -> the mission as kept, or null (none of them
 // can be signed for, or another mission is still on)
 // (signed as its engineer: when this run's tuning of the core comes, picked now and kept: `tune`)
-export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.random) {
+export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.random, seedRand = Math.random) {
   const M = MISSIONS[missionId];
   if (!M || !crew || contractOf(crew)) return null;
   const roles = openRoles(M, roleIds);
   if (!roles.length) return null;
   const tune = pickTune(M, roles, rand);
-  crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now, ...(tune ? { tune } : {}) };
+  // (a run to a planet: which planet, its seed, picked now and kept, so a reload goes to the same one: src/planet/kinds.js
+  // newSeed's own way, any seed from 1 to 999,999)
+  const seed = M.place === 'planet' ? 1 + Math.floor(seedRand() * 999999) : null;
+  crew.mission = { id: M.id, captain: M.captain, roles, state: 'signed', signed: now, ...(tune ? { tune } : {}), ...(seed ? { seed } : {}) };
   return crew.mission;
 }
+// the planet a contract's run goes to (its seed), or null (a run that goes to no planet, or no contract)
+export function seedOf(crew) { const m = contractOf(crew); return m && MISSIONS[m.id].place === 'planet' ? (Number.isFinite(+m.seed) && +m.seed > 0 ? Math.floor(+m.seed) : 1) : null; }
 // WHEN THE CORE'S TUNING COMES ON THIS CREW MEMBER'S RUN: 'arrive' or 'leave' (the top of this file), or null (not
 // their job, or no run to fly). It is what was picked as the contract was signed.
 // (CONTRACTS KEPT FROM BEFORE THE TUNING WAS MOVED OUT TO THE ROCKS, when it was done in the hangar 'before' the run or
@@ -261,9 +314,18 @@ export function tuneWhen(crew) {
 // of what it sells for waiting at the smelter's controls. n: the haul's number (src/crane.js arrive); store: the
 // tonnes of each metal that came home (all eight canisters full: whole tonnes; headed home early: the rounded store,
 // in eighths of a tonne). -> the payout, or null (no contract signed)
-export function land(crew, { n = 0, store = {}, now = Date.now() } = {}) {
+// A RESCUE (a mission with `perPerson`): people, how many were brought home; the pay is so much for each of them
+// (RESCUE), the crew member's share of that: { kind: 'rescue', people, per, sold (what the rescue paid), share, pay, at }
+export function land(crew, { n = 0, store = {}, people = 0, now = Date.now() } = {}) {
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
+  const M = MISSIONS[m.id];
+  if (M.perPerson) {
+    const k = Math.max(0, Math.floor(+people || 0)), sold = k * M.perPerson, share = shareOf(m.roles);
+    m.state = 'payout';
+    m.payout = { kind: 'rescue', people: k, per: M.perPerson, sold, share, pay: payOf(sold, share), at: now };
+    return m.payout;
+  }
   flownHaul(n, { store });
   const H = haulOf(n), share = shareOf(m.roles);
   m.state = 'payout';
@@ -308,6 +370,8 @@ export const payoutForm = (grade) => (grade < 20 ? 'count' : grade < 44 ? 'add' 
 const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ metal: P.metal || 'iron', tonnes: P.oreTonnes || 6, price: Math.round((P.sold || 0) / (P.oreTonnes || 6)), pay: P.sold || 0 }]);
 // the slip's rows: the plain sum. ask: which row is the one asked for ('sold' or 'pay': shown as "?"), or none
 export function payoutLines(P, ask = null) {
+  // (a rescue's: how many came home, what each is worth, what the rescue paid, the share)
+  if (P.kind === 'rescue') return [['Brought home', `${P.people} ${P.people === 1 ? 'person' : 'people'}`], ['Each person', `${say(P.per)} credits`], ['The rescue paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   const lots = lotsOf(P), e = inEighths(lots);
   // (a row is one sum, kept short enough for one line on a phone: "3 tonnes × 3,000 = 9,000"; home early, an eighth
   // as a fraction: "2 5/8 tonnes × 2,000 = 5,250", "3/4 tonne × 4,000 = 3,000")
@@ -320,8 +384,58 @@ function cansOf(P) {
   const lit = Math.min(P.canisters, lotsOf(P).reduce((a, L) => a + Math.ceil(L.tonnes - 1e-9), 0));
   return [...Array(lit).fill('full'), ...Array(P.canisters - lit).fill('empty')];
 }
+// A RESCUE'S PAYOUT CARD, at the triage desk: the same four forms by the same levels. COUNT the people brought home;
+// TIMES, so many people at so much each (what the rescue paid); A PART and PERCENT of what the rescue paid, as a haul's
+// (the forms below, in the rescue's own words). Every rescue pays a whole number of credits to every share (so much a
+// person is a whole thousand), so the share is always asked.
+const PEOPLE = ['person', 'people'];
+function rescueOrder(m, grade, rand, paid) {
+  const P = m.payout, n = P.people, per = P.per, form = payoutForm(grade), top = { from: 'Your share' };
+  const done = (o) => Object.assign(o, { payout: P.pay, form });
+  if (form === 'count') {
+    return done(ownOrder({
+      key: 'payout:people',
+      story: `Your crew is home. The rescue paid ${say(P.sold)} credits. Your share is ${say(P.pay)} credits.`,
+      ask: 'How many people did your crew bring home?',
+      right: N(n, PEOPLE),
+      slips: [
+        { ...N(n + 1, PEOPLE), slip: 'off', why: 'One too many. Count again, touching each one once.' },
+        { ...N(n - 1, PEOPLE), slip: 'off', why: 'One short. Count again, touching each one once.' },
+        { ...N(n + 2, PEOPLE), slip: 'off', why: 'Too many. Count again, touching each one once.' },
+      ],
+      rightWhy: `${say(n)} people. ${paid}`,
+      lines: payoutLines(P),
+      picFirst: true, help: { title: 'Count them', pic: { kind: 'people', n }, line: 'Touch each person once as you count: 1, 2, 3 ...' },
+      own: { strand: 'number', at: 6 }, facts: { ...top, form, n, pay: P.pay },
+    }, rand, 3));
+  }
+  if (form === 'add') {
+    // (so many people at so much each: the rescue's pay)
+    return done(ownOrder({
+      key: 'payout:perPerson',
+      story: `Your crew is home with ${n} people from the pods. The rescue pays ${say(per)} credits for each person.`,
+      ask: 'How many credits did the rescue pay?',
+      right: N(P.sold, CREDIT),
+      slips: [
+        { ...N(per, CREDIT), slip: 'one', why: `${say(per)} credits is for one person. There are ${n} people.` },
+        { ...N(per + n, CREDIT), slip: 'added', why: `That adds the people to the pay. Each person is ${say(per)} credits: multiply.` },
+        { ...N(P.sold + per, CREDIT), slip: 'groupOff', why: `That is one person too many. There are ${n} people.` },
+        { ...N(P.sold - per, CREDIT), slip: 'groupOff', why: `That is one person short. There are ${n} people.` },
+      ].filter((s) => s.v > 0),
+      rightWhy: `${n} × ${say(per)} = ${say(P.sold)} credits. ${paid}`,
+      sum: { op: 'mul', a: n, b: per },
+      lines: payoutLines(P, 'sold'),
+      help: { title: 'Person by person', pic: { kind: 'people', n }, line: `Each person brought home is ${say(per)} credits: ${n} lots of ${say(per)}.`, steps: [`${n} lots of ${say(per)}: ${n} × ${say(per)}`] },
+      own: { strand: 'words', at: 26 }, facts: { ...top, form, n, per, pay: P.pay },
+    }, rand));
+  }
+  return null;
+}
 export function payoutOrder(m, grade = 0, rand = Math.random) {
-  const P = m.payout, who = rolesWords(m.roles), tenths = P.share / 10, lots = lotsOf(P);
+  const P = m.payout, who = rolesWords(m.roles), tenths = P.share / 10, lots = P.kind === 'rescue' ? [] : lotsOf(P);
+  // (what the whole came to, in its own words: a haul sold, a rescue paid)
+  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : 'The haul sold for';
+  if (P.kind === 'rescue') { const r = rescueOrder(m, grade, rand, `Your share, ${P.share}%, is ${say(P.pay)} credits.`); if (r) return r; }
   // (A HALF CREDIT: a haul headed home early can sell for an odd 125 credits (1/8 of a tonne of nickel is 375), and a
   // tenth of that is not a whole credit. The pay is in whole credits, as it always was (payOf: to the nearest one), the
   // card says so, and it asks what the haul sold for rather than a share that does not come out whole)
@@ -330,7 +444,7 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
   const done = (o) => Object.assign(o, { payout: P.pay, form });
   // (what the right answer's line says: the pay, in every form)
   const paid = `Your share, ${P.share}%, is ${say(P.pay)} credits${even ? '' : ', to the nearest credit'}.`;
-  const home = `Your crew is home with ${lotsWords(lots)}`;
+  const home = lots.length ? `Your crew is home with ${lotsWords(lots)}` : 'Your crew is home';
   if (form === 'count') {
     // (the youngest: one side of the Miner, four canisters; a little older: all eight)
     const side = grade < 6, n = side ? P.canisters / 2 : P.canisters, cans = cansOf(P), allFull = P.tonnes >= P.canisters;
@@ -402,7 +516,7 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
     const half = tenths === 5, frac = half ? '1/2' : `${tenths}/10`;
     return done(ownOrder({
       key: 'payout:part',
-      story: `The haul sold for ${say(P.sold)} credits. Your share is ${frac} of it.`,
+      story: `${SOLD} ${say(P.sold)} credits. Your share is ${frac} of it.`,
       ask: 'How many credits is your share?',
       right: N(P.pay, CREDIT),
       slips: [
@@ -424,7 +538,7 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
   }
   return done(ownOrder({
     key: 'payout:percent',
-    story: `The haul sold for ${say(P.sold)} credits. Your contract pays you ${P.share}% of it.`,
+    story: `${SOLD} ${say(P.sold)} credits. Your contract pays you ${P.share}% of it.`,
     ask: 'How many credits is your pay?',
     right: N(P.pay, CREDIT),
     slips: [

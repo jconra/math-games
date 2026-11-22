@@ -118,6 +118,17 @@ Object.assign(DRAW, {
     if (p.place === 'rack') for (let r = 0; r < rows; r++) { const y = y0 + r * dy + 17; s += `<path d="M${x0 - 26} ${y}h${dx * (cols - 1) + 52}" stroke="${K.INK}" stroke-width="3" stroke-linecap="round"/>`; }
     return { svg: svg(h + 6, s), line: '' };
   },
+  // THE PEOPLE A RESCUE BROUGHT HOME, to count (src/missions.js, the rescue's payout card): a small figure for each, up
+  // to four to a row
+  people({ n }) {
+    const cols = Math.min(4, Math.max(1, n)), rows = Math.ceil(n / cols), dx = 64, dy = 62, x0 = W / 2 - dx * (cols - 1) / 2, y0 = 14;
+    let s = '';
+    for (let i = 0; i < n; i++) {
+      const x = x0 + (i % cols) * dx, y = y0 + Math.floor(i / cols) * dy;
+      s += `<circle cx="${x}" cy="${y + 9}" r="9" fill="${K.FILL2}" stroke="${K.INK}" stroke-width="1.3"/><path d="M${x - 15} ${y + 50}v-13a15 15 0 0 1 30 0v13z" fill="${K.FILL}" stroke="${K.INK}" stroke-width="1.3"/>`;
+    }
+    return { svg: svg(y0 + rows * dy - 4, s), line: '' };
+  },
   // a load cut into d equal parts, n of them taken: each part a "?" until it is worked out
   // (unit: what the load is counted in, 'tonnes' or 'canisters'; it: what it is called over the bar, or none: "12 tonnes in all")
   fracbar({ whole, n, d, it = 'load', unit = 'tonnes' }) {

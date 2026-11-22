@@ -58,24 +58,25 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   el.className = 'pmc'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', `${captain}'s contract`);
   root.appendChild(el);
   function draw() {
-    // (the example: an ordinary load of the Miner's eight tonnes, the game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000)
-    const share = shareOf([...mine]), sample = 24000;
+    // (the example: an ordinary load of the Miner's eight tonnes, the game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000;
+    // a rescue's: so much for each person brought home, four of them)
+    const share = shareOf([...mine]), sample = M.perPerson ? 4 * M.perPerson : 24000;
     // (who does each job left to the crew: the ship has a crew of three, the captain and one of his crew with the crew
     // member: src/missions.js aboardOf)
     const by = Object.fromEntries(crewFor(M, [...mine], 'You', captain).map((c) => [c.role, c.name]));
     for (const r of roles) r.crew = by[r.id] || r.crew;
     el.innerHTML = `<section class="pmc-card">
       <header class="pmc-top"><b>${esc(M.name)}</b><small>${esc(captain)}'s contract</small></header>
-      <p class="pmc-what">The Miner flies out to the rocks, fills its 8 canisters with ore and comes home. Each job on the run earns a share of what the haul sells for.</p>
+      <p class="pmc-what">${esc(M.about)}</p>
       <div class="pmc-roles">${roles.map((r) => {
     const on = mine.has(r.id), inner = `<span><b>${esc(r.name)}</b><small>${esc(r.does)}</small></span><em>${r.share}%</em><i>${on ? 'You' : esc(r.crew)}</i>`;
     return r.open && pick ? `<button type="button" class="pmc-role${on ? ' is-mine' : ''}" data-role="${r.id}" aria-pressed="${on}">${inner}</button>`
       : `<div class="pmc-role ${on ? 'is-mine' : 'is-crew'}" data-role="${r.id}">${inner}</div>`;
   }).join('')}</div>
       <p class="pmc-note">${roles.some((r) => !r.open) ? `${esc(roles.filter((r) => !r.open).map((r) => r.crew).join(' and '))} of ${esc(captain)}'s own crew ${roles.filter((r) => !r.open).length === 1 ? 'does the other job' : 'do the other jobs'} this trip.` : ''}${pick ? ' Tap a job to take it or leave it to the crew.' : ''}</p>
-      <div class="pmc-pay"><b>Your share: ${share}% of what the haul sells for</b>
+      <div class="pmc-pay"><b>Your share: ${share}% of what the ${M.perPerson ? 'rescue pays' : 'haul sells for'}</b>
         <p>${esc(M.paid)}</p>
-        <p>A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits.</p></div>
+        <p>${M.perPerson ? `The rescue pays ${say(M.perPerson)} credits for each person brought home. Four people come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : `A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits.`}</p></div>
       <div class="pmc-btns"><button type="button" class="pmc-sign">Sign<kbd>E</kbd></button><button type="button" class="pmc-later">Not now<kbd>Esc</kbd></button></div>
     </section>`;
     el.querySelector('.pmc-sign').addEventListener('click', sign);

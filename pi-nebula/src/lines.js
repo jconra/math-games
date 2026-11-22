@@ -42,7 +42,11 @@ export const CAPTAINS = {
     payout: 'Good work! Your share is waiting at the smelter\'s controls.' },
   hale: { ship: 'Medic', mission: 'rescue', what: 'Join her crew for a rescue mission?',
     offer: { clip: 'hale-pitch' }, yes: { clip: 'hale-ready' }, hello: { clip: 'hale-hello' },
-    no: 'That\'s all right. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.' },
+    no: 'That\'s all right. Another time.', again: 'We still need a rescue crew. Interested?', waiting: 'Nearly ready. I\'ll come and find you.',
+    // (her run is made, src/missions.js 'rescue': as Captain Ruiz's, her contract, then she walks to the Medic and waits
+    // by its ramp; home, her word while the share is still waiting at the triage desk. Bubbles: no clips of these yet)
+    contract: 'Wonderful. Here is my contract. Have a look.', signed: 'Glad to have you. I\'ll meet you at the Medic.',
+    payout: 'Well done. Your share is waiting at the triage desk.' },
   // (Captain Adair, security: her ship is down for maintenance for now (the game's maker, 2026-11-17: "You could just
   // say their ship is down for maintenance for now.. until we make that job"): she says who she is and that, and asks
   // nothing; `down` keeps the question away until her job is made)
@@ -89,6 +93,29 @@ export const RUN_TALK = {
     // (the crew member at the drill headed home before all eight were full)
     early: ['That\'s the load. Home, {player}.'], earlyCrew: ['That\'s the load. Home, Juno.'],
     landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],
+  },
+  // CAPTAIN HALE'S RESCUE RUN (src/missions.js 'rescue'; at the planet src/rescue.js). {pilot}, {medic}: who of her
+  // crew flies and who opens the pods (the crew member, or one of hers: their name as said)
+  rescue: {
+    tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
+    tuned: ['The core is steady. Back to your seat, {player}.'],
+    tunedFree: ['The core is steady. Good work, {player}.'],
+    backJump: ['Back to your seat, {player}. The jump is yours.'],
+    out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
+    crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
+    there: ['There\'s the planet. Their ship came down just ahead.', 'That\'s the jump. There\'s the planet.'],
+    // (out of the wormhole: who sets the Medic down beside the wreck; with the pilot's seat theirs, the autopilot does it
+    // for now)
+    down: ['I can see the wreck. Take us down beside it, {pilot}.', 'There\'s the wreck. Set us down by it, {pilot}.'],
+    downAuto: ['I can see the wreck. The autopilot will set us down beside it, {player}.'],
+    // (down in the ring beside the wreck: the pods are opened and their sleepers brought aboard)
+    site: ['We\'re down. {medic}, see to the pods.', 'Down safe. Off you go, {medic}. Open the pods.'],
+    aboard: ['Everyone is aboard and resting. Take us home, {player}.'],
+    aboardCrew: ['Everyone is aboard and resting. Take us home, {pilot}.'],
+    home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
+    homeCrew: ['There\'s the station. {pilot} has the landing.', 'Home. {pilot} takes her in.'],
+    landed: ['We\'re home, {player}. Your share is at the triage desk.'],
+    landedCrew: ['Good work, {player}. Your share is at the triage desk.'],
   },
 };
 

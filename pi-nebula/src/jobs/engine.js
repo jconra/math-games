@@ -306,18 +306,20 @@ function make(job, L, { rand = Math.random, last = null, who = null, frac = 0, l
   const own = job.makers && job.makers[ask.maker];
   for (let tries = 0; tries < 8; tries++) {
     try {
-      const w = who || pickWho(job, rand);
+      const w = who || pickWho(job, rand, live);
       const o = own ? own.make(ask.step, { rand, who: w, frac, live })
         : storeOrder(ask, { rand, who: w, frac, longMost: 0, setting: job.setting });
       o.who = o.who || w;
       o.ask_ = { maker: ask.maker, step: ask.step };
+      // (a job whose cards are told of where its props are: the pilot's, on a run that is not the Miner's)
+      if (job.reword && live) job.reword(o, live);
       if (!o.own) o.own = { strand: own ? own.strand : L.strand, at: own ? own.at(ask.step) : askAt(ask) };
       return o;
     } catch (e) { if (tries === 7) throw e; }
   }
   return null;
 }
-const pickWho = (job, rand) => { const F = job.setting && job.setting.folk; return F && F.length ? F[Math.floor(rand() * F.length)] : null; };
+const pickWho = (job, rand, live = null) => { const F = job.folkFor ? job.folkFor(live) : job.setting && job.setting.folk; return F && F.length ? F[Math.floor(rand() * F.length)] : null; };
 
 export function deal(crew, job, { rand = Math.random, last = null, now = Date.now(), live = null } = {}) {
   register(job);

@@ -120,8 +120,18 @@
 //     home; down on the pad at once. The wormhole itself is never skipped. Nothing else changes: the same haul comes
 //     home either way.
 //
-//   const T = startTrip(ctx, { mission, roles, tune, onEnd })     ctx: { W, walls, boarding, crane, jobs, guide,
-//       people, crew, save, body, put, walk(on), onCredits }; the crew member is in the ship's cockpit
+//   - CAPTAIN HALE'S RESCUE RUN (src/missions.js 'rescue') is these same steps with one of its own: out of the Medic's
+//     hangar ('leave'), the jump ('jump', its cards told of the Medic and the crashed ship: src/jobs/pilot.js reword),
+//     out of the wormhole above a planet ('rescue': src/rescue.js, the far place as the drill's view is the mining
+//     run's; made unseen while the jump is worked out, so the wormhole's far end opens on it), the core's tuning there
+//     ('tune', in the Medic's own Engineering), the jump home and the landing in its own hangar ('land'). At the planet
+//     everything not made yet is the captain's crew's (her pilot, or the autopilot, sets the Medic down by the wreck;
+//     her medic opens the pods; the rescued come aboard out of sight), watched from the seat or from behind, or skipped
+//     (K). The rescued are counted aboard; home, the pay is so much for each of them (src/missions.js RESCUE).
+//
+//   const T = startTrip(ctx, { mission, roles, tune, onEnd })     ctx: { W, walls, boarding, crane, keeper (the run's
+//       ship's hull keeper: the crane, or its own hull), jobs, guide, people, crew, save, body, put, walk(on), onCredits,
+//       seed (a run to a planet: which), lib (the crew kit) }; the crew member is in the ship's cockpit
 //       tune: when the core's tuning comes on this run ('arrive' | 'leave'), or null (missions.js tuneWhen)
 //       walk(on): the crew member's own walking handed back to them (on their feet at the rocks) and taken again
 //   T.update(dt) each frame; T.aim(camera, dt) after the game's own camera; T.late() just before the picture
@@ -136,7 +146,7 @@ import * as THREE from 'three';
 import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
 import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/smelter.js';
-import { stepsFor, land, LAMPS, ROLES, aboardOf } from './missions.js';
+import { stepsFor, land, LAMPS, aboardOf, roleOf } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
 import { MINER, flyingOf, setFlying } from './flymodel.js';
@@ -213,13 +223,18 @@ const CSS = `
 
 export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {} }) {
   const { W, walls, boarding, crane, jobs, guide, crew, save } = ctx;
+  // (who keeps the run's ship's hull where it is flown and stands: the Miner's crane, or the ship's own shared hull:
+  // src/mission.js keeperOf)
+  const keeper = ctx.keeper || crane;
+  // (where the run goes: the rocks, or a planet (a rescue run: src/rescue.js); and the captain's own pilot, by name)
+  const PLANET = M.place === 'planet', TO = PLANET ? 'the planet' : 'the rocks', flier = roleOf(M, 'pilot').crew, flierShort = String(flier).split(' ').pop();
   if (!document.getElementById('pmt-css')) { const st = document.createElement('style'); st.id = 'pmt-css'; st.textContent = CSS; document.head.appendChild(st); }
   const S = boarding.ships.find((s) => s.id === M.ship);
   // (the run's ship's own facts, as the shared ship piece flies it: src/fleet.js)
   const SHIP = flightOf(M.ship) || MINER;
   const steps = stepsFor(M, roles, tune), TALK = RUN_TALK[M.id] || {};
   const el = document.createElement('div'); el.className = 'pmt';
-  el.innerHTML = '<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>Canisters full</small><b></b><em></em></div><div class="pmt-acts"><button type="button" class="pmt-skip" hidden></button><button type="button" class="pmt-up" hidden>Get up <kbd>E</kbd></button><button type="button" class="pmt-view" hidden></button></div>';
+  el.innerHTML = `<div class="pmt-chip"><b></b><span></span></div><div class="pmt-say"><small></small><p></p></div><div class="pmt-count" hidden><small>${PLANET ? 'Rescued aboard' : 'Canisters full'}</small><b></b><em></em></div><div class="pmt-acts"><button type="button" class="pmt-skip" hidden></button><button type="button" class="pmt-up" hidden>Get up <kbd>E</kbd></button><button type="button" class="pmt-view" hidden></button></div>`;
   document.body.appendChild(el);
   const $ = (s) => el.querySelector(s), sayEl = $('.pmt-say'), countEl = $('.pmt-count'), skipEl = $('.pmt-skip'), upEl = $('.pmt-up'), viewEl = $('.pmt-view');
   $('.pmt-chip b').textContent = M.name;
@@ -252,15 +267,20 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (the wormhole: one for the trip, made as the crew member sits down. The flying at the rocks, src/fieldfly.js: from
   // the far end of the jump out until the colours of the jump home are all round)
   let wh = null, ff = null;
+  // (a rescue's far place, the planet: src/rescue.js, fetched as the crew member sits down and made as the jump out is
+  // worked out, unseen, so the wormhole's far end opens on it)
+  let site = null, siteMod = null, siteErr = null;
   // THE DASHBOARD'S NUMBERS FOR THE WHOLE RUN (src/dash.js; the dashboard itself is the flying's, src/flying.js): one tank
   // and one count of how far and how long, from the lift-off to the landing at home, whichever flying shows them (the
   // station's, the one at the rocks); stepped here each frame from wherever the ship is (shipNow), the jump through the
   // wormhole not flown. The canisters full are the run's own (T.filled)
-  const dash = makeDash(), dashRun = () => ({ cans: [T.filled, CARRIES] }), _dw = new THREE.Vector3();
+  const dash = makeDash(), dashRun = () => (PLANET ? {} : { cans: [T.filled, CARRIES] }), _dw = new THREE.Vector3();
   // (the core's tuning, src/tune.js: fetched as the crew member sits down, if this run has one; `tn` while it is on)
   let tuneMod = null, tuneErr = null, tuneAsked = false, tn = null;
   const name = crew.name || 'pilot';
-  const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, engineer: engineer || name, driller: driller ? driller.short : name, ...more }[k] ?? ''));
+  // (who opens a rescue's pods: the crew member, signed for it, or one of the captain's own)
+  const medicShort = roles.includes('medic') ? name : doer('medic') ? doer('medic').short : 'the medic';
+  const fill = (s, more = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => ({ player: name, engineer: engineer || name, driller: driller ? driller.short : name, pilot: flierShort, medic: medicShort, ...more }[k] ?? ''));
   const pick = (L) => (L && L.length ? L[Math.floor(Math.random() * L.length)] : '');
   function say(key, more) { const w = fill(pick(TALK[key]), more); if (!w) return; $('.pmt-say small').textContent = ctx.captainName || 'The captain'; $('.pmt-say p').textContent = w; sayEl.classList.add('is-on'); sayT = Math.min(8, 2.4 + w.length * 0.06); T.log.push('says: ' + w); }
   const words = (w) => { $('.pmt-chip span').textContent = w; };
@@ -286,8 +306,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // ── the jump computer: the job panel with the pilot's cards, its three lamps on the card's top ──
   const lampsHtml = () => `<div class="pnj-lamps" aria-label="The jump's three lamps">${LAMPS.map((n, k) => { const s = T.lamps[k]; return `<span class="pnj-lamp${s ? ' is-' + s : k === T.lit ? ' is-now' : ''}" title="${n}${s === 'lit' ? ': lit at the first try' : s === 'late' ? ': lit' : ''}"><i></i><span>${n}</span></span>`; }).join('')}</div>`;
   const link = {
-    now: () => ({ lamp: LAMPS[Math.min(T.lit, LAMPS.length - 1)].toLowerCase(), to: steps[T.i].to }),
-    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Jump computer</b><small>${steps[T.i].to === 'home' ? 'The jump home' : 'The jump to the rocks'}</small></header>${lampsHtml()}`,
+    // (where the jump goes, and the ship and crew the cards speak of: src/jobs/pilot.js)
+    now: () => ({ lamp: LAMPS[Math.min(T.lit, LAMPS.length - 1)].toLowerCase(), to: steps[T.i].to, ship: SHIP.name, far: M.place, folk: M.folk || null }),
+    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Jump computer</b><small>${steps[T.i].to === 'home' ? 'The jump home' : `The jump to ${TO}`}</small></header>${lampsHtml()}`,
     right(q) {
       const first = q.misses === 0, st = steps[T.i];
       T.lamps[T.lit] = first ? 'lit' : 'late'; T.lit++;
@@ -323,6 +344,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // button that also lets the pilot skip this portion (like "Return Home")"; riding, the part they take no part in)
     if (k === 'work' && !iDrill && T.phase === 'crew' && drill && drill.crew && !drill.crew.hurried) return iPilot ? 'Return home' : 'Skip the drilling';
     if (k === 'land' && !iPilot && T.phase === 'fly' && fl && fl.on && !fl.S.landed) return 'Skip the landing';
+    // (at the planet: the crew's setting down, the pods and everyone coming aboard, all at once)
+    if (k === 'rescue' && T.phase === 'crew' && site && site.canSkip) return 'Skip the rescue';
     return null;
   }
   function skip() {
@@ -334,6 +357,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // (at the rocks: a very short scene of a rock being drilled, seen from outside the ship: the eye glides out to the
     // drill's own view, the marked rock is flown to at once and drilled, a hole, and the rest of the load is the crew's)
     else if (k === 'work') { drill.crew.hurry(); T.hurry = true; if (ff && !T.afoot) { T.scene = true; T.viewWas = ff.fl.view; ff.out(GLIDE.skip); } }
+    else if (k === 'rescue') { site.skip(); T.hurry = true; }
     else fl.skip();
     T.log.push('skipped: ' + what); skipEl.hidden = true;
     return true;
@@ -361,15 +385,17 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         if (flErr) { abort(); return; }
         if (!flMod) return;
         stand = P().pos.clone();
-        if (!crane.depart()) { abort(); return; }
+        if (!keeper || !keeper.depart()) { abort(); return; }
         jobs.show(false); if (guide.active) guide.clear();
         if (!wh) wh = makeWormhole({ scene: W.scene, quality: W.quality, rand: ctx.rand || Math.random });
         // (the field and its ship, the drill's game, for everyone (the same field whatever the jobs): fetched and its
         // ship built now, so the field does not wait)
         // (the core's tuning, if this run has one: fetched now too, and the ship's own words for it)
         if (!tuneAsked && steps.some((s) => s.kind === 'tune')) { tuneAsked = true; import('./tune.js').then((m) => { tuneMod = m; m.readyTune(M); }).catch((e) => { tuneErr = e; console.error(e); if (window.oops) window.oops(e); }); }
-        if (!drillKit) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
-        fl = flMod.startFlying({ W, boarding, crane, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier: ROLES.pilot.crew, words,
+        // (a rescue: the planet's own piece instead, src/rescue.js; the planet itself is made as the jump out is worked out)
+        if (PLANET && !siteMod && !siteErr) import('./rescue.js').then((m) => { siteMod = m; }).catch((e) => { siteErr = e; console.error(e); if (window.oops) window.oops(e); });
+        if (!drillKit && !PLANET) Promise.all([import('./drillview.js'), import('./fieldfly.js')]).then(async ([m, f]) => { const ship = await m.buildShip(); if (T.done) ship.dispose(); else drillKit = { m, f, ship }; }).catch((e) => { drillErr = e; console.error(e); if (window.oops) window.oops(e); });
+        fl = flMod.startFlying({ W, boarding, crane, hull: keeper, outside: ctx.outside || null, people: ctx.people || (() => null), visit: ctx.visit || null }, { cfg: SHIP, goal: 'leave', pilot: iPilot, flier, words,
           dash, run: dashRun,
           // (taking no part in the flying or the drilling: the ship seen from outside, where that view exists)
           view: iWatch ? 'behind' : 'cockpit',
@@ -405,7 +431,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!T.phase) {
         // (the ship steadies itself and holds where it is while the jump is worked out: the flying's controls put away)
         if (fl && fl.on) fl.lock(true);
-        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : 'Work out the jump to the rocks') : (st.to === 'home' ? 'Juno plots the jump home' : 'Juno plots the jump'));
+        T.lamps = []; T.lit = 0; fireIn = -1; words(st.mine ? (st.to === 'home' ? 'Work out the jump home' : `Work out the jump to ${TO}`) : (st.to === 'home' ? `${flierShort} plots the jump home` : `${flierShort} plots the jump`));
         if (st.mine) { T.phase = 'cards'; T.hurry = false; openCards(); } else T.phase = 'crew';
       }
       // (a pilot of the captain's own: the lamps light by themselves; all at once after a part skipped: T.hurry)
@@ -417,7 +443,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       }
       // (the wormhole itself is stepped with everything else: api.update. Its far end, opened, moves the run on)
       // (the place ahead not made by the time the colours are all round: they go on, and it is opened as soon as it is)
-      if (T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
+      if (!PLANET && T.phase === 'jumping' && T.inField && !drill && wh && wh.jump && wh.jump.shut) { if (drillErr) { abort(); return; } if (drillKit) openDrill(); }
+      // (a rescue's planet: made as soon as its piece has come, while the jump out is worked out)
+      if (PLANET && st.to !== 'home' && !site) { if (siteErr) { abort(); return; } if (siteMod) makeSite(); }
     },
     // at the rocks: the crew member's own drilling (signed for the drill: runDrill), or the crew's (runCrew)
     work(dt, st) {
@@ -436,16 +464,34 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (!T.phase) { T.phase = 'fly'; T.landed = false; T.gotUp = false; if (!fl) { console.error('trip: nothing to fly home in'); abort(); return; } }
       // (on their feet aboard as it comes down: they are up already, and the flight ends as it is down)
       if (T.phase === 'fly' && (T.gotUp || T.afoot) && fl.S.landed) {
-        T.stood = !!crane.standing;
+        T.stood = !!keeper.standing;
         fl.close(); fl = null; api.fly = null;
-        // (the hangar's canisters are the ones that came home: how full each is; the payout is their plain sum)
-        T.n = crane.arrive({ flown: true, fills: T.cans ? T.cans.map((c) => c.t) : null });
-        T.payout = land(crew, { n: T.n, store: T.store }); save(crew);
+        // (the hangar's canisters are the ones that came home: how full each is; the payout is their plain sum. A rescue:
+        // so much for each person brought home)
+        T.n = keeper.arrive({ flown: true, fills: T.cans ? T.cans.map((c) => c.t) : null });
+        T.payout = land(crew, { n: T.n, store: T.store, people: T.rescued || 0 }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
-        try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
+        // (the station's news: a haul, or the rescue (its people talk of it, and the speakers say so: src/announce.js))
+        if (PLANET) { try { news.add({ kind: 'rescue', ship: SHIP.name, captain: ctx.captainName || 'Captain Hale', crew: `${['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.people] || T.payout.people} stranded crew` }); } catch (e) { /* no news */ } }
+        else try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Home'); say(iPilot ? 'landed' : 'landedCrew');
         next();
       }
+    },
+    // AT THE PLANET, A RESCUE (src/rescue.js): the captain's own crew sets the Medic down beside the wreck, opens the
+    // pods and brings everyone aboard, then lifts it clear for the jump home; watched from the seat or from behind (V),
+    // or skipped (K). The rescued are counted aboard as they come.
+    rescue(dt, st) {
+      if (!T.phase) {
+        if (!site || site.failed || !site.fl) { console.error('trip: the planet never came'); abort(); return; }
+        T.phase = 'crew'; T.rescued = 0; site.go(); countEl.hidden = false; countEl.querySelector('em').textContent = '';
+        say(iPilot ? 'downAuto' : 'down');
+      }
+      const c = site.count; T.rescued = c.aboard;
+      countEl.querySelector('b').textContent = `${c.aboard} of ${c.of}`;
+      if (site.words) words(site.words);
+      if (site.down && !T.saidSite) { T.saidSite = true; say('site'); }
+      if (site.phase === 'up') { countEl.querySelector('em').textContent = c.of ? 'Everyone from the pods' : ''; words(''); say(iPilot ? 'aboard' : 'aboardCrew'); next(); }
     },
     // THE CORE'S TUNING, out at the rocks (the top of this file; src/tune.js): the ship says so, then the captain; the
     // seat's prompt, Get up; on their feet to the core and its cards; tuned, back to the cockpit and Sit down; then
@@ -515,6 +561,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (panel || (tn && tn.busy) || (st.kind === 'jump' && st.mine && T.phase === 'cards')) return true;
     if (st.kind === 'tune' && T.phase !== 'seat') return true;
     if (st.kind === 'land' && fl && fl.S.landed) return true;      // (down: the flying's own Get up ends the flight)
+    if (site && site.fl) return false;      // (at the planet nobody flies by hand yet: the captain's pilot, or the autopilot)
     if (ff) return ff.mode === 'hand' || ff.mode === 'drill' || (drill && drill.gliding);
     if (fl && fl.on) return iPilot && !fl.auto && !fl.locked;
     return false;
@@ -559,7 +606,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   }
   function goAfoot() {
     // (whoever flies, flies on: nothing of the flying is theirs meanwhile)
-    if (fl) fl.aside(true); if (ff) ff.fl.aside(true);
+    if (fl) fl.aside(true); if (ff) ff.fl.aside(true); if (site && site.fl) site.fl.aside(true);
     W.camera.up.set(0, 1, 0); el.classList.add('is-afoot');
     // (the captain's words have their ordinary place while they walk: the drill's own boxes are not on the screen)
     el.classList.remove('is-drill');
@@ -573,7 +620,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // WHERE THE SHIP IS NOW, its kit frame in the world: out in the field, flying about the station, or where it stands
   // (out in the field it is where the drill's view has it: the flying is told only when it is flown)
   const _sw = new THREE.Matrix4();
-  const shipNow = () => (ff && drill ? _sw.multiplyMatrices(drill.at, drill.ship.M) : ff ? ff.matrix : fl && fl.on ? fl.matrix : S.M);
+  const shipNow = () => (ff && drill ? _sw.multiplyMatrices(drill.at, drill.ship.M) : ff ? ff.matrix : site && site.fl ? site.matrix : fl && fl.on ? fl.matrix : S.M);
   const OUT = { secs: 0.7, swap: 0.4 };      // (the glide out and back, s; how far out the drill's own ship is drawn in place of the rooms)
   // ABOARD, each frame after the game's own walking and camera have had their say (the top of this part)
   function drawAboard(dt) {
@@ -584,8 +631,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // outside, the drill's own ship again, its arms at work)
     if (ff) {
       const rooms = k < OUT.swap;
-      if (rooms) { _m.multiplyMatrices(Mn, _m.copy(S.M0).invert()); crane.fly(_m); boarding.fly(M.ship, _m); W.alone = [S.zone.id]; if (drill) drill.aboard = true; }
-      else if (T.afield) { crane.fly(null); boarding.fly(M.ship, null); W.alone = []; if (drill) drill.aboard = false; }
+      if (rooms) { _m.multiplyMatrices(Mn, _m.copy(S.M0).invert()); keeper.fly(_m); boarding.fly(M.ship, _m); W.alone = [S.zone.id]; if (drill) drill.aboard = true; }
+      else if (T.afield) { keeper.fly(null); boarding.fly(M.ship, null); W.alone = []; if (drill) drill.aboard = false; }
       T.afield = rooms;
     }
     _X.multiplyMatrices(Mn, _m.copy(S.M).invert()); _Xq.setFromRotationMatrix(_X);
@@ -604,7 +651,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (drill) drill.aim(cam, 0);      // (what the field draws by the eye: the size of its ore's glow)
   }
   function fromField() {
-    if (T.afield) { T.afield = false; crane.fly(null); boarding.fly(M.ship, null); W.alone = []; if (drill) drill.aboard = false; }
+    if (T.afield) { T.afield = false; keeper.fly(null); boarding.fly(M.ship, null); W.alone = []; if (drill) drill.aboard = false; }
     if (drill && drillOn && iDrill) el.classList.add('is-drill');
     const root = P() && P().c.root; if (root) { root.matrixAutoUpdate = true; root.updateMatrix(); root.matrixWorldNeedsUpdate = true; }
   }
@@ -614,7 +661,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     T.afoot = false; T.out = false; T.outK = 0; seatEl.hidden = true; seatEl.dataset.as = ''; el.classList.remove('is-afoot');
     if (ctx.walk) ctx.walk(false);
     fromField();
-    if (fl) fl.aside(false); if (ff) ff.fl.aside(false);
+    if (fl) fl.aside(false); if (ff) ff.fl.aside(false); if (site && site.fl) site.fl.aside(false);
     camFresh = true;
     T.log.push('sat down');
     // (their body put back in the seat brings the game's own camera to it, in the hangar's own place: the eye is kept
@@ -637,7 +684,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // own prompt has it while the core is being seen to)
   function paintSeat() {
     if (T.done || (steps[T.i] && steps[T.i].kind === 'tune' && T.phase === 'seat')) return;
-    const inCockpit = T.afoot && !!P() && boarding.where(P().pos) === M.ship + '/cockpit', free = !(tn && tn.busy) && !T.out;
+    // (at the core with its prompt up, its prompt alone: the Medic has a stool within reach of its core)
+    const inCockpit = T.afoot && !!P() && boarding.where(P().pos) === M.ship + '/cockpit', free = !(tn && (tn.busy || (tn.prompting && !T.rest))) && !T.out;
     // (their own seat in the cockpit; else any free seat or bed within reach; resting, getting up again)
     const near = T.afoot && free && !T.rest && crewA && P() && !(seatOf() && inCockpit) ? crewA.near(P().pos) : null;
     const want = T.rest ? (free ? 'rise' : '') : T.afoot && free && seatOf() && inCockpit ? 'down' : near ? 'rest' : '';
@@ -655,12 +703,12 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // THE JUMP ITSELF: the wormhole (src/wormhole.js). The tear opens in front of the ship where it is; when the colours
   // are all round the place is changed, unseen; they go on until the place ahead is made; then the far end opens on it.
   function startJump(st) {
-    const toField = st.to === 'field';
+    const toField = st.to !== 'home';
     countEl.hidden = true;
     wh.begin({
-      onShut() { T.inField = toField; if (toField) arriveField(); else arriveHome(); },
-      // (out to the rocks: the field and its ship have to be there)
-      ready: () => !toField || !!drill || !!drillErr,
+      onShut() { T.inField = toField; if (toField) (PLANET ? arrivePlanet() : arriveField()); else arriveHome(); },
+      // (out to the rocks: the field and its ship have to be there; to a planet, the planet made)
+      ready: () => !toField || (PLANET ? !!siteErr || (!!site && (site.ready || site.failed)) : !!drill || !!drillErr),
       onOpen() {
         // (at the rocks his word that the drill is theirs is only for a crew member who signed for the drill)
         say(toField ? (st.mine || !iDrill ? 'there' : 'crewJump') : iPilot ? 'home' : 'homeCrew');
@@ -685,14 +733,28 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // field from the seat or from behind, as the view was)
     if (drillKit && !drillErr) openDrill();
   }
+  // ARRIVING above a rescue's planet (the colours all round): the station put away, the planet shown, the ship above it
+  // (src/rescue.js), seen from the seat or from behind as the view was
+  function makeSite() {
+    site = siteMod.makeSite({ W, boarding, keeper, ship: S, cfg: SHIP, lib: ctx.lib || null, startFlying: flMod.startFlying },
+      { seed: ctx.seed, pilot: iPilot, flier: iPilot ? 'The autopilot' : flierShort, medic: medicShort, settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); }, dash, run: dashRun });
+    api.site = site;
+  }
+  function arrivePlanet() {
+    T.view = fl ? fl.view : 'cockpit';
+    if (fl) { fl.away(); fl.view = 'cockpit'; }
+    space(true); camFresh = true;
+    if (!site || !site.open(T.view || 'cockpit')) { console.error('trip: the planet never came'); abort(); }
+  }
+  function endSite() { if (site) { site.close(); site = null; api.site = null; } }
   // ARRIVING home (the colours all round): outside the station, in sight of it; the flying there is back, to come in and land
   function arriveHome() {
     // (whoever only watches comes home in the view they went out in: from behind the ship, unless they changed it)
-    const view = ff ? ff.fl.view : iWatch ? T.view || 'cockpit' : 'cockpit';
-    endDrill();
+    const view = ff ? ff.fl.view : site && site.fl ? site.fl.view : iWatch ? T.view || 'cockpit' : 'cockpit';
+    endDrill(); endSite();
     space(false);
     // (the haul is in its canisters from here on: it is seen flown home with them as full as they came)
-    if (crane.aboard) crane.aboard(T.cans ? T.cans.map((c) => c.t) : null);
+    if (keeper.aboard) keeper.aboard(T.cans ? T.cans.map((c) => c.t) : null);
     // (its controls and its guide stay put away until the far end has opened)
     if (fl) { fl.view = view; fl.arrive(); fl.lock(true); words('Jumping'); }
   }
@@ -715,7 +777,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     drill = drillKit.m.makeDrillView({ scene: W.scene, camera: W.camera, renderer: W.renderer, ship: drillKit.ship, at: DRILL_AT, crew, save, rand: ctx.rand || Math.random,
       // (who flies the ship over to a rock: the captain's pilot, or the autopilot for a crew member with the pilot's seat
       // too, who also has the button that hands them the ship: src/fieldfly.js)
-      flier: iPilot ? 'The autopilot' : 'Pilot Juno', pilot: iPilot && iDrill, onFly: iPilot && iDrill ? () => { if (ff) ff.fly(); } : null,
+      flier: iPilot ? 'The autopilot' : flier, pilot: iPilot && iDrill, onFly: iPilot && iDrill ? () => { if (ff) ff.fly(); } : null,
       // (not signed for the drill: the crew's driller, in the same field: the drill's view `byCrew`. They mark a rock;
       // riding, the crew's pilot flies to it; with the pilot's seat, the crew member does, by hand)
       byCrew: iDrill ? null : { driller: driller ? driller.short : 'The driller', auto: !iPilot },
@@ -727,7 +789,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // as the view was) while the wormhole's far end opens; then the drill's view has the eye (the crew member at the
     // drill), or the flying keeps it (the crew's driller: by hand to the marked rock with the pilot's seat, `ride`
     // otherwise)
-    ff = drillKit.f.makeFieldFlying({ W, drill, startFlying: flMod.startFlying, pilot: iPilot, flier: ROLES.pilot.crew, view: T.view || 'cockpit', words,
+    ff = drillKit.f.makeFieldFlying({ W, drill, startFlying: flMod.startFlying, pilot: iPilot, flier, view: T.view || 'cockpit', words,
       settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); },
       byCrew: iDrill ? null : { hand: () => iPilot && !T.afoot && !drill.crew.hurried }, dash, run: dashRun });
     api.field = ff;
@@ -757,7 +819,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       const cs = drill.crew.state(), ds = drill.stage, who = driller ? driller.short : 'The driller';
       if (cs.mark != null && cs.rocks === 0 && !T.saidField) { T.saidField = true; say(iPilot ? 'fieldFly' : driller && driller.captain ? 'fieldMine' : 'field'); }
       words(ds === 'grab' || ds === 'drill' ? `${who} drills the rock` : ds === 'release' || ds === 'breakUp' || ds === 'back' ? `${who} looks for the next rock`
-        : cs.mark == null && ds !== 'fly' ? `${who} looks for a rock` : iPilot && !T.afoot && !cs.hurry ? `Fly to ${who}'s rock` : `${iPilot ? 'The autopilot' : 'Juno'} flies to ${who}'s rock`);
+        : cs.mark == null && ds !== 'fly' ? `${who} looks for a rock` : iPilot && !T.afoot && !cs.hurry ? `Fly to ${who}'s rock` : `${iPilot ? 'The autopilot' : flierShort} flies to ${who}'s rock`);
     }
     T.filled = drill.run.full;
     countEl.querySelector('b').textContent = `${T.filled} of ${CARRIES}`;
@@ -798,6 +860,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (tn) { tn.close(); tn = null; api.tune = null; }
     seatEl.remove(); upEl.hidden = true; viewEl.hidden = true;
     endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
+    endSite();
     if (fl) { fl.close(); fl = null; api.fly = null; }
     jobs.show(true);
     if (panel) { panel.close(true); panel = null; }
@@ -811,7 +874,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (home, the crew stay aboard where they are until the crew member has left the ship: src/mission.js keeps them;
   // given up, they are gone at once and the captain is back in the station)
   function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; const A = crewA; crewA = null; api.crew = null; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock, aboard: A, captain: M.captain }); }
-  function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); crane.back(); el.remove(); if (crewA) { crewA.dispose(); crewA = null; api.crew = null; } const pp = ctx.people ? ctx.people() : null; if (pp && pp.aboard) pp.aboard(M.captain, false); onEnd({ payout: null, aborted: true, secs: T.clock }); }
+  function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); keeper.back(); el.remove(); if (crewA) { crewA.dispose(); crewA = null; api.crew = null; } const pp = ctx.people ? ctx.people() : null; if (pp && pp.aboard) pp.aboard(M.captain, false); onEnd({ payout: null, aborted: true, secs: T.clock }); }
 
   const _eye = new THREE.Vector3(), _look = new THREE.Vector3(), camLook = new THREE.Vector3(); let camFresh = true;
   const api = {
@@ -826,6 +889,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     fly: null,      // (the flying, while there is one: src/flying.js)
     field: null,    // (the flying at the rocks, while there is one: src/fieldfly.js)
     tune: null,     // (the core's tuning, while it is on: src/tune.js)
+    site: null,     // (a rescue's planet, while there is one: src/rescue.js)
     update(dt) {
       T.clock += dt; T.dt = dt;
       // (the captain's bubble outlives the trip a moment)
@@ -840,11 +904,13 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // (at the rocks: the drill's view, the flying kept there; and the wormhole, whose two ends change the place)
       if (drill && drillOn) drill.update(dt);
       if (ff) { ff.fl.panel = !!panel; ff.update(dt); el.classList.toggle('is-hand', ff.mode === 'hand'); }
+      // (at a rescue's planet: the ship where the captain's crew has it)
+      if (site) { if (site.fl) site.fl.panel = !!panel; site.update(dt); }
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
       if (crewA) crewA.update(dt, { player: T.afoot && P() ? P() : null });
       // (the dashboard's numbers: in the air from the lift-off until it is down at home, wherever it is)
-      if (T.sat) { _dw.setFromMatrixPosition(shipNow()); stepDash(dash, { p: [_dw.x, _dw.y, _dw.z], dt, flying: fl && fl.on ? !fl.S.landed : !!(T.space || T.inField || (wh && wh.on)) }); }
+      if (T.sat) { _dw.setFromMatrixPosition(shipNow()); stepDash(dash, { p: [_dw.x, _dw.y, _dw.z], dt, flying: site && site.fl ? !site.down : fl && fl.on ? !fl.S.landed : !!(T.space || T.inField || (wh && wh.on)) }); }
     },
     // the camera: the pilot's eyes, looking out over the nose (turned clear of the job panel while it is up)
     aim(camera, dt = 1 / 60) {
@@ -852,6 +918,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (T.afoot) { if (tn) tn.aim(camera, dt); camFresh = true; return; }
       // (at the rocks, signed for the drill: the drill's view, or the flying's own from the seat and flown by hand)
       if (ff) { ff.aim(camera, dt); camFresh = true; return; }
+      // (above a rescue's planet, or down on it: the flying's own two views of the ship there)
+      if (site && site.fl) { site.aim(camera, dt); camFresh = true; return; }
       if (drill && drillOn) { drill.aim(camera, dt); return; }
       // (near the station: the flying's own two views)
       if (fl && fl.on) { fl.aim(camera, dt); camFresh = true; return; }
@@ -868,9 +936,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (T.afoot && !T.done) drawAboard(T.dt || 1 / 60);
       else if (T.afield) fromField();
       if (!ff) T.afield = false;
+      // (a rescue's planet: laid out round the eye, wherever it is drawn from; seen as far as its sky)
+      if (site && !T.done) site.late(T.dt || 1 / 60);
       if (fl && fl.on) fl.late(); else if (T.space && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; }
       // (the wormhole, round the eye: ahead is the way the nose of the ship points, whichever ship is being drawn)
-      if (wh && wh.on) wh.place(W.camera, ff ? ff.matrix : fl && fl.on ? fl.matrix : S.M);
+      if (wh && wh.on) wh.place(W.camera, ff ? ff.matrix : site && site.fl ? site.matrix : fl && fl.on ? fl.matrix : S.M);
       // (the crew aboard, drawn where the ship is just now)
       if (crewA && !T.done) crewA.late(shipNow(), W.scene);
     },
@@ -883,7 +953,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     rig: {},
     state: () => ({ dash: { fuel: +dash.fuel.toFixed(4), dist: +dash.dist.toFixed(2), secs: +dash.secs.toFixed(2), speed: +dash.speed.toFixed(2), cans: T.filled }, step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
       afoot: T.afoot, afield: !!T.afield, out: !!T.out, up: !upEl.hidden, seat: seatEl.hidden ? null : seatEl.dataset.as === 'tune' ? 'up' : seatEl.dataset.as, tune: tn ? tn.state() : null, strip: $('.pmt-chip').textContent, says: sayEl.classList.contains('is-on') ? $('.pmt-say p').textContent : null,
-      fly: fl ? fl.state() : null, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
+      fly: fl ? fl.state() : null, site: site ? site.state() : null, rescued: T.rescued || 0, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, crew: drill && drill.crew ? drill.crew.state() : null, aboard: aboard.map((a) => ({ id: a.id, name: a.name, jobs: [...a.jobs] })), log: T.log.slice(-12) }),
   };
   return api;
