@@ -309,7 +309,7 @@ Object.assign(DRAW, {
 //          numbered (a level with no minus numbers yet)
 //   marks  [{ x, y, kind }] put on it as it is tapped (src/jobs/panel.js): 'aim' the crossing under the finger (its two
 //          lines lit, no numbers: finding the numbers is the question), 'miss' a tap that was wrong, 'field' the right one
-const mapFrame = ({ hi = 7, quad = 4, size = 150, numbers = true }) => { const lo = quad === 1 ? 0 : -hi, pad = numbers ? 16 : 6; return { lo, hi, pad, S: size, u: (size - 2 * pad) / (hi - lo) }; };
+export const mapFrame = ({ hi = 7, quad = 4, size = 150, numbers = true }) => { const lo = quad === 1 ? 0 : -hi, pad = numbers ? 16 : 6; return { lo, hi, pad, S: size, u: (size - 2 * pad) / (hi - lo) }; };
 // a place on the map's picture (fx, fy: 0 to 1 across and down its square) in the map's own units: [x, y], not rounded
 export function mapSpot(map, fx, fy) { const M = mapFrame(map); return [M.lo + (fx * M.S - M.pad) / M.u, M.lo + (M.S - M.pad - fy * M.S) / M.u]; }
 export function navMap(o) { return o.dark == null ? drawMap(o) : themed(o.dark, () => drawMap(o)); }

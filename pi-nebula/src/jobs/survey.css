@@ -1,0 +1,12 @@
+/* THE SURVEYOR'S CARDS (src/jobs/survey.js, src/jobs/surveyview.js): only what the job panel (src/jobs/jobs.css) does
+   not have already. The card's top in the survey table's blue; a chart a little taller than other cards' pictures, as
+   the pilot's map is (a chart is the question itself). */
+.pnj-icon.is-survey { color: #7fd0ff; clip-path: polygon(0 0, 14% 0, 14% 86%, 26% 86%, 26% 50%, 44% 50%, 44% 86%, 56% 86%, 56% 20%, 74% 20%, 74% 86%, 100% 86%, 100% 100%, 0 100%); }
+.pnj-cardtop.is-survey b { color: #bfe6ff; }
+.pnj[data-job="survey"] .pnj-pic.is-lead:not(.is-tap) svg { max-height: 180px; }
+@media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+  .pnj[data-job="survey"] .pnj-pic.is-lead:not(.is-tap) svg { max-height: 180px; }
+}
+@media (max-height: 780px) and (min-width: 641px) { .pnj[data-job="survey"] .pnj-pic.is-lead:not(.is-tap) svg { max-height: 165px; } }
+/* a card whose picture is the map (a point read off it, how far across it): as big as the map one taps */
+.pnj[data-job="survey"][data-key^="map:"] .pnj-pic.is-lead:not(.is-tap) svg { max-height: none; width: min(100%, 290px, 26vh); margin: 0 auto; }

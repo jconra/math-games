@@ -159,7 +159,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     const pic = o.picFirst ? helpPicture(o, { dark }) : null;
     // (a job's own question may bring its picture with it, drawn: o.lead, the dock's panel with its gap; a card
     // answered by a tap has its map)
-    const lead = o.tap ? navMap({ ...o.tap.map, dark }) : o.lead || (pic && pic.svg) || '';
+    const lead = o.tap ? tapMap(o, []) : o.lead || (pic && pic.svg) || '';
     el.dataset.key = o.key || '';   // (which maker made the card: a job's props may draw for it, the crane game's grid)
     // (a chart beside the story: what each metal sells for, at the smelter's controls)
     card.innerHTML = `${sceneHtml(o)}
@@ -189,11 +189,14 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     if (o.tap) mountTap(o);
     waitReady();
   }
+  // the map of a card answered by a tap: the pilot's (the planet in the middle), or one the card draws itself in the same
+  // frame (o.tap.draw(marks): the surveyor's map of the land below, src/jobs/surveyview.js)
+  const tapMap = (o, marks) => (o.tap.draw ? o.tap.draw(marks) : navMap({ ...o.tap.map, dark, marks }));
   // the map of a card answered by a tap: the crossing under the finger lit, the tap judged by the card's own rule
   function mountTap(o) {
     const box = card.querySelector('.pnj-pic.is-tap'); if (!box) return;
     const marks = []; let aim = null, down = false;
-    const paint = () => { box.innerHTML = navMap({ ...o.tap.map, dark, marks: [...marks, ...(aim ? [{ x: aim[0], y: aim[1], kind: 'aim' }] : [])] }); };
+    const paint = () => { box.innerHTML = tapMap(o, [...marks, ...(aim ? [{ x: aim[0], y: aim[1], kind: 'aim' }] : [])]); };
     const spot = (e) => {
       const svg = box.querySelector('svg'), m = svg && svg.getScreenCTM(); if (!m) return null;
       const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse()), S = o.tap.map.size;
