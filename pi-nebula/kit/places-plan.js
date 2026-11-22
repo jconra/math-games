@@ -127,6 +127,36 @@ export const CARGO = {
 };
 // (a pallet of the forklift's, as it stands at a place: [x0, x1, z0, z1], its skids along z)
 export const palletBox = ([x, z]) => [x - PALLET.wide / 2, x + PALLET.wide / 2, z - PALLET.long / 2, z + PALLET.long / 2];
+// THE SUPPLY RUN (2026-11-22, the game's maker, STA2-5: "What makes the most sense to me is you go to the computer, do
+// the questions to calculate out how much of the supplies you need to pack. Maybe 5 questions. Then you go get in the
+// forklift and load some pallets onto the containers. If someone is really bad at driving, Id say they can get off the
+// forklift and the ship will automatically be loaded once they leave. So then they can go up the elevator and board the
+// hauler and everything will be ready for takeoff."). The supplies are the pallets waiting on the loading floor; they
+// are loaded into the containers in the cargo slots, whose doors open for it (kit/containerdoors.js), and those
+// containers go out to the Hauler (src/supplyrun.js).
+//   slots   the containers loaded, by slot (SLOT.z): 03 and 02, the nearest the pallets waiting; 01 stays shut
+//   floor   a container's floor inside, over Cargo's (m); inner: half its width inside; door: half its doorway's width
+//           between the door frame's posts; frame: how deep the frame round the doorway is (m)
+//   places  two to a container, side by side just inside its doors: a pallet's middle [x, z], its near edge `in` (m)
+//           inside the door frame's face (the forklift's carriage, 2 cm behind it, then just at the frame), `off` (m) either side of the container's middle line, its skids along x (the forklift
+//           faces west to set one there); `each`: so many to a container
+//   hinge   a door leaf's hinge: opened, a leaf swings round `swing` (radians: 270 degrees) on it and lies back along the
+//           container's side, as a container's doors are latched back to load it. It stands `out` (m) in front of the
+//           door frame and `beyond` (m) past the container's corner, so a leaf folded back clears the side, its bars too;
+//           a swing takes `secs`, the second container's doors start `after` (s) the first's (so the two leaves
+//           between the containers never meet), and a leaf left half open is lit between its closed and open light
+export const LOAD = { slots: [2, 1], floor: 0.05, inner: 1.17, door: 1.145, frame: 0.1, in: 0.015, off: 0.55, each: 2,
+  hinge: { out: 0.1, beyond: 0.1, swing: Math.PI * 1.5, secs: 2.6, after: 1.3 } };
+// the places, in the order a run fills them: container 03's two, then 02's (ids b0 .. b3)
+LOAD.places = LOAD.slots.flatMap((k) => [-1, 1].map((s) => [SLOT.end + 0.02 - LOAD.in - PALLET.long / 2, SLOT.z[k] + s * LOAD.off]));
+// a door leaf's hinge (kit/containerdoors.js, kit/store.js containerDoor): { x, z, s (-1 the north leaf, 1 the south) };
+// its turn about straight up `k` of the way open (0 shut, 1 latched back: north leaves round one way, south the other,
+// eased in and out)
+export function doorHinge(slot, side) {
+  const s = side === 'south' ? 1 : -1, x1 = SLOT.end + 0.02, hz = SLOT.box[0] / 2 + 0.045;
+  return { x: x1 + LOAD.hinge.out, z: SLOT.z[slot] + s * (hz + LOAD.hinge.beyond), s };
+}
+export const doorTurn = (s, k) => { const t = Math.max(0, Math.min(1, k)); return -s * LOAD.hinge.swing * t * t * (3 - 2 * t); };
 // THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
 // in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js
 // draws it), parked in its painted place. In his file it is one unit long, its forks along +x, its foot on y = 0:

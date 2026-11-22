@@ -67,6 +67,7 @@
 // The plates are the lab's shape C (labs/hull/sample-plan.js): a big raised plate with a sunk bevelled panel on a flat
 // stretch of 10 m or more, plain plates elsewhere. Laid with the station's own look (kit/hull-look.js STATION_LOOK).
 import { offsetPath, SEAM, INSIDE } from './hull-plates.js';
+import { LOAD } from './places-plan.js';
 
 export const plates = (group, shapes) => ({ group, kind: 'plates', ...shapes }), ROW = { group: 'trim', kind: 'windows' };
 // shape C: a big raised plate with a sunk panel wherever the stretch is big enough (the builder decides)
@@ -514,9 +515,12 @@ export function outsideGear(opts = {}) {
   // the cargo slots: three containers plugged end-on into their sockets, a rail each side of every slot
   const S = SLOTS, y0 = SLOT_DECK + 0.32;
   S.full.forEach((k) => {
-    const z = S.z[k], col = lin(BOX_COLOURS[k]), rib = col.map((v) => v * 0.6), x1 = S.x - 0.45 + DOCK.in, xm = x1 - BOX.len / 2;
-    G.box([xm, y0 + BOX.h / 2, z], [BOX.len / 2, BOX.h / 2, BOX.w / 2], col);
-    for (let i = 0; i < 9; i++) G.box([x1 - 0.7 - i * 1.35, y0 + BOX.h / 2, z], [0.07, BOX.h / 2 - 0.12, BOX.w / 2 + 0.04], rib);
+    const z = S.z[k], col = lin(BOX_COLOURS[k]), rib = col.map((v) => v * 0.6), x1 = S.x - 0.45 + DOCK.in;
+    // (a container the supply run loads, kit/places-plan.js LOAD: its doors open into Cargo and its inside is Cargo's own,
+    // kit/store.js openEnd, so out here it stops at the station's face, where nobody outside sees its end)
+    const x0 = x1 - BOX.len, xe = LOAD.slots.includes(k) ? S.x : x1;
+    G.box([(x0 + xe) / 2, y0 + BOX.h / 2, z], [(xe - x0) / 2, BOX.h / 2, BOX.w / 2], col);
+    for (let i = 0; i < 9; i++) { const xr = x1 - 0.7 - i * 1.35; if (xr + 0.07 <= xe) G.box([xr, y0 + BOX.h / 2, z], [0.07, BOX.h / 2 - 0.12, BOX.w / 2 + 0.04], rib); }
   });
   for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25, xa = S.x - DOCK.out - 0.3, xb = PORT + 0.5; G.box([(xa + xb) / 2, y0 + 0.12, z], [(xa - xb) / 2, 0.12, 0.12], yellow); }
   if (!opts.inside) for (const hg of HANGARS) standInHangar(G, 19.4, 58.9, hg.z - 13.8, hg.z + 13.8);

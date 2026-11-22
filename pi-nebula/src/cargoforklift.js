@@ -31,11 +31,22 @@
 // ARRIVING: a pallet set on the shelf comes back to the loading floor now and then, so the loading floor never runs
 // out: moved where nobody sees it (both places out of the camera's view, nobody near the place it comes to), while the
 // forklift is parked; one from the first shelf first, so the first shelf has room for the next round.
+// THE PLAYER DRIVES IT (2026-11-22, the game's maker, STA2-5: "Then you go get in the forklift and load some pallets onto
+// the containers. If someone is really bad at driving, Id say they can get off the forklift and the ship will
+// automatically be loaded once they leave"): parked, with nobody on it, the player can take it (src/cargodrive.js: the
+// prompt, the keys, the camera). forklift.hand: can(), take(), step(cmd, dt, feet) (kit/forkliftdrive.js: it never goes
+// through anything; pallets on and off its forks at the places a pallet can stand in, the loading floor's and, while
+// their doors are open, just inside the containers'), give() (got off: it stands where it was left, and goes back to its
+// bay where nobody sees, a pallet left on its forks set down first), seat() (where the player sits), board() (where they
+// stand to get on and off). While the supply run waits for the player (hold()), Cargo's people leave it parked.
 import * as THREE from 'three';
 import { loadForklift, standForklift } from '../kit/forklift.js';
-import { STORE, forkliftBox, CARGO, PALLET } from '../kit/places-plan.js';
-import { TRUCK, FORKS, DRIVE, PARKED, PLACES, placeById, round, outline, pointGap, palletFoot, ON_FORKS } from '../kit/forkliftround.js';
+import { STORE, forkliftBox, CARGO, PALLET, palletBox } from '../kit/places-plan.js';
+import { TRUCK, FORKS, DRIVE, PARKED, PLACES, placeById, round, outline, pointGap, gapTo, palletFoot, ON_FORKS } from '../kit/forkliftround.js';
 import { makePallets, warmLoad } from '../kit/cargopallets.js';
+import { makeDoors } from '../kit/containerdoors.js';
+import { makeDrive, worldOf, BOX_PLACES, boxPlace, HAND } from '../kit/forkliftdrive.js';
+import { SLOT, LOAD } from '../kit/places-plan.js';
 
 const KEY = 'cargo:forklift';
 // its shine: the room's own picture of itself, this much (the kit's painted parts have 1.25: kit/materials.js, as the
@@ -49,9 +60,10 @@ const CARE = { near: 0.5, ahead: 1.1, clear: 0.8 };
 // on its seat as on a chair, lifted by the difference
 // NOW AND THEN: after a round, this long before another (s); how often a pallet may arrive (s), and nobody nearer the
 // place it comes to than `clear` (m)
-const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6 };
+export const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6 };
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-export function makeCargoForklift({ W, walls }) {
+export function makeCargoForklift({ W, walls, hold = () => false, open = () => [] }) {
   const zone = W.room('store');
   const [x0, x1, z0, z1] = forkliftBox();
   const box = new THREE.Box3(new THREE.Vector3(x0, STORE.floor, z0), new THREE.Vector3(x1, STORE.floor + 2.3, z1));
@@ -76,7 +88,7 @@ export function makeCargoForklift({ W, walls }) {
     S.wallsKB = L.V ? Math.round(L.V.bytes / 1024) : 0;
     // (a pallet on its forks stands in the walls with it, only while it carries one)
     const lb = new THREE.BoxGeometry(PALLET.long, PALLET.top, PALLET.wide).translate(ON_FORKS.x, palletFoot(FORKS.carry) + PALLET.top / 2, 0).applyMatrix4(poseMatrix(PARKED, new THREE.Matrix4()));
-    walls.add(KEY + ':load', { solid: [lb], when: () => !!(job && job.carrying) });
+    walls.add(KEY + ':load', { solid: [lb], when: () => carrying() });
   }
   // ITS FIRST DRAWING, where nobody sees it: the first frame Cargo is drawn after it stands (on the ride down, the
   // doors shut, the view still), it is drawn whether in front of the camera or not, so its program is made and its
@@ -89,7 +101,7 @@ export function makeCargoForklift({ W, walls }) {
   }
 
   // ── ITS PALLETS: made the first time the player steps into a lift, a load's piece at a time ─────────────────────
-  let pallets = null, building = null;
+  let pallets = null, building = null, doors = null;
   const here = new Map();          // place id -> pallet index
   const since = new Map();         // place id -> when a pallet was set there (for which one arrives back first)
   function buildPallets() {
@@ -100,14 +112,22 @@ export function makeCargoForklift({ W, walls }) {
     const room = (W.R.rooms || []).find((r) => r.id === 'store');
     pallets = makePallets({ zone, lights: W.built.lights || [], sky: room && room.sky });
     zone.group.add(pallets.group);
+    // (and the doors of the containers the supply run loads, kit/containerdoors.js: shut, as the other containers')
+    doors = makeDoors({ zone, lights: W.built.lights || [], sky: room && room.sky, walls });
+    zone.group.add(doors.group);
     CARGO.pallets.forEach((d, i) => { here.set(d.at, i); since.set(d.at, 0); });
     // (each place in the walls while a pallet stands in it)
     for (const q of PLACES) {
       const g = new THREE.BoxGeometry(PALLET.wide, PALLET.top, PALLET.long).translate(q.at[0], STORE.floor + q.y + PALLET.top / 2, q.at[1]);
       walls.add('cargo:pallet:' + q.id, { solid: [g], when: () => here.has(q.id) });
     }
+    // (and inside the containers, their skids east to west)
+    for (const q of BOX_PLACES) {
+      const g = new THREE.BoxGeometry(PALLET.long, PALLET.top, PALLET.wide).translate(q.at[0], STORE.floor + q.y + PALLET.top / 2, q.at[1]);
+      walls.add('cargo:pallet:' + q.id, { solid: [g], when: () => here.has(q.id) });
+    }
     building.t += performance.now() - t;
-    S.pallets = { ...pallets.facts, allMs: Math.round(building.t) }; building = 'done';
+    S.pallets = { ...pallets.facts, allMs: Math.round(building.t) }; S.doors = doors.facts; building = 'done';
   }
 
   // ── WHERE IT IS, AND ITS PARTS ───────────────────────────────────────────────────────────────────────────────────
@@ -123,7 +143,8 @@ export function makeCargoForklift({ W, walls }) {
     // (the pallet on its forks; in the rack's shade as far as it is in under the shelf, its light between the shelf
     // place's and the loading floor's. Taken up or set down, it stands on its place, the floor or the first shelf,
     // while the forks are under it lower than its deck)
-    if (job && job.carrying) {
+    if (hand && hand.D.s.carry != null) showCarried();
+    else if (job && job.carrying) {
       const f = [Math.cos(pose.h), -Math.sin(pose.h)], px = pose.x + f[0] * ON_FORKS.x, pz = pose.z + f[1] * ON_FORKS.x;
       const L = job.R.legs[job.li], Q = L && L.kind === 'forks' ? placeById(L.take || L.leave || '') : null;
       pallets.move(job.pallet, px, STORE.floor + palletFoot(parts.lift, Q ? Q.y : 0), pz, pose.h);   // (its skids along the forks)
@@ -133,6 +154,8 @@ export function makeCargoForklift({ W, walls }) {
     }
     if (driver) seatDriver(driver);
   }
+
+  const carrying = () => !!((job && job.carrying) || (hand && hand.D.s.carry != null));
 
   // ── A ROUND ──────────────────────────────────────────────────────────────────────────────────────────────────
   // job: { from, to, pallet, R (the round), li (its leg), s (m along it), v (m/s), carrying, wait, clear, pause }
@@ -168,7 +191,6 @@ export function makeCargoForklift({ W, walls }) {
       if (!L.way || s >= ahead) return false;
     }
   }
-  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   function drive(dt, feet) {
     const R = job.R, L = R.legs[job.li];
     if (!L) { home(); return; }
@@ -263,7 +285,7 @@ export function makeCargoForklift({ W, walls }) {
   let clock = 0;
   const ride = {
     claim(P) {
-      if (!made || !pallets || state !== 'parked' || rest > 0 || driver || P.home !== 'store') return null;
+      if (!made || !pallets || state !== 'parked' || rest > 0 || driver || P.home !== 'store' || hold()) return null;
       const J = pickJob(); if (!J) return null;
       job = J; driver = P; state = 'called'; S.claims++;
       spot = { name: 'forklift', pos: boardSpot(), heading: PARKED.h, who: null };
@@ -306,16 +328,169 @@ export function makeCargoForklift({ W, walls }) {
     },
     // (where it is just now, for everyone walking by: its outline (kit/forkliftround.js), or null while it is not in;
     // the driver is driver())
-    outline: () => (made ? outline(pose, !!(job && job.carrying)) : null),
+    outline: () => (made ? outline(pose, carrying()) : null),
     driver: () => driver,
   };
+
+  // ── THE PLAYER'S HAND ON IT (src/cargodrive.js) ───────────────────────────────────────────────────────────────────
+  // hand: { D (kit/forkliftdrive.js: where it is, its speed, its wheel, its forks, the pallet on them), from, fromH (the
+  // place the pallet on its forks was taken from, and its turn there: its light), shade, left (got off: it stands where it
+  // was left), last (what happened on the last step) }
+  let hand = null;
+  const placeAt = (id) => placeById(id) || boxPlace(id);
+  const fwdOf = (h) => [Math.cos(h), -Math.sin(h)], rightOf = (h) => [Math.sin(h), Math.cos(h)];
+  // every pallet standing where its forks can reach: on the loading floor, inside a container (not on the racks)
+  function standingNow() {
+    const out = [];
+    for (const [id, i] of here) {
+      const q = placeAt(id); if (!q || q.shelf) continue;
+      out.push({ i, at: q.at, y: q.y, h: pallets.list[i].turn ?? q.h, place: id, box: !!q.box });
+    }
+    return out;
+  }
+  const worldNow = (feet = []) => worldOf({ open: open(), pallets: standingNow(), people: feet.filter((q) => q && Math.abs(q.y - STORE.floor) < 1.2).map((q) => [q.x, q.z]) });
+  // the pallet on its forks, and its light: where it was taken from; going in through a container's doorway, the
+  // container's, by how far in it is
+  function showCarried() {
+    const i = hand.D.s.carry, f = fwdOf(pose.h), px = pose.x + f[0] * ON_FORKS.x, pz = pose.z + f[1] * ON_FORKS.x;
+    pallets.move(i, px, STORE.floor + palletFoot(parts.lift), pz, pose.h);
+    const b = BOX_PLACES.find((q) => open().includes(q.slot) && Math.abs(pz - q.at[1]) < 0.6 && px < SLOT.end + PALLET.long);
+    const d = b ? Math.max(0, Math.min(1, (SLOT.end + PALLET.long / 2 - px) / PALLET.long)) : 0, to = b ? b.id : hand.from;
+    if (hand.shade == null || hand.shadeTo !== to || Math.abs(d - hand.shade) > 0.02) { hand.shade = d; hand.shadeTo = to; pallets.blend(i, hand.from, to, d, hand.fromH, b ? b.h : hand.fromH); }
+  }
+  // where a person sits on it, and where they stand beside its seat (side: -1 its left, 1 its right), as it stands now
+  function seatAt() {
+    const f = fwdOf(pose.h);
+    return { x: pose.x + f[0] * TRUCK.seat.x, y: STORE.floor + TRUCK.seat.y - RIDE.chair, z: pose.z + f[1] * TRUCK.seat.x, heading: pose.h + Math.PI / 2 };
+  }
+  function besideAt(side = -1) {
+    const f = fwdOf(pose.h), r = rightOf(pose.h), o = side * (TRUCK.half + RIDE.out);
+    const x = pose.x + f[0] * TRUCK.seat.x + r[0] * o, z = pose.z + f[1] * TRUCK.seat.x + r[1] * o;
+    const p = walls.snap(x, STORE.floor + 0.35, z, 0.3);
+    if (!p || Math.abs(p.y - STORE.floor) > 0.2 || Math.hypot(p.x - x, p.z - z) > 0.3) return null;
+    // (never inside it, its forks or the pallet on them)
+    if (outline(pose, carrying()).some((o) => pointGap(o, p.x, p.z) < 0.3)) return null;
+    return { pos: p, heading: pose.h + Math.PI / 2 };
+  }
+  // BACK IN ITS BAY, where nobody sees: left standing somewhere by the player; a pallet left on its forks set down
+  // first, where nobody sees either (in a container while the run wants it loaded: wants(), else on the loading floor)
+  const _lb = new THREE.Box3();
+  function leftBack(feet, wants) {
+    if (!hand || !hand.left || !made) return;
+    const O = outline(pose, carrying());
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const o of O) for (const a of [-1, 1]) for (const b of [-1, 1]) { const x = o.c[0] + o.f[0] * o.hx * a + o.r[0] * o.hz * b, z = o.c[1] + o.f[1] * o.hx * a + o.r[1] * o.hz * b; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    _lb.set(new THREE.Vector3(x0, STORE.floor, z0), new THREE.Vector3(x1, STORE.floor + 2.6, z1));
+    if (seenBox(_lb) || seenBox(box) || inTheWay(feet)) return;
+    const s = hand.D.s;
+    if (s.carry != null) {
+      const free = (q) => !here.has(q.id) && !seenBox(placeBox(q));
+      const to = (wants() ? BOX_PLACES.filter((q) => open().includes(q.slot) && free(q)) : [])[0] || PLACES.filter((q) => !q.shelf && free(q))[0] || PLACES.filter((q) => q.shelf && free(q))[0];
+      if (!to) return;
+      here.set(to.id, s.carry); since.set(to.id, clock); pallets.at(s.carry, to.id); S.leftPallets = (S.leftPallets || 0) + 1;
+    }
+    hand = null; Object.assign(pose, PARKED); parts.lift = FORKS.rest; parts.steer = 0; show();
+    state = 'parked'; rest = Math.max(rest, RIDE.rest * 0.5); S.leftBack = (S.leftBack || 0) + 1;
+  }
+  const handApi = {
+    // (the player may take it: in Cargo, parked, nobody on it)
+    can: () => !!(made && pallets && state === 'parked' && !driver),
+    get on() { return !!(hand && !hand.left); },
+    take() {
+      if (!handApi.can()) return false;
+      state = 'hand'; S.hands = (S.hands || 0) + 1;
+      hand = { D: makeDrive({ x: pose.x, z: pose.z, h: pose.h, lift: parts.lift }), from: null, fromH: null, shade: null, left: false, last: null };
+      return true;
+    },
+    // a frame of the player's driving: cmd { go, turn, forks }; feet: everyone else on Cargo's floor -> what happened
+    step(cmd, dt, feet = []) {
+      if (!hand || hand.left) return null;
+      const s = hand.D.s, x0 = s.x, z0 = s.z;
+      const ev = hand.D.step(cmd, dt, worldNow(feet));
+      if (ev.took) { here.delete(ev.took.place); hand.from = ev.took.place; hand.fromH = ev.took.h; hand.shade = null; S.took = (S.took || 0) + 1; }
+      if (ev.set) { here.set(ev.set, ev.placed.i); since.set(ev.set, clock); pallets.at(ev.placed.i, ev.set, ev.placed.h); hand.from = null; S.put = (S.put || 0) + 1; }
+      // its wheels rolling with the ground covered (the back ones further round a turn), the back ones steered
+      const f = fwdOf(s.h), ds = (s.x - x0) * f[0] + (s.z - z0) * f[1];
+      pose.x = s.x; pose.z = s.z; pose.h = s.h; parts.lift = s.lift;
+      parts.front -= ds / TRUCK.front.r;
+      parts.back -= ds * Math.sqrt(1 + (TRUCK.base * s.curv) ** 2) / TRUCK.back.r;
+      parts.steer = -Math.atan(TRUCK.base * s.curv);
+      show();
+      hand.last = ev;
+      return ev;
+    },
+    // got off: it stands where it was left (in its bay with nothing on its forks: parked exactly as it parks)
+    give() {
+      if (!hand || hand.left) return;
+      const s = hand.D.s, inBay = Math.abs(s.x - PARKED.x) < 0.25 && Math.abs(s.z - PARKED.z) < 0.25 && Math.abs(wrap(s.h - PARKED.h)) < 0.12;
+      if (inBay && s.carry == null && s.under == null) { hand = null; Object.assign(pose, PARKED); parts.lift = FORKS.rest; parts.steer = 0; show(); state = 'parked'; return; }
+      hand.left = true; s.v = 0; state = 'left';
+    },
+    seat: seatAt, beside: besideAt,
+    drive: () => (hand ? hand.D : null),
+    world: worldNow,
+    // (the places a pallet stands in just now, on the loading floor and in the containers: for the run, src/supplyrun.js)
+    places: () => Object.fromEntries([...here].filter(([id]) => !placeAt(id).shelf)),
+    // what is on it and in front of it, for the hints: { carry, under, lift, v, front (a pallet lined up), place (a
+    // place lined up to set one down in), blocked, why }
+    read() {
+      if (!hand) return null;
+      const s = hand.D.s, W2 = worldNow([]), F = hand.D.inFront(W2), P = hand.D.placeNear(W2);
+      return { carry: s.carry, under: s.under, lift: s.lift, v: s.v, front: F ? { i: F.q.i, along: F.L.along, place: F.q.place } : null,
+        place: P ? { id: P.q.id, d: P.d, side: P.side, ahead: P.ahead, box: !!P.q.box } : null, blocked: hand.last && hand.last.blocked, why: hand.last && hand.last.why };
+    },
+  };
+
+  // ── THE SUPPLY RUN'S PALLETS (src/supplyrun.js): loaded by the player's hand, or by themselves where nobody sees ──
+  // (the box of a place, for "is it seen": a container's place is its pallet inside the doorway)
+  const stock = {
+    // how many stand in the containers' places
+    count: () => BOX_PLACES.filter((q) => here.has(q.id)).length,
+    // ONE MORE LOADED BY ITSELF (the game's maker: "the ship will automatically be loaded once they leave"): a pallet
+    // waiting on the loading floor into a free place inside an open container, both where nobody sees and nobody near
+    // (force: Cargo is not drawn at all, the player has left it); not while it is on the forklift's forks or under them
+    loadOne(feet = [], force = false) {
+      if (!pallets) return false;
+      const busy = new Set([hand && hand.D.s.carry, hand && hand.D.s.under, job && job.pallet].filter((x) => x != null));
+      const to = BOX_PLACES.filter((q) => open().includes(q.slot) && !here.has(q.id) && (force || (!seenBox(placeBox(q)) && !nearFeet(q, feet))))[0];
+      if (!to) return false;
+      const from = PLACES.filter((q) => !q.shelf && here.has(q.id) && !busy.has(here.get(q.id)) && (force || (!seenBox(placeBox(q)) && !nearFeet(q, feet))))[0]
+        || (force ? PLACES.filter((q) => q.shelf && here.has(q.id) && !busy.has(here.get(q.id)))[0] : null);
+      if (!from) return false;
+      const i = here.get(from.id); here.delete(from.id); here.set(to.id, i); since.set(to.id, clock); pallets.at(i, to.id); S.loadedBy = (S.loadedBy || 0) + 1;
+      return true;
+    },
+    // THE CONTAINERS GONE OUT TO THE HAULER: what was loaded in them is no longer there; Cargo's pallets back where
+    // its rounds keep them (the shelf first, then the loading floor), where nobody sees (force: Cargo is not drawn)
+    ship(force = false) {
+      if (!pallets) return 0;
+      let n = 0;
+      for (const q of BOX_PLACES) {
+        if (!here.has(q.id) || (!force && seenBox(placeBox(q)))) continue;
+        const to = PLACES.filter((x) => x.shelf && !here.has(x.id) && (force || !seenBox(placeBox(x))))[0] || PLACES.filter((x) => !x.shelf && !here.has(x.id) && (force || !seenBox(placeBox(x))))[0];
+        if (!to) continue;
+        const i = here.get(q.id); here.delete(q.id); here.set(to.id, i); since.set(to.id, 0); pallets.at(i, to.id); n++;
+      }
+      S.shipped = (S.shipped || 0) + n;
+      return n;
+    },
+    // (a run kept from before the page was loaded again: so many already standing in the containers)
+    putLoaded(n) { let k = 0; while (stock.count() < n && stock.loadOne([], true)) k++; return k; },
+    // is the forklift (and anything on its forks) clear of a container's doorway: its doors may shut
+    clearOf(slot) {
+      if (!made) return true;
+      const z = SLOT.z[slot], x1 = SLOT.end + 0.02, door = { c: [x1 + 0.9, z], f: [1, 0], r: [0, 1], hx: 1.2, hz: SLOT.box[0] / 2 + 0.1 };
+      return outline(pose, carrying()).every((o) => gapTo(o, [door.c[0] - door.hx, door.c[0] + door.hx, z - door.hz, z + door.hz]) > 0.05);
+    },
+  };
+  const nearFeet = (q, feet) => feet.some((p) => p && Math.abs(p.y - STORE.floor) < 1.2 && Math.max(Math.abs(p.x - q.at[0]) - 0.6, Math.abs(p.z - q.at[1]) - 0.6) < RIDE.clear);
 
   // ── A PALLET ARRIVING on the loading floor: one set on the shelf longest ago (the first shelf's first), where nobody
   // sees it go or come ──
   let arriveClock = RIDE.arrive;
   const _b = new THREE.Box3(), placeBox = (q) => _b.set(new THREE.Vector3(q.at[0] - 0.7, STORE.floor + q.y, q.at[1] - 0.8), new THREE.Vector3(q.at[0] + 0.7, STORE.floor + q.y + 1.3, q.at[1] + 0.8));
   function arrive(feet) {
-    if (state !== 'parked' || !pallets) return;
+    if (!(state === 'parked' || state === 'hand' || state === 'left') || !pallets) return;
     const empty = PLACES.filter((q) => !q.shelf && !here.has(q.id));
     const onShelf = PLACES.filter((q) => q.shelf && here.has(q.id)).sort((a, b) => (b.up - a.up) || since.get(a.id) - since.get(b.id));
     if (!empty.length || !onShelf.length) return;
@@ -324,17 +499,20 @@ export function makeCargoForklift({ W, walls }) {
     for (const q of empty) {
       if (seenBox(placeBox(q))) continue;
       if (feet.some((p) => p && Math.abs(p.y - STORE.floor) < 1.2 && Math.max(Math.abs(p.x - q.at[0]) - PALLET.wide / 2, Math.abs(p.z - q.at[1]) - PALLET.long / 2) < RIDE.clear)) continue;
+      // (never where the forklift stands just now, its forks or a pallet on them)
+      if (state !== 'parked' && outline(pose, carrying()).some((o) => gapTo(o, palletBox(q.at)) < 0.3)) continue;
       const i = here.get(from.id); here.delete(from.id); here.set(q.id, i); pallets.at(i, q.id); S.arrivals++;
       return;
     }
   }
 
   return {
-    ride,
-    update(soon, { camera = null, feet = () => [], dt = 1 / 60 } = {}) {
+    ride, hand: handApi, stock, get doors() { return doors; },
+    update(soon, { camera = null, feet = () => [], dt = 1 / 60, wants = () => false } = {}) {
       if (!zone) return;
       clock += dt; cam = camera; if (camera) frustum(camera);
       if (soon || pallets || building) buildPallets();
+      if (doors) doors.update(dt);
       if (made) {
         if (warm < 2) warmUp();
         if (rest > 0 && state === 'parked') rest -= dt;
@@ -345,6 +523,7 @@ export function makeCargoForklift({ W, walls }) {
           S.ms.drive = S.ms.drive || { n: 0, sum: 0, most: 0 }; S.ms.drive.n++; S.ms.drive.sum += u; S.ms.drive.most = Math.max(S.ms.drive.most, u);
         }
         else if (state === 'home' && !driver) state = 'parked';
+        else if (state === 'left') leftBack(all, wants);
         if ((arriveClock -= dt) <= 0) { arriveClock = RIDE.arrive; arrive(all); }
         return;
       }

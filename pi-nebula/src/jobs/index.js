@@ -35,8 +35,9 @@ import { JOB as arena } from './arena.js';
 import { openMathball, mathballIdle } from '../mathball/index.js';
 import { JOB as dock } from './dock.js';
 import { dockLink } from './docklink.js';
+import { JOB as cargo } from './cargo.js';
 
-export const JOBS = [galley, medical, smelter, crane, arena, dock];
+export const JOBS = [galley, medical, smelter, crane, arena, dock, cargo];
 export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -81,7 +82,9 @@ function sideMarks(s) {
 
 // hints: { [job id]: fn -> words or null }: a job's prompt line for now, in place of its own (the smelter's, while a
 // share of a run waits there: src/mission.js)
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null } = {}) {
+// links: { [job.link]: ({ W, walls, job, crew, save }) -> the panel's live, joined to the job's own props } (the
+// shipping computer's supply run in Cargo: src/jobs/cargolink.js)
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {} } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -143,7 +146,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     } else {
       // (a job joined to its props: the dock's bridge outside the port, src/jobs/docklink.js; the crane's: openCrane)
       // (the dock's bridge is kept with the crew member between visits: its link saves them as each ring is built)
-      link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos, crew: c, save: () => save(c) }) : null;
+      link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos, crew: c, save: () => save(c) })
+        : s.job.link && links[s.job.link] ? links[s.job.link]({ W, walls, job: s.job, crew: c, save: () => save(c) }) : null;
       panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
     api.panel = panel;
@@ -215,7 +219,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     if (panel && at && at.job.game) { panel.update(dt, P); return true; }
     if (panel) {
       if (panel.update) panel.update(dt);
-      if (link) link.update(dt);
+      if (link && link.update) link.update(dt);
       // standing at the job, facing it
       const k = 1 - Math.exp(-8 * dt), dh = Math.atan2(Math.sin(at.heading - P.heading), Math.cos(at.heading - P.heading));
       P.pos.lerp(at.pos, k); P.heading += dh * k;
@@ -264,7 +268,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     if (!at) return;
     // (free control and the crane operator job: the view that follows the load)
     if (panel && panel.aim) return panel.aim(camera, dt);
-    if (link) return link.aim(camera, dt);
+    if (link && link.aim) return link.aim(camera, dt);
     const h = at.heading, fx = Math.sin(h), fz = Math.cos(h), rx = -fz, rz = fx;   // (forward, and the player's right)
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     const V = at.job.view ? W.view(at.job.view) : null;

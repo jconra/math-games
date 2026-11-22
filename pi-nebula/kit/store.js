@@ -26,7 +26,7 @@ import { SCREEN_RECT } from './tex.js';
 import { segText, textWidth } from './shipparts/cabin/segtext.js';
 import { subInto } from './lift.js';
 import { flatOver } from './tower.js';
-import { STORE, SLOT, RACKS, FLOOR, STOPS, LIFT } from './places-plan.js';
+import { STORE, SLOT, RACKS, FLOOR, STOPS, LIFT, LOAD } from './places-plan.js';
 
 const PI = Math.PI, H = STORE.h, TOPW = 3.25, SIZES = { h: H, top: TOPW };
 const ROOF = H;
@@ -110,6 +110,8 @@ function slot(p, k) {
   // locking bars, a seal round it in the socket
   const [W, Ht] = SLOT.box, c = SLOT.colours[k], col = { c, r: 0.5, m: 0.25, w: 0.6 }, dk = { c: '#' + new THREE.Color(c).multiplyScalar(0.6).getHexString(), r: 0.5, m: 0.25, w: 0.6 };
   const x1 = SLOT.end + 0.02, y0 = 0.04, y1 = y0 + Ht + 0.04, hz = W / 2 + 0.045;
+  // (a container the supply run loads, LOAD: open, its doors drawn apart so they can swing, kit/containerdoors.js)
+  if (LOAD.slots.includes(k)) { openEnd(p, k, { x, z, x1, y0, y1, hz, col, dk }); return; }
   p.slab(col, x - 0.4, x1 - 0.06, y0, y1, z - hz, z + hz, { r: 0.02, cell: 1.5 });
   for (const xr of [x1 - 0.7, x1 - 2.05]) p.slab(dk, xr - 0.04, xr + 0.04, y0 + 0.1, y1 - 0.1, z - hz - 0.025, z + hz + 0.025, { r: 0.01, cell: 1.5 });   // its ribs
   p.slab('gun', x1 - 0.1, x1, y0, y1, z - hz, z + hz, { r: 0.02, cell: 1.5 });       // the end frame
@@ -119,6 +121,46 @@ function slot(p, k) {
   }
   segText(p, '0' + (k + 1), { h: 0.5, t: 0.07, at: [x1 + 0.025, 2.1, z], rot: [0, PI / 2, 0], look: 'white' });
   // the seal, filling the socket round it
+  p.slab('rubber', x, x + 0.18, y1, sh, z - hw, z + hw, { r: 0.02, cell: 1.5 });
+  for (const s of [-1, 1]) p.slab('rubber', x, x + 0.18, 0, sh, s > 0 ? z + hz : z - hw, s > 0 ? z + hw : z - hz, { r: 0.02, cell: 1.5 });
+}
+
+// ── A CONTAINER THE SUPPLY RUN LOADS (LOAD.slots: 03 and 02), open to the room: its sides, roof and floor round an
+// inside (painted grey inside, as many containers are, a dark plywood floor, ribs down its walls), the door frame round the doorway (two posts, a
+// header, a steel sill flush with its floor), and its back closed off where it goes into the station's side (the
+// rest of its length is outside, kit/outside-plan.js, which stops it there). Its doors are not here: they swing, and are
+// drawn apart (kit/containerdoors.js: closed they look as the others' do). Its numbers and bars are on its doors.
+export const CONTAINER_IN = { back: STORE.x0 - 0.35, skin: 0.05, rib: 1.0, floor: { c: '#4a3a2c', r: 0.85, m: 0, w: 0.4 }, inside: { c: '#8b9096', r: 0.6, m: 0.2, w: 0.5 }, ribs: { c: '#62676d', r: 0.6, m: 0.25, w: 0.5 } };
+function openEnd(p, k, { x, z, x1, y0, y1, hz, col, dk }) {
+  const sk = CONTAINER_IN.skin, xb = CONTAINER_IN.back, o = { r: 0.012, cell: 1.5 };
+  const inner = CONTAINER_IN.inside, ribs = CONTAINER_IN.ribs;
+  // its sides and roof: the outer skin in its colour, the inside grey
+  for (const s of [-1, 1]) {
+    p.slab(col, x - 0.4, x1 - 0.06, y0, y1, s > 0 ? z + hz - sk : z - hz, s > 0 ? z + hz : z - hz + sk, o);
+    p.slab(inner, xb, x1 - 0.1, LOAD.floor, y1 - sk, s > 0 ? z + hz - sk - 0.012 : z - hz + sk, s > 0 ? z + hz - sk : z - hz + sk + 0.012, { r: 0, cell: 1.5 });
+  }
+  p.slab(col, x - 0.4, x1 - 0.06, y1 - sk, y1, z - hz, z + hz, o);
+  p.slab(inner, xb, x1 - 0.1, y1 - sk - 0.012, y1 - sk, z - hz + sk, z + hz - sk, { r: 0, cell: 1.5 });
+  // its floor (the forks carry a pallet over its sill), and its back where it goes into the station's side
+  p.slab(CONTAINER_IN.floor, xb, x1 - 0.06, 0, LOAD.floor, z - hz + sk, z + hz - sk, { r: 0.004, cell: 1.5 });
+  p.slab(inner, xb - 0.05, xb, 0, y1, z - hz, z + hz, { r: 0, cell: 1.5 });
+  // ribs down its inside walls and across its roof, a darker grey
+  for (let xr = x1 - 0.55; xr > xb + 0.3; xr -= CONTAINER_IN.rib) {
+    for (const s of [-1, 1]) p.slab(ribs, xr - 0.04, xr + 0.04, LOAD.floor, y1 - sk, s > 0 ? z + hz - sk - 0.05 : z - hz + sk, s > 0 ? z + hz - sk : z - hz + sk + 0.05, { r: 0.008, cell: 1.5 });
+    p.slab(ribs, xr - 0.04, xr + 0.04, y1 - sk - 0.05, y1 - sk, z - hz + sk, z + hz - sk, { r: 0.008, cell: 1.5 });
+  }
+  // its outside ribs round the part in the room: up its sides and over its roof
+  for (const xr of [x1 - 0.7, x1 - 2.05]) {
+    for (const s of [-1, 1]) p.slab(dk, xr - 0.04, xr + 0.04, y0 + 0.1, y1 - 0.1, s > 0 ? z + hz : z - hz - 0.025, s > 0 ? z + hz + 0.025 : z - hz, { r: 0.01, cell: 1.5 });
+    p.slab(dk, xr - 0.04, xr + 0.04, y1, y1 + 0.02, z - hz + 0.1, z + hz - 0.1, { r: 0.01, cell: 1.5 });
+  }
+  // the door frame: its two corner posts, its header, its sill
+  const post = hz - LOAD.door;
+  for (const s of [-1, 1]) p.slab('gun', x1 - LOAD.frame, x1, y0, y1, s > 0 ? z + hz - post : z - hz, s > 0 ? z + hz : z - hz + post, { r: 0.02, cell: 1.5 });
+  p.slab('gun', x1 - LOAD.frame, x1, y1 - 0.16, y1, z - hz, z + hz, { r: 0.02, cell: 1.5 });
+  p.slab('gun', x1 - LOAD.frame, x1, 0, LOAD.floor + 0.002, z - LOAD.door, z + LOAD.door, { r: 0.004, cell: 1.5 });
+  // the seal, filling the socket round it
+  const hw = SLOT.w / 2, sh = SLOT.h;
   p.slab('rubber', x, x + 0.18, y1, sh, z - hw, z + hw, { r: 0.02, cell: 1.5 });
   for (const s of [-1, 1]) p.slab('rubber', x, x + 0.18, 0, sh, s > 0 ? z + hz : z - hw, s > 0 ? z + hw : z - hz, { r: 0.02, cell: 1.5 });
 }
@@ -310,6 +352,32 @@ export function shipDesk(p) {
   p.light([0.2, h + 0.5, 0.2], 0.35, [0.45, 0.75, 1], [0, 0, 1], 2.5);
 }
 
+// ── A DOOR LEAF of a container the supply run loads (LOAD.slots), drawn apart from the room so it can swing
+// (kit/containerdoors.js). 'north 03' / 'south 03' (and 02): the leaf on that side of container 03's doorway, in its
+// own frame: its hinge at the origin (LOAD.hinge: in front of the door frame and past the container's corner), the
+// leaf along +z from it (north) or -z (south), its outer face toward +x. Closed it is exactly the doors the other
+// containers have: the container's paint, its two locking bars and their handles, half its number.
+export function containerDoor(p, v) {
+  const [side, num] = String(v).split(' '), k = (+num || 3) - 1, s = side === 'south' ? 1 : -1;
+  const [W, Ht] = SLOT.box, c = SLOT.colours[k], col = { c, r: 0.5, m: 0.25, w: 0.6 };
+  const x1 = SLOT.end + 0.02, y0 = 0.04, y1 = y0 + Ht + 0.04, hz = W / 2 + 0.045, z = SLOT.z[k];
+  const H = LOAD.hinge, px = x1 + H.out, pz = z + s * (hz + H.beyond);
+  // (the room's numbers turned into the leaf's: x from its hinge, z from its hinge)
+  const X = (x) => x - px, Z = (zz) => zz - pz;
+  const za = z + s * 0.01, zb = z + s * (hz - (hz - LOAD.door));
+  p.slab(col, X(x1 - 0.06), X(x1 + 0.02), LOAD.floor + 0.016, y1 - 0.16, Math.min(Z(za), Z(zb)), Math.max(Z(za), Z(zb)), { r: 0.01, cell: 1.5 });
+  for (const t of [0.3, 0.75]) {
+    const zz = z + s * t;
+    p.cyl('rail', 0.022, y1 - y0 - 0.3, [X(x1 + 0.06), (y0 + y1) / 2, Z(zz)], null, 10);
+    p.slab('rail', X(x1 + 0.02), X(x1 + 0.12), 1.1, 1.16, Math.min(Z(zz - 0.02 * -s), Z(zz + 0.12 * -s)), Math.max(Z(zz - 0.02 * -s), Z(zz + 0.12 * -s)), { r: 0.01 });
+  }
+  // half its number: read from the room it runs north (its first figure on the south leaf, its second on the north)
+  const o = { h: 0.5, t: 0.07 }, full = '0' + (k + 1), Wt = textWidth(full, o), w = textWidth('0', o), gap = Wt - 2 * w;
+  const n = s > 0 ? 0 : 1, at = z + Wt / 2 - n * (w + gap);
+  segText(p, full[n], { ...o, align: 'left', at: [X(x1 + 0.025), 2.1, Z(at)], rot: [0, PI / 2, 0], look: 'white' });
+}
+export const DOOR_VARIANTS = LOAD.slots.slice().sort().flatMap((k) => ['north', 'south'].map((side) => side + ' 0' + (k + 1)));
+
 export const STORE_PIECES = {
   storeHall: { name: 'Cargo (the hall)', group: 'Cargo', at: 'cell', variants: ['shell'], foot: [32, 3.75, 46], build: storeHall },
   rack: { name: 'Shelving', group: 'Cargo', at: 'free', variants: ['bays 1', 'bays 3', 'bays 5'], accepts: (v) => /^bays \d+$/.test(v), foot: [13.6, 3.3, 1.1], build: rack },
@@ -317,6 +385,7 @@ export const STORE_PIECES = {
   scale: { name: 'Floor scale', group: 'Cargo', at: 'free', variants: ['platform'], foot: [3.4, 1.8, 3.4], build: scale },
   bench: { name: 'Packing bench', group: 'Cargo', at: 'free', variants: ['packing'], foot: [3.6, 1.4, 0.9], build: bench },
   shipDesk: { name: 'Shipping desk', group: 'Cargo', at: 'free', variants: ['desk'], foot: [3.6, 1.4, 0.8], build: shipDesk },
+  containerDoor: { name: 'Container door', group: 'Cargo', at: 'free', variants: DOOR_VARIANTS, foot: [0.3, 2.6, 1.4], build: containerDoor },
   // the game's maker's own forklift (kit/forklift.js): a file of his, not cut by the kit, so it builds nothing here;
   // the Kit Lab fetches it and stands it on its stand (`model`), and in the station's Cargo in its painted place
   forklift: { name: 'Forklift', group: 'Cargo', at: 'free', variants: ['his model'], foot: [3.45, 2.1, 1.14], build: () => {}, model: 'forklift' },

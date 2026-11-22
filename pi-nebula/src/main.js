@@ -40,6 +40,7 @@ import { makePeople, resolve } from './people.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
 import { startJobs } from './jobs/index.js';
+import { cargoLink } from './jobs/cargolink.js';
 import { credits } from './jobs/engine.js';
 import { sound } from './sound.js';
 import { soundButton } from './ui/soundbutton.js';
@@ -51,6 +52,9 @@ import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
 import { makeLift } from './lift.js';
 import { makeCargoForklift } from './cargoforklift.js';
+import { makeCargoDrive } from './cargodrive.js';
+import { makeSupplyRun } from './supplyrun.js';
+import { bridgeStands } from './jobs/dock.js';
 import { pointGap } from '../kit/forkliftround.js';
 import { STORE } from '../kit/places-plan.js';
 
@@ -161,7 +165,9 @@ async function boot() {
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     // (and a rescue's share at the triage desk: src/missions.js payAt)
     live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null), head: (o) => (mission ? mission.payoutHead(o) : null) } },
-    hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null) }, crane, lib, people: () => people });
+    hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null) }, crane, lib, people: () => people,
+    // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js)
+    links: { cargo: ({ crew, save: keep }) => cargoLink({ crew, save: keep, supply: GAME.supply }) } });
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });
@@ -174,7 +180,12 @@ async function boot() {
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
   // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift; now and then
   // one of Cargo's people drives it, a pallet from the loading floor to the shelves (src/cargoforklift.js)
-  const forklift = GAME.forklift = makeCargoForklift({ W, walls });
+  // (and the player can drive it, parked: the supply run's pallets into the containers, src/cargodrive.js,
+  // src/supplyrun.js; while a worked-out run waits for the player, Cargo's people leave it parked)
+  let supply = null;
+  const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!(supply && supply.hold()), open: () => (supply ? supply.open() : []) });
+  supply = GAME.supply = makeSupplyRun({ crew: () => GAME.player, save: (p) => save.save(p), forklift, bridge: () => bridgeStands(GAME.player), people: () => people });
+  const cargo = GAME.cargo = makeCargoDrive({ W, walls, input, forklift, run: supply, people: () => people });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -185,7 +196,7 @@ async function boot() {
   // (and beside it the sound's switch: the volume and a mute, kept in this browser)
   const soundSw = soundButton(document.getElementById('hud-root'), sound);
   // (a job shift that paid becomes the station's news: the people may talk about it, news.js 'player')
-  const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab', craneFree: 'crane cab', arena: 'Mathball arena', dock: 'dock' };
+  const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab', craneFree: 'crane cab', arena: 'Mathball arena', dock: 'dock', cargo: 'shipping desk' };
   let shift = null, turnCam = null;
   const CAM_LIFT = 0.1;     // (radians: about 6 degrees more, while a line is followed)
 
@@ -197,7 +208,7 @@ async function boot() {
     const P = player && player.P;
     if (GAME.mode === 'title' || !P) drift(now);
     else {
-      const atJob = jobs.update(dt, P, GAME.mode === 'play');   // (at a job: standing still, the camera on the job)
+      const atJob = jobs.update(dt, P, GAME.mode === 'play' && !cargo.on);   // (at a job: standing still, the camera on the job)
       const onTrip = mission.update(dt, P, GAME.mode === 'play' && !atJob);   // (on a captain's run: in the pilot's seat)
       board.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !lift.here);      // (in the lift: its own panel, not the jobs board through its wall)
       guide.update(dt, GAME.mode === 'play' && !atJob && !onTrip ? P : null);
@@ -211,20 +222,24 @@ async function boot() {
       chase.lift += ((guide.active ? CAM_LIFT : 0) - chase.lift) * Math.min(1, dt * 2);
       const ctl = atJob ? jobs.control(dt, P) : null;              // (a job that is a game walks the player itself: the arena's)
       const riding = lift.busy;      // (in the lift while it goes: held still)
-      const move = ctl ? ctl.move : atJob || onTrip || riding ? null : auto.way ? autoMove() : input.move;
+      // (on Cargo's forklift: seated, the forklift driven by the keys and the stick: src/cargodrive.js)
+      const driving = cargo.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding, { inLift: !!lift.here });
+      const move = ctl ? ctl.move : atJob || onTrip || riding || driving ? null : auto.way ? autoMove() : input.move;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
       const aboardOthers = mission.others;
-      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed, keepOff: offForklift });
+      P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : driving ? cargo.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed, keepOff: offForklift });
+      if (driving) cargo.seatBody(P);
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
       if (atJob) jobs.aim(W.camera, dt);
-      lift.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip);
+      if (driving) cargo.aim(W.camera, dt);
+      lift.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !driving);
       if (lift.busy || lift.viewing) lift.aim(W.camera);      // (the ride's own view, over the player's head at the shut doors)
       if (onTrip) mission.aim(W.camera, dt);
       // (how far the camera that is DRAWN is from the head: at a job that is the job's own camera, not the follow camera,
       // which still runs behind the player and may be pressed against a wall there: the player vanished for about a
       // second in the arena, standing near its wall with Mathball's camera metres away)
-      const camNear = atJob || lift.busy || lift.viewing ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
+      const camNear = atJob || lift.busy || lift.viewing || driving ? W.camera.position.distanceTo(_head.set(P.pos.x, P.pos.y + chase.eye, P.pos.z)) : chase.near;
       P.c.root.visible = camNear > 0.4 && !(atJob && jobs.inEyes()) && !mission.seated;     // (closer than that, the camera would be inside the head; at a job, seen through their eyes)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
@@ -235,7 +250,10 @@ async function boot() {
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
     // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
-    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });
+    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])], wants: () => supply.wants() });
+    // (the supply run: the doors, the pallets that load themselves, the Hauler loaded; in Cargo while the player stands
+    // on its floor)
+    supply.update(dt, { inCargo: GAME.mode === 'play' && !!P && Math.abs(P.pos.y - STORE.floor) < 1 && lift.crewAt === 'store', feet: [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });
     sound.ears(W.camera);
     if (GAME.player) {
       const busy = jobs.busy();
@@ -300,13 +318,13 @@ async function boot() {
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); jobs.update(0, null, false); jobs.close();
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); cargo.stop(); jobs.update(0, null, false); jobs.close();
     board.update(0, null, false); board.stop();
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
   }
   // back to the title (Escape)
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && GAME.mode === 'play') toTitle(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && GAME.mode === 'play' && !cargo.on) toTitle(); });
 
   // ── for the rigs: walk the player somewhere the way a player would (the stick pushed toward the next turn) ────
   // (the player's whole body off Cargo's forklift, as everyone's (src/people.js): never a step that ends with their middle

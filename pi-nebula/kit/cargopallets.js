@@ -8,7 +8,8 @@
 // for each place.
 //   const P = makePallets({ zone, lights, sky })     zone: Cargo's (its group, its materials); lights: the room's
 //   P.list        [{ i, load, mesh, place }]          (place: the place id it stands at, or null while carried)
-//   P.at(i, id)   pallet i stood at a place (its light there)
+//   P.at(i, id, h)   pallet i stood at a place (its light there; h: its turn, if not the place's own: a pallet set down
+//                 from the other end of its skids)
 //   P.move(i, x, y, z, h)   pallet i somewhere else (carried: its light kept)
 //   P.blend(i, a, b, k)     its light `k` of the way from place a's to place b's (sliding into the rack: into the shade)
 //   P.facts       { tris, draws, ms }; P.dispose()
@@ -18,12 +19,20 @@ import { builtPiece, compact } from './layout.js';
 import { bake, lightAt } from './bake.js';
 import { CARGO, STORE } from './places-plan.js';
 import { PLACES, placeById } from './forkliftround.js';
+import { boxPlace } from './forkliftdrive.js';
+
+// a place by its id: the rounds' (waiting, on the racks), or one inside a container
+const placeOf = (id) => placeById(id) || boxPlace(id);
+// how a pallet stands at a place: its turn (the way a forklift faces to take it up; the place's own unless said)
+const turnAt = (q, h = null) => (h != null ? h : q.box ? q.h : PALLET_LOOK.h);
 
 // HOW MUCH OF THAT LIGHT, as the room's own pallets take (their saved light, with its shadows, against the same worked
 // out with none, on the same vertices: under row 6's first shelf 0.28 and 0.30, out in the open 0.8;
 // ~/pw/space-math/FORKLIFT_2.md; on row 6's first shelf, under the second, 0.13 to 0.46, most of them 0.24 to 0.26:
 // "Round 3" there); its turn at a place: its skids north to south
-export const PALLET_LOOK = { open: 0.8, underShelf: 0.29, firstShelf: 0.25, h: Math.PI / 2 };
+// INSIDE A CONTAINER (the supply run's places, kit/forkliftdrive.js BOX_PLACES: just inside its open doors, its skids
+// east to west): `box` of it, as the container's own floor there takes (measured: ~/pw/space-math/CARGO_1.md)
+export const PALLET_LOOK = { open: 0.8, underShelf: 0.29, firstShelf: 0.25, box: 0.4, h: Math.PI / 2 };
 
 const BASE = new Map();
 // a load's geometry once: the kit's piece (Cargo's coarse one), its parts merged, its corner darkening on itself
@@ -50,11 +59,11 @@ export function makePallets({ zone, lights = [], sky = null }) {
   const skyI = sky ? sky.i ?? 1 : 0, skyC = [1, 0.98, 0.95];
   const lit = new Map(), _p = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
   // the light on each vertex of a load standing at a place (once a place, for each load)
-  function lightFor(load, id) {
-    const key = load + '@' + id; if (lit.has(key)) return lit.get(key);
-    const g = baseOf(load), q = placeById(id), P = g.attributes.position, N = g.attributes.normal, out = new Float32Array(P.count * 3);
-    _m.makeRotationY(PALLET_LOOK.h).setPosition(q.at[0], floor + q.y, q.at[1]); _q.setFromRotationMatrix(_m);
-    const k = q.up ? PALLET_LOOK.firstShelf : q.shelf ? PALLET_LOOK.underShelf : PALLET_LOOK.open;
+  function lightFor(load, id, h = null) {
+    const q = placeOf(id), turn = turnAt(q, h), key = load + '@' + id + '@' + turn.toFixed(3); if (lit.has(key)) return lit.get(key);
+    const g = baseOf(load), P = g.attributes.position, N = g.attributes.normal, out = new Float32Array(P.count * 3);
+    _m.makeRotationY(turn).setPosition(q.at[0], floor + q.y, q.at[1]); _q.setFromRotationMatrix(_m);
+    const k = q.box ? PALLET_LOOK.box : q.up ? PALLET_LOOK.firstShelf : q.shelf ? PALLET_LOOK.underShelf : PALLET_LOOK.open;
     for (let v = 0; v < P.count; v++) {
       _p.set(P.getX(v), P.getY(v), P.getZ(v)).applyMatrix4(_m); _n.set(N.getX(v), N.getY(v), N.getZ(v)).normalize().applyQuaternion(_q);
       const [r, gg, b] = lightAt(_p, near, _n), s = skyI * (0.55 + 0.45 * _n.y);
@@ -70,14 +79,14 @@ export function makePallets({ zone, lights = [], sky = null }) {
     group.add(mesh);
     return { i, load: d.load, mesh, place: null, own: new THREE.BufferAttribute(new Float32Array(base.attributes.position.count * 3), 3) };
   });
-  function at(i, id) {
-    const P = list[i], q = placeById(id), g = P.mesh.geometry, L = lightFor(P.load, id);
+  function at(i, id, h = null) {
+    const P = list[i], q = placeOf(id), g = P.mesh.geometry, L = lightFor(P.load, id, h);
     if (!g.attributes.aBake || g.attributes.aBake.array !== L) g.setAttribute('aBake', new THREE.BufferAttribute(L, 3));
-    P.place = id; P.mesh.position.set(q.at[0], floor + q.y, q.at[1]); P.mesh.rotation.set(0, PALLET_LOOK.h, 0); P.mesh.updateMatrix();
+    P.place = id; P.turn = turnAt(q, h); P.mesh.position.set(q.at[0], floor + q.y, q.at[1]); P.mesh.rotation.set(0, P.turn, 0); P.mesh.updateMatrix();
   }
-  function move(i, x, y, z, h) { const P = list[i]; P.place = null; P.mesh.position.set(x, y, z); P.mesh.rotation.set(0, h, 0); P.mesh.updateMatrix(); }
-  function blend(i, a, b, k) {
-    const P = list[i], A = lightFor(P.load, a), B = lightFor(P.load, b), o = P.own.array;
+  function move(i, x, y, z, h) { const P = list[i]; P.place = null; P.turn = h; P.mesh.position.set(x, y, z); P.mesh.rotation.set(0, h, 0); P.mesh.updateMatrix(); }
+  function blend(i, a, b, k, ha = null, hb = null) {
+    const P = list[i], A = lightFor(P.load, a, ha), B = lightFor(P.load, b, hb), o = P.own.array;
     for (let j = 0; j < o.length; j++) o[j] = A[j] + (B[j] - A[j]) * k;
     P.own.needsUpdate = true; if (P.mesh.geometry.attributes.aBake !== P.own) P.mesh.geometry.setAttribute('aBake', P.own);
   }

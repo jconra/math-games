@@ -20,6 +20,7 @@ import { JOB as crane } from '../src/jobs/crane.js';
 import { JOB as pilot } from '../src/jobs/pilot.js';
 import { JOB as drill } from '../src/jobs/drill.js';
 import { JOB as engineer } from '../src/jobs/engineer.js';
+import { JOB as cargo } from '../src/jobs/cargo.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
 import { PROBLEMS, PLACE } from '../../mathwood-valley/src/levels/places.js';
 import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
@@ -27,7 +28,8 @@ import { setLevelAt } from '../../mathwood-valley/src/levels/model.js';
 // (the pilot's seat is not one of the station's job spots: its cards come up on a captain's run, src/trip.js; its
 // ladder is a job's ladder like the others', and its own tests are missions.test.mjs. The same for the drill's, and
 // for the engineer's, asked at the ship's own core, src/tune.js: its own tests are engineer.test.mjs)
-const OPEN = [galley, medical, smelter, crane, arena, pilot, drill, engineer];
+// (and the shipping computer in Cargo, the supply run's five questions: its own tests are cargo.test.mjs)
+const OPEN = [galley, medical, smelter, crane, arena, pilot, drill, engineer, cargo];
 const crewOf = (age = null) => ({ id: 'c1', name: 'Test', look: { id: 'zuri' }, age });
 
 test('the open jobs join Mathwood\'s levels cleanly', () => {
