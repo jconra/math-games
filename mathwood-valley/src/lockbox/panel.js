@@ -66,6 +66,19 @@
 // (workpanel.js), in the same session.
 //   opts.audio (optional): the game's sound (src/audio/audio.js); the read-aloud follows its volume.
 //   opts.readAloud: false turns the box's read-aloud off.  opts.levels: false keeps a rider's boxes on the strands.
+//   opts.one: true deals ONE box: solved (its button says look.finish, else "Finish") or set aside, the panel closes.
+//   opts.saveRider(rider) (optional): saves the rider when the level arrows step it (else save.js saveRider).
+//   opts.look (optional): THE SAME BOX IN ANOTHER GAME'S DRESS (Pi Nebula's stasis pods: pi-nebula/src/podlock/). Every
+//     rule, move, hint, part, check and the ladder stay exactly as they are; only what is drawn and the few words that
+//     belong to the West change. Left out, the box is Mathwood's as it always was. Any of:
+//       cls        a class on the panel (its own stylesheet styles under it);  css: that stylesheet's address
+//       title(info, tier) / where(info)   the top strip's big name and the line under it (TIER_NAME, the desk's name)
+//       say(text)  every line Hob's place shows or the voice says, passed through (the West's words to the game's own)
+//       helper     the hint button's word ("Ask Hob");  skip: "Skip this box";  finish: the last box's button
+//       face, bag, nugget, sack, reward   drawings (SVG) for Hob's face, the picture row's x and 1, the kindergarten
+//                  box's x, and what opens after "Next problem" (the chest)
+//       things     { apple: svg, egg: svg, ... } the kindergarten box's things (kbox.js THINGS), by the same names
+//       pay: false no gold: no purse, no coins flying; opened: the words under the opened drawing ("+N gold")
 //
 // It writes nothing to storage itself: it changes rider.topics.algebra (the ladder's bookkeeping), rider.levels,
 // rider.skill and rider.facts in place; the caller saves the rider (save.js recordLockbox does that) in onBox, or after onDone.
@@ -151,7 +164,21 @@ const CSS_HREF = new URL('./lockbox.css', import.meta.url).href;
 
 // Adds the panel's stylesheet once; resolves when it has loaded (or failed), so the first draw is measured with it.
 let cssReady = null;
-function ensureCss() {
+const lookCss = new Map();   // (another game's own sheets for its look: opts.look.css)
+function ensureCss(extra = null) {
+  baseCss();
+  // (another game's own sheet, added after this one so it wins; once)
+  if (extra && !lookCss.has(extra)) {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = extra;
+    l.dataset.lockboxLook = '1';
+    lookCss.set(extra, new Promise((res) => { l.addEventListener('load', res); l.addEventListener('error', res); setTimeout(res, 3000); }));
+    document.head.appendChild(l);
+  }
+  return extra ? Promise.all([cssReady, lookCss.get(extra)]) : cssReady;
+}
+function baseCss() {
   if (cssReady) return cssReady;
   const old = document.querySelector('link[data-lockbox-css]');
   if (old) return (cssReady = Promise.resolve());
@@ -223,6 +250,22 @@ function chestSVG() {
   <g class="lid"><path d="M34 88 V62 Q120 22 206 62 V88 Z" class="lidtop"/><rect x="62" y="40" width="14" height="48" class="strap"/>
   <rect x="164" y="40" width="14" height="48" class="strap"/><rect x="34" y="80" width="172" height="8" class="band"/></g>
   ${[44, 196].map((x) => [98, 162].map((y) => `<circle cx="${x}" cy="${y}" r="3" class="rivet"/>`).join('')).join('')}</svg>`;
+}
+
+// THE LOOK (opts.look; the top of this file): Mathwood's own, with whatever another game hands in put over it
+const WHERE = { sheriff: 'Sheriff’s desk', loot: 'Saddlebags', practice: 'Just lock boxes' };
+export function lookOf(o) {
+  const L = o && typeof o === 'object' ? o : {};
+  return {
+    cls: L.cls || '', css: L.css || null,
+    title: typeof L.title === 'function' ? L.title : (info, tier) => TIER_NAME[tier],
+    where: typeof L.where === 'function' ? L.where : (info) => WHERE[info.from] || 'Lock box',
+    say: typeof L.say === 'function' ? (t) => (t ? L.say(t) : t) : (t) => t,
+    helper: L.helper || 'Ask Hob', skip: L.skip || 'Skip this box', finish: L.finish || 'Finish',
+    face: L.face || HOB_SVG, bag: L.bag || BAG_SVG, nugget: L.nugget || NUGGET_SVG, sack: L.sack || SACK_SVG,
+    things: L.things || THING_SVG, reward: L.reward || null,
+    pay: L.pay !== false, opened: L.opened || null,
+  };
 }
 
 // A side written out as HTML, with a real fraction bar under a whole group over a number ((5x − 10)/2).
@@ -333,7 +376,8 @@ function keyInHTML(side, x) {
 
 export function openLockbox(root = document.body, opts = {}) {
   const { rider = null, box: firstInfo = {}, onDone = () => {}, onBox = null, next = null } = opts;
-  ensureCss();
+  const look = lookOf(opts.look);
+  ensureCss(look.css);
   const rng = makeRng(opts.seed ?? ((Math.random() * 2 ** 32) >>> 0));
 
   // the ladder state lives in the rider (or a scratch object when there is no rider, e.g. the test page)
@@ -366,7 +410,7 @@ export function openLockbox(root = document.body, opts = {}) {
   // ms to wait first (a "Not that one." clip goes first)
   function tell(text, { now = true, after = 0 } = {}) {
     if (!text || !canRead()) return false;
-    return speakLine(text, { now, after });
+    return speakLine(look.say(text), { now, after });
   }
 
   // ----- the session: boxes back to back until "Done for now" -----
@@ -376,14 +420,17 @@ export function openLockbox(root = document.body, opts = {}) {
   const bag = own && rider && Array.isArray(rider.lockboxes) ? rider.lockboxes.filter((b) => b && typeof b === 'object').map((b) => ({ tier: b.tier })) : [];
   { const i = bag.findIndex((b) => b.tier === firstInfo.tier); if (i >= 0) bag.splice(i, 1); else bag.shift(); }
   function nextInfo(last) {
+    if (opts.one) return null;
     if (typeof next === 'function') { try { return next(last) || null; } catch (e) { console.error(e); return null; } }
     if (own) { const b = bag.shift(); return b ? { tier: b.tier, from: 'loot' } : null; }
     return { tier: last?.tier || firstInfo.tier, from: firstInfo.from || 'sheriff' };
   }
+  // (one box only, or the last of the saddlebags: its button finishes)
+  const lastOne = () => !!opts.one || (own && typeof next !== 'function' && !bag.length);
   const purseNow = () => (rider ? whole(rider.gold) : 0) + session.unpaid;
 
   // ----- the frame: the wood panel and its top strip stay put while the boxes slide through -----
-  const el = h('div', 'lbx');
+  const el = h('div', look.cls ? `lbx ${look.cls}` : 'lbx');
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-label', 'Lock box: solve for x');
@@ -394,7 +441,7 @@ export function openLockbox(root = document.body, opts = {}) {
   top.innerHTML = `<div class="lbx-name"><span class="lbx-tier"></span><span class="lbx-rung"></span>
       <span class="lbx-lv" hidden><button type="button" data-dir="-1" aria-label="A level down">‹</button><span class="lbx-lvt"></span><button type="button" data-dir="1" aria-label="A level up">›</button></span></div>
     <div class="lbx-right">
-      <div class="lbx-purse" title="Your gold"><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
+      <div class="lbx-purse" title="Your gold"${look.pay ? '' : ' hidden'}><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
       <button class="lbx-rules" type="button" hidden>The rules</button>
       <button class="lbx-tools lbx-work" type="button" title="Work it out: the part being asked, in columns" aria-label="Work it out" hidden>${WORK_SVG}<span>Work it out</span></button>
       <button class="lbx-tools" type="button" title="Tools: the times chart" hidden>${TOOLS_SVG}<span>Tools</span></button>
@@ -436,7 +483,7 @@ export function openLockbox(root = document.body, opts = {}) {
     card.setAttribute('aria-label', first ? ALGEBRA_TITLE : RULES_TITLE);
     card.innerHTML = `<div class="rl-box${first ? ' rl-first' : ''}"><h2 class="rl-title">${esc(first ? ALGEBRA_TITLE : RULES_TITLE)}</h2>
       ${rulesHTML({ first, flip, ...(steps ? { steps } : {}) })}
-      <button class="rl-go" type="button">${esc(first ? GO_WORD.first : GO_WORD.again)}<kbd>Enter</kbd></button></div>`;
+      <button class="rl-go" type="button">${esc(look.say(first ? GO_WORD.first : GO_WORD.again))}<kbd>Enter</kbd></button></div>`;
     el.appendChild(card);
     requestAnimationFrame(() => card.classList.add('in'));
     let close;
@@ -496,14 +543,14 @@ export function openLockbox(root = document.body, opts = {}) {
     // a "Work it out" box has a page of its own (workpanel.js); the session around it is the same
     if (WORK_RUNG[problem.rung]) {
       el.className = el.className.replace(/\blbx-tier-\w+/g, '').trim() + ` lbx-tier-${tier}`;
-      el.setAttribute('aria-label', `${TIER_NAME[tier]}: work it out`);
-      const where = { sheriff: 'Sheriff’s desk', loot: 'Saddlebags', practice: 'Just lock boxes' }[info.from] || 'Lock box';
+      el.setAttribute('aria-label', `${look.title(info, tier)}: work it out`);
+      const where = look.where(info);
       const skippedNow = session.results.filter((r) => !r.solved).length;
       const more = info.from === 'loot' && typeof next !== 'function'
         ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
       rulesBtn.hidden = true;
-      return mountWorkBox({ HOB_SVG }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
-        where: where + more, nextLabel: () => (own && typeof next !== 'function' && !bag.length ? 'Finish' : 'Next problem') });
+      return mountWorkBox({ HOB_SVG: look.face, look }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
+        where: where + more, nextLabel: () => (lastOne() ? look.finish : 'Next problem') });
     }
     const rung = RUNG[problem.rung] || K_RUNG[problem.rung];
     const stage = rung.stage;
@@ -556,7 +603,7 @@ export function openLockbox(root = document.body, opts = {}) {
     body.style.setProperty('--k', K.toFixed(3));
     el.style.setProperty('--k', K.toFixed(3));
     el.className = el.className.replace(/\blbx-tier-\w+/g, '').trim() + ` lbx-tier-${tier}`;
-    el.setAttribute('aria-label', `${TIER_NAME[tier]}: solve for x`);
+    el.setAttribute('aria-label', `${look.title(info, tier)}: solve for x`);
 
     const stepsEl = h('section', 'lbx-steps');
     stepsEl.setAttribute('aria-label', 'The steps');
@@ -573,16 +620,16 @@ export function openLockbox(root = document.body, opts = {}) {
         <div class="lbx-focus" hidden aria-live="polite"></div>
         <div class="lbx-picwrap"></div><div class="lbx-calcs"></div><svg class="lbx-links" aria-hidden="true"></svg></div>
       <div class="lbx-rotate">Turn your phone sideways for bigger numbers</div>
-      <div class="lbx-hob"><span class="lbx-hob-face">${HOB_SVG}</span><span class="lbx-hob-say" aria-live="polite"></span>
+      <div class="lbx-hob"><span class="lbx-hob-face">${look.face}</span><span class="lbx-hob-say" aria-live="polite"></span>
         <button class="lbx-hear" type="button" hidden aria-label="Hear it again" title="Hear it again">${SPEAKER_SVG}</button></div>
-      <button class="lbx-leave" type="button" hidden>Skip this box</button>
+      <button class="lbx-leave" type="button" hidden>${esc(look.skip)}</button>
       <div class="lbx-hurry" aria-hidden="true"><span class="lbx-kb">Enter or click: hurry</span><span class="lbx-tap">Tap: hurry</span></div>`;
     body.appendChild(stageEl);
 
     const tray = h('section', 'lbx-tray');
     tray.innerHTML = `<button class="lbx-undo lbx-side-btn" type="button"><span>Undo</span><kbd>U</kbd></button>
       <div class="lbx-grid"></div>
-      <button class="lbx-ask lbx-side-btn" type="button"><span>Ask Hob</span><kbd>H</kbd></button>
+      <button class="lbx-ask lbx-side-btn" type="button"><span>${esc(look.helper)}</span><kbd>H</kbd></button>
       <div class="lbx-verdicts" ${verdictMode ? '' : 'hidden'}>
         <button type="button" data-verdict="all">Infinitely many solutions<small>every number works</small></button><button type="button" data-verdict="none">No solution<small>no number works</small></button></div>
       <button class="lbx-nextbtn" type="button" hidden><span class="lbl">Next problem</span><kbd>Enter</kbd></button>`;
@@ -607,8 +654,8 @@ export function openLockbox(root = document.body, opts = {}) {
     if (ineqMode) { body.classList.add('ineq'); if (problem.start.chains.length > 1) body.classList.add('ineq-or'); }
 
     // the top strip shows this box
-    top.querySelector('.lbx-tier').textContent = TIER_NAME[tier];
-    const where = { sheriff: 'Sheriff’s desk', loot: 'Saddlebags', practice: 'Just lock boxes' }[info.from] || 'Lock box';
+    top.querySelector('.lbx-tier').textContent = look.title(info, tier);
+    const where = look.where(info);
     const skippedNow = session.results.filter((r) => !r.solved).length;   // (skipped boxes stay in the bags)
     const more = info.from === 'loot' && typeof next !== 'function'
       ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
@@ -631,7 +678,7 @@ export function openLockbox(root = document.body, opts = {}) {
     };
 
     function hob(text, mood = '') {
-      say.textContent = text || '';
+      say.textContent = look.say(text) || '';
       say.dataset.mood = mood;
       say.classList.remove('fresh'); void say.offsetWidth; say.classList.add('fresh');
     }
@@ -935,9 +982,9 @@ export function openLockbox(root = document.body, opts = {}) {
           const c = h('span', 'pic-term');
           c.dataset.side = name; c.dataset.i = i;
           if (t.t === 'x') {
-            for (let k = 0; k < t.v.n; k++) c.insertAdjacentHTML('beforeend', `<span class="pic-bag">${BAG_SVG}${t.v.d > 1 ? `<b>÷${t.v.d}</b>` : ''}</span>`);
+            for (let k = 0; k < t.v.n; k++) c.insertAdjacentHTML('beforeend', `<span class="pic-bag">${look.bag}${t.v.d > 1 ? `<b>÷${t.v.d}</b>` : ''}</span>`);
           } else if (t.t === 'n') {
-            for (let k = 0; k < t.v.n; k++) c.insertAdjacentHTML('beforeend', `<span class="pic-ng">${NUGGET_SVG}</span>`);
+            for (let k = 0; k < t.v.n; k++) c.insertAdjacentHTML('beforeend', `<span class="pic-ng">${look.nugget}</span>`);
             if (t.v.n === 0) c.insertAdjacentHTML('beforeend', '<span class="pic-zero">nothing</span>');
           } else return;
           pics.appendChild(c);
@@ -973,7 +1020,7 @@ export function openLockbox(root = document.body, opts = {}) {
     // Adding (2 + x = 4): two apples, the sack, four apples. Taking away (5 − x = 3): five apples, the sack that takes
     // some of them, three apples. open: the kid's number put in the sack (taking away: that many of the five are
     // gone into it); help: the empty spots the sack has to fill drawn as outlines, or the ones taken crossed out.
-    const kThings = (n, cls = '') => Array.from({ length: Math.max(0, n) }, () => `<span class="kp-o${cls ? ` ${cls}` : ''}">${THING_SVG[problem.thing] || THING_SVG.nugget}</span>`).join('');
+    const kThings = (n, cls = '') => Array.from({ length: Math.max(0, n) }, () => `<span class="kp-o${cls ? ` ${cls}` : ''}">${look.things[problem.thing] || look.things.nugget || THING_SVG.nugget}</span>`).join('');
     function renderK({ open = null, help = false } = {}) {
       if (!kMode) return;
       const P = problem, add = P.op === '+', shut = open == null;
@@ -982,7 +1029,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const inSack = !shut ? kThings(open, 'pop') : help && add ? kThings(P.b - P.a, 'ghost') : '';
       kpicsEl.classList.toggle('helping', help && shut);
       kpicsEl.innerHTML = `<div class="kp-row"><div class="kp-side">${left}</div><span class="kp-op">${add ? '+' : MINUS}</span>`
-        + `<div class="kp-sack${shut ? '' : ' open'}"><span class="kp-bag">${SACK_SVG}<b class="kp-q">${shut ? '?' : open}</b></span>`
+        + `<div class="kp-sack${shut ? '' : ' open'}"><span class="kp-bag">${look.sack}<b class="kp-q">${shut ? '?' : open}</b></span>`
         + `<span class="kp-in">${inSack}</span></div><span class="kp-eq">=</span><div class="kp-side">${kThings(P.b)}</div></div>`;
     }
 
@@ -2036,8 +2083,7 @@ export function openLockbox(root = document.body, opts = {}) {
     function showNext() {
       body.classList.add('reviewing');
       nextBtn.hidden = false;
-      const last = own && typeof next !== 'function' && !bag.length;
-      nextBtn.querySelector('.lbl').textContent = last ? 'Finish' : 'Next problem';
+      nextBtn.querySelector('.lbl').textContent = lastOne() ? look.finish : 'Next problem';
       nextBtn.disabled = false;
       requestAnimationFrame(() => nextBtn.focus({ preventScroll: true }));
     }
@@ -2294,15 +2340,15 @@ export function openLockbox(root = document.body, opts = {}) {
       // every opened box counts toward the Safecracker badge (save.js recordLockbox has counted this one already)
       const boxesNow = whole(rider?.stats?.boxes);
       let safe = '';
-      if (rider?.stats && boxesNow > boxesBefore) {
+      if (look.pay && rider?.stats && boxesNow > boxesBefore) {
         if (boxesBefore < SAFECRACKER_BOXES && boxesNow >= SAFECRACKER_BOXES) safe = 'Safecracker badge!';
         else if (boxesNow < SAFECRACKER_BOXES) safe = `Safecracker ${boxesNow} / ${SAFECRACKER_BOXES}`;
       }
       const lines = [safe, note?.newTitle ? `You’re a ${note.newTitle} now!` : '', note?.badge && !/Safecracker/.test(safe) ? `${note.badge} badge!` : '',
         last && own ? lastBagNote() : ''].filter(Boolean);
       const wrap = h('div', 'lbx-reward');
-      wrap.innerHTML = `${chestSVG()}
-        <div class="rw-gold">+${result.gold} gold</div>
+      wrap.innerHTML = `${look.reward || chestSVG()}
+        <div class="rw-gold">${look.pay ? `+${result.gold} gold` : esc(look.opened || '')}</div>
         ${lines.map((t) => `<div class="rw-note">${esc(t)}</div>`).join('')}`;
       stageEl.appendChild(wrap);
       ctrl.body.classList.add('opened');
@@ -2344,7 +2390,7 @@ export function openLockbox(root = document.body, opts = {}) {
           };
         }
       };
-      setTimeout(fly, 120);
+      if (look.pay) setTimeout(fly, 120); else ctrl.body.classList.add('counted');
       const finishUp = () => { purseN.textContent = String(after); ctrl.hurry = null; resolve(); };
       const tickWait = () => {
         if (closed) { resolve(); return; }
@@ -2370,7 +2416,7 @@ export function openLockbox(root = document.body, opts = {}) {
     const b = e.target.closest('button[data-dir]'); if (!b || closed) return;
     b.blur();
     if (!cur || !stepLevel(rider, 'lockbox', +b.dataset.dir)) return;
-    try { saveRiderNow(rider); } catch (err) { console.warn(err); }
+    try { (typeof opts.saveRider === 'function' ? opts.saveRider : saveRiderNow)(rider); } catch (err) { console.warn(err); }
     const ph = cur.phase();
     if (ph === 'open' || ph === 'done') { showLevel(); return; }   // (a box being opened: the next one comes at the new level)
     slideTo(infoNow);

@@ -28,6 +28,8 @@ import { loadForklift, standForklift } from '../../kit/forklift.js';
 import { makePallets } from '../../kit/cargopallets.js';
 import { loadPod, podMaterials, makePod } from '../../kit/stasispod.js';
 import { POD, POD_PIECES, POSITION_IDS } from '../../kit/stasispod-plan.js';
+import { openPodLock, labMedic } from '../../src/podlock.js';
+import { makePodReach } from '../../src/podreach.js';
 // (his stasis pod is the lab's to show for now, not the game's: its entry is added to the catalog here, in the Medical
 // group, and nothing the game loads knows of it)
 Object.assign(PIECES, POD_PIECES);
@@ -398,7 +400,7 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (stationTick(now)) return;
-  resize(); fly(dt); if (dust.visible) dust.userData.update(dt, camera.position); sky.update(dt);
+  resize(); fly(dt); podReach.update(); if (dust.visible) dust.userData.update(dt, camera.position); sky.update(dt);
   if (built && built.doors.length && state.doors === 'auto' && updateDoors(built.doors, camera.position, dt, 'auto')) renderer.shadowMap.needsUpdate = true;
   if (shown.pod && !podHeld && shown.pod.swing(podWant(dt), dt)) renderer.shadowMap.needsUpdate = true;
   if (renderer.shadowMap.enabled) renderer.shadowMap.autoUpdate = false;
@@ -549,9 +551,27 @@ const KL = window.KL = {
   get roomData() { return roomData; }, renderer, scene, camera, mats, state,
   sky: (name) => showSky(name), skyTurn, theSky: sky, skyViews: () => Object.keys(SKY_VIEWS),
 };
+// HIS POD'S LOCK (src/podlock.js): shut, tap the pod (or look at it and press E, or the prompt over the menu) and its
+// lock opens, Mathwood's lock box in this game's look; solved, the lid opens (the Doors chips to Open). The lab's own
+// medic's level on the ladder is kept in this browser.
+const medic = labMedic();
+let podLock = null;
+const podReach = makePodReach({ camera, canvas, reach: 9, onPick: () => openPodLockHere(),
+  pods: () => (shown.pod ? [{ group: shown.pod.group, name: 'Stasis pod', open: shown.pod.k > 0.02 || state.doors === 'open', i: 0 }] : []) });
+function openPodLockHere() {
+  if (podLock || !shown.pod) return null;
+  podReach.busy(true); keys.clear();
+  if (state.doors === 'auto') doors('shut');   // (it waits shut while its lock is worked)
+  podLock = openPodLock(document.body, { rider: medic.rider, saveRider: medic.save, debug: true, pod: { name: 'Stasis pod', where: 'The Kit Lab · its lock' },
+    ...(KL.lockRung ? { rung: KL.lockRung, size: KL.lockSize } : {}),
+    onOpen: () => { medic.save(medic.rider); podHeld = false; doors('open'); },
+    onClose: () => { podLock = null; podReach.busy(false); medic.save(medic.rider); } });
+  return podLock;
+}
 // (his stasis pod, for rigs: the pod and its sleeper on show; podAt(k) holds the lid at open k (null: the Doors chips
 // again); sleeperReady())
-Object.defineProperties(KL, { pod: { get: () => shown.pod }, sleeper: { get: () => shown.sleeper } });
+Object.defineProperties(KL, { pod: { get: () => shown.pod }, sleeper: { get: () => shown.sleeper }, lockNow: { get: () => podLock }, reach: { get: () => podReach } });
+KL.lock = () => openPodLockHere();
 Object.assign(KL, { podAt: (k) => { podHeld = k != null; if (shown.pod && k != null) { shown.pod.set(k); renderer.shadowMap.needsUpdate = true; } }, sleeperReady: () => !!shown.sleeper });
 // (the station's tools, for rigs: a plan, holes to outside, a walk along a route, the saved bake)
 Object.assign(KL, { plan, leaks, leakPaint, walk, packBake: packBakeB64, station, unfreeze: () => { frozen = false; }, zones: () => (built?.zones || []).map((z) => ({ id: z.id, tris: Math.round(z.tris), visible: z.group.visible, from: z.bakedFrom })) });

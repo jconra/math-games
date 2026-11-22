@@ -15,6 +15,8 @@
 //   await pods.fill(lib)                             someone asleep in each (lib: the crew kit's, loadCrew), in their
 //                                                    position's colour, the far copies made ready; pods.filled
 //   pods.open(k)                                     every lid on its way to open (1) or shut (0)
+//   pods.openOne(i, k)                               one pod's lid on its way (its lock solved: src/podlock.js); the
+//                                                    others as they were; pods.open(k) sets them all together again
 //   pods.update(camera, dt)                          each frame: the curve, the lids, the sleepers near or far
 //   pods.stats() -> { pods, draws, tris, sleepers }  (what is drawn: the pods and the sleepers shown)
 //   pods.dispose()
@@ -101,7 +103,8 @@ export async function makePods({ plan, scene, ground, sky = null, sunDir = null,
     sleepersShown: true,     // (for the rigs: the sleepers left out, to measure them)
     paintId: PAINTS[paint] ? paint : null,
     get filled() { return filled; }, get want() { return want; },
-    open(k) { want = k ? 1 : 0; },
+    open(k) { want = k ? 1 : 0; for (const p of pods) p.want = null; },
+    openOne(i, k) { if (pods[i]) pods[i].want = k ? 1 : 0; },
     paint(id) { api.paintId = PAINTS[id] ? id : null; podPaint(mats, PAINTS[id] || null); },
     // someone asleep in each pod, one after another (each pod's own look and position from the plan)
     async fill(lib) {
@@ -117,7 +120,7 @@ export async function makePods({ plan, scene, ground, sky = null, sunDir = null,
     update(camera, dt) {
       const k = ground.U.uCurve.value, cx = camera.position.x, cz = camera.position.z;
       for (const p of pods) {
-        p.swing(want, dt);
+        p.swing(p.want ?? want, dt);
         const e = p.place.elements, dx = e[12] - cx, dz = e[14] - cz, d2 = dx * dx + dz * dz;
         p.group.matrix.copy(p.place); p.group.matrix.elements[13] -= d2 * k; p.group.matrixWorldNeedsUpdate = true;
         if (p.sleeper) { const d = Math.sqrt(d2), on = api.sleepersShown && d < PODS_DRAW.seen; p.sleeper.root.visible = on; if (on) p.sleeper.setFar(d > PODS_DRAW.far); }

@@ -20,7 +20,7 @@
 // part of the strand's own skill was right the first time with no more than the first hint; timed until solved.
 //
 //   mountWorkBox(kit, ctx) -> the box's controller (the same shape as panel.js mountBox's)
-//     kit: { HOB_SVG }  the panel's drawings
+//     kit: { HOB_SVG, look }  the panel's drawings, and its look (panel.js lookOf: another game's words and drawings)
 //     ctx: { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished, nextLabel(), where, K }
 
 import { workCredit, recordPart } from './strand.js';
@@ -53,6 +53,8 @@ const isOp = (p) => ['+', '−', '×', '÷'].includes(p);
 export function mountWorkBox(kit, ctx) {
   const { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished } = ctx;
   const K = ctx.K ?? 1;
+  const look = kit.look || null;
+  const words = (t) => (look && t ? look.say(t) : t);
   const order = problem.map === 'order';
   const steps = problem.steps;
 
@@ -70,12 +72,12 @@ export function mountWorkBox(kit, ctx) {
   stageEl.innerHTML = `<div class="lbx-workwrap"><div class="lbx-work"><div class="wk-line"></div></div>
       <div class="lbx-focus" hidden aria-live="polite"></div></div>
     <div class="lbx-hob"><span class="lbx-hob-face">${kit.HOB_SVG}</span><span class="lbx-hob-say" aria-live="polite"></span></div>
-    <button class="lbx-leave" type="button" hidden>Skip this box</button>`;
+    <button class="lbx-leave" type="button" hidden>${esc(look ? look.skip : 'Skip this box')}</button>`;
   body.appendChild(stageEl);
   const tray = h('section', 'lbx-tray');
   tray.innerHTML = `<button class="lbx-undo lbx-side-btn" type="button" disabled><span>Undo</span><kbd>U</kbd></button>
     <div class="lbx-grid partgrid"></div>
-    <button class="lbx-ask lbx-side-btn" type="button"><span>Ask Hob</span><kbd>H</kbd></button>
+    <button class="lbx-ask lbx-side-btn" type="button"><span>${esc(look ? look.helper : 'Ask Hob')}</span><kbd>H</kbd></button>
     <button class="lbx-nextbtn" type="button" hidden><span class="lbl">Next problem</span><kbd>Enter</kbd></button>`;
   body.appendChild(tray);
   const $ = (s) => body.querySelector(s);
@@ -83,7 +85,7 @@ export function mountWorkBox(kit, ctx) {
   const say = $('.lbx-hob-say'), askBtn = $('.lbx-ask'), nextBtn = $('.lbx-nextbtn'), leaveBtn = $('.lbx-leave');
 
   // the top strip shows this box
-  top.querySelector('.lbx-tier').textContent = TIER_NAME[tier];
+  top.querySelector('.lbx-tier').textContent = look ? look.title(info, tier) : TIER_NAME[tier];
   top.querySelector('.lbx-rung').innerHTML = `${esc(ctx.where)} · ${esc(plan && plan.title ? `${plan.title} · ${problem.name || ''}` : `Work it out · ${problem.name || ''}`)}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
 
   // ----- state -----
@@ -99,7 +101,7 @@ export function mountWorkBox(kit, ctx) {
   let expr = steps[0].expr;     // the line on the mat now
 
   function hob(text, mood = '') {
-    say.innerHTML = text ? wkHTML(text) : '';
+    say.innerHTML = text ? wkHTML(words(text)) : '';
     say.dataset.mood = mood;
     say.classList.remove('fresh'); void say.offsetWidth; say.classList.add('fresh');
   }

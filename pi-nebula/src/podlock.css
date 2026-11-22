@@ -1,0 +1,188 @@
+/* THE STASIS POD'S LOCK: Mathwood's lock box (mathwood-valley/src/lockbox/lockbox.css) in this game's look, the station's
+   panels' (src/jobs/jobs.css, src/ui/title.css): dark glass, off-white words, light blue lines, ONE orange accent, frames
+   with their corners cut at 45 degrees. Only colours, fonts and frames change here: every size, place and movement is
+   Mathwood's, so the box works and fits exactly as it does there. Everything is under .lbx.lbx-space (src/podlock.js). */
+
+.lbx.lbx-space {
+  --ink: #eef1f4; --ink-2: #c3ccd5; --mute: #8995a1;
+  --brass: #7cc3ef; --brass-hi: #ffa552; --brass-lo: rgba(150, 205, 245, 0.42);
+  --rust: #ff6b5b; --good: #59d68b; --warn: #ffb35c;
+  --paper: #0f161e; --pencil: #b9c6d2; --pencil-ink: #ffffff;
+  --rule: rgba(150, 210, 250, 0.12); --margin-red: rgba(255, 143, 46, 0.35);
+  --line: rgba(196, 220, 240, 0.36); --line-hi: rgba(232, 243, 252, 0.9); --glass: rgba(13, 18, 24, 0.94); --glass-hi: rgba(34, 42, 52, 0.94);
+  --cut: 14px;
+  --oct: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background: radial-gradient(ellipse at 50% 40%, rgba(4, 8, 14, 0.62), rgba(2, 4, 8, 0.86));
+  backdrop-filter: blur(3px) saturate(0.6); -webkit-backdrop-filter: blur(3px) saturate(0.6);
+}
+/* the station's type, everywhere (Mathwood's is a slab serif with a Western display face) */
+.lbx.lbx-space, .lbx.lbx-space * { font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif !important; }
+.lbx.lbx-space i.x { font-family: Georgia, "Times New Roman", serif !important; }
+.lbx.lbx-space :focus-visible { outline-color: #7fd4ff; }
+
+/* the panel: dark glass, a light line round it, the corners cut */
+.lbx-space .lbx-panel {
+  background: linear-gradient(180deg, rgba(18, 24, 31, 0.97), rgba(10, 14, 19, 0.97));
+  box-shadow: inset 0 0 0 1.5px var(--line), 0 24px 70px rgba(0, 0, 0, 0.6); border-radius: 0; clip-path: var(--oct); --cut: 22px;
+}
+.lbx-space .lbx-panel.jam { box-shadow: inset 0 0 0 2px var(--rust), 0 24px 70px rgba(0, 0, 0, 0.6); }
+.lbx-space .lbx-top { background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--line); box-shadow: none; }
+.lbx-space .lbx-tier { font-weight: 700; font-size: 22px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); text-shadow: none; }
+.lbx-space .lbx-tier-tin .lbx-tier, .lbx-space.lbx-tier-tin .lbx-tier, .lbx-space.lbx-tier-brass .lbx-tier, .lbx-space.lbx-tier-vault .lbx-tier { color: var(--ink); text-shadow: none; }
+.lbx-space .lbx-rung, .lbx-space .lbx-lv { color: var(--ink-2); }
+.lbx-space .lbx-lv button { border-radius: 0; clip-path: var(--oct); --cut: 6px; border: 0; background: rgba(255, 255, 255, 0.08); color: var(--ink); }
+.lbx-space .lbx-done, .lbx-space .lbx-rules, .lbx-space .lbx-tools {
+  border-radius: 0; clip-path: var(--oct); --cut: 8px; color: var(--ink); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 14px;
+  background: var(--glass-hi); box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.lbx-space .lbx-done:hover, .lbx-space .lbx-rules:hover, .lbx-space .lbx-tools:hover { background: rgba(60, 72, 86, 0.95); box-shadow: inset 0 0 0 1.5px var(--line-hi); }
+.lbx-space .lbx-done kbd, .lbx-space .lbx-side-btn kbd, .lbx-space .lbx-move kbd, .lbx-space .lbx-nextbtn kbd, .lbx-space .rl-go kbd {
+  color: var(--ink-2); background: rgba(255, 255, 255, 0.1); box-shadow: none;
+}
+.lbx-space .lbx-leave, .lbx-space .lbx-hurry { border-radius: 0; clip-path: var(--oct); --cut: 7px; background: var(--glass-hi); border: 0; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); }
+.lbx-space .ck-hurry { color: var(--brass); background: rgba(0, 0, 0, 0.3); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* the paper: a dark screen with faint blue rules, the margin line in the accent */
+.lbx-space .lbx-paper { border-radius: 0; clip-path: var(--oct); --cut: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+.lbx-space .lbx-start { color: var(--ink-2); background: rgba(120, 190, 240, 0.06); border-bottom: 1px solid var(--line); }
+.lbx-space .lbx-start-k { color: var(--brass); }
+.lbx-space .lbx-start.lit { background: rgba(255, 165, 82, 0.14); box-shadow: inset 4px 0 0 var(--brass-hi); }
+.lbx-space .lg-under, .lbx-space .lg-row.again .lg-note, .lbx-space .lg-row.raw .lg-note, .lbx-space .wk-lg-note { color: #ffb47a; }
+.lbx-space .lg-div .lg-txt { box-shadow: inset 0 -2px 0 #ffb47a; }
+.lbx-space .lg-note { color: var(--mute); }
+.lbx-space .lg-row.amber .lg-txt { color: #e9c79a; }
+.lbx-space .lg-row.raw .lg-txt { color: #e9c79a; }
+.lbx-space .lg-row.struck .lg-txt { text-decoration-color: rgba(255, 107, 91, 0.8); }
+.lbx-space .lbx-ledger { scrollbar-color: rgba(150, 205, 245, 0.4) transparent; }
+
+/* the mat: a darker screen with a dashed light line inside its edge */
+.lbx-space .lbx-stage {
+  border-radius: 0; clip-path: var(--oct); --cut: 16px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(120, 190, 240, 0.08), rgba(0, 0, 0, 0) 65%), linear-gradient(180deg, #131c26, #0c1218);
+  box-shadow: inset 0 0 0 1.5px var(--line); outline: 1px dashed rgba(150, 210, 250, 0.22); outline-offset: -9px;
+}
+.lbx-space .wside .den, .lbx-space .wside .times { color: var(--brass); }
+
+/* the chips: numbers are round lights, a light ring round a dark face; negatives dark with a dashed ring; x-terms
+   are cards drawn in lines */
+.lbx-space .chip.coin.pos {
+  color: #0b1218; background: radial-gradient(circle at 34% 28%, #ffffff, #dcecf8 45%, #a9c9e2 90%);
+  box-shadow: 0 0 0 0.05em #6f9fc4, 0 0 0.3em rgba(150, 210, 250, 0.35);
+}
+.lbx-space .chip.coin.pos::after { border-color: rgba(60, 100, 140, 0.35); }
+.lbx-space .chip.coin.neg { color: #eef6fc; background: radial-gradient(circle at 34% 28%, #33414f, #19222c 60%, #10161d); box-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.6); }
+.lbx-space .chip.coin.neg::before { background: repeating-conic-gradient(#bfe3ff 0deg 6deg, rgba(0, 0, 0, 0) 6deg 12deg); }
+.lbx-space .chip.coin.zero { color: var(--ink-2); box-shadow: inset 0 0 0 0.05em rgba(190, 220, 245, 0.55); }
+.lbx-space .chip.coin.blank { color: var(--brass-hi); box-shadow: inset 0 0 0 0.06em var(--brass-hi); }
+.lbx-space .chip.card.pos { color: #eef6fc; background: linear-gradient(180deg, #2a4a66, #1a3148); box-shadow: inset 0 0 0 0.05em #9fd6ff, 0 0.06em 0.14em rgba(0, 0, 0, 0.5); border-radius: 0.12em; }
+.lbx-space .chip.card.neg { color: #eef6fc; background: linear-gradient(180deg, #1a2430, #0f151c); box-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.55); border-radius: 0.12em; }
+.lbx-space .chip.card.neg::before { border-color: #9fd6ff; }
+.lbx-space .chip.brk .paren { color: #9fc4e0; }
+.lbx-space .chip.lit { box-shadow: 0 0 0 0.08em var(--brass-hi), 0 0 0.4em rgba(255, 165, 82, 0.55); }
+.lbx-space .chip.poof::after { background: radial-gradient(circle, rgba(170, 220, 255, 0.8), rgba(170, 220, 255, 0) 68%); }
+/* the "=": a round light with two bars */
+.lbx-space .hinge .pin { fill: #6f9fc4; }
+.lbx-space .hinge .pin-in { fill: #16222e; }
+.lbx-space .hinge .bar { fill: #dcecf8; }
+.lbx-space .calc { color: var(--ink); background: #18222d; box-shadow: inset 0 0 0 1px var(--line), 0 4px 12px rgba(0, 0, 0, 0.5); border-bottom-color: var(--brass); border-radius: 0; }
+.lbx-space .calc.zero, .lbx-space .calc.free { border-bottom-color: var(--good); }
+.lbx-space .dist-lab { color: var(--ink); background: #18222d; border-radius: 0; }
+.lbx-space .dist-lab .dist-q { color: var(--ink-2); }
+.lbx-space .dist-lab.done { background: #163323; }
+.lbx-space .dist-lab.done .dist-a { color: #b8f5cf; }
+
+/* the picture row: crates for x, crystals for 1 */
+.lbx-space .pic-term { background: rgba(150, 210, 250, 0.05); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.14); border-radius: 0; }
+.lbx-space .pic-term.lit { background: rgba(255, 165, 82, 0.14); box-shadow: inset 0 0 0 2px var(--brass-hi); }
+.lbx-space .pic-bag b { color: var(--ink); background: #22384c; }
+.lbx-space .kp-op, .lbx-space .kp-eq { color: var(--brass); text-shadow: none; }
+.lbx-space .kp-q { color: var(--ink); text-shadow: 0 1px 0 #000; top: 52%; }
+.lbx-space .kp-sack.open .kp-q { color: var(--brass-hi); }
+.lbx-space .kp-o.ghost { outline-color: rgba(255, 165, 82, 0.9); }
+
+/* the lock's screen talking (Hob's place) */
+.lbx-space .lbx-hob-face { box-shadow: 0 0 0 1.5px var(--line), 0 3px 8px rgba(0, 0, 0, 0.5); }
+.lbx-space .lbx-hob-say { background: rgba(0, 0, 0, 0.34); border-radius: 0; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+@media (max-width: 900px), (max-height: 520px) { .lbx-space .lbx-hob-say { background: rgba(12, 17, 23, 0.96); } }
+.lbx-space .lbx-rotate { color: var(--brass); }
+
+/* the buttons: dark glass with a light line, their keys' numbers small in the corner */
+.lbx-space .lbx-move {
+  color: var(--ink); border-radius: 0; clip-path: var(--oct); --cut: 12px;
+  background: linear-gradient(180deg, rgba(48, 60, 74, 0.96), rgba(28, 36, 46, 0.96));
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.lbx-space .lbx-move:hover:not(:disabled) { filter: none; box-shadow: inset 0 0 0 2px var(--line-hi); }
+.lbx-space .lbx-move:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--line-hi); }
+.lbx-space .lbx-move.tidycard.right, .lbx-space .lbx-move.prodpick.right, .lbx-space .lbx-move.partpick.right, .lbx-space .lbx-move.nlpick.right { box-shadow: inset 0 0 0 3px var(--good); background: linear-gradient(180deg, #1f4a33, #163323); }
+.lbx-space .lbx-move.nlpick { background: linear-gradient(180deg, rgba(48, 60, 74, 0.96), rgba(28, 36, 46, 0.96)); }
+.lbx-space .lbx-move .keyicon { color: var(--brass); }
+.lbx-space .lbx-move.glow { animation: pl-glow 1.1s ease-in-out infinite; }
+@keyframes pl-glow { 50% { box-shadow: inset 0 0 0 3px var(--brass-hi), 0 0 18px rgba(255, 165, 82, 0.5); } }
+.lbx-space .lbx-side-btn { border-radius: 0; clip-path: var(--oct); --cut: 10px; background: var(--glass-hi); box-shadow: inset 0 0 0 1.5px var(--line); font-size: 16px; }
+.lbx-space .lbx-side-btn:hover:not(:disabled) { background: rgba(60, 72, 86, 0.95); }
+.lbx-space .lbx-ask.bounce { background: rgba(255, 165, 82, 0.2); }
+/* the one button at the end: the accent */
+.lbx-space .lbx-nextbtn, .lbx-space .ck-next, .lbx-space .rl-go {
+  color: #1c1205; background: linear-gradient(180deg, #ffad66, #ff8f2e); border-radius: 0; clip-path: var(--oct); --cut: 14px; box-shadow: none;
+}
+.lbx-space .lbx-nextbtn:active:not(:disabled), .lbx-space .ck-next:active { transform: translateY(2px); box-shadow: none; }
+.lbx-space .lbx-nextbtn kbd, .lbx-space .rl-go kbd { color: #3a2207; background: rgba(0, 0, 0, 0.12); }
+
+/* the steps card: dark glass, the step being worked lit in the accent */
+.lbx-space .lbx-steps { border-radius: 0; clip-path: var(--oct); --cut: 10px; background: linear-gradient(180deg, rgba(26, 34, 44, 0.97), rgba(17, 23, 30, 0.97)); box-shadow: inset 0 0 0 1px var(--line); }
+.lbx-space .st-bar, .lbx-space .st-title { color: var(--ink); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 14px; }
+.lbx-space .st-rule { color: #dcecf8; background: rgba(120, 190, 240, 0.08); }
+.lbx-space .st-mini i { box-shadow: inset 0 0 0 1.5px rgba(150, 205, 245, 0.5); }
+.lbx-space .st-mini i[data-state="now"], .lbx-space .st-row[data-state="now"] .st-n, .lbx-space .rl-stl b { color: #1c1205; background: var(--brass-hi); }
+.lbx-space .st-n { box-shadow: inset 0 0 0 1.5px rgba(150, 205, 245, 0.5); }
+.lbx-space .st-row[data-state="now"] { background: rgba(255, 165, 82, 0.14); color: #fff; }
+.lbx-space .st-row[data-state="done"] { color: #b8e6c8; }
+.lbx-space .st-row[data-state="skip"] .st-txt { text-decoration-color: rgba(190, 220, 245, 0.45); }
+@media (max-width: 900px) and (min-height: 521px) {
+  .lbx-space .st-tab { font-weight: 700; color: var(--ink); background: linear-gradient(90deg, rgba(26, 34, 44, 0.97), rgba(17, 23, 30, 0.97)); box-shadow: inset 0 0 0 1px var(--line); }
+  .lbx-space .lbx-steps.dopen { box-shadow: inset 0 0 0 1px var(--line), 6px 0 24px rgba(0, 0, 0, 0.55); }
+}
+
+/* the part being asked, big in the middle */
+.lbx-space .lbx-focus { border-radius: 0; clip-path: var(--oct); --cut: 14px; background: rgba(0, 0, 0, 0.36); box-shadow: inset 0 0 0 1.5px rgba(150, 210, 250, 0.45); }
+.lbx-space .fq-q, .lbx-space .rl-line, .lbx-space .rv-final, .lbx-space .ck-txt.final, .lbx-space .iv-ans, .lbx-space .wk-rv-final { color: #ffffff; }
+.lbx-space .fq-slot { color: var(--brass-hi); background: rgba(255, 165, 82, 0.08); box-shadow: inset 0 0 0 0.045em rgba(255, 165, 82, 0.85); border-radius: 0.08em; }
+.lbx-space .fq-autos { color: #e6f6ec; }
+.lbx-space .lbx-now { border-radius: 0; clip-path: var(--oct); --cut: 10px; background: rgba(255, 165, 82, 0.1); box-shadow: inset 0 0 0 1.5px rgba(255, 165, 82, 0.45); color: #fff; }
+.lbx-space .lbx-now .ln-n { font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* the check */
+.lbx-space .ck-head, .lbx-space .rv-head, .lbx-space .iv-k { font-weight: 700; letter-spacing: 0.06em; color: var(--brass); }
+.lbx-space .ck-side, .lbx-space .rv-c.rv-in { background: rgba(150, 210, 250, 0.05); box-shadow: inset 0 0 0 2px rgba(150, 210, 250, 0.22); }
+.lbx-space .ck-key { color: var(--brass); }
+
+/* the rules card */
+.lbx-space .lbx-rulescard { background: rgba(2, 4, 8, 0.66); }
+.lbx-space .rl-box { border-radius: 0; clip-path: var(--oct); --cut: 18px; background: linear-gradient(180deg, #18212b, #10161d); box-shadow: inset 0 0 0 1.5px var(--line); }
+.lbx-space .rl-title { font-weight: 700; font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); text-shadow: none; }
+.lbx-space .rl-h { font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); }
+.lbx-space .rl-ex, .lbx-space .rl-steps { border-radius: 0; background: rgba(0, 0, 0, 0.25); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.16); }
+
+/* the lock opening (the West's chest and its gold): the padlock's shackle lifts, the ring of light turns */
+.lbx-space .lbx-reward { background: radial-gradient(ellipse at 50% 48%, rgba(20, 34, 48, 0.97), rgba(8, 12, 17, 0.97) 75%); border-radius: 0; }
+.lbx-space .rw-gold { color: var(--good); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 24px; }
+.lbx-space .pl-open { width: min(240px, 60%); height: auto; overflow: visible; }
+.lbx-space .pl-open .pl-shackle { transform-origin: 148px 74px; transition: transform 0.45s cubic-bezier(.3, 1.4, .5, 1) 0.15s; }
+.lbx-space .lbx-reward.go .pl-shackle { transform: translateY(-14px); }
+.lbx-space .pl-open .pl-ring { transform-origin: 120px 104px; animation: pl-turn 3s linear infinite; }
+.lbx-space .lbx-reward.go .pl-open rect + circle, .lbx-space .lbx-reward.go .pl-open circle + rect { fill: var(--good); transition: fill 0.3s 0.3s; }
+@keyframes pl-turn { to { transform: rotate(360deg); } }
+
+/* the in-between lines Mathwood colours in its gold */
+.lbx-space .w-or, .lbx-space .wk-op, .lbx-space .wk-rv-eq, .lbx-space .iv-rel, .lbx-space .iv-check b, .lbx-space .fq-eq, .lbx-space .fq-cap b, .lbx-space .wk-ex b, .lbx-space .rl-move, .lbx-space .rl-flip, .lbx-space .st-nowtxt b { color: var(--brass); }
+.lbx-space .wk-grp.on { background: rgba(255, 165, 82, 0.14); box-shadow: inset 0 0 0 0.055em var(--brass-hi); }
+.lbx-space .lbx-arrow .shaft { stroke: var(--brass); }
+
+/* no gold here: the purse stays hidden (Mathwood's own sheet shows it whatever its hidden says) */
+.lbx-space .lbx-purse[hidden] { display: none; }
+/* hear it again (the read-aloud's button): a round light like the lock's screen */
+.lbx-space .lbx-hear { background: #16222e; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
+.lbx-space .lbx-hear:active { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--line-hi); }
+/* (the rigs' small rung names beside the line) */
+.lbx-space .lbx-rung small { display: none; }

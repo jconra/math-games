@@ -32,6 +32,10 @@
 // yet.
 //
 // Address switches: ?seed=N the planet; ?kind=moon|meadow|canyon a new one of that kind; ?q=low|medium|high graphics;
+// EACH POD'S LOCK (src/podlock.js; his words: "opening the statis pods on medical missions can be equation solving, like
+// lockboxes"): fly up to a pod and look at it (the prompt over the menu, or E), or tap the pod: its lock is Mathwood's
+// lock box in this game's look; solved, that pod's lid opens (the Pods row shuts them all again). The lab's own medic's
+// level on the ladder is kept in this browser.
 // ?view=landing|above|low|wreck|pods; ?wreck=none|any|miner|explorer|medic|hauler (any: each rescue, the first pick);
 // ?paint=rust|olive|slate and ?pieces=2|3 (with a ship by hand); ?pods=shut|open (their lids);
 // ?rig keeps the picture readable for a screenshot; ?hold no clock of its own (LAB.step).
@@ -47,6 +51,8 @@ import { makeWreck } from '../../src/planet/wreckship.js';
 import { podsPlan, footprintTris } from '../../src/planet/pods.js';
 import { makePods } from '../../src/planet/podsdraw.js';
 import { loadPod } from '../../kit/stasispod.js';
+import { openPodLock, labMedic } from '../../src/podlock.js';
+import { makePodReach } from '../../src/podreach.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), RIG = q.has('rig'), HOLD = q.has('hold');
@@ -101,6 +107,8 @@ function wreckAddress(u) {
 // THE PODS: the plan for this planet's (where they lie), the pods drawn, their lids wanted open (1) or shut (0); the crew
 // kit for their sleepers, fetched the first time
 let podPlan = null, pods = null, podsWant = q.get('pods') === 'open' ? 1 : 0, crewLib = null;
+// (each pod's lock: the one open now, and the lab's medic)
+let lock = null; const medic = labMedic();
 const NUMBERS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
 // the menu's line about it: the wreck as it is shown (said again when its colours are changed where it lies), and its pods
 const wreckSay = () => (wreck ? ` A crashed ${SHIP_NAMES[wreck.ship]} lies beside the ring, broken in ${wreck.stats.pieces === 2 ? 'two' : 'three'}, in ${PAINTS[wreck.paintId].name.toLowerCase()}${podPlan ? `, ${NUMBERS[podPlan.pods.length] || podPlan.pods.length} stasis pods beside it in the same colours, someone of its crew asleep in each` : ''}.` : '');
@@ -180,7 +188,7 @@ const canLock = !navigator.webdriver && typeof canvas.requestPointerLock === 'fu
     drag.moved += Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y);
     turn(e.clientX - drag.x, e.clientY - drag.y, 0.0042); drag.x = e.clientX; drag.y = e.clientY;
   });
-  const end = (e) => { if (!drag || e.pointerId !== drag.id) return; const click = drag.moved < 4 && e.type === 'pointerup' && e.pointerType === 'mouse'; drag = null; if (click && canLock) { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } };
+  const end = (e) => { if (!drag || e.pointerId !== drag.id) return; const click = drag.moved < 4 && e.type === 'pointerup' && e.pointerType === 'mouse'; drag = null; if (click && canLock && !lock && !(reach && reach.tapped())) { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
 }
 function turn(dx, dy, k) { k *= camera.fov / 60; cam.yaw -= dx * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * k, -1.5, 1.5); applyCam(); }
@@ -341,6 +349,7 @@ function frame(dt) {
   fly(dt);
   planet.update(camera, dt);
   if (pods) pods.update(camera, dt);
+  if (reach) reach.update();
   renderer.info.reset();
   renderer.render(scene, camera);
 }
@@ -390,6 +399,25 @@ LAB.setWreck = async ({ ship, paint: p, pieces } = {}) => {
   else if (wreck && w) repaint(w.paint);
   paintChips(); return wreck ? wreck.stats : null;
 };
+
+// ── EACH POD'S LOCK ──────────────────────────────────────────────────────────────────────────────────────────────
+// a pod counts as open once its lid is on its way open (by its lock, or the Pods row's Open)
+const podOpen = (p) => (p.want ?? pods.want) === 1;
+const reach = makePodReach({ camera, canvas, onPick: (p) => openLock(p.i),
+  aim: () => Math.min(0.6, ($('bar').offsetHeight || 0) / Math.max(1, innerHeight)),   // (the middle of what the menu leaves showing)
+  pods: () => (pods ? pods.pods.map((p, i) => ({ group: p.group, name: `Stasis pod ${i + 1}`, open: podOpen(p), i })) : []) });
+function openLock(i) {
+  if (lock || !pods || !pods.pods[i]) return null;
+  const P = pods; reach.busy(true); keys.clear();
+  lock = openPodLock(document.body, { rider: medic.rider, saveRider: medic.save, debug: RIG, ...(LAB.lockRung ? { rung: LAB.lockRung, size: LAB.lockSize } : {}),
+    pod: { name: `Stasis pod ${i + 1}`, where: `${i + 1} of ${P.pods.length} beside the wreck · its lock` },
+    onOpen: () => { medic.save(medic.rider); if (P === pods) { P.openOne(i, 1); paintChips(); } },
+    onClose: () => { lock = null; reach.busy(false); medic.save(medic.rider); } });
+  return lock;
+}
+// (for the rigs: a pod's lock opened as a tap opens it; the one open now; the pod offered now; a rung to deal)
+LAB.lock = (i) => openLock(i);
+Object.defineProperties(LAB, { lockNow: { get: () => lock }, reach: { get: () => reach } });
 
 touchControls(); paintChips();
 const first = +q.get('seed') > 0 ? Math.floor(+q.get('seed')) : (q.get('kind') ? newSeed(want) : (kept.seed > 0 ? kept.seed : newSeed(want === 'any' ? null : want)));
