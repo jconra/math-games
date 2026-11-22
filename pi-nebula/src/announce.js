@@ -37,7 +37,7 @@
 //   - TEXT LINES: a line no recorded clip says (the run's own facts: how many people a rescue brought home, from where)
 //     is the chime and then its words, shown at the top of the screen for as long as they take to read (TEXT), heard
 //     where a spoken line would be (the brief for the rescue's news: "only text lines if a clip doesn't exist; never
-//     browser speech"). One so far: THE RESCUE'S OUTCOME ('rescued', src/wardplan.js outcome), said once after the
+//     browser speech"), never while a question card is up (it waits for the card to go; a card come up puts it away). One so far: THE RESCUE'S OUTCOME ('rescued', src/wardplan.js outcome), said once after the
 //     recorded "The Medic has brought a stranded crew home safely" for a rescue the crew member was on: "News from the
 //     Medic. Five people have been brought home from a crashed ship on a canyon world. They are resting in the ward."
 //   - THE MATHBALL HIGH SCORE (2026-11-20, the game's maker: "Keep only your own best round. This plays when you beat
@@ -236,6 +236,8 @@ export function makeAnnouncer({ sound, read, rand = Math.random, onText = () => 
     for (const L of LINES) {
       if (L.event || L.held || (L.once && once.has(L.id)) || !quiet(L)) continue;
       const s = L.say(G, rand); if (!s) continue;
+      // (a text line waits while a question card is up: its words would be read over the card's)
+      if (s.text && G.math) continue;
       if (!heardIn(whereOf(L, G), G.place)) continue;
       ok.push({ L, s });
     }
@@ -276,7 +278,7 @@ export function makeAnnouncer({ sound, read, rand = Math.random, onText = () => 
       if (now && now.t0 != null) {
         const vol = volumeAt(now.where, G.place, G.math);
         if (Math.abs(vol - now.vol) > 0.001) { for (const h of now.handles) if (h) h.volume(vol); now.vol = vol; }
-        show(now.s.text && t - now.t0 >= T.chime && t - now.t0 < now.ends && heardIn(now.where, G.place) ? now.words : null);
+        show(now.s.text && t - now.t0 >= T.chime && t - now.t0 < now.ends && heardIn(now.where, G.place) && !G.math ? now.words : null);
         if (t - now.t0 >= now.ends) { now = null; show(null); due = t + gapAfter(rand); }
         return;
       }

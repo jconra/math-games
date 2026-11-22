@@ -141,3 +141,26 @@ test('a text line is not shown where it is not heard, nor away from the station;
   for (let t = 0; t < 1; t += 0.1) A.update(0.1, facts(null));
   assert.equal(shown[shown.length - 1], null);
 });
+
+test('a text line waits while a question card is up (its words would be read over the card\'s), and is put away if one comes up', () => {
+  const shown = [];
+  const A = makeAnnouncer({ sound: fakeSound(), read: null, rand: seeded(13), onText: (w) => shown.push(w) });
+  const item = { id: 'rescue:7', kind: 'rescue', ship: 'Medic', captain: 'Captain Hale', crew: 'four stranded crew', people: 'four people', from: fromWords('meadow'), count: 4, resting: 3 };
+  const facts = (math) => ({ playing: true, place: 'medical', math, news: [item], captains, scan: null, alarm: null, events: [] });
+  A.told.add('rescue:7');
+  // (a card up the whole time: other lines, never the text one)
+  for (let t = 0; t < 400; t += 0.1) A.update(0.1, facts(true));
+  assert.ok(A.log.length >= 3 && !A.log.some((x) => x.id === 'rescued'), A.log.map((x) => x.id).join());
+  assert.deepEqual(shown, []);
+  // (the card put away: said at the next turn)
+  for (let t = 0; t < 120; t += 0.1) A.update(0.1, facts(false));
+  assert.ok(A.log.some((x) => x.id === 'rescued'));
+  assert.equal(shown[0], outcome({ people: 4, from: fromWords('meadow'), resting: 3 }));
+  // (shown, then a card comes up: put away)
+  const B = makeAnnouncer({ sound: fakeSound(), read: null, rand: seeded(13), onText: (w) => shown.push(w) });
+  B.told.add('rescue:7'); B.say('rescued'); shown.length = 0;
+  for (let t = 0; t < 4; t += 0.1) B.update(0.1, facts(false));
+  assert.equal(shown.length, 1);
+  B.update(0.1, facts(true));
+  assert.deepEqual(shown, [outcome({ people: 4, from: fromWords('meadow'), resting: 3 }), null]);
+});
