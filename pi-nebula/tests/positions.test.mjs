@@ -1,14 +1,15 @@
-// Our crew in their positions' colours (kit/positions.js; the game's maker, of the stasis pods' sleepers in red for a
-// captain, purple for an engineer, yellow for a drill operator, asked whether our own crew should too: "Let's do them
-// all"): one table for the sleepers, the station's people and the ships' crews; worn on the crew uniform's bands. A
-// sleeper in an outfit without bands is swapped for the crew uniform of its build; our own crew keep their own bodies
-// (his answer JOB1-1 B: the captains and the medic in their own bodies and colours, no job colour on them), so only those
-// already in a crew uniform show it. Run against the crew kit's own list of parts (assets/crew/crew.json).
+// The positions' colours (kit/positions.js): one table for the stasis pods' sleepers and for a crew whose standard is a
+// uniform. The game's maker (2026-11-22): "certain crews might all use a standard uniform. Like maybe on the miner
+// everyone wears whatever they want. But on the medic ship everyone wears the Atlantis uniforms and the colors mean
+// something"; of Captain Hale: "the captain should also have the crews uniform". So the Medic's crew (Captain Hale too)
+// wear the crew uniform in their position's colour; the Miner's crew and the station's people their own clothes; Jon
+// the mechanic in the engineer's purple (JOB1-2 B); the other captains their own bodies (JOB1-1 B). Run against the crew
+// kit's own list of parts (assets/crew/crew.json).
 //   node --test pi-nebula/tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { POSITIONS, POSITION_IDS, CREW_UNIFORM, wearPosition } from '../kit/positions.js';
+import { POSITIONS, POSITION_IDS, CREW_UNIFORM, CREWS, wearPosition, crewRecipe } from '../kit/positions.js';
 import * as POD from '../kit/stasispod-plan.js';
 import { ROSTER, ROOM_CREW, lookRecipe } from '../src/life.js';
 import { ROLES, MISSIONS, aboardOf } from '../src/missions.js';
@@ -17,9 +18,9 @@ const CREW = JSON.parse(readFileSync(new URL('../assets/crew/crew.json', import.
 const lib = { list: CREW, entry: (kind, id) => (CREW.parts[kind] || []).find((p) => p.id === id) || null };
 // (the crew kit's band colours, read from its source: kit/crew.js loads three.js, which node has not)
 const BANDS = JSON.parse(readFileSync(new URL('../kit/crew.js', import.meta.url), 'utf8').match(/export const BAND_COLOURS = (\{[^}]*\})/)[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"'));
-const dressed = (def) => lookRecipe(def.look, def.position, lib);
+const def = (id) => [...ROSTER, ...ROOM_CREW].find((d) => d.id === id);
+const dressed = (d) => lookRecipe(d.look, d, lib);
 const ownOf = (look) => (typeof look === 'string' ? CREW.recipes[look] : look);
-const inUniform = (R) => Object.values(CREW_UNIFORM).includes(R.suit);
 
 test('one table: the five positions, each a band colour of the crew kit\'s by its name, his three as he named them', () => {
   assert.deepEqual(POSITION_IDS, ['captain', 'pilot', 'engineer', 'drill', 'medic']);
@@ -29,55 +30,64 @@ test('one table: the five positions, each a band colour of the crew kit\'s by it
   assert.equal(POD.POSITIONS, POSITIONS); assert.equal(POD.POSITION_IDS, POSITION_IDS);
 });
 
-test('the sleepers\' way: a crew uniform kept, any other outfit swapped for the crew uniform of its build; kept bodies: only a crew uniform takes the colour', () => {
+test('worn the sleepers\' way: a crew uniform kept, any other outfit swapped for the crew uniform of its build', () => {
   for (const s of CREW.parts.suit) {
     const head = CREW.parts.head.find((h) => h.with === s.id);
-    const R0 = { suit: s.id, head: head ? head.id : 't3', colours: { skin: '#c48a62' } };
-    const R = wearPosition(R0, 'medic', lib), K = wearPosition(R0, 'medic', lib, { keep: true });
-    if (head) { assert.equal(R, R0, s.id + ' brings its own head: as made'); assert.equal(K, R0); continue; }
+    const R0 = { suit: s.id, head: head ? head.id : 't3', colours: { skin: '#c48a62' } }, R = wearPosition(R0, 'medic', lib);
+    if (head) { assert.equal(R, R0, s.id + ' brings its own head: as made'); continue; }
     assert.equal(R.suit, Object.values(CREW_UNIFORM).includes(s.id) ? s.id : CREW_UNIFORM[s.skeleton], s.id);
     assert.equal(lib.entry('suit', R.suit).skeleton, s.skeleton, s.id + ' keeps its build');
     assert.equal(R.colours.uniform, POSITIONS.medic.colour); assert.equal(R.colours.skin, '#c48a62');
-    if (inUniform(R0)) assert.deepEqual(K, R); else assert.equal(K, R0, s.id + ' kept as it is');
   }
   const R = { suit: 'civilian', head: 't1' };
   assert.equal(wearPosition(R, null, lib), R); assert.equal(wearPosition(R, 'cook', lib), R);
   assert.equal(wearPosition({ ...R, position: 'pilot' }, null, lib).colours.uniform, POSITIONS.pilot.colour, 'a recipe\'s own position');
 });
 
-test('the captains, the medic and the miner keep their own bodies in their own colours (JOB1-1 B); Jon the mechanic in the engineer\'s purple (JOB1-2 B)', () => {
-  for (const [id, pos] of Object.entries({ ruiz: 'captain', hale: 'captain', adair: 'captain', medic: 'medic', 'miner-oso': 'drill' })) {
-    const def = ROSTER.find((d) => d.id === id); assert.ok(def, id); assert.equal(def.position, pos, id);
-    assert.equal(dressed(def), ownOf(def.look), id + ' exactly as their look');
+test('a crew\'s standard: the Medic\'s crew in the crew uniform in their positions\' colours, its captain too; the Miner\'s in their own', () => {
+  assert.equal(CREWS.medic.standard, true); assert.equal(CREWS.medic.captainToo, true); assert.equal(CREWS.miner.standard, false);
+  for (const p of CREWS.medic.positions) assert.ok(POSITIONS[p], p);
+  const jacket = { suit: 'civilian', head: 't1', colours: { skin: '#c48a62' } };
+  for (const p of CREWS.medic.positions) {
+    const R = crewRecipe(jacket, { ship: 'medic', position: p }, lib);
+    assert.equal(R.suit, 'atlantis1', p); assert.equal(R.colours.uniform, POSITIONS[p].colour, p);
+    assert.equal(crewRecipe(jacket, { ship: 'miner', position: p }, lib), jacket, 'the Miner\'s ' + p + ' in their own');
+    assert.equal(crewRecipe(jacket, { position: p }, lib), jacket, 'no crew: their own');
   }
-  assert.equal(ROSTER.find((d) => d.id === 'adair').look.colours.uniform, '#2f6db3', 'Captain Adair in her own blue');
-  const jon = dressed(ROSTER.find((d) => d.id === 'mechanic'));
-  assert.equal(jon.suit, 'atlantis1'); assert.equal(jon.colours.uniform, POSITIONS.engineer.colour);
-  // (Captain Vega's body brings its own head: as made)
-  assert.equal(dressed(ROSTER.find((d) => d.id === 'vega')).suit, 'vega');
+  assert.equal(crewRecipe(jacket, { ship: 'medic', captain: true }, lib).colours.uniform, POSITIONS.captain.colour);
+  assert.equal(crewRecipe(jacket, { ship: 'miner', captain: true }, lib), jacket);
 });
 
-test('everyone whose work is none of the five keeps their own clothes, exactly as their look has them (Ada, Dara as now: JOB1-3 A)', () => {
-  for (const def of [...ROSTER, ...ROOM_CREW]) {
-    if (def.position) continue;
-    assert.equal(dressed(def), ownOf(def.look), def.id + ' as their look has it');
-  }
-  assert.equal(ROSTER.find((d) => d.id === 'crew-ada').look.colours.uniform, '#6e28b2');
-  assert.equal(ROOM_CREW.find((d) => d.id === 'duty-dara').look.colours.uniform, '#3f8fe8');
+test('Captain Hale in the crew uniform in the captain\'s red, her official uniform; the other captains in their own bodies', () => {
+  const H = dressed(def('hale'));
+  assert.equal(H.suit, 'atlantis2'); assert.equal(H.colours.uniform, POSITIONS.captain.colour);
+  const own = ownOf(def('hale').look); assert.equal(H.head, own.head); assert.equal(H.hair, own.hair);
+  for (const id of ['ruiz', 'adair', 'vega', 'rook']) assert.equal(dressed(def(id)), ownOf(def(id).look), id);
+  assert.equal(def('adair').look.colours.uniform, '#2f6db3', 'Captain Adair in her own blue');
 });
 
-test('the Miner\'s crew aboard: the pilot and the engineer (crew uniforms) in their jobs\' colours, the drill operator and Captain Ruiz in their own', () => {
-  const M = MISSIONS.mining;
+test('the station\'s people in their own clothes, exactly as their looks; Jon in the engineer\'s purple (JOB1-2 B); Ada and Dara as they are', () => {
+  for (const d of [...ROSTER, ...ROOM_CREW]) {
+    if (d.id === 'hale') continue;
+    assert.equal(dressed(d), ownOf(d.look), d.id + ' as their look has it');
+    assert.equal(d.position, undefined, d.id);
+  }
+  const jon = dressed(def('mechanic')); assert.equal(jon.suit, 'atlantis1'); assert.equal(jon.colours.uniform, POSITIONS.engineer.colour);
+  assert.equal(def('crew-ada').look.colours.uniform, '#6e28b2'); assert.equal(def('duty-dara').look.colours.uniform, '#3f8fe8');
+});
+
+test('aboard the Miner: its crew member and Captain Ruiz in their own clothes, whatever roles are signed for', () => {
+  const M = MISSIONS.mining; assert.equal(M.ship, 'miner');
   for (const first of M.roles) {
     const mine = M.roles.filter((r) => r !== first && M.roles.indexOf(r) < M.roles.indexOf(first));     // (the roles before it signed for)
-    const A = aboardOf(M, mine);
-    const crew = A.find((a) => !a.captain); assert.equal(crew.id, 'crew-' + first);
+    const A = aboardOf(M, mine), crew = A.find((a) => !a.captain);
+    assert.equal(crew.id, 'crew-' + first); assert.equal(crew.look.crew, 'miner'); assert.equal(crew.look.position, first);
     const R = lookRecipe(crew.look, null, lib), own = ROLES[first].look;
-    if (inUniform(own)) { assert.equal(R.suit, own.suit, first); assert.equal(R.colours.uniform, POSITIONS[first].colour, first); }
-    else { assert.equal(R.suit, own.suit, first + ' in their own body'); assert.equal((R.colours || {}).uniform, (own.colours || {}).uniform, first); }
+    assert.equal(R.suit, own.suit, first); assert.equal((R.colours || {}).uniform, (own.colours || {}).uniform, first);
     assert.equal(ROLES[first].look.position, undefined, 'the role\'s own look is not changed');
-    const cap = A.find((a) => a.captain), def = ROSTER.find((d) => d.id === cap.look);
-    assert.equal(dressed(def), ownOf(def.look));
+    const cap = A.find((a) => a.captain); assert.equal(dressed(def(cap.look)), ownOf(def(cap.look).look));
   }
-  assert.ok(inUniform(ROLES.pilot.look) && inUniform(ROLES.engineer.look), 'the pilot and the engineer wear crew uniforms');
+  // (a Medic mission's crew, as missions.js would hand them aboard: in its standard)
+  const medicCrew = lookRecipe({ ...ROLES.pilot.look, position: 'pilot', crew: 'medic' }, null, lib);
+  assert.equal(medicCrew.colours.uniform, POSITIONS.pilot.colour);
 });

@@ -42,8 +42,8 @@
 //            Plain, Wireframe; the 1.8 m post; the Normal figure (2026-11-15: a mannequin of normal adult proportions
 //            beside them, reference.js); Bones
 //   COLORS   Position (2026-11-21, kit/positions.js: None, Captain, Pilot, Engineer, Drill operator, Medic: the person in
-//            that position's colour on the crew uniform's bands, as the pods' sleepers wear it (another body: the crew
-//            uniform of its build; the game's own people keep their own bodies); None: back as before),
+//            that position's colour on the crew uniform's bands, as the pods' sleepers and the Medic's crew wear it
+//            (another body: the crew uniform of its build); None: back as before),
 //            Job colours (the outfit's marks, light lines and panels; an outfit keeping its own colours takes none),
 //            Bands (the outfit's whites: as made, BAND_COLOURS by name, then More: the older uniform colours, or any),
 //            Skin tone, Hair colour, Eyes (a head with real eyes: the iris's colour, Look at camera)
@@ -334,20 +334,20 @@ function menu() { if (!M) return; for (const id of M.ids()) paint(id); LU?.drawT
 function crewWin() {
   return [sec('Crew members', row(Object.entries(RECIPES).map(([id, r]) => chip(r.name, id === st.who, () => { st.who = id; show(r); }, true, 'Wear this crew member\'s whole recipe: outfit, head, hair and colours')))),
     note('Each is a whole recipe from crew.json. Change any part in Bodies, Heads, Hair or Colors.'),
-    sec('In the game, in their job\'s colour', row(GAME_PEOPLE.filter((g) => g.shows).map((g) => posChip(g.name + ', ' + POSITIONS[g.position].name.toLowerCase(), g.position, st.who === g.id, () => wearGame(g), 'As the game dresses them: their job\'s colour on the crew uniform\'s bands')))),
-    sec('In the game, in their own clothes', row(GAME_PEOPLE.filter((g) => !g.shows).map((g) => chip(g.name + (g.position ? ', ' + POSITIONS[g.position].name.toLowerCase() : ''), st.who === g.id, () => wearGame(g), true, g.position ? 'As the game dresses them: their own body, which has no crew uniform bands, so no job colour' : 'As the game dresses them: their work is none of the five positions')))),
-    note('The station\'s people and the ships\' crews as the game puts them together (src/life.js, src/missions.js). Someone in the crew uniform wears their job\'s colour on its bands: captains red, pilots blue, engineers purple, drill operators yellow, medics green (kit/positions.js). Everyone keeps their own body: the captains and the medic in theirs, no job colour.')];
+    sec('In the game, in their crew\'s uniform', row(GAME_PEOPLE.filter((g) => g.shows).map((g) => posChip(g.name + ', ' + POSITIONS[g.shows].name.toLowerCase(), g.shows, st.who === g.id, () => wearGame(g), 'As the game dresses them: their crew\'s standard, the crew uniform in their position\'s colour')))),
+    sec('In the game, in their own clothes', row(GAME_PEOPLE.filter((g) => !g.shows).map((g) => chip(g.name, st.who === g.id, () => wearGame(g), true, 'As the game dresses them: their own clothes')))),
+    note('The station\'s people and the ships\' crews as the game puts them together (src/life.js, src/missions.js). A crew may have a standard uniform: the Medic\'s crew wear the crew uniform in their position\'s colour, Captain Hale in the captain\'s red; captains red, pilots blue, engineers purple, drill operators yellow, medics green (kit/positions.js CREWS). Everyone else wears their own clothes.')];
 }
-// (the game's own people: the station's (life.js ROSTER, ROOM_CREW) and the Miner's own crew (missions.js ROLES), each
-// as the game dresses them)
-const GAME_PEOPLE = [...ROSTER, ...ROOM_CREW].map((d) => ({ id: 'game:' + d.id, name: d.name, look: d.look, position: d.position || null }))
-  .concat(Object.values(ROLES).map((r) => ({ id: 'game:role-' + r.id, name: r.crew, look: r.look, position: r.id })))
-  // (shows: their job's colour is on them: a position, and the crew uniform worn)
-  .map((g) => ({ ...g, shows: !!(g.position && (lookRecipe(g.look, g.position, lib) || {}).position) }));
+// (the game's own people: the station's (life.js ROSTER, ROOM_CREW) and the Miner's own crew (missions.js ROLES, the
+// Miner's), each as the game dresses them (who: what life.js lookRecipe is given); shows: the position whose colour they
+// wear, if any)
+const GAME_PEOPLE = [...ROSTER, ...ROOM_CREW].map((d) => ({ id: 'game:' + d.id, name: d.name, look: d.look, who: d }))
+  .concat(Object.values(ROLES).map((r) => ({ id: 'game:role-' + r.id, name: r.crew, look: r.look, who: { crew: 'miner', position: r.id } })))
+  .map((g) => ({ ...g, shows: (lookRecipe(g.look, g.who, lib) || {}).position || null }));
 function wearGame(g) {
-  const R = lookRecipe(g.look, g.position, lib); if (!R) return; st.who = g.id;
-  const own = JSON.parse(JSON.stringify(lookRecipe(g.look, null, lib)));
-  return show(R).then(() => { st.unpos = g.position ? own : null; });
+  const R = lookRecipe(g.look, g.who, lib); if (!R) return; st.who = g.id;
+  const own = JSON.parse(JSON.stringify(typeof g.look === 'string' ? RECIPES[g.look] : g.look));
+  return show(R).then(() => { st.unpos = g.shows ? own : null; });
 }
 // (a chip with its position's colour beside its words)
 function posChip(label, id, on, fn, title) {
@@ -355,9 +355,9 @@ function posChip(label, id, on, fn, title) {
   b.prepend(dot); return b;
 }
 // THE POSITIONS' COLOURS (kit/positions.js; the game's maker: "red-Captain, purple-engineer, yellow-drill", and of our
-// own crew: "Let's do them all"): the person shown in a position's colour, as the pods' sleepers wear it (an outfit
-// without bands: the crew uniform of its build; the game's own people keep their own bodies, his JOB1-1 B); None: back
-// to the recipe before a position was picked
+// crews: "on the medic ship everyone wears the Atlantis uniforms and the colors mean something"): the person shown in a
+// position's colour, as the pods' sleepers and a crew with a standard uniform wear it (an outfit without bands: the crew
+// uniform of its build); None: back to the recipe before a position was picked
 function position(id) {
   if (!st.recipe) return;
   if (!id) {
