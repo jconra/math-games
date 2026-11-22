@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Other Station Lab</title>
+<meta name="description" content="A space station lab: the outside of the other station, the old one in distress, seen from a ship coming in and flying round it.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../mathwood-valley/oops.js"></script>
+<link rel="stylesheet" href="../kit/kit.css?v=1">
+<style>
+  /* the strip at the top names the lab and says what it costs; the places to look from are a bar along the bottom that
+     wraps onto a second line rather than scroll */
+  body { --bar: 0px; }
+  .os-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+    background: var(--glass); border-top: 1px solid var(--edge); }
+  .os-bar .chip { font-size: 13.5px; padding: 5px 12px; }
+  .os-bar .os-round { font-weight: 700; }
+  .os-keys { flex-basis: 100%; color: var(--mute); font-size: 11.5px; }
+  .touch .os-keys { display: none; }
+  .kl-top { max-width: min(100%, 560px); }
+  .touch .kl-stick, .touch .kl-updown { bottom: calc(var(--barH, 50px) + 14px); }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="The other station in 3D: a red-grey station with two hangars, a ring of solar panels standing round it"></canvas>
+<div class="kl-top" id="top">
+  <h1>Other Station Lab</h1><a href="../">All labs</a>
+  <span class="kl-hud" id="hud" aria-live="off"></span>
+  <span class="os-keys" id="keys">W A S D move · Space up · C down · Shift faster · drag to look</span>
+</div>
+<!-- the places to look from, and the Explorer's way round it -->
+<div class="os-bar" id="bar" role="toolbar" aria-label="Where to look from"></div>
+<!-- the touch controls: a stick to fly, buttons up and down (only on touch screens) -->
+<div class="kl-stick" id="stick" aria-hidden="true"><div class="kl-knob" id="knob"></div></div>
+<div class="kl-updown" id="updown" aria-hidden="true"><button id="up" aria-label="Up">▲</button><button id="down" aria-label="Down">▼</button></div>
+<div class="kl-loading" id="loading">Finding the old station…</div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>

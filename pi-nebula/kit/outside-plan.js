@@ -68,12 +68,12 @@
 // stretch of 10 m or more, plain plates elsewhere. Laid with the station's own look (kit/hull-look.js STATION_LOOK).
 import { offsetPath, SEAM, INSIDE } from './hull-plates.js';
 
-const plates = (group, shapes) => ({ group, kind: 'plates', ...shapes }), ROW = { group: 'trim', kind: 'windows' };
+export const plates = (group, shapes) => ({ group, kind: 'plates', ...shapes }), ROW = { group: 'trim', kind: 'windows' };
 // shape C: a big raised plate with a sunk panel wherever the stretch is big enough (the builder decides)
-const BIG = { slab: { recess: true } };
+export const BIG = { slab: { recess: true } };
 // (on the hangars' band the big plate stands 0.67 m off the wall, just short of the game's own door frames at 0.68 m, so
 // nothing beside a door hides more of the view out of it than its frame already does)
-const BIG_BAND = { slab: { proud: 0.22, recess: true } };
+export const BIG_BAND = { slab: { proud: 0.22, recess: true } };
 // (a lower face: the panel is brought in less, so it still fits a plate 4 to 7 m tall)
 const BIG_LOW = { slab: { inset: 1, recess: { inset: 0.8, depth: 0.4, cut: 0.4 } } };
 
@@ -99,7 +99,7 @@ const ROOF = 18.2, BELLY = -8.4;                       // the body's flat roof a
 export const LEVELS = { band: { foot: -1.4, top: 12 }, upper: { in: 3.8, wall: 3.2, slope: 2 }, lower: { in: 2.6, wall: 3.6, slope: 2.4 }, roof: ROOF, belly: BELLY };
 
 // an outline walked with the outside on the right: a box with its corners cut ([north-east, north-west, south-west, south-east])
-function boxPath(x0, x1, z0, z1, c = 0) {
+export function boxPath(x0, x1, z0, z1, c = 0) {
   const [ne, nw, sw, se] = Array.isArray(c) ? c : [c, c, c, c], P = [[x1, z1 - se], [x1, z0 + ne], [x1 - ne, z0], [x0 + nw, z0], [x0, z0 + nw], [x0, z1 - sw], [x0 + sw, z1], [x1 - se, z1]];
   return P.filter((p, i) => { const q = P[(i + 1) % P.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-6; });
 }
@@ -141,13 +141,13 @@ export function flatsOf(outer, holes, y, up, part) {
   return out;
 }
 // (a band gets its big plate if its narrow way is at least `least` m, and no more than `most`: one plate 28 m by 30 m is not armour)
-const plain = () => plates('tiers'), bigIf = (least, most = 16) => (w, h) => plates('tiers', Math.min(w, h) >= least && Math.min(w, h) <= most ? BIG : {});
+export const plain = () => plates('tiers'), bigIf = (least, most = 16) => (w, h) => plates('tiers', Math.min(w, h) >= least && Math.min(w, h) <= most ? BIG : {});
 
 // ── THE BODY ────────────────────────────────────────────────────────────────────────────────────────────────────
 // its outline at the band's wall: the east face is the hangars' own door wall, the ends are the smelter's and the
 // medical centre's own end walls, the west face the hangars' own west wall; the four corners are cut
 export const BODY_PATH = [[59.02, 71], [59.02, -21], [53.5, -31.02], [26.5, -31.02], [18.93, -20.5], [18.93, 70.5], [32.5, 85.02], [51.5, 85.02]];
-const WIN = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09, cut: 0.3, lit: 0.5 };
+export const WIN = { w: 2.6, h: 1.05, pitch: 4.2, lip: 0.3, sink: 0.14, panes: 2, bar: 0.09, cut: 0.3, lit: 0.5 };
 const spirePath = boxPath(SPIRE.x - 5, SPIRE.x + 5, SPIRE.z - 5, SPIRE.z + 5, 2.2);
 
 // THE ROOF, AS HIS DRAWING. Everything on it is the same on each side of the line z = MID (the roof's own middle is
@@ -199,13 +199,22 @@ function pyramidPlan(p) {
   return { name: p.name, closed: true, path: p.path, tiers: [{ name: p.name, profile: [[0, y0, 'in'], [0, y0 + p.foot], [-p.slope, top]], parts: [plates('band'), plates('tiers')] }], flats: flatsOf(offsetPath(p.path, -p.slope, true), [], top, true, plain) };
 }
 
-function bodyPlan(o) {
-  const L = LEVELS, up = L.upper, lo = L.lower, f = L.band.foot, t = L.band.top, real = o.inside ? { frame: false, shield: false } : {};
-  const tiers = [
+// THE BODY'S CROSS-SECTION, foot to top: a lower terrace with a band of windows, the hangars' band (its big plates, the
+// doors in its wall: tier 1, step 2), an upper terrace with a band of windows, out to the flat roof and underside (its
+// edges stand in from the band's wall by `roofIn` and `bellyIn`). Shared: the other station's body is cut the same way
+// (kit/oldstation-plan.js)
+export const BODY_EDGE = { roofIn: LEVELS.upper.in + 2.2, bellyIn: LEVELS.lower.in + 3 };
+export function bodyTiers() {
+  const L = LEVELS, up = L.upper, lo = L.lower, f = L.band.foot, t = L.band.top;
+  return [
     { name: 'lower terrace', profile: [[-lo.in - 3, BELLY], [-lo.in, f - 1 - lo.wall], [-lo.in, f - 1, 'in']], parts: [plates('tiers'), ROW] },
     { name: 'hangar band', profile: [[-lo.in, f - 1, 'in'], [-1, f - 1], [0, f], [0, t], [-1, t + 1], [-up.in, t + 1, 'in']], parts: [plates('tiers'), plates('band'), plates('band', BIG_BAND), plates('band'), plates('tiers')] },
     { name: 'upper terrace', profile: [[-up.in, t + 1, 'in'], [-up.in, t + 1 + up.wall], [-up.in - 2.2, ROOF]], parts: [ROW, plates('tiers')] },
   ];
+}
+function bodyPlan(o) {
+  const L = LEVELS, up = L.upper, lo = L.lower, real = o.inside ? { frame: false, shield: false } : {};
+  const tiers = bodyTiers();
   const doors = [
     // the three hangar doors (the east wall is run 0, walked north from z = 71): the kit's frame stands where the
     // game's own door frame does; inside the game the frame and the shield are the game's own
@@ -373,8 +382,8 @@ export const MARKS = [
   { text: 'π 04·117', box: 0 }, { text: 'π 22·908', box: 1 }, { text: 'π 31·455', box: 2 },
 ];
 const BOX_COLOURS = ['#2f62b8', '#a8392f', '#2c8a57'], BOX = { len: 12.2, w: 2.44, h: 2.6 };
-const lin = (hex, k = 1) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.pow(v / 255, 2.2) * k); };
-class Tris {
+export const lin = (hex, k = 1) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.pow(v / 255, 2.2) * k); };
+export class Tris {
   constructor() { this.position = []; this.color = []; this.index = []; }
   get count() { return this.position.length / 3; }
   vert(p, c) { this.position.push(p[0], p[1], p[2]); this.color.push(c[0], c[1], c[2]); return this.count - 1; }
@@ -412,12 +421,14 @@ class Tris {
   quad(p, col) { const b = this.count; for (const q of p) this.vert(q, col); this.index.push(b, b + 1, b + 2, b, b + 2, b + 3); }
   arrays() { return { position: new Float32Array(this.position), color: new Float32Array(this.color), index: new Uint32Array(this.index), triangles: this.index.length / 3 }; }
 }
+// the gear's colours (sRGB; lights with how many times over they glow), shared with the other station's gear
+export const GEAR_COLOURS = { steel: '#59606b', dark: '#2c3038', gold: '#a8843a', cell: '#16234f', frame: '#3a3320', pale: '#8f96a0', yellow: '#c9a232', red: ['#ff3a24', 2.2], white: ['#f2f5ff', 1.6], teal: ['#58e0d0', 1.5] };
+export const gearColour = (name) => { const c = GEAR_COLOURS[name]; return Array.isArray(c) ? lin(c[0], c[1]) : lin(c); };
 //   inside   true: for the game (the real rooms are there). Otherwise a plain dim room is put behind each hangar door,
 //            so that the door's shield has something behind it where the hangars are not built
 export function outsideGear(opts = {}) {
   const G = new Tris(), L = new Tris(), H = new Tris(), X = SPIRE.x, Z = SPIRE.z;
-  const steel = lin('#59606b'), dark = lin('#2c3038'), gold = lin('#a8843a'), cell = lin('#16234f'), frame = lin('#3a3320'), pale = lin('#8f96a0'), yellow = lin('#c9a232');
-  const red = lin('#ff3a24', 2.2), white = lin('#f2f5ff', 1.6), teal = lin('#58e0d0', 1.5);
+  const [steel, dark, gold, cell, frame, pale, yellow, red, white, teal] = ['steel', 'dark', 'gold', 'cell', 'frame', 'pale', 'yellow', 'red', 'white', 'teal'].map(gearColour);
   // the spire's mast and beacon
   G.drum([X, SPIRE_TOP + 6.5, Z], 0.45, 13, steel, 8); L.ball([X, SPIRE_TOP + 15, Z], 2.2, white, 14); L.ball([X, SPIRE_TOP + 17.9, Z], 0.6, red, 8);
   // the keel: four radiators round it; the reactor ball under it in its ring, four struts, a mast
@@ -447,14 +458,10 @@ export function outsideGear(opts = {}) {
   G.ball([X, -49.5, Z], 7.5, pale, 16); L.ring([X, -49.5, Z], 9.2, 0.45, teal);
   G.drum([X, -61.5, Z], 0.4, 9, steel, 8); L.ball([X, -66.6, Z], 0.6, red, 8);
   // the two girders, and the solar wings standing above and below each to face the low sun
-  const g = GIRDER, h = g.half;
+  const g = GIRDER;
   for (const [z0, z1] of g.runs) {
-    const dir = Math.sign(z1 - z0), len = Math.abs(z1 - z0), bays = Math.round(len / 7.4), bay = len / bays;
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) G.rod([g.x + sx * h, g.y + sy * h, z0], [g.x + sx * h, g.y + sy * h, z1], 0.45, steel);
-    for (let k = 0; k <= bays; k++) {
-      const z = z0 + dir * k * bay, zn = z + dir * bay, c = [[-h, -h], [h, -h], [h, h], [-h, h]];
-      for (let i = 0; i < 4; i++) { const a = c[i], b = c[(i + 1) % 4]; G.rod([g.x + a[0], g.y + a[1], z], [g.x + b[0], g.y + b[1], z], 0.32, steel); if (k < bays) { const [p, q] = (k + i) % 2 ? [a, b] : [b, a]; G.rod([g.x + p[0], g.y + p[1], z], [g.x + q[0], g.y + q[1], zn], 0.28, steel); } }
-    }
+    const dir = Math.sign(z1 - z0);
+    girder(G, [g.x, g.y, z0], [g.x, g.y, z1], { half: g.half, side: [1, 0, 0], up: [0, 1, 0] }, steel);
     L.ball([g.x, g.y, z1 + dir * 1.2], 0.8, red, 8);
     for (const d of g.wings) for (const up of [-1, 1]) {
       const zc = z0 + dir * d, y0 = g.y + up * g.wingFrom, y1 = g.y + up * g.wingTo, ym = (y0 + y1) / 2, hh = Math.abs(y1 - y0) / 2, hw = g.wingW / 2;
@@ -512,12 +519,29 @@ export function outsideGear(opts = {}) {
     for (let i = 0; i < 9; i++) G.box([x1 - 0.7 - i * 1.35, y0 + BOX.h / 2, z], [0.07, BOX.h / 2 - 0.12, BOX.w / 2 + 0.04], rib);
   });
   for (let k = 0; k <= S.z.length; k++) { const z = k < S.z.length ? S.z[k] - 2.25 : S.z[k - 1] + 2.25, xa = S.x - DOCK.out - 0.3, xb = PORT + 0.5; G.box([(xa + xb) / 2, y0 + 0.12, z], [(xa - xb) / 2, 0.12, 0.12], yellow); }
-  if (!opts.inside) for (const hg of HANGARS) {
-    const x0 = 19.4, x1 = 58.9, z0 = hg.z - 13.8, z1 = hg.z + 13.8, y1 = 10.9, wallC = lin('#39424f'), floorC = lin('#586273');
-    G.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], floorC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
-    G.quad([[x0, 0, z0], [x0, y1, z0], [x0, y1, z1], [x0, 0, z1]], wallC); G.quad([[x0, 0, z0], [x1, 0, z0], [x1, y1, z0], [x0, y1, z0]], wallC); G.quad([[x0, 0, z1], [x1, 0, z1], [x1, y1, z1], [x0, y1, z1]], wallC);
-  }
+  if (!opts.inside) for (const hg of HANGARS) standInHangar(G, 19.4, 58.9, hg.z - 13.8, hg.z + 13.8);
   return { lit: G.arrays(), glow: L.arrays(), heat: H.arrays() };
+}
+// A LATTICE GIRDER from a to b, into a list of triangles G: four long rods `half` out from its line (along `side` and
+// `up`, unit vectors square to it and to each other), a square frame every bay (about `bay` m long), and a diagonal
+// across each face of each bay, leaning one way and the next the other. rods: the long rods', the frames' and the
+// diagonals' thickness. Shared: the station's own two girders, the other station's arms (kit/oldstation-plan.js)
+export function girder(G, a, b, { half, side, up, bay: bayLen = 7.4, rods = [0.45, 0.32, 0.28] }, col) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], len = Math.hypot(d[0], d[1], d[2]), az = d.map((v) => v / len), h = half;
+  const bays = Math.max(1, Math.round(len / bayLen)), bay = len / bays, c = [[-h, -h], [h, -h], [h, h], [-h, h]];
+  const off = (o, [cx, cy]) => [o[0] + side[0] * cx + up[0] * cy, o[1] + side[1] * cx + up[1] * cy, o[2] + side[2] * cx + up[2] * cy];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) G.rod(off(a, [sx * h, sy * h]), off(b, [sx * h, sy * h]), rods[0], col);
+  for (let k = 0; k <= bays; k++) {
+    const o = [a[0] + az[0] * k * bay, a[1] + az[1] * k * bay, a[2] + az[2] * k * bay], on = [o[0] + az[0] * bay, o[1] + az[1] * bay, o[2] + az[2] * bay];
+    for (let i = 0; i < 4; i++) { const p0 = c[i], q0 = c[(i + 1) % 4]; G.rod(off(o, p0), off(o, q0), rods[1], col); if (k < bays) { const [p, q] = (k + i) % 2 ? [p0, q0] : [q0, p0]; G.rod(off(o, p), off(on, q), rods[2], col); } }
+  }
+}
+// A PLAIN DIM ROOM behind a hangar door where the hangar is not built, so the door's shield has something behind it:
+// a floor, a ceiling, the back wall and the two side walls (x0 the back, the door's wall at x1; the floor at y = 0)
+export function standInHangar(G, x0, x1, z0, z1, y1 = 10.9) {
+  const wallC = lin('#39424f'), floorC = lin('#586273');
+  G.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], floorC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
+  G.quad([[x0, 0, z0], [x0, y1, z0], [x0, y1, z1], [x0, 0, z1]], wallC); G.quad([[x0, 0, z0], [x1, 0, z0], [x1, y1, z0], [x0, y1, z0]], wallC); G.quad([[x0, 0, z1], [x1, 0, z1], [x1, y1, z1], [x0, y1, z1]], wallC);
 }
 // where each painted mark goes: its lower left corner, the way it reads (U) and its top (V), its width and height
 export function outsideMarks() {
