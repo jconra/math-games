@@ -24,6 +24,8 @@
 //                  Cargo (life.js ROOM_CREW) are about only while `place` is theirs; `soon`: the player is in the lift,
 //                  so they are made now if they are not yet (THE PLACES ONLY THE LIFT GOES TO, below)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
+//   people.ward    THE RESCUED IN THE WARD after a rescue run (THE WARD, below; src/wardplan.js): ward.admit(list) as the
+//                  run ends at home, ward.state(), ward.beds
 //   people.bubbles, people.say(P, words)   the chat bubbles (bubbles.js)
 //   resolve(W, walls, at) -> { pos, heading } | null                where a spot in spots.js is, by the station's names
 //
@@ -75,7 +77,9 @@ import { pointGap } from '../kit/forkliftround.js';
 import { MOVES_ON, MOVES_OFF, SECS as BED_SECS, pose as onBedPose } from './onbed.js';
 import { STAND, shine } from './player.js';
 import { PASS, passBy, bumps, facing, overlaps, roomAt, roomFor, sideOn } from './passing.js';
-import { addMoves } from './moves.js';
+import { addMoves, bedPose } from './moves.js';
+import { sleeperRecipe } from './sleeper.js';
+import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, kept } from './wardplan.js';
 import { makeBubbles } from './bubbles.js';
 import { pickTalk } from './chatter.js';
 import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK, NUDGES } from './lines.js';
@@ -441,6 +445,22 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   if (!SCAN) missing.push('the big scanner (no scan)');
   if (scanD) scanD.use = null;     // (parked: nobody on it yet)
 
+  // ── THE WARD'S BEDS (THE WARD, below): the station file's cabinMedBed 'ward N', each as an onbed bed: its piece's own
+  // frame (mirrored when it is got onto from its -x: moves.js bedPose), where one stands with one's back to it (stand),
+  // the way they face then (out: across it, away from it), where one walks to first beside it (walkTo: as near as the
+  // way-finder lets a body come to its rails) ──
+  const wardBeds = pieces.filter((x) => x.piece === 'cabinMedBed' && bedNumber(x.variant) != null).map((x) => {
+    const side = bedSide(x.variant), s = side || 1;
+    const at = (bx, bz) => new THREE.Vector3(bx * s, 0, bz).applyMatrix4(x.M);
+    const o = at(0, 0), across = at(1, 0).sub(o), w = at(...WARD_BED.walkTo), v = at(...WARD_BED.via);
+    return { n: bedNumber(x.variant), variant: x.variant, side, frame: x.M, mirror: side === -1, room: x.room, floor: o.y, at, stand: at(...WARD_BED.stand), out: Math.atan2(across.x, across.z), walkTo: walls.snap(w.x, w.y + 0.35, w.z, 0.4), via: walls.snap(v.x, v.y + 0.35, v.z, 0.5), P: null };
+  }).sort((a, b) => a.n - b.n);
+  for (const B of wardBeds) { if (!B.side) missing.push('ward bed ' + B.n + ' (both its rails up: nobody gets onto it)'); else if (!B.walkTo) missing.push('ward bed ' + B.n + ' (no room beside it)'); }
+  // (where the rescued who go home walk to: the Medic hangar's way out into the station, where its people come and go;
+  // a way from the ward to the docking airlock, 90 m and more, ran past what a way may take)
+  const wardHome = (() => { const e = W.R.places && W.R.places.entrances && W.R.places.entrances.medic; const p = e ? walls.snap(e[0], e[1] + 0.4, e[2], 1.5) : null; return p ? { pos: p } : null; })();
+  if (!wardHome) missing.push('the way home from the ward (the Medic hangar has no way in)');
+
   // ── the people themselves ────────────────────────────────────────────────────────────────────────────────────
   const firstClip = (c, clips) => [].concat(clips || STAND).find((n) => c.person.actions[n]) || 'Idle';
   const _v = new THREE.Vector3();
@@ -490,7 +510,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   };
   // (someone free to be asked over: to talk, or to run the scanner; about as P is (both near the player, or both not))
   // (and in the same place: the control room's and Cargo's people (P.home) only with each other)
-  const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away) && (q.home || null) === (P.home || null);
+  const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && !q.rescued && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away) && (q.home || null) === (P.home || null);
   function claimFor(P, step) {
     const { kind, group, n } = parse(step);
     if (kind === 'sit') {
@@ -572,6 +592,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function next(P) {
     if (P.fleeing) { P.speed = P.fleeing.was; P.fleeing = null; }   // (run from the crane: back to their own pace)
     release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false; P.pose = null; P.scripted = false;
+    // (the rescued: their one errand, to their bed or home, again: THE WARD)
+    if (P.rescued) { wardNext(P); return; }
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
       const step = P.day[P.k];
@@ -681,7 +703,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     presenceClock -= dt; if (presenceClock > 0) return; presenceClock = PRESENCE.every;
     // (the control room's and Cargo's people are not counted: they are about exactly while the player is in their
     // place, THE PLACES ONLY THE LIFT GOES TO)
-    const L = list.filter((P) => !P.hidden && !P.home);
+    // (nor the rescued in the ward, THE WARD: about for as long as they are aboard)
+    const L = list.filter((P) => !P.hidden && !P.home && !P.rescued);
     for (const P of L) P.rank = Math.hypot(P.pos.x - focus.x, P.pos.z - focus.z) + Math.abs(P.pos.y - focus.y) * 2;
     for (const P of L) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank ?? Infinity) : P.rank; }
     L.sort((a, b) => a.rankPair - b.rankPair || a.order - b.order);
@@ -752,6 +775,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     news.update(dt);
     presence(dt, focus || (player ? player.pos : camera.position), camera);
     homes(dt, place, soon, camera);      // (the control room's and Cargo's people: about only while the player is there)
+    wardUpdate(dt, player, camera);      // (the rescued, after a rescue run: THE WARD)
     for (const P of list) {
       const c = P.c;
       if (P.hidden) { P.shown = false; continue; }
@@ -809,7 +833,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // their legs, feet and hands as the move has them (moves.js M.bed, from onbed.js))
       // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
       if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
-      P.moves.bed = P.act && P.act.kind === 'scan' && P.pose && P.bed ? P.bed : null;
+      P.moves.bed = P.act && (P.act.kind === 'scan' || P.act.kind === 'ward') && P.pose && P.bed ? P.bed : null;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
@@ -820,7 +844,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const tk = P.act && P.act.kind === 'talk' && P.act.phase === 'do' && P.act.spot.talk.who[1 - P.act.spot.i];
       const ck = P.convo ? (P.convo.A === P ? P.convo.B : P.convo.A) : null;
       const vis = far < 8 && !tk && !ck && P.act && (P.act.kind === 'post' || P.act.kind === 'stand') ? visitor(P) : null;
-      const lying = P.act && P.act.kind === 'scan' && P.pose;
+      const lying = P.act && (P.act.kind === 'scan' || P.act.kind === 'ward') && P.pose;
       const scanning = SCAN && SCAN.busy && P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic') ? SCAN.busy : null;
       let look = null;
       // (on the bed's moves: only a glance the move itself asks for, at the bed as they back up to it)
@@ -957,6 +981,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (a.kind === 'scan') { scanPatient(P, a, dt); return; }
     if (a.kind === 'scanMedic') { scanMedic(P, a, dt); return; }
+    if (a.kind === 'ward') { wardStep(P, a, dt); return; }
     // RIDES: at their machine (getting on, riding it, getting off): the machine's own part, src/cargoforklift.js
     if (a.kind === 'drive') { a.ride.step(P, a, dt, RIDES); return; }
     // at it: standing, at work, or talking (the time counted once both are there)
@@ -1058,8 +1083,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     let best = null, bd = FRIENDLY.hello;
     for (const P of list) {
       if (P.away || !P.shown || P.cap || P.hidden || (P.greeted && clock - P.greeted < FRIENDLY.again)) continue;
-      // (at the scanner, patient or medic: busy with each other)
-      if (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic')) continue;
+      // (at the scanner, patient or medic: busy with each other; the rescued, on their way to the ward and resting there)
+      if (P.rescued || (P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic'))) continue;
       const dx = pl.pos.x - P.pos.x, dz = pl.pos.z - P.pos.z, d = Math.hypot(dx, dz);
       if (d > bd || Math.abs(pl.pos.y - P.pos.y) > 1.2) continue;
       // (two people talking keep to their talk (and look at each other) unless the player comes right up to them)
@@ -1364,6 +1389,229 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const md = S.medic; if (md && md !== P && md.act && md.act.kind === 'scanMedic') md.act = { kind: 'wait', until: rnd(1, 3), t: 0 };
   }
 
+  // ── THE WARD: the rescued after a rescue run (src/wardplan.js: the game's maker's words, and what happens) ────────
+  // Station people with one errand of their own (P.rescued: their record; their act 'ward'), made from the looks the
+  // sleepers in the pods had. Coming down the Medic's ramp one after another (at its foot, where the camera does not see
+  // them appear), each walks to their own bed's side as anyone walks (a way worked out, round others and the player, the
+  // doors opening for them), turns their back to it and gets on and lies down as the big scanner's patient does
+  // (onbed.js, laid into the world by moves.js bedPose); the crew member gone off anywhere but along their way
+  // (wardplan.js watching), they are in it at once. The rest, with no bed free, walk off out of the hangar, home, and
+  // are gone once nobody sees them. Their stay over, they are gone while nobody sees the ward, or get up and walk off.
+  // Never counted among the nearest (presence): about for as long as they are aboard; never asked to talk, never a
+  // hello (busy getting better).
+  const ward = { list: [], queue: [], making: false, last: -99, for: undefined, n: 0, ms: 0, foot: null, footSeen: 0, counts: { came: 0, walkedIn: 0, put: 0, late: 0, home: 0, left: 0, gone: 0 } };
+  // (the Medic's ramp foot: where it comes down nearest the ward, on the hangar's floor just past its patch, where the
+  // ship stands now)
+  function wardFoot() {
+    const s = (boarding?.ships || []).find((q) => q.id === 'medic'); if (!s || !s.ways || !s.ways.length || !s.zone) return null;
+    const mid = s.zone.box.getCenter(new THREE.Vector3()), to = wardBeds.length && wardBeds[0].walkTo ? wardBeds[0].walkTo : mid;
+    let best = null, bd = Infinity;
+    // (its ramps, not its crew door: the rescued come down a ramp, as they went up one at the planet)
+    const ramps = s.ways.filter((D) => /ramp/i.test(D.piece || ''));
+    for (const D of ramps.length ? ramps : s.ways) {
+      const dx = D.sense.x - mid.x, dz = D.sense.z - mid.z, L = Math.hypot(dx, dz) || 1;
+      for (let k = 2; k < 5; k += 0.25) {
+        const p = new THREE.Vector3(D.sense.x + dx / L * k, 0, D.sense.z + dz / L * k); if (s.moved) p.applyMatrix4(s.D);
+        if (noGo(p.x, p.z)) continue;
+        const q = walls.snap(p.x, 0.5, p.z, 0.3); if (!q) continue;
+        const d = q.distanceTo(to); if (d < bd) { bd = d; best = q; }
+        break;
+      }
+    }
+    return best;
+  }
+  // (to their bed in two legs: past its foot on the side they get on from, then along it: WARD_BED.via)
+  const bedAct = (B) => (B.via ? { kind: 'ward', leg: 'via', step: { do: 'ward' }, spot: { pos: B.via.clone(), heading: null, name: 'ward bed ' + B.n + ' (its foot)' } } : { kind: 'ward', step: { do: 'ward' }, spot: { pos: B.walkTo.clone(), heading: B.out, name: 'ward bed ' + B.n } });
+  const homeAct = () => ({ kind: 'ward', home: true, step: { do: 'ward' }, spot: { pos: wardHome.pos.clone(), heading: null, name: 'home' } });
+  // (their errand, again: to their bed, or home)
+  function wardNext(P) {
+    const r = P.rescued, B = r.bed >= 0 ? wardBeds[r.bed] : null;
+    if (r.state === 'lying') { placeInBed(P); return; }
+    if (B && r.state === 'toBed') { begin(P, bedAct(B)); return; }
+    if (wardHome) { begin(P, homeAct()); return; }
+    wardGone(P);
+  }
+  // a move on the bed, laid into the world (moves.js bedPose: the person's root placed from where the clips put the hip
+  // joints, and the legs', feet's and hands' places for moves.js M.bed)
+  // (the bed as onbed takes it, for this person: their hips placed by their own legs' length, wardplan.js bedFor)
+  const bedOf = (P) => P.rescued.onbed || (P.rescued.onbed = bedFor(P.moves.body));
+  const standOf = (P, B) => B.at(...bedOf(P).stand);
+  function wardPose(P, B, move, t) {
+    const p = onBedPose(move, t, bedOf(P), P.moves.body);
+    P.bed = bedPose(P.moves, p, B.frame, { mirror: B.mirror, D: P.bed });
+    P.pose = P.bed;
+    P.pos.set(P.bed.hips.x, B.floor, P.bed.hips.z); P.heading = P.bed.heading;
+    play(P, p.clip === 'sit' ? CLIPS.sit : STAND, { fade: 0.45 });
+    return p;
+  }
+  // there, at their bed: their back to it, then on it and lying down (onbed's moves, as the scanner's patient); their
+  // stay over, off it again (the same moves backwards) and away; home: there, gone
+  function wardStep(P, a, dt) {
+    const r = P.rescued, B = r.bed >= 0 ? wardBeds[r.bed] : null;
+    if (a.phase === 'do' || a.phase === 'turn') {
+      if (a.home || !B || r.state !== 'toBed') { wardGone(P); return; }
+      // (past the bed's foot: on along its side, straight, as the scanner's patient walks along its bed)
+      if (a.leg === 'via') { a.leg = 'along'; a.phase = 'along'; a.t = 0; a.from = P.pos.clone(); P.scripted = true; P.walking = false; stillV++; return; }
+      a.phase = 'back'; a.t = 0; a.from = P.pos.clone(); a.fromH = P.heading; P.scripted = true; P.walking = false; stillV++;
+    }
+    if (a.phase === 'off') {
+      // (along the bed's side to past its foot, straight; then the way out, worked out as anyone's)
+      const A = a.from, E = B.via || B.walkTo, L = A.distanceTo(E), k = Math.min(1, a.t * 0.8 / Math.max(L, 0.01));
+      P.pos.lerpVectors(A, E, k);
+      const want = Math.atan2(E.x - A.x, E.z - A.z), diff = wrap(want - P.heading);
+      P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
+      if (Math.abs(diff) > 1.0 && a.t < 1.2) { a.t -= dt * 0.7; play(P, STAND); } else play(P, CLIPS.walk, { speed: 0.8 });
+      if (k >= 1) { P.scripted = false; if (wardHome) begin(P, homeAct()); else wardGone(P); }
+      return;
+    }
+    if (a.phase === 'along') {
+      const A = a.from, E = B.walkTo, L = A.distanceTo(E), k = Math.min(1, a.t * 0.8 / Math.max(L, 0.01));
+      P.pose = null; P.bed = null; P.pos.lerpVectors(A, E, k);
+      const want = Math.atan2(E.x - A.x, E.z - A.z), diff = wrap(want - P.heading);
+      P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
+      play(P, CLIPS.walk, { speed: 0.8 });
+      if (k >= 1) { a.phase = 'back'; a.t = 0; a.from = P.pos.clone(); a.fromH = P.heading; }
+      return;
+    }
+    if (a.phase === 'back') {
+      // (turned round where they stand, their back to the bed's side: standing, the clip's own legs)
+      const k = ease(Math.min(1, a.t / BED_SECS.back));
+      P.pose = null; P.bed = null; P.pos.lerpVectors(a.from, standOf(P, B), k); P.heading = wrap(a.fromH + wrap(B.out - a.fromH) * k);
+      play(P, STAND);
+      if (a.t >= BED_SECS.back) { a.phase = BED_ON[1]; a.t = 0; }
+      return;
+    }
+    const on = BED_ON.indexOf(a.phase), off = BED_OFF.indexOf(a.phase);
+    if (on > 0 || off >= 0) {
+      const p = wardPose(P, B, a.phase, a.t);
+      if (!p.done) return;
+      a.t = 0;
+      if (on > 0) { a.phase = BED_ON[on + 1] || 'lying'; if (a.phase === 'lying') { r.state = 'lying'; ward.counts.walkedIn++; } }
+      else if (BED_OFF[off + 1]) a.phase = BED_OFF[off + 1];
+      else {
+        // (off the bed, on their feet at its side: along it past its foot, as they came, then away out of the hangar)
+        P.pose = null; P.bed = null; P.pos.copy(standOf(P, B)); P.heading = B.out; play(P, STAND, { fade: 0.3 });
+        r.state = 'leaving'; r.from = P.pos.clone(); r.unseen = 0; r.since = clock; B.P = null; ward.counts.left++;
+        a.phase = 'off'; a.t = 0; a.from = P.pos.clone();
+      }
+      return;
+    }
+    if (a.phase === 'lying') {
+      P.scripted = true;
+      wardPose(P, B, 'lying', 0);
+      // (the stay over: gone, if nobody sees them; else up and off)
+      if (clock >= r.leaveAt) { if (!P.shown) wardGone(P); else { a.phase = BED_OFF[0]; a.t = 0; } }
+    }
+  }
+  // in their bed at once, lying (the crew member gone off, or come back to a ward that has people in it)
+  function placeInBed(P) {
+    const r = P.rescued, B = wardBeds[r.bed];
+    if (P.req) { P.req.dropped = true; P.req = null; }
+    release(P); bubbles.clear(P);
+    Object.assign(P, { walking: false, way: null, yielding: null, blocker: null, held: 0, heldAll: 0, side: 0, sideOn: 0, sideOnAim: 0, scripted: true });
+    P.act = { kind: 'ward', phase: 'lying', t: 0, len: Infinity, step: { do: 'ward' }, spot: { pos: B.walkTo.clone(), heading: B.out, name: 'ward bed ' + B.n }, placed: true };
+    r.state = 'lying'; B.P = P;
+    wardPose(P, B, 'lying', 0);
+    const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); }
+    P.fresh = true; stillV++;
+  }
+  function wardGone(P) {
+    const i = ward.list.indexOf(P); if (i >= 0) ward.list.splice(i, 1);
+    const r = P.rescued; if (r && r.bed >= 0 && wardBeds[r.bed] && wardBeds[r.bed].P === P) wardBeds[r.bed].P = null;
+    if (P.req) { P.req.dropped = true; P.req = null; }
+    bubbles.clear(P); remove(P); ward.counts.gone++; stillV++;
+  }
+  function wardClear() {
+    for (const P of [...ward.list]) wardGone(P);
+    for (const r of ward.queue) { r.cleared = true; if (r.P) { r.P.c.dispose(); r.P = null; } }
+    ward.queue.length = 0;
+    for (const B of wardBeds) B.P = null;
+  }
+  // (their bodies made one at a time, the crew kit's far copy with them, as everyone's)
+  function wardMake() {
+    const r = ward.queue.find((q) => !q.P && !q.failed && !q.cleared); if (!r || ward.making) return;
+    ward.making = true;
+    const t0 = performance.now();
+    body({ id: 'rescued-' + (++ward.n), name: 'Rescued', look: sleeperRecipe(lib, r.look, r.position) }, ward.foot || wardHome?.pos || new THREE.Vector3(), 0).then((P) => {
+      ward.making = false; ward.ms += performance.now() - t0;
+      if (!P) { r.failed = true; return; }
+      if (r.cleared) { P.c.dispose(); return; }
+      Object.assign(P, { order: 2e6 + ward.n, day: [{ do: 'ward' }], k: 0, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false, rescued: r });
+      r.P = P;
+    }).catch((e) => { ward.making = false; r.failed = true; console.warn('people: a rescued person was not made: ' + (e && e.message ? e.message : e)); });
+  }
+  // (one of the queue, made, into the station: in bed, or at the ramp's foot to walk)
+  function wardIn(r, walk) {
+    const P = r.P, B = r.bed >= 0 ? wardBeds[r.bed] : null;
+    ward.queue.splice(ward.queue.indexOf(r), 1);
+    if (!walk) {
+      if (!B) { P.c.dispose(); ward.counts.home++; return; }      // (home, off screen)
+      list.push(P); ward.list.push(P); placeInBed(P); ward.counts.put++; return;
+    }
+    P.pos.copy(ward.foot); P.drawnY = P.pos.y; P.lastGain.copy(P.pos);
+    const to = B ? B.walkTo : wardHome.pos; P.heading = Math.atan2(to.x - P.pos.x, to.z - P.pos.z);
+    P.zone = W.zoneAt(P.pos); if (P.zone) shine(P.c, W.envAt(P.pos));
+    r.state = B ? 'toBed' : 'home'; r.since = clock; r.from = P.pos.clone(); r.unseen = 0;
+    list.push(P); ward.list.push(P); ward.counts.came++; if (!B) ward.counts.home++;
+    begin(P, B ? bedAct(B) : homeAct());
+    ward.last = clock; stillV++;
+  }
+  // each frame: whose ward it is, the bodies made, the rescued come down the ramp one after another, and the rules
+  // (watched or not; late; gone once unseen)
+  const roomNow = (pos) => { const z = W.zoneAt(pos); return z ? z.id : null; };
+  function wardUpdate(dt, player, camera) {
+    // (whose ward: the crew member playing; another one, theirs, from their save: those still in bed)
+    const c = crew ? crew() : null, id = c ? c.id : null;
+    if (id !== ward.for) { wardClear(); ward.for = id; if (c && c.ward) for (const r of kept(c.ward)) if (wardBeds[r.bed] && wardBeds[r.bed].side) ward.queue.push({ ...r, leaveAt: clock + (r.until - Date.now()) / 1000, placed: true, state: 'lying' }); }
+    if (!ward.queue.length && !ward.list.length) return;
+    wardMake();
+    const watch = !!player && watching(roomNow(player.pos)) || !!(player && boarding && /^medic\//.test(boarding.where(player.pos) || ''));
+    ward.watch = watch;
+    // (the queue: in bed at once (come back to, or nobody along the way), or down the ramp one after another, never
+    // where the camera sees them appear; seen there a while, down the ramp all the same)
+    for (const r of [...ward.queue]) {
+      if (!r.P) continue;
+      if (r.placed || !watch || !ward.foot || (r.bed < 0 && !wardHome)) { wardIn(r, false); continue; }
+      if (clock - ward.last < WARD.gap) break;
+      if (someoneAt(ward.foot, null, LIFE.body + 0.1, true)) break;
+      const seen = seenAt(ward.foot, W.zoneAt(ward.foot), camera);
+      ward.footSeen = seen ? ward.footSeen + dt : 0;
+      if (seen && ward.footSeen < 8) break;
+      wardIn(r, true);
+      break;
+    }
+    for (const P of [...ward.list]) {
+      const r = P.rescued;
+      if (r.state === 'toBed') {
+        // (on their way to bed: in it at once if the crew member has gone off; not there by WARD.late: put there, loudly)
+        if (!watch) { placeInBed(P); ward.counts.put++; continue; }
+        if (clock - r.since > WARD.late) { alarms.wardLate = (alarms.wardLate || 0) + 1; ward.counts.late++; console.warn('people: ward: ' + P.id + ' not in bed after ' + WARD.late + ' s, put there (at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ')'); placeInBed(P); ward.counts.put++; }
+      } else if (r.state === 'home' || r.state === 'leaving') {
+        // (on their way out: gone once nobody sees them, a few metres on; at once with nobody along the way)
+        r.unseen = P.shown ? 0 : (r.unseen || 0) + dt;
+        if (!watch || (r.unseen > WARD.gone && P.pos.distanceTo(r.from) > 6)) wardGone(P);
+        // (no way out found by WARD.late: gone all the same, loudly)
+        else if (clock - r.since > WARD.late) { alarms.wardLate = (alarms.wardLate || 0) + 1; ward.counts.late++; console.warn('people: ward: ' + P.id + ' found no way out in ' + WARD.late + ' s, gone (at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ')'); wardGone(P); }
+      }
+    }
+  }
+  // AS THE RUN ENDS AT HOME (src/trip.js): the rescued, [{ look, position }] in the order they came aboard. The free
+  // beds to the first; the rest home. -> { beds: how many have one, saved: [{ look, position, bed, until }] (for the crew
+  // member's save: those in bed, until when on the wall clock) }
+  function wardAdmit(who = []) {
+    const taken = new Set(wardBeds.map((B, i) => (B.P || ward.queue.some((r) => r.bed === i) ? i : -1)).filter((i) => i >= 0));
+    const beds = assign(who.length, wardBeds.map((B) => ({ n: B.n, side: B.walkTo ? B.side : 0 })), taken);
+    ward.foot = wardFoot();
+    const saved = [];
+    who.forEach((w, k) => {
+      const stay = stayFor(), r = { look: w.look, position: w.position || null, bed: beds[k], leaveAt: clock + stay, until: Date.now() + stay * 1000, state: beds[k] >= 0 ? 'toBed' : 'home' };
+      ward.queue.push(r);
+      if (r.bed >= 0) saved.push({ look: r.look, position: r.position, bed: r.bed, until: Math.round(r.until) });
+    });
+    ward.last = clock;      // (the first a moment after the crew member is up)
+    return { beds: beds.filter((b) => b >= 0).length, saved };
+  }
+
   // (anyone, or the player, within r of a point; `present`: only those about the player, not those away)
   function someoneAt(p, P, r, present = false) {
     for (const Q of list) if (Q !== P && !Q.hidden && !(present && Q.away) && !(!present && P && Q.away !== P.away) && Math.hypot(Q.pos.x - p.x, Q.pos.z - p.z) < r && Math.abs(Q.pos.y - p.y) < 1.2) return Q;
@@ -1552,7 +1800,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const still = !by || by === 'patch' || by === 'truck' || (by !== playerNow && !by.walking), end = P.way[P.way.length - 1];
       // (the scanner's patient and medic keep at it: a scan is not dropped for someone standing near; they work the way
       // out again round them, and give up only after twice as long)
-      const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic' || P.act.kind === 'drive');
+      const keen = P.act && (P.act.kind === 'scan' || P.act.kind === 'scanMedic' || P.act.kind === 'drive' || P.act.kind === 'ward');
       if (still && !keen && P.held > LIFE.stillWait && Math.hypot(end.x - P.pos.x, end.z - P.pos.z) < 1.6) { alarms.gaveUp++; P.side = 0; P.held = 0; next(P); return; }
       if (P.held > LIFE.sidestep && !P.side) P.side = Math.random() < 0.75 ? 0.9 : -0.9;
       // (the way worked out again whenever held this long, at most once in LIFE.replanEvery seconds; held up too long in
@@ -1907,7 +2155,18 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       return true;
     },
   };
-  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, inView: (P) => inView(P, W.camera),
+  // THE WARD, for the trip and the rigs: admit (as a rescue run ends at home), the beds, what each of the rescued is
+  // doing; stay(s): from now, everyone in the ward leaves in s seconds (the rigs)
+  const wardApi = {
+    admit: wardAdmit,
+    get beds() { return wardBeds.map((B) => ({ n: B.n, side: B.side, walkTo: B.walkTo ? B.walkTo.toArray().map((v) => +v.toFixed(2)) : null, stand: B.stand.toArray().map((v) => +v.toFixed(2)), out: +B.out.toFixed(3), who: B.P ? B.P.id : null })); },
+    get list() { return ward.list; },
+    foot: () => (ward.foot || wardFoot()),
+    stay(s) { for (const P of ward.list) P.rescued.leaveAt = clock + s; for (const r of ward.queue) r.leaveAt = clock + s; },
+    state: () => ({ watch: !!ward.watch, queue: ward.queue.length, making: ward.making, ms: Math.round(ward.ms), foot: ward.foot ? ward.foot.toArray().map((v) => +v.toFixed(2)) : null, counts: { ...ward.counts }, late: alarms.wardLate || 0,
+      list: ward.list.map((P) => ({ id: P.id, look: P.rescued.look, bed: P.rescued.bed >= 0 && wardBeds[P.rescued.bed] ? wardBeds[P.rescued.bed].n : null, state: P.rescued.state, act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, walking: !!P.walking, planning: !!P.req, shown: !!P.shown, far: !!P.c.far, pos: P.pos.toArray().map((v) => +v.toFixed(2)), left: +(P.rescued.leaveAt - clock).toFixed(1) })) }),
+  };
+  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, ward: wardApi, inView: (P) => inView(P, W.camera),
     say: (P, words, o) => bubbles.say(P, words, o),
     // (for the rigs: the control room's and Cargo's people, made or not, and what each is doing)
     homes: () => Object.fromEntries(Object.values(HOMES).map((H) => [H.id, { made: H.made, ms: Math.round(H.ms), tries: H.tries, people: H.people.map((P) => ({ id: P.id, name: P.name, in: !P.hidden, shown: !!P.shown, act: P.act ? P.act.kind + ':' + (P.act.phase || '') + ':' + (P.act.spot?.name || '') : null, walking: !!P.walking, pos: P.pos.toArray().map((v) => +v.toFixed(2)), far: !!P.c.far })) }])),

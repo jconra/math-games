@@ -6,7 +6,8 @@
 //   id        its own name (a conversation is not heard again for a while: chatter.js MEMORY)
 //   lines     the words, in turns. {A} and {B} are the two speakers' names; {player} the player's name
 //   news      (optional) a kind of news it is about (news.js): it is picked only while such news is going round, and
-//             its facts fill in the lines where they say {winner}, {loser}, {score}, {ship}, {captain}, {crew}, {planet},
+//             its facts fill in the lines where they say {winner}, {loser}, {score}, {ship}, {captain}, {crew}, {people},
+//             {from} (a rescue the crew member was on: news.js), {planet},
 //             {ore}, {tons}, {job}
 //   about     (optional) the people it talks about, by their roster id: never said by them
 //   who       (optional) only between these people, by roster id (both speakers among them)
@@ -140,6 +141,8 @@ export const TALKS = [
   { id: 'mathball-3', news: 'mathball', lines: ["Are you watching the Mathball rematch?", "{loser} against {winner} again? Of course!"] },
   { id: 'rescue-1', news: 'rescue', lines: ["Did you hear? The {ship} ship brought home {crew}!", "They were stranded past the asteroid belt for days.", "{captain} never gives up, does she?"] },
   { id: 'rescue-2', news: 'rescue', lines: ["The {ship} ship is back from the rescue.", "Is everyone all right?", "{crew}, all safe and sound.", "That's the best news all week."] },
+  // (a rescue the crew member was on: how many came home and from where, as the station's line says it)
+  { id: 'rescue-3', news: 'rescue', lines: ["The {ship} brought {people} home today!", "From where?", "{from}. They were asleep in stasis pods.", "I'm so glad they're safe."] },
   { id: 'planet-1', news: 'planet', lines: ["They found a new planet people could live on!", "Really? What's it called?", "{planet}. It has oceans, I heard.", "Oceans! I'd go just to swim."] },
   { id: 'planet-2', news: 'planet', lines: ["Would you live on {planet}?", "Only if they have a galley as good as ours."] },
   { id: 'haul-1', news: 'haul', about: ['ruiz'], lines: ["The {ship} ship came back with {tons} tons of {ore}!", "That's one lucky rock.", "Captain Ruiz says it was the richest one yet."] },

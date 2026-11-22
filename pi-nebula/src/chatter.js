@@ -34,7 +34,10 @@ export function pickTalk(A, B, { sitting = false, player = null, now = 0, nearby
     if (N.kind === 'player' && !player) continue;
     const facts = { ...N, player: N.player || player };
     if (Object.values(facts).some((v) => typeof v === 'string' && names.has(v))) continue;
-    for (const T of TALKS) if (T.news === N.kind && ok(T)) cands.push({ T, N, facts });
+    // (only a conversation whose blanks this piece of news fills: a rescue the crew member was on has facts the others
+    // have not, how many came home and from where)
+    const fills = (T) => T.lines.every((l) => [...l.matchAll(/\{(\w+)\}/g)].every((m) => ['A', 'B', 'player'].includes(m[1]) || facts[m[1]] != null));
+    for (const T of TALKS) if (T.news === N.kind && ok(T) && fills(T)) cands.push({ T, N, facts });
     if (cands.length) break;
   }
   // (else the station's own stories; a news one now and then even with plenty of these)

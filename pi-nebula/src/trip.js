@@ -127,7 +127,9 @@
 //     ('tune', in the Medic's own Engineering), the jump home and the landing in its own hangar ('land'). At the planet
 //     everything not made yet is the captain's crew's (her pilot, or the autopilot, sets the Medic down by the wreck;
 //     her medic opens the pods; the rescued come aboard out of sight), watched from the seat or from behind, or skipped
-//     (K). The rescued are counted aboard; home, the pay is so much for each of them (src/missions.js RESCUE).
+//     (K). The rescued are counted aboard; home, the pay is so much for each of them (src/missions.js RESCUE), and they
+//     come down the Medic's ramp and walk to the station's ward (src/people.js THE WARD: in bed already if the crew member
+//     has gone off), the station's news has the rescue, how many came home and from where (news.js, announce.js).
 //
 //   const T = startTrip(ctx, { mission, roles, tune, onEnd })     ctx: { W, walls, boarding, crane, keeper (the run's
 //       ship's hull keeper: the crane, or its own hull), jobs, guide, people, crew, save, body, put, walk(on), onCredits,
@@ -149,6 +151,8 @@ import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/sme
 import { stepsFor, land, LAMPS, aboardOf, roleOf } from './missions.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
+import { kept, numberWord, fromWords } from './wardplan.js';
+import { SLEEPERS } from './sleeper.js';
 import { MINER, flyingOf, setFlying } from './flymodel.js';
 import { flightOf, seatView } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
@@ -472,7 +476,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         T.payout = land(crew, { n: T.n, store: T.store, people: T.rescued || 0 }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         // (the station's news: a haul, or the rescue (its people talk of it, and the speakers say so: src/announce.js))
-        if (PLANET) { try { news.add({ kind: 'rescue', ship: SHIP.name, captain: ctx.captainName || 'Captain Hale', crew: `${['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.people] || T.payout.people} stranded crew` }); } catch (e) { /* no news */ } }
+        if (PLANET) rescuedHome();
         else try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Home'); say(iPilot ? 'landed' : 'landedCrew');
         next();
@@ -493,7 +497,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       countEl.querySelector('b').textContent = `${c.aboard} of ${c.of}`;
       if (site.words) words(site.words);
       if (site.down && !T.saidSite) { T.saidSite = true; say('site'); }
-      if (site.phase === 'up') { countEl.querySelector('em').textContent = c.of ? 'Everyone from the pods' : ''; words(''); say(iPilot ? 'aboard' : 'aboardCrew'); next(); }
+      if (site.phase === 'up') {
+        // (who came aboard, and from what kind of planet: for the ward and the news at home)
+        T.who = site.who; T.kind = (site.state() || {}).kind || null;
+        countEl.querySelector('em').textContent = c.of ? 'Everyone from the pods' : ''; words(''); say(iPilot ? 'aboard' : 'aboardCrew'); next();
+      }
     },
     // THE CORE'S TUNING, out at the rocks (the top of this file; src/tune.js): the ship says so, then the captain; the
     // seat's prompt, Get up; on their feet to the core and its cards; tuned, back to the cockpit and Sit down; then
@@ -755,6 +763,28 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (!site.open(T.view || 'cockpit')) { console.error('trip: the planet could not be shown'); abort(); }
   }
   function endSite() { if (site) { site.close(); site = null; api.site = null; } }
+  // HOME FROM A RESCUE: the rescued to the station's ward (src/people.js THE WARD: down the Medic's ramp one after
+  // another and to their beds, or home with no bed free; kept in the crew member's save while they are in bed), and the
+  // station's news (its people talk of it; the speakers say so: the recorded line, then how many came home, from where,
+  // and how many are resting in the ward: src/announce.js)
+  function rescuedHome() {
+    const n = T.payout ? T.payout.people : T.rescued || 0;
+    // (everyone counted aboard; who each was, as the pods had them (an older save's run with none: looks of the pods' own)
+    const who = Array.from({ length: n }, (_, i) => (T.who && T.who[i]) || { look: null, position: null });
+    let resting = 0;
+    try {
+      const pp = ctx.people ? ctx.people() : null;
+      if (pp && pp.ward && n > 0) {
+        const r = pp.ward.admit(who.map((w, i) => ({ look: w.look || SLEEPERS[i % SLEEPERS.length], position: w.position })));
+        resting = r.beds;
+        crew.ward = [...kept(crew.ward), ...r.saved]; save(crew);
+      }
+    } catch (e) { console.error('trip: the rescued did not come to the ward', e); }
+    try {
+      news.add({ kind: 'rescue', ship: SHIP.name, captain: ctx.captainName || 'Captain Hale', crew: `${numberWord(n)} stranded crew`,
+        people: n === 1 ? 'one person' : `${numberWord(n)} people`, from: fromWords(T.kind), count: n, resting });
+    } catch (e) { /* no news */ }
+  }
   // ARRIVING home (the colours all round): outside the station, in sight of it; the flying there is back, to come in and land
   function arriveHome() {
     // (whoever only watches comes home in the view they went out in: from behind the ship, unless they changed it)

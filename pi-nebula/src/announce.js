@@ -34,6 +34,12 @@
 //     (PAGE: any name with any place); a word inside a sentence (the metal, the planet, the food left somewhere, the
 //     lunch special) is a whole sentence for each word, a handful each: those lines are one group, so the station
 //     does not say "Whoever left a..." twice in ten minutes.
+//   - TEXT LINES: a line no recorded clip says (the run's own facts: how many people a rescue brought home, from where)
+//     is the chime and then its words, shown at the top of the screen for as long as they take to read (TEXT), heard
+//     where a spoken line would be (the brief for the rescue's news: "only text lines if a clip doesn't exist; never
+//     browser speech"). One so far: THE RESCUE'S OUTCOME ('rescued', src/wardplan.js outcome), said once after the
+//     recorded "The Medic has brought a stranded crew home safely" for a rescue the crew member was on: "News from the
+//     Medic. Five people have been brought home from a crashed ship on a canyon world. They are resting in the ward."
 //   - THE MATHBALL HIGH SCORE (2026-11-20, the game's maker: "Keep only your own best round. This plays when you beat
 //     it."): "A new Mathball high score has been set in the arena." is said once a round is over that beat the crew
 //     member's own best round (src/mathball/best.js: their first round only sets it). Mathball tells it as it happens:
@@ -51,6 +57,7 @@
 // The rules alone, with no game (node tests): makeAnnouncer({ sound, read }), where read() gives the facts each frame.
 import { news } from './news.js';
 import { missions } from './missions.js';
+import { outcome } from './wardplan.js';
 
 export const ANNOUNCE = {
   first: [25, 40],      // s after the crew member wakes, the first
@@ -63,6 +70,9 @@ export const ANNOUNCE = {
   retry: 5,             // s before trying again when nothing could be said (away, or nothing true)
   chime: 2.51,          // s: the voice starts as the chime's file ends
 };
+// a text line's words, shown from the chime's end: for as long as they take to read (s, at most `most`)
+export const TEXT = { least: 4, per: 0.06, most: 11 };
+export const readSecs = (w) => Math.min(TEXT.most, Math.max(TEXT.least, 1.5 + String(w || '').length * TEXT.per));
 // a page joined from parts, as sample E: the name, 0.22 s, "please report to the X.", 0.85 s, the name, 0.2 s,
 // "to the X."; each part starts where the one before it stops speaking (its `len`) and its pause; the first 0.15 s
 // after the chime (the lead a whole line has in its own file)
@@ -121,6 +131,18 @@ export const CLIPS = {
   'to-medical-long': { words: 'please report to the medical centre.', len: 1.702 }, 'to-medical-short': { words: 'to the medical centre.', len: 1.07 },
 };
 export const clipUrl = (id) => new URL('../assets/sound/station/' + id + '.mp3', import.meta.url).href;
+// (a text line's strip: under the top's chip (the jobs board's line, 52 px of it), never over the Crew and sound buttons'
+// row on a phone; the station's dark glass and cut corners, its teal for the station's own voice)
+const CSS = `
+.pan { position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 52px); transform: translate(-50%, -6px); z-index: 13; width: max-content; max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 16px 9px; color: #eef1f4; background: rgba(15, 19, 25, 0.88); box-shadow: inset 0 0 0 1.5px rgba(80, 200, 190, 0.6); --cut: 9px;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  font: 400 15px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; pointer-events: none; user-select: none; -webkit-user-select: none;
+  opacity: 0; visibility: hidden; transition: opacity 0.35s, transform 0.35s, visibility 0s 0.35s; }
+.pan.is-on { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity 0.35s, transform 0.35s; }
+.pan small { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #7fd8cf; margin-bottom: 2px; }
+.pan p { margin: 0; }
+`;
 const soundName = (id) => 'station:' + id;
 
 // THE PAGES' WORD BANK: who can be paged (by their id in the roster, life.js) and where to (the scanner room only for
@@ -138,11 +160,15 @@ export function newsClip(n) {
 const asking = (C) => !!C && (C.state === 'new' || C.state === 'asked' || C.state === 'declined');
 const pick = (L, rand) => L[Math.floor(rand() * L.length)];
 
-// THE LINES. say(G, rand) -> null (not true now) or { clips: [ids] } or { page: [nameId, placeId] }, and `news` (a news
+// THE LINES. say(G, rand) -> null (not true now) or { clips: [ids] } or { page: [nameId, placeId] } or { text: words }
+// (no clip: the chime and the words shown, TEXT LINES above), and `news` (a news
 // item said: never said again). where: 'station' (everyone) or one room's id. group: lines of one group are one line
 // for "said lately". event: said as it happens (G.events has its kind), not in the minute's turn.
 export const LINES = [
   { id: 'news', where: 'station', first: 2, say: (G) => { for (const n of G.news || []) { if (G.told.has(n.id)) continue; const c = newsClip(n); if (c) return { clips: [c], news: n.id }; } return null; }, again: 0 },
+  // (the rescue's outcome, after its recorded line: how many came home, from where, how many are resting in the ward. A
+  // text line: no clip has the numbers in it)
+  { id: 'rescued', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if (n.kind !== 'rescue' || !n.count || G.told.has(n.id + ':outcome') || !G.told.has(n.id)) continue; return { text: outcome({ people: n.count, from: n.from, resting: n.resting }), news: n.id + ':outcome' }; } return null; } },
   { id: 'welcome', where: 'station', first: 1, once: true, say: (G) => (['vega', 'ruiz', 'hale'].some((k) => asking(G.captains[k]) && G.captains[k].room === 'terminal') ? { clips: ['welcome'] } : null) },
   { id: 'crew-hale', group: 'crew', where: 'station', say: (G) => (asking(G.captains.hale) && G.captains.hale.room === 'terminal' ? { clips: ['crew-hale'] } : null) },
   { id: 'crew-vega', group: 'crew', where: 'station', say: (G) => (asking(G.captains.vega) && G.captains.vega.room === 'terminal' ? { clips: ['crew-vega'] } : null) },
@@ -183,10 +209,10 @@ export function timeline(said) {
     const [who, to] = said.page, ids = ['name-' + who, `to-${to}-long`, 'name-' + who, `to-${to}-short`];
     let t = ANNOUNCE.chime + PAGE.lead;
     ids.forEach((id, i) => { out.push({ id, at: +t.toFixed(3) }); t += (CLIPS[id] ? CLIPS[id].len : 0) + (PAGE.gaps[i] || 0); });
-  } else for (const id of said.clips) out.push({ id, at: ANNOUNCE.chime });
+  } else for (const id of said.clips || []) out.push({ id, at: ANNOUNCE.chime });
   return out;
 }
-export const wordsOf = (said) => (said.page ? timeline(said).slice(1).map((x) => CLIPS[x.id].words).join(' ') : said.clips.map((id) => CLIPS[id].words).join(' '));
+export const wordsOf = (said) => (said.text ? said.text : said.page ? timeline(said).slice(1).map((x) => CLIPS[x.id].words).join(' ') : said.clips.map((id) => CLIPS[id].words).join(' '));
 
 // SOMETHING THAT HAPPENED ELSEWHERE IN THE GAME, told to the station's speakers as it happens (Mathball: 'best', a
 // round that beat the crew member's own best): read with the game's facts below, the next frame
@@ -197,9 +223,11 @@ export function happened(kind) { if (told2.length < 8) told2.push(kind); }
 //   { playing, place, math, news: [fresh news], captains: { id: { state, room } }, scan: medic's roster id | null,
 //     alarm: the alarm's hangar room id | null, events: [kinds that just happened: 'scan', 'alarm', 'shipIn', 'match',
 //     'best'] }
-export function makeAnnouncer({ sound, read, rand = Math.random }) {
+export function makeAnnouncer({ sound, read, rand = Math.random, onText = () => {} }) {
   const T = ANNOUNCE;
-  let t = 0, due = null, now = null, waiting = [], lastFacts = null;
+  let t = 0, due = null, now = null, waiting = [], lastFacts = null, shown = null;
+  // (a text line's words: shown from the chime's end while it is heard where the ears are; null: none)
+  const show = (w) => { if (w !== shown) { shown = w; onText(w); } };
   const said = new Map(), told = new Set(), once = new Set(), log = [];
   const quiet = (L) => { const k = L.group || L.id, a = L.again ?? T.again; return !said.has(k) || t - said.get(k) >= a; };
   function choose(G) {
@@ -223,10 +251,11 @@ export function makeAnnouncer({ sound, read, rand = Math.random }) {
     const vol = volumeAt(now.where, G.place, G.math);
     now.handles = now.parts.map((p) => sound.play(soundName(p.id), { group: 'station', volume: vol, delay: p.at }));
     now.vol = vol; now.t0 = t;
-    // (how long it lasts: its last clip's start and length)
+    // (how long it lasts: its last clip's start and length; a text line, the chime and then its words' reading time)
     now.ends = Math.max(...now.parts.map((p) => p.at + (sound.length(soundName(p.id)) || 0)));
+    if (now.s.text) now.ends = Math.max(now.ends, T.chime + readSecs(now.s.text));
     const L = now.L; said.set(L.group || L.id, t); if (L.once) once.add(L.id); if (now.s.news) told.add(now.s.news);
-    log.push({ t: +t.toFixed(1), id: L.id, clips: now.parts.map((p) => p.id), words: now.words, where: now.where, place: G.place, volume: +vol.toFixed(3), math: !!G.math, why: now.why, heard: now.handles.every(Boolean) });
+    log.push({ t: +t.toFixed(1), id: L.id, clips: now.parts.map((p) => p.id), words: now.words, text: !!now.s.text, where: now.where, place: G.place, volume: +vol.toFixed(3), math: !!G.math, why: now.why, heard: now.handles.every(Boolean) });
   }
   const A = {
     log, told,
@@ -238,7 +267,7 @@ export function makeAnnouncer({ sound, read, rand = Math.random }) {
     update(dt, G = read()) {
       t += dt; lastFacts = G;
       G.told = told;
-      if (!G.playing) { if (now && now.t0 != null && now.vol !== 0) { for (const h of now.handles) if (h) h.volume(0); now.vol = 0; } due = null; waiting = []; return; }
+      if (!G.playing) { if (now && now.t0 != null && now.vol !== 0) { for (const h of now.handles) if (h) h.volume(0); now.vol = 0; } show(null); due = null; waiting = []; return; }
       if (due == null) due = t + T.first[0] + (T.first[1] - T.first[0]) * rand();
       // (what just happened: said when it can be)
       for (const k of G.events || []) for (const L of LINES) if (L.event === k && quiet(L) && !waiting.some((w) => w.L === L)) waiting.push({ L, until: t + T.wait });
@@ -247,12 +276,14 @@ export function makeAnnouncer({ sound, read, rand = Math.random }) {
       if (now && now.t0 != null) {
         const vol = volumeAt(now.where, G.place, G.math);
         if (Math.abs(vol - now.vol) > 0.001) { for (const h of now.handles) if (h) h.volume(vol); now.vol = vol; }
-        if (t - now.t0 >= now.ends) { now = null; due = t + gapAfter(rand); }
+        show(now.s.text && t - now.t0 >= T.chime && t - now.t0 < now.ends && heardIn(now.where, G.place) ? now.words : null);
+        if (t - now.t0 >= now.ends) { now = null; show(null); due = t + gapAfter(rand); }
         return;
       }
       // one picked, its clips on their way: begun once they are all ready (given up after a while)
       if (now) {
-        if (now.parts.every((p) => sound.has(soundName(p.id)))) start(G);
+        // (a text line's words are shown even with no chime to be had: the sound off, or not yet allowed by the browser)
+        if (now.parts.every((p) => sound.has(soundName(p.id))) || (now.s.text && now.loadT > 1)) start(G);
         else if ((now.loadT += dt) > T.wait) { now = null; due = t + T.retry; }
         return;
       }
@@ -270,7 +301,7 @@ export function makeAnnouncer({ sound, read, rand = Math.random }) {
         if (c) begin(c.L, c.s, G, 'minute'); else due = t + T.retry;
       }
     },
-    state: () => ({ t: +t.toFixed(1), due: due == null ? null : +due.toFixed(1), playing: now && now.t0 != null ? { id: now.L.id, words: now.words, where: now.where, volume: +now.vol.toFixed(3), since: +(t - now.t0).toFixed(1), ends: +now.ends.toFixed(2) } : null,
+    state: () => ({ t: +t.toFixed(1), due: due == null ? null : +due.toFixed(1), playing: now && now.t0 != null ? { id: now.L.id, words: now.words, text: !!now.s.text, where: now.where, volume: +now.vol.toFixed(3), since: +(t - now.t0).toFixed(1), ends: +now.ends.toFixed(2) } : null, shown,
       loading: now && now.t0 == null ? now.L.id : null, waiting: waiting.map((w) => w.L.id), place: lastFacts ? lastFacts.place : null, math: lastFacts ? !!lastFacts.math : false, said: log.length }),
   };
   return A;
@@ -316,7 +347,20 @@ export function makeAnnounce({ sound, W, visit = null, people = () => null, crew
     const math = arena || !!(doc && doc.querySelector('.pnj'));
     return { playing, place, math, news: news.fresh(), captains, scan: busy && busy.medic ? busy.medic.id : null, alarm, events };
   }
-  const A = makeAnnouncer({ sound, read });
+  // (A TEXT LINE'S WORDS on the screen: a strip at the top, under the line's chip where one is up, in the station's look;
+  // made the first time one is said)
+  let strip = null;
+  function onText(words) {
+    if (typeof document === 'undefined') return;
+    if (!strip) {
+      if (!document.getElementById('pan-css')) { const st = document.createElement('style'); st.id = 'pan-css'; st.textContent = CSS; document.head.appendChild(st); }
+      strip = document.createElement('div'); strip.className = 'pan'; strip.setAttribute('role', 'status'); strip.innerHTML = '<small>Station announcement</small><p></p>';
+      document.body.appendChild(strip);
+    }
+    if (words) strip.querySelector('p').textContent = words;
+    strip.classList.toggle('is-on', !!words);
+  }
+  const A = makeAnnouncer({ sound, read, onText });
   // (the chime and the lines that happen of a sudden, fetched once play begins: small, and wanted at once)
   let fetched = false;
   const update = A.update;

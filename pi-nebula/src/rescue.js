@@ -42,6 +42,8 @@
 //   site.update(dt), site.aim(camera, dt), site.late()   each frame
 //   site.phase    'made' | 'above' | 'fly' | 'hover' | 'down' | 'pods' | 'lift' | 'up'
 //   site.count    { aboard, of }      the rescued aboard, of all asleep in the pods
+//   site.who      [{ look, position }] who each of them is, in the order they came aboard (the look they slept in, their
+//                 crew position's colour: the pods' plan), for the ward at home (src/people.js THE WARD)
 //   site.matrix   the ship's kit frame in the world;  site.fl  the flying;  site.down  on the ground (the pods' part)
 //   site.words    what is going on, for the strip along the top;  site.state();  site.close()
 import * as THREE from 'three';
@@ -50,6 +52,7 @@ import { clearUnder, wreckFor } from './planet/wreck.js';
 import { makeWreck } from './planet/wreckship.js';
 import { podsPlan, footprintTris } from './planet/pods.js';
 import { makePods } from './planet/podsdraw.js';
+import { SLEEPERS } from './sleeper.js';
 import { loadPod } from '../kit/stasispod.js';
 import { facing } from './flymodel.js';
 
@@ -75,7 +78,7 @@ export function makeSite(ctx, opts = {}) {
   // (the ship as the flying flies it out there: its own facts with nothing of its hangar, as the rocks' FIELD has the Miner's)
   const cfg = { ...shipCfg, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true }; delete cfg.q0;
   const group = new THREE.Group(); group.name = 'rescue:planet'; group.visible = false; W.scene.add(group);
-  const st = { phase: 'made', t: 0, ready: false, failed: false, closed: false, aboard: 0, of: 0, opened: 0, words: '', times: {} };
+  const st = { phase: 'made', t: 0, ready: false, failed: false, closed: false, aboard: 0, of: 0, opened: 0, words: '', times: {}, who: [] };
   let planet = null, wreck = null, pods = null, land = null, fl = null, L = null;
   const at = { p: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), from: new THREE.Vector3(), hover: new THREE.Vector3(), ground: new THREE.Vector3(), up: new THREE.Vector3(), flyT: 1, lifted: 0 };
   const ground = (x, z) => (land ? land.heightAt(x, z) : 0);
@@ -164,12 +167,14 @@ export function makeSite(ctx, opts = {}) {
   function aboardPod(i) {
     const p = pods && pods.pods[i]; if (!p) return;
     if (p.sleeper) { p.sleeper.dispose(); p.sleeper = null; }
+    // (who they are, for the ward at home: the look they slept in and their position's colour, the pods' own plan)
+    if (!st.who[i]) st.who[i] = { look: SLEEPERS[((p.plan && p.plan.look) || 0) % SLEEPERS.length], position: (p.plan && p.plan.position) || null };
     st.aboard = Math.max(st.aboard, i + 1);
   }
 
   const api = {
     get ready() { return st.ready; }, get failed() { return st.failed; }, get phase() { return st.phase; }, get words() { return st.words; },
-    get count() { return { aboard: st.aboard, of: st.of }; }, get fl() { return fl; }, get down() { return st.phase === 'pods'; },
+    get count() { return { aboard: st.aboard, of: st.of }; }, get who() { return st.who.filter(Boolean).map((w) => ({ ...w })); }, get fl() { return fl; }, get down() { return st.phase === 'pods'; },
     get matrix() { return fl ? fl.matrix : S.M; }, get canSkip() { return !!fl && ['fly', 'hover', 'down', 'pods'].includes(st.phase); },
     open,
     go() { if (st.phase === 'above') setPhase('fly'); },

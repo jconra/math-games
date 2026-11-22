@@ -11,7 +11,10 @@
 //   news.update(dt)                  each frame: now and then something new happens out there by itself
 // THE KINDS, and their facts (each fact a few words a line can say; lines.js fills them in where it says {fact}):
 //   mathball  { winner, loser, score }         a Mathball match: who won, who lost, the score in words
-//   rescue    { ship, captain, crew }          a ship that brought a stranded crew home
+//   rescue    { ship, captain, crew }          a ship that brought a stranded crew home; a rescue the crew member was on
+//             (src/trip.js) has its own facts too: people ('five people'), from ('a crashed ship on a canyon world'),
+//             count (5) and resting (how many of them are in the ward), for the station's line of how it went
+//             (announce.js 'rescued') and its people's talk of it (lines.js 'rescue-3')
 //   planet    { planet }                       a new world found that people could live on
 //   haul      { ship, ore, tons }              a ship back with a rich load of ore
 //   player    { player, job }                  the player did a job shift (main.js, after a job pays)
