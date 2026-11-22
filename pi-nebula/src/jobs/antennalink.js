@@ -22,7 +22,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meshesOf } from '../../kit/dockbridge.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { DIR as SKY } from '../../world/sky.js';
-import { STEPS, CALL, SIGNAL, antennaOf, stepBuilt, buildAgain, faceSvg, FACES } from './antenna.js';
+import { STEPS, CALL, SIGNAL, antennaOf, antennaSeen, stepBuilt, buildAgain, faceSvg, FACES } from './antenna.js';
 
 const CSS = new URL('./antenna.css', import.meta.url).href;
 function ensureCss() {
@@ -169,7 +169,7 @@ export function standingAntenna(W) {
     // built again)
     sync(crew, force = false) {
       if (hold) return;
-      const a = crew ? antennaOf(crew) : { built: 0, repaired: false }, k = `${crew ? crew.id || crew.name : ''}:${a.built}:${a.repaired}`;
+      const a = antennaSeen(crew), k = `${crew ? crew.id || crew.name : ''}:${a.built}:${a.repaired}`;
       if (!force && crew === crewNow && k === key) return;
       crewNow = crew; key = k;
       whole(false);
@@ -201,10 +201,10 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
 
   let cur = 0, anim = null, finished = false, closed = false, clock = 0, order = null, ui = null, queue = [], braced = new Set(), pops = new Map(), fl = new Map(), jolt = 0, loose = 1, tested = false, heard = 0;
   const a0 = () => (crew ? antennaOf(crew) : { built: cur, repaired: false });
-  // the antenna as the crew member has it at the job's opening (a repaired one is built again from its first step)
+  // the antenna as the crew member has it at the job's opening
   function reset() {
+    // (a repaired one built to its end: the end card comes first, "Build it again" or "Done")
     const a = a0();
-    if (crew && a.built >= STEPS.length) { /* the end card comes first: "Build it again" or "Done" */ }
     cur = a.built; finished = cur >= STEPS.length; queue = []; braced.clear(); pops.clear(); fl.clear(); jolt = 0; tested = finished; heard = finished ? 1 : 0;
     showBuilt(M, cur, { on: finished });
     if (cur > 3) for (let f = 0; f < FACES; f++) braced.add(f);

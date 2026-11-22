@@ -63,6 +63,12 @@ export function antennaOf(crew) {
 export function stepBuilt(crew) { const a = antennaOf(crew); a.built = Math.min(STEPS.length, a.built + 1); if (a.built >= STEPS.length) a.repaired = true; return a; }
 //   buildAgain(crew) from the first step again (the radio tower stays repaired)
 export function buildAgain(crew) { const a = antennaOf(crew); a.built = 0; return a; }
+//   antennaSeen(crew) the same, only read: a crew member who never went to the radio desk is left as they were (the
+//   antenna on the roof shows each crew member's own, every frame)
+export function antennaSeen(crew) {
+  const t = crew?.jobs?.antenna, b = t && Number.isInteger(t.built) ? Math.max(0, Math.min(STEPS.length, t.built)) : 0;
+  return { built: b, repaired: !!t && t.repaired === true };
+}
 // THE FLAG: the radio tower repaired (the call heard). Only read: a crew member who never went to the radio desk is left
 // as they were.
 export function antennaRepaired(crew) { return crew?.jobs?.antenna?.repaired === true; }

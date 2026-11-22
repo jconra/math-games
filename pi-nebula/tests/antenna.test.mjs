@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as E from '../src/jobs/engine.js';
-import { JOB as antenna, MAKERS, PLACE, STEPS, CALL, SIGNAL, antennaOf, stepBuilt, buildAgain, antennaRepaired, pickAsk } from '../src/jobs/antenna.js';
+import { JOB as antenna, MAKERS, PLACE, STEPS, CALL, SIGNAL, antennaOf, antennaSeen, stepBuilt, buildAgain, antennaRepaired, pickAsk } from '../src/jobs/antenna.js';
 import { readFileSync } from 'node:fs';
 import { ANTENNA, anchorsAt, corners, TOP } from '../kit/antenna-plan.js';
 import { MASSES, SPIRE, boxPath, PYRAMIDS, RAISED } from '../kit/outside-plan.js';
@@ -113,6 +113,7 @@ test('a right answer at each step pays as any card, and the youngest\'s bracing 
 test('THE FLAG: the antenna is kept with the crew member, step by step; the eighth step repairs the radio tower, and it stays repaired', () => {
   const crew = crewOf();
   assert.equal(antennaRepaired(crew), false);
+  assert.deepEqual(antennaSeen(crew), { built: 0, repaired: false });
   assert.equal(crew.jobs, undefined, 'only read: a crew member who never went to the radio desk is left as they were');
   assert.deepEqual({ ...antennaOf(crew) }, { built: 0, repaired: false });
   for (let k = 1; k < STEPS.length; k++) { assert.equal(stepBuilt(crew).built, k); assert.equal(antennaRepaired(crew), false, `not yet at step ${k}`); }
@@ -125,6 +126,7 @@ test('THE FLAG: the antenna is kept with the crew member, step by step; the eigh
   // built again from the first step: still repaired
   assert.equal(buildAgain(back).built, 0); assert.equal(antennaRepaired(back), true);
   assert.equal(stepBuilt(back).built, 1); assert.equal(antennaRepaired(back), true);
+  assert.deepEqual(antennaSeen(back), { built: 1, repaired: true });
   // (a broken save: nothing repaired, nothing built past the end)
   assert.equal(antennaRepaired({ jobs: { antenna: { repaired: 'yes' } } }), false);
   assert.equal(antennaOf({ jobs: { antenna: { built: 99 } } }).built, 8);
