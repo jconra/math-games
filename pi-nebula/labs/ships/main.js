@@ -25,6 +25,8 @@
 //     engines up (plume.js, the jet: Off nothing, the nozzles dark; Idle a dull orange, up through bright orange and
 //     white-yellow to blue at Afterburn), easing to the new setting.
 //   ?ship=built|miner|medic|hauler|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   ?emblem=<design> the ship's glowing emblem (options for the Miner, the Explorer and the Hauler, emblems.js; none in
+//     the game yet), the menu's Emblem chips
 //   ?look=light|warm  ?level=asnow|darker|darkest (the Light look's light level; the menu's Light chips)
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
@@ -57,6 +59,7 @@ import * as EB from '../../kit/ships/explorer-built.js';
 import * as MB from '../../kit/ships/miner-built.js';
 import * as MD from '../../kit/ships/medic-built.js';
 import * as HB from '../../kit/ships/hauler-built.js';
+import { EMBLEMS, layEmblem } from './emblems.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
@@ -99,6 +102,8 @@ const st = {
   pools: q.has('pools') ? q.get('pools') === '1' : q.has('bloom') ? q.get('bloom') === '1' : !matchMedia('(pointer: coarse)').matches,
   // (the cabin's motion: the live screens, the reactor's core, the one tired strip, the dust in the beams (?motion=0:
   // all held still); the screens' palette (?screens=vivid))
+  // (the emblem options shown: a design of emblems.js for the ship shown, or none)
+  emblem: q.get('emblem') || 'none',
   motion: q.get('motion') !== '0', screens: q.get('screens') === 'soft' ? 'soft' : 'vivid',
 };
 
@@ -265,9 +270,20 @@ async function showShip(S) {
   // (its own blueprints: the one shown stays if it is one of them)
   if (S.bps && !S.bps.includes(st.opt) && st.opt !== 'uploaded') showOption(S.bps[0]);
   await showMeshy();
-  plan.hFor = null; recheck(true); await showCabin(); setCam(st.cam); url(); menu();
+  plan.hFor = null; recheck(true); await showCabin(); showEmblem(); setCam(st.cam); url(); menu();
   loading.hidden = true;
 }
+// ── the emblem options (emblems.js: not in the game): a design laid on the ship shown, both sides ──
+const EMBLEM_OF = { miner: 'miner', built: 'explorer', hauler: 'hauler' };
+const emblemsOf = (S = st.ship) => EMBLEMS[EMBLEM_OF[S?.id]] || null;
+let emblem = null;
+function showEmblem() {
+  if (emblem) { emblem.group.parent?.remove(emblem.group); emblem.group.traverse((o) => o.geometry?.dispose()); emblem = null; }
+  const E = emblemsOf(); if (!E || !E.designs[st.emblem] || !st.shell?.model) return;
+  emblem = { ...layEmblem(THREE, st.shell.model, EMBLEM_OF[st.ship.id], st.emblem), ship: st.ship.id, design: st.emblem };
+  st.shell.holder.add(emblem.group);
+}
+function setEmblem(k) { st.emblem = k || 'none'; showEmblem(); url(); menu(); }
 // Meshy B laid over the built ship, see-through, to compare (its own shell, a see-through copy of its paint)
 let meshyOver = null;
 async function showMeshy() {
@@ -460,7 +476,7 @@ function setCam(name) {
   controls.target.set(0, name === 'Above' || name === 'Top' ? deckUp() + 1 : s.y * 0.42, 0);
   camera.position.copy(controls.target).addScaledVector(d, fit); controls.update();
 }
-function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` + (st.level && LOOKS[st.look].levels?.[st.level] && st.level !== LOOKS[st.look].level ? `&level=${st.level}` : '') : '&inside=0') : '')); }
+function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (emblemsOf()?.designs[st.emblem] ? `&emblem=${st.emblem}` : '') + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` + (st.level && LOOKS[st.look].levels?.[st.level] && st.level !== LOOKS[st.look].level ? `&level=${st.level}` : '') : '&inside=0') : '')); }
 
 // ── the checks panel ─────────────────────────────────────────────────────────────────────────────────────────────
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -517,6 +533,9 @@ function menu() {
     // (a built ship's own chips, from its module (its LAB.menu): the Hauler's containers one at a time, its clamps, the
     // containers' look)
     ...(L?.menu ? L.menu({ sep, lab, chip, menu, st, reload: (ids) => { for (const id of ids) forgetPiece(id); for (const k of [...shells.keys()]) if (k.startsWith(st.ship.id)) shells.delete(k); showShip(st.ship); } }) : []),
+    // (the emblem options: the ship's designs, or none)
+    ...(emblemsOf() ? [sep(), lab('Emblem'), chip('No emblem', !emblemsOf().designs[st.emblem], () => setEmblem('none'), true, 'No emblem (as the ship is in the game)'),
+      ...Object.entries(emblemsOf().designs).map(([k, D]) => chip(D.name, k === st.emblem, () => setEmblem(k), true, D.tip + ' (an option: not in the game)'))] : []),
     ...(has('ramps') ? [sep(), lab('Ramps'), chip(st.ramps === 'down' ? 'Ramps up' : 'Ramps down', false, () => { st.ramps = st.ramps === 'down' ? 'up' : 'down'; menu(); }, true, 'Lower the ramps to the ground (each unfolds as it comes down), or raise them to close the bay')] : []),
     ...(has('rampCount') ? [lab('Ramp'), ...[['both', 'Both sides'], ['one', 'One (port)']].map(([k, t]) => chip(t, st.rampCount === k, () => { st.rampCount = k; menu(); }, true, k === 'one' ? 'Only the port ramp opens; the starboard opening is sealed, with medical cabinets along it inside' : 'A ramp in each side opening'))] : []),
     ...(has('gear') ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, L.gearTip || 'Fold the landing legs into their wells, or let them down')] : []),
@@ -677,6 +696,8 @@ window.SHIPLAB = {
     const B = st.shell?.built; st.hold = !!at; if (!B || !at || !st.ship?.lab) return;
     st.ship.lab.pose(B, at, { updateDoors, person, jets: st.shell.jets });
   },
+  // (the emblem options: emblem(design or 'none'); emblemInfo() the one laid: its design, triangles, points off the hull)
+  emblem: (k) => setEmblem(k), emblemInfo: () => (emblem ? { ship: emblem.ship, design: emblem.design, tris: emblem.tris, points: emblem.points, missed: emblem.missed } : null),
   built: () => st.shell?.built || null, three: THREE, scene, camera, renderer, controls,
   // (the cabin: shown or not, its look, its ceilings; its doors 'auto' | 'open' | 'shut', or held part open (0 to 1),
   // null lets them go; what it is: its triangles, by zone, its doors and how open each is; the cameras in its rooms)
