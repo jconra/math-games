@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Explore Lab</title>
+<meta name="description" content="A space station lab for the exploring run: the surveyor's cards at the Explorer's survey table, by themselves. The scan of the land below, its finds counted, picture charts, bar charts, line plots and a line graph, points on the map of the land, averages, and the chance a probe lands on something. Twenty-four levels; step through them with the level arrows, and take a new card of a level.">
+<meta name="theme-color" content="#05070b">
+<link rel="icon" href="data:,">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../shared/oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070b; color: #e8eef5; overflow: hidden; font: 400 15px/1.35 system-ui, "Segoe UI", Roboto, "DejaVu Sans", sans-serif; }
+  #top { position: fixed; left: 0; right: 0; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; background: rgba(7, 10, 15, 0.82); border-bottom: 1px solid rgba(79, 182, 255, 0.3); }
+  #top h1 { margin: 0 4px 0 0; font: 700 16px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #9fdcff; }
+  #top a { color: #9fdcff; font-size: 13px; margin-right: 4px; }
+  #top button { font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 10px; color: #e8eef5; background: #152131; border: 1px solid rgba(79, 182, 255, 0.45); border-radius: 6px; }
+  #note { flex: 1 1 320px; margin: 0; font-size: 12.5px; color: #a9b8c8; min-height: 1.3em; }
+  /* the ladder, to read: every level, easiest first, the one in hand lit; a tap on one goes to it. Beside the card on a
+     wide screen; a phone has the card under the top line and the level in hand in the line under the buttons */
+  #ladder { position: fixed; left: 0; top: var(--lab-top, 46px); bottom: 0; right: calc(min(480px, 44vw) + 32px); margin: 0; padding: 20px 16px 16px 20px; list-style: none; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; align-content: start; }
+  #ladder li { display: grid; grid-template-columns: 26px 1fr; column-gap: 6px; padding: 8px 10px; background: #0b1118; border: 1px solid rgba(150, 210, 250, 0.2); border-radius: 6px; cursor: pointer; }
+  #ladder li b { grid-row: 1 / 3; font-size: 15px; color: #6f8194; }
+  #ladder li span { font-weight: 600; color: #cfe0ee; }
+  #ladder li small { font-size: 12.5px; color: #8fa3b6; }
+  #ladder li.is-now { border-color: #ffab45; background: #121b25; }
+  #ladder li.is-now b { color: #ffab45; }
+  /* the card under this page's top line, however many rows that wraps to */
+  html body .pnj[data-job="survey"] .pnj-panel { top: max(64px, calc(var(--lab-top, 46px) + 10px)); max-height: calc(100% - max(64px, calc(var(--lab-top, 46px) + 10px)) - 16px); }
+  /* a phone: the card starts right under the top line (in the game it lies along the bottom of the screen, the
+     Explorer's lab in view above it; here there is nothing above it to see), the same size as it is in the game */
+  @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
+    #ladder { display: none; }
+    html body .pnj[data-job="survey"] .pnj-panel { top: calc(var(--lab-top, 84px) + 8px); bottom: auto; max-height: calc(100% - var(--lab-top, 84px) - 16px); }
+  }
+  #loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 18px; color: #cfe6ff; background: #05070b; }
+</style>
+</head>
+<body>
+<div id="top">
+  <h1>Explore Lab</h1><a href="../">All labs</a>
+  <button type="button" id="new">New card</button>
+  <p id="note" aria-live="polite"></p>
+</div>
+<ol id="ladder" aria-label="The surveyor's levels, easiest first"></ol>
+<div id="loading">Scanning the land below…</div>
+<!-- (the lab is loaded from here so that a mistake in any of its files shows on the page too) -->
+<script type="module">import('./main.js?v=1').catch((e) => { window.oops && window.oops(e); const l = document.getElementById('loading'); if (l) l.textContent = 'The lab did not start: ' + (e && e.message || e); });</script>
+</body>
+</html>
