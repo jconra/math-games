@@ -13,7 +13,8 @@
 //   mbMounts     'both sides'   the canisters' fixed mounts (the 8k's cradles, back plates, rails, middle clamps)
 //   mbCanopy     'glass'     the canopy: the panes his picture has (a windscreen, a roof pane, three down each side) in
 //                            smoked glass, one black spar part along every border and round the outline
-//   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps
+//   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps, his emblem (the ore
+//                            line with a cut gem, amber)
 //   mbCanister   (8)         an ore canister on its mount: kit door leaves (door 'canister': the canister, the lit
 //                            strip in its level windows and the ring lights round its ends) and the tray it rides out
 //                            on (door 'tray': two flat bars under it, in two stages). Both slide out sideways off the
@@ -81,7 +82,9 @@ export const PAL = {
   nozzle: s('#1f2125', 0.4, 0.75, 0.8), rim: s('#2c2f34', 0.32, 0.8, 0.7), core: s('#141619', 0.45, 0.8, 0.8),
 };
 // (glows kept below the point where they wash out to white: the blue stays blue, the amber amber)
-export const GLOW = { strip: [0.04, 0.5, 2.1], warm: [2.1, 0.78, 0.1], cutter: [1.9, 0.5, 0.04], pod: [0.04, 0.5, 2.1] };
+export const GLOW = { strip: [0.04, 0.5, 2.1], warm: [2.1, 0.78, 0.1], cutter: [1.9, 0.5, 0.04], pod: [0.04, 0.5, 2.1],
+  // (the emblem: the miners' amber, from their job colour's light lines, kit/crew.js JOBS)
+  emblem: [1.5, 0.55, 0.02] };
 
 // ── PAINTING THE HULL ────────────────────────────────────────────────────────────────────────────────────────────────
 // ZONES (built-common.js paintFaces): a |x| + b y + c z <= d inside each plane
@@ -227,6 +230,16 @@ export const MARKS = {
   // his amber headlamps: one each side in the nose's dark lower face, each a housing standing out of it (the same both
   // sides: the 3k is not quite symmetric) with its glowing face at the front
   lamps: [{ x: 0.85, y: 2.5, w: 0.42, h: 0.18, rim: 0.035 }],
+  // HIS EMBLEM (the game's maker's pick of the Ship Lab's options, 2026-11-22: Miner C): the ore line, a line along the
+  // side like the Medic's pulse with a cut gem in it, glowing amber on the white flank of the cab aft of the canopy, over
+  // the dark band, both sides (built-common.js emblem: the strokes as seen from the side, x to the right, y up, metres
+  // about (z, y): in the hull's own frame, so 4.07 m off the floor with the ship on its longer legs, STAND)
+  emblem: { z: 0.8, y: 3.94, colour: GLOW.emblem, strokes: [
+    { pts: [[-0.8, -0.05], [-0.22, -0.05]] }, { pts: [[0.22, -0.05], [0.8, -0.05]] },
+    // (the gem: its outline, its table's line across, and its facets down to the point)
+    { pts: [[-0.22, -0.05], [-0.12, 0.13], [0.12, 0.13], [0.22, -0.05], [0, -0.3]], closed: true },
+    { pts: [[-0.22, -0.05], [0.22, -0.05]] }, { pts: [[-0.12, 0.13], [-0.07, -0.05], [0, -0.3]] }, { pts: [[0.12, 0.13], [0.07, -0.05], [0, -0.3]] }, { pts: [[-0.07, -0.05], [0, 0.13], [0.07, -0.05]] },
+  ] },
 };
 const onSide = (s, y, z, lift = 0.012) => { const h = rayHull(V3(s * 8, y, z), V3(-s, 0, 0)); return h ? h.p.addScaledVector(h.n, lift) : null; };
 const onFront = (x, y, lift = 0.012) => { const h = rayHull(V3(x, y, 12), V3(0, 0, -1)); return h ? h.p.addScaledVector(h.n, lift) : null; };
@@ -253,6 +266,9 @@ function mbMarks(p) {
   }
   { const N = MARKS.noseStrip, c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => onFront(a * N.x, N.y + b * N.h / 2)); if (c.every((v) => v)) acc.poly(c.map(dk), V3(0, 0, 1), GLOW.strip, 'glow', 99); }
   // (no nav lights: his picture has none)
+  // his emblem, both sides (a point of it off the hull says so)
+  const em = C.emblem(acc, MARKS.emblem, hullFaces(), drawn, dk);
+  if (em.missed) console.warn(`mbMarks: ${em.missed} of the emblem's ${em.points} points missed the hull`);
   acc.flush(p);
   return p;
 }

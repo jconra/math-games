@@ -5,6 +5,7 @@
 //   painting       paintFaces: a mesh's faces cut by plane ZONES where a colour line must cross a face, then each
 //                  painted by the first of the RULES that matches it; drawFaces puts them in a piece
 //   shapes         clipPlane, fan, tnorm, polyTo, boxAt, boxAtGlow, convexHullXZ, rayFaces (the first face a ray meets)
+//   the emblem     emblem: a ship's line-art emblem laid on its skin as a glowing ribbon, each side (EMBLEM, arc)
 //   the canopy     buildPanes: named panes through named corners on the mesh's canopy, their borders as straight
 //                  spars; spar: the one black bar placed along every border; drawCanopy: the glass and its spars
 //   the cockpit    cockpitTub: dark walls from the canopy's outline down to its floor, so no gap shows the sky
@@ -86,6 +87,63 @@ export function rayFaces(faces, o, d, keep = () => true) {
     const t = e2.dot(qv) / det; if (t > 1e-4 && t < bt) { bt = t; best = { p: o.clone().addScaledVector(d, t), n: f.n.clone().dot(d) > 0 ? f.n.clone().negate() : f.n.clone() }; }
   }
   return best;
+}
+
+// ── A SHIP'S EMBLEM: line art laid on its skin as a glowing ribbon, each side, the Medic's pulse line's way (its width,
+// 1.4 cm off the skin; medic-built.js MARKS.pulse). The game's maker's picks from the Ship Lab's options (2026-11-22):
+// the Miner's ore line with a cut gem, the Explorer's ringed planet, the Hauler's container seen from the corner; each
+// is the ship's own MARKS.emblem, laid in its marks piece:
+//   E { z, y, scale, colour, strokes }: the strokes drawn as seen from the side they are on (x to the right, y up,
+//   metres, about (z, y) on the side), so each reads the same way round on both sides (x to the right is aft on the
+//   port side, forward on the starboard); a stroke { pts: [[x, y], ...], closed }. Each point is found on the hull by a
+//   ray in from outside (among `faces`, the ones `keep` says count), no further than 4 cm from the last along its
+//   stroke so the ribbon follows the facets; across a corner the ribbon is mitred, never more than twice as wide.
+// Returns how many points it looked for and how many missed the hull (the ship's marks say so out loud).
+export const EMBLEM = { w: 0.045, lift: 0.014, step: 0.04 };
+// (a circle's or an ellipse's points for a stroke: centre, radii, from angle a0 to a1, n steps, turned by tilt)
+export const arc = (cx, cy, rx, ry, a0, a1, n = 24, tilt = 0) => {
+  const out = [], c = Math.cos(tilt), s = Math.sin(tilt);
+  for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n, x = rx * Math.cos(a), y = ry * Math.sin(a); out.push([cx + x * c - y * s, cy + x * s + y * c]); }
+  return out;
+};
+export function emblem(acc, E, faces, keep, dk) {
+  const k = E.scale || 1, { w: W, lift, step } = EMBLEM;
+  // (only the faces round the emblem: its extent and a margin, in y and z)
+  let r = 0; for (const S of E.strokes) for (const [x, y] of S.pts) r = Math.max(r, Math.abs(x) * k, Math.abs(y) * k);
+  const m = r + 0.3, over = (f, a, c) => Math.min(...f.pts.map((p) => p[a])) < c + m && Math.max(...f.pts.map((p) => p[a])) > c - m;
+  const near = faces.filter((f) => keep(f) && over(f, 'y', E.y) && over(f, 'z', E.z));
+  let points = 0, missed = 0;
+  for (const s of [1, -1]) {
+    const hit = (x, y) => {
+      const h = rayFaces(near, V3(s * 9, E.y + y * k, E.z - s * x * k), V3(-s, 0, 0)); points++;
+      if (!h) { missed++; return null; }
+      if (h.n.x * s < 0) h.n.negate();
+      return { p: h.p.addScaledVector(h.n, lift), n: h.n };
+    };
+    for (const S of E.strokes) {
+      const src = S.closed ? [...S.pts, S.pts[0]] : S.pts, dense = [src[0]];
+      for (let i = 1; i < src.length; i++) {
+        const [ax, ay] = src[i - 1], [bx, by] = src[i], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * k / step));
+        for (let j = 1; j <= n; j++) dense.push([ax + (bx - ax) * j / n, ay + (by - ay) * j / n]);
+      }
+      const H = dense.map(([x, y]) => hit(x, y));
+      for (let i = 0; i < H.length; i++) {
+        if (!H[i]) continue;
+        // (the ribbon's sideways: across the line, in the face)
+        const prev = H[i - 1] || (S.closed && i === 0 ? H[H.length - 2] : null), next = H[i + 1] || (S.closed && i === H.length - 1 ? H[1] : null);
+        const t1 = prev ? H[i].p.clone().sub(prev.p).normalize() : null, t2 = next ? next.p.clone().sub(H[i].p).normalize() : null;
+        const side = (t) => H[i].n.clone().cross(t).normalize();
+        let w = V3(0, 0, 0), mt = 1;
+        if (t1 && t2) { const a = side(t1), b = side(t2); w = a.clone().add(b); if (w.lengthSq() < 1e-6) w = a; w.normalize(); mt = Math.min(2, 1 / Math.max(0.5, w.dot(a))); } else w = side(t1 || t2);
+        H[i].l = H[i].p.clone().addScaledVector(w, W / 2 * mt); H[i].r = H[i].p.clone().addScaledVector(w, -W / 2 * mt);
+      }
+      for (let i = 0; i < H.length - 1; i++) {
+        const a = H[i], b = H[i + 1]; if (!a || !b || !a.l || !b.l) continue;
+        acc.poly([a.l, a.r, b.r, b.l].map(dk), a.n.clone().add(b.n).normalize(), E.colour, 'glow', 99);
+      }
+    }
+  }
+  return { points, missed };
 }
 
 // ── PAINTING BY FACE ─────────────────────────────────────────────────────────────────────────────────────────────

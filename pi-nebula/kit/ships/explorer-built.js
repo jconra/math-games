@@ -15,7 +15,7 @@
 //                            straight black spar along each border between them and a wider one round the sill: all
 //                            one part, the spar, placed again and again
 //   ebMarks      'marks'     what is laid on the skin: the blue light strips, the nose's lamps, the yellow marks by the
-//                            door, the nav lights
+//                            door, the nav lights, his emblem (the ringed planet, blue)
 //   ebDoorway    'port' / 'starboard'   a doorway: a pocket in the hull's side (the 3k has no skin there). Port: its
 //                            sides and sill, and the airlock behind it (its floor, walls, ceiling and inner door);
 //                            starboard: the sealed hatch, fixed: the hull's skin carried across the pocket, flush
@@ -61,7 +61,9 @@ export const PAL = {
   inner: s(SURF.white[0], SURF.white[1], SURF.white[2], 0.35),   // inside: the station's own off-white
   deck: s('#55595f', 0.6, 0.3, 0.6),         // the airlock's and cockpit's floors
 };
-export const GLOW = { strip: GLOW_SHIP.strip, nozzle: [0.1, 0.7, 1.8], ring: [0.4, 2.8, 6.4], warm: GLOW_SHIP.warm, red: [6.0, 0.5, 0.3], green: [0.5, 5.0, 1.4], white: [4, 4, 4] };
+export const GLOW = { strip: GLOW_SHIP.strip, nozzle: [0.1, 0.7, 1.8], ring: [0.4, 2.8, 6.4], warm: GLOW_SHIP.warm, red: [6.0, 0.5, 0.3], green: [0.5, 5.0, 1.4], white: [4, 4, 4],
+  // (the emblem: the explorers have no job colour, so the built ships' light strips' blue, the Medic's and the Hauler's)
+  emblem: [0.08, 0.85, 3.2] };
 
 // ── the data, decoded once ──────────────────────────────────────────────────────────────────────────────────────────
 const { bytes, at, tnorm } = C, mesh = (d) => C.decodeMesh(d, Q);
@@ -305,7 +307,22 @@ export const MARKS = {
   lamps: [{ x: 0.36, y: 2.33, w: 0.24, h: 0.08 }, { x: 0.78, y: 2.36, w: 0.22, h: 0.08 }],
   // his yellow "//" by the door, aft of it, on the white side (z of the bars' feet, how they lean, their height)
   slashes: { z: [-0.25, -0.02], y: [2.95, 3.45], lean: -0.22, w: 0.13 },
+  // HIS EMBLEM (the game's maker's pick of the Ship Lab's options, 2026-11-22: Explorer B): a ringed planet, glowing
+  // blue on the flank aft of the door, behind his two yellow slashes, both sides (built-common.js emblem)
+  emblem: { z: -1.95, y: 3.18, colour: GLOW.emblem, strokes: ringedPlanet() },
 };
+// the ringed planet as strokes (as seen from the side, x to the right, y up, metres about its middle): the planet R
+// round, a ring tilt up from level round it (its half lengths rx, ry); the ring's back half hidden behind the planet,
+// and a little gap in the planet's outline where the ring's front half crosses over it
+function ringedPlanet(R = 0.2, tilt = 0.32, rx = 0.44, ry = 0.11) {
+  const c = Math.cos(tilt), s = Math.sin(tilt);
+  // (in the ring's own frame: u along it, v across; its front half v < 0)
+  const uv = ([x, y]) => [x * c + y * s, -x * s + y * c];
+  const runs = (pts, keep) => { const out = []; let cur = []; for (const p of pts) { if (keep(p)) cur.push(p); else { if (cur.length > 1) out.push({ pts: cur }); cur = []; } } if (cur.length > 1) out.push({ pts: cur }); return out; };
+  const planet = runs(C.arc(0, 0, R, R, PI / 2, PI * 2.5, 72), (p) => { const [u, v] = uv(p); return v > 0 || Math.abs(Math.hypot(u / rx, v / ry) - 1) > 0.3; });
+  const ring = runs(C.arc(0, 0, rx, ry, PI, PI * 3, 80, tilt), (p) => uv(p)[1] < 0 || Math.hypot(p[0], p[1]) > R + 0.035);
+  return [...planet, ...ring];
+}
 // the first face a ray meets (the hull's own, not its glass): { p, n } or null
 const rayHull = (o, d) => C.rayFaces(hullFaces(), o, d, drawn);
 // a point on the side s of the skin at (y, z), lifted `lift` off it
@@ -340,6 +357,9 @@ function ebMarks(p) {
   const nav = (at, col) => boxAtGlow(acc, at, 0.05, col);
   nav(V3(6.44, 1.33, -4.86), GLOW.red); nav(V3(-6.44, 1.33, -4.86), GLOW.green);
   for (const s of [1, -1]) nav(V3(s * 3.13, 6.27, -6.92), GLOW.white);
+  // his emblem, both sides (a point of it off the hull says so)
+  const em = C.emblem(acc, MARKS.emblem, hullFaces(), drawn, dk);
+  if (em.missed) console.warn(`ebMarks: ${em.missed} of the emblem's ${em.points} points missed the hull`);
   acc.flush(p);
   p.light([0, 2.35 - DECK, 9.0], 0.9, [1.2, 0.95, 0.6], [0, -0.2, 1], 5);
   return p;

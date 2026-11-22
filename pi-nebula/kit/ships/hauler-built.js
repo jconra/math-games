@@ -84,7 +84,9 @@ export const PAL = {
   nozzle: s('#2a2d32', 0.4, 0.75, 0.8), rim: s('#868d95', 0.45, 0.3, 0.7), core: s('#16181b', 0.45, 0.8, 0.8),
   screen: s('#0c1418', 0.2, 0.1, 0.2), legs: s('#33373d', 0.5, 0.35, 0.6),
 };
-export const GLOW = { strip: [0.08, 0.85, 3.2], warm: [2.1, 0.78, 0.1], amber: [2.3, 1.05, 0.12], keypad: [0.1, 0.9, 2.2], white: [2.4, 2.3, 2.1] };
+export const GLOW = { strip: [0.08, 0.85, 3.2], warm: [2.1, 0.78, 0.1], amber: [2.3, 1.05, 0.12], keypad: [0.1, 0.9, 2.2], white: [2.4, 2.3, 2.1],
+  // (the emblem: the haulers' orange, from their job colour's light lines, kit/crew.js JOBS)
+  emblem: [1.8, 0.4, 0.03] };
 
 // ── THE NOSE AND THE ENGINE BLOCK: the meshes, painted by face ──────────────────────────────────────────────────────
 // (his picture: a cream cab on a dark lower hull, three yellow stripes leaning back on each cheek, a dark panel under
@@ -777,7 +779,7 @@ function hbGear(p, which) {
 }
 
 // ── THE MARKS AND LAMPS: his blue strips (under each side window, on the nose's front, on the roof behind the
-// windscreen) and an amber headlamp each side of the nose ───────────────────────────────────────────────────────────
+// windscreen), an amber headlamp each side of the nose, and his emblem ───────────────────────────────────────────────
 const lifted = (h, lift) => (h ? h.p.addScaledVector(h.n, lift) : null);
 const onSide = (sx, y, z, lift = 0.012) => lifted(rayHull(V3(sx * 8, y, z), V3(-sx, 0, 0)), lift);
 const onFront = (x, y, lift = 0.012) => lifted(rayHull(V3(x, y, 12), V3(0, 0, -1)), lift);
@@ -785,6 +787,17 @@ const onTop = (x, z, lift = 0.012) => lifted(rayHull(V3(x, 9, z), V3(0, -1, 0)),
 export const MARKS = {
   side: { z: [5.0, 5.55], y: 2.04, h: 0.1 }, nose: { x: 0.3, y: 1.96, h: 0.07 }, roof: { x: 0.25, z: [6.42, 6.54] },
   lamp: { x: 0.62, y: 1.38, w: 0.36, h: 0.26, rim: 0.04 },
+  // HIS EMBLEM (the game's maker's pick of the Ship Lab's options, 2026-11-22: Hauler A): one cargo container seen
+  // corner on, its ribs along the side, glowing orange on the white panel of the cab's flank just ahead of the crew door
+  // (the rest of its side is clamps and containers), both sides (built-common.js emblem: the strokes as seen from the
+  // side, x to the right, y up, metres about (z, y), drawn at `scale`)
+  emblem: { z: 4.1, y: 2.1, scale: 0.92, colour: GLOW.emblem, strokes: [
+    // (its side, its top, its end; the ribs down its side)
+    { pts: [[-0.36, -0.26], [0.16, -0.26], [0.16, 0.08], [-0.36, 0.08]], closed: true },
+    { pts: [[-0.36, 0.08], [-0.16, 0.22], [0.36, 0.22], [0.16, 0.08]], closed: true },
+    { pts: [[0.16, -0.26], [0.36, -0.12], [0.36, 0.22], [0.16, 0.08]], closed: true },
+    ...[-0.23, -0.1, 0.03].map((x) => ({ pts: [[x, -0.2], [x, 0.02]] })),
+  ] },
 };
 function hbMarks(p) {
   const acc = new Acc(), M = MARKS;
@@ -809,6 +822,9 @@ function hbMarks(p) {
   if (c.every((v) => v)) acc.poly(c.map(dk), V3(0, 0, 1), GLOW.strip, 'glow', 99);
   const R = M.roof, r = [[-1, 0], [1, 0], [1, 1], [-1, 1]].map(([a, b]) => onTop(a * R.x, R.z[b]));
   if (r.every((v) => v)) acc.poly(r.map(dk), V3(0, 1, 0), GLOW.strip, 'glow', 99);
+  // his emblem, both sides (a point of it off the hull says so)
+  const em = C.emblem(acc, M.emblem, hullFaces(), drawn, dk);
+  if (em.missed) console.warn(`hbMarks: ${em.missed} of the emblem's ${em.points} points missed the hull`);
   return acc.flush(p);
 }
 
