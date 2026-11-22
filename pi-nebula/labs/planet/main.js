@@ -465,7 +465,8 @@ async function flyMedic() {
     flown = LAB.flown = await flyOver({ renderer, scene, camera, land: planet.land, at: [cam.pos.x, Math.max(cam.pos.y, g + 25), cam.pos.z], ahead: [-Math.sin(cam.yaw), -Math.cos(cam.yaw)],
       toward: P ? [P.reduce((a, p) => a + p.x, 0) / P.length, P.reduce((a, p) => a + p.z, 0) / P.length] : null, onGetUp: () => stopFlying() });
   } catch (e) { console.error('planet lab: the Medic did not come', e); if (window.oops) window.oops(e); flying = false; return null; }
-  flying = false; $('bar').style.display = 'none'; document.body.classList.remove('touch');
+  // (the menu and the lab's own stick and up and down put away: the flying has its own)
+  flying = false; for (const id of ['bar', 'stick', 'updown']) $(id).style.display = 'none';
   return flown;
 }
 // (the camera given back where the flying's view left it)
@@ -474,7 +475,7 @@ function stopFlying() {
   flown.close(); flown = LAB.flown = null;
   camera.getWorldDirection(_v); cam.pos.copy(camera.position); cam.yaw = Math.atan2(-_v.x, -_v.z); cam.pitch = Math.asin(THREE.MathUtils.clamp(-_v.y, -1, 1));
   camera.up.set(0, 1, 0); camera.fov = 60; camera.near = 0.25; camera.far = 20000; camera.updateProjectionMatrix(); applyCam();
-  $('bar').style.display = ''; document.body.classList.toggle('touch', TOUCH); fit();
+  for (const id of ['bar', 'stick', 'updown']) $(id).style.display = ''; fit();
 }
 {
   const row = document.createElement('div'); row.className = 'kl-row'; row.id = 'searchRow'; row.style.display = 'none';
