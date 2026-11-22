@@ -196,7 +196,7 @@ async function boot() {
   // (and beside it the sound's switch: the volume and a mute, kept in this browser)
   const soundSw = soundButton(document.getElementById('hud-root'), sound);
   // (a job shift that paid becomes the station's news: the people may talk about it, news.js 'player')
-  const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab', craneFree: 'crane cab', arena: 'Mathball arena', dock: 'dock', cargo: 'shipping desk' };
+  const JOB_WORDS = { galley: 'galley', medical: 'medical centre', smelter: 'smelter', crane: 'crane cab', craneFree: 'crane cab', arena: 'Mathball arena', dock: 'dock', cargo: 'shipping desk', antenna: 'control room' };
   let shift = null, turnCam = null;
   const CAM_LIFT = 0.1;     // (radians: about 6 degrees more, while a line is followed)
 

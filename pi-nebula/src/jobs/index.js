@@ -17,7 +17,8 @@
 //                                 stands still at the job and jobs.aim(camera) frames the job's props)
 //   jobs.aim(camera, dt)          the camera while a job is up: through the player's eyes, at the counter or desk
 //   jobs.close()                  (the crew screen: the panel goes)
-//   jobs.start(id) / jobs.panel / jobs.spots / jobs.near   for the rigs (GAME.jobs)
+//   jobs.start(id) / jobs.panel / jobs.spots / jobs.near   for the rigs (GAME.jobs); jobs.antenna: the antenna on the roof
+//                                 as it stands (src/jobs/antennalink.js standingAntenna)
 //
 // HOW A JOB IS ADDED: ~/pw/space-math/JOBS.md. In short: a module here exporting JOB (its spot, sign, PLACE, SETTING,
 // MAKERS, card), listed in JOBS below.
@@ -36,8 +37,10 @@ import { openMathball, mathballIdle } from '../mathball/index.js';
 import { JOB as dock } from './dock.js';
 import { dockLink } from './docklink.js';
 import { JOB as cargo } from './cargo.js';
+import { JOB as antenna } from './antenna.js';
+import { antennaLink, standingAntenna } from './antennalink.js';
 
-export const JOBS = [galley, medical, smelter, crane, arena, dock, cargo];
+export const JOBS = [galley, medical, smelter, crane, arena, dock, cargo, antenna];
 export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -106,6 +109,9 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   }
   if (missing.length) console.info('job spots left out (the station has no such place): ' + missing.join(', '));
   const pairOf = (s) => (s.job.pair ? spots.filter((x) => x.job.pair === s.job.pair) : [s]);
+  // (THE RADIO TOWER as it stands on the roof, with the station's outside: the crew member's own, src/jobs/antennalink.js)
+  let standing = null;
+  try { standing = standingAntenna(W); } catch (e) { console.warn('Pi Nebula: the antenna on the roof could not be made', e); }
   // (the operator's chair's middle screen shows the crane's numbers, live: the rail's mark, the hook's height, the load)
   const screen = crane && crane.on ? chairScreen(W, crane) : null;
 
@@ -146,7 +152,9 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     } else {
       // (a job joined to its props: the dock's bridge outside the port, src/jobs/docklink.js; the crane's: openCrane)
       // (the dock's bridge is kept with the crew member between visits: its link saves them as each ring is built)
+      // (the radio tower: the antenna on the roof built from the control room's radio desk, src/jobs/antennalink.js)
       link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos, crew: c, save: () => save(c) })
+        : s.job.link === 'antenna' ? antennaLink({ W, job: s.job, crew: c, save: () => save(c), standing })
         : s.job.link && links[s.job.link] ? links[s.job.link]({ W, walls, job: s.job, crew: c, save: () => save(c) }) : null;
       panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
@@ -209,6 +217,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   function update(dt, P, isPlaying = true) {
     t += dt;
     playing = isPlaying;
+    if (standing) { standing.sync(crew()); standing.update(dt); }
     if (screen) screen.update(dt);
     for (const s of spots) {
       const lit = !s.job.pair || (near === s), base = s.job.open ? 0.6 : 0.3;
@@ -302,6 +311,6 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   const control = (dt, P) => (panel && at && at.job.game && panel.control ? panel.control(dt, P) : null);
   // (the rings and signs put away while a ship is out on a trip, where the station is not: src/trip.js)
   const show = (on) => { group.visible = !!on; };
-  const api = { show, update, aim, close, start, control, spots, missing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
+  const api = { show, update, aim, close, start, control, spots, missing, antenna: standing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
   return api;
 }

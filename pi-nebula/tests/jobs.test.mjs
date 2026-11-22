@@ -16,6 +16,7 @@ import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { answerOf } from '../../mathwood-valley/src/math/jobsums.js';
 import { JOB as arena } from '../src/jobs/arena.js';
 import { JOB as dock } from '../src/jobs/dock.js';
+import { JOB as antenna } from '../src/jobs/antenna.js';
 import { JOB as crane } from '../src/jobs/crane.js';
 import { JOB as pilot } from '../src/jobs/pilot.js';
 import { JOB as drill } from '../src/jobs/drill.js';
@@ -540,4 +541,6 @@ test('the jobs still to come are marked, with nothing to play yet', () => {
     assert.ok(J.spot && J.sign && J.hint, J.id);
   }
   assert.equal(dock.open, true); assert.equal(arena.open, true);
+  // (the radio tower, worked at the control room's radio desk, is open: its own tests, antenna.test.mjs)
+  assert.equal(antenna.open, true);
 });
