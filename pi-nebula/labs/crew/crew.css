@@ -89,3 +89,5 @@ body { overscroll-behavior: none; }
 .lu-tile.on span { color: var(--blue-hi); }
 .lu-tile.wait span { color: var(--mute); }
 @media (max-width: 520px) { .cm { width: 222px; } .cw-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); } .pic img, .pic .ph { width: 64px; height: 64px; } }
+/* a position's colour beside its words (the Crew and Colors windows: kit/positions.js) */
+.cw-pos { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.45); }

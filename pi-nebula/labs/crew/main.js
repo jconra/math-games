@@ -9,7 +9,8 @@
 // Where the windows are and which are open are kept for this browser tab only. (2026-11-15: a window opens big enough
 // to show everything in it where the screen allows, its picture grid no longer scrolling on its own, and is resized by
 // its bottom-right corner, the size kept for this tab: windows.js.) EVERY CONTROL IS IN ONE PLACE ONLY:
-//   CREW     the ready-made crew members (crew.json recipes), each a whole recipe
+//   CREW     the ready-made crew members (crew.json recipes), each a whole recipe; and the game's own people as the game
+//            dresses them (2026-11-21): those in a position (in its colour) and those in their own clothes
 //   BODIES   a grid of picture buttons, one an outfit (thumbs.js: drawn from the kit as the window opens; the one worn
 //            outlined), and under it Hands (by outfit: the man's on a men's-skeleton outfit, the woman's on a women's;
 //            either; none), Height (the recipe's size, kit/crew.js SIZES: Shorter, Medium, Taller), Arm thickness
@@ -40,7 +41,9 @@
 //            close (2026-11-15: the game's own camera, from behind and above: AS THE GAME SEES THEM, below); Painted,
 //            Plain, Wireframe; the 1.8 m post; the Normal figure (2026-11-15: a mannequin of normal adult proportions
 //            beside them, reference.js); Bones
-//   COLORS   Job colours (the outfit's marks, light lines and panels; an outfit keeping its own colours takes none),
+//   COLORS   Position (2026-11-21, kit/positions.js: None, Captain, Pilot, Engineer, Drill operator, Medic: the person in
+//            that position's colour on the crew uniform's bands, as the game dresses its people; None: back as before),
+//            Job colours (the outfit's marks, light lines and panels; an outfit keeping its own colours takes none),
 //            Bands (the outfit's whites: as made, BAND_COLOURS by name, then More: the older uniform colours, or any),
 //            Skin tone, Hair colour, Eyes (a head with real eyes: the iris's colour, Look at camera)
 //   FACE     a slider for each of FACE's (kit/crew.js; a head with face bones: the Tripo heads), -1 to 1, kept in the
@@ -61,8 +64,9 @@
 //     are moved out (0 as made) } }
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster); the arrow keys step
 // the hair (left, right) and the head (up, down); Esc closes the window in front.
-//   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
+//   ?who=<recipe id>  ?game=<id> (one of the game's own people, as the game dresses them)  ?position=<id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
+//     position(id) (a POSITIONS id, or null: None), game(id) (one of the game's people, as ?game=), people() (theirs),
 //     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
 //     look(on) (the eyes on the camera, a head with real eyes), face(values) (the face sliders: { slider: -1..1 }),
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Hair window's fit: the fit worn,
@@ -85,6 +89,9 @@ import { makeThumbs } from './thumbs.js';
 import { makeLineup, KINDS as LINEUPS } from './lineup.js';
 import { referenceFigure } from './reference.js';
 import { figureOf } from './sweeps.js';
+import { POSITIONS, wearPosition } from '../../kit/positions.js';
+import { ROSTER, ROOM_CREW, lookRecipe } from '../../src/life.js';
+import { ROLES } from '../../src/missions.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, ref: false, recipe: null, look: q.has('look'), dirty: false, eyes: ['open', 'shut'].includes(q.get('eyes')) ? q.get('eyes') : 'blink' };
@@ -194,6 +201,7 @@ let showSeq = 0, shownSeq = 0;
 async function show(recipe) {
   const seq = ++showSeq;
   st.recipe = JSON.parse(JSON.stringify(recipe));
+  if (!st.recipe.position) st.unpos = null;      // (no position worn: nothing to go back to)
   const c = await makeCrew(lib, st.recipe);
   // (a fit changed while it was being put together: the latest)
   const want = lib.fitOf(c.recipe.hair, c.recipe.head);
@@ -321,10 +329,40 @@ function paint(id, opened) {
 }
 function menu() { if (!M) return; for (const id of M.ids()) paint(id); LU?.drawTags(); }
 
-// CREW: the ready-made crew members
+// CREW: the ready-made crew members; and the game's own people as the game dresses them (THE POSITIONS' COLOURS)
 function crewWin() {
   return [sec('Crew members', row(Object.entries(RECIPES).map(([id, r]) => chip(r.name, id === st.who, () => { st.who = id; show(r); }, true, 'Wear this crew member\'s whole recipe: outfit, head, hair and colours')))),
-    note('Each is a whole recipe from crew.json. Change any part in Bodies, Heads, Hair or Colors.')];
+    note('Each is a whole recipe from crew.json. Change any part in Bodies, Heads, Hair or Colors.'),
+    sec('In the game, in their job\'s colour', row(GAME_PEOPLE.filter((g) => g.position).map((g) => posChip(g.name + ', ' + POSITIONS[g.position].name.toLowerCase(), g.position, st.who === g.id, () => wearGame(g), 'As the game dresses them: their job\'s colour on the crew uniform\'s bands')))),
+    sec('In the game, in their own clothes', row(GAME_PEOPLE.filter((g) => !g.position).map((g) => chip(g.name, st.who === g.id, () => wearGame(g), true, 'As the game dresses them: their work is none of the five positions')))),
+    note('The station\'s people and the ships\' crews as the game puts them together (src/life.js, src/missions.js). Captains wear red, pilots blue, engineers purple, drill operators yellow, medics green (kit/positions.js).')];
+}
+// (the game's own people: the station's (life.js ROSTER, ROOM_CREW) and the Miner's own crew (missions.js ROLES), each
+// as the game dresses them)
+const GAME_PEOPLE = [...ROSTER, ...ROOM_CREW].map((d) => ({ id: 'game:' + d.id, name: d.name, look: d.look, position: d.position || null }))
+  .concat(Object.values(ROLES).map((r) => ({ id: 'game:role-' + r.id, name: r.crew, look: r.look, position: r.id })));
+function wearGame(g) {
+  const R = lookRecipe(g.look, g.position, lib); if (!R) return; st.who = g.id;
+  const own = JSON.parse(JSON.stringify(lookRecipe(g.look, null, lib)));
+  return show(R).then(() => { st.unpos = g.position ? own : null; });
+}
+// (a chip with its position's colour beside its words)
+function posChip(label, id, on, fn, title) {
+  const b = chip(label, on, fn, true, title), dot = el('span', 'cw-pos', ''); dot.style.background = id ? POSITIONS[id].colour : 'linear-gradient(135deg,#f4f5f6,#9aa3ad)';
+  b.prepend(dot); return b;
+}
+// THE POSITIONS' COLOURS (kit/positions.js; the game's maker: "red-Captain, purple-engineer, yellow-drill", and of our
+// own crew: "Let's do them all"): the person shown in a position's colour, as the game dresses its people (an outfit
+// without bands: the crew uniform of its build); None: back to the recipe before a position was picked
+function position(id) {
+  if (!st.recipe) return;
+  if (!id) {
+    if (!st.recipe.position) return;
+    const back = st.unpos || JSON.parse(JSON.stringify(st.recipe)); delete back.position; if (!st.unpos && back.colours) delete back.colours.uniform;
+    st.unpos = null; return show(back);
+  }
+  const from = st.recipe.position ? st.unpos || st.recipe : JSON.parse(JSON.stringify(st.recipe));
+  return show(wearPosition(from, id, lib)).then(() => { st.unpos = from.position ? null : from; });
 }
 // BODIES: the outfits, the hands, the height
 function bodiesWin() {
@@ -404,7 +442,9 @@ function coloursWin() {
   any.onchange = () => colours({ uniform: any.value });
   const ownIris = st.crew?.meshes.eyes?.material.userData.eye?.crIrisOwn.value.getStyle();
   const bands = Object.values(BAND_COLOURS);
-  return [sec(own0 ? 'Job colours (this outfit keeps its own)' : 'Job colours', row(Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true, own0 ? 'This outfit keeps its own colours: a job changes nothing on it' : '')))),
+  return [sec('Position (their job\'s colour on the crew uniform\'s bands)', row(posChip('None', null, !st.recipe?.position, () => position(null), 'Their own outfit and bands, as before a position was picked'),
+      ...Object.entries(POSITIONS).map(([id, P]) => posChip(P.name, id, st.recipe?.position === id, () => position(id), P.name + ': ' + P.band + ' bands (an outfit without bands: the crew uniform)')))),
+    sec(own0 ? 'Job colours (this outfit keeps its own)' : 'Job colours', row(Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true, own0 ? 'This outfit keeps its own colours: a job changes nothing on it' : '')))),
     sec('Bands (the outfit\'s whites)', row(swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The bands as made (white)'),
       ...Object.entries(BAND_COLOURS).map(([n, s]) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Bands: ' + n))),
     row(lab('More'), ...UNIFORM_COLOURS.filter((s) => !bands.includes(s)).map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Bands ' + s)), any)),
@@ -1069,6 +1109,9 @@ const triCount = () => { tris = 0; st.crew?.root.traverse((o) => { if (o.isMesh)
 
 st.who = RECIPES[q.get('who')] ? q.get('who') : Object.keys(RECIPES)[0];
 await show(RECIPES[st.who]); triCount();
+// (?game=<id>: one of the game's own people as the game dresses them (life.js ROSTER, ROOM_CREW; role-pilot, role-drill,
+// role-engineer: the Miner's own crew); ?position=<id>: the person shown in that position's colour)
+{ const g = GAME_PEOPLE.find((x) => x.id === 'game:' + q.get('game')); if (g) await wearGame(g); if (POSITIONS[q.get('position')]) await position(q.get('position')); }
 layout(); setCam(CAMS[st.cam] !== undefined ? st.cam : 'Full');
 const topPx = () => $('#top').getBoundingClientRect().bottom;
 LU = makeLineup({ lib, makeCrew, scene, renderer, sun, topPx, current: () => st.recipe, onPick: (kind, id) => wear(kind, id), paintOf: paintOne, anchorOf: (c, kind, v) => anchorAt(kind, v, c || st.crew) });
@@ -1097,6 +1140,7 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'ref') setRef(on); if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
+  position: async (id) => { await position(id); return st.recipe; }, game: async (id) => { const g = GAME_PEOPLE.find((x) => x.id === 'game:' + id); if (g) await wearGame(g); return st.recipe; }, people: () => GAME_PEOPLE.map((g) => ({ id: g.id.slice(5), name: g.name, position: g.position })),
   colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), eyes: (k) => eyes(k), face: (v) => { face(v); menu(); },
   state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, lids: st.eyes, shut: st.crew?.lids.shut, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
     look: st.look, eyes: !!st.crew?.gaze, faceSliders: st.crew?.faceSliders || [], face: st.recipe?.face || {}, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,

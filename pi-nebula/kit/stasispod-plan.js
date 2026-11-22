@@ -71,18 +71,10 @@ export const POD = {
   // (the wreck's own, at most `most`)
   paint: { skin: { light: 0.6, sat: 0.42, by: 0.82 }, accent: { hue: [15, 40], sat: 0.45, light: 0.25, by: 0.5 }, most: 1.15 },
 };
-// THE POSITIONS of whoever sleeps in a pod, and the colour each wears (the crew kit's band colours, kit/crew.js
-// BAND_COLOURS, by name): his three (red for the captain, purple for the engineer, yellow for the drill operator: the
-// crew kit's gold, its yellow) and two more the crashed crews have: blue for a pilot, green for a medic. A rescue's
-// sleepers have one captain at most (src/planet/pods.js sleeperPositions).
-export const POSITIONS = {
-  captain: { name: 'Captain', colour: '#d9463e', band: 'red' },
-  pilot: { name: 'Pilot', colour: '#3f8fe8', band: 'blue' },
-  engineer: { name: 'Engineer', colour: '#6e28b2', band: 'purple' },
-  drill: { name: 'Drill operator', colour: '#e3b341', band: 'gold' },
-  medic: { name: 'Medic', colour: '#5cbf5a', band: 'green' },
-};
-export const POSITION_IDS = Object.keys(POSITIONS);
+// THE POSITIONS of whoever sleeps in a pod, and the colour each wears: the one table every position of our crew wears
+// (kit/positions.js, the station's people and the ships' crews too). A rescue's sleepers have one captain at most
+// (src/planet/pods.js sleeperPositions).
+export { POSITIONS, POSITION_IDS } from './positions.js';
 export const podScale = () => POD.long / POD.his.long;
 // a point of his (his units) turned level (POD.level about z): its height then
 export const levelY = (x, y) => x * Math.sin(POD.level) + y * Math.cos(POD.level);

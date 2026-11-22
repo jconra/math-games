@@ -76,7 +76,8 @@ import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighths
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
-// (look: how the captain's crew member for a job looks aboard, a crew kit recipe as the station's people's are: src/aboard.js)
+// (look: how the captain's crew member for a job looks aboard, a crew kit recipe as the station's people's are: src/aboard.js;
+// worn in their job's colour, the role's id being its position: kit/positions.js POSITIONS, aboardOf)
 export const ROLES = {
   pilot: { id: 'pilot', name: 'Pilot', does: 'piloting to the rocks and home', share: 10, ready: true, crew: 'Pilot Juno',
     look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'miner', skin: '#c48a62', hair: '#2a1a12' } } },
@@ -156,7 +157,7 @@ export function aboardOf(M, mine, captain = null) {
   const short = (n) => String(n).split(' ').pop();
   return [
     { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1), look: cap.id },
-    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [], look: ROLES[first].look || null },
+    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [], look: ROLES[first].look ? { ...ROLES[first].look, position: first } : null },
   ];
 }
 

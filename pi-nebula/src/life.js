@@ -25,9 +25,22 @@
 //   'drive:<machine>'    to a machine of their room's, on, a round on it, off (people.js RIDES: Cargo's forklift)
 // with the time in seconds after it ([least, most]) where the activity's own is not wanted, and p: how likely it is
 // done each time round (left out: always).
+// A POSITION (position: a kit/positions.js POSITIONS id: 'captain', 'pilot', 'engineer', 'drill', 'medic'; the game's
+// maker, of the stasis pods' sleepers in their positions' colours: "Let's do them all"): they wear its colour on the crew
+// uniform's bands (an outfit without bands: the crew uniform of its build; kit/positions.js wearPosition). The people
+// whose work is none of those keep their own clothes.
 // A CAPTAIN (captain: { ship, mission }) wears a yellow marker over their head and speaks to the player who comes near:
 // who they are, what they want crew for, and are you interested (lines.js CAPTAINS; missions.js takes the answer).
+import { wearPosition } from '../kit/positions.js';
+
 export const NEAR = { low: 4, medium: 6, high: 8 };
+
+// a person's look as a crew kit recipe: a look by name (assets/crew/crew.json's recipes) or its own, in their
+// position's colour (kit/positions.js; position: theirs, else the recipe's own). lib: the crew kit's (loadCrew)
+export function lookRecipe(look, position = null, lib = null) {
+  const R = typeof look === 'string' ? ((lib && lib.list && lib.list.recipes) || {})[look] : look;
+  return R ? wearPosition(R, position, lib) : null;
+}
 
 // (a hangar's spots: in front of each of its crates and carts and lockers, all along its walls; a crate stacked on
 // another, or one under the crane's loads or by a ship's way in, is left out by people.js)
@@ -180,14 +193,15 @@ export const ROSTER = [
   // their own ship (Captain Adair's is down for maintenance: she walks the station's rounds instead) ──
   { id: 'vega', name: 'Captain Vega', look: 'vega', voice: 'vega', captain: { ship: 'explorer' },
     day: [{ do: 'stand:windows', for: T(30, 60) }, { do: 'sit:window', for: T(40, 80), p: 0.6 }, { do: 'stand:board', for: T(15, 30), p: 0.5 }, { do: 'stand:explorerShip', for: T(40, 80) }, { do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
-  { id: 'ruiz', name: 'Captain Ruiz', look: 'captainMan', voice: 'ruiz', captain: { ship: 'miner' },
+  { id: 'ruiz', name: 'Captain Ruiz', look: 'captainMan', position: 'captain', voice: 'ruiz', captain: { ship: 'miner' },
     day: [{ do: 'stand:terminalFloor', for: T(20, 40) }, { do: 'stand:windows', for: T(30, 50) }, { do: 'sit:cafe', for: T(60, 120), p: 0.5 }, { do: 'stand:minerShip', for: T(40, 80) }, { do: 'stand:lobby', for: T(15, 30), p: 0.4 }, { do: 'stand:counter', for: T(6, 12), p: 0.5 }] },
-  { id: 'hale', name: 'Captain Hale', look: 'captainWoman', voice: 'hale', captain: { ship: 'medic' },
+  { id: 'hale', name: 'Captain Hale', look: 'captainWoman', position: 'captain', voice: 'hale', captain: { ship: 'medic' },
     day: [{ do: 'sit:window', for: T(50, 90) }, { do: 'stand:windows', for: T(20, 40) }, { do: 'stand:medicShip', for: T(40, 80) }, { do: 'stand:medicalFloor', for: T(20, 40), p: 0.5 }, { do: 'stand:board', for: T(15, 25), p: 0.5 }, { do: 'sit:cafe', for: T(60, 120), p: 0.4 }] },
   // (Captain Adair, the security captain on the jobs board, her ship down for maintenance for now (the game's maker,
   // 2026-11-17: "Add Captain Adair walking about too ... You could just say their ship is down for maintenance for now"):
-  // the captains' uniform in the security crew's blue, about the terminal and walking the station's rounds)
-  { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { uniform: '#2f6db3', skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, voice: 'adair', captain: { ship: 'security' },
+  // about the terminal and walking the station's rounds; a captain, so in the captain's red as the others (her captain's
+  // uniform's colour was the security crew's blue, #2f6db3)
+  { id: 'adair', name: 'Captain Adair', look: { suit: 'captainWoman', head: 't9', hair: 'wavy', colours: { skin: '#a66d45', hair: '#2a1a12' }, face: { jawWidth: 0.4, cheekbones: 0.4, eyeSize: -0.2 } }, position: 'captain', voice: 'adair', captain: { ship: 'security' },
     // (security, on her feet: the station's rounds, a look out of the windows, at a screen, over the hangar. Not at the
     // captains' board (she isn't hiring, and its one free spot is the others') and not on the terminal's seats: with
     // her on them too, ten minutes on a phone had 16 to 21 jams at them, against main's 5 to 11)
@@ -195,7 +209,7 @@ export const ROSTER = [
       { do: 'stand:terminalFloor', for: T(20, 40), p: 0.6 }] },
   // ── the station's own: at their posts, and their breaks ──
   { id: 'cook', name: 'Bo', look: 'cook', voice: 'om', rate: 1.04, day: [{ do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'post:cook', clip: 'stand', for: T(6, 14) }, { do: 'post:cook', clip: 'polish', for: T(50, 90) }, { do: 'stand:drinks', for: T(6, 12), p: 0.5 }, { do: 'sit:cafe', for: T(120, 200), p: 0.35 }] },
-  { id: 'medic', name: 'Ana', look: 'medic', voice: 'yw', rate: 0.94, day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },
+  { id: 'medic', name: 'Ana', look: 'medic', position: 'medic', voice: 'yw', rate: 0.94, day: [{ do: 'stand:medic', for: T(20, 45) }, { do: 'stand:medic', for: T(15, 35), clip: 'reach' }, { do: 'stand:medic', for: T(20, 40) }] },
   { id: 'smelter', name: 'Ivo', look: 'smelter', voice: 'ym', rate: 0.93, day: [{ do: 'post:forge', clip: 'forge', for: T(50, 100) }, { do: 'stand:forgeConsole', for: T(12, 25) }, { do: 'post:forge', clip: 'forge', for: T(50, 100) }, { do: 'sit:control', for: T(40, 80), p: 0.5 }, { do: 'stand:store', for: T(10, 20), p: 0.5 }] },
   { id: 'guard', name: 'Tess', look: 'security', voice: 'yw', rate: 1.0, day: [{ do: 'post:guard', for: T(70, 140) }, { do: 'walk:patrol' }, { do: 'stand:counter', for: T(6, 12), p: 0.5 }, { do: 'sit:cafe', for: T(120, 200), p: 0.5 }] },
   // the old captain, retired: tells stories by the windows and at the tables (no marker: not looking for crew)
@@ -208,7 +222,8 @@ export const ROSTER = [
     day: [{ do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'post:mechanic', clip: 'reach', for: T(15, 30) }, { do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.6 }, { do: 'post:mechanic', clip: 'hammer', for: T(25, 45) }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach', p: 0.5 }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
   { id: 'crew-ada', name: 'Ada', look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } }, voice: 'yw', rate: 1.03,
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:quarters', for: T(10, 25) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(140, 280) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(25, 50) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
-  { id: 'miner-oso', name: 'Oso', look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#663b22', hair: '#17110d' } }, voice: 'ym', rate: 0.97,
+  // (Oso, a miner off Captain Ruiz's ship: a drill operator, as the Miner's own crew's Miner Kestrel is)
+  { id: 'miner-oso', name: 'Oso', look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#663b22', hair: '#17110d' } }, position: 'drill', voice: 'ym', rate: 0.97,
     day: [{ do: 'stand:minerShip', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:minerHangar', for: T(30, 60), clip: 'reach' }, { do: 'sit:waiting', for: T(30, 60) }, { do: 'scan', for: T(40, 60), p: 0.3 }, { do: 'talk:lobby', for: T(20, 40) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(120, 240) }] },
   { id: 'hauler-pia', name: 'Pia', look: { suit: 'atlantis2', head: 't11', hair: 'braidcrown', colours: { job: 'hauler', uniform: '#f0892e', skin: '#c48a62', hair: '#8f8a84' } }, voice: 'yw', rate: 0.9,
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:cafe', for: T(120, 240) }] },

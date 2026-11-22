@@ -27,17 +27,15 @@ import { addMoves } from './moves.js';
 import { pose } from './onbed.js';
 import { LOOKS, recipeOf } from './looks.js';
 import { STAND } from './player.js';     // (the clip under the scanner's patient lying: the standing one, people.js)
-import { POSITIONS } from '../kit/stasispod-plan.js';
+import { POSITIONS, CREW_UNIFORM, wearPosition } from '../kit/positions.js';
 
 export const SLEEPERS = LOOKS.filter((l) => !/^android/.test(l.id)).map((l) => l.id);
-// the crew uniforms (the outfits with bands), by the build of the body (the suit's skeleton: 'm', 'f')
-export const CREW_UNIFORM = { m: 'atlantis1', f: 'atlantis2' };
-// a look's recipe as it sleeps in a pod: in its position's colour (a look in a jacket in the crew uniform of its build)
+// the crew uniforms (the outfits with bands), by the build of the body (the suit's skeleton: 'm', 'f'): kit/positions.js
+export { CREW_UNIFORM };
+// a look's recipe as it sleeps in a pod: in its position's colour (a look in a jacket in the crew uniform of its build),
+// as all our crew wear theirs (kit/positions.js wearPosition)
 export function sleeperRecipe(lib, look, position = null) {
-  const R = recipeOf({ id: look }, lib), P = POSITIONS[position];
-  if (!P) return R;
-  const suit = lib.entry ? lib.entry('suit', R.suit) : null, wear = Object.values(CREW_UNIFORM).includes(R.suit) ? R.suit : CREW_UNIFORM[suit && suit.skeleton] || R.suit;
-  return { ...R, suit: wear, colours: { ...(R.colours || {}), uniform: P.colour } };
+  return wearPosition(recipeOf({ id: look }, lib), position, lib);
 }
 // (the arm at rest: the wrist this share of the arm's length from the shoulder; how far the body sinks into the padded
 // bed, metres; the feet at rest: pointed past square to the shin and turned outward (radians; onbed.js's own lying

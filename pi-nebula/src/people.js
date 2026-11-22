@@ -68,7 +68,7 @@ import { makeCrew } from '../kit/crew.js';
 import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
-import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED } from './life.js';
+import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
 import { pointGap } from '../kit/forkliftround.js';
@@ -218,7 +218,8 @@ const MARKER = (() => {
 
 export async function makePeople({ W, walls, lib, jobs = null, boarding = null, crane = null, say = () => {}, crew = () => null, rides = {} }) {
   const pieces = piecesOf(W.R), list = [], missing = [];
-  const recipeOf = (r) => (typeof r === 'string' ? (lib.list.recipes || {})[r] : r);
+  // (a look, by name or its own, in its position's colour: life.js lookRecipe)
+  const recipeOf = (r, position = null) => lookRecipe(r, position, lib);
   const alarms = { stuck: 0, inWall: 0, inPerson: 0, onPatch: 0, planFailed: 0, gaveUp: 0, seen: {} };
   const alarm = (k, P, words) => { alarms[k]++; if (!alarms.seen[k + P.id]) { alarms.seen[k + P.id] = 1; console.warn('people: ' + k + ': ' + P.id + ' ' + words); } };
   // (what the friendly bits did, counted: for the rigs)
@@ -444,7 +445,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const firstClip = (c, clips) => [].concat(clips || STAND).find((n) => c.person.actions[n]) || 'Idle';
   const _v = new THREE.Vector3();
   async function body(def, pos, heading) {
-    const recipe = recipeOf(def.look || def.recipe); if (!recipe) { missing.push(def.id + ': no recipe'); return null; }
+    const recipe = recipeOf(def.look || def.recipe, def.position); if (!recipe) { missing.push(def.id + ': no recipe'); return null; }
     const c = await makeCrew(lib, recipe, { far: true });
     const P = { id: def.id, name: def.name, def, c, pos: pos.clone(), drawnY: pos.y, heading, zone: null, shown: false, walking: false, clip: '', anim: 0, animDt: 0, sitY: 0, away: false, voice: def.voice || null, rate: def.rate || 1 };
     c.root.position.copy(P.pos); c.root.rotation.set(0, heading, 0);
@@ -1913,7 +1914,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (A SHIP'S CREW ABOARD, src/aboard.js: a figure built from a look as the station's people are (a roster id, a
     // recipe's name, or a recipe), standing; and one of the station's own people taken out of the station while they
     // are aboard a ship (on: they are; off: back where they were))
-    figure: async (look) => { const def = ROSTER.find((d) => d.id === look); const recipe = recipeOf(def ? def.look : look); if (!recipe) return null; const c = await makeCrew(lib, recipe, { far: true }); shadeUnder(c.root); c.play(firstClip(c, STAND), { fade: 0 }); c.update(0); return c; },
+    figure: async (look) => { const def = ROSTER.find((d) => d.id === look); const recipe = def ? recipeOf(def.look, def.position) : recipeOf(look); if (!recipe) return null; const c = await makeCrew(lib, recipe, { far: true }); shadeUnder(c.root); c.play(firstClip(c, STAND), { fade: 0 }); c.update(0); return c; },
     aboard: (id, on) => { const P = list.find((q) => q.id === id); if (!P) return false; P.hidden = !!on; return true; } };
   return api;
 }

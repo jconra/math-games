@@ -38,7 +38,7 @@ import { COURT, GOALS, GOAL_CSS, WALLS, clampIn, inside } from './court.js';
 import { LADDER } from './ladder.js';
 import { ruleOf, value as valueOf, wholeNote } from './rules.js';
 import { makeCrew } from '../../kit/crew.js';
-import { ROSTER } from '../life.js';
+import { ROSTER, lookRecipe } from '../life.js';
 import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
@@ -56,7 +56,7 @@ function ensureCss() { if (document.querySelector('link[data-mbl]')) return; con
 // unbeatable"). A look the roster no longer has falls back to a plain crew suit.
 export const OPPONENTS = [
   { id: 'visitor-ola', name: 'Ola', line: 'Visiting the station, still learning the game', level: 0 },
-  { id: 'pilot-sol', name: 'Pilot Sol', line: 'A fair match', level: 1 },
+  { id: 'pilot-sol', name: 'Pilot Sol', line: 'A fair match', level: 1, position: 'pilot' },
   { id: 'vega', name: 'Captain Vega', line: 'Hard to beat', level: 2 },
 ];
 const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
@@ -182,9 +182,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
 
   // ── the other player's body (the crew kit) ────────────────────────────────────────────────────────────────────
   const looks = new Map();
+  // (as the station dresses them: in their position's colour, life.js lookRecipe; one the roster hasn't, in its own)
   function lookOf(id) {
-    const R = ROSTER.find((r) => r.id === id), look = R ? R.look : FALLBACK_LOOK;
-    return typeof look === 'string' ? (lib.list.recipes || {})[look] || FALLBACK_LOOK : look;
+    const R = ROSTER.find((r) => r.id === id), O = OPPONENTS.find((o) => o.id === id);
+    return lookRecipe(R ? R.look : FALLBACK_LOOK, R ? R.position : O && O.position, lib) || FALLBACK_LOOK;
   }
   async function bodyFor(opp) {
     if (looks.has(opp.id)) return looks.get(opp.id);
