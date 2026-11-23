@@ -291,7 +291,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           () => { const pp = people(); if (pp && !desk) pp.captain.say(captain.id, `The ${shipName(M)} is yours. Take it out whenever you like.`); }),
         own: desk ? {
           get run() { return stationFound(c) && !contractOf(c); },
-          get why() { return !stationFound(c) ? 'Hauling runs of your own start once the old station is found. Until then the Hauler is yours to fly round the station.' : 'You have a run on already. A run of your own can start once it is done and paid.'; },
+          get why() { const on = contractOf(c); return !stationFound(c) ? 'Hauling runs of your own start once the old station is found. Until then the Hauler is yours to fly round the station.' : on && on.state === 'payout' ? 'Your pay from the last run is still waiting: a run of your own can start once you have collected it.' : 'You have a contract on. A run of your own can start once it is done and paid.'; },
           fly: false, note: 'Just flying, for no pay: from the Hauler\'s pilot\'s seat, any time.',
           onRun: (roles) => { done(); const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (m) begunAtDesk(m, roles, true); },
           onFly: () => {},
@@ -328,7 +328,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         sale: { now: () => saleOf(c, ship, { bridge: bridgeUp() }) },
         own: { run, fly: true,
           why: run ? '' : desk ? (stationFound(c) ? 'The Hauler is yours to fly round the station. A supply run of your own starts at the shipping computer in Cargo, where its load is worked out.' : 'The Hauler is yours to fly round the station. Hauling runs of your own start once the old station is found.')
-            : `The ${nameOfShip(ship)} is yours to fly round the station. You have a contract on: a run of your own can start once it is done and paid.`,
+            : on && on.state === 'payout' ? `The ${nameOfShip(ship)} is yours to fly round the station. Your pay from the last run is still waiting: a run of your own can start once you have collected it.`
+              : `The ${nameOfShip(ship)} is yours to fly round the station. You have a contract on: a run of your own can start once it is done and paid.`,
           note: 'Just flying: out, round the station and back. Nothing is asked and nothing is paid.',
           onRun: (roles) => {
             done();
@@ -384,10 +385,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   function deskLive(at) {
     const c = crew(), m = c && contractOf(c);
     if (!m || m.state !== 'payout' || MISSIONS[m.id].payAt !== at) return null;
-    let paid = null;
+    let paid = null; const own = !!m.own;
     return { card: () => (paid ? null : payoutCard(at)), head: (o) => payoutHead(o),
       right: (q) => { if (q && q.order && q.order.payout != null) paid = { pay: q.order.payout, first: !!(m.payout && m.payout.first) }; },
-      over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'The old station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to the old station.'} ${deskOf(at).by} has another run whenever you want one: start at this computer.</p>`, buttons: [{ label: 'Done' }] } : null),
+      over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'The old station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to the old station.'} ${own ? 'Another run of your own whenever you like: Your Hauler, at this computer.' : `${deskOf(at).by} has another run whenever you want one: start at this computer.`}</p>`, buttons: [{ label: 'Done' }] } : null),
       close() {} };
   }
 
@@ -401,6 +402,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     // (a supply run: its supplies worked out; whatever is not in the containers yet goes in as the Hauler is boarded)
     if (loadWait(m)) return false;
     if (MISSIONS[m.id].desk) { const S = supply(); if (S && S.depart) S.depart(m.run); }
+    letGo();      // (the crew still aboard from the run before: gone as the next run begins)
     loading = true; prompt.hidden = true;
     if (input) input.enabled = false;
     import('./trip.js').then(({ startTrip }) => {
@@ -449,6 +451,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     if (m && m.state === 'signed' && MISSIONS[m.id].ship === ship) return false;
     loading = true; prompt.hidden = true;
     if (input) input.enabled = false;
+    letGo();      // (the crew still aboard from the run before: gone as the next flight begins)
     const held = !!crane.awayHeld; if (ship === 'miner') crane.awayHeld = true;
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
@@ -458,6 +461,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         onEnd: (r) => {
           const v = visits.get(ship);
           if (v) { for (const w of v.views) if (w.O.moved) v.reset(w.cfg.id); v.dispose(); visits.delete(ship); }
+          if (r.aboard) r.aboard.dispose();
           lastRun = { ...r, aboard: undefined, free: true }; if (ship === 'miner') crane.awayHeld = held;
           if (input) input.enabled = playing;
         } });
