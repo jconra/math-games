@@ -152,6 +152,7 @@ import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
 import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/smelter.js';
 import { stepsFor, land, LAMPS, aboardOf, roleOf } from './missions.js';
+import { restOrder } from './rescueplan.js';
 import { RUN_TALK } from './lines.js';
 import { news } from './news.js';
 import { kept, numberWord, fromWords } from './wardplan.js';
@@ -523,7 +524,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (iPilot && sens.found && !T.saidFound) { T.saidFound = true; say('found'); }
       el.classList.toggle('has-radar', iPilot && sens.found && !site.down);
       // (down, and the ground walkable: the pods are theirs, or her paramedic's; the places the rescued take kept for them)
-      if (site.ground && !T.saidSite) { T.saidSite = true; say(iMedic ? 'sitePod' : 'site'); reserve(); }
+      if (site.ground && !T.saidSite) { T.saidSite = true; say(iMedic ? 'sitePod' : 'site'); }
       if (site.phase === 'wait' && !T.saidBack) { T.saidBack = true; say('backAboard'); }
       el.classList.toggle('has-pod', !!(T.ground && site.lockOffered));
       if (site.phase === 'up') {
@@ -682,14 +683,20 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     }
     T.log.push('back in the rooms as the ship is parked');
   }
-  // THE PLACES THE RESCUED TAKE, kept for them from the crew aboard (src/aboard.js take): each that is free now; one
-  // someone aboard is in (a bunk one of the crew lies on, the player's own seat) is passed over (busy), the rescued taking
-  // the next in the order. (Bumping the crew out of them set two of them walking for the same narrow door as the
-  // crew member came through it, and nowhere to turn back to: they stood in it for good)
+  // THE PLACES THE RESCUED TAKE, kept for them from the crew aboard (src/aboard.js take), from the moment the planet is
+  // made (how many pods it has) until the Medic is down: each as it is free. One of the crew resting in one (a bunk they
+  // lie on) gets up a moment later of their own accord and goes elsewhere, while the Medic is still in the air; one
+  // still in it when the rescued come is passed over (busy), the rescued taking the next in the order. (Bumped out of
+  // them at once as the Medic came down, two of the crew set off for the same narrow door the crew member was walking
+  // through, with nowhere to turn back to: they stood in it for good)
   function reserve() {
-    if (!crewA || !site) return;
-    site.order.slice(0, site.count.of).forEach((c, k) => {
-      const p = crewA.places.find((q) => q.id === c.place.id); if (!p || crewA.user(p)) return;
+    if (!crewA || !site || !site.ready || !S.bpData) return;
+    const n = site.count.of; if (!n) return;
+    T.restOrder = T.restOrder || restOrder(S.bpData, S.space.deck, crewA.places);
+    T.restOrder.slice(0, n).forEach((c, k) => {
+      const p = crewA.places.find((q) => q.id === c.place.id); if (!p) return;
+      const u = crewA.user(p);
+      if (u) { const w = !String(u).startsWith('rescued') && crewA.list.find((x) => x.id === u); if (w && w.place === p && Number.isFinite(w.stay) && !site.down) w.stay = Math.min(w.stay, w.t + 3); return; }
       if (crewA.list.some((w) => w.target === p && w.doing === 'walk')) return;
       crewA.take(p, 'rescued-' + k);
     });
@@ -1046,6 +1053,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // in a narrow door with the place they had left taken by one of the rescued: nowhere to turn back to, and the two
       // stood there for good)
       if (crewA && site && site.down) for (const w of crewA.list) if (w.doing !== 'walk') w.t = 0;
+      if (crewA && site && site.phase !== 'up') reserve();
       if (crewA) { const me = T.afoot ? (T.ground ? (site && site.footIn ? { pos: stationPos() } : null) : P()) : null; crewA.update(dt, { player: me }); }
       // (the dashboard's numbers: in the air from the lift-off until it is down at home, wherever it is)
       if (T.sat) { _dw.setFromMatrixPosition(shipNow()); stepDash(dash, { p: [_dw.x, _dw.y, _dw.z], dt, flying: site && site.fl ? !site.down : fl && fl.on ? !fl.S.landed : !!(T.space || T.inField || (wh && wh.on)) }); }
