@@ -886,7 +886,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     wh.begin({
       onShut() { T.inField = toField; if (toField) (EXPLORE ? arriveLeg() : PLANET ? arrivePlanet() : arriveField()); else arriveHome(); },
       // (out to the rocks: the field and its ship have to be there; to a planet, the planet made)
-      ready: () => !toField || (EXPLORE ? !!siteErr || (!!nextSite && (nextSite.ready || nextSite.failed)) : PLANET ? !!siteErr || (!!site && (site.ready || site.failed)) : !!drill || !!drillErr),
+      // (an exploring run's: the next place, being made; once the colours are all round it is the place: arriveLeg)
+      ready: () => !toField || (EXPLORE ? !!siteErr || (!!(nextSite || site) && ((nextSite || site).ready || (nextSite || site).failed)) : PLANET ? !!siteErr || (!!site && (site.ready || site.failed)) : !!drill || !!drillErr),
       onOpen() {
         // (at the rocks his word that the drill is theirs is only for a crew member who signed for the drill)
         // (an exploring run: what is there, said as each place's own line; the last place's own)
