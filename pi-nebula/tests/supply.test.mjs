@@ -14,6 +14,7 @@ import { MISSIONS, ROLES, SUPPLY, rolesOf, openRoles, shareOf, sign, contractOf,
 import { makeSupplyRun, runOf, lastRun, RUN } from '../src/supplyrun.js';
 import { RUN_TALK, OLD_STATION, TALKS } from '../src/lines.js';
 import { keepFind, foundOf } from '../src/exploreplan.js';
+import { lineOf } from '../src/announce.js';
 import { oldStationPlans, oldStationGear, LIT, LIT_SAVED, BRIDGE } from '../kit/oldstation-plan.js';
 import { OUTSIDE_BOX } from '../kit/outside-plan.js';
 
@@ -249,6 +250,11 @@ test('the words: its first mate\'s for every moment of the run; the old station\
   // (and where the run begins is said once, as the Explorer comes home with the find: a text line, nobody's talk)
   assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: 'A word from Cargo\. Gus at the shipping desk/);
   assert.ok(!TALKS.some((t) => t.news === 'call'));
+  // (both are said by the station's own text line, each once)
+  const found = lineOf('found'), told = new Set();
+  assert.deepEqual(found.say({ news: [{ kind: 'haul', id: 'haul:1' }, { kind: 'call', text: 'A word from Cargo.', id: 'call:2' }], told }), { text: 'A word from Cargo.', news: 'call:2' });
+  assert.deepEqual(found.say({ news: [{ kind: 'supply', text: 'News from the Hauler.', id: 'supply:3' }], told }), { text: 'News from the Hauler.', news: 'supply:3' });
+  assert.equal(found.say({ news: [{ kind: 'call', text: 'A word from Cargo.', id: 'call:2' }], told: new Set(['call:2']) }), null);
   // no browser speech anywhere in the run's own files
   for (const f of ['../src/oldstationsite.js', '../src/trip.js', '../src/mission.js', '../src/supplyrun.js']) assert.ok(!/speechSynthesis|SpeechSynthesisUtterance/.test(read(f)), f);
 });
