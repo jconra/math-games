@@ -17,7 +17,9 @@
 //                           whoever is nearest each (eyes: feet in the world), its screens' clock
 //   M.ramp(k)               its ramp on its way down (1) or up (0); M.rampT (0 up .. 1 down)
 //   M.foot                  a Vector3: on the ground just past its ramp's foot, in the middle of the ramp (the way in)
+//   M.place(stand, { down })  put somewhere else (the game builds it ahead, unseen, and puts it where the Medic came down)
 //   M.bp, M.space, M.places (src/aboard.js's: every seat and bed of its rooms), M.beds (src/rescueplan.js patientBeds),
+//   M.order (src/rescueplan.js restOrder: the places the rescued take, in turn),
 //   M.inside(p)             is a point (the world) inside its cabin's rooms
 //   M.stats { ms, hullMs, cabinMs, tris, draws }, M.dispose()
 import * as THREE from 'three';
@@ -30,7 +32,7 @@ import { liveTick, livePalette } from '../../kit/shipparts/cabin/live.js';
 import { makeBeams } from '../../kit/beams.js';
 import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
-import { MEDIC, patientBeds } from '../rescueplan.js';
+import { MEDIC, patientBeds, restOrder } from '../rescueplan.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 // the hull's corners' darkness baked coarser than the Ship Lab's (it is made each time a planet is landed on: as the
@@ -64,7 +66,7 @@ const eachMaterial = (mats, fn) => { const seen = new Set(); for (const m of Obj
 
 export async function makeMedicDown({ scene, renderer = null, camera = null, ground, sky = null, stand, quality = 'medium' }) {
   const t0 = performance.now();
-  const side = stand.side === 'starboard' ? 'starboard' : 'port', sideSign = side === 'port' ? 1 : -1;
+  let side = stand.side === 'starboard' ? 'starboard' : 'port', sideSign = side === 'port' ? 1 : -1;
   const M = new THREE.Matrix4().makeRotationY(stand.yaw).setPosition(stand.x, stand.y, stand.z), inv = M.clone().invert();
   const group = new THREE.Group(); group.name = 'planet:medic'; group.matrixAutoUpdate = false; group.matrix.copy(M);
   // ── its hull: the kit's own build, its cabin's pieces swapped in ─────────────────────────────────────────────────
@@ -84,7 +86,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   // the legs down (the build's own: its gear door shut is down), both ramps up, the starboard opening's cabinets away
   // (his blueprint has both ramps: "ramps": "both"), then this side's ramp down at once
   const rampOf = (s) => B.doors.find((D) => D.piece === 'mdRamp' && Math.sign(D.sense.x) === s);
-  const ramp = rampOf(sideSign);
+  let ramp = rampOf(sideSign);
   MD.equipStep(B, false);
   if (ramp) { ONE[0] = ramp; setDoors(ONE, 1); }
   MD.rampFoot(B);
@@ -173,11 +175,24 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     return (bp.rooms || []).some((r) => _p.x >= r.rect[0] && _p.x <= r.rect[2] && _p.z >= r.rect[1] && _p.z <= r.rect[3]);
   }
   // (just past the ramp's foot: its hinge on the sill, its two sections down to the ground at its slope, and a step on)
-  const R0 = MD.RAMP, foot = new THREE.Vector3(sideSign * (R0.face + (R0.A + R0.B) * Math.cos(R0.slope) + 0.7), 0, (R0.z[0] + R0.z[1]) / 2).applyMatrix4(M);
+  const R0 = MD.RAMP, foot = new THREE.Vector3(), footAt = () => foot.set(sideSign * (R0.face + (R0.A + R0.B) * Math.cos(R0.slope) + 0.7), 0, (R0.z[0] + R0.z[1]) / 2).applyMatrix4(M);
+  footAt();
   const places = placesOf(bp, { deck: space.deck, cockpitFloor: MD.COCKPIT.floor, jobs: ['pilot', 'medic'] });
+  // SET DOWN SOMEWHERE ELSE (the game: made ahead, unseen, while the jump is worked out, and put where the Medic really
+  // came down, whichever way round: src/rescue.js): stand as makeMedicDown's; down: its ramp on that side down at once
+  // (else it is up, and comes down with M.ramp(1)); the other ramp up. Before or after its walls are added
+  function place(st, { down = true } = {}) {
+    stand = st; side = st.side === 'starboard' ? 'starboard' : 'port'; sideSign = side === 'port' ? 1 : -1;
+    M.makeRotationY(st.yaw).setPosition(st.x, st.y, st.z); inv.copy(M).invert(); group.matrix.copy(M); group.matrixWorldNeedsUpdate = true;
+    const was = ramp; ramp = rampOf(sideSign);
+    if (was && was !== ramp) { ONE[0] = was; setDoors(ONE, 0); }
+    if (ramp) { ONE[0] = ramp; setDoors(ONE, down ? 1 : 0); }
+    MD.rampFoot(B); rampWant = down ? 1 : 0; footAt();
+    if (walls) { walls.place('medic:hull', M); walls.place('medic:cabin', M); if (rampIn) { walls.drop('medic:ramp'); rampIn = false; } rampWalls(); }
+  }
   const stats = { ms: Math.round(performance.now() - t0), hullMs, cabinMs, bake: Math.round(B.stats.bake?.ms || 0), tris: Math.round(B.stats.tris + C.built.stats.tris), draws: B.stats.draws + C.built.stats.draws + (beams ? 2 : 0) };
   return {
-    group, M, inv, stand, side, foot, bp, space, places, beds: patientBeds(bp, space.deck), built: B, cabin: C, stats, addTo, update, inside,
+    group, M, inv, get stand() { return stand; }, get side() { return side; }, foot, bp, space, places, beds: patientBeds(bp, space.deck), order: restOrder(bp, space.deck, places), built: B, cabin: C, stats, addTo, update, inside, place,
     get rampT() { return ramp ? ramp.t : 0; },
     ramp(k) { rampWant = k ? 1 : 0; },
     dispose() {

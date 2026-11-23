@@ -202,7 +202,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // their walking is their own again, and the trip's once more when they sit down)
       // (keeper: who keeps the run's ship's hull where it is flown, the Miner's crane or the ship's own: keeperOf)
       // (seed: the planet a run to a planet goes to, kept with the contract; lib: the crew kit, for whoever sleeps in its pods)
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib,
+      // (input: the keys and the thumb stick, for walking on a planet's ground, src/rescue.js: the trip walks them there)
+      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib, input,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         onEnd: (r) => {
           const mine = MISSIONS[m.id].ship === 'miner', v = visits.get(MISSIONS[m.id].ship);

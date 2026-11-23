@@ -86,9 +86,10 @@ export const ROLES = {
     look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#8d5a3b', hair: '#3b2a1e' } } },
   engineer: { id: 'engineer', name: 'Engineer', does: 'serving as engineer', share: 20, ready: true, crew: 'Engineer Okafor',
     look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'miner', uniform: '#f0892e', skin: '#47291a', hair: '#17110d' } } },
-  // (the rescue run's own job: each stasis pod's lock, src/podlock.js. Not in the run yet (walking down the ramp to the
-  // pods is still to come), so the captain's own medic does it)
-  medic: { id: 'medic', name: 'Medic', does: 'opening the stasis pods', share: 20, ready: false, crew: 'Medic Teo',
+  // (the rescue run's own job, the paramedic's (the game's maker, 2026-11-22, RESC3-1: "The medical one can be the
+  // paramedic ... For the paramedic the questions are to open the pods"): down the Medic's ramp to the stasis pods and
+  // each pod's lock, src/podlock.js, at the planet: src/rescue.js. Its id stays 'medic', as contracts already kept name it)
+  medic: { id: 'medic', name: 'Paramedic', does: 'opening the stasis pods', share: 20, ready: true, crew: 'Paramedic Teo',
     look: { suit: 'atlantis1', head: 't2', hair: 'coil', colours: { job: 'medic', skin: '#86522f', hair: '#17110d' } } },
 };
 // A ROLE AS ONE MISSION HAS IT: its own crew member for it (who does it for that captain, and how they look) and its own
@@ -127,9 +128,11 @@ export const MISSIONS = {
   // CAPTAIN HALE'S RESCUE RUN (the plan: ~/pw/space-math/RESCUE_PLAN.md). Out of the Medic's hangar, the jump, out of
   // the wormhole above a planet made from the run's seed (src/planet/: its ground, a crashed ship and 3 to 6 stasis pods
   // beside it, someone asleep in each), the Medic set down beside the wreck, everyone in the pods brought aboard, the
-  // jump home, down in the Medic's hangar; paid so much for each person brought home (RESCUE). 'rescue': all that is
-  // done at the planet, by her own crew until its parts are made (her pilot sets the Medic down, her medic opens the
-  // pods and the rescued come aboard): src/rescue.js. The core's tuning is out there too, as on the mining run.
+  // jump home, down in the Medic's hangar; paid so much for each person brought home (RESCUE). Its three jobs (the
+  // game's maker, 2026-11-22, RESC3-1: "all the missions should have pilot and engineer. The medical one can be the
+  // paramedic"): 'rescue' is all that is done at the planet, src/rescue.js: the pilot's way down to the wreck (the
+  // sensors' card, then flying down) and the paramedic's pods (each one's lock); the rescued come aboard by themselves.
+  // The core's tuning is out there too, as on the mining run.
   rescue: {
     id: 'rescue', captain: 'hale', ship: 'medic', name: 'Rescue run', roles: ['pilot', 'medic', 'engineer'], payAt: 'medical', place: 'planet',
     about: 'The Medic flies out to a planet where a crew is stranded by their crashed ship, asleep in stasis pods, brings everyone aboard and comes home. Each job on the run earns a share of what the rescue pays.',
@@ -137,7 +140,7 @@ export const MISSIONS = {
     // (her own crew, for the jobs left to them: their names and how they look aboard; the pilot's words for this run)
     jobs: {
       pilot: { does: 'piloting to the planet and home', crew: 'Pilot Cass', she: true, look: { suit: 'atlantis2', head: 't9', hair: 'wavy', colours: { job: 'medic', skin: '#d9a37f', hair: '#4a2f1d' } } },
-      medic: { crew: 'Medic Teo', she: false },
+      medic: { crew: 'Paramedic Teo', she: false },
       engineer: { crew: 'Engineer Mara', she: true, look: { suit: 'atlantis2', head: 't7', hair: 'afro', colours: { job: 'medic', skin: '#663b22', hair: '#17110d' } } },
     },
     steps: [

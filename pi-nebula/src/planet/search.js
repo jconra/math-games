@@ -15,9 +15,12 @@
 //     cfg      the ship's flight facts (src/fleet.js flightOf): its blue goal on the landing place
 //     place(at, look)   the ship put there, looking there (the lab's camera)
 //   S.start({ ahead })  the card up, the ship put where it says (ahead: the way the ship's nose points, [x, z])
+//   S.deal({ ahead })   (the game) the first card dealt ahead and the ship put where it says, unseen (as the wormhole's
+//                       colours are all round); S.start then opens on that very card, so nothing moves as it comes up
 //   S.update(camera, dt, { ahead })    each frame
 //   S.guide (src/planet/guide.js), S.panel (the card, while it is up), S.found, S.state(), S.dispose()
 import { openPanel } from '../jobs/panel.js';
+import * as E from '../jobs/engine.js';
 import { JOB as SENSORS, sensorsHead, labPilot } from '../jobs/sensors.js';
 import { guideColour } from './guideplan.js';
 import { makeWreckGuide } from './guide.js';
@@ -31,7 +34,7 @@ export function makeSearch({ scene, ground, land, wreck, pods = null, cfg = null
   const guide = makeWreckGuide({ scene, ground, colour, at: [wreck.x, wreck.y, wreck.z], root, bounds });
   if (cfg) guide.goal({ cfg, landing: land.landing, toward: pods });
   const pilot = crew || labPilot();
-  let panel = null, found = false, ahead = [0, -1], facts = null, closing = 0, closed = false;
+  let panel = null, found = false, ahead = [0, -1], facts = null, closing = 0, closed = false, first = null;
   // the ship where the card's grid has it: the wreck x squares to its right and y ahead of it
   function put(f) {
     if (!f) return;
@@ -47,6 +50,8 @@ export function makeSearch({ scene, ground, land, wreck, pods = null, cfg = null
   const live = {
     // (the card's top, as the jump computer's; and each card dealt puts the ship where it says)
     head: (o) => { if (o && o.facts && (!facts || o.facts.x !== facts.x || o.facts.y !== facts.y || o.facts.unit !== facts.unit)) put(o.facts); return sensorsHead(); },
+    // (a card dealt ahead: the first one the panel shows)
+    card: () => { const q = first; first = null; return q; },
     right() {
       found = true; guide.light(true);
       // (the card goes by itself, a moment after the right answer has shown green, before the next would slide in)
@@ -59,9 +64,15 @@ export function makeSearch({ scene, ground, land, wreck, pods = null, cfg = null
     start({ ahead: a = null } = {}) {
       if (closed || panel) return panel;
       if (a && Math.hypot(a[0], a[1]) > 1e-4) ahead = [a[0], a[1]];
-      found = false; guide.show(false); facts = null;
+      found = false; guide.show(false); if (!first) facts = null;
       panel = openPanel(root, { job: SENSORS, crew: pilot.crew, live, pay: false, onSave: () => pilot.save(), onClose: () => { panel = null; clearTimeout(closing); } });
       return panel;
+    },
+    deal({ ahead: a = null } = {}) {
+      if (closed || panel) return null;
+      if (a && Math.hypot(a[0], a[1]) > 1e-4) ahead = [a[0], a[1]];
+      E.register(SENSORS); first = E.deal(pilot.crew, SENSORS, {}); put(first.order.facts);
+      return first;
     },
     // (the rigs: the way lit at once, as a right answer lights it)
     light(on = true) { found = !!on; guide.light(found); },

@@ -105,12 +105,18 @@ export const RUN_TALK = {
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
     there: ['There\'s the planet. Their ship came down just ahead.', 'That\'s the jump. There\'s the planet.'],
-    // (out of the wormhole: who sets the Medic down beside the wreck; with the pilot's seat theirs, the autopilot does it
-    // for now)
+    // (out of the wormhole: who sets the Medic down beside the wreck. Her pilot: down; the crew member with the pilot's
+    // seat: first the sensors (find), then theirs to fly down (found); downAuto: the autopilot's, should a pilot's run
+    // ever set it down for them)
     down: ['I can see the wreck. Take us down beside it, {pilot}.', 'There\'s the wreck. Set us down by it, {pilot}.'],
+    find: ['The crash site is close, {player}. Find the wreck on the sensors.', 'Their distress call is near. Find the wreck on the sensors, {player}.'],
+    found: ['There it is. Set us down beside the wreck, {player}.', 'Good. Take us down by the wreck, {player}.'],
     downAuto: ['I can see the wreck. The autopilot will set us down beside it, {player}.'],
-    // (down in the ring beside the wreck: the pods are opened and their sleepers brought aboard)
+    // (down in the ring beside the wreck: the pods are opened (her paramedic's job, or the crew member's: sitePod) and
+    // their sleepers come aboard; backAboard: everyone in their place, the crew member still outside)
     site: ['We\'re down. {medic}, see to the pods.', 'Down safe. Off you go, {medic}. Open the pods.'],
+    sitePod: ['We\'re down. The pods are yours, {player}. Down the ramp you go.', 'Down safe. Down the ramp to the pods, {player}, and open each lock.'],
+    backAboard: ['Everyone is aboard, {player}. Back up the ramp.', 'That\'s everyone. Come back aboard, {player}.'],
     aboard: ['Everyone is aboard and resting. Take us home, {player}.'],
     aboardCrew: ['Everyone is aboard and resting. Take us home, {pilot}.'],
     home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],

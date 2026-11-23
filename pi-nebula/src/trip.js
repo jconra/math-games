@@ -124,12 +124,15 @@
 //     hangar ('leave'), the jump ('jump', its cards told of the Medic and the crashed ship: src/jobs/pilot.js reword),
 //     out of the wormhole above a planet ('rescue': src/rescue.js, the far place as the drill's view is the mining
 //     run's; made unseen while the jump is worked out, so the wormhole's far end opens on it), the core's tuning there
-//     ('tune', in the Medic's own Engineering), the jump home and the landing in its own hangar ('land'). At the planet
-//     everything not made yet is the captain's crew's (her pilot, or the autopilot, sets the Medic down by the wreck;
-//     her medic opens the pods; the rescued come aboard out of sight), watched from the seat or from behind, or skipped
-//     (K). The rescued are counted aboard; home, the pay is so much for each of them (src/missions.js RESCUE), and they
-//     come down the Medic's ramp and walk to the station's ward (src/people.js THE WARD: in bed already if the crew member
-//     has gone off), the station's news has the rescue, how many came home and from where (news.js, announce.js).
+//     ('tune', in the Medic's own Engineering), the jump home and the landing in its own hangar ('land'). Its three jobs
+//     (the game's maker, RESC3-1): THE PILOT's sensors' card over the planet and the Medic flown down beside the wreck,
+//     by hand or on autopilot; THE PARAMEDIC's walk down the ramp to the pods and each pod's lock (on foot out on the
+//     planet: ON THEIR FEET ABOARD, below, and src/rescue.js); THE ENGINEER's core. A job not theirs is her crew's, seen
+//     from the seat, from behind, or on foot out there, or skipped (K). The rescued wake, walk aboard and take their
+//     places by themselves, and are counted as they do; home, the pay is so much for each of them (src/missions.js
+//     RESCUE), and they come down the Medic's ramp and walk to the station's ward (src/people.js THE WARD: in bed already
+//     if the crew member has gone off), the station's news has the rescue, how many came home and from where (news.js,
+//     announce.js).
 //
 //   const T = startTrip(ctx, { mission, roles, tune, onEnd })     ctx: { W, walls, boarding, crane, keeper (the run's
 //       ship's hull keeper: the crane, or its own hull), jobs, guide, people, crew, save, body, put, walk(on), onCredits,
@@ -158,6 +161,7 @@ import { flightOf, seatView } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 import { makeDash, stepDash } from './dash.js';
+import { recipeOf } from './looks.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
@@ -223,6 +227,13 @@ const CSS = `
 @media (max-width: 640px) { .pmt.is-tune.has-panel .pmt-chip, .pmt.is-tune.has-panel .pmt-say { display: none; } }
 /* (the seat's prompt out at the rocks, and the core's: as wide as their words need, up to the screen's width, so on a phone the words are a line or two and not a column of single words) */
 .pnj-prompt.pmt-wide { width: max-content; max-width: 94vw; }
+/* (on foot out on a planet: a pod's lock offered over where the count sits, the count put away under it; a pod's lock up:
+   the strip and the captain's words put away under it) */
+.pmt.has-pod .pmt-count { display: none; }
+/* (over a planet, the pilot's radar up in the top right corner: the captain's words under it) */
+.pmt.has-radar .pmt-say, .pmt.has-radar.has-panel .pmt-say { top: 226px; right: max(18px, 4vw); left: auto; }
+@media (max-width: 640px) { .pmt.has-radar .pmt-say, .pmt.has-radar.has-panel .pmt-say { top: 232px; left: 10px !important; right: auto; } }
+.pmt.has-lock .pmt-chip, .pmt.has-lock .pmt-say, .pmt.has-lock .pmt-count, .pmt.has-lock .pmt-acts { display: none; }
 `;
 
 export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {} }) {
@@ -252,10 +263,17 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   seatEl.innerHTML = '<div class="pnj-pw"><b></b><small></small></div><button type="button" class="pnj-go"></button>';
   document.body.appendChild(seatEl);
   seatEl.querySelector('.pnj-go').addEventListener('click', () => seatGo());
+  // (over a planet, the pilot's sensors' card put away unanswered: its prompt, to ask the sensors again)
+  const findEl = document.createElement('div'); findEl.className = 'pnj-prompt pmt-wide'; findEl.hidden = true;
+  findEl.innerHTML = '<div class="pnj-pw"><b>Sensors</b><small>Find the wreck</small></div><button type="button" class="pnj-go">Start<kbd>E</kbd></button>';
+  document.body.appendChild(findEl);
+  findEl.querySelector('.pnj-go').addEventListener('click', () => { if (site) site.findAgain(); });
 
   const T = { i: -1, t: 0, phase: '', clock: 0, space: false, inField: false, done: false, aborted: false, afoot: false, filled: 0, lamps: [], lit: 0, n: null, paused: false, store: null, cans: null, early: false, log: [] };
   // (signed for which: the pilot's seat, the drill; for neither, the ship's engineer alone: they ride and watch)
   const iPilot = roles.includes('pilot'), iDrill = steps.some((s) => s.kind === 'work' && s.mine) && roles.includes('drill'), iWatch = !iPilot && !iDrill;
+  // (a rescue: signed as its paramedic, the pods' locks are theirs: src/rescue.js)
+  const iMedic = PLANET && steps.some((s) => s.kind === 'rescue' && s.mine);
   // WHO IS ABOARD (src/missions.js aboardOf: the ship's crew of three, the captain and one of his crew with the crew
   // member) and which of them does each job left to the crew: the one who drills (their name as said), the one who
   // is the run's engineer, whom the captain speaks to (the crew member, signed for it, or his own; null: himself)
@@ -329,10 +347,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   function onKey(e) {
     if (!prompt.hidden && !panel && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); openCards(); }
     else if (!seatEl.hidden && !e.repeat && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); seatGo(); }
+    else if (!findEl.hidden && !e.repeat && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); if (site) site.findAgain(); }
     else if (!upEl.hidden && !e.repeat && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); getUp(); }
     else if (e.code === 'KeyK' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && skipWhat()) { e.preventDefault(); skip(); }
     // (on their feet aboard: V looks from outside the ship, and back; seated, the flying's own V changes its views)
-    else if (e.code === 'KeyV' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && T.afoot && !(tn && tn.busy)) { e.preventDefault(); outside(!T.out); }
+    else if (e.code === 'KeyV' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && T.afoot && !T.ground && !(tn && tn.busy)) { e.preventDefault(); outside(!T.out); }
   }
   upEl.addEventListener('click', () => { getUp(); upEl.blur(); });
   viewEl.addEventListener('click', () => { outside(!T.out); viewEl.blur(); });
@@ -348,8 +367,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // button that also lets the pilot skip this portion (like "Return Home")"; riding, the part they take no part in)
     if (k === 'work' && !iDrill && T.phase === 'crew' && drill && drill.crew && !drill.crew.hurried) return iPilot ? 'Return home' : 'Skip the drilling';
     if (k === 'land' && !iPilot && T.phase === 'fly' && fl && fl.on && !fl.S.landed) return 'Skip the landing';
-    // (at the planet: the crew's setting down, the pods and everyone coming aboard, all at once)
-    if (k === 'rescue' && T.phase === 'crew' && site && site.canSkip) return 'Skip the rescue';
+    // (at the planet: what is not theirs of the crew's setting down, the pods and everyone coming aboard, all at once)
+    if (k === 'rescue' && T.phase === 'crew' && site && site.canSkip) return site.skipWords;
     return null;
   }
   function skip() {
@@ -491,16 +510,23 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (still being made: a moment more where the ship is, as at the rocks)
         if (!site.fl) return;
         T.phase = 'crew'; T.rescued = 0; site.go(); countEl.hidden = false; countEl.querySelector('em').textContent = '';
-        say(iPilot ? 'downAuto' : 'down');
+        say(iPilot ? 'find' : 'down');
       }
       const c = site.count; T.rescued = c.aboard;
       countEl.querySelector('b').textContent = `${c.aboard} of ${c.of}`;
       if (site.words) words(site.words);
-      if (site.down && !T.saidSite) { T.saidSite = true; say('site'); }
+      // (the pilot's sensors' card: up, the trip's words and bubbles to its side; put away unanswered, its prompt)
+      const sens = site.sensors; el.classList.toggle('has-panel', sens.up); findEl.hidden = !(site.phase === 'find' && !sens.up && !sens.found);
+      if (iPilot && sens.found && !T.saidFound) { T.saidFound = true; say('found'); }
+      el.classList.toggle('has-radar', iPilot && sens.found && !site.down);
+      // (down, and the ground walkable: the pods are theirs, or her paramedic's; the places the rescued take kept for them)
+      if (site.ground && !T.saidSite) { T.saidSite = true; say(iMedic ? 'sitePod' : 'site'); reserve(); }
+      if (site.phase === 'wait' && !T.saidBack) { T.saidBack = true; say('backAboard'); }
+      el.classList.toggle('has-pod', !!(T.ground && site.lockOffered));
       if (site.phase === 'up') {
         // (who came aboard, and from what kind of planet: for the ward and the news at home)
         T.who = site.who; T.kind = (site.state() || {}).kind || null;
-        countEl.querySelector('em').textContent = c.of ? 'Everyone from the pods' : ''; words(''); say(iPilot ? 'aboard' : 'aboardCrew'); next();
+        countEl.querySelector('em').textContent = c.of ? 'Everyone from the pods' : ''; words(''); findEl.hidden = true; el.classList.remove('has-pod', 'has-radar'); say(iPilot ? 'aboard' : 'aboardCrew'); next();
       }
     },
     // THE CORE'S TUNING, out at the rocks (the top of this file; src/tune.js): the ship says so, then the captain; the
@@ -571,7 +597,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (panel || (tn && tn.busy) || (st.kind === 'jump' && st.mine && T.phase === 'cards')) return true;
     if (st.kind === 'tune' && T.phase !== 'seat') return true;
     if (st.kind === 'land' && fl && fl.S.landed) return true;      // (down: the flying's own Get up ends the flight)
-    if (site && site.fl) return false;      // (at the planet nobody flies by hand yet: the captain's pilot, or the autopilot)
+    if (site && site.fl) return site.atControls;      // (at the planet: the sensors' card up, or flying down by hand)
     if (ff) return ff.mode === 'hand' || ff.mode === 'drill' || (drill && drill.gliding);
     if (fl && fl.on) return iPilot && !fl.auto && !fl.locked;
     return false;
@@ -622,6 +648,50 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     el.classList.remove('is-drill');
     if (ctx.walk) ctx.walk(true);
   }
+  // ── ON FOOT OUT ON A PLANET (a rescue, the Medic down beside the wreck: src/rescue.js `ground`): the rooms they walk
+  // are no longer the ship's as it is parked in its hangar, drawn where it is (the one matrix), but the Medic set down out
+  // there, its ramp down onto the planet's ground: the very same rooms, built where it stands (src/planet/medicdown.js),
+  // with the ground, the wreck, the pods and the rocks walkable round it (src/planet/onfoot.js). Their own figure, in
+  // their own look, walks there with the game's own walking and camera (the keys, the thumb stick; their input, its
+  // look and zoom taken here before the station's own camera can). Meanwhile their body in the ship as it is parked
+  // stands where they last stood in it, unseen. Into it the moment the ship is down with them on their feet aboard, or
+  // they get up; out of it into the rooms as parked as they sit down in their seat, or as the ramp comes up to leave.
+  // (where they are, as if aboard the ship as it is parked in its hangar: what boarding, the crew aboard and the seats ask)
+  const stationPos = () => (T.ground && site && site.foot ? site.toStation(site.foot.pos.clone()) : P() ? P().pos : null);
+  // (a heading turned by the one matrix's turn: from the ship as parked to where it is, or back)
+  const turnBy = (h, back) => { const M = site.matrix, a = Math.atan2(M.elements[8], M.elements[10]) - Math.atan2(S.M.elements[8], S.M.elements[10]); return h + (back ? -a : a); };
+  function enterGround() {
+    if (!site || !site.ground || T.ground || !P()) return;
+    T.ground = true; T.out = false; T.outK = 0;
+    fromField();
+    site.putFoot(site.toPlanet(P().pos.clone()), turnBy(P().heading || 0, false));
+    el.classList.add('is-afoot'); if (ctx.walk) ctx.walk(!T.lockUp);
+    T.log.push('on foot out on the planet');
+  }
+  function leaveGround(sit = false) {
+    if (!T.ground) return;
+    T.ground = false;
+    if (site && site.foot) {
+      if (!sit) { const f = site.foot; ctx.put(site.toStation(f.pos.clone()), turnBy(f.heading || 0, true)); }
+      site.hideFoot();
+    }
+    T.log.push('back in the rooms as the ship is parked');
+  }
+  // THE PLACES THE RESCUED TAKE, kept for them from the crew aboard (src/aboard.js take): each that is free now; one
+  // someone aboard is in (a bunk one of the crew lies on, the player's own seat) is passed over (busy), the rescued taking
+  // the next in the order. (Bumping the crew out of them set two of them walking for the same narrow door as the
+  // crew member came through it, and nowhere to turn back to: they stood in it for good)
+  function reserve() {
+    if (!crewA || !site) return;
+    site.order.slice(0, site.count.of).forEach((c, k) => {
+      const p = crewA.places.find((q) => q.id === c.place.id); if (!p || crewA.user(p)) return;
+      if (crewA.list.some((w) => w.target === p && w.doing === 'walk')) return;
+      crewA.take(p, 'rescued-' + k);
+    });
+  }
+  const crewBusy = (id) => { if (!crewA) return false; const p = crewA.places.find((q) => q.id === id), u = p && crewA.user(p); return !!u && !String(u).startsWith('rescued'); };
+  // (the crew aboard as people on foot out there: where each stands, in the world as it is out there)
+  const crewOut = () => (crewA && site ? crewA.list.map((W) => ({ pos: site.toPlanet(W.posW.clone()), walking: W.doing === 'walk', hidden: false, away: false })) : []);
   // V: out to behind the ship and back, with a quick glide (aboard() draws it)
   function outside(v) {
     if (!T.afoot || T.done || v === T.out) return;
@@ -668,6 +738,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // IN THE SEAT AGAIN: the view from it as it was, and the run goes on (a part that waited for them, from there)
   function sitDown() {
     if (!T.afoot || T.done) return;
+    leaveGround(true);
     T.afoot = false; T.out = false; T.outK = 0; seatEl.hidden = true; seatEl.dataset.as = ''; el.classList.remove('is-afoot');
     if (ctx.walk) ctx.walk(false);
     fromField();
@@ -695,9 +766,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   function paintSeat() {
     if (T.done || (steps[T.i] && steps[T.i].kind === 'tune' && T.phase === 'seat')) return;
     // (at the core with its prompt up, its prompt alone: the Medic has a stool within reach of its core)
-    const inCockpit = T.afoot && !!P() && boarding.where(P().pos) === M.ship + '/cockpit', free = !(tn && (tn.busy || (tn.prompting && !T.rest))) && !T.out;
+    const me = stationPos(), inCockpit = T.afoot && !!me && boarding.where(me) === M.ship + '/cockpit', free = !(tn && (tn.busy || (tn.prompting && !T.rest))) && !T.out;
     // (their own seat in the cockpit; else any free seat or bed within reach; resting, getting up again)
-    const near = T.afoot && free && !T.rest && crewA && P() && !(seatOf() && inCockpit) ? crewA.near(P().pos) : null;
+    const near = T.afoot && !T.ground && free && !T.rest && crewA && P() && !(seatOf() && inCockpit) ? crewA.near(P().pos) : null;
     const want = T.rest ? (free ? 'rise' : '') : T.afoot && free && seatOf() && inCockpit ? 'down' : near ? 'rest' : '';
     if (want !== seatEl.dataset.as || (want === 'rest' && near !== T.near)) {
       seatEl.dataset.as = want; seatEl.hidden = !want; T.near = near;
@@ -707,7 +778,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       else if (want === 'rise') { seatEl.querySelector('b').textContent = name(T.rest); seatEl.querySelector('small').textContent = ask ? ask.replace(/: back to your seat$/, '') : T.rest.kind === 'lie' ? 'Lying down' : 'Sitting down'; seatEl.querySelector('.pnj-go').innerHTML = 'Get up<kbd>E</kbd>'; }
     }
     upEl.hidden = !canUp(); el.classList.toggle('has-seat', !seatEl.hidden);
-    viewEl.hidden = !T.afoot || !!(tn && tn.busy);
+    viewEl.hidden = !T.afoot || T.ground || !!(tn && tn.busy);
     const vw = T.out ? 'Inside' : 'Outside'; if (viewEl._w !== vw) { viewEl._w = vw; viewEl.innerHTML = `${vw} <kbd>V</kbd>`; }
   }
   // THE JUMP ITSELF: the wormhole (src/wormhole.js). The tear opens in front of the ship where it is; when the colours
@@ -747,7 +818,16 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (src/rescue.js), seen from the seat or from behind as the view was
   function makeSite() {
     site = siteMod.makeSite({ W, boarding, keeper, ship: S, cfg: SHIP, lib: ctx.lib || null, startFlying: flMod.startFlying },
-      { seed: ctx.seed, pilot: iPilot, flier: iPilot ? 'The autopilot' : flierShort, medic: medicShort, settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); }, dash, run: dashRun });
+      { seed: ctx.seed, pilot: iPilot, medic: iMedic, flier: iPilot ? 'The autopilot' : flierShort, medicName: medicShort, settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); }, dash, run: dashRun,
+        // (the crew member: their levels on the sensors' card and the locks, and their own look on foot out there)
+        crew, save: () => save(crew), recipe: ctx.lib && crew.look ? recipeOf(crew.look, ctx.lib) : null,
+        // (a pod's lock up: their walking rests meanwhile)
+        onLock: (up) => { T.lockUp = up; el.classList.toggle('has-lock', up); if (ctx.walk) ctx.walk(!up && T.ground); },
+        busy: crewBusy, crewAt: () => crewOut().map((o) => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z, walking: o.walking })),
+        walking: () => !!T.ground, outside: () => !!T.ground && !!site && !site.footIn,
+        // (anyone on foot in the rooms as the ship is parked, where they are there: the crew aboard walking, the crew member
+        // not out on the planet)
+        eyes: () => [...(crewA ? crewA.list.filter((w) => w.doing === 'walk').map((w) => w.posW) : []), ...(T.afoot && !T.ground && P() ? [P().pos] : [])] });
     api.site = site;
   }
   function arrivePlanet() {
@@ -894,6 +974,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // (on their feet when the run ends at home: they stay where they stand, in the ship as it now stands)
     if (T.rest) rise();
     const wasAfoot = T.afoot && !T.aborted;
+    if (T.ground) leaveGround();
     fromField(); T.afoot = false; T.out = false; el.classList.remove('is-afoot'); if (boarding.ride) boarding.ride(M.ship, true);
     if (tn) { tn.close(); tn = null; api.tune = null; }
     seatEl.remove(); upEl.hidden = true; viewEl.hidden = true;
@@ -902,7 +983,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (fl) { fl.close(); fl = null; api.fly = null; }
     jobs.show(true);
     if (panel) { panel.close(true); panel = null; }
-    removeEventListener('keydown', onKey); prompt.remove();
+    removeEventListener('keydown', onKey); prompt.remove(); findEl.remove();
     if (wh) { wh.dispose(); wh = null; }
     space(false);
     // (back on their feet where they stood in the cockpit, in the ship as it now stands, turned to the cabin behind the
@@ -919,8 +1000,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     get done() { return T.done; },
     // (in the seat, or at the core with its card up: seen through their own eyes, their body put away; and the trip
     // has them: no walking. On their feet out at the rocks neither is so)
-    get seated() { return !T.done && !!T.sat && (!T.afoot || !!(tn && tn.busy)); },
-    get holds() { return !T.done && (!T.afoot || !!(tn && tn.busy) || !!T.rest); },
+    // (on foot out on a planet: their own figure out there is theirs, walked by the trip; their body as parked unseen)
+    get seated() { return !T.done && !!T.sat && (!T.afoot || !!(tn && tn.busy) || !!T.ground); },
+    get holds() { return !T.done && (!T.afoot || !!(tn && tn.busy) || !!T.rest || !!T.ground); },
     // (sitting on a seat or a bench aboard: the sitting clip for their own figure; lying: standing, laid along the bed)
     get clip() { return !T.done && T.rest ? (T.rest.kind === 'sit' ? 'Sit_Listen' : 'Stand_Listen') : null; },
     crew: null,    // (the crew aboard, while they are: src/aboard.js)
@@ -936,6 +1018,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (T.i < 0) next();
       T.t += dt;
       RUN[steps[T.i].kind](dt, steps[T.i]);
+      // (a rescue, the Medic down: on foot aboard, out onto the planet's ground; the ramp coming up, back in the rooms as
+      // the ship is parked. On foot out there, the input's look and zoom are theirs, taken before the station's camera)
+      if (!T.done && site && site.ground && T.afoot && !T.ground && !T.rest && !T.out && !(tn && tn.busy)) enterGround();
+      if (!T.done && T.ground && (!site || !site.ground)) leaveGround();
+      if (T.ground && ctx.input) { T.look = ctx.input.takeLook(); T.zoom = ctx.input.takeZoom(); }
       if (T.done) { skipEl.hidden = true; return; }
       paintSkip(); paintSeat();
       if (fl) { fl.panel = !!panel; fl.update(dt); if (T.done) return; }
@@ -949,13 +1036,24 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (PLANET && T.inField && site && !site.fl) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
-      if (crewA) crewA.update(dt, { player: T.afoot && P() ? P() : null });
+      // (a rescue, the Medic down: the crew aboard stay where they sit or lie meanwhile (one on their way somewhere gets
+      // there first), so the rescued and the crew member come and go round them. Left to wander, one met the crew member
+      // in a narrow door with the place they had left taken by one of the rescued: nowhere to turn back to, and the two
+      // stood there for good)
+      if (crewA && site && site.down) for (const w of crewA.list) if (w.doing !== 'walk') w.t = 0;
+      if (crewA) { const me = T.afoot ? (T.ground ? (site && site.footIn ? { pos: stationPos() } : null) : P()) : null; crewA.update(dt, { player: me }); }
       // (the dashboard's numbers: in the air from the lift-off until it is down at home, wherever it is)
       if (T.sat) { _dw.setFromMatrixPosition(shipNow()); stepDash(dash, { p: [_dw.x, _dw.y, _dw.z], dt, flying: site && site.fl ? !site.down : fl && fl.on ? !fl.S.landed : !!(T.space || T.inField || (wh && wh.on)) }); }
     },
     // the camera: the pilot's eyes, looking out over the nose (turned clear of the job panel while it is up)
     aim(camera, dt = 1 / 60) {
       // (on their feet out at the rocks: the game's own camera follows them; at the core with its card up, the core's)
+      // (on foot out on a planet: their own figure walks there, the camera behind them: src/rescue.js walk)
+      if (T.ground && site) {
+        const inp = ctx.input, mv = inp && inp.enabled && !T.lockUp ? inp.move : null;
+        site.walk(dt, { move: mv, run: !!(inp && inp.run), look: T.look || null, zoom: T.zoom || 0, others: crewOut() }); T.look = null; T.zoom = 0;
+        camFresh = true; return;
+      }
       if (T.afoot) { if (tn) tn.aim(camera, dt); camFresh = true; return; }
       // (at the rocks, signed for the drill: the drill's view, or the flying's own from the seat and flown by hand)
       if (ff) { ff.aim(camera, dt); camFresh = true; return; }
@@ -974,7 +1072,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // just before the picture: no haze out there (after the boarding's light has had its say)
     late() {
       // (on their feet aboard: the eye and their figure drawn where the ship is now; first, so the haze is that eye's)
-      if (T.afoot && !T.done) drawAboard(T.dt || 1 / 60);
+      if (T.afoot && !T.ground && !T.done) drawAboard(T.dt || 1 / 60);
       else if (T.afield) fromField();
       if (!ff) T.afield = false;
       // (a rescue's planet: laid out round the eye, wherever it is drawn from; seen as far as its sky)
@@ -993,7 +1091,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     get panel() { return panel; }, get drill() { return drill; },
     rig: {},
     state: () => ({ dash: { fuel: +dash.fuel.toFixed(4), dist: +dash.dist.toFixed(2), secs: +dash.secs.toFixed(2), speed: +dash.speed.toFixed(2), cans: T.filled }, step: T.done ? 'done' : T.i < 0 ? 'start' : steps[T.i].id, phase: T.phase, t: +T.t.toFixed(2), clock: +T.clock.toFixed(2), space: T.space, field: T.inField, lamps: [...T.lamps], lit: T.lit, filled: T.filled, paused: T.paused, n: T.n, skip: skipWhat(), watch: iWatch,
-      afoot: T.afoot, afield: !!T.afield, out: !!T.out, up: !upEl.hidden, seat: seatEl.hidden ? null : seatEl.dataset.as === 'tune' ? 'up' : seatEl.dataset.as, tune: tn ? tn.state() : null, strip: $('.pmt-chip').textContent, says: sayEl.classList.contains('is-on') ? $('.pmt-say p').textContent : null,
+      afoot: T.afoot, ground: !!T.ground, lockUp: !!T.lockUp, afield: !!T.afield, out: !!T.out, up: !upEl.hidden, seat: seatEl.hidden ? null : seatEl.dataset.as === 'tune' ? 'up' : seatEl.dataset.as, tune: tn ? tn.state() : null, strip: $('.pmt-chip').textContent, says: sayEl.classList.contains('is-on') ? $('.pmt-say p').textContent : null,
       fly: fl ? fl.state() : null, site: site ? site.state() : null, rescued: T.rescued || 0, jump: wh ? wh.state() : null, ff: ff ? ff.state() : null, drill: drill ? drill.state() : null, store: T.store || null, cans: T.cans || null, early: T.early, sells: T.store ? sellsFor(T.store).pay : null, drillStats: T.drillStats || null, drillSecs: T.drillSecs || null,
       panel: panel ? panel.state() : null, landed: !!T.landed, gotUp: !!T.gotUp, stood: !!T.stood, dark: 0, crew: drill && drill.crew ? drill.crew.state() : null, aboard: aboard.map((a) => ({ id: a.id, name: a.name, jobs: [...a.jobs] })), log: T.log.slice(-12) }),
   };

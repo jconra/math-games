@@ -9,15 +9,22 @@
 //   - WALKS to the Medic and up its ramp: a way worked out by the player's own walls (src/walls.js plan: the ground, the
 //     pods, the wreck, the rocks, the ramp's treads, the cabin's doors) and walked as the crew aboard walk (src/aboardplan.js
 //     walkStep: round the player and each other, waiting or squeezing past where it is narrow);
-//   - TAKES A BED, the first two to come aboard (the Medic's two patient beds: onbed.js MOVES_ON, the scanner's patient's
-//     own way onto a high bed, then lying back on the stretcher's raised back), or, the beds taken, A SEAT (the lab's
-//     stool, the crew room's stools; then a cockpit seat no job has: sitting as the crew aboard sit, src/aboard.js).
+//   - TAKES THEIR PLACE, in the game's maker's order (2026-11-22, RESC4-1 B: "after the patient beds, the crew room's
+//     bunk and bed, then stools"; "They should be able to sit on the bench in the lab area too"; src/rescueplan.js
+//     restOrder): the Medic's two patient beds (onbed.js MOVES_ON, the scanner's patient's own way onto a high bed, then
+//     lying back on the stretcher's raised back); the crew room's bunk and its bed (lain on as the crew aboard lie on
+//     them: walked to, and lying there); the lab's long bench (the hop up onto its edge, and perched there); then A SEAT
+//     (the lab's stool, the crew room's stools; then a cockpit seat no job has: sitting as the crew aboard sit,
+//     src/aboard.js). A place someone else aboard is in is passed over.
 // Their bodies are posed by the shared people code (src/moves.js: M.bed and its bedPose), never a copy of it.
 //
-//   const R = makeRescued({ pods, medic, walls, scene })    pods: src/planet/podsdraw.js's; medic: src/planet/medicdown.js;
-//                                                            walls: src/planet/onfoot.js's (the planet's own)
+//   const R = makeRescued({ pods, medic, walls, scene, busy, crew })   pods: src/planet/podsdraw.js's; medic:
+//                                    src/planet/medicdown.js; walls: src/planet/onfoot.js's (the planet's own); busy(id):
+//                                    a place the crew aboard are in; crew(): where they stand, [{ x, y, z, walking }]
 //   R.update(dt, { player, camera })   each frame: a lid open enough wakes its sleeper; everyone's moves go on
+//   R.settle()  everyone out of the pods and in their place at once (the run's skip)
 //   R.list    [{ i (the pod), name, phase, pos, heading, place }]   R.others: the people to walk round, for the player
+//   R.placed  how many are in their place; R.out: how many awake are still outside the cabin
 //   R.eyes()  where the awake ones' feet are (the cabin's doors open for them)
 //   R.state() (for the rigs)   R.dispose()
 import * as THREE from 'three';
@@ -26,7 +33,7 @@ import { bedPose } from './moves.js';
 import { walkStep, WALK, CLIP } from './aboardplan.js';
 import { BODY } from './walls.js';
 import { STAND } from './player.js';
-import { OUT, ON, WAKE, POD_OUT, choose, seatsFor, bedToShip, leanOn } from './rescueplan.js';
+import { OUT, ON, WAKE, POD_OUT, choose, restOrder, bedToShip, leanOn } from './rescueplan.js';
 
 // how far from the camera someone is drawn with the crew kit's far copy (m: src/planet/podsdraw.js PODS_DRAW.far); how
 // long the way may be worked out each frame (ms), how long before a way not found is asked again (s), and how many tries
@@ -49,8 +56,11 @@ function blend(a, b, k) {
   return out;
 }
 
-export function makeRescued({ pods, medic, walls, scene }) {
-  const list = [], taken = new Set(), beds = medic ? medic.beds : [], seats = medic ? seatsFor(medic.places) : [];
+export function makeRescued({ pods, medic, walls, scene, busy = () => false, crew = () => [] }) {
+  // (the places, in the game's maker's order: the patient beds, the crew room's bunk and bed, the lab's bench, the stools;
+  // busy(id): a place someone else aboard is in (the crew aboard, src/aboard.js), passed over; crew(): where the crew
+  // aboard stand just now, in the world, walked round as the rescued walk round each other)
+  const list = [], taken = new Set(), order = medic ? medic.order || restOrder(medic.bp, medic.space.deck, medic.places) : [];
   const alarms = { putThere: 0, stalled: 0 };
   // (a point of the ship's own frame, and a heading, in the world)
   const shipPoint = (p) => new THREE.Vector3(...p).applyMatrix4(medic.M), shipHeading = (h) => h + medic.stand.yaw;
@@ -103,23 +113,26 @@ export function makeRescued({ pods, medic, walls, scene }) {
     R.c.root.position.set(R.pos.x, R.drawnY, R.pos.z); R.c.root.quaternion.setFromEuler(_e.set(0, R.heading + (R.side || 0), 0));
   }
 
-  // ── on to their place: a patient bed while one is free, else a seat ──────────────────────────────────────────
+  // ── on to their place: the first free one of the order (a bed while one is free, then the bench, then a seat) ──
+  // (their place, picked now: the next free one; the bed's frame in the world, and the way they face, back to it)
+  function pick(R) {
+    if (R.place) return R.place;
+    const ch = choose(order, new Set([...taken, ...order.map((c) => c.place.id).filter((id) => busy(id))]));
+    if (!ch) return null;
+    taken.add(ch.place.id); R.place = ch;
+    if (ch.kind === 'bed' || ch.kind === 'perch') {
+      const B = ch.place;
+      R.target = { kind: 'bed', lie: !!B.lie, perch: ch.kind === 'perch' }; R.bedWorld = bedFrame(B); R.goal = shipPoint(bedToShip(B, [B.bed.stand[0], 0, B.bed.stand[1]]));
+      const o = bedToShip(B, [1, 0, 0]), z0 = bedToShip(B, [0, 0, 0]); R.out = Math.atan2(o[0] - z0[0], o[2] - z0[2]) + medic.stand.yaw;
+    } else {
+      const p = ch.place; R.goal = shipPoint([p.stand[0], p.y, p.stand[1]]); R.seat = shipPoint([p.x, p.y, p.z]); R.target = { kind: 'sit' }; R.seatHeading = shipHeading(p.heading);
+    }
+    return ch;
+  }
   function setOff(R) {
-    const ch = choose(beds, seats, taken);
+    const ch = pick(R);
     R.walking = true; R.phase = 'walk'; R.t = 0; R.leg = 0; R.wait = 0; R.side = 0; R.sideAim = 0;
     if (!ch) { R.target = null; R.goal = shipPoint([0, medic.space.deck, 0.25]); }
-    else {
-      taken.add(ch.place.id); R.place = ch;
-      if (ch.kind === 'bed') {
-        const B = ch.place, s = bedToShip(B, [B.bed.stand[0], 0, B.bed.stand[1]]);
-        R.goal = shipPoint(s); R.target = { kind: 'bed' }; R.bedWorld = bedFrame(B);
-        // (the way they face standing there, their back to the bed: out across it, its open side)
-        const o = bedToShip(B, [1, 0, 0]), z0 = bedToShip(B, [0, 0, 0]); R.out = Math.atan2(o[0] - z0[0], o[2] - z0[2]) + medic.stand.yaw;
-      } else {
-        const p = ch.place; R.goal = shipPoint([p.stand[0], p.y, p.stand[1]]); R.seat = shipPoint([p.x, p.y, p.z]); R.target = { kind: 'sit' };
-        R.seatHeading = shipHeading(p.heading);
-      }
-    }
     // (the way in two legs: to the ramp's foot over the ground, then up it and through the cabin to the place: a way
     // from far off into the cabin's narrow rooms, worked out at once on the cabin's fine grid, ran out of steps)
     const foot = medic.foot.clone(); foot.y = walls.floorAt(foot.x, foot.z, foot.y + 3, 6) ?? foot.y;
@@ -130,12 +143,26 @@ export function makeRescued({ pods, medic, walls, scene }) {
   function planNext(R) { const from = R.wayAll.length ? R.wayAll[R.wayAll.length - 1] : R.pos; R.plan = walls.plan(from.clone(), R.stops[R.stopI].clone()); }
 
   // ── each frame ──────────────────────────────────────────────────────────────────────────────────────────────────
-  let clock = 0;
+  let clock = 0, settling = false;
+  // ALL AT ONCE (the run's skip, K): every pod's sleeper out of it and in their place at once, lying, perched or sitting
+  // (a sleeper not in their pod yet is put in their place as soon as they are: settling)
+  function settle() {
+    settling = true;
+    if (pods && medic) pods.pods.forEach((p, i) => { if (p.sleeper && !list.some((R) => R.i === i)) wake(i, p); });
+    for (const R of list) {
+      if (['lying', 'perched', 'sit', 'standing'].includes(R.phase)) continue;
+      R.way = null; R.plan = null; R.walking = false; R.t = 0;
+      if (!pick(R)) { R.goal = shipPoint([0, medic.space.deck, 0.25]); R.pos.copy(R.goal); R.drawnY = R.pos.y; R.phase = 'standing'; stand(R); play(R, STAND, 0); continue; }
+      if (R.target.kind === 'sit') { R.pos.copy(R.seat); R.drawnY = R.seat.y; R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; stand(R); play(R, CLIP.sit, 0); }
+      else { R.pos.copy(R.goal); R.drawnY = R.pos.y; R.phase = R.target.perch ? 'perched' : 'lying'; }
+    }
+  }
   function update(dt, { player = null, camera = null } = {}) {
     clock += dt;
     // (a lid open far enough: its sleeper wakes)
     if (pods && medic) pods.pods.forEach((p, i) => { if (p.sleeper && (p.want ?? pods.want) === 1 && p.k >= WAKE.lid && !list.some((R) => R.i === i)) wake(i, p); });
-    const pl = player ? { x: player.pos.x, z: player.pos.z } : null;
+    if (settling && list.some((R) => !['lying', 'perched', 'sit', 'standing'].includes(R.phase))) settle();
+    const pl = player ? { x: player.pos.x, z: player.pos.z } : null, crewNow = list.length ? crew() || [] : [];
     for (const R of list) {
       R.t += dt;
       if (R.phase === 'wake') { lay(R, R.rest, R.frame); if (R.t >= WAKE.still) { R.phase = OUT[0]; R.t = 0; } }
@@ -170,7 +197,9 @@ export function makeRescued({ pods, medic, walls, scene }) {
           const wall = walls.radius ? walls.radius(R.pos.x, R.pos.y, R.pos.z) : 0.15;
           // (the others standing or walking: someone sitting or lying is in their seat or bed, beside the way through, as the
           // crew aboard have it; the crew room's stools are 0.5 m apart, nearer than two bodies are ever let come)
-          const others = list.filter((Q) => Q !== R && !['wake', 'sit', 'lying', ...OUT, ...ON].includes(Q.phase)).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.phase === 'walk' && !!Q.way, heading: Q.heading, held: Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(R) }));
+          const others = list.filter((Q) => Q !== R && !['wake', 'sit', 'lying', 'perched', ...OUT, ...ON].includes(Q.phase)).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.phase === 'walk' && !!Q.way, heading: Q.heading, held: Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(R) }));
+          // (and the crew aboard standing or walking (in the cabin, on its deck): walked round as each other is)
+          for (const q of crewNow) if (Math.abs(q.y - R.pos.y) < 1.2) others.push({ x: q.x, z: q.z, walking: !!q.walking, heading: q.heading || 0, held: false, first: true });
           const x0 = R.pos.x, z0 = R.pos.z, r = walkStep(R, dt, pl, { others, free, wall });
           // (held up on the spot this long, walking (not waiting for the player): a loud alarm, and put in their place)
           R.stall = Math.hypot(R.pos.x - x0, R.pos.z - z0) > 0.004 || r === 'wait' || r === 'back' ? 0 : (R.stall || 0) + dt;
@@ -194,14 +223,17 @@ export function makeRescued({ pods, medic, walls, scene }) {
         stand(R); play(R, STAND);
         if (R.t >= SECS.back) { R.phase = ON[1]; R.t = 0; }
       } else if (ON.includes(R.phase)) {
-        // ONTO THE BED: onbed's moves, and lying back on its stretcher's raised back
+        // ONTO THE BED: onbed's moves, and lying back on its stretcher's raised back; ONTO THE BENCH: the hop alone, and
+        // there, perched on its edge
         const p = onBed(R.phase, R.t, R.place.place.bed, R.M.body);
         if (R.phase === 'down' || R.phase === 'stretch') p.lean = leanOn(p.lean, R.place.place.back);
         lay(R, p, R.bedWorld, R.place.place.mirror);
-        if (p.done) { const k = ON.indexOf(R.phase); if (k < ON.length - 1) { R.phase = ON[k + 1]; R.t = 0; } else { R.phase = 'lying'; R.t = 0; } }
+        if (p.done) { const k = ON.indexOf(R.phase); if (R.target.perch) { R.phase = 'perched'; R.t = 0; } else if (k < ON.length - 1) { R.phase = ON[k + 1]; R.t = 0; } else { R.phase = 'lying'; R.t = 0; } }
       } else if (R.phase === 'lying') {
         const p = onBed('lying', 0, R.place.place.bed, R.M.body); p.lean = leanOn(p.lean, R.place.place.back);
         lay(R, p, R.bedWorld, R.place.place.mirror);
+      } else if (R.phase === 'perched') {
+        lay(R, onBed(ON[1], SECS[ON[1]], R.place.place.bed, R.M.body), R.bedWorld, R.place.place.mirror);
       } else if (R.phase === 'sit') { stand(R); }
       // drawn near or far (the crew kit's far copy beyond RESCUED.far from the camera)
       if (camera) R.S.setFar(R.c.root.position.distanceTo(camera.position) > RESCUED.far);
@@ -213,6 +245,8 @@ export function makeRescued({ pods, medic, walls, scene }) {
     R.way = null; R.plan = null; R.walking = false;
     if (R.target && R.target.kind === 'bed') {
       if (put) { R.pos.copy(R.goal); R.drawnY = R.pos.y; }
+      // (the crew room's bunk and bed: lain on as the crew aboard lie on them, not climbed into; else turned round and up)
+      if (R.target.lie) { R.phase = 'lying'; R.t = 0; return; }
       R.phase = 'back'; R.t = 0; R.from = R.pos.clone(); R.fromH = R.heading;
     } else if (R.target && R.target.kind === 'sit') {
       R.pos.copy(R.seat); R.drawnY = R.seat.y; R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; R.t = 0;
@@ -225,7 +259,10 @@ export function makeRescued({ pods, medic, walls, scene }) {
     // (everyone awake: getting out of a pod, walking, on a bed or a seat; where their hips are, about their feet's height)
     get others() { return list.map((R) => ({ pos: R.pos, walking: R.phase === 'walk' && !!R.way, hidden: false, away: false })); },
     eyes: () => list.filter((R) => R.phase === 'walk').map((R) => R.pos),
-    update,
+    // (how many are in their place: lying, perched or sitting; and whether anyone awake is still on their way)
+    get placed() { return list.filter((R) => ['lying', 'perched', 'sit', 'standing'].includes(R.phase)).length; },
+    get out() { return list.filter((R) => !medic.inside(R.pos)).length; },
+    update, settle,
     alarms,
     state: () => ({ alarms, list: list.map((R) => ({ i: R.i, phase: R.phase, t: +R.t.toFixed(2), pos: R.pos.toArray().map((v) => +v.toFixed(2)), place: R.place ? R.place.kind + ':' + R.place.place.id : null, way: R.way ? R.way.length : null, leg: R.leg, tries: R.tries, eyes: R.c.lids ? +R.c.lids.shut.toFixed(2) : null })) }),
     dispose() { for (const R of list) R.S.dispose(); list.length = 0; },

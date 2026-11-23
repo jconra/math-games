@@ -20,7 +20,7 @@ const num = (label) => { const s = String(label).replace(/,/g, ''), m = s.match(
 const rightOf = (o) => num(o.coins.find((c) => c.good).label);
 const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
 
-test('her run is data: Captain Hale, the Medic, to a planet; Pilot 10%, Medic 20%, Engineer 20%; paid at the triage desk', () => {
+test('her run is data: Captain Hale, the Medic, to a planet; Pilot 10%, Paramedic 20%, Engineer 20%; paid at the triage desk', () => {
   assert.equal(R.captain, 'hale'); assert.equal(R.ship, 'medic'); assert.equal(R.place, 'planet'); assert.equal(R.payAt, 'medical');
   assert.deepEqual(R.roles, ['pilot', 'medic', 'engineer']);
   assert.deepEqual(R.roles.map((id) => ROLES[id].share), [10, 20, 20], 'the mining run\'s shares');
@@ -37,17 +37,27 @@ test('her run is data: Captain Hale, the Medic, to a planet; Pilot 10%, Medic 20
   assert.deepEqual(MS.stepsFor(R, ['pilot', 'engineer'], 'arrive').map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut*', 'core*', 'site', 'jumpHome*', 'home']);
   assert.deepEqual(MS.stepsFor(R, ['pilot', 'engineer'], 'leave').map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut*', 'site', 'core*', 'jumpHome*', 'home']);
   assert.deepEqual(MS.stepsFor(R, ['engineer'], 'arrive').map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut', 'core*', 'site', 'jumpHome', 'home']);
+  // (signed as the paramedic: the planet's part, the pods, is theirs)
+  assert.deepEqual(MS.stepsFor(R, ['medic']).map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut', 'site*', 'jumpHome', 'home']);
+  assert.deepEqual(MS.stepsFor(R, ['pilot', 'medic', 'engineer'], 'leave').map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut*', 'site*', 'core*', 'jumpHome*', 'home']);
 });
 
-test('the medic\'s job is not made yet: her own medic opens the pods; the other two can be signed for, alone or together', () => {
-  assert.equal(ROLES.medic.ready, false);
-  assert.deepEqual(MS.rolesOf(R).map((r) => r.id + (r.open ? '' : ' (crew)')), ['pilot', 'medic (crew)', 'engineer']);
-  assert.deepEqual(MS.openRoles(R), ['pilot', 'engineer']);
-  for (const want of [['pilot'], ['engineer'], ['pilot', 'engineer'], ['pilot', 'medic', 'engineer']]) {
+test('her three jobs: Pilot, Paramedic, Engineer, each signed for alone or with the others (the game\'s maker, RESC3-1)', () => {
+  // ("The medical one can be the paramedic ... For the paramedic the questions are to open the pods")
+  assert.equal(ROLES.medic.ready, true); assert.equal(ROLES.medic.name, 'Paramedic'); assert.match(ROLES.medic.does, /stasis pods/);
+  assert.deepEqual(MS.rolesOf(R).map((r) => r.name + (r.open ? '' : ' (crew)')), ['Pilot', 'Paramedic', 'Engineer']);
+  assert.deepEqual(MS.openRoles(R), ['pilot', 'medic', 'engineer']);
+  for (const want of [['pilot'], ['medic'], ['engineer'], ['pilot', 'medic'], ['medic', 'engineer'], ['pilot', 'engineer'], ['pilot', 'medic', 'engineer']]) {
     const c = crewOf(), m = MS.sign(c, 'rescue', want);
-    assert.deepEqual(m.roles, want.filter((id) => id !== 'medic'));
+    assert.deepEqual(m.roles, want);
+    assert.equal(MS.contractOf(JSON.parse(JSON.stringify(c))).roles.join(), want.join(), 'kept through a reload');
   }
-  assert.equal(MS.sign(crewOf(), 'rescue', ['medic']), null, 'the medic alone: nothing to sign');
+  assert.equal(MS.rolesWords(['pilot', 'medic']), 'Pilot and paramedic');
+  // (a contract kept from before, signed for the jobs then open: as it was)
+  const old = crewOf(); old.mission = { id: 'rescue', captain: 'hale', roles: ['pilot', 'engineer'], state: 'signed', signed: 1, seed: 5 };
+  assert.deepEqual(MS.contractOf(old).roles, ['pilot', 'engineer']);
+  // (her own paramedic, for the job left to her crew)
+  assert.equal(MS.roleOf(R, 'medic').crew, 'Paramedic Teo');
   // (the pilot's words on her contract are her run's: to the planet)
   assert.equal(MS.rolesOf(R)[0].does, 'piloting to the planet and home');
   assert.equal(MS.rolesOf(MINING)[0].does, 'piloting to the rocks and home');
@@ -68,16 +78,19 @@ test('the planet is picked as the contract is signed and kept with it (its seed)
 test('who is aboard: her and one of her own crew, in the Medic\'s uniform in their position\'s colour', () => {
   const H = { id: 'hale', name: 'Captain Hale' };
   const a1 = MS.aboardOf(R, ['pilot', 'engineer'], H);
-  assert.deepEqual(a1.map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:', 'Medic Teo:medic']);
+  assert.deepEqual(a1.map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:', 'Paramedic Teo:medic']);
   const a2 = MS.aboardOf(R, ['engineer'], H);
   assert.deepEqual(a2.map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:medic', 'Pilot Cass:pilot']);
   assert.equal(a2[1].look.position, 'pilot'); assert.equal(a2[1].look.crew, 'medic');
   const a3 = MS.aboardOf(R, ['pilot'], H);
-  assert.deepEqual(a3.map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:engineer', 'Medic Teo:medic']);
+  assert.deepEqual(a3.map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:engineer', 'Paramedic Teo:medic']);
+  // (signed as the paramedic: her pilot comes along and flies, she sees to the core)
+  assert.deepEqual(MS.aboardOf(R, ['medic'], H).map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:engineer', 'Pilot Cass:pilot']);
+  assert.deepEqual(MS.aboardOf(R, ['pilot', 'medic'], H).map((a) => a.name + ':' + a.jobs.join('+')), ['Captain Hale:', 'Engineer Mara:engineer']);
   assert.equal(a3[1].look.position, 'medic'); assert.equal(a3[1].look.crew, 'medic');
   // her crew, never the Miner's
   for (const mine of [[], ['pilot'], ['engineer'], ['pilot', 'engineer']]) for (const a of MS.aboardOf(R, mine, H)) assert.ok(!/Juno|Kestrel|Okafor/.test(a.name), a.name);
-  assert.deepEqual(MS.crewFor(R, ['pilot'], 'You', 'Captain Hale').map((c) => c.name), ['You', 'Medic Teo', 'Captain Hale']);
+  assert.deepEqual(MS.crewFor(R, ['pilot'], 'You', 'Captain Hale').map((c) => c.name), ['You', 'Paramedic Teo', 'Captain Hale']);
   // the mining run's crew as it was
   assert.deepEqual(MS.aboardOf(MINING, ['pilot'], { id: 'ruiz', name: 'Captain Ruiz' }).map((a) => a.name), ['Captain Ruiz', 'Miner Kestrel']);
 });
@@ -123,7 +136,7 @@ test('the payout card at the triage desk: count the people, so many at so much e
 
 test('her words and her crew\'s along the run: a line for every moment the trip has', () => {
   const T = RUN_TALK.rescue;
-  for (const k of ['out', 'crewOut', 'there', 'down', 'downAuto', 'site', 'aboard', 'aboardCrew', 'home', 'homeCrew', 'landed', 'landedCrew', 'tune', 'tuned', 'tunedFree', 'backJump']) assert.ok(Array.isArray(T[k]) && T[k].length, k);
+  for (const k of ['out', 'crewOut', 'there', 'down', 'find', 'found', 'site', 'sitePod', 'backAboard', 'aboard', 'aboardCrew', 'home', 'homeCrew', 'landed', 'landedCrew', 'tune', 'tuned', 'tunedFree', 'backJump']) assert.ok(Array.isArray(T[k]) && T[k].length, k);
   const all = Object.values(T).flat().join(' ');
   assert.ok(!/rocks|smelter|canister|Juno|drill/i.test(all), 'nothing of the mining run');
   assert.match(T.landed.join(' '), /triage desk/);
@@ -140,7 +153,7 @@ test('the jump computer on her run: the Medic, the crashed ship and her crew in 
     for (const w of ['Miner', 'asteroid field', 'mine', 'field', 'rocks', 'Juno', 'Ruiz', 'Kestrel', 'Okafor']) if (new RegExp('\\b' + w + '\\b').test(txt)) bad.push(w + ': ' + o.story);
   }
   assert.deepEqual(bad, []);
-  assert.equal(R.folk.length, 4); assert.deepEqual(R.folk.map((f) => f.name), ['Captain Hale', 'Pilot Cass', 'Medic Teo', 'Engineer Mara']);
+  assert.equal(R.folk.length, 4); assert.deepEqual(R.folk.map((f) => f.name), ['Captain Hale', 'Pilot Cass', 'Paramedic Teo', 'Engineer Mara']);
   // (the mining run: nothing changed by its own live words)
   const c = crewOf(); for (let s = 0; s < 12; s++) E.step(c, pilot, 1);
   const r1 = seq(0.2, 0.4, 0.6, 0.8), r2 = seq(0.2, 0.4, 0.6, 0.8);
