@@ -405,6 +405,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         const first = synced == null || !String(synced).startsWith(c.id + ':'); synced = c.id + ':' + (m ? m.state : '');
         crane.awayHeld = !!(m && m.state === 'signed' && minerRun(m));
         if (first && playing && m && !trip) lead(m.state === 'signed' ? 'ship' : 'payout');
+        // (the old station found and no supply run made yet: where its contract waits, said once as they come aboard)
+        if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp('Gus has a contract at the shipping desk in Cargo, down the lift: supplies for the old station.');
       }
       // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
       // station's people are aboard; any other state: he is not)

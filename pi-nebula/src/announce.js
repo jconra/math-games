@@ -172,7 +172,7 @@ export const LINES = [
   // text line: no clip has the numbers in it)
   // (a finding of Captain Vega's exploring run the crew member was on, other than a new world (whose recorded line names
   // it): a text line, its words the run's own: src/exploreplan.js findNews)
-  { id: 'found', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if ((n.kind !== 'find' && n.kind !== 'supply') || !n.text || G.told.has(n.id)) continue; return { text: n.text, news: n.id }; } return null; } },
+  { id: 'found', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if ((n.kind !== 'find' && n.kind !== 'supply' && n.kind !== 'call') || !n.text || G.told.has(n.id)) continue; return { text: n.text, news: n.id }; } return null; } },
   { id: 'rescued', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if (n.kind !== 'rescue' || !n.count || G.told.has(n.id + ':outcome') || !G.told.has(n.id)) continue; return { text: outcome({ people: n.count, from: n.from, resting: n.resting }), news: n.id + ':outcome' }; } return null; } },
   { id: 'welcome', where: 'station', first: 1, once: true, say: (G) => (['vega', 'ruiz', 'hale'].some((k) => asking(G.captains[k]) && G.captains[k].room === 'terminal') ? { clips: ['welcome'] } : null) },
   { id: 'crew-hale', group: 'crew', where: 'station', say: (G) => (asking(G.captains.hale) && G.captains.hale.room === 'terminal' ? { clips: ['crew-hale'] } : null) },

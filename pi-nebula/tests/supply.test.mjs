@@ -245,7 +245,10 @@ test('the words: its first mate\'s for every moment of the run; the old station\
   assert.ok(!/station [A-Z][a-z]+\b/.test(first));
   // the station's news of it, and its people's talk
   assert.ok(TALKS.some((t) => t.news === 'supply'));
-  assert.match(read('../src/announce.js'), /n\.kind !== 'find' && n\.kind !== 'supply'/);
+  assert.match(read('../src/announce.js'), /n\.kind !== 'find' && n\.kind !== 'supply' && n\.kind !== 'call'/);
+  // (and where the run begins is said once, as the Explorer comes home with the find: a text line, nobody's talk)
+  assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: 'A word from Cargo\. Gus at the shipping desk/);
+  assert.ok(!TALKS.some((t) => t.news === 'call'));
   // no browser speech anywhere in the run's own files
   for (const f of ['../src/oldstationsite.js', '../src/trip.js', '../src/mission.js', '../src/supplyrun.js']) assert.ok(!/speechSynthesis|SpeechSynthesisUtterance/.test(read(f)), f);
 });

@@ -20,6 +20,8 @@
 //             src/exploreplan.js findNews): what, in a few words; text, the station's line of it (announce.js 'found')
 //   supply    { ship, text }                   the Hauler's supply run that saved the old station (src/trip.js); text, the
 //             station's line of it (announce.js 'found')
+//   call      { ship, text }                   the old station found: Cargo's word that the Hauler needs a crew for its
+//             supply run (src/trip.js, as the Explorer comes home with the find); a text line only, nobody's talk
 //   haul      { ship, ore, tons }              a ship back with a rich load of ore
 //   player    { player, job }                  the player did a job shift (main.js, after a job pays)
 // A piece of news is talked about for FRESH seconds of the game, then left be.

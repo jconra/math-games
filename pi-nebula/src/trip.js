@@ -582,7 +582,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         // (the station's news: a haul, or the rescue (its people talk of it, and the speakers say so: src/announce.js))
         // (an exploring run: what it found kept with the crew member, and the station's news of it: src/exploreplan.js findNews)
-        if (EXPLORE) { try { keepFind(crew, plan); save(crew); const N = findNews(plan); if (N) news.add(N); } catch (e) { console.error(e); } }
+        if (EXPLORE) { try { keepFind(crew, plan); save(crew); const N = findNews(plan); if (N) news.add(N);
+          // (the old station found: where its supply run begins, said once over the speakers: src/missions.js 'supply')
+          if (plan && plan.scenario === 'distress') news.add({ kind: 'call', ship: 'Hauler', text: 'A word from Cargo. Gus at the shipping desk is getting supplies together for the old station. The Hauler needs a crew.' }); } catch (e) { console.error(e); } }
         else if (PLANET) rescuedHome();
         // (the supply run that saved the old station: the station's news of it, a text line over the speakers)
         else if (SUPPLY) { try { if (T.payout && T.payout.first) news.add({ kind: 'supply', ship: SHIP.name, text: 'News from the Hauler. Its supplies have reached the old station. The old station has power again.' }); } catch (e) { /* no news */ } }
