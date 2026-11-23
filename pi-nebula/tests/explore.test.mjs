@@ -184,7 +184,7 @@ test('the jump computer on his run: the Explorer, the lead it follows and his cr
     const c = crewOf(); for (let s = 0; s < L; s++) E.step(c, pilot, 1);
     const live = { lamp: ['distance', 'charge', 'go'][k % 3], to: 'lead', ship: 'Explorer', far: 'explore', folk: X.folk, lead };
     const o = E.deal(c, pilot, { live, rand: seq(((L * 7 + k * 3) % 10) / 10 + 0.05, 0.37, 0.71, 0.13) }).order;
-    const txt = [o.story, o.ask, o.rightWhy, JSON.stringify(o.help || {}), ...(o.coins || []).map((x) => x.why || '')].join(' ').replace(/"kind":"field"/g, '').replace(/"to":"lead"/g, '');
+    const txt = [o.story, o.ask, o.rightWhy, JSON.stringify(o.help || {}), typeof o.lead === 'string' ? o.lead.replace(/<[^>]*>/g, ' ') : '', ...(o.coins || []).map((x) => x.why || '')].join(' ').replace(/"kind":"field"/g, '').replace(/"to":"lead"/g, '');
     for (const w of ['Miner', 'asteroid field', 'mine', 'field', 'rocks', 'Juno', 'Ruiz', 'Kestrel', 'Okafor']) if (new RegExp('\\b' + w + '\\b').test(txt)) bad.push(w + ': ' + o.story);
   }
   assert.deepEqual(bad, []);

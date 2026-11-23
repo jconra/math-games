@@ -89,7 +89,7 @@ DEST.planet = { key: 'planet', name: 'the crashed ship', is: 'The crashed ship i
 // AN EXPLORING RUN'S JUMPS OUT (src/missions.js 'explore': live.far 'explore', live.to 'lead', live.lead the lead the
 // jump follows, "the faint signal", "the strange pull" ...): the same, told of the lead (its own words: src/exploreplan.js)
 DEST.lead = { ...DEST.field, key: 'lead' };
-const LEAD_WORDS = (live) => { const L = String(live.lead || 'the signal'), C = L[0].toUpperCase() + L.slice(1); return [['We have authorization to mine at', `${C} is at`], ['The asteroid field', C], ['the asteroid field', L], ['an asteroid field', L], ['a dense field', L], ['The field', C], ['the field', L], ['The rocks are', `${C} is`], ['the rocks', L]]; };
+const LEAD_WORDS = (live) => { const L = String(live.lead || 'the signal'), C = L[0].toUpperCase() + L.slice(1); return [['We have authorization to mine at', `${C} is at`], ['The asteroid field', C], ['the asteroid field', L], ['an asteroid field', L], ['a dense field', L], ['The field', C], ['the field', L], ['The rocks are', `${C} is`], ['the rocks', L], ['>field<', `>${L.split(' ').pop()}<`]]; };
 const FAR_WORDS = { explore: LEAD_WORDS, planet: [['We have authorization to mine at', 'The crashed ship\'s distress call comes from'], ['The asteroid field', 'The crashed ship'], ['the asteroid field', 'the crashed ship'], ['an asteroid field', 'the crashed ship'], ['a dense field', 'the crashed ship'], ['The field', 'The crashed ship'], ['the field', 'the crashed ship'], ['The rocks are', 'The crashed ship is'], ['the rocks', 'the crashed ship']] };
 const WORD_KEYS = new Set(['story', 'ask', 'why', 'rightWhy', 'line', 'title', 'label', 'say', 'steps', 'lines', 'help', 'coins', 'slips', 'sum', 'pic', 'tap', 'map', 'points', 'pts']);
 export function reword(o, live) {
@@ -104,7 +104,8 @@ export function reword(o, live) {
     if (v && typeof v === 'object') { for (const k of Object.keys(v)) if (WORD_KEYS.has(k) || typeof v[k] === 'object') v[k] = walk(v[k], k); return v; }
     return v;
   };
-  for (const k of ['story', 'ask', 'rightWhy', 'help', 'coins', 'lines', 'tap']) if (o[k] != null) o[k] = walk(o[k], k);
+  // (and a picture drawn ready, its words in it: the map's "the field is at (?, ?)")
+  for (const k of ['story', 'ask', 'rightWhy', 'help', 'coins', 'lines', 'tap', 'lead']) if (o[k] != null) o[k] = walk(o[k], k);
   return o;
 }
 // who is aboard, for the cards that name someone: the run's own crew (live.folk), else the Miner's

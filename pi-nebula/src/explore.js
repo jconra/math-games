@@ -47,7 +47,7 @@ import { makeFarShip } from './farship.js';
 //   cruise   how fast the crew's pilot flies over to the finding; stand: how far short of it it stops, and how high
 //            over it; clear: how high it keeps over the ground on the way
 //   far      the camera's far plane out there (the cloud sky is 9,000 m round)
-export const PLACE = { arrive: { out: 430, up: 140, clear: 90, space: 720 }, cruise: 34, stand: { land: 150, up: 55, space: 400 }, clear: 26, far: 12000 };
+export const PLACE = { arrive: { out: 430, up: 140, clear: 90, space: 720 }, cruise: 34, stand: { land: 105, up: 38, space: 400 }, clear: 26, far: 12000 };
 // the field: how many rocks, how far round its middle they lie (flattened up and down), the biggest and the smallest;
 // the spots of ore on each (more on a bigger rock), how big each is across the rock, and at most (m)
 export const FIELD = { rocks: 46, r: 260, flat: 0.45, big: 34, small: 4, dots: [4, 14], dot: [0.035, 0.07], most: 1.6 };
