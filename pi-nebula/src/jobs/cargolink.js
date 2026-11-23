@@ -38,6 +38,10 @@ export function cargoLink({ crew, save = () => {}, supply = null }) {
       const S = supply ? supply.status() : null, loaded = S ? S.loaded : run.loaded || 0, N = run.pallets, K = Math.ceil(N / PER_BOX);
       const boxes = (run.slots || []).map(nameOf), where = boxes.length > 1 ? `containers ${boxes.slice(0, -1).join(', ')} and ${boxes[boxes.length - 1]}` : `container ${boxes[0]}`;
       const done = run.done || (S && S.left === 0);
+      // (Cargo's crew's run, the supply contract signed without the Loader's job: nothing here is the crew member's)
+      if (run.byCrew && !done) return { html: `${head(null, true)}
+        <p class="pnj-story pcc-end"><b>Cargo's crew loads this run.</b></p>
+        <p class="pnj-story pcc-end2">${u(N, 'pallet', 'pallets')} for the old station, in ${where}. The Hauler will be ready for takeoff: up the lift to the main deck, out across the bridge and aboard.</p>`, buttons: [{ label: 'Done' }] };
       const html = `${head(null, true)}
         <p class="pnj-story pcc-end"><b>${done ? 'Loaded!' : `Pack ${u(N, 'pallet', 'pallets')} for the old station.`}</b></p>
         <p class="pnj-story pcc-end2">${done ? 'The Hauler is loaded and ready for takeoff.'

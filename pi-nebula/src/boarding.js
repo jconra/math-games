@@ -84,7 +84,10 @@ export const flight = (kit, pods = null) => ({ nozzles: kit.jetNozzles, jet: kit
 // the hooks: whether it may be gone into (the bridge stands), where it is, its hull's version with the rooms inside and
 // what of that hull a person meets). Near it: in the airlock, or out on the bridge (the airlock is the room nearest
 // there). Its cabin is his deck plan (HAUL-1), built and walked as the others'. No `flight`: it is not flown (HAUL3-6).
-export const DOCKED_SHIP = { id: 'hauler', dock: true, near: ['airlock'], lab: HB.LAB, cockpit: HB.COCKPIT, bp: 'hauler-his-plan', ways: [] };
+// `flight`: how it is flown, on a contract (the supply run, src/missions.js 'supply'; the game's maker, HAUL4-1: "not fly
+// it unless you have a contract to fly it"): its main engines' nozzles and their jets; its pods are held at rest at the
+// dock (src/haulerdock.js), so none is given
+export const DOCKED_SHIP = { id: 'hauler', dock: true, near: ['airlock'], lab: HB.LAB, cockpit: HB.COCKPIT, bp: 'hauler-his-plan', flight: flight(HB), ways: [] };
 export const SHIPS = [
   { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: flight(EB), ways: ['ebAirstair'] },
   { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: flight(MD), ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },

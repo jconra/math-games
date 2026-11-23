@@ -166,9 +166,12 @@ async function boot() {
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     // (and a rescue's share at the triage desk: src/missions.js payAt)
     live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null), head: (o) => (mission ? mission.payoutHead(o) : null) } },
-    hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null) }, crane, lib, people: () => people,
-    // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js)
-    links: { cargo: ({ crew, save: keep }) => cargoLink({ crew, save: keep, supply: GAME.supply }) } });
+    // (and at the shipping computer the supply run: its contract offered there, its share waiting there: src/mission.js)
+    hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null), cargo: () => (mission ? mission.deskHint('cargo') : null) }, crane, lib, people: () => people,
+    before: { cargo: () => (mission ? mission.deskStart('cargo') : false) },
+    // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js; home from the run, its
+    // share's pay slip first)
+    links: { cargo: ({ crew, save: keep }) => (mission && mission.deskLive('cargo')) || cargoLink({ crew, save: keep, supply: GAME.supply }) } });
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });
@@ -176,7 +179,10 @@ async function boot() {
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
   const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
-    body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, lib });
+    body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, lib,
+    // (the supply run: its cargo run in Cargo, src/supplyrun.js; the Hauler's bridge, src/dockwalk.js; is the crew member
+    // down in Cargo just now)
+    supply: () => GAME.supply, dock: dockWalk, inCargo: () => !!(player && player.P && GAME.lift && Math.abs(player.P.pos.y - STORE.floor) < 1 && GAME.lift.crewAt === 'store') });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
   // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift; now and then

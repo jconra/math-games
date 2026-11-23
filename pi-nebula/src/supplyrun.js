@@ -14,9 +14,13 @@
 //   4. LOADED: the doors shut (once the forklift is clear of them), and the line says the Hauler is ready: up the lift,
 //      across the bridge, aboard. The containers go out to the Hauler: what was loaded in them is gone from Cargo the
 //      next time nobody sees it.
-// THE CONTRACT that starts it comes with the other station, later (the plan's piece 7: whose contract the supply run
-// is). For now it starts at the computer, any time, and starting it is ONE CALL: startRun(crew) (kept with the crew
-// member, as their other jobs' tallies are: crew.jobs.cargo.run).
+// THE CONTRACT that starts it is the supply run's (src/missions.js 'supply', offered at this same computer once the old
+// station has been found: src/mission.js deskStart): signed, R.contract(loader) is the ONE CALL that starts the run
+// (startRun(crew), kept with the crew member, as their other jobs' tallies are: crew.jobs.cargo.run). Signed as the
+// run's Loader, the computer's questions and the forklift are theirs, as above; otherwise it is Cargo's crew's run
+// (`byCrew`): worked out already, its doors open, and its pallets go in as the rest of a run got off does (where nobody
+// sees, and all at once when the crew member leaves Cargo). As the Hauler is boarded for the run whatever is not in yet
+// goes in (R.depart). Until the old station is found the computer still starts a run of its own, any time, as before.
 //
 //   startRun(crew, { rand }) -> the run           runOf(crew) -> the run on now, or null (none, or one already done)
 //   the run: { n (the crew member's runs so far), pallets (3 or 4: how many to load), slots (the containers, LOAD.slots),
@@ -91,6 +95,25 @@ export function makeSupplyRun({ crew = () => null, save = () => {}, forklift, br
         r = startRun(c); save(c);
       }
       return r;
+    },
+    // THE SUPPLY CONTRACT SIGNED (src/mission.js): its run, the one on now or a new one; loader: the crew member signed
+    // as the run's Loader (the computer and the forklift are theirs); not: Cargo's crew's, worked out and loading
+    contract(loader) {
+      const c = crew(); if (!c) return null;
+      const r = R.begin(); if (!r) return null;
+      if (!loader) { r.byCrew = true; r.worked = true; handed = true; banner = { t: 0, title: 'Cargo\'s crew load the Hauler', words: `${r.pallets} pallets for the old station go into the containers without you. The Hauler will be ready: up the lift, across the bridge, aboard.` }; }
+      save(c);
+      return r;
+    },
+    // the run a contract began (its number, kept with the contract), done or not; null: no such run
+    contractRun(n) { const c = crew(), r = c ? lastRun(c) : null; return r && (n == null || r.n === n) ? r : null; },
+    // THE HAULER BOARDED FOR THE RUN: whatever of a worked-out run is not in the containers yet goes in now (the crew
+    // member has left Cargo), the run is loaded, and its containers are gone out to the Hauler
+    depart(n) {
+      const c = crew(), r = c ? lastRun(c) : null; if (!r || (n != null && r.n !== n)) return false;
+      if (forklift.stock) { while (forklift.stock.count() < r.pallets && forklift.stock.loadOne([], true)); }
+      r.loaded = r.pallets; r.done = true; r.flown = true; handed = false; save(c);
+      return true;
     },
     // the computer's five questions are done: the doors open
     worked() { const c = crew(), r = R.run(); if (!c || !r) return; r.worked = true; save(c); },

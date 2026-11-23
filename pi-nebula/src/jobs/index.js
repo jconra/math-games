@@ -87,7 +87,9 @@ function sideMarks(s) {
 // share of a run waits there: src/mission.js)
 // links: { [job.link]: ({ W, walls, job, crew, save }) -> the panel's live, joined to the job's own props } (the
 // shipping computer's supply run in Cargo: src/jobs/cargolink.js)
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {} } = {}) {
+// before: { [job id]: fn -> true if it took the Start itself } (a contract offered at the job's desk, shown in place of
+// the job: the supply run's at the shipping computer, src/mission.js deskStart)
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {} } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -137,6 +139,7 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
     const s = spots.find((x) => x.job.id === id);
     const c = crew();
     if (!s || !s.job.open || !c || panel) return false;
+    if (before[id] && before[id]()) return true;
     at = s; camFresh = true;
     for (const x of pairOf(s)) x.ring.visible = x.sign.visible = false;   // (the job's own props in view, not its marker)
     if (input && !s.job.game) input.enabled = false;
@@ -263,6 +266,10 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
           otherBtn.setAttribute('aria-label', `${alt.job.sign} (turn to its side, or pick it here)`);
         }
       }
+    } else if (best && hints[best.job.id]) {
+      // (still at the same spot: its line for now may have changed meanwhile: a contract signed there, a share paid)
+      const w = hints[best.job.id]() || best.job.hint, sm = prompt.querySelector('small');
+      if (sm.textContent !== w) sm.textContent = w;
     }
     // (the other side: which way to turn to it, from the view as it is)
     if (other) {

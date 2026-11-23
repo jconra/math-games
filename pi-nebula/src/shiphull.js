@@ -42,7 +42,43 @@ import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
 // (first made for the Miner's landing: src/crane.js LANDING)
 export const FLIGHT = { swing: { yaw: 1.2, pitch: 0.62 }, podLen: 1.1, idle: 0.15, cool: 30, settle: 2.6, wind: 0.7 };
 
-export function makeHull({ W, id, kit, skip = null, hangar = null, boarding = null, eyes = () => [] }) {
+// A SHIP THAT WAITS AT THE DOCK (the Hauler: src/haulerdock.js, `dock`: its own hooks there): no room of the station but
+// a group of its own, drawn where it is docked; flown, that group is moved whole by the same one matrix, and the same
+// flight (kit/ships/flight.js) lights its main engines' glow and jets from its kit's own nozzles. Its pods are held at
+// rest in that group (they are not live doors), so none is turned or fired; out in space nothing blows down under it.
+// It is never set down anywhere but docked, so it never stands somewhere else (stand: nothing to do).
+//   dock: { group() (in the scene, or null until built), matrix() (its kit frame where it is docked), flown(on) (it is
+//   its keeper's to show or hide while it is away from the bridge) }
+function makeDockHull({ W, id, kit, dock }) {
+  let aloft = false;
+  const H = {
+    id, zone: null, meshes: [], pods: [], flight: null, air: null, docks: true,
+    get group() { return dock.group(); },
+    move(M) { const g = dock.group(); if (!g) return; if (M) g.matrix.multiplyMatrices(M, dock.matrix()); else g.matrix.copy(dock.matrix()); g.matrixWorldNeedsUpdate = true; },
+    fx() {
+      if (H.flight !== null) return H.flight;
+      const g = dock.group(); if (!g || !kit) return false;
+      H.flight = makeFlight({ pods: [], podHalf: 0, swing: FLIGHT.swing, nozzles: kit.nozzles(), jet: kit.jet, frame: new THREE.Matrix4(), parent: g, quality: W.quality });
+      return H.flight;
+    },
+    lift() { H.fx(); },
+    thrust(dt, how) { if (H.flight && how) H.flight.update(dt, how); },
+    rest() { if (H.flight) H.flight.rest(); },
+    fly(D, dt = 0, how = null) {
+      if (!D) { if (aloft) { aloft = false; H.move(null); H.rest(); dock.flown(false); } return true; }
+      if (!aloft) { aloft = true; H.lift(); dock.flown(true); }
+      H.move(D); H.thrust(dt, how);
+      return true;
+    },
+    stand() { return true; },
+    get standing() { return null; }, get aloft() { return aloft; },
+    padBusy: () => false,
+  };
+  return H;
+}
+
+export function makeHull({ W, id, kit, skip = null, hangar = null, boarding = null, eyes = () => [], dock = null }) {
+  if (dock) return makeDockHull({ W, id, kit, dock });
   const room = 'ship-' + id, zone = W.room(room); if (!zone) return null;
   const home = hangar || W.room((zone.with || [])[0]) || null;
   // the moving parts that are its alone (not shared with another room), but those it is told to leave alone

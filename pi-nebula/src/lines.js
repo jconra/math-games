@@ -60,6 +60,25 @@ export const CAPTAINS = {
     offer: { clip: 'adair-pitch' }, hello: { clip: 'adair-hello' }, again: 'Hello again! My ship\'s still in for repairs.' },
 };
 
+// THE OLD STATION'S OWN PEOPLE, in its hall, to the Hauler's crew (src/oldstationsite.js; bubbles, no recorded clips; who:
+// which of the three says it, 0 to 2). They have no names yet (the game's maker's to pick), nor has their station: each
+// bubble is headed "Old station". first: the run that saves it (they thank the crew by name of what was brought: the
+// call the Explorer heard asked for fuel cells, food and spare parts); `lights`: said as its lights come back up;
+// again: a hauling run after that. {player}: the crew member's name
+export const OLD_STATION = {
+  first: [
+    { who: 0, w: 'You came! We heard your Explorer on the radio, and then nothing for days.' },
+    { who: 1, w: 'Fuel cells! Quick, down to the power room with them.' },
+    { who: 2, lights: true, w: 'The lights! We have power again!' },
+    { who: 1, w: 'And food. We have been on half meals for weeks.' },
+    { who: 0, w: 'Spare parts too. Thank you, {player}. Thank you, all of you.' },
+  ],
+  again: [
+    { who: 0, w: 'The Hauler! Good to see you again, {player}.' },
+    { who: 1, w: 'More fuel cells, fresh food and spare parts. Thank you!' },
+  ],
+};
+
 // A CAPTAIN'S RUN (src/trip.js): what the captain says from the other seat as the run goes, one of each at its moment,
 // in a bubble (no recorded clips yet). {player}: the crew member's name; {ore}: the metal; {tonnes}: the haul's ore;
 // {engineer}: whoever is the run's engineer (the crew member, or the captain's own)
@@ -131,6 +150,38 @@ export const RUN_TALK = {
     landed: ['We\'re home, {player}. Your share is at the triage desk.'],
     landedCrew: ['Good work, {player}. Your share is at the triage desk.'],
   },
+  // THE HAULER'S SUPPLY RUN (src/missions.js 'supply'; src/oldstationsite.js): what its first mate says, as a captain does
+  // on their run (bubbles; no recorded clips). The old station's own people's words in its hall are OLD_STATION below.
+  supply: {
+    tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
+    tuned: ['The core is steady. Back to your seat, {player}.'],
+    tunedFree: ['The core is steady. Good work, {player}.'],
+    backJump: ['Back to your seat, {player}. The jump is yours.'],
+    backDock: ['Back to your seat, {player}. The docking is yours.'],
+    backAway: ['Back to your seat, {player}. Take us clear of their bridge.'],
+    // (in the seat at our dock: the Hauler lets go of the bridge)
+    letGo: ['Everything is loaded. Letting go of the bridge.', 'The supplies are aboard. Letting go of the bridge.'],
+    out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
+    crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
+    there: ['There it is: the old station. Hardly a light on.', 'That\'s the jump. There\'s the old station, nearly dark.'],
+    thereAgain: ['There\'s the old station. Look at all those lights now.', 'That\'s the jump. The old station, all lit up.'],
+    // (out of the wormhole: who takes the Hauler in to their old bridge)
+    dock: ['Their old bridge still stands, on the far side. Take us in to it, {player}: line up with the blue ship.', 'Round to their bridge, {player}, and dock us: the blue ship shows where.'],
+    dockCrew: ['Their old bridge still stands. Take us in to it, {pilot}.', 'Round to their bridge, {pilot}, and dock us.'],
+    // (docked: across their bridge on foot)
+    docked: ['Docked. Their bridge held! Go across, {player}: they are waiting for us.', 'We\'re docked. Across the bridge with you, {player}. They will want to see a new face.'],
+    dockedAgain: ['Docked. Go across and say hello, {player}, while we unload.'],
+    // (the supplies are off and the crew member has been across: home)
+    done: ['Every pallet is off. Come back aboard, {player}: we\'re going home.'],
+    away: ['Everyone is aboard. Take us clear of their bridge, {player}.'],
+    awayCrew: ['Everyone is aboard. Take us clear, {pilot}.'],
+    clear: ['Clear of the old station. Work out the jump home, pilot.'],
+    clearCrew: ['Clear of the old station. {pilot} has the jump home.'],
+    home: ['There\'s our station. Round to the bridge, {player}, and dock us.', 'Home. Take us in to our bridge, {player}.'],
+    homeCrew: ['There\'s our station. {pilot} has the docking.', 'Home. {pilot} takes her in to the bridge.'],
+    landed: ['We\'re home, {player}. Your share is at the shipping computer in Cargo.'],
+    landedCrew: ['Good work, {player}. Your share is at the shipping computer in Cargo.'],
+  },
   // CAPTAIN VEGA'S EXPLORING RUN (src/missions.js 'explore'): the lines every run of his has. What each run is about,
   // and his words for it (out, at each place, the lead, the finding), are the run's own scenario's, laid over these:
   // src/exploreplan.js SCENARIOS. {sensor}: whoever scans at the survey table (the crew member, or his own)
@@ -189,6 +240,8 @@ export const TALKS = [
   // (a rescue the crew member was on: how many came home and from where, as the station's line says it)
   { id: 'rescue-3', news: 'rescue', lines: ["The {ship} brought {people} home today!", "From where?", "{from}. They were asleep in stasis pods.", "I'm so glad they're safe."] },
   // (a finding of Captain Vega's exploring run: news.js 'find', its {what} the run's own words)
+  // (the supply run that saved the old station: src/trip.js, news.js 'supply')
+  { id: 'supply-1', news: 'supply', lines: ['The Hauler got through to the old station!', 'With the fuel cells?', 'Its lights are back on, they say.'] },
   { id: 'find-1', news: 'find', about: ['vega'], lines: ["Captain Vega's crew found {what}!", "Way out past the charts?", "That's what I heard. Who knows what they'll find next."] },
   { id: 'planet-1', news: 'planet', lines: ["They found a new planet people could live on!", "Really? What's it called?", "{planet}. It has oceans, I heard.", "Oceans! I'd go just to swim."] },
   { id: 'planet-2', news: 'planet', lines: ["Would you live on {planet}?", "Only if they have a galley as good as ours."] },

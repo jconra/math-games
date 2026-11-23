@@ -214,9 +214,13 @@ export function boxDist(p, B = OUTSIDE_BOX) { return Math.hypot(Math.max(B.min[0
 // is the jump offered? (was: whether it was offered a moment ago: once out, it stays offered until the ship is well back in)
 export const clearOf = (p, was = false) => boxDist(p) > (was ? AREA.back : AREA.out);
 // where a ship comes out of its jump home: out from its own bay door, nose toward it
-export function arrival(cfg = MINER) { return { p: [DOOR.face + ARRIVE.out, cfg.hover + ARRIVE.up, cfg.pad[2]], q: facing([-1, 0, 0]) }; }
+// (a ship that docks, cfg.dock: out from its dock the way it backs off from it, nose toward the station)
+export function arrival(cfg = MINER) {
+  if (cfg.dock) { const A = cfg.dock.away, P = cfg.pad; return { p: [P[0] + A[0] * ARRIVE.out, P[1] + ARRIVE.up, P[2] + A[2] * ARRIVE.out], q: facing([-A[0], 0, -A[2]]) }; }
+  return { p: [DOOR.face + ARRIVE.out, cfg.hover + ARRIVE.up, cfg.pad[2]], q: facing([-1, 0, 0]) };
+}
 // in its bay, or any of it still in the doorway (its tail is 9 m behind its middle; higher than this it would not fit under the lintel)
-const inBay = (p, cfg) => p[0] < DOOR.face + 11 && p[0] > cfg.pad[0] - 22 && Math.abs(p[2] - cfg.pad[2]) < DOOR.w / 2 + 1 && p[1] > cfg.pad[1] - 1 && p[1] < cfg.pad[1] + 3.6;
+const inBay = (p, cfg) => !cfg.dock && p[0] < DOOR.face + 11 && p[0] > cfg.pad[0] - 22 && Math.abs(p[2] - cfg.pad[2]) < DOOR.w / 2 + 1 && p[1] > cfg.pad[1] - 1 && p[1] < cfg.pad[1] + 3.6;
 
 // ── A SHIP ──
 export function makeShip(cfg = MINER, at = null) {
@@ -282,11 +286,12 @@ export function stepShip(S, input, dt, solid = null) {
     if (flies && !S.power) S.power = true;
     S.engine += ((S.power ? 0.15 : 0) - S.engine) * Math.min(1, dt * 3);
     if (!(flies && S.power && S.engine > 0.1)) return S;
-    S.landed = false;
+    S.landed = false; if (S.cfg.dock) S.undocked = true;
   }
   // (the autopilot's own way down goes on only while the autopilot asks for it: switched off, the pilot has the ship)
-  if (S.settle && !C.settle) S.settle = null;
-  if (S.settle) { settle(S, dt, solid); return S; }
+  // (a ship that docks, taken by its dock's clamps: they bring it in whoever was flying)
+  if (S.settle && !C.settle && !(S.cfg.dock && S.settle.hand)) S.settle = null;
+  if (S.settle) { if (S.cfg.dock) settleDock(S, dt); else settle(S, dt, solid); return S; }
   const vb0 = unturn(S.q, S.v), wy0 = S.w[1];
   // (the mouse held by the game turns the nose outright)
   if (C.nudge[0] || C.nudge[1]) S.q = qUnit(qMul(S.q, qMul(qOf([0, 0, clamp(C.nudge[0], -FEEL.nudge, FEEL.nudge)]), qOf([0, -clamp(C.nudge[1], -FEEL.nudge, FEEL.nudge), 0]))));
@@ -315,6 +320,9 @@ export function stepShip(S, input, dt, solid = null) {
   const fy = floorUnder(S); S.on = false; S.tilt = tiltOf(S);
   if (fy != null) { const low = lowest(S); if (low < fy) { S.p[1] += fy - low; if (S.v[1] < 0) S.v[1] = 0; } S.on = low - fy <= LAND.touch; }
   const P = S.cfg.pad, up = turn(S.q, [0, 1, 0])[1];
+  // A SHIP THAT DOCKS (cfg.dock: no floor under it anywhere): close beside its dock, slow and turned as it lies there,
+  // the dock's clamps take it (dockStep)
+  if (S.cfg.dock) { dockStep(S, C); return S; }
   // THE AUTOPILOT, low and slow over the ship's own pad, asks it to set itself down
   if (C.settle) { if (C.move[1] <= 0 && Math.hypot(S.p[0] - P[0], S.p[2] - P[2]) < SETTLE.reach && S.p[1] - P[1] < SETTLE.low && Math.hypot(S.v[0], S.v[2]) < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 }; }
   // A PILOT'S OWN LANDING: on the floor, not held up off it, and not rolled over too much: its legs take the floor
@@ -623,6 +631,70 @@ function settle(S, dt, solid) {
   if (lined && S.p[1] - P[1] < 0.003) { park(S); S.settle = null; S.justLanded = true; }
 }
 
+// ── A SHIP THAT DOCKS (cfg.dock: { away, nose }, src/fleet.js DOCKED; the Hauler at the bridge's end, and at the old
+// station's own bridge). Its pad is where it lies docked, out in space: nothing is under it, so it is never "down" on a
+// floor. Docked is the same `landed` as a ship on its pad (the power's switch, the seat's Get up, the lift-off that
+// leaves it: here the undocking). It comes in from its side, along `away`:
+//   - THE AUTOPILOT brings it to just off its dock and asks it in (its `down` leg, as over a pad);
+//   - A PILOT'S OWN DOCKING: brought close beside the dock, slow, level and turned nearly as it lies there (DOCKING), the
+//     dock's clamps take it: it is lined up and drawn in the last of the way, exactly onto its place (its crew door has
+//     to meet the tunnel's end, so docked is never crooked: unlike a hangar's floor, where it stands as it was put).
+//     A ship that has just undocked is not taken again until it has been DOCKING.free away. ──
+export const DOCKING = { free: 6, grab: 2.6, side: 1.4, slow: 1.6, turn: 14, tilt: 10, hold: SETTLE.hold + 0.6 };
+// how far out from its dock along the way it backs off, and how far off that line (m)
+export function dockOff(S) { const A = S.cfg.dock.away, rel = sub(S.p, S.cfg.pad), out = dot(rel, A); return { out, side: len(sub(rel, mul(A, out))), dist: len(rel) }; }
+function dockStep(S, C) {
+  const O = dockOff(S), sp = len(S.v), up = turn(S.q, [0, 1, 0])[1];
+  if (S.undocked && O.dist > DOCKING.free) S.undocked = false;
+  // (the autopilot, stopped just off the dock: in)
+  if (C.settle) { if (O.dist < SETTLE.reach && sp < SETTLE.slow && up > SETTLE.level) S.settle = { t: 0 }; return; }
+  if (C.auto || S.undocked) return;
+  const e = vOf(qMul(S.q, qConj(parkedTurn(S.cfg)))), deg = len(e) * 180 / Math.PI;
+  if (O.out > -0.4 && O.out < DOCKING.grab && O.side < DOCKING.side && sp < DOCKING.slow && deg < DOCKING.turn && tiltOf(S) < DOCKING.tilt) S.settle = { t: 0, hand: true };
+}
+// drawn in by the dock: turned as it lies there and brought onto its line while it is held SETTLE.hold off, then
+// straight in (the same sums and speeds as setting down over a pad, sideways)
+function settleDock(S, dt) {
+  const T = S.settle, P = S.cfg.pad, A = S.cfg.dock.away, G = SETTLE; T.t += dt;
+  const q0 = parkedTurn(S.cfg), e = vOf(qMul(S.q, qConj(q0))), ang = len(e);
+  const rel = sub(S.p, P), out = dot(rel, A), sideV = sub(rel, mul(A, out)), off = len(sideV);
+  const lined = ang < 0.012 && off < 0.05 && !S.padBusy, wantOut = lined ? 0 : Math.max(G.hold, Math.min(out, DOCKING.grab));
+  const stepA = Math.min(ang, Math.max(0.05, Math.min(G.turn, ang * 3.5)) * dt);
+  S.q = ang < 1e-6 ? [...q0] : qUnit(qMul(qOf(mul(e, -stepA / ang)), S.q));
+  const was = [...S.p], stepM = Math.min(off, Math.max(0.05, Math.min(G.move, off * 2.2)) * dt);
+  if (off > 1e-6) S.p = sub(S.p, mul(sideV, stepM / off));
+  S.p = add(S.p, mul(A, clamp(wantOut - out, -G.down * dt, G.down * dt)));
+  S.v = mul(sub(S.p, was), 1 / Math.max(dt, 1e-6)); S.w = [0, 0, 0]; S.acc = [0, 0, 0]; S.spin = 0;
+  S.engine += (0.15 - S.engine) * Math.min(1, dt * 2.5);
+  if (lined && Math.abs(dot(sub(S.p, P), A)) < 0.003) { park(S); S.settle = null; S.undocked = false; S.justLanded = true; }
+}
+// the autopilot's way out from a dock and clear of the station: docked or still beside the bridge, straight out from the
+// station's side first, turned as it lies; then away from the station's middle, as any ship outside
+function planLeaveDock(S, solid) {
+  const c = S.cfg, P = c.pad, A = c.dock.away, legs = [];
+  let from = S.p;
+  if (S.landed || len(sub(S.p, P)) < 30) { from = [P[0] + A[0] * 34, S.landed ? P[1] : S.p[1], P[2] + A[2] * 34]; legs.push({ to: from, face: S.landed ? parkedNose(c) : unit([turn(S.q, [1, 0, 0])[0], 0, turn(S.q, [1, 0, 0])[2]]), speed: 5, near: 2, stop: true }); }
+  else { const off = backOff(S, solid); if (off.length) { legs.push(...off); from = off[0].to; } }
+  // (a dock with no station of ours round it, the old station's: clear is simply well out from the dock)
+  if (c.far) { const d = len(sub(from, P)); if (d < c.far) legs.push({ to: add(from, mul(unit(sub(from, P)), c.far - d + 10)), speed: FEEL.speed.forward, near: 4, stop: true }); return legs; }
+  const mid = [(OUTSIDE_BOX.min[0] + OUTSIDE_BOX.max[0]) / 2, (OUTSIDE_BOX.min[1] + OUTSIDE_BOX.max[1]) / 2, (OUTSIDE_BOX.min[2] + OUTSIDE_BOX.max[2]) / 2];
+  const dir = unit(sub(from, mid)), need = Math.max(0, AREA.out + 30 - boxDist(from));
+  if (need > 0) legs.push({ to: add(from, mul(dir, need + 20)), speed: FEEL.speed.forward, near: 4, stop: true });
+  return legs;
+}
+// the autopilot's way in to a dock: round the station to a gate straight out from the dock, in along that line turned
+// as it will lie, stopped just off the dock, and in (its `down` leg: the dock takes it)
+function planLandDock(S, solid) {
+  const c = S.cfg, P = c.pad, A = c.dock.away, nose = parkedNose(c);
+  if (onPad(S)) return [];
+  const at = (k) => [P[0] + A[0] * k, P[1] + A[1] * k, P[2] + A[2] * k], gate = at(70), legs = S.landed || c.far ? [] : backOff(S, solid), from = legs.length ? legs[0].to : S.p;
+  const O = dockOff(S), lined = !legs.length && O.out > 8 && O.out < 76 && O.side < 7;
+  if (!lined) { for (const w of c.far ? [gate] : wayRound(from, gate)) legs.push({ to: w, speed: FEEL.speed.forward, near: 6, stop: true }); const last = legs[legs.length - 1]; last.stop = false; last.then = 10; }
+  legs.push({ to: at(14), face: nose, speed: 10, near: 1.5, then: 3 });
+  legs.push({ to: at(DOCKING.hold), face: nose, speed: 2.5, near: 0.4, stop: true }, { down: true });
+  return legs;
+}
+
 // ── THE AUTOPILOT: a plan is a list of legs; fly(S, plan, dt) gives the controls it holds now ──
 // a leg: { to: [x, y, z], face: [x, y, z] the way the nose points (none: along the way), speed, near, stop (it ends
 // stopped) or then (it ends no faster than this) }
@@ -686,6 +758,7 @@ export function outOfOtherBay(S) {
 }
 // out of the hangar and clear of the station (solid: what it bumps into, if a start beside a wall is to be looked after)
 export function planLeave(S, solid = null) {
+  if (S.cfg.dock) return planLeaveDock(S, solid);
   const out = outOfOtherBay(S); if (out) return [...out.legs, ...planLeave({ ...S, p: out.at, landed: false }, solid)];
   const c = S.cfg, P = c.pad, clear = OUTSIDE_BOX.max[0] + AREA.out + 30;
   if (S.landed || inBay(S.p, c)) return [
@@ -701,6 +774,7 @@ export function planLeave(S, solid = null) {
 }
 // in through the bay door and down on the pad
 export function planLand(S, solid = null) {
+  if (S.cfg.dock) return planLandDock(S, solid);
   const c = S.cfg, P = c.pad, y = P[1] + c.hover;
   const over = { to: [P[0], P[1] + c.low, P[2]], face: parkedNose(c), speed: 3, near: 0.3, stop: true }, down = { down: true };
   if (onPad(S)) return [];
@@ -727,6 +801,8 @@ export function fly(S, plan, dt = 1 / 60) {
       // (settle: the autopilot asks the ship to set itself down; a hand pilot's controls never do)
       if (S.settle) return { ...autoControls(), settle: true };
       const C = { ...autoControls(), settle: true }, P = S.cfg.pad;
+      // (a ship that docks: held just off its dock, turned as it is; the dock takes it from there)
+      if (S.cfg.dock) { const A = S.cfg.dock.away, b = unturn(S.q, mul(sub([P[0] + A[0] * DOCKING.hold, P[1] + A[1] * DOCKING.hold, P[2] + A[2] * DOCKING.hold], S.p), 1.2)); C.move = [clamp(b[0] / 3, -1, 1), clamp(b[1] / 3, -1, 1), clamp(b[2] / 3, -1, 1)]; level(S, C, turn(S.q, [1, 0, 0])); return C; }
       // (over the pad and level: down; the ship sets itself down from there)
       const off = [P[0] - S.p[0], 0, P[2] - S.p[2]], b = unturn(S.q, mul(off, 1.2));
       C.move = [clamp(b[0] / 3, -1, 1), S.p[1] - P[1] > SETTLE.low - 0.25 ? -0.25 : 0, clamp(b[2] / 3, -1, 1)];
@@ -813,7 +889,7 @@ export function guideTurn(S) { const q0 = parkedTurn(S.cfg); return [[1, 0, 0], 
 // getUp: the ship is down where the seat lets them out (the seat's own prompt says so too)
 // field: out at the rocks: nothing to land on and no autopilot of its own there (a tapped rock is where the autopilot
 // flies, in the drill's view); task: the words of the button that switches back to the drill, for whoever has it
-export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false, getUp = false, field = false, task = '' } = {}) {
+export function helpFor(mode, { pilot = true, auto = false, behind = false, canJump = false, touch = false, getUp = false, field = false, task = '', dock = false } = {}) {
   const view = [touch ? 'View' : 'V', behind ? 'See from the cockpit' : 'See from behind'], look = behind && !touch ? [['R', 'Hold: look round the ship']] : [];
   if (field && pilot && !auto) {
     const back = task ? [[touch ? task : 'M', touch ? 'Stop flying: back to the drill' : task]] : [], claw = [['', 'Fly up to a rock: the claw takes it']];
@@ -824,6 +900,8 @@ export function helpFor(mode, { pilot = true, auto = false, behind = false, canJ
   if (!pilot) return [['', 'The crew\'s pilot is flying'], ...out, view, ...look];
   const autoLine = [touch ? 'Autopilot' : 'T', auto ? 'Autopilot off: fly it yourself' : 'Autopilot: it flies for you'], jump = canJump ? [[touch ? 'Jump' : 'J', 'Jump']] : [];
   if (auto) return [['', 'The autopilot is flying'], autoLine, view, ...look, ...jump];
+  // (dock: a ship that is docked, not standing on a floor: the same key undocks it)
+  if (mode === 'seat' && dock) return touch ? [...out, ['Power', 'Switch the ship on or off'], ['Undock', 'Hold it: off the bridge'], autoLine, view] : [...out, ['P', 'Power'], ['Space', 'Undock'], autoLine, view];
   if (mode === 'seat') return touch ? [...out, ['Power', 'Switch the ship on or off'], ['Lift off', 'Hold it: up off the floor'], autoLine, view] : [...out, ['P', 'Power'], ['Space', 'Lift off'], autoLine, view];
   if (touch) return [['Fly', 'Left stick: forward, back, left, right'], ['Nose', 'Right stick: point the nose'], ['Up Down', 'Hold: up, down'], ['Roll', 'Hold: roll'], autoLine, view, ...jump];
   const keys = [['W S', 'Forward, back'], ['A D', 'Left, right'], ['Space C', 'Up, down'], ['Q E', 'Roll']];

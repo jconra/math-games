@@ -18,12 +18,19 @@
 //     (src/boarding.js, its line 'hauler'; the hooks below): built when someone is in the airlock or out on the bridge,
 //     dropped a few seconds after they have gone back in;
 //   - while the dock's job is up it draws its own bridge and has the Hauler as it needs it (hold); not drawn while a ship
-//     is out at the rocks (W.alone). The Hauler is not flown: nothing here moves it.
+//     is out at the rocks (W.alone).
+//   - THE HAULER FLOWN, ON A CONTRACT (the game's maker, HAUL4-1: "You can go on the hauler, but not fly it unless you have
+//     a contract to fly it"; the supply run, src/missions.js 'supply', src/trip.js): it lets go of the bridge and takes
+//     it again by the dock's job's own docking run backward and forward (seal: 1 docked .. 0 let go: its stair up, the
+//     tunnel drawn back into the bridge's end, its crew door shut, its lights red). Let go, nobody aboard can walk out
+//     of its crew door (a plug across the doorway, as the door shut). Its hull is then its keeper's to move
+//     (src/shiphull.js, the hooks below: `hull`).
 //
 //   const D = makeDockWalk({ W, walls, crew })    crew: () -> the crew member playing (or null)
 //   D.update(dt)       once a frame, before the boarding
 //   D.on               the bridge stands and can be walked
 //   D.hold(on)         the dock's job is up, drawing its own bridge (src/jobs/docklink.js)
+//   D.seal(k)          how far the Hauler is docked: 1 as it stands .. 0 let go of the bridge (D.sealed: k now)
 //   D.boarding         the hooks the boarding uses for the Hauler (src/boarding.js SHIPS 'hauler' `dock`)
 //   D.spots()          for the rigs: points along the way in, in the station's frame (null until it stands)
 //   D.stats            { tris, draws, ms, walls } once made
@@ -31,7 +38,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeMaterials } from '../kit/materials.js';
 import { DOCK, wholeBridge, meshesOf } from '../kit/dockbridge.js';
-import { portFrame, bridgeLight, tunnelMeshes, GLASS } from './jobs/docklink.js';
+import { portFrame, bridgeLight, tunnelMeshes, GLASS, DOCKING } from './jobs/docklink.js';
 import { bridgeStands } from './jobs/dock.js';
 
 // where a person can walk on it: voxels as fine as a ship's cabin's (the tunnel is the door's width), and a person a
@@ -92,9 +99,43 @@ export function makeDockWalk({ W, walls, crew = () => null }) {
     else walls.drop('dock:bridge');
     if (door && entry) { entry.locked = !on; if (on) W.keepShut.delete(door); else W.keepShut.add(door); }
     hauler();
+    if (!on) plug(false); else plug(api.sealed < 1);
   }
   // (the Hauler as the bridge has it, unless the dock's job has it just now)
-  function hauler() { const h = H(); if (!h?.pose || api.held) return; h.pose(api.on ? 'docked' : 'waiting'); h.lights(api.on ? 'green' : 'red'); }
+  function hauler() {
+    const h = H(); if (!h?.pose || api.held) return;
+    if (api.on && api.sealed < 1) { sealPose(); return; }
+    h.pose(api.on ? 'docked' : 'waiting'); h.lights(api.on ? 'green' : 'red');
+  }
+  // THE DOCKING, PART WAY (seal): the dock's job's own, by its own clock (src/jobs/docklink.js DOCKING: the lights, the
+  // door, the tunnel, the stair), k of the way through it
+  const _sc = new THREE.Matrix4(), _sh = new THREE.Matrix4(), END = DOCKING.stair[1];
+  const part = (s, [a, b]) => Math.max(0, Math.min(1, (s - a) / (b - a))), ease = (x) => x * x * (3 - 2 * x);
+  function sealPose() {
+    const h = H(), s = api.sealed * END, T = api.made && api.made.tunnel; if (!h?.pose) return;
+    h.pose({ crew: part(s, DOCKING.door), stair: part(s, DOCKING.stair) * h.docked.stair });
+    h.lights(s >= DOCKING.lights ? 'green' : 'red');
+    if (T) {
+      const z0 = h.tunnel.z0, kt = Math.max(0.02, ease(part(s, DOCKING.tunnel)));
+      T.group.visible = s >= DOCKING.tunnel[0];
+      T.tube.matrix.makeTranslation(0, 0, z0).multiply(_sc.makeScale(1, 1, kt)).multiply(_sh.makeTranslation(0, 0, -z0)); T.tube.matrixWorldNeedsUpdate = true;
+    }
+  }
+  // (the plug across the Hauler's doorway while it is let go: a slab just outside its crew door, the tunnel's width)
+  function plug(on) {
+    if (on === !!api.plugged || !api.made) return;
+    api.plugged = on;
+    if (!on) { walls.drop('dock:plug'); return; }
+    const T = H().tunnel, zf = T.face(DOCK.c), g = new THREE.BoxGeometry(T.half * 2 + 0.6, T.roof - T.floor + 0.4, 0.12);
+    g.applyMatrix4(new THREE.Matrix4().makeTranslation(0, (T.roof + T.floor) / 2, zf - 0.2)).applyMatrix4(frame);
+    walls.add('dock:plug', { solid: [g], up: [], voxel: WALK.voxel, r: WALK.r });
+  }
+  api.sealed = 1;
+  api.seal = (k) => {
+    const v = Math.max(0, Math.min(1, +k || 0)); if (v === api.sealed) return;
+    api.sealed = v;
+    if (api.on && !api.held) { if (v >= 1) hauler(); else sealPose(); plug(v < 1); }
+  };
   api.hold = (on) => { api.held = !!on; if (!on) hauler(); if (api.made) api.made.root.visible = api.on && !api.held && !W.alone; };
   api.update = () => {
     if (!frame && W.built) find();
@@ -112,6 +153,16 @@ export function makeDockWalk({ W, walls, crew = () => null }) {
     deck: () => H().deck,
     inside: (on) => (H() ? H().inside(on) : Promise.resolve(false)),
     walls: () => (H() ? H().walls() : { solid: [], up: [] }),
+    // (flown: its hull as its keeper has it, src/shiphull.js makeHull `dock`: its group, where it is docked, and that it
+    // is away from the bridge: then it is its keeper's to show, whatever else is put away)
+    hull: {
+      group: () => H()?.group || null,
+      matrix: () => H().matrix,
+      flown: (on) => { const h = H(); if (!h) return; h.flown = !!on; if (on) h.show(true); },
+    },
+    seal: (k) => api.seal(k), get sealed() { return api.sealed; },
+    // (the bridge as built, for whoever draws or walks it somewhere else: the old station's own, src/oldstationsite.js)
+    get made() { return api.made; }, frame: () => frame,
   };
   // (for the rigs: on the floor at the port's sill, on the bridge's deck at its middle and at its end, in the tunnel,
   // on the stair in the Hauler's doorway, and in its crew area just inside)

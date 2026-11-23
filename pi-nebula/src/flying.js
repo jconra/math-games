@@ -333,7 +333,7 @@ const SOLIDS = new Map();
 // (its own bay, and the other hangars' bays it can fly into by hand: cfg.others)
 export function solidFor(cfg, outside = null) {
   const key = cfg.id;
-  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: cfg.bay || bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles() : null }));
+  if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: cfg.dock ? null : cfg.bay || bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles(cfg.id) : null }));
   return SOLIDS.get(key);
 }
 
@@ -359,7 +359,10 @@ export function startFlying(ctx, opts = {}) {
   const { W, boarding, crane = null, hull = crane, outside = null, people = () => null, visit = null } = ctx;
   const cfg = opts.cfg || M.MINER, pilot = opts.pilot !== false, canvas = W.renderer.domElement;
   // (at the rocks: a body of its own, the top of this file; then there is no cabin, no crane and no station here)
-  const body = opts.body || null, overPlanet = !!(body && cfg.planet);
+  // (A SHIP THAT DOCKS, cfg.dock (src/fleet.js DOCKED, src/flymodel.js): the Hauler at the bridge's end, with no hangar,
+  // bay or floor; and at a far dock, the old station's own bridge, the same `body` as over a planet with the dock as its
+  // pad: the guide asks, the autopilot docks it)
+  const body = opts.body || null, overPlanet = !!(body && (cfg.planet || cfg.dock)), docks = !!cfg.dock;
   const B = body ? null : boarding.ships.find((s) => s.id === cfg.id);
   if (!body && (!B || !B.M)) throw new Error('flying: the ' + cfg.id + '\'s cabin is not in');
   if (!document.getElementById('pfl-css')) { const st = document.createElement('style'); st.id = 'pfl-css'; st.textContent = CSS; document.head.appendChild(st); }
@@ -428,6 +431,7 @@ export function startFlying(ctx, opts = {}) {
   document.body.appendChild(el);
   const $ = (s) => el.querySelector(s), $$ = (s) => [...el.querySelectorAll(s)];
   const helpEl = $('.pfl-help'), inv = $('.pfl-inv'), card = $('.pfl-card');
+  if (docks) $('[data-lift]').innerHTML = 'Undock <kbd>Space</kbd>';
   inv.checked = set.invertY;
   inv.addEventListener('change', () => { set.invertY = inv.checked; if (opts.onSettings) opts.onSettings({ ...set }); });
   let helpShut = null;      // (the help corner: open on a wide screen, behind its tab on a phone, until it is asked for or put away)
@@ -611,7 +615,8 @@ export function startFlying(ctx, opts = {}) {
     _D.compose(_p.set(...S.p), _q, _one).multiply(_T.makeTranslation(-cfg.pad[0], -cfg.pad[1], -cfg.pad[2]));
     // (how it is moving, for its thrusters: its push in the kit's frame, x its left, y up, z its nose; in the bay the
     // pods hold it up, out in space nothing needs to)
-    const hold = S.landed ? 0 : Math.max(0, Math.min(1, (DOOR.face + 8 - S.p[0]) / 12)), inBay = S.p[0] < DOOR.face + 8;
+    // (a ship that docks is never in a bay: out in space from the first)
+    const hold = S.landed || docks ? 0 : Math.max(0, Math.min(1, (DOOR.face + 8 - S.p[0]) / 12)), inBay = !docks && S.p[0] < DOOR.face + 8;
     hull.fly(_D, dt, { acc: _acc.set(-S.acc[2], S.acc[1], S.acc[0]), spin: S.spin, hold, engine: S.engine, heat: 1, x: S.p[0], z: S.p[2], height: inBay ? S.p[1] - cfg.pad[1] : null });
     boarding.fly(cfg.id, _D);
     now.multiplyMatrices(_D, B.M0); rig.matrix.copy(now); rig.matrixWorldNeedsUpdate = true;
@@ -655,8 +660,12 @@ export function startFlying(ctx, opts = {}) {
     // place on the floor (a ring under it and a stem down to it)
     const P = cfg.pad, B2 = cfg.bay, runs = [], run = (pts) => runs.push(pts), y0 = P[1] + 0.02;
     const seg = (a, b, step = 1.5) => { const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / step)), out = []; for (let i = 0; i <= n; i++) out.push([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, a[2] + (b[2] - a[2]) * i / n]); return out; };
-    { const ring = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; ring.push([P[0] + Math.cos(a) * HOLO.pad, y0, P[2] + Math.sin(a) * HOLO.pad]); } run(ring); }
-    run(seg([P[0] - 2.5, y0, P[2]], [P[0] + 2.5, y0, P[2]])); run(seg([P[0], y0, P[2] - 2.5], [P[0], y0, P[2] + 2.5]));
+    // (a dock: no pad's ring out in space; the bridge's own line instead, from the ship's side in to the station's)
+    if (docks) { const A = cfg.dock.away, yb = P[1] + 2.4, at = (k) => [P[0] - A[0] * k, yb, P[2] - A[2] * k]; run(seg(at(2.8), at(11.5))); for (const k of [2.8, 7.1, 11.5]) run(seg([at(k)[0], yb - 1.2, at(k)[2]], [at(k)[0], yb + 1.2, at(k)[2]])); }
+    else {
+      { const ring = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; ring.push([P[0] + Math.cos(a) * HOLO.pad, y0, P[2] + Math.sin(a) * HOLO.pad]); } run(ring); }
+      run(seg([P[0] - 2.5, y0, P[2]], [P[0] + 2.5, y0, P[2]])); run(seg([P[0], y0, P[2] - 2.5], [P[0], y0, P[2] + 2.5]));
+    }
     if (B2 && !overPlanet) {
       const z0 = P[2] - DOOR.w / 2, z1 = P[2] + DOOR.w / 2, xb = B2.x0, xd = DOOR.x;
       run([...seg([xd, y0, z0], [xb, y0, z0]), ...seg([xb, y0, z0], [xb, y0, z1]), ...seg([xb, y0, z1], [xd, y0, z1])]);
@@ -680,7 +689,8 @@ export function startFlying(ctx, opts = {}) {
     const bigWire = new THREE.LineSegments(wire.geometry, new THREE.LineBasicMaterial({ color: HOLO.line, transparent: true, opacity: GOAL.edges, toneMapped: false, fog: false }));
     big.add(bigGlass, bigWire);
     big.matrix.compose(new THREE.Vector3(...P), q0.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2)), new THREE.Vector3().setScalar(M.GUIDE.space));
-    if (!body) W.scene.add(big);
+    // (a far dock's, the old station's bridge: the blue ship stands there life size too)
+    if (!body || docks) W.scene.add(big);
     // everything put where the ship now sees it (the ship's frame [ahead, up, right] -> the picture's x right, y up, z back)
     function update() {
       let o = 0;
@@ -754,8 +764,8 @@ export function startFlying(ctx, opts = {}) {
     const capOn = guideOn && landing() && view === 'behind' && powered();
     $('.pfl-seat').hidden = !seatUp; $('.pfl-guide').hidden = !(keysOn && !touch) && !capOn; $('.pfl-keys').hidden = !keysOn || touch; holo.show(powered());
     { const c = $('.pfl-gcap'); c.hidden = !capOn; c.textContent = GUIDE_WORDS; }
-    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = overPlanet ? 'Down beside the wreck' : where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
-    const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body && !overPlanet, task: opts.task ? opts.task.words : '' });
+    if (seatUp) { $('.pfl-seat b').textContent = pilot ? 'Pilot\'s seat' : `The ${cfg.name || 'ship'}'s cockpit`; $('.pfl-seat small').textContent = docks ? 'Docked' : overPlanet ? 'Down beside the wreck' : where === 'pad' ? 'Down on your pad' : 'Down on the hangar floor'; }
+    const rows = M.helpFor(mode, { pilot, auto, behind: view === 'behind', canJump, touch, getUp: seatUp, field: !!body && !overPlanet, task: opts.task ? opts.task.words : '', dock: docks });
     helpEl.querySelector('ul').innerHTML = rows.map(([k, w]) => (k ? `<li><kbd>${k}</kbd><span>${w}</span></li>` : `<li class="is-word"><span>${w}</span></li>`)).join('');
     helpEl.classList.toggle('is-shut', helpShut == null ? touch : helpShut);
     $('.pfl-helptab span').textContent = touch ? 'Help' : 'Keys';
@@ -772,9 +782,16 @@ export function startFlying(ctx, opts = {}) {
     if (!flying && (sticks.l.id != null || sticks.r.id != null || sticks.l.x || sticks.l.y || sticks.r.x || sticks.r.y)) letGo();
     $('.pfl-ring').hidden = !(mode === 'fly' && !captured);
     // a few words on what is happening
-    const outThere = S.p[0] > DOOR.face + 2;
+    const outThere = docks || S.p[0] > DOOR.face + 2;
     // (at the rocks the run's own words stand, but while a pilot flies by hand)
     if (body) { if (pilot && !auto && !locked) say('Flying by hand'); return; }
+    // (a ship that docks: docked, away from its dock, back to it)
+    if (docks) {
+      say(S.landed ? (home ? 'Docked' : pilot && !auto ? 'At the controls: undock when you are ready' : 'Docked') : why === 'over' ? 'Rolled over too far to dock: roll it level'
+        : !pilot ? `${opts.flier || 'The crew\'s pilot'} is flying` : auto ? (goal === 'land' || (goal === 'free' && everClear) ? 'Autopilot: round to the bridge, and docked' : 'Autopilot: away from the bridge, clear of the station')
+        : S.settle ? 'The dock has it: docking' : goal === 'land' ? 'Fly to the bridge and line up with the blue ship' : canJump ? 'Clear of the station' : 'Fly clear of the station');
+      return;
+    }
     // (down at home: where; down where the seat cannot let them out, or lying rolled over: what to do about it)
     say(home && where === 'pad' ? 'Down on your pad' : home && where === 'floor' ? 'Down on the hangar floor'
       : where === 'edge' ? (edge === 'door' ? 'Too near the door for the crane: lift off and set down further in' : 'Too near the wall for the crane: lift off and set down nearer the middle')
@@ -881,7 +898,7 @@ export function startFlying(ctx, opts = {}) {
     if (c.near !== 0.03 || c.far !== (W.sees || 120)) { c.near = 0.03; c.far = W.sees || 120; c.updateProjectionMatrix(); }
     if (W.dust) W.dust.visible = dustWas;
   }
-  if (outside) outside.flying = cfg.room;
+  if (outside) outside.flying = cfg.room || cfg.id;
 
   const api = {
     S, cfg, get solid() { return job.finish(); },
@@ -933,7 +950,7 @@ export function startFlying(ctx, opts = {}) {
     // and none of the rooms' drifting dust out there
     late() {
       if (closed || !on || body) return;
-      const out = !!(outside && outside.out), k = out ? 1 : Math.max(0, Math.min(1, (W.camera.position.x - (DOOR.face - 6)) / 22));
+      const out = !!(outside && outside.out), k = out ? 1 : docks ? 0 : Math.max(0, Math.min(1, (W.camera.position.x - (DOOR.face - 6)) / 22));
       if (W.scene.fog && k > 0) { W.scene.fog.near += k * k * 1e4; W.scene.fog.far += k * k * 2e4; }
       if (W.dust) W.dust.visible = dustWas && !out;
     },
@@ -965,7 +982,7 @@ export function startFlying(ctx, opts = {}) {
       if (closed) return;
       const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15; letGo(); if (ownDash) D.last = null;
       goal = 'land'; offered = false; auto = !pilot; plan = null; startIn = pilot ? 0 : 0.8; on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; painted = '';
-      if (outside) outside.flying = cfg.room;
+      if (outside) outside.flying = cfg.room || cfg.id;
       pose(1 / 60); paint();
     },
     // (the lab: back on its pad with the power off, as when first sat down in; wherever it had been left standing)
@@ -974,21 +991,22 @@ export function startFlying(ctx, opts = {}) {
       M.park(S); stood(); S.power = false; S.engine = 0; auto = !pilot; plan = null; offered = false; everClear = false; letGo(); setMouse('pointer');
       voice.welcomed = false; voice.busy = 0; saying = null;      // (as newly sat down: its welcome again when the power comes on)
       if (ownDash) resetDash(D);      // (and its tank full again, nothing flown)
-      on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room;
+      on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; if (outside) outside.flying = cfg.room || cfg.id;
       pose(1 / 60); painted = ''; paint();
     },
     // A PART OF THE FLYING SKIPPED by a crew member who takes no part in it (src/trip.js: its skip button, while the
     // crew's own pilot flies). Coming home: down on its pad at once, as it is parked. Leaving: clear of the station at
     // once, out from its own bay door (where the jump home comes out), nose away from it.
     skip() {
-      if (closed || !on || body) return false;
+      // (at a far dock, the old station's bridge: docked at once, or clear of it at once, the same way)
+      if (closed || !on || (body && !docks)) return false;
       if (goal === 'land') {
         if (S.landed) return false;
         M.park(S); stood(); eArmed = !held.has('rollRight'); setMouse('pointer'); auto = !pilot; plan = null; fresh = true; painted = ''; pose(1 / 60); paint();
         if (opts.onLanded) opts.onLanded();
         return true;
       }
-      const A = M.arrival(cfg); M.place(S, A.p, M.facing([1, 0, 0])); plan = null; fresh = true; painted = ''; pose(1 / 60);
+      const A = M.arrival(cfg); M.place(S, A.p, M.facing(docks ? cfg.dock.away : [1, 0, 0])); plan = null; fresh = true; painted = ''; pose(1 / 60);
       return true;
     },
     // (the rigs, and the lab: the ship put somewhere at once)

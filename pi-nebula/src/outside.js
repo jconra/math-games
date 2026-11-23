@@ -197,7 +197,8 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       const shown = !W.alone && !W.seenFrom && !api.off;
       api.shown = out.group.visible = shown;
       // (the Hauler: with the outside, and while the dock's job has the camera out at the port, W.seenFrom)
-      hauler.show(!W.alone && !api.off);
+      // (flown, on a run of its own: its keeper has it, wherever it is: src/shiphull.js)
+      if (!hauler.flown) hauler.show(!W.alone && !api.off);
       // (a flown ship's camera, out past the hull: in none of the hangars' own boxes)
       const camIn = shown && api.flying ? hangarAt(camera.position) : null, outThere = !!(shown && api.flying) && !camIn;
       api.out = outThere; stand.visible = outThere && cheap;
@@ -228,11 +229,12 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
         }
       } else if (cheap) for (const s of standIns) if (s.curtain && s.o.room === camIn) s.k = 0;      // (in it: the real one, and nothing to clear on the way out)
     },
-    triangles() {
+    // (skip: a ship's id that is not among them: the Hauler flown is not something it bumps into itself)
+    triangles(skip = null) {
       const lists = [];
       out.group.traverse((o) => { if (o.isMesh && o.geometry.index && /^(hull:(band|tiers|trim)|outside:(gear|glow))$/.test(o.name)) lists.push({ position: o.geometry.attributes.position.array, index: o.geometry.index.array }); });
       for (const j of jets) lists.push(jetBox(j));
-      const hb = hauler.box(); if (hb) lists.push(hb);
+      const hb = skip === 'hauler' ? null : hauler.box(); if (hb) lists.push(hb);
       return lists;
     },
     dispose() { W.rooms = null; bulk(null); if (jetTimer) clearTimeout(jetTimer); hauler.dispose(); for (const o of [...owned, ...jetOwned]) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },

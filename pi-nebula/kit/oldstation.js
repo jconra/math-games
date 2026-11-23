@@ -5,7 +5,8 @@
 //     look    its look (kit/oldstation-plan.js OLD_LOOK: "old and worn", leaning red)
 //     mats    hullMaterials(look) (kit/hull.js)
 //     opts    shield   the material for the hangar doors' shields (kit/materials.js shieldMaterial); none: no shields
-//             seed     which of the windows are lit
+//             seed     which of the windows are lit; lit: how many ({ hull, tower }: kit/oldstation-plan.js LIT, LIT_SAVED)
+//             inside   its real dock airlock is built behind the port: no plain stand-in there
 //             fog      false: nothing here is fogged
 //   st.group           add it to the scene
 //   st.stats           { triangles: { hull, gear, glow, bridge, all }, draws, plates, windows, lit, meshBytes }
@@ -48,8 +49,8 @@ function bridgeMeshes(fog) {
 
 export function buildOldStation(look, mats, opts = {}) {
   const group = new THREE.Group(), fog = opts.fog !== false, own = []; group.name = 'old station';
-  const hull = buildHull(oldStationPlans({ seed: opts.seed }), { ...look, lap: 0 }, mats, { shield: opts.shield }); group.add(hull.group);
-  const gear = oldStationGear(), make = (a, mat, name) => {
+  const hull = buildHull(oldStationPlans({ seed: opts.seed, lit: opts.lit }), { ...look, lap: 0 }, mats, { shield: opts.shield }); group.add(hull.group);
+  const gear = oldStationGear({ inside: !!opts.inside }), make = (a, mat, name) => {
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(a.position, 3)); geo.setAttribute('color', new THREE.BufferAttribute(a.color, 3)); geo.setIndex(new THREE.BufferAttribute(a.index, 1));
     geo.computeBoundingSphere(); const m = new THREE.Mesh(geo, mat); m.name = 'old station: ' + name; group.add(m); own.push(geo, mat); return m;
   };

@@ -18,6 +18,8 @@
 //   planet    { planet }                       a new world found that people could live on
 //   find      { ship, captain, what, text }    anything else an exploring run the crew member was on found (src/trip.js,
 //             src/exploreplan.js findNews): what, in a few words; text, the station's line of it (announce.js 'found')
+//   supply    { ship, text }                   the Hauler's supply run that saved the old station (src/trip.js); text, the
+//             station's line of it (announce.js 'found')
 //   haul      { ship, ore, tons }              a ship back with a rich load of ore
 //   player    { player, job }                  the player did a job shift (main.js, after a job pays)
 // A piece of news is talked about for FRESH seconds of the game, then left be.

@@ -61,7 +61,8 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
     // (the example: an ordinary load of the Miner's eight tonnes, the game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000;
     // a rescue's: so much for each person brought home, four of them; an exploring run's: so much for each place
     // explored, two of them)
-    const share = shareOf([...mine]), sample = M.perPerson ? 4 * M.perPerson : M.perPlace ? (M.findPays || 0) + 2 * M.perPlace : 24000;
+    // (a supply run's: so much for each pallet of supplies delivered, four of them)
+    const share = shareOf([...mine]), sample = M.perPerson ? 4 * M.perPerson : M.perPlace ? (M.findPays || 0) + 2 * M.perPlace : M.perPallet ? 4 * M.perPallet : 24000;
     // (who does each job left to the crew: the ship has a crew of three, the captain and one of his crew with the crew
     // member: src/missions.js aboardOf)
     const by = Object.fromEntries(crewFor(M, [...mine], 'You', captain).map((c) => [c.role, c.name]));
@@ -75,9 +76,9 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
       : `<div class="pmc-role ${on ? 'is-mine' : 'is-crew'}" data-role="${r.id}">${inner}</div>`;
   }).join('')}</div>
       <p class="pmc-note">${roles.some((r) => !r.open) ? `${esc(roles.filter((r) => !r.open).map((r) => r.crew).join(' and '))} of ${esc(captain)}'s own crew ${roles.filter((r) => !r.open).length === 1 ? 'does the other job' : 'do the other jobs'} this trip.` : ''}${pick ? ' Tap a job to take it or leave it to the crew.' : ''}</p>
-      <div class="pmc-pay"><b>Your share: ${share}% of what the ${M.perPerson ? 'rescue pays' : M.perPlace ? 'run pays' : 'haul sells for'}</b>
+      <div class="pmc-pay"><b>Your share: ${share}% of what the ${M.perPerson ? 'rescue pays' : M.perPlace || M.perPallet ? 'run pays' : 'haul sells for'}</b>
         <p>${esc(M.paid)}</p>
-        <p>${M.perPerson ? `The rescue pays ${say(M.perPerson)} credits for each person brought home. Four people come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : M.perPlace ? `The run pays ${M.findPays ? `${say(M.findPays)} credits for what it finds and ${say(M.perPlace)} more` : `${say(M.perPlace)} credits`} for each place explored. Two places come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : `A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits.`}</p></div>
+        <p>${M.perPerson ? `The rescue pays ${say(M.perPerson)} credits for each person brought home. Four people come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : M.perPlace ? `The run pays ${M.findPays ? `${say(M.findPays)} credits for what it finds and ${say(M.perPlace)} more` : `${say(M.perPlace)} credits`} for each place explored. Two places come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : M.perPallet ? `The run pays ${say(M.perPallet)} credits for each pallet of supplies delivered. Four pallets come to ${say(sample)} credits and pay you ${say(payOf(sample, share))} credits.` : `A haul that sells for ${say(sample)} credits pays you ${say(payOf(sample, share))} credits.`}</p></div>
       <div class="pmc-btns"><button type="button" class="pmc-sign">Sign<kbd>E</kbd></button><button type="button" class="pmc-later">Not now<kbd>Esc</kbd></button></div>
     </section>`;
     el.querySelector('.pmc-sign').addEventListener('click', sign);

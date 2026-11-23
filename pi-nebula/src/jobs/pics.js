@@ -140,6 +140,18 @@ Object.assign(DRAW, {
     }
     return { svg: svg(y0 + (rows - 1) * dy + 30, s), line: '' };
   },
+  // THE PALLETS A SUPPLY RUN DELIVERED, to count (src/missions.js, the supply run's payout card): a loaded pallet for
+  // each (two crates on its boards), up to four to a row
+  pallets({ n }) {
+    const cols = Math.min(4, Math.max(1, n)), rows = Math.ceil(n / cols), dx = 70, dy = 58, x0 = W / 2 - dx * (cols - 1) / 2, y0 = 8;
+    let s = '';
+    for (let i = 0; i < n; i++) {
+      const x = x0 + (i % cols) * dx, y = y0 + Math.floor(i / cols) * dy;
+      s += `<rect x="${x - 22}" y="${y}" width="20" height="30" fill="${K.FILL2}" stroke="${K.INK}" stroke-width="1.3"/><rect x="${x + 2}" y="${y + 8}" width="20" height="22" fill="${K.FILL}" stroke="${K.INK}" stroke-width="1.3"/>`
+        + `<path d="M${x - 26} ${y + 32}h52v5h-52zM${x - 22} ${y + 37}v5M${x} ${y + 37}v5M${x + 22} ${y + 37}v5" fill="${K.FILL2}" stroke="${K.INK}" stroke-width="1.3"/>`;
+    }
+    return { svg: svg(y0 + rows * dy - 10, s), line: '' };
+  },
   // a load cut into d equal parts, n of them taken: each part a "?" until it is worked out
   // (unit: what the load is counted in, 'tonnes' or 'canisters'; it: what it is called over the bar, or none: "12 tonnes in all")
   fracbar({ whole, n, d, it = 'load', unit = 'tonnes' }) {

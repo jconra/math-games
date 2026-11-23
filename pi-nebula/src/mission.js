@@ -27,6 +27,15 @@
 //     waits AT THE EXPLORER'S OWN SURVEY TABLE aboard (payAt 'survey': its prompt there, Start (E), and the payout card
 //     on the survey table's own card, asked at the crew member's level at the table), the line leading to it.
 //
+//   - THE HAULER'S SUPPLY RUN TO THE OLD STATION (src/missions.js 'supply') the same way, but for who offers it: no
+//     captain walks the station with it. It is OFFERED AT THE SHIPPING DESK'S COMPUTER IN CARGO (the mission's `desk`:
+//     the job spot's own Start there brings up the contract's card, deskStart, once the old station has been found), it is
+//     the shipping clerk's contract, and nobody walks to the ship: signed, the cargo game is the Loader's work there
+//     (src/supplyrun.js: theirs at the computer and the forklift, or Cargo's crew's), then the line leads across the
+//     bridge to the Hauler at the dock; the run starts from its pilot's seat once the supplies are worked out; its
+//     keeper is the dock's own hull (src/shiphull.js `dock`); home, the share waits at the shipping computer (the cargo
+//     job's first card there, deskLive), and the run can be signed for again as a plain hauling run.
+//
 //   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people, crew, save, body, put, lib })
 //   mission.update(dt, P, playing) -> true while a trip has the player (seated: no walking, the trip's camera); on
 //                                    their feet out at the rocks, tuning the core, their walking is their own: false
@@ -36,7 +45,7 @@
 //                                                rescue: src/missions.js payAt)
 //   mission.offer(id), mission.start(), mission.state(), mission.trip   (the rigs)
 import * as THREE from 'three';
-import { missions, missionOf, contractOf, sign, collect, payoutOrder, tuneWhen, seedOf, MISSIONS } from './missions.js';
+import { missions, missionOf, contractOf, sign, collect, payoutOrder, tuneWhen, seedOf, MISSIONS, stationFound, supplyRuns } from './missions.js';
 import { CAPTAINS } from './lines.js';
 import * as E from './jobs/engine.js';
 import { JOB as smelter } from './jobs/smelter.js';
@@ -47,20 +56,21 @@ import { makeVisit } from './visit.js';
 import { planOf, foundOf } from './exploreplan.js';
 import { antennaRepaired } from './jobs/antenna.js';
 import { JOB as survey } from './jobs/survey.js';
+import { JOB as cargo } from './jobs/cargo.js';
 import { openPanel } from './jobs/panel.js';
 
 // (the line on the floor: to the run's ship, and to where the share waits)
 const LINE = { ship: '#ffd560', payout: '#ff8a3a' };
 // THE STATION JOBS WHERE A RUN'S SHARE WAITS (src/missions.js `payAt`): its payout card is the first card there (the
 // panel's `card` hook), asked at the crew member's own level of that job
-const PAY_AT = { smelter, medical, survey };
+const PAY_AT = { smelter, medical, survey, cargo };
 // (where each run goes, as the seat's prompt says it)
-const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts' };
+const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts', oldstation: 'the old station' };
 const shipName = (M) => (shipFacts(M.ship) || {}).name || 'ship';
 // (a run of the Miner's: its crane holds it on its pad for the run, and takes its canisters off it after)
 const minerRun = (m) => !!m && MISSIONS[m.id].ship === 'miner';
 
-export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, visit = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {}, lib = null }) {
+export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, visit = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {}, lib = null, supply = () => null, dock = null, inCargo = () => false }) {
   let card = null, trip = null, loading = false, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
   const nameOf = (id) => { const p = people(); const P = p && p.list.find((x) => x.id === id); return (P && P.name) || 'The captain'; };
   const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
@@ -74,12 +84,23 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // crew they are aboard, and the run begins with them on their feet)
   const promptFor = (m) => {
     const M = MISSIONS[m.id], ship = shipName(M), to = PLACE_WORDS[M.place] || 'the rocks';
-    const pilot = m.roles.includes('pilot'), seat = pilot || m.roles.includes('drill'), key = m.id + ':' + (pilot ? 'pilot' : seat ? 'seat' : 'ready'); if (key === prompted) return; prompted = key;
+    // (a supply run whose supplies are not worked out yet: nothing to fly out with; the seat says so and offers nothing)
+    const wait = loadWait(m);
+    const pilot = m.roles.includes('pilot'), seat = pilot || m.roles.includes('drill'), key = m.id + ':' + (wait ? 'wait' : pilot ? 'pilot' : seat ? 'seat' : 'ready'); if (key === prompted) return; prompted = key;
+    prompt.querySelector('.pnj-go').hidden = !!wait;
+    if (wait) { prompt.querySelector('b').textContent = `The ${ship}'s cockpit`; prompt.querySelector('small').textContent = wait; return; }
     prompt.querySelector('b').textContent = pilot ? 'Pilot\'s seat' : `The ${ship}'s cockpit`;
     prompt.querySelector('small').textContent = pilot ? `Sit at the controls and fly the ${ship} out` : seat ? `Sit down and ride out to ${to} with the crew` : `Tell the crew you are aboard: they fly out to ${to}`;
     prompt.querySelector('.pnj-go').innerHTML = (seat ? 'Sit down' : 'Ready') + '<kbd>E</kbd>';
   };
   document.body.appendChild(prompt);
+  // (THE SUPPLY RUN'S LOAD: worked out (the Loader's five questions done, or Cargo's crew's run), it loads itself once
+  // the crew member has left Cargo, src/supplyrun.js; not worked out yet, the Hauler has nothing to take: the words)
+  function loadWait(m) {
+    if (!m || !MISSIONS[m.id].desk) return null;
+    const S = supply(), r = S && S.contractRun ? S.contractRun(m.run) : null;
+    return r && (r.worked || r.done) ? null : 'The supplies are not worked out yet: the shipping computer in Cargo, down the lift';
+  }
   prompt.querySelector('.pnj-go').addEventListener('click', () => start());
   addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start(); } });
 
@@ -91,7 +112,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   function keeperOf(id) {
     if (id === 'miner') return crane;
     if (!hulls.has(id)) {
-      const s = boarding.ships.find((q) => q.id === id), H = s ? makeHull({ W, id, kit: s.flight, boarding, eyes: () => { const pp = people(); return pp && pp.eyes ? pp.eyes() : []; } }) : null;
+      // (the ship at the dock, the Hauler: its hull is the dock's own group, src/dockwalk.js `hull`)
+      const s = boarding.ships.find((q) => q.id === id), H = s ? makeHull({ W, id, kit: s.flight, boarding, dock: (s.dock && s.dock.hull) || null, eyes: () => { const pp = people(); return pp && pp.eyes ? pp.eyes() : []; } }) : null;
       if (H) Object.assign(H, { depart: () => true, arrive: () => null, back: () => { H.fly(null); return true; }, aboard: () => {} });
       hulls.set(id, H);
     }
@@ -104,6 +126,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   const visits = new Map();
   function visitOf(id) {
     if (id === 'miner' || !flightOf(id)) return visit;
+    // (a ship that docks goes into no hangar: nothing parked there is met)
+    if (flightOf(id).dock) return null;
     if (!visits.has(id)) visits.set(id, makeVisit({ W, boarding, outside, people, cfg: flightOf(id), crane }));
     return visits.get(id);
   }
@@ -150,18 +174,29 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     return meetAll.length ? meetAll[skip % meetAll.length] : null;
   }
   const meet = (id) => { const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(id, meetSpot); };
+  // (a run nobody walks to the ship for: the supply run, offered at a desk)
+  const walksTo = (m) => !!m && !MISSIONS[m.id].desk;
 
   // ── the line on the floor: to the run's ship with a contract signed (its first way in once its cabin is in, its
   // hangar till then), to where the share waits (the mission's payAt job) with a share waiting ──
   function lead(where) {
     const P = body(); if (!P || !guide) return;
     const m = contractOf(crew());
+    // (the ship at the dock: across the bridge, to just inside its crew door; from Cargo no line leads there (only the
+    // lift goes up): the cargo game's own last words say the way)
+    if (where === 'ship' && m && MISSIONS[m.id].desk) {
+      const sp = dock && dock.spots ? dock.spots() : null;
+      if (sp && !inCargo()) { guide.to(new THREE.Vector3(...sp.inside), { near: 1.2, label: 'mission', colour: LINE.ship }, P.pos); lineTo = 'dock'; }
+      return;
+    }
     if (where === 'ship') {
       const id = shipOf(m), sp = boarding.spots(id), e = W.R.places?.entrances?.[id];
       const at = sp && sp.ways && sp.ways[0] ? new THREE.Vector3(...sp.ways[0]) : e ? walls.snap(e[0] + 3, e[1] + 0.4, e[2], 4) : null;
       if (at) { guide.to(at, { near: 1.6, label: 'mission', colour: LINE.ship }, P.pos); lineTo = sp ? 'lift' : 'hangar'; }
     } else {
       const job = (m && MISSIONS[m.id].payAt) || 'smelter', s = jobs.spots.find((x) => x.job.id === job);
+      // (the shipping computer is down the lift, in Cargo: a line only from there)
+      if (job === 'cargo' && !inCargo()) { lineTo = null; return; }
       // (an exploring run's: the survey table aboard the Explorer, where it stands)
       const T = job === 'survey' ? boarding.core(shipOf(m), 'survey') : null;
       if (T) { guide.to(T.pos, { near: 1.0, label: 'mission', colour: LINE.payout }, P.pos); lineTo = job; }
@@ -174,16 +209,22 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     const M = missionOf(captain.id), c = crew();
     if (!M || !c || card || trip || contractOf(c)) return false;
     card = 'loading';
-    const p = people(); if (p) p.captain.hold(captain.id, 90);
+    const desk = !!M.desk;
+    const p = people(); if (p && !desk) p.captain.hold(captain.id, 90);
     import('./contract.js').then(({ openContract }) => {
       if (card !== 'loading') return;
       const was = input ? input.enabled : true; if (input) input.enabled = false;
       const done = () => { card = null; if (input) input.enabled = was && playing; };
-      card = openContract(document.body, { mission: M, captain: captain.name || nameOf(captain.id),
+      // (a supply run after the first: the same contract, as a plain hauling run)
+      const Mc = desk && M.aboutAgain && supplyRuns(c) > 0 ? { ...M, about: M.aboutAgain, name: 'Hauling run' } : M;
+      card = openContract(document.body, { mission: Mc, captain: captain.name || nameOf(captain.id),
         onSign: (roles) => {
           done();
           // (?tune=arrive or ?tune=leave in the address: this run's tuning of the core then, for trying each)
           const want = new URLSearchParams(location.search).get('tune'), m = sign(c, M.id, roles, Date.now(), want === 'arrive' ? () => 0 : want === 'leave' ? () => 0.999 : Math.random); if (!m) return;
+          // (the supply run: its cargo run begun with the contract, the one call that starts it: src/supplyrun.js; the
+          // Loader's own at the computer, or Cargo's crew's, already worked out and loading)
+          if (desk) { const S = supply(); if (S && S.contract) { const r = S.contract(roles.includes('cargo')); if (r) m.run = r.n; } save(c); toastUp(roles.includes('cargo') ? 'Signed. The supplies are yours to work out: start at this computer.' : 'Signed. Cargo\'s crew loads the Hauler: up the lift, across the bridge and aboard.'); return; }
           save(c);
           if (M.ship === 'miner') { crane.awayHeld = true; if (crane.mode === 'away') crane.arrive(); }      // (found parked and ready)
           // (he says so, turned to the crew member while he says it, and then walks to his ship)
@@ -192,11 +233,45 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           meet(captain.id); meeting = captain.id;
           lead('ship');
         },
-        onLater: () => { done(); missions.declined(captain.id); const pp = people(); if (pp) { pp.captain.say(captain.id, (CAPTAINS[captain.id] || {}).no); pp.captain.release(captain.id, 30); } } });
+        onLater: () => { done(); missions.declined(captain.id); if (desk) return; const pp = people(); if (pp) { pp.captain.say(captain.id, (CAPTAINS[captain.id] || {}).no); pp.captain.release(captain.id, 30); } } });
     }).catch((e) => { card = null; fail(e); });
     return true;
   }
   missions.on((captain, yes) => { if (yes && missions.ready(captain.id)) offer(captain); });
+  // ── A RUN OFFERED AT A DESK (the supply run, at the shipping computer: src/missions.js `desk`). deskOpen(at): is one
+  // offered there now, to this crew member (the old station found, no contract of theirs on)? deskStart(at): the job
+  // spot's Start there, pressed: the contract's card comes up in place of the job (true), or the job goes on (false).
+  // deskHint(at): the job's prompt line there for now: the offer, the share waiting, or what the run waits for ──
+  const deskOf = (at) => Object.values(MISSIONS).find((q) => q.desk === at) || null;
+  function deskOpen(at) { const M = deskOf(at), c = crew(); return !!(M && c && !contractOf(c) && stationFound(c)); }
+  function deskStart(at) { const M = deskOf(at); if (!M || !deskOpen(at) || card || trip) return false; return offer({ id: M.captain, name: M.by || 'The station' }); }
+  function deskHint(at) {
+    const M = deskOf(at), c = crew(), m = c && contractOf(c); if (!M || !c) return null;
+    if (m && m.id === M.id && m.state === 'payout') return hint(at);
+    if (m && m.id === M.id && m.state === 'signed') {
+      const S = supply(), r = S && S.contractRun ? S.contractRun(m.run) : null;
+      if (r && (r.worked || r.done)) return r.done ? 'The Hauler is loaded: up the lift, across the bridge and aboard' : m.roles.includes('cargo') ? 'Load the pallets with the forklift, or leave them to Cargo\'s crew' : 'Cargo\'s crew is loading the Hauler: up the lift, across the bridge and aboard';
+      return null;
+    }
+    if (deskOpen(at)) return supplyRuns(c) > 0 ? `${M.by} has a hauling run for the Hauler: have a look at the contract` : `${M.by} has a contract: supplies for the old station`;
+    return null;
+  }
+  // (a word at the top for a moment: the contract signed at the desk, where no captain says so)
+  const toastEl = document.createElement('div'); toastEl.className = 'pnj-prompt pmt-wide'; toastEl.hidden = true; toastEl.style.cssText = 'top: max(70px, env(safe-area-inset-top)); bottom: auto; pointer-events: none;';
+  toastEl.innerHTML = '<div class="pnj-pw"><b>Supply run</b><small></small></div>'; document.body.appendChild(toastEl);
+  function toastUp(w) { toastEl.querySelector('small').textContent = w; toastEl.hidden = false; toastT = 7; }
+  // THE SHIPPING COMPUTER'S CARD while a supply run's share waits there (the cargo job's panel, src/jobs/index.js
+  // `links`): the payout card first, as at the smelter's controls; paid, a last card saying so. null: nothing waits, the
+  // computer is the cargo game's own (src/jobs/cargolink.js)
+  function deskLive(at) {
+    const c = crew(), m = c && contractOf(c);
+    if (!m || m.state !== 'payout' || MISSIONS[m.id].payAt !== at) return null;
+    let paid = null;
+    return { card: () => (paid ? null : payoutCard(at)), head: (o) => payoutHead(o),
+      right: (q) => { if (q && q.order && q.order.payout != null) paid = { pay: q.order.payout, first: !!(m.payout && m.payout.first) }; },
+      over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'The old station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to the old station.'} ${deskOf(at).by} has another run whenever you want one: start at this computer.</p>`, buttons: [{ label: 'Done' }] } : null),
+      close() {} };
+  }
 
   // ── the trip: from the seat, by the crew member's own sitting down ──
   let meeting = null;
@@ -205,6 +280,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     if (!m || m.state !== 'signed' || trip || loading || card || !body()) return false;
     // (never from anywhere else: nobody is put in the seat without being seen to get there)
     if (boarding.where(body().pos) !== MISSIONS[m.id].ship + '/cockpit') return false;
+    // (a supply run: its supplies worked out; whatever is not in the containers yet goes in as the Hauler is boarded)
+    if (loadWait(m)) return false;
+    if (MISSIONS[m.id].desk) { const S = supply(); if (S && S.depart) S.depart(m.run); }
     loading = true; prompt.hidden = true;
     if (input) input.enabled = false;
     import('./trip.js').then(({ startTrip }) => {
@@ -217,7 +295,11 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (input: the keys and the thumb stick, for walking on a planet's ground, src/rescue.js: the trip walks them there)
       // (plan: an exploring run's, from its seed and what is so for this crew member now: src/exploreplan.js)
       const plan = MISSIONS[m.id].legs ? planOf(seedOf(c), { antenna: antennaRepaired(c), found: foundOf(c) }) : null;
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib, input, plan,
+      // (a run led by someone who walks no station, the supply run's first mate: their name on the run's words; dock: the
+      // Hauler's bridge, let go and taken again; pallets: what a supply run carries; again: the old station saved before)
+      const Mn = MISSIONS[m.id], S = supply(), cr = Mn.desk && S && S.contractRun ? S.contractRun(m.run) : null;
+      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: Mn.lead ? Mn.lead.name : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
+        dock, pallets: cr ? cr.pallets : 0, again: supplyRuns(c) > 0,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         onEnd: (r) => {
           const mine = MISSIONS[m.id].ship === 'miner', v = visits.get(MISSIONS[m.id].ship);
@@ -227,7 +309,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           if (r.aboard) kept = { A: r.aboard, captain: r.captain, ship: MISSIONS[m.id].ship };
           if (input) input.enabled = playing;
           // (home: the share waits; the captain, who waited by the ship, goes on with his day from where he is)
-          if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(m.captain, null); meeting = null; }
+          if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet && walksTo(m)) pp.captain.meet(m.captain, null); meeting = null; }
           else if (mine) crane.awayHeld = true;
         } });
       api.trip = trip;
@@ -306,13 +388,13 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     table.prompt.hidden = !T;
   }
 
-  let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0;
+  let synced = null, tail = null, tailT = 0, stoodAt = boarding.stands ?? 0, deskT = 0;
   // THE CREW ABOARD AFTER A RUN (src/aboard.js, handed over by the trip as it ends): drawn where the ship stands, going
   // about as they do, until the crew member is off the ship; then gone, and the captain back in the station
   let kept = null;
-  const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard) pp.aboard(kept.captain, false); kept = null; };
+  const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard && kept.captain) pp.aboard(kept.captain, false); kept = null; };
   const api = {
-    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
+    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskStart, deskHint, deskLive, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P; lastDt = dt;
       const c = crew(), m = c ? contractOf(c) : null;
@@ -324,11 +406,19 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       }
       // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
       // station's people are aboard; any other state: he is not)
-      const want = m && m.state === 'signed' ? m.captain : null;
+      const want = m && m.state === 'signed' && walksTo(m) ? m.captain : null;
       if (want !== meeting && people()) { if (meeting && people().captain.meet) people().captain.meet(meeting, null); meeting = want; if (want) meet(want); }
       // (the line reached the hangar: on to the lift's foot, once the ship's cabin is in; the ship stood somewhere else
       // (set back in its proper place while the crew member was away): the line to its lift where it is now)
       if (lineTo === 'hangar' && guide.active === 'mission' && m && boarding.spots(shipOf(m))) lead('ship');
+      // (a supply run signed and its supplies worked out: the line to the Hauler from wherever they are on the main deck,
+      // looked for now and then until they are aboard; a share waiting at the shipping computer: its line once in Cargo)
+      if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
+      if (playing && m && MISSIONS[m.id].desk && !trip && !card && guide && guide.active !== 'mission' && (deskT -= dt) <= 0) {
+        deskT = 3;
+        const aboard = (boarding.where(P.pos) || '').startsWith(MISSIONS[m.id].ship + '/');
+        if (m.state === 'signed' && !aboard && !loadWait(m)) lead('ship'); else if (m.state === 'payout' && inCargo()) lead('payout');
+      }
       if (stoodAt !== (boarding.stands ?? 0)) { stoodAt = boarding.stands ?? 0; if (lineTo === 'lift' && guide.active === 'mission' && !trip && playing) lead('ship'); }
       if (trip) {
         if (playing) trip.update(dt);
@@ -358,7 +448,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     get clip() { return trip ? trip.clip : null; },
     // (in the seat on a run, or at the ship's core with its card up: seen through their own eyes, their body put away)
     get seated() { return !!(trip && trip.seated) || !!table.panel; },
-    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; tableShut(); playing = false; },
+    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; toastEl.hidden = true; tableShut(); playing = false; },
     get table() { return { prompt: !table.prompt.hidden, panel: table.panel ? table.panel.state() : null }; },
     state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: trip && trip.tune ? trip.tune.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
       meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),

@@ -80,10 +80,14 @@ test('walked: the bridge stands for the crew member playing, its walls added, th
   // (the outer door is a door now: two halves sliding apart, as the inner door's; locked while it leads nowhere)
   const HANGAR = text('kit/hangar.js');
   assert.match(HANGAR, /p\.leaf\('airlock-outer:' \+ sx, \(q\) => half\(q, sx\), \{ slide: \[sx \* AR, 0, 0\], door: 0 \}\);/);
-  // the Hauler's line in the boarding's ships: its own deck plan, at the dock, near from the airlock, no flight
+  // the Hauler's line in the boarding's ships: its own deck plan, at the dock, near from the airlock; and how it is flown
+  // (its main engines), which it is only on a contract: the supply run (the game's maker, HAUL4-1: "You can go on the
+  // hauler, but not fly it unless you have a contract to fly it"; tests/supply.test.mjs)
   const line = BOARD.match(/export const DOCKED_SHIP = (\{[^\n]*\});/); assert.ok(line, 'DOCKED_SHIP');
   assert.match(line[1], /id: 'hauler', dock: true, near: \['airlock'\]/); assert.match(line[1], /bp: 'hauler-his-plan'/);
-  assert.ok(!/flight/.test(line[1]), 'not flown (HAUL3-6)');
+  assert.match(line[1], /flight: flight\(HB\)/);
+  // (nothing but a run of its own flies it: its keeper is made by the mission alone, src/mission.js keeperOf)
+  assert.ok(!/startFlying/.test(text('src/dockwalk.js')) && !/startFlying/.test(text('src/haulerdock.js')), 'the dock itself never flies it');
   assert.match(BOARD, /\n  DOCKED_SHIP,\n\];/);
   // (gone into only once the bridge stands; its cabin built and dropped as the others')
   assert.match(BOARD, /\(s\.near\.has\(here\) \|\| inShip === s\) && \(!s\.dock \|\| s\.dock\.open\(\)\)/);

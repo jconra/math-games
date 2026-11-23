@@ -97,6 +97,12 @@ export const ROLES = {
   // to and discover the secrets (detect radio signals, scan asteroid fields, detect mysterious gravity)")
   sensor: { id: 'sensor', name: 'Sensor operator', does: 'scanning for where to go next', share: 20, ready: true, crew: 'Sensor operator Arlo',
     look: { suit: 'civilian', head: 't10', hair: 'crop', colours: { job: 'explorer', skin: '#e0b08f', hair: '#5a3a22' } } },
+  // (the supply run's own job: working out how much to pack at the shipping computer and loading the pallets with the
+  // forklift, in Cargo before the Hauler leaves: the cargo game, src/supplyrun.js, src/jobs/cargo.js; the game's maker,
+  // STA2-5: "you go to the computer, do the questions to calculate out how much of the supplies you need to pack ...
+  // Then you go get in the forklift and load some pallets onto the containers")
+  cargo: { id: 'cargo', name: 'Loader', does: 'working out and loading the supplies', share: 20, ready: true, crew: 'Loader Hob',
+    look: { suit: 'smelter', head: 't2', hair: 'coil', colours: { job: 'hauler', skin: '#86522f', hair: '#17110d' } } },
 };
 // A ROLE AS ONE MISSION HAS IT: its own crew member for it (who does it for that captain, and how they look) and its own
 // words for what it does, where the mission says (MISSIONS[..].jobs); otherwise the role as above. Its share and
@@ -183,7 +189,56 @@ export const MISSIONS = {
       { id: 'home', kind: 'land', secs: 5 },
     ],
   },
+  // THE HAULER'S SUPPLY RUN TO THE OLD STATION (the plan: STATION2_PLAN.md in the helpers' notes, its pieces 6 to 10; the
+  // game's maker, HAUL3-6: "you don't fly it until you discover the other station and need to bring supplies to it.
+  // After that then you can go on hauling missions as much as you want to make money. It does have a dock, that is what
+  // the bridge is for."; HAUL4-1: "You can go on the hauler, but not fly it unless you have a contract to fly it").
+  // Offered once the old station has been found (Captain Vega's run that follows the call for help: src/exploreplan.js
+  // foundOf `distress`), AT THE SHIPPING DESK'S COMPUTER IN CARGO (`desk`: the Hauler has no captain walking the station;
+  // the contract is the shipping clerk's, `by`), and again as often as wanted afterwards, as a plain hauling run for pay.
+  // Its three jobs (RESC3-1: "all the missions should have pilot and engineer"): the pilot, the engineer, and THE LOADER,
+  // whose work is the cargo game in Cargo before the Hauler leaves (src/supplyrun.js: signed for it, the crew member
+  // works out the load at the computer and drives the forklift; otherwise Cargo's crew loads). Then aboard across the
+  // bridge; the Hauler undocks and flies clear ('leave': the same flying, from a dock); the jump; out of the wormhole by
+  // the old station ('deliver': src/oldstationsite.js: flown to its old bridge and docked, by hand or on autopilot;
+  // across their bridge on foot into the old station, where its people take the supplies and its lights come back up;
+  // aboard again and away); the core's tuning out there; the jump home and the docking at our own bridge ('land').
+  // Paid so much for each pallet of supplies delivered (SUPPLY). Aboard: the Hauler's own first mate (`lead`: who
+  // speaks on the run, as a captain does on theirs) and one of its crew.
+  supply: {
+    id: 'supply', captain: 'gus', by: 'Gus', desk: 'cargo', ship: 'hauler', name: 'Supply run', roles: ['pilot', 'engineer', 'cargo'], payAt: 'cargo', place: 'oldstation',
+    about: 'The old station called for help: fuel cells, food and spare parts. The supplies are worked out and loaded here in Cargo. Then the Hauler flies them out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
+    paid: 'You are paid your share of the run, here at the shipping computer, when you are back.',
+    // (after the first run, the old station saved: the same run as a plain hauling run)
+    aboutAgain: 'The old station trades with us now. A load for it is worked out and packed here in Cargo. Then the Hauler flies it out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
+    lead: { id: 'hauler-mate', name: 'First mate Tully', she: true, look: { suit: 'dockWorker', head: 't9', hair: 'wavy', colours: { job: 'hauler', skin: '#b5805a', hair: '#3b2a1e' } } },
+    jobs: {
+      pilot: { does: 'piloting to the old station and home', crew: 'Pilot Remy', she: false, look: { suit: 'atlantis1', head: 't1', hair: 'shortFull', colours: { job: 'hauler', uniform: '#3f8fe8', skin: '#e0b08f', hair: '#5a3a22' } } },
+      engineer: { crew: 'Engineer Sol', she: true, look: { suit: 'atlantis2', head: 't7', hair: 'afro', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } } },
+      cargo: { crew: 'Loader Hob', she: false },
+    },
+    steps: [
+      { id: 'out', kind: 'leave', secs: 4 },
+      { id: 'jumpOut', kind: 'jump', role: 'pilot', cards: CARDS, to: 'oldstation' },
+      { id: 'core', kind: 'tune', role: 'engineer', cards: CARDS, when: ['arrive', 'leave'] },
+      // (at the old station: the docking is the pilot's; everything else there is everyone's)
+      { id: 'site', kind: 'deliver', roles: ['pilot'] },
+      { id: 'jumpHome', kind: 'jump', role: 'pilot', cards: CARDS, to: 'home' },
+      { id: 'home', kind: 'land', secs: 5 },
+    ],
+  },
 };
+// WHAT A SUPPLY RUN PAYS: so much for each pallet of supplies delivered (a run loads 3 or 4: src/supplyrun.js RUN), the
+// same on every run. Set from the run's length beside a mining run's, as the rescue's was (the game's maker, RESC1-2;
+// the helpers' notes, HAULRUN_1.md, have the sums).
+export const SUPPLY = { perPallet: 7000 };
+MISSIONS.supply.perPallet = SUPPLY.perPallet;
+MISSIONS.supply.folk = [{ name: MISSIONS.supply.lead.name, she: MISSIONS.supply.lead.she }, ...Object.values(MISSIONS.supply.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
+// IS THE SUPPLY RUN OFFERED? Once the old station has been found (kept with the crew member by the exploring run that
+// found it: crew.explored.distress, src/exploreplan.js keepFind; read here as that file's foundOf reads it). And has
+// this crew member already made a run there (the station saved: crew.supply.runs, kept by land below)?
+export const stationFound = (crew) => !!(crew && crew.explored && typeof crew.explored === 'object' && crew.explored.distress);
+export const supplyRuns = (crew) => Math.max(0, Math.floor(+(crew && crew.supply && typeof crew.supply === 'object' && crew.supply.runs) || 0));
 // WHAT AN EXPLORING RUN PAYS: so much for what it finds, and so much more for each place explored (src/exploreplan.js
 // EXPLORE)
 MISSIONS.explore.perPlace = EXPLORE.perPlace; MISSIONS.explore.findPays = EXPLORE.find;
@@ -242,7 +297,8 @@ export function aboardOf(M, mine, captain = null) {
   const crewName = ROLES[first].crew, cap = captain || { id: M.captain, name: 'The captain' };
   const short = (n) => String(n).split(' ').pop();
   return [
-    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1), look: cap.id },
+    // (look: a captain of the station's own, by their id; a run's lead who walks no station, by their own look)
+    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1), look: cap.look || cap.id },
     { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [], look: ROLES[first].look ? { ...ROLES[first].look, position: first, crew: M.ship } : null },
   ];
 }
@@ -385,7 +441,7 @@ export function tuneWhen(crew) {
 // in eighths of a tonne). -> the payout, or null (no contract signed)
 // A RESCUE (a mission with `perPerson`): people, how many were brought home; the pay is so much for each of them
 // (RESCUE), the crew member's share of that: { kind: 'rescue', people, per, sold (what the rescue paid), share, pay, at }
-export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = null, now = Date.now() } = {}) {
+export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = null, pallets = 0, now = Date.now() } = {}) {
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
   const M = MISSIONS[m.id];
@@ -396,6 +452,16 @@ export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = n
     const k = Math.max(1, Math.floor(+places || 1)), base = M.findPays || 0, sold = base + k * M.perPlace, share = shareOf(m.roles);
     m.state = 'payout';
     m.payout = { kind: 'explore', places: k, per: M.perPlace, base, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}) };
+    return m.payout;
+  }
+  // (A SUPPLY RUN, a mission with `perPallet`: pallets, how many it delivered; so much for each (SUPPLY): { kind:
+  // 'supply', pallets, per, sold (what the run paid), share, pay, at, first (the run that saved the old station) }; and
+  // the crew member's runs there counted: crew.supply.runs)
+  if (M.perPallet) {
+    const k = Math.max(1, Math.floor(+pallets || 1)), sold = k * M.perPallet, share = shareOf(m.roles), first = supplyRuns(crew) === 0;
+    crew.supply = { ...(crew.supply && typeof crew.supply === 'object' ? crew.supply : {}), runs: supplyRuns(crew) + 1 };
+    m.state = 'payout';
+    m.payout = { kind: 'supply', pallets: k, per: M.perPallet, sold, share, pay: payOf(sold, share), at: now, ...(first ? { first: true } : {}) };
     return m.payout;
   }
   if (M.perPerson) {
@@ -450,6 +516,8 @@ const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ meta
 export function payoutLines(P, ask = null) {
   // (a rescue's: how many came home, what each is worth, what the rescue paid, the share)
   if (P.kind === 'rescue') return [['Brought home', `${P.people} ${P.people === 1 ? 'person' : 'people'}`], ['Each person', `${say(P.per)} credits`], ['The rescue paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+  // (a supply run's: how many pallets it delivered, what each is worth, what the run paid, the share)
+  if (P.kind === 'supply') return [['Delivered', `${P.pallets} ${P.pallets === 1 ? 'pallet' : 'pallets'}`], ['Each pallet', `${say(P.per)} credits`], ['The run paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   // (an exploring run's: how many places it explored, what each is worth, what the run paid, the share)
   if (P.kind === 'explore') return [...(P.base ? [['What it found', `${say(P.base)} credits`]] : []), ['Places explored', `${P.places} ${P.places === 1 ? 'place' : 'places'}`], [P.base ? 'Each place, more' : 'Each place', `${say(P.per)} credits`], ['The run paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   const lots = lotsOf(P), e = inEighths(lots);
@@ -469,9 +537,11 @@ function cansOf(P) {
 // (the forms below, in the rescue's own words). Every rescue pays a whole number of credits to every share (so much a
 // person is a whole thousand), so the share is always asked.
 // AN EXPLORING RUN'S, at the Explorer's survey table: the same, so many places explored at so much each (PER_WORDS).
-const PEOPLE = ['person', 'people'], PLACES = ['place', 'places'];
+// A SUPPLY RUN'S, at the shipping computer: the same, so many pallets delivered at so much each.
+const PEOPLE = ['person', 'people'], PLACES = ['place', 'places'], PALLETS = ['pallet', 'pallets'];
 const PER_WORDS = {
   rescue: { n: (P) => P.people, unit: PEOPLE, pic: 'people', key: 'people', perKey: 'perPerson', home: (n) => `Your crew is home with ${n} people from the pods.`, pays: 'The rescue pays', paid: 'the rescue', ask: 'How many people did your crew bring home?', each: 'person', one: 'for one person', many: 'people', title: 'Person by person', brought: 'Each person brought home is', count: 'Touch each person once as you count: 1, 2, 3 ...' },
+  supply: { n: (P) => P.pallets, unit: PALLETS, pic: 'pallets', key: 'pallets', perKey: 'perPallet', home: (n) => `Your crew is home. It took ${n === 1 ? 'one pallet' : `${n} pallets`} of supplies to the old station.`, pays: 'The run pays', paid: 'the run', ask: 'How many pallets did your crew deliver?', each: 'pallet', one: 'for one pallet', many: 'pallets', title: 'Pallet by pallet', brought: 'Each pallet delivered is', count: 'Touch each pallet once as you count: 1, 2, 3 ...' },
   explore: { n: (P) => P.places, unit: PLACES, pic: 'places', key: 'places', perKey: 'perPlace', home: (n) => `Your crew is home from ${n === 1 ? 'one place' : `${n} places`} nobody had explored.`, pays: 'The run pays', paid: 'the run', ask: 'How many places did your crew explore?', each: 'place', one: 'for one place', many: 'places', title: 'Place by place', brought: 'Each place explored is', count: 'Touch each place once as you count: 1, 2, 3 ...' },
 };
 function rescueOrder(m, grade, rand, paid) {
@@ -543,9 +613,9 @@ function rescueOrder(m, grade, rand, paid) {
   return null;
 }
 export function payoutOrder(m, grade = 0, rand = Math.random) {
-  const P = m.payout, per = P.kind === 'rescue' || P.kind === 'explore', who = rolesWords(m.roles), tenths = P.share / 10, lots = per ? [] : lotsOf(P);
+  const P = m.payout, per = P.kind === 'rescue' || P.kind === 'explore' || P.kind === 'supply', who = rolesWords(m.roles), tenths = P.share / 10, lots = per ? [] : lotsOf(P);
   // (what the whole came to, in its own words: a haul sold, a rescue paid, an exploring run paid)
-  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : P.kind === 'explore' ? 'The run paid' : 'The haul sold for';
+  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : P.kind === 'explore' || P.kind === 'supply' ? 'The run paid' : 'The haul sold for';
   if (per) { const r = rescueOrder(m, grade, rand, `Your share, ${P.share}%, is ${say(P.pay)} credits.`); if (r) return r; }
   // (A HALF CREDIT: a haul headed home early can sell for an odd 125 credits (1/8 of a tonne of nickel is 375), and a
   // tenth of that is not a whole credit. The pay is in whole credits, as it always was (payOf: to the nearest one), the

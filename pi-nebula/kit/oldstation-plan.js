@@ -64,7 +64,10 @@ export const DOORS = HANGARS.map((h) => ({ name: 'door of the ' + h.id, at: [BOD
 export const PORT = { z: 0, w: 3.6, h: 2.9, y: 0, jamb: 0.35, head: 0.35, proud: 0.7, deep: 0.9 };
 export const BRIDGE = { at: [BODY.x0 - PORT.proud, 0, PORT.z], out: [-1, 0, 0], across: [0, 0, 1] };
 
-function bodyPlan(seed) {
+// (lit: how many of the windows are lit, { hull, tower }: LIT while its power is failing; LIT_SAVED once the supply run's
+// fuel cells have come: src/oldstationsite.js)
+export const LIT_SAVED = { hull: 0.72, tower: 0.85 };
+function bodyPlan(seed, lit = LIT) {
   const doors = [
     ...HANGARS.map((h) => ({ tier: 1, step: 2, run: 0, at: RUN0 - h.z, w: DOOR.w, h: DOOR.h, y: 0, sill: 0, head: DOOR.head, jamb: DOOR.jamb, proud: 0.68 })),
     { tier: 1, step: 2, run: 4, at: PORT.z - (BODY.z0 + BODY.cut), w: PORT.w, h: PORT.h, y: PORT.y, sill: 0, head: PORT.head, jamb: PORT.jamb, proud: PORT.proud, shield: false },
@@ -72,31 +75,31 @@ function bodyPlan(seed) {
   // (the roof's plates leave a hole where the tower stands, the underside's where the keel hangs)
   const flats = [...flatsOf(offsetPath(BODY_PATH, -BODY_EDGE.roofIn, true), [boxPath(-8.2, 8.2, -8.2, 8.2, 3.6)], ROOF, true, bigIf(7)),
     ...flatsOf(offsetPath(BODY_PATH, -BODY_EDGE.bellyIn, true), [boxPath(-6.6, 6.6, -6.6, 6.6, 3)], BELLY, false, bigIf(7))];
-  return { name: 'body', closed: true, path: BODY_PATH, tiers: bodyTiers(), doors, flats, windows: { ...WIN, lit: LIT.hull, seed } };
+  return { name: 'body', closed: true, path: BODY_PATH, tiers: bodyTiers(), doors, flats, windows: { ...WIN, lit: lit.hull, seed } };
 }
 
 // ── THE TOWER AND THE KEEL (shape B's, over and under the body's middle; the tower 7.4 m shorter than B's) ─────────
 const towerPath = boxPath(-5, 5, -5, 5, 2.2);
 export const TOWER = { top: 36.6, mast: 9, beacon: 1.5 };
 export const KEEL = { foot: -26, mast: 8, beacon: 0.7 };
-function towerPlan(seed) {
+function towerPlan(seed, lit = LIT) {
   const R = ROOF, T = TOWER.top;
   // (its foot, a plain stretch, the control room's band standing out with its windows, a neck, the cap)
   const profile = [[3.2, R, 'in'], [3.2, R + 2], [1.4, R + 3.4], [0, R + 3.4, 'in'], [0, T - 11.6], [3.0, T - 8.6], [3.0, T - 5.2], [2.0, T - 4.2], [-1.6, T - 4.2, 'in'], [-1.6, T - 1], [-2.6, T]];
   const parts = [plates('band'), plates('tiers'), plates('tiers'), plates('band', BIG), plates('tiers'), ROW, plates('tiers'), plates('tiers'), plates('band'), plates('tiers')];
   return { name: 'tower', closed: true, path: towerPath, tiers: [{ name: 'tower', profile, parts }],
-    windows: { ...WIN, w: 2.2, h: 1.8, pitch: 2.9, lip: 0.4, sink: 0.15, cut: 0.4, lit: LIT.tower, bar: 0.1, seed }, flats: flatsOf(offsetPath(towerPath, -2.6, true), [], T, true, plain) };
+    windows: { ...WIN, w: 2.2, h: 1.8, pitch: 2.9, lip: 0.4, sink: 0.15, cut: 0.4, lit: lit.tower, bar: 0.1, seed }, flats: flatsOf(offsetPath(towerPath, -2.6, true), [], T, true, plain) };
 }
-function keelPlan(seed) {
+function keelPlan(seed, lit = LIT) {
   const F = KEEL.foot, profile = [[-1.4, F], [0, F + 1.4], [0, -16], [1.6, -14.4], [1.6, BELLY, 'in']];
-  return { name: 'keel', closed: true, path: towerPath, tiers: [{ name: 'keel', profile, parts: [plates('tiers'), plates('band', BIG), plates('tiers'), plates('band')] }], windows: { ...WIN, lit: LIT.hull, seed },
+  return { name: 'keel', closed: true, path: towerPath, tiers: [{ name: 'keel', profile, parts: [plates('tiers'), plates('band', BIG), plates('tiers'), plates('band')] }], windows: { ...WIN, lit: lit.hull, seed },
     flats: flatsOf(offsetPath(towerPath, -1.4, true), [], F, false, plain) };
 }
 
 // THE WHOLE HULL as plans for kit/hull.js buildHull.  seed: which of the windows are lit
 export function oldStationPlans(opts = {}) {
-  const seed = opts.seed ?? 7;
-  return [bodyPlan(seed), towerPlan(seed), keelPlan(seed)];
+  const seed = opts.seed ?? 7, lit = opts.lit || LIT;
+  return [bodyPlan(seed, lit), towerPlan(seed, lit), keelPlan(seed, lit)];
 }
 
 // ── THE RING, UPRIGHT ───────────────────────────────────────────────────────────────────────────────────────────
@@ -134,7 +137,9 @@ function slab(G, P, n, t, col) {
   for (let i = 0; i < 8; i++) { const o = i & 1, s = i & 2 ? t : -t, r = i & 4; const p = P[o ? (r ? 2 : 3) : (r ? 1 : 0)]; G.vert([p[0] + n[0] * s, p[1] + n[1] * s, p[2] + n[2] * s], col); }
   for (const q of [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]]) G.index.push(b + q[0], b + q[1], b + q[2], b + q[0], b + q[2], b + q[3]);
 }
-export function oldStationGear() {
+// (inside: its real dock airlock is built behind the port (the supply run: kit/rooms/oldstation.json), so the plain dark
+// way in drawn there for a ship flying past is left out)
+export function oldStationGear({ inside = false } = {}) {
   const G = new Tris(), L = new Tris();
   const [steel, dark, cell, frame, red] = ['steel', 'dark', 'cell', 'frame', 'red'].map(gearColour), dead = lin('#20242c');
   const R = RING, N = R.panels, span = 360 / N, X = [1, 0, 0];
@@ -176,7 +181,7 @@ export function oldStationGear() {
   // the plain rooms behind the hangar doors (our own stand-in, kit/outside-plan.js standInHangar)
   for (const h of HANGARS) standInHangar(G, BODY.x0 + 1, BODY.x1 - 0.12, h.z - 13.5, h.z + 13.5);
   // behind the port: a short dark way in, its round inner door shut
-  {
+  if (!inside) {
     const x0 = BODY.x0 - 0.05, x1 = x0 + PORT.deep, z0 = PORT.z - PORT.w / 2, z1 = PORT.z + PORT.w / 2, y0 = PORT.y, y1 = PORT.y + PORT.h, wallC = lin('#24282e');
     G.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], wallC); G.quad([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], wallC);
     G.quad([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]], wallC); G.quad([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], wallC);

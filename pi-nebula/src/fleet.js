@@ -130,7 +130,36 @@ export const SHIPS = [
   },
 ];
 export const SHIP_IDS = SHIPS.map((s) => s.id);
-export const shipOf = (id) => SHIPS.find((s) => s.id === id) || null;
+// ── THE SHIP THAT WAITS AT THE DOCK, NOT IN A HANGAR: THE HAULER (src/haulerdock.js; the game's maker, HAUL3-6: "It does
+// have a dock, that is what the bridge is for"; HAUL4-1: "You can go on the hauler, but not fly it unless you have a
+// contract to fly it, or if you bought the hauler"). The same shape of entry and the same one flying, with a `dock` where
+// the others have a hangar: where it is docked (the point of it that the others have on their pad's middle: its kit
+// frame's own middle, on its ground line), which way its nose points there, and the way it backs off from the bridge's
+// end (its starboard, straight out from the station's side). Its place is the station file's outer docking port's, out
+// along the bridge (kit/dockbridge.js) to where its crew door meets the tunnel (src/haulerdock.js inBridge); a test
+// holds these numbers to the station file (tests/supply.test.mjs), and a rig to the ship as drawn. It has no bay, no
+// floor and no pad to stand on: docked is where it stands (src/flymodel.js: cfg.dock). Its flight's screen is laid on
+// its dashboard's top in front of the pilot (its kit's dashboard has no raised screen of its own yet).
+// (16.05 m long, 5.5 m wide over its clamp frames and pods, 4.4 m to its antennas' tips: src/haulerdock.js SIZE)
+export const DOCKED = [
+  {
+    id: 'hauler', name: 'Hauler',
+    dock: { at: [-26.69, -0.58, 27.77], nose: [0, 0, 1], away: [-1, 0, 0] },
+    boxes: [{ a: [-8.05, 8.0], r: 2.75, h: 4.4 }],
+    model: [[-8.0, 3.6, -1.7, 1.7, 0.6, 3.9, 'body'], [3.6, 8.0, -1.4, 1.4, 0.7, 3.1, 'nose'], [4.4, 6.6, -1.0, 1.0, 3.1, 3.5, 'glass'],
+      [-5.9, 2.5, 1.7, 2.7, 0.6, 3.8, 'pod'], [-5.9, 2.5, -2.7, -1.7, 0.6, 3.8, 'pod'], [-8.05, -7.2, -1.3, 1.3, 1.0, 3.5, 'engine']],
+    hover: 0, low: 0,
+    // (the pilot's eyes over the middle of his deck plan's pilot's seat, 1.27 m over the cockpit's floor, looking as
+    // the Miner's pilot looks from theirs)
+    seat: { eye: [0.625, 2.62, 5.125], look: [0.225, 1.96, 12.985], lookPanel: [-1.575, 1.91, 12.985], eyeTall: [0.22, 2.62, 5.125], lookTall: [0.22, 0.42, 12.985], lookTallPanel: [0.29, -2.69, 12.985], fov: 62, fovTall: 78 },
+    behind: { back: 29, up: 9, ups: [9, 6, 3.6], look: [0, 2.4, 2], fov: 60, fovTall: 74 },
+    dash: { arc: 3.4, at: [0.22, 2.2, 5.93], w: 0.46, h: 0.14375, lean: 0.62 },
+    floor: null, shove: null, voice: 'hauler',
+  },
+];
+export const shipOf = (id) => SHIPS.find((s) => s.id === id) || DOCKED.find((s) => s.id === id) || null;
+// a turn about straight up that points the flight model's nose (+x) along [x, 0, z] (a level way), as a quaternion
+const turnTo = ([x, , z]) => { const a = Math.atan2(-z, x) / 2; return [0, Math.sin(a), 0, Math.cos(a)]; };
 // THE VIEW FROM A SEAT (src/flying.js, src/trip.js): the eyes and where they look, in the ship's kit frame, and the
 // view's width: the pilot's, or the other seat's across the ship (it looks where the pilot's does); with the job's
 // panel up, aside; on a screen held upright, from in front of the flight's screen (seat.eyeTall), for both seats
@@ -160,6 +189,14 @@ const made = new Map(), others = new Map();
 export function flightOf(id) {
   if (made.has(id)) return made.get(id);
   const s = shipOf(id); if (!s) return null;
+  // (the ship at the dock: its docked place its pad, turned as it lies there; no hangar, no bay, no floor, and no
+  // other hangar is open to it)
+  if (s.dock) {
+    const cfg = { id: s.id, room: null, hangar: null, pad: [...s.dock.at], points: pointsOf(s.boxes), hover: s.hover, low: s.low, seat: s.seat, behind: s.behind, dash: s.dash,
+      bay: null, floor: null, others: [], voice: s.voice, name: s.name, model: s.model, q0: turnTo(s.dock.nose), dock: { away: [...s.dock.away], nose: [...s.dock.nose] } };
+    made.set(id, cfg);
+    return cfg;
+  }
   const H = HANGARS[s.hangar], cfg = {
     id: s.id, room: 'ship-' + s.id, hangar: H.id,
     pad: padOf(s.hangar),
