@@ -159,7 +159,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
       link = s.job.link === 'dock' ? dockLink({ W, walls, job: s.job, spot: s.pos, crew: c, save: () => save(c) })
         : s.job.link === 'antenna' ? antennaLink({ W, job: s.job, crew: c, save: () => save(c), standing })
         : s.job.link && links[s.job.link] ? links[s.job.link]({ W, walls, job: s.job, crew: c, save: () => save(c) }) : null;
-      panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, onSave: () => save(c), onCredits: showWallet, onClose: done });
+      // (a link may say its cards pay nothing by themselves: the supply run's Loader's questions, whose share is the pay)
+      panel = openPanel(document.body, { job: s.job, crew: c, live: link || live[s.job.id] || null, pay: !(link && link.pay === false), onSave: () => save(c), onCredits: showWallet, onClose: done });
     }
     api.panel = panel;
     return true;

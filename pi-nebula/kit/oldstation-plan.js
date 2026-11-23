@@ -139,6 +139,9 @@ function slab(G, P, n, t, col) {
 }
 // (inside: its real dock airlock is built behind the port (the supply run: kit/rooms/oldstation.json), so the plain dark
 // way in drawn there for a ship flying past is left out)
+// (its real rooms, kit/rooms/oldstation.json as src/oldstationsite.js stands them at the port, reach in from the west
+// face to 6.45 m short of its middle: nothing plain is drawn west of `east`)
+export const REAL_ROOMS = { east: -5 };
 export function oldStationGear({ inside = false } = {}) {
   const G = new Tris(), L = new Tris();
   const [steel, dark, cell, frame, red] = ['steel', 'dark', 'cell', 'frame', 'red'].map(gearColour), dead = lin('#20242c');
@@ -179,7 +182,8 @@ export function oldStationGear({ inside = false } = {}) {
   G.rod([0, TOWER.top, 0], [0, TOWER.top + TOWER.mast, 0], 0.8, steel); L.ball([0, TOWER.top + TOWER.mast + 1, 0], TOWER.beacon, red, 12);
   G.rod([0, KEEL.foot, 0], [0, KEEL.foot - KEEL.mast, 0], 0.7, steel); L.ball([0, KEEL.foot - KEEL.mast - 0.8, 0], KEEL.beacon, red, 8);
   // the plain rooms behind the hangar doors (our own stand-in, kit/outside-plan.js standInHangar)
-  for (const h of HANGARS) standInHangar(G, BODY.x0 + 1, BODY.x1 - 0.12, h.z - 13.5, h.z + 13.5);
+  // (inside: they stop short of its real rooms, which stand in the west half of its body behind the port: REAL_ROOMS)
+  for (const h of HANGARS) standInHangar(G, inside ? REAL_ROOMS.east : BODY.x0 + 1, BODY.x1 - 0.12, h.z - 13.5, h.z + 13.5);
   // behind the port: a short dark way in, its round inner door shut
   if (!inside) {
     const x0 = BODY.x0 - 0.05, x1 = x0 + PORT.deep, z0 = PORT.z - PORT.w / 2, z1 = PORT.z + PORT.w / 2, y0 = PORT.y, y1 = PORT.y + PORT.h, wallC = lin('#24282e');

@@ -171,7 +171,7 @@ async function boot() {
     before: { cargo: () => (mission ? mission.deskStart('cargo') : false) },
     // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js; home from the run, its
     // share's pay slip first)
-    links: { cargo: ({ crew, save: keep }) => (mission && mission.deskLive('cargo')) || cargoLink({ crew, save: keep, supply: GAME.supply }) } });
+    links: { cargo: ({ crew, save: keep }) => (mission && mission.deskLive('cargo')) || cargoLink({ crew, save: keep, supply: GAME.supply, contract: !!(mission && mission.deskSigned('cargo')) }) } });
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });

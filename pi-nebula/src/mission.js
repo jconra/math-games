@@ -244,6 +244,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // deskHint(at): the job's prompt line there for now: the offer, the share waiting, or what the run waits for ──
   const deskOf = (at) => Object.values(MISSIONS).find((q) => q.desk === at) || null;
   function deskOpen(at) { const M = deskOf(at), c = crew(); return !!(M && c && !contractOf(c) && stationFound(c)); }
+  // (a contract of that desk's signed and not flown yet, with the desk's own job among its jobs: the Loader's)
+  function deskSigned(at) { const M = deskOf(at), c = crew(), m = c && contractOf(c); return !!(M && m && m.id === M.id && m.state === 'signed' && m.roles.includes(at)); }
   function deskStart(at) { const M = deskOf(at); if (!M || !deskOpen(at) || card || trip) return false; return offer({ id: M.captain, name: M.by || 'The station' }); }
   function deskHint(at) {
     const M = deskOf(at), c = crew(), m = c && contractOf(c); if (!M || !c) return null;
@@ -394,7 +396,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   let kept = null;
   const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard && kept.captain) pp.aboard(kept.captain, false); kept = null; };
   const api = {
-    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskStart, deskHint, deskLive, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
+    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskStart, deskHint, deskLive, deskSigned, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P; lastDt = dt;
       const c = crew(), m = c ? contractOf(c) : null;

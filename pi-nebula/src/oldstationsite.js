@@ -36,6 +36,8 @@
 //     its windows are lit. THE STATION IS SAVED.
 //   - THEN HOME: back aboard, the Hauler lets go of their bridge, flies clear (by hand, the autopilot, or the crew's
 //     pilot), and the trip's jump home.
+//   - NOBODY HAS TO GO ACROSS: a crew member who stays aboard sees its windows light up a little after the last pallet
+//     is off, and the run goes on by itself.
 //   - A PART NOT THEIRS CAN BE SKIPPED (K): the crew's pilot's flying in, docked at once; the visit (the supplies off
 //     and its lights up at once, wherever the crew member is); the crew's pilot's flying clear.
 // What is not made (left to the crew, off screen): the pallets themselves seen coming off, its people walking about.
@@ -74,10 +76,11 @@ const KIT = new THREE.Matrix4().makeRotationY(Math.PI / 2);
 // nose toward the station; how far from their bridge counts as clear of it for the jump home (m); how long the docking
 // takes (s: the dock's job's own clock, DOCKING) and the letting go; how often a pallet comes off (s); how long after
 // its people's word the lights take to come up, and to steady (s)
-export const SITE = { out: 230, along: 60, up: 24, clear: 150, seal: DOCKING.stair[1], unseal: 3, each: 6, first: 4, flicker: 1.6, near: 0.08 };
+// (idle: nobody came across: how long after the last pallet its lights come up all the same, and everything is done, s)
+export const SITE = { out: 230, along: 60, up: 24, clear: 150, seal: DOCKING.stair[1], unseal: 3, each: 6, first: 4, flicker: 1.6, near: 0.08, idle: [3, 8] };
 // THE OLD ROOMS' LOOK: the kit's own materials taken toward red and down (worn, its power failing), and a little less so
 // with its lights back up; its people's looks (the crew kit's, their own clothes, nobody's uniform)
-export const OLD_ROOMS = { dim: [0.62, 0.36, 0.33], lit: [0.96, 0.8, 0.76] };
+export const OLD_ROOMS = { dim: [0.66, 0.34, 0.3], lit: [0.97, 0.76, 0.7] };
 export const OLD_PEOPLE = [
   { suit: 'civilian', head: 't4', hair: 'ponytail', colours: { job: 'staff', uniform: '#7a4a3c', skin: '#d9a37f', hair: '#8f8a84' } },
   { suit: 'dockWorker', head: 't6', hair: 'curlyShort', colours: { job: 'staff', uniform: '#6b5140', skin: '#663b22', hair: '#17110d' } },
@@ -115,9 +118,11 @@ export function makeSite(ctx, opts = {}) {
       const R = await loadRoom(new URL('../kit/rooms/oldstation.json', import.meta.url).href);
       if (st.closed) return;
       const tinted = (k) => { const mats = makeMaterials(); for (const m of new Set(Object.values(mats))) if (m && m.color) m.color.multiply(new THREE.Color(k[0], k[1], k[2])); own.push(() => { for (const m of new Set(Object.values(mats))) if (m && m.dispose) m.dispose(); }); return mats; };
-      // (its power failing: every ceiling light but the hall's first is a plain panel)
+      // (its power failing: every ceiling light but the hall's first is a plain panel, and the walls' light strips are
+      // out but for the airlock's own)
       let kept = 0;
-      const dark = { ...R, rooms: R.rooms.map((z) => ({ ...z, pieces: z.pieces.map((p) => (p.piece === 'ceiling' && p.variant === 'light' && !(z.id === 'old-hall' && kept++ === 0) ? { ...p, variant: 'panel' } : p)) })) };
+      const dark = { ...R, rooms: R.rooms.map((z) => ({ ...z, pieces: z.pieces.map((p) => (p.piece === 'ceiling' && p.variant === 'light' && !(z.id === 'old-hall' && kept++ === 0) ? { ...p, variant: 'panel' }
+        : p.piece === 'rib' && p.variant === 'strip' && z.id === 'old-hall' ? { ...p, variant: 'plain' } : p)) })) };
       const build = (room, k) => { const B = buildRoom(room, tinted(k), { bake: { voxel: 0.1, rays: 12 } }); setDoors(B.doors, 0); B.group.traverse((o) => { if (o.isMesh && o.material) o.material.fog = false; }); moved.add(B.group); own.push(() => B.dispose()); return B; };
       rooms = { R, lit: again ? build(R, OLD_ROOMS.lit) : null, dark: again ? null : build(dark, OLD_ROOMS.dim), build: () => build(R, OLD_ROOMS.lit) };
       st.times.rooms = Math.round(performance.now() - t0);
@@ -130,6 +135,8 @@ export function makeSite(ctx, opts = {}) {
       // where a person walks here: the old rooms; the Hauler's cabin and what of its hull a person meets, as it lies
       // docked; the bridge with its plate and tunnel (the very shapes walked at home)
       const built = rooms.dark || rooms.lit, walls = makeWalls({ zones: built.zones, doors: built.doors });
+      // (their port's outer door leads out onto their bridge here: not a door to nowhere)
+      for (const d of walls.doors) if (d.D.piece === 'airlock') d.locked = false;
       {
         const solid = [], up = [], doors = [], _b = new THREE.Box3(), _m = new THREE.Matrix4(), C = S.cabin.C;
         for (const z of C.built.zones) for (const k of ['solid', 'floor', 'glass']) {
@@ -212,7 +219,7 @@ export function makeSite(ctx, opts = {}) {
   // ITS LIGHTS BACK UP: the rooms built with their lights on in place of the dark ones, its windows lit outside
   function lightsUp() {
     if (st.lit) return;
-    st.lit = true; st.saved = true;
+    st.lit = true;
     if (!rooms.lit) rooms.lit = rooms.build();
     if (!outside.lit) outside.lit = outside.mk(true);
     // (their doors as the dark rooms' are just now, so nothing jumps)
@@ -226,7 +233,7 @@ export function makeSite(ctx, opts = {}) {
   }
   const WORDS = {
     above: () => '', fly: () => (iPilot ? (fl && fl.auto ? 'The autopilot docks at the old station\'s bridge' : 'Dock at the old station\'s bridge: line up with the blue ship') : `${opts.flier} flies in to the old station's bridge`),
-    seal: () => 'Docking', docked: () => (st.saved && st.unloaded >= of ? (st.visited || st.skipped ? 'The old station has its supplies: back aboard' : 'Across the bridge to meet its people') : st.visited ? 'The supplies are coming off' : 'Docked: across the bridge to meet its people'),
+    seal: () => 'Docking', docked: () => (st.done && st.unloaded >= of ? 'The old station has its supplies: back aboard' : st.visited ? (st.unloaded >= of ? 'With the old station\'s people' : 'The supplies are coming off') : 'Docked: across the bridge to meet its people'),
     unseal: () => 'Letting go of their bridge', away: () => (iPilot ? (fl && fl.auto ? 'The autopilot flies clear' : 'Undock and fly clear of the old station') : `${opts.flier} flies clear`), up: () => '',
   };
   const _f = new THREE.Vector3(), _c = new THREE.Vector3(), inRooms = (p) => p.x > -15.1 && p.x < -0.9 && p.z > 27 && p.z < 35.2 && p.y < 4;
@@ -269,6 +276,7 @@ export function makeSite(ctx, opts = {}) {
       F.player.c.root.visible = F.chase.near > 0.4;
       W.camera.position.add(here); W.camera.updateMatrixWorld();
     },
+    open,
     lines() { const L = lines; lines = []; return L; },
     // (for the rigs: the crew member on foot here walked to a spot by the way the walls work out; walking: still on it)
     walkTo(at) { if (!F || !F.shown) return 0; const to = F.walls.snap(at[0], at[1] + 0.5, at[2], 2.5, CABIN_WALLS.r), way = to ? F.walls.path(F.player.pos, to) : null; F.way = way && way.length ? [...way] : null; return F.way ? F.way.length : 0; },
@@ -276,7 +284,7 @@ export function makeSite(ctx, opts = {}) {
     go() { if (st.phase !== 'above') return false; setPhase('fly'); fl.lock(false); return true; },
     // A PART NOT THEIRS, SKIPPED: the crew's pilot's flying in (docked at once); the visit (the supplies off, its
     // lights up); the crew's pilot's flying clear
-    get canSkip() { return ((st.phase === 'fly' || st.phase === 'away') && !iPilot) || (st.phase === 'docked' && !(st.saved && st.unloaded >= of && (st.visited || st.skipped))); },
+    get canSkip() { return ((st.phase === 'fly' || st.phase === 'away') && !iPilot) || (st.phase === 'docked' && !(st.done && st.unloaded >= of)); },
     get skipWords() { return st.phase === 'fly' ? 'Skip the docking' : st.phase === 'away' ? 'Skip the flying' : st.visited ? 'Skip the unloading' : 'Skip the visit'; },
     skip() {
       // (the flying's own skip: docked at once, as it lies there; clear of the bridge at once)
@@ -286,12 +294,13 @@ export function makeSite(ctx, opts = {}) {
     },
     // (the crew member is aboard and everything here is done: the Hauler lets go; the trip asks once they are in)
     leave() { if (st.phase !== 'docked') return false; st.ground = false; setPhase('unseal'); return true; },
-    get doneHere() { return st.phase === 'docked' && st.saved && st.unloaded >= of && (st.visited || st.skipped); },
+    get doneHere() { return st.phase === 'docked' && !!st.done && st.unloaded >= of; },
     update(dt) {
       if (st.closed) return;
       st.t += dt;
       st.words = (WORDS[st.phase] || (() => ''))();
       if (!fl) return;
+      fl.update(dt);
       if (st.phase === 'seal') {
         seal(Math.min(1, st.t / SITE.seal));
         if (st.t >= SITE.seal) { st.ground = true; setPhase('docked'); }
@@ -312,9 +321,13 @@ export function makeSite(ctx, opts = {}) {
         }
         // (its lights coming up: a flicker, then steady)
         if (st.lightsT >= 0) { st.lightsT += dt; const k = st.lightsT / SITE.flicker; show(k >= 1 ? 1 : (Math.sin(st.lightsT * 31) > 0.2 - k * 0.9 ? 1 : 0)); if (k >= 1) st.lightsT = -1; }
-        // (nobody came across: its lights come up all the same once the fuel cells have been in a while)
-        if (!st.lit && !st.visited && st.unloaded >= of && st.t > SITE.first + of * SITE.each + 20) { lightsUp(); st.lightsT = 0; }
-        if (st.visited && st.said >= (again ? OLD_STATION.again : OLD_STATION.first).length && !st.saved) st.saved = true;
+        // (nobody came across, the crew member staying aboard: once every pallet is off its lights come up all the same,
+        // and a little after that everything here is done; not while they are out on the bridge on their way over)
+        const outNow = !!p && !footIn();
+        if (!st.visited && !outNow && st.unloaded >= of) st.idleT = (st.idleT || 0) + dt;
+        if (!st.lit && !st.visited && (st.idleT || 0) > SITE.idle[0]) { lightsUp(); st.lightsT = 0; }
+        // (saved: its lights up, and its people have had their say (or the visit was skipped, or never made))
+        if (!st.done && st.lit && st.lightsT < 0 && (st.skipped || (st.visited ? st.said >= (again ? OLD_STATION.again : OLD_STATION.first).length && st.sayT <= 0 : !outNow && (st.idleT || 0) > SITE.idle[1]))) { st.done = true; st.saved = true; }
       } else if (st.phase === 'unseal') {
         seal(Math.max(0, 1 - st.t / SITE.unseal));
         if (st.t >= SITE.unseal) { goal = 'leave'; fl.goal = 'leave'; fl.lock(false); setPhase('away'); }

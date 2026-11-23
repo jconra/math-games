@@ -14,7 +14,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const u = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const nameOf = (slot) => '0' + (slot + 1);
 
-export function cargoLink({ crew, save = () => {}, supply = null }) {
+// contract: the run is a signed supply contract's, the Loader's own work on it: its cards pay nothing by themselves (the
+// share of the run is the pay, as the pilot's cards on a captain's run: src/missions.js THE MONEY)
+export function cargoLink({ crew, save = () => {}, supply = null, contract = false }) {
   const run = supply && supply.begin ? supply.begin() : runOf(crew) || startRun(crew);
   if (!Number.isInteger(run.k)) run.k = 0;
   save();
@@ -28,6 +30,7 @@ export function cargoLink({ crew, save = () => {}, supply = null }) {
       <div class="pcc-steps" role="img" aria-label="${Math.min(run.k, CARDS)} of ${CARDS} worked out">${dots()}</div>`;
   }
   const L = {
+    ...(contract ? { pay: false } : {}),
     now: () => ({ k: run.k, N: run.pallets, chain }),
     head: (o) => head(o),
     right() { run.k = Math.min(CARDS, run.k + 1); if (run.k >= CARDS && supply) supply.worked(); save(); },
