@@ -302,6 +302,10 @@ export function makeSite(ctx, opts = {}) {
       if (!fl) return;
       fl.update(dt);
       if (st.phase === 'seal') {
+        // (while it docks, a quiet moment: its rooms with their lights on, and its outside with its windows lit, are
+        // built unseen, one and then the other, so nothing is built at the moment its lights come up)
+        if (!again && !st.pre) { st.pre = 1; if (!rooms.lit) { rooms.lit = rooms.build(); rooms.lit.group.visible = false; } }
+        else if (!again && st.pre === 1) { st.pre = 2; if (!outside.lit) { outside.lit = outside.mk(true); outside.lit.group.visible = false; } }
         seal(Math.min(1, st.t / SITE.seal));
         if (st.t >= SITE.seal) { st.ground = true; setPhase('docked'); }
       } else if (st.phase === 'docked') {
