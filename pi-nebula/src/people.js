@@ -736,7 +736,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (about + group.length > nearMost + (Q ? 1 : 0)) continue;
       // (back, where nobody is looking, nobody stands, not right by the player, and not in a shut door's way: someone
       // away walks through doors as if they were open)
-      if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.come) && !someoneAt(X.pos, X, LIFE.body, true) && (X.scripted || walls.free(X.pos.x, X.pos.y, X.pos.z, 0.22)))) { for (const X of group) setAway(X, false); about += group.length; }
+      // (one of the rescued on their seat is let back seated: a bench is no free floor to the walls, and one waiting
+      // their turn at the scanner on the medical centre's would be out of the way until they got up: THE WARD)
+      if (group.every((X) => unseen(X) && (!pl || X.pos.distanceTo(pl) > PRESENCE.come) && !someoneAt(X.pos, X, LIFE.body, true) && (X.scripted || (X.rescued && X.act && X.act.phase === 'sat') || walls.free(X.pos.x, X.pos.y, X.pos.z, 0.22)))) { for (const X of group) setAway(X, false); about += group.length; }
     }
   }
   function setAway(P, v) {
