@@ -130,6 +130,8 @@
 //                 autopilot sets it down on its pad, and the blue ship life size is the planet's own
 //                 (src/planet/guide.js), bent with the ground.
 //     task        { words, on() }: one more button (M), for a pilot who also has another job out there
+//     dump        () -> what whoever started this flying knows of the moment (at the rocks: src/fieldfly.js), written
+//                 down with the flying's own facts in its warning when the ship is stuck ("forward" held, going nowhere)
 //     visit       the other two hangars' keeper (src/visit.js), or none: then nothing is parked in them
 //     goal        'leave' (out of the hangar and clear of the station) | 'land' (in and down in its hangar) | 'free' (the lab)
 //     pilot       false: the crew's pilot flies (the autopilot, and no way to switch it off)
@@ -395,6 +397,8 @@ export function startFlying(ctx, opts = {}) {
   let on = true, locked = false, closed = false, offered = false, everClear = false, panelUp = false, aside = false;
   let mouse = 'pointer', captured = false, hadLock = false, rightDown = false, mx = innerWidth / 2, my = innerHeight / 2;
   let seatUp = false, guideOn = false, keysOn = false, eArmed = true, underT = 0;
+  // (THE SHIP STUCK: "forward" held and the ship going nowhere: it says so, loudly, with all this flying knows: `update`)
+  const stuck = M.makeStuck();
   // (the ship's power on: its dashboard lit, and its tiny ship shown. Out at the rocks it always is)
   const powered = () => !!body || S.power;
   // (LANDING, flymodel.js isLanding: coming in to set down in its hangar, until it is down: coming home (goal 'land',
@@ -926,6 +930,14 @@ export function startFlying(ctx, opts = {}) {
       S.padBusy = !!(hull && hull.padBusy && hull.padBusy());
       // (what it bumps into: a little of that work each frame on the pad, all that is left of it the moment it is off)
       M.stepShip(S, C, dt, S.landed ? job.run(S.power ? 12 : 6) : job.finish());
+      // THE SHIP STUCK (flymodel.js stuckStep): the pilot has held "forward" for seconds and the ship has not moved. At
+      // the station that is a ship pressed against a wall or a parked ship, and nothing is said unless it touches
+      // nothing at all. Out at the rocks nothing should ever hold it (a rock the claw takes is taken, any other gives
+      // way), so there it is always said, with the rock nearest its hull. A warning, not an error: the game goes on.
+      if (M.stuckStep(stuck, S, pilot && !auto && !locked && C.move[0] > 0.5, dt)) {
+        const sol = job.finish(), by = sol && sol.by ? sol.by(S) : null;
+        if (by || !stuck.bumped) console.warn('flying: "forward" held ' + M.STUCK.secs + ' s and the ship has not moved: ' + JSON.stringify({ where: body ? (overPlanet ? 'a planet' : 'the rocks') : 'the station', ship: cfg.id, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(4)), speed: M.speedOf(S), bump: +S.bump.toFixed(4), bumped: stuck.bumped, goal, view, mouse, power: S.power, tilt: +M.tiltOf(S).toFixed(1), floor: M.floorUnder(S), nearestRock: by, ...(opts.dump ? opts.dump() : {}) }));
+      }
       if (was && !S.landed) { if (liftMouse && pilot && !auto && canLock) { liftLock = 1.5; capture(true); } liftMouse = false; painted = ''; }
       if (liftLock > 0) liftLock -= dt;
       if (!was && S.landed) { stood(); eArmed = !held.has('rollRight'); setMouse('pointer'); auto = !pilot; plan = null; painted = ''; pose(dt); if (opts.onLanded) opts.onLanded(); if (closed || !on) return; }
@@ -1017,7 +1029,7 @@ export function startFlying(ctx, opts = {}) {
     // (the ship's place as a matrix, from where it is parked: for the rigs' own pictures)
     state: () => ({ on, view, auto, mouse, captured, canLock, locked, aside, offered, everClear, goal, pilot, touch, mode: modeNow(), power: S.power, landed: S.landed, settling: !!S.settle, p: S.p.map((v) => +v.toFixed(2)), q: S.q.map((v) => +v.toFixed(3)), speed: +M.speedOf(S).toFixed(2), bump: +S.bump.toFixed(3), legs: plan ? plan.length : 0, invertY: set.invertY,
       visiting: there ? there.id : null, said: { ...voice.said }, heard: { ...heard },
-      standing: M.standing(S), stands: !!(B && B.moved), field: !!body, task: !!(opts.task && pilot && on && !locked), canGetUp: M.canGetUp(S), why: M.whyNot(S), tilt: +M.tiltOf(S).toFixed(1), touching: !!S.on, seat: seatUp, guide: guideOn, keys: keysOn, yaw: +(Math.atan2(-M.turn(S.q, [1, 0, 0])[2], M.turn(S.q, [1, 0, 0])[0]) * 180 / Math.PI).toFixed(1),
+      standing: M.standing(S), stands: !!(B && B.moved), stuck: stuck.told, field: !!body, task: !!(opts.task && pilot && on && !locked), canGetUp: M.canGetUp(S), why: M.whyNot(S), tilt: +M.tiltOf(S).toFixed(1), touching: !!S.on, seat: seatUp, guide: guideOn, keys: keysOn, yaw: +(Math.atan2(-M.turn(S.q, [1, 0, 0])[2], M.turn(S.q, [1, 0, 0])[0]) * 180 / Math.PI).toFixed(1),
       lit: hints ? Object.fromEntries(Object.entries(hints.keys).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null, arrows: hints ? Object.fromEntries(Object.entries(hints.mouse).filter(([, v]) => v > 0).map(([k, v]) => [k, +v.toFixed(2)])) : null,
       help: [...el.querySelectorAll('.pfl-help li')].map((li) => li.textContent.trim()), helpShut: helpEl.classList.contains('is-shut'), buttons: $$('.pfl-btns .pfl-b, .pfl-jump').filter((b) => !b.hidden).map((b) => [...b.childNodes].filter((n) => !n.hidden).map((n) => n.textContent).join('').trim().replace(/\s+/g, ' ')), sticks: !$('.pfl-stick').hidden, clearOf: body ? 0 : +M.boxDist(S.p).toFixed(1),
       dash: { on: powered(), words: dash.words, caption: guideOn ? GUIDE_WORDS : '', fuel: +D.fuel.toFixed(4), dist: +D.dist.toFixed(2), secs: +D.secs.toFixed(2), speed: +D.speed.toFixed(2), own: ownDash, goal: holo.bigShown, landing: landing(), glasses: dash.group.children.length, box: view === 'cockpit' && !aside ? dash.onScreen(W.camera) : null } }),

@@ -10,7 +10,9 @@
 // SO, AT THE ROCKS:
 //   - THE FLYING IS KEPT. It is the same flying as at the station (the same keys, mouse, sticks and buttons, the two
 //     views, the help corner), flying the drill's own Miner in the field, with the rocks as what it bumps into (no
-//     damage: it stops, or slides round them).
+//     damage: it stops, or slides round them). A rock the claw will not take (the crew's driller, below: every rock
+//     but the marked one) gives way to the ship instead, so none of them can hold it on its way to the mark
+//     (src/flymodel.js pushRocks).
 //   - A TAP ON A ROCK IS STILL WHERE TO FLY, in the drill's view, whoever flies: Pilot Juno for a drill operator, the
 //     autopilot for a crew member who has the pilot's seat too. That is the drill's own, untouched.
 //   - A CREW MEMBER WITH BOTH JOBS HAS THE BUTTON THAT SWITCHES BETWEEN THE TWO TASKS. At the drill it says "Fly
@@ -55,13 +57,17 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
   const poseNow = () => { _q.copy(drill.ship.q).multiply(_k); return { p: drill.ship.p.toArray(), q: _q.toArray() }; };
   _f.set(0, 0, 1).applyQuaternion(drill.ship.q);
   let mode = 'seat', closed = false, taken = 0, api = null;
+  // (the crew's driller: the claw takes the marked rock only, and every other rock gives way to the ship)
+  const takes = byCrew ? (R) => R.id === drill.crew.mark : null;
   const fl = startFlying({ W, boarding: null, crane: null }, {
     // (the flying's own few words along the top only while it is flown by hand: from the seat the run's own stand)
     cfg: FIELD, goal: 'field', pilot, flier, view, settings, onSettings, words: (w) => { if (mode === 'hand') words(w); },
     // (the dashboard: a run's own numbers, if it keeps them; src/flying.js)
     ...(dash ? { dash, run } : {}),
-    body: { at: drill.at, M0: KIT, p: drill.ship.p.toArray(), f: _f.toArray(), fly: (M) => drill.shipTo(M), solid: rockSolid(() => drill.rocksNow()) },
+    body: { at: drill.at, M0: KIT, p: drill.ship.p.toArray(), f: _f.toArray(), fly: (M) => drill.shipTo(M), solid: rockSolid(() => drill.rocksNow(), takes, (R) => drill.rockTo(R.id, R.p)) },
     task: pilot && !byCrew ? { words: 'Back to the drill', on: () => api.drill() } : null,
+    // (what this flying knows, for the flying's own word when the ship is stuck: src/flying.js)
+    dump: () => ({ mode, taken, stage: drill.stage, mark: byCrew ? drill.crew.mark : undefined }),
   });
   fl.lock(true); drill.eye = false; drill.show(false);
 
@@ -111,7 +117,8 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
       // (flown up to a rock: the claw takes it, and the drill's task is on with that rock; the crew's driller takes only
       // the rock they marked, and the ship is watched from where the eye is)
       if (mode === 'hand') {
-        const R = rockNear(fl.S, drill.rocksNow());
+        // (the nearest of the rocks the claw takes: a rock that gave way and lies nearer its hand is not in the mark's way)
+        const R = rockNear(fl.S, takes ? drill.rocksNow().filter(takes) : drill.rocksNow());
         if (R && byCrew) { if (R.id === drill.crew.mark && drill.take(R.id, W.camera)) { taken++; const at = poseNow(); fl.put(at.p, at.q); fl.lock(true); mode = 'ride'; } }
         else if (R) { fl.pause(true); mode = 'drill'; words('At the rocks'); if (drill.take(R.id, W.camera)) taken++; else drill.hand(false, W.camera); }
       }

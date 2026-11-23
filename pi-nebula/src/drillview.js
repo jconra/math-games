@@ -1106,6 +1106,9 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     for (const o of seen.values()) { if ((H && o === H.o) || !o.mesh.visible) continue; balls.push({ id: o.rock.id, p: [o.pos.x, o.pos.y, o.pos.z], r: ROCK_R * Math.max(o.S.sq[0], o.S.sq[1], o.S.sq[2]) * BALL }); }
     return balls;
   }
+  // (flown by hand, a rock the claw will not take gives way to the ship: src/flymodel.js pushRocks says where it went;
+  // the plain game's own record of where it lies goes with it, for the crew's driller's choice of the nearest)
+  function rockTo(id, p) { const o = seen.get(id); if (!o || (H && o === H.o)) return; o.pos.set(p[0], p[1], p[2]); o.rock.pos = [p[0], p[1], p[2]]; }
   // THE CLAW TAKES A ROCK THE SHIP HAS BEEN FLOWN UP TO, as after a tapped trip: the rock is drawn into the hand from
   // where it is, the question is asked, and the drilling goes on from there
   function take(id, c = camera) {
@@ -1502,7 +1505,7 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
     target: (dir) => { const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE).toArray(); },
     reach: (dir) => { if (!H) return null; const S = H.o.S, n3 = new THREE.Vector3(...dir).normalize(), now = n3.clone().multiplyScalar(radiusAt(S, n3) * ROCK_R).multiply(new THREE.Vector3(...S.sq)).applyQuaternion(H.q), a = wristAxis, s2 = now.clone().addScaledVector(a, -now.dot(a)), c2 = cutDir.clone().addScaledVector(a, -cutDir.dot(a)); const round = Math.atan2(new THREE.Vector3().crossVectors(s2, c2).dot(a), s2.dot(c2)), then = now.clone().applyAxisAngle(a, round); return +cutterTo(H.centre.clone().add(then).addScaledVector(then.clone().normalize(), WHEEL - BITE)).miss.toFixed(3); },
   };
-  return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, shipTo, at,
+  return { el, run, update, aim, close, rig, glideFrom, glideTo, glideGo, eyeFrom, hand, take, rocksNow, rockTo, shipTo, at,
     // (which way the ore is shown: 'glow' or 'veins'; given a name, changes it)
     oreLook(name) { if (ORE_LOOKS.includes(name) && name !== oreLook) { oreLook = name; oreSet = setOf(name); } return oreLook; },
     // (the look's settings: { glow, dots, size }, dust: how bright the dust band is, light: how hard the light falls on

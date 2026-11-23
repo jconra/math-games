@@ -560,7 +560,8 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 //   - THERE IS NOTHING TO LAND ON (FIELD: the Miner's own facts with no pad, no bay and no floor), so it is never down;
 //   - THE ROCKS are what it bumps into, with no damage, as at the station: it stops, or slides round them (pushRocks).
 //     A rock is small beside the ship, so it is the ship's whole hull, as one box, that is tried against each rock
-//     (the hull's few points alone would let a rock slip in between them);
+//     (the hull's few points alone would let a rock slip in between them). On a run where the claw takes one rock
+//     only, every other rock gives way to the ship instead (pushRocks `takes`, below);
 //   - ITS CLAW TAKES A ROCK THE SHIP HAS BEEN BROUGHT UP TO (rockNear): the rock's middle within TAKE.reach of where
 //     the claw's hand holds a rock, and the ship moving slower than TAKE.slow. The claw then takes it as it does after
 //     a tapped trip (src/drillview.js). Nothing is asked of how the ship is turned. The reach is the whole of the
@@ -571,36 +572,92 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 // screens set into its dashboard as the hangar's are: so the screen is the hangar's, 13 cm higher)
 export const FIELD_UP = 0.13;
 const raised = (d) => (d ? { ...d, at: [d.at[0], +(d.at[1] + FIELD_UP).toFixed(5), d.at[2]] } : d);
-export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash) };
+// THE DRILL'S OWN MINER AS IT IS DRAWN AT THE ROCKS, its legs up and its two arms reaching ahead of its nose (for a
+// rock that gives way to it: pushRocks, below). Every drawn point of it was measured in the game
+// (~/pw/space-math/rigs/fieldstop-1/shape.cjs, which also holds these two parts to it: no point of the ship is further
+// outside them than the 0.8 m a rock is kept off). Its hull: 15.8 m long, 5.5 m wide over the canisters at its sides,
+// from 1.0 m to 5.2 m up. Its arms, from its shoulders to the open claw's fingertips 2.8 m ahead of its nose: 8.2 m
+// wide (a metre more to port, where the open claw's fingers spread) and low (0.35 m to 3.35 m up), round in front
+// like a roller, so a rock dead ahead goes over or under them. The place its claw's hand holds a rock (MINER.claw) is
+// inside them: no rock that gives way is ever left there.
+// A part: a box in the ship's own frame { a0, a1 (along it), u0, u1 (up), r0, r1 (to its right) }, rounded by k (the
+// box drawn in by k all round, and everything within k of that); given here by the box it fills, all of it.
+const drawnIn = (lo, hi, k) => (hi - lo > 2 * k ? [lo + k, hi - k] : [(lo + hi) / 2, (lo + hi) / 2]);
+const rounded = ({ part, a, u, r, k }) => { const A = drawnIn(a[0], a[1], k), U = drawnIn(u[0], u[1], k), R = drawnIn(r[0], r[1], k); return { part, a0: A[0], a1: A[1], u0: U[0], u1: U[1], r0: R[0], r1: R[1], k }; };
+export const FIELD_SHAPE = [
+  { part: 'hull', a: [-9, 6.8], u: [1.0, 5.2], r: [-2.75, 2.75], k: 1.0 },
+  { part: 'arms', a: [3.5, 9.6], u: [0.35, 3.35], r: [-4.6, 3.6], k: 1.5 },
+].map(rounded);
+export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash), shape: FIELD_SHAPE };
 export const TAKE = { reach: 4.5, slow: 3 };
 // where the claw's hand is now
 export const clawOf = (S) => add(S.p, turn(S.q, S.cfg.claw || MINER.claw));
+// A ROCK THE CLAW WILL NOT TAKE GIVES WAY TO THE SHIP. The hull's one box has a broad flat front (6.6 m by 5.1 m: the
+// nose, and the two arms reaching ahead beside it), and a rock met anywhere on it stops the ship dead for as long as
+// "forward" is held: nothing of its speed runs round a flat face. That is as it should be for a rock the claw takes,
+// which is then in its reach and taken at once. But on a run where the claw takes one rock only (the crew's driller's
+// marked one: src/fieldfly.js), any other rock that lay on the straight way to the mark stopped the ship for good:
+// not taken, not moving, and out of sight under the nose as often as not (about once in fifty such runs:
+// ~/pw/space-math/FIELDSTOP_1.md). THE GAME'S MAKER (2026-11-19, asked what a rock should do when the ship bumps into
+// it): "I would like the rock to move away so it is more realistic. But I feel like that would involve more coding and
+// could be frustrating for someone trying to grab the rock. Shouldn't the claw grab the rock if it is heading towards
+// it?" So a rock the claw takes is as it was (it stops the ship, and the claw takes it); a rock the claw will not
+// take moves away: it is the rock that is eased out of the ship's way, and the ship goes on as if it were not there.
+// (The autopilot's own trip to a tapped or marked rock has always eased the other rocks out of its way:
+// src/drillview.js.) It is eased out of THE SHIP AS IT IS DRAWN OUT THERE (shapeOf: cfg.shape, FIELD_SHAPE above),
+// parts with no flat front, so a rock met nose on slides off over, under or round the ship and is never carried along
+// in front of it. A ship with no such shape of its own: its one box.
+const boxOf = (cfg) => { const H = hullOf(cfg); return H.box || (H.box = [{ a0: H.a0, a1: H.a1, u0: 0, u1: H.u1, r0: -H.r, r1: H.r, k: 0 }]); };
+export const shapeOf = (cfg) => cfg.shape || boxOf(cfg);
+// rock R and part B of the ship, where they have come within `far` of each other (the rock's middle from the part),
+// eased apart: the ship back out of the rock, keeping the speed that runs round it; or (give) the rock out of the
+// ship's way, the ship left as it is -> touched?
+function easeOut(S, R, B, far, give = false) {
+  const l = unturn(S.q, sub(R.p, S.p)), c = [clamp(l[0], B.a0, B.a1), clamp(l[1], B.u0, B.u1), clamp(l[2], B.r0, B.r1)];
+  let n = sub(c, l), d = len(n);
+  if (d >= far) return false;
+  let deep = far - d;
+  if (d < 1e-6) {
+    // (the rock's middle is inside the part: out by the nearest side of it)
+    let best = Infinity; n = [0, 1, 0];
+    for (const [e, m] of [[l[0] - B.a0, [1, 0, 0]], [B.a1 - l[0], [-1, 0, 0]], [l[1] - B.u0, [0, 1, 0]], [B.u1 - l[1], [0, -1, 0]], [l[2] - B.r0, [0, 0, 1]], [B.r1 - l[2], [0, 0, -1]]]) if (e < best) { best = e; n = m; }
+    deep = far + best;
+  } else n = mul(n, 1 / d);
+  // (n: from the rock to the hull, the ship's own frame; the ship goes that way, or the rock the other way)
+  const nw = turn(S.q, n);
+  if (give) { R.p = sub(R.p, mul(nw, deep)); return true; }
+  S.p = add(S.p, mul(nw, deep)); S.bump = Math.max(S.bump, deep);
+  const into = dot(S.v, nw); if (into < 0) S.v = sub(S.v, mul(nw, into));
+  return true;
+}
 // eased back out of any rock its hull has come into (within SKIN of), keeping the speed that runs round it -> touched?
-export function pushRocks(S, rocks) {
-  const H = hullOf(S.cfg); let touched = false;
+// takes(R): is this a rock the claw takes? (none given: every rock is). A rock it will not take gives way instead
+// (above): its place R.p is changed, and moved(R) is told, for whoever keeps the rocks (src/drillview.js rockTo).
+export function pushRocks(S, rocks, takes = null, moved = null) {
+  let touched = false;
   for (const R of rocks) {
     const far = R.r + SKIN, w = sub(R.p, S.p);
     if (Math.abs(w[0]) > 14 + far || Math.abs(w[1]) > 14 + far || Math.abs(w[2]) > 14 + far) continue;
-    const l = unturn(S.q, w), c = [clamp(l[0], H.a0, H.a1), clamp(l[1], 0, H.u1), clamp(l[2], -H.r, H.r)];
-    let n = sub(c, l), d = len(n);
-    if (d >= far) continue;
-    let deep = far - d;
-    if (d < 1e-6) {
-      // (the rock's middle is inside the hull: out by the nearest side of it)
-      let best = Infinity; n = [0, 1, 0];
-      for (const [e, m] of [[l[0] - H.a0, [1, 0, 0]], [H.a1 - l[0], [-1, 0, 0]], [l[1], [0, 1, 0]], [H.u1 - l[1], [0, -1, 0]], [l[2] + H.r, [0, 0, 1]], [H.r - l[2], [0, 0, -1]]]) if (e < best) { best = e; n = m; }
-      deep = far + best;
-    } else n = mul(n, 1 / d);
-    // (n: from the rock to the hull, the ship's own frame; the ship goes that way)
-    const nw = turn(S.q, n);
-    S.p = add(S.p, mul(nw, deep)); S.bump = Math.max(S.bump, deep); touched = true;
-    const into = dot(S.v, nw); if (into < 0) S.v = sub(S.v, mul(nw, into));
+    if (takes && !takes(R)) { let went = false; for (const B of shapeOf(S.cfg)) if (easeOut(S, R, B, far + B.k, true)) went = true; if (went && moved) moved(R); }
+    else for (const B of boxOf(S.cfg)) if (easeOut(S, R, B, far)) touched = true;
   }
   return touched;
 }
-// what a ship bumps into at the rocks, as the flying takes it (stepShip's `solid`): rocks() gives the rocks now
-export function rockSolid(rocks) {
-  return { reach: 3, dist: () => 99, away: (x, y, z, out) => { out[0] = out[1] = out[2] = 0; return out; }, push: (S) => pushRocks(S, rocks()), clear: () => 1 };
+// the rock nearest the ship now, for whoever asks why it does not move (src/flying.js: the ship stuck): which, how far
+// its surface is from the hull's one box (m; SKIN: it is against it), where its middle is in the ship's own frame
+// [ahead, up, right], and whether the claw takes it (clawTakes); null: no rock
+export function rockBy(S, rocks, takes = null) {
+  const H = hullOf(S.cfg); let best = null;
+  for (const R of rocks) {
+    const l = unturn(S.q, sub(R.p, S.p)), gap = len(sub([clamp(l[0], H.a0, H.a1), clamp(l[1], 0, H.u1), clamp(l[2], -H.r, H.r)], l)) - R.r;
+    if (!best || gap < best.gap) best = { id: R.id, r: +R.r.toFixed(2), gap: +gap.toFixed(3), at: l.map((v) => +v.toFixed(2)), clawTakes: !takes || !!takes(R) };
+  }
+  return best;
+}
+// what a ship bumps into at the rocks, as the flying takes it (stepShip's `solid`): rocks() gives the rocks now;
+// takes(R): is this a rock the claw takes? (none: every rock is); moved(R): a rock that gave way (pushRocks)
+export function rockSolid(rocks, takes = null, moved = null) {
+  return { reach: 3, dist: () => 99, away: (x, y, z, out) => { out[0] = out[1] = out[2] = 0; return out; }, push: (S) => pushRocks(S, rocks(), takes, moved), clear: () => 1, by: (S) => rockBy(S, rocks(), takes) };
 }
 // THE ROCK THE CLAW CAN TAKE NOW: the nearest to the claw's hand within TAKE.reach, the ship slow enough; or null
 export function rockNear(S, rocks) {
@@ -608,6 +665,24 @@ export function rockNear(S, rocks) {
   const c = clawOf(S); let best = null, bd = TAKE.reach;
   for (const R of rocks) { const d = len(sub(R.p, c)); if (d <= bd) { bd = d; best = R; } }
   return best;
+}
+// ── THE SHIP STUCK: "forward" held by the pilot and the ship going nowhere ──
+// (So that it says so itself the next time: a ship that stopped dead out at the rocks with "forward" held was seen
+// three times in some 150 runs before anyone knew why, since nothing on the page said a word.) K = makeStuck();
+// stuckStep(K, S, forward, dt) each frame after the ship's step, forward: the pilot is holding "forward" and the
+// controls are theirs -> true once, the moment the ship has not moved STUCK.moved metres in STUCK.secs seconds of it
+// (again only after it has moved or "forward" was let go). A ship that is down, on its legs or being set down is not
+// stuck: it is where it should be. K.bumped: it was eased back out of something meanwhile (a wall, a parked ship, a
+// rock): then it is simply pressed against that, and src/flying.js says nothing at the station, where that is all
+// it can be.
+export const STUCK = { secs: 3, moved: 0.5 };
+export const makeStuck = () => ({ t: 0, from: null, bumped: false, told: false });
+export function stuckStep(K, S, forward, dt) {
+  if (!forward || S.landed || S.settle || S.on) { K.t = 0; K.from = null; K.bumped = false; K.told = false; return false; }
+  if (!K.from || len(sub(S.p, K.from)) > STUCK.moved) { K.from = [...S.p]; K.t = 0; K.bumped = false; K.told = false; return false; }
+  K.t += dt; if (S.bump > 0) K.bumped = true;
+  if (K.t < STUCK.secs || K.told) return false;
+  K.told = true; return true;
 }
 // a ship out at the rocks, in flight: at `p`, its nose along `f`
 export function makeFieldShip(p = [0, 0, 0], f = [0, 0, 1], cfg = FIELD) { const S = makeShip(cfg); place(S, p, facing(f)); S.engine = 0.15; return S; }

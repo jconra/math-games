@@ -912,6 +912,136 @@ test('the claw takes a rock the ship has been brought up to, and not one it flie
   assert.deepEqual(M.MINER.claw, [8.54, 2.94, 0]);
 });
 
+// (how near a rock's surface is to the ship's own shape, part by part: src/flymodel.js shapeOf; under 0: inside it)
+function gapToShape(S, R) {
+  const l = M.unturn(S.q, [R.p[0] - S.p[0], R.p[1] - S.p[1], R.p[2] - S.p[2]]); let least = Infinity;
+  for (const B of M.shapeOf(S.cfg)) { const c = [Math.max(B.a0, Math.min(B.a1, l[0])), Math.max(B.u0, Math.min(B.u1, l[1])), Math.max(B.r0, Math.min(B.r1, l[2]))]; least = Math.min(least, Math.hypot(l[0] - c[0], l[1] - c[1], l[2] - c[2]) - B.k - R.r); }
+  return least;
+}
+// THE PILOT'S RUN (the crew's driller marks a rock, the claw takes that one only: src/fieldfly.js): flown at the mark
+// as a pilot flies it, "forward" held with the nose on it, slowing as it comes up
+// -> { took (s; null: never), stuck, off (how far it was moved off its line, m), least (the nearest any other rock came to the ship itself, m) }
+function flyAtMark(S, rocks, mark, secs = 40) {
+  const takes = (R) => R.id === mark.id, solid = M.rockSolid(() => rocks, takes);
+  let took = null, stuck = false, still = 0, off = 0, least = 99;
+  for (let t = 0; t < secs && took == null; t += DT) {
+    const d = mark.p[2] - M.clawOf(S)[2], C = keys(...(d > 14 ? ['forward'] : d > 3 && M.speedOf(S) < 2 ? ['forward'] : []));
+    M.stepShip(S, C, DT, solid);
+    // (stuck: "forward" held for 3 s with no speed, as the run that was caught)
+    still = C.move[0] > 0.5 && M.speedOf(S) < 0.05 ? still + DT : 0; if (still >= 3) stuck = true;
+    off = Math.max(off, Math.hypot(S.p[0], S.p[1]));
+    for (const R of rocks) if (!takes(R)) least = Math.min(least, gapToShape(S, R));
+    if (M.rockNear(S, rocks.filter(takes))) took = t;
+  }
+  return { took, stuck, off, least };
+}
+
+test('a rock the claw will not take gives way: nothing holds the ship on its way to the marked rock', () => {
+  // THE BUG (seen three times in some 150 pilot's runs, the ship stopped dead "in open space" with "forward" held):
+  // another rock lay on the straight way to the marked one, in front of the hull's box's broad flat front. The first
+  // of these is the run that was caught (the field of seed 3, ~/pw/space-math/FIELDSTOP_1.md): 1.2 m off the nose's
+  // middle. Anywhere across that flat front (6.6 m by 5.1 m), near and far: the ship goes straight on and the claw
+  // takes the mark
+  for (const [x, y] of [[1.2, 3.0], [0.25, 2.9], [-0.4, 2.2], [3.1, 0.3], [-3.2, 4.9], [2.4, 4.5], [-2.6, 1.0], [0.6, 5.0], [-1.3, 0.1]]) for (const z of [30, 62, 95]) {
+    const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), mark = { id: 1, p: [0, 2.94, 120], r: 1 }, stray = { id: 2, p: [x, y, z], r: 1.04 }, was = [...stray.p];
+    const f = flyAtMark(S, [stray, mark], mark);
+    assert.ok(f.took != null && !f.stuck, `a rock ${x} m across and ${y} m up the hull's front, ${z} m out: the mark is taken (${f.took}), never stuck`);
+    assert.ok(f.off < 1e-9, 'the ship is not moved off its line by it');
+    assert.equal(Math.hypot(stray.p[0] - was[0], stray.p[1] - was[1], stray.p[2] - was[2]) > 1e-9, f.least < SKIN + 1e-6, 'the rock went, if the ship itself came to it');
+    assert.ok(f.least > SKIN - 0.06, `and it is never nearer the ship itself than its skin (${f.least.toFixed(2)} m)`);
+    // (not carried along in front of the nose: it is left beside the ship or behind it)
+    assert.ok(M.unturn(S.q, [stray.p[0] - S.p[0], stray.p[1] - S.p[1], stray.p[2] - S.p[2]])[0] < M.MINER.claw[0], 'left beside or behind');
+  }
+  // the marked rock itself is as every rock was: it stops the ship, anywhere on the nose, in the claw's reach
+  for (const [x, y] of [[0.6, 0.4], [-3.0, 4.6], [0, 2.9]]) {
+    const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), mark = { id: 1, p: [x, y, 30], r: 1.05 }, takes = (R) => R.id === 1;
+    hold(S, 6, ['forward'], M.rockSolid(() => [mark], takes));
+    assert.ok(M.speedOf(S) < 0.3 && gapTo(S, mark) > SKIN - 0.05 && M.rockNear(S, [mark]) === mark, 'stopped against it, and taken');
+    assert.deepEqual(mark.p, [x, y, 30], 'it does not move');
+  }
+  // whoever keeps the rocks is told where one went (src/drillview.js rockTo); and with no word of which rocks the
+  // claw takes (a crew member at the drill, flying by hand: it takes any), every rock stops the ship as it did
+  { const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), stray = { id: 2, p: [1.2, 3.0, 40], r: 1 }, told = [];
+    hold(S, 6, ['forward'], M.rockSolid(() => [stray], () => false, (R) => told.push([...R.p])));
+    assert.ok(told.length > 0 && S.p[2] > 60 && S.bump === 0, 'told, and the ship flew on');
+    assert.deepEqual(told[told.length - 1], stray.p);
+    const Q = M.makeFieldShip([0, 0, 0], [0, 0, 1]), rock = { id: 3, p: [1.2, 3.0, 40], r: 1 };
+    hold(Q, 6, ['forward'], M.rockSolid(() => [rock]));
+    assert.ok(M.speedOf(Q) < 0.3 && Q.p[2] < 40 && rock.p[2] === 40, 'no word of the claw: it stops the ship, and stays'); }
+  // a field of them and one marked, flown about any which way for a minute: none is ever in the ship itself, and
+  // the marked one never gives way
+  const r = seededRand(21), rocks = [];
+  for (let i = 0; i < 200; i++) rocks.push({ id: i, p: [(r() - 0.5) * 90, (r() - 0.5) * 36, 16 + r() * 110], r: 0.5 + r() * 1.2 });
+  const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), solid = M.rockSolid(() => rocks, (R) => R.id === 7); let worst = 99, went = 0;
+  const at0 = rocks.map((R) => [...R.p]);
+  for (let t = 0, C = keys('forward'); t < 60; t += DT) {
+    if (Math.round(t / DT) % 90 === 0) { C = M.controlsOf(new Set(['forward', 'reverse', 'left', 'right', 'up', 'down', 'rollLeft'].filter(() => r() < 0.35))); C.turn = [r() * 2 - 1, r() * 2 - 1]; }
+    M.stepShip(S, C, DT, solid);
+    for (const R of rocks) if (R.id !== 7) worst = Math.min(worst, gapToShape(S, R));
+  }
+  rocks.forEach((R, i) => { if (R.p.some((v, k) => v !== at0[i][k])) went++; });
+  assert.ok(worst > SKIN - 0.12, `never nearer than ${worst.toFixed(2)} m to the ship itself`);
+  assert.ok(went > 0 && rocks[7].p.every((v, k) => v === at0[7][k]), 'some gave way; the marked one never');
+  assert.ok(S.p.every(Number.isFinite) && S.q.every(Number.isFinite) && rocks.every((R) => R.p.every(Number.isFinite)));
+});
+
+test('the ship as it is drawn at the rocks, for a rock that gives way: its hull and its arms, round, with no flat front', () => {
+  const P = M.shapeOf(M.FIELD), box = (B) => ({ a: [B.a0 - B.k, B.a1 + B.k], u: [B.u0 - B.k, B.u1 + B.k], r: [B.r0 - B.k, B.r1 + B.k] }), near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+  assert.equal(P, M.FIELD_SHAPE); assert.deepEqual(P.map((B) => B.part), ['hull', 'arms']);
+  const hull = box(P[0]), arms = box(P[1]);
+  // (as measured off the ship that is drawn there: ~/pw/space-math/rigs/fieldstop-1/shape.cjs holds them to it)
+  // its hull: as long as the hull's one box, narrower (the canisters at its sides), and off the ground line its legs stood on
+  assert.ok(near(hull.a, [-9, 6.8]) && near(hull.r, [-2.75, 2.75]) && near(hull.u, [1.0, 5.2]), JSON.stringify(hull));
+  // its arms: from its shoulders to 2.8 m ahead of its nose, wider than its hull (and more to port, where the open
+  // claw's fingers spread), and low
+  assert.ok(near(arms.a, [3.5, 9.6]) && near(arms.r, [-4.6, 3.6]) && near(arms.u, [0.35, 3.35]), JSON.stringify(arms));
+  // the place the claw's hand holds a rock is inside the arms: a rock that gives way is never left there
+  const c = M.MINER.claw, B = P[1], d = Math.hypot(c[0] - Math.max(B.a0, Math.min(B.a1, c[0])), c[1] - Math.max(B.u0, Math.min(B.u1, c[1])), c[2] - Math.max(B.r0, Math.min(B.r1, c[2])));
+  assert.ok(d < B.k - 0.2, `the claw's place is ${(B.k - d).toFixed(2)} m inside the arms`);
+  // NO FLAT FRONT: the arms' front is round from top to bottom (nothing of them is flat there), and the hull's own
+  // flat front is behind them: wherever a rock's middle is in front of that face and within reach of it, the arms
+  // have hold of it too and push it up or down off the face
+  assert.equal(P[1].u0, P[1].u1, 'the arms: round in front, top to bottom');
+  for (const far of [0.95 + SKIN, 1.6 + SKIN]) for (let u = P[0].u0; u <= P[0].u1 + 1e-9; u += 0.1) for (let r = P[0].r0; r <= P[0].r1 + 1e-9; r += 0.25) for (const s of [0.05, far / 2, far - 0.01]) {
+    const l = [P[0].a1 + P[0].k + s, u, r], q = [Math.max(B.a0, Math.min(B.a1, l[0])), B.u0, Math.max(B.r0, Math.min(B.r1, l[2]))], dq = Math.hypot(l[0] - q[0], l[1] - q[1], l[2] - q[2]);
+    assert.ok(dq < far + B.k && Math.abs(l[1] - q[1]) / dq > 0.05, `in front of the hull's face ${u.toFixed(1)} m up, ${r.toFixed(2)} m across, ${s.toFixed(2)} m off: the arms push it off (${dq.toFixed(2)} m from them)`);
+  }
+  // a ship with no shape of its own (the Miner in its hangar, every other ship): its one box
+  assert.deepEqual(M.shapeOf(M.MINER).map((q) => [q.a0, q.a1, q.u0, q.u1, q.r0, q.r1, q.k]), [[-9, 6.8, 0, 5.1, -3.3, 3.3, 0]]);
+  assert.equal(M.MINER.shape, undefined);
+});
+
+test('a ship that is stuck says so: "forward" held for 3 s and it has not moved', () => {
+  assert.deepEqual(M.STUCK, { secs: 3, moved: 0.5 });
+  const step = (S, K, C, secs, solid) => { let said = 0; for (let t = 0; t < secs - 1e-9; t += DT) { M.stepShip(S, C, DT, solid); if (M.stuckStep(K, S, C.move[0] > 0.5, DT)) said++; } return said; };
+  // flying free, or with the keys let go: never
+  { const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), K = M.makeStuck(), none = M.rockSolid(() => []);
+    assert.equal(step(S, K, keys('forward'), 8, none), 0); assert.equal(step(S, K, keys(), 8, none), 0); assert.equal(step(S, K, keys('reverse'), 6, none), 0); }
+  // held against a rock that does not give way and is not taken (what the bug was): once, 3 s after it stopped; not
+  // again while it is held there; again 3 s after "forward" is let go and pressed once more
+  { const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), K = M.makeStuck(), rock = { id: 1, p: [1.2, 3.0, 20], r: 1 }, solid = M.rockSolid(() => [rock]);
+    assert.equal(step(S, K, keys('forward'), 2, solid), 0, 'on its way');
+    assert.equal(step(S, K, keys('forward'), 6, solid), 1, 'said once'); assert.ok(K.bumped && K.told && M.speedOf(S) < 0.3);
+    assert.equal(step(S, K, keys('forward'), 6, solid), 0, 'not again while it is held there');
+    assert.equal(step(S, K, keys(), 0.5, solid), 0); assert.ok(!K.told);
+    assert.equal(step(S, K, keys('forward'), 2.9, solid), 0); assert.equal(step(S, K, keys('forward'), 0.3, solid), 1, 'and again');
+    // what is nearest it, for the warning: that rock, against the hull's box, in front of it, and whether the claw takes it
+    const by = M.rockSolid(() => [rock, { id: 9, p: [0, 0, 300], r: 1 }], (R) => R.id === 9).by(S);
+    assert.ok(by.id === 1 && Math.abs(by.gap - SKIN) < 0.05 && by.at[0] > 6.8 && by.clawTakes === false, JSON.stringify(by));
+    assert.equal(M.rockBy(S, []), null); }
+  // with the rock giving way there is nothing to say
+  { const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]), K = M.makeStuck(), rock = { id: 1, p: [1.2, 3.0, 20], r: 1 };
+    assert.equal(step(S, K, keys('forward'), 9, M.rockSolid(() => [rock], () => false)), 0); assert.ok(S.p[2] > 100); }
+  // on its pad with W held: it is where it should be, and nothing is said. Pressed nose on against its bay's back
+  // wall: said (to whoever asks), with K.bumped: src/flying.js keeps quiet then, at the station
+  { const S = M.makeShip(), K = M.makeStuck(); assert.equal(step(S, K, keys('forward'), 8, SOLID), 0); assert.ok(S.landed); }
+  { const S = lifted(), K = M.makeStuck(), C = keys('forward'); C.turn = [0, 1];
+    // (turned round to face the back wall, then W held into it)
+    for (let t = 0; t < 12 && M.turn(S.q, [1, 0, 0])[0] > -0.98; t += DT) M.stepShip(S, { ...keys(), turn: [0, 1] }, DT, SOLID);
+    assert.ok(M.turn(S.q, [1, 0, 0])[0] < -0.9, 'nose to the back wall');
+    assert.equal(step(S, K, keys('forward'), 14, SOLID), 1); assert.ok(K.bumped, 'against the wall'); }
+});
+
 test('the help corner at the rocks: the same keys, the way back to the drill, no autopilot of its own', () => {
   const has = (rows, key) => rows.some(([k]) => k === key), says = (rows, re) => rows.some(([, w]) => re.test(w));
   const fly = M.helpFor('fly', { field: true, task: 'Back to the drill' }), ptr = M.helpFor('pointer', { field: true, task: 'Back to the drill', behind: true });
