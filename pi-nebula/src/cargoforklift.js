@@ -436,7 +436,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     read() {
       if (!hand) return null;
       const s = hand.D.s, W2 = worldNow([]), F = hand.D.inFront(W2), P = hand.D.placeNear(W2);
-      return { carry: s.carry, under: s.under, lift: s.lift, v: s.v, front: F ? { i: F.q.i, along: F.L.along, place: F.q.place } : null,
+      const underAt = s.under != null ? ([...here].find(([, i]) => i === s.under) || [null])[0] : null;
+      return { carry: s.carry, under: s.under, underAt, lift: s.lift, v: s.v, front: F ? { i: F.q.i, along: F.L.along, place: F.q.place } : null,
         place: P ? { id: P.q.id, d: P.d, side: P.side, ahead: P.ahead, box: !!P.q.box } : null, blocked: hand.last && hand.last.blocked, why: hand.last && hand.last.why };
     },
   };

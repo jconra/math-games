@@ -215,9 +215,12 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
     return true;
   }
   // ── the words: what to do next, what it would not do and why ───────────────────────────────────────────────────
+  let carried = null, lastSet = null;   // (the pallet on the forks, and the one just set down: the words after it)
   const WHY = { deeper: 'Drive the forks all the way in first.', line: 'Line it up with the place to set it down.', place: 'Set it down just inside a container\'s doors, or back on the loading floor.' };
   function show(cmd) {
     const r = forklift.hand.read(); if (!r) return;
+    if (r.carry != null) carried = r.carry; else if (carried != null) { lastSet = carried; carried = null; }
+    if (r.under == null && lastSet != null && !(r.front && r.front.i === lastSet)) lastSet = null;
     const R = run && run.status ? run.status() : null;
     let h = '';
     if (r.why && WHY[r.why]) say(WHY[r.why]);
@@ -225,7 +228,10 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
     else if (r.blocked && Math.abs(cmd.go) > 0.1 && !(r.under != null && cmd.go > 0) && !(r.place && r.place.d < HAND.reach && cmd.go > 0)) say(r.blocked === 'someone' ? 'Someone is in the way: it waits for them.' : r.blocked === 'the wall' ? 'The wall is in the way.' : 'Something is in the way.');
     if (note && performance.now() - noteT < 2200) h = note;
     else if (r.carry != null) h = r.place ? (r.place.d < 0.4 ? 'Lower the forks to set it down.' : r.place.box ? 'Drive it in through the container\'s doors.' : 'Drive it onto its place.') : R && R.open ? 'Take it to a container: its doors are open.' : 'Set it down on the loading floor.';
+    // (just set down: in a container, it is loaded; back out from under it)
+    else if (r.under != null && lastSet === r.under) h = /^b/.test(r.underAt || '') ? 'Loaded! Back out from under it.' : 'Set down. Back out from under it.';
     else if (r.under != null) h = 'All the way in, then the forks up to lift it.';
+    else if (r.front && /^b/.test(r.front.place || '')) h = R && R.left > 0 && R.open ? `Pick up a pallet from the loading floor: ${R.left} to load.` : 'Loaded: back away from it.';
     else if (r.front) h = 'Lined up: drive the forks in under it.';
     else h = R && R.left > 0 && R.open ? `Pick up a pallet from the loading floor: ${R.left} to load.` : 'Line the forks up with a pallet\'s end to pick it up.';
     const e = $('.pcf-hint'); if (e.textContent !== h) { e.textContent = h; e.classList.toggle('is-note', !!note && performance.now() - noteT < 2200); }

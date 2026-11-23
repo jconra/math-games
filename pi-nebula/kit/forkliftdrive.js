@@ -31,7 +31,7 @@
 //   worldOf({ open, pallets, people })      open: the containers whose doors are open (slots); pallets: [{ i, at, y, h,
 //                                           place }] every pallet standing somewhere; people: [[x, z]]
 //   clearance(pose, s, world)               -> { gap, what } the nearest anything comes to it (m; below 0: into it)
-import { TRUCK, FORKS, ON_FORKS, outline, gapTo, pointGap, wallGap, roomBlocks, palletFoot, axleOf, poseAt, poseFor, PLACES } from './forkliftround.js';
+import { TRUCK, FORKS, ON_FORKS, outline, pointGap, wallGap, roomBlocks, palletFoot, axleOf, poseAt, poseFor, PLACES } from './forkliftround.js';
 import { PALLET, SLOT, STORE, LOAD, FORKLIFT, forkliftScale, doorHinge } from './places-plan.js';
 
 // THE PLAYER'S HAND ON IT: a little quicker than Cargo's careful drivers on their rounds (1 m/s), never a racing kart
