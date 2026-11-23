@@ -189,7 +189,8 @@ export function findNews(plan) {
 
 // WHAT A RUN PAYS (the game's maker, RESC1-2, of the rescue: "It needs to be a similar payout to what a mining mission
 // pays. So it would be nice to know how long it takes and use that to figure out how much it should pay"; and of the
-// exploring run, EXP-2: "I feel like now we just get paid for the knowledge we bring back"). So much for each place
-// explored (each jump out and what was learned there), the same on every run: a run of more jumps is longer and pays
-// more. Set from the run's length against the mining run's: ~/pw/space-math/EXPLORE_2.md.
-export const EXPLORE = { perPlace: 9000 };
+// exploring run, EXP-2: "I feel like now we just get paid for the knowledge we bring back"). So much for what it finds,
+// and so much more for each place explored (each jump out and what was learned there), the same on every run: a run of
+// more jumps is longer, and pays more by what each jump adds to its length. Set from the runs' lengths against the
+// mining run's: ~/pw/space-math/EXPLORE_2.md.
+export const EXPLORE = { find: 15000, perPlace: 5000 };

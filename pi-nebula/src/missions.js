@@ -184,8 +184,9 @@ export const MISSIONS = {
     ],
   },
 };
-// WHAT AN EXPLORING RUN PAYS: so much for each place explored (src/exploreplan.js EXPLORE)
-MISSIONS.explore.perPlace = EXPLORE.perPlace;
+// WHAT AN EXPLORING RUN PAYS: so much for what it finds, and so much more for each place explored (src/exploreplan.js
+// EXPLORE)
+MISSIONS.explore.perPlace = EXPLORE.perPlace; MISSIONS.explore.findPays = EXPLORE.find;
 MISSIONS.explore.folk = [{ name: 'Captain Vega', she: false }, ...Object.values(MISSIONS.explore.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
 // WHAT A RESCUE PAYS (the game's maker, 2026-11-22, RESC1-2: "It needs to be a similar payout to what a mining mission
 // pays. So it would be nice to know how long it takes and use that to figure out how much it should pay. But it should
@@ -388,12 +389,13 @@ export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = n
   const m = contractOf(crew);
   if (!m || m.state !== 'signed') return null;
   const M = MISSIONS[m.id];
-  // (AN EXPLORING RUN, a mission with `perPlace`: places, how many places it explored; so much for each (EXPLORE):
-  // { kind: 'explore', places, per, sold (what the run paid), share, pay, at, find (what it found) })
+  // (AN EXPLORING RUN, a mission with `perPlace`: places, how many places it explored; so much for what it found and so
+  // much for each place (EXPLORE): { kind: 'explore', places, per, base (what the finding pays), sold (what the run
+  // paid), share, pay, at, find (what it found) })
   if (M.perPlace) {
-    const k = Math.max(1, Math.floor(+places || 1)), sold = k * M.perPlace, share = shareOf(m.roles);
+    const k = Math.max(1, Math.floor(+places || 1)), base = M.findPays || 0, sold = base + k * M.perPlace, share = shareOf(m.roles);
     m.state = 'payout';
-    m.payout = { kind: 'explore', places: k, per: M.perPlace, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}) };
+    m.payout = { kind: 'explore', places: k, per: M.perPlace, base, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}) };
     return m.payout;
   }
   if (M.perPerson) {
@@ -449,7 +451,7 @@ export function payoutLines(P, ask = null) {
   // (a rescue's: how many came home, what each is worth, what the rescue paid, the share)
   if (P.kind === 'rescue') return [['Brought home', `${P.people} ${P.people === 1 ? 'person' : 'people'}`], ['Each person', `${say(P.per)} credits`], ['The rescue paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   // (an exploring run's: how many places it explored, what each is worth, what the run paid, the share)
-  if (P.kind === 'explore') return [['Places explored', `${P.places} ${P.places === 1 ? 'place' : 'places'}`], ['Each place', `${say(P.per)} credits`], ['The run paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+  if (P.kind === 'explore') return [...(P.base ? [['What it found', `${say(P.base)} credits`]] : []), ['Places explored', `${P.places} ${P.places === 1 ? 'place' : 'places'}`], [P.base ? 'Each place, more' : 'Each place', `${say(P.per)} credits`], ['The run paid', ask === 'sold' ? '?' : `${say(P.sold)} credits`], ['Your share', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
   const lots = lotsOf(P), e = inEighths(lots);
   // (a row is one sum, kept short enough for one line on a phone: "3 tonnes × 3,000 = 9,000"; home early, an eighth
   // as a fraction: "2 5/8 tonnes × 2,000 = 5,250", "3/4 tonne × 4,000 = 3,000")
@@ -492,6 +494,29 @@ function rescueOrder(m, grade, rand, paid) {
       picFirst: true, help: { title: 'Count them', pic: { kind: U.pic, n }, line: U.count },
       own: { strand: 'number', at: 6 }, facts: { ...top, form, n, pay: P.pay },
     }, rand, 3));
+  }
+  // (AN EXPLORING RUN'S: what the finding pays, and so much more for each place explored: two steps, the places first)
+  if (form === 'add' && P.base) {
+    const places = n * per, pl = n === 1 ? 'one place' : `${n} places`;
+    return done(ownOrder({
+      key: 'payout:findAndPlaces',
+      story: `${U.home(n)} The run pays ${say(P.base)} credits for what it found, and ${say(per)} credits more for each place explored.`,
+      ask: 'How many credits did the run pay?',
+      right: N(P.sold, CREDIT),
+      slips: [
+        { ...N(P.base, CREDIT), slip: 'findOnly', why: `That is only what it found. Add ${say(per)} credits for each place explored.` },
+        { ...N(places, CREDIT), slip: 'placesOnly', why: `That is only the places. Add the ${say(P.base)} credits for what it found.` },
+        ...(n > 1 ? [{ ...N(P.base + per, CREDIT), slip: 'onePlace', why: `That counts one place. Your crew explored ${pl}: ${n} × ${say(per)}.` }] : []),
+        { ...N(P.sold + per, CREDIT), slip: 'groupOff', why: `That is one place too many. Your crew explored ${pl}.` },
+        { ...N(P.base + per + n, CREDIT), slip: 'added', why: `That adds the places to the pay. Each place is ${say(per)} credits: multiply.` },
+      ].filter((s) => s.v > 0 && s.v !== P.sold),
+      rightWhy: `${n} × ${say(per)} = ${say(places)}; ${say(P.base)} + ${say(places)} = ${say(P.sold)} credits. ${paid}`,
+      sum: [{ op: 'mul', a: n, b: per, say: 'First the places' }, { op: 'add', a: P.base, b: places, say: 'Then what it found as well' }],
+      lines: payoutLines(P, 'sold'),
+      help: { title: 'What it found, then the places', pic: { kind: U.pic, n }, line: `${say(per)} credits for each place explored: ${n} ${n === 1 ? 'lot' : 'lots'} of ${say(per)}. Then add the ${say(P.base)} credits for what it found.`,
+        steps: [`The places: ${n} × ${say(per)}`, `Then what it found as well: ${say(P.base)} + that`] },
+      own: { strand: 'words', at: 30 }, facts: { ...top, form, n, per, base: P.base, pay: P.pay }, size: 2,
+    }, rand));
   }
   if (form === 'add') {
     // (so many people at so much each: the rescue's pay; so many places: an exploring run's)

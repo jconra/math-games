@@ -115,12 +115,12 @@ test('the steps: the jump and the scan for each place, in turn; the core\'s tuni
   assert.deepEqual(MS.legSteps(X, null), X.steps);
 });
 
-test('the pay: so much for each place explored, the same on every run; each share a whole number of credits', () => {
-  assert.equal(X.perPlace, EXPLORE.perPlace); assert.ok(EXPLORE.perPlace % 1000 === 0);
+test('the pay: so much for what it finds and so much more for each place explored, the same on every run; each share a whole number of credits', () => {
+  assert.equal(X.perPlace, EXPLORE.perPlace); assert.equal(X.findPays, EXPLORE.find); assert.ok(EXPLORE.perPlace % 1000 === 0 && EXPLORE.find % 1000 === 0);
   for (const places of [1, 2, 3]) for (const roles of [['pilot'], ['sensor'], ['engineer'], ['pilot', 'sensor', 'engineer']]) {
     const c = crewOf(); MS.sign(c, 'explore', roles, 1, () => 0, () => 0.3);
     const P = MS.land(c, { places, find: 'world' });
-    assert.equal(P.kind, 'explore'); assert.equal(P.places, places); assert.equal(P.sold, places * EXPLORE.perPlace);
+    assert.equal(P.kind, 'explore'); assert.equal(P.places, places); assert.equal(P.sold, EXPLORE.find + places * EXPLORE.perPlace); assert.equal(P.base, EXPLORE.find);
     assert.equal(P.pay, P.sold * MS.shareOf(roles) / 100); assert.ok(Number.isInteger(P.pay)); assert.equal(P.find, 'world');
     const r = MS.collect(c); assert.equal(r.pay, P.pay); assert.equal(c.mission, undefined);
   }
@@ -138,7 +138,7 @@ test('the payout card at the survey table: count the places, so many at so much 
     for (const x of o.coins) { assert.ok(num(x.label) > 0, 'nothing of none: ' + x.label); if (!x.good) assert.ok(x.why && x.why.length > 10); }
     const v = rightOf(o);
     if (o.form === 'count') { assert.equal(v, places); assert.match(o.ask, /places/); assert.ok(helpPicture(o).svg.includes('ellipse'), 'a planet to count for each'); }
-    else if (o.form === 'add') { assert.equal(v, m.payout.sold); assert.match(o.story, /for each place/); }
+    else if (o.form === 'add') { assert.equal(v, m.payout.sold); assert.match(o.story, /for what it found, and .* more for each place explored/); assert.deepEqual(o.sum.chain.map((x) => x.op), ['mul', 'add']); }
     else assert.equal(v, m.payout.pay);
     const txt = [o.story, o.ask, o.rightWhy, JSON.stringify(o.lines)].join(' ');
     for (const w of ['haul', 'tonne', 'canister', 'rescue', 'people', 'person']) assert.ok(!new RegExp('\\b' + w + '\\b', 'i').test(txt), w + ': ' + txt);
