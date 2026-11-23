@@ -25,7 +25,8 @@
 //                  so they are made now if they are not yet (THE PLACES ONLY THE LIFT GOES TO, below)
 //   people.add(recipe, spot, heading) / people.remove(P)   one more person standing (the cost test)
 //   people.ward    THE RESCUED IN THE WARD after a rescue run (THE WARD, below; src/wardplan.js): ward.admit(list) as the
-//                  run ends at home, ward.state(), ward.beds
+//                  run ends at home, ward.state(), ward.beds; those with no bed go to the big scanner or are about the
+//                  station for their while, as its own people are (THE OTHERS, there)
 //   people.bubbles, people.say(P, words)   the chat bubbles (bubbles.js)
 //   resolve(W, walls, at) -> { pos, heading } | null                where a spot in spots.js is, by the station's names
 //
@@ -79,7 +80,7 @@ import { STAND, shine } from './player.js';
 import { PASS, passBy, bumps, facing, overlaps, roomAt, roomFor, sideOn } from './passing.js';
 import { addMoves, bedPose } from './moves.js';
 import { sleeperRecipe } from './sleeper.js';
-import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, kept } from './wardplan.js';
+import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, kept, ABOUT, ABOUT_DAY, SCAN_WAIT, SCAN_STEP, othersDo, startOf } from './wardplan.js';
 import { makeBubbles } from './bubbles.js';
 import { pickTalk } from './chatter.js';
 import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK, NUDGES } from './lines.js';
@@ -511,6 +512,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (someone free to be asked over: to talk, or to run the scanner; about as P is (both near the player, or both not))
   // (and in the same place: the control room's and Cargo's people (P.home) only with each other)
   const free = (q, P, kinds = ['stand', 'wait']) => q !== P && !q.hidden && !q.rescued && q.act && kinds.includes(q.act.kind) && (q.act.phase === 'do' || q.act.kind === 'wait') && !q.walking && !q.req && !q.cap?.busy && (!P.pos || q.away === P.away) && (q.home || null) === (P.home || null);
+  // (the big scanner free for P's turn: nobody on it or on their way to it, and a medic free to run it -> that medic, the
+  // nearest, or null)
+  const scanMedicFor = (P) => (!SCAN || SCAN.busy || scanA.who || scanS.who ? null : list.filter((q) => free(q, P) && /medic/.test(q.id) && q.pos.distanceTo(scanA.pos) < 60).sort((a, b) => a.pos.distanceTo(scanA.pos) - b.pos.distanceTo(scanA.pos))[0] || null);
   function claimFor(P, step) {
     const { kind, group, n } = parse(step);
     if (kind === 'sit') {
@@ -537,10 +541,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (kind === 'scan') {
       // (a patient's turn in the big scanner: only one at a time, and only with a medic to run it, who is asked over)
-      if (!SCAN || SCAN.busy) return null;
-      const A = scanA, S = scanS;
-      if (A.who || S.who) return null;
-      const Q = list.filter((q) => free(q, P) && /medic/.test(q.id) && q.pos.distanceTo(A.pos) < 60).sort((a, b) => a.pos.distanceTo(A.pos) - b.pos.distanceTo(A.pos))[0];
+      const A = scanA, S = scanS, Q = scanMedicFor(P);
       if (!Q) return null;
       // (the medic's own errand let go first: the scan is theirs only after)
       release(Q);
@@ -592,8 +593,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function next(P) {
     if (P.fleeing) { P.speed = P.fleeing.was; P.fleeing = null; }   // (run from the crane: back to their own pace)
     release(P); P.yielding = null; P.blocker = null; P.heldAll = 0; P.lastReplan = null; P.madeWayFor = false; P.jammed = false; P.pose = null; P.scripted = false;
-    // (the rescued: their one errand, to their bed or home, again: THE WARD)
-    if (P.rescued) { wardNext(P); return; }
+    // (the rescued: their one errand, to their bed or home, again: THE WARD; those of them about the station, their
+    // day's next thing as anyone's, below)
+    if (P.rescued && wardNext(P)) return;
     for (let tries = 0; tries < P.day.length; tries++) {
       P.k = (P.k + 1) % P.day.length;
       const step = P.day[P.k];
@@ -694,6 +696,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (P.act && P.act.kind === 'talk' && P.act.spot.talk) { const Q = P.act.spot.talk.who[1 - P.act.spot.i]; if (Q) return Q; }
     if (P.convo) return P.convo.A === P ? P.convo.B : P.convo.A;
     if (SCAN && SCAN.busy) { if (SCAN.busy.patient === P) return SCAN.busy.medic; if (SCAN.busy.medic === P) return SCAN.busy.patient; }
+    // (one of the rescued waiting their turn at the scanner, and the medic who will run it: THE WARD, wardPair)
+    const pr = wardPair(); if (pr) { if (pr[0] === P) return pr[1]; if (pr[1] === P) return pr[0]; }
     return null;
   }
   let presenceClock = 0, nearMost = 8;
@@ -703,8 +707,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     presenceClock -= dt; if (presenceClock > 0) return; presenceClock = PRESENCE.every;
     // (the control room's and Cargo's people are not counted: they are about exactly while the player is in their
     // place, THE PLACES ONLY THE LIFT GOES TO)
-    // (nor the rescued in the ward, THE WARD: about for as long as they are aboard)
-    const L = list.filter((P) => !P.hidden && !P.home && !P.rescued);
+    // (nor the rescued in the ward, THE WARD: about for as long as they are aboard; those of them about the station
+    // are counted, as the station's own people)
+    const L = list.filter((P) => !P.hidden && !P.home && !(P.rescued && P.rescued.state !== 'about'));
     for (const P of L) P.rank = Math.hypot(P.pos.x - focus.x, P.pos.z - focus.z) + Math.abs(P.pos.y - focus.y) * 2;
     for (const P of L) { const Q = partner(P); P.rankPair = Q ? Math.min(P.rank, Q.rank ?? Infinity) : P.rank; }
     L.sort((a, b) => a.rankPair - b.rankPair || a.order - b.order);
@@ -1056,8 +1061,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
   // (sitting at a table or on a bench with someone beside, nobody talking: a chat)
   function seatChat(P) {
-    const s = P.act.spot; if (!s || !s.table) return;
-    const Q = list.find((q) => q !== P && !q.hidden && q.away === P.away && !q.convo && q.act && q.act.kind === 'sit' && q.act.phase === 'sat' && q.act.spot.table && q.act.spot.table.distanceTo(s.table) < 0.3 && q.act.t > 3);
+    const s = P.act.spot; if (!s || !s.table || P.rescued) return;      // (the rescued talk with nobody: THE WARD)
+    const Q = list.find((q) => q !== P && !q.hidden && !q.rescued && q.away === P.away && !q.convo && q.act && q.act.kind === 'sit' && q.act.phase === 'sat' && q.act.spot.table && q.act.spot.table.distanceTo(s.table) < 0.3 && q.act.t > 3);
     if (Q) startTalk(P, Q, true);
   }
 
@@ -1366,7 +1371,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const S = SCAN.busy, first = (Y) => (Y && Y.name ? Y.name.split(' ')[0] : '');
     const L = SCAN_TALK[kind].filter((w) => w !== not);
     const line = pick(L.length ? L : SCAN_TALK[kind]);
-    const words = line.replace('{patient}', first(S && S.patient) || 'there').replace('{medic}', first(S && S.medic) || 'Doc');
+    // (a patient nobody knows the name of, one of the rescued: the line without a name, "Ready for your scan? Up you get.")
+    const pn = first(S && S.patient), words = (pn ? line.replace('{patient}', pn) : line.replace(/,? \{patient\}/, '')).replace('{medic}', first(S && S.medic) || 'Doc');
     bubbles.say(X, words, { kind: 'talk' });
     if (S && X === S.medic) X.talkUntil = clock + Math.min(kind === 'still' ? 1.1 : 2.4, READ(words));
     counts.scanWords = (counts.scanWords || 0) + 1;
@@ -1395,11 +1401,20 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // them appear), each walks to their own bed's side as anyone walks (a way worked out, round others and the player, the
   // doors opening for them), turns their back to it and gets on and lies down as the big scanner's patient does
   // (onbed.js, laid into the world by moves.js bedPose); the crew member gone off anywhere but along their way
-  // (wardplan.js watching), they are in it at once. The rest, with no bed free, walk off out of the hangar, home, and
-  // are gone once nobody sees them. Their stay over, they are gone while nobody sees the ward, or get up and walk off.
+  // (wardplan.js watching), they are in it at once. The rest, with no bed free: THE OTHERS, next (only past the room
+  // there is for those do any still walk off out of the hangar, home, and are gone once nobody sees them). Their stay
+  // over, they are gone while nobody sees the ward, or get up and walk off.
   // Never counted among the nearest (presence): about for as long as they are aboard; never asked to talk, never a
   // hello (busy getting better).
-  const ward = { list: [], queue: [], making: false, last: -99, for: undefined, n: 0, ms: 0, foot: null, footSeen: 0, counts: { came: 0, walkedIn: 0, put: 0, late: 0, home: 0, left: 0, gone: 0 } };
+  // THE OTHERS, with no bed (wardplan.js THE OTHERS; the game's maker: "They can exist in the station too. Also, they can
+  // go to the scanner."): no longer gone at the hangar's way out. Their record's state is 'about': from the ramp's foot
+  // they go on as the station's own people do, with a day of the station's own things (wardplan.js ABOUT_DAY, taken up
+  // by next() as anyone's day is), counted among the nearest as anyone (presence); those of them who go to the big
+  // scanner first (r.scan) sit in the medical centre's waiting seats till it is free and a medic to run it, then have
+  // the station's patients' own errand, 'scan' (claimFor, SCAN above: nothing of it is theirs alone), and then go about
+  // as the rest. Their while over (the ward's stay): gone if nobody sees them; seen, off toward the hangar's way out,
+  // gone once nobody does.
+  const ward = { list: [], queue: [], making: false, last: -99, for: undefined, n: 0, ms: 0, foot: null, footSeen: 0, counts: { came: 0, walkedIn: 0, put: 0, late: 0, home: 0, left: 0, gone: 0, about: 0, scanned: 0, off: 0 } };
   // (the Medic's ramp foot: where it comes down nearest the ward, on the hangar's floor just past its patch, where the
   // ship stands now)
   function wardFoot() {
@@ -1423,13 +1438,77 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (to their bed in two legs: past its foot on the side they get on from, then along it: WARD_BED.via)
   const bedAct = (B) => (B.via ? { kind: 'ward', leg: 'via', step: { do: 'ward' }, spot: { pos: B.via.clone(), heading: null, name: 'ward bed ' + B.n + ' (its foot)' } } : { kind: 'ward', step: { do: 'ward' }, spot: { pos: B.walkTo.clone(), heading: B.out, name: 'ward bed ' + B.n } });
   const homeAct = () => ({ kind: 'ward', home: true, step: { do: 'ward' }, spot: { pos: wardHome.pos.clone(), heading: null, name: 'home' } });
-  // (their errand, again: to their bed, or home)
+  // (their errand, again: to their bed, or home -> true; false: about the station, their day's next thing is next()'s)
   function wardNext(P) {
     const r = P.rescued, B = r.bed >= 0 ? wardBeds[r.bed] : null;
-    if (r.state === 'lying') { placeInBed(P); return; }
-    if (B && r.state === 'toBed') { begin(P, bedAct(B)); return; }
-    if (wardHome) { begin(P, homeAct()); return; }
-    wardGone(P);
+    if (r.state === 'about') {
+      if (clock < r.leaveAt) return aboutNext(P);
+      // (their while over, and seen: off, out of the station, gone once nobody sees them: wardUpdate)
+      r.state = 'leaving'; r.from = P.pos.clone(); r.unseen = 0; r.since = clock; ward.counts.off++;
+    }
+    if (r.state === 'lying') { placeInBed(P); return true; }
+    if (B && r.state === 'toBed') { begin(P, bedAct(B)); return true; }
+    if (wardHome) { begin(P, homeAct()); return true; }
+    wardGone(P); return true;
+  }
+  // THE OTHERS' TURN AT THE SCANNER (r.scan: still to come). Waiting: on the medical centre's waiting seats (none free:
+  // on its floor), and there, once they have waited, the scan itself when it can be had: the station's patients' own
+  // errand, claimed as theirs is. Scanned (the ring has been over them): about the station, as the rest. -> true: an
+  // errand given; false: their day's next thing (next()'s own)
+  const waitsSeated = (P) => !!(P.rescued.scan && P.act && P.act.kind === 'sit' && P.act.phase === 'sat');
+  function aboutNext(P) {
+    const r = P.rescued, a0 = P.act;
+    if (!r.scan) return false;
+    if (a0 && a0.kind === 'scan' && a0.rounds) {
+      r.scan = false; ward.counts.scanned++;
+      // (their save too, so a reload does not send them again: written with the crew member's next save)
+      const c = crew ? crew() : null, s = c && Array.isArray(c.ward) ? c.ward.find((x) => x && x.bed === -1 && x.until === r.until && x.look === r.look) : null;
+      if (s) delete s.scan;
+      return false;
+    }
+    const a = (r.waited && /^med/.test(roomNow(P.pos) || '') && claimFor(P, SCAN_STEP)) || SCAN_WAIT.reduce((f, s) => f || claimFor(P, s), null);
+    if (a) { if (a.kind !== 'scan') r.waited = true; begin(P, a); } else { P.act = { kind: 'wait', until: rnd(4, 9), t: 0 }; P.walking = false; }
+    return true;
+  }
+  // (each frame, wardUpdate: seated and waiting, they stay seated until it is their turn: the scanner free and a medic
+  // to run it, and nobody who came down the ramp before them still waiting; their while over: gone if nobody sees
+  // them, else off as soon as they can go (up from a seat as anyone gets up; a scan finished first))
+  function aboutStep(P) {
+    const r = P.rescued, a = P.act;
+    if (clock >= r.leaveAt) {
+      if (P.away || !P.shown) { wardGone(P); return; }
+      if (!a || a.kind === 'scan' || P.scripted) return;
+      if (['sat', 'sitting', 'rising'].includes(a.phase)) { if (a.phase === 'sat') a.len = 0; return; }
+      if (P.req) { P.req.dropped = true; P.req = null; }
+      next(P); return;
+    }
+    if (waitsSeated(P) && !(scanMedicFor(P) && ward.list.find(waitsSeated) === P)) a.len = Math.max(a.len, a.t + 1);
+  }
+  // (for presence's pairs, partner(): the first of them whose turn is still to come and the medic who will run the
+  // scanner come and go together, as a patient and a medic at the scanner do; else, with few people about at once (the
+  // low picture quality's four), the medic could be out of the way while they sat waiting in front of the player, and
+  // their turn never come. Worked out once a frame.)
+  function wardPair() {
+    if (ward.pairAt === clock) return ward.pair;
+    ward.pairAt = clock; ward.pair = null;
+    if (!SCAN || SCAN.busy || !ward.list.length) return null;
+    const P = ward.list.find((Q) => Q.rescued.state === 'about' && Q.rescued.scan); if (!P) return null;
+    const M = list.filter((q) => /medic/.test(q.id) && !q.hidden && !q.home && !q.rescued && !q.convo && !(q.act && q.act.kind === 'talk')).sort((a, b) => a.pos.distanceTo(scanA.pos) - b.pos.distanceTo(scanA.pos))[0];
+    return (ward.pair = M ? [P, M] : null);
+  }
+  // (not watched as they come home, or come back to after a reload: about the station at once, at something of their
+  // day (waiting for the scanner: on the medical centre's seats), put there out of the way: presence brings them
+  // about where nobody is looking, as it does anyone)
+  function aboutPlace(P) {
+    const r = P.rescued; let first = r.scan ? SCAN_WAIT.reduce((f, s) => f || claimFor(P, s), null) : null;
+    if (first) r.waited = true;
+    for (let i = 0; i < P.day.length && !first; i++) { P.k = (P.k + 1) % P.day.length; if (!/^walk:/.test(P.day[P.k].do)) first = claimFor(P, P.day[P.k]); }
+    P.pos.copy(first ? first.spot.pos : wardHome ? wardHome.pos : P.pos); P.drawnY = P.pos.y; P.lastGain.copy(P.pos); P.away = true;
+    if (first && first.spot.heading != null) P.heading = first.spot.heading;
+    P.zone = W.zoneAt(P.pos); if (P.zone) shine(P.c, W.envAt(P.pos));
+    // (already some way into it, each their own)
+    if (first) { begin(P, first, true); if (!r.scan && P.act && P.act.len) P.act.t = Math.random() * P.act.len * 0.5; } else P.act = { kind: 'wait', until: rnd(2, 5), t: 0 };
+    stillV++;
   }
   // a move on the bed, laid into the world (moves.js bedPose: the person's root placed from where the clips put the hip
   // joints, and the legs', feet's and hands' places for moves.js M.bed)
@@ -1532,28 +1611,34 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const r = ward.queue.find((q) => !q.P && !q.failed && !q.cleared); if (!r || ward.making) return;
     ward.making = true;
     const t0 = performance.now();
-    body({ id: 'rescued-' + (++ward.n), name: 'Rescued', look: sleeperRecipe(lib, r.look, r.position) }, ward.foot || wardHome?.pos || new THREE.Vector3(), 0).then((P) => {
+    // (no name: nobody knows theirs; the medic at the scanner says her hello without one, scanSay)
+    body({ id: 'rescued-' + (++ward.n), name: '', look: sleeperRecipe(lib, r.look, r.position) }, ward.foot || wardHome?.pos || new THREE.Vector3(), 0).then((P) => {
       ward.making = false; ward.ms += performance.now() - t0;
       if (!P) { r.failed = true; return; }
       if (r.cleared) { P.c.dispose(); return; }
-      Object.assign(P, { order: 2e6 + ward.n, day: [{ do: 'ward' }], k: 0, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false, rescued: r });
+      // (their day: the ward's one errand; about the station, the station's own things, begun at a step of their own)
+      const about = r.state === 'about';
+      Object.assign(P, { order: 2e6 + ward.n, day: about ? ABOUT_DAY : [{ do: 'ward' }], k: about ? startOf(r.k ?? ward.n) - 1 : 0, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false, rescued: r });
       r.P = P;
     }).catch((e) => { ward.making = false; r.failed = true; console.warn('people: a rescued person was not made: ' + (e && e.message ? e.message : e)); });
   }
   // (one of the queue, made, into the station: in bed, or at the ramp's foot to walk)
   function wardIn(r, walk) {
-    const P = r.P, B = r.bed >= 0 ? wardBeds[r.bed] : null;
+    const P = r.P, B = r.bed >= 0 ? wardBeds[r.bed] : null, about = r.state === 'about';
     ward.queue.splice(ward.queue.indexOf(r), 1);
     if (!walk) {
+      if (about) { list.push(P); ward.list.push(P); aboutPlace(P); ward.counts.about++; return; }      // (about the station at once)
       if (!B) { P.c.dispose(); ward.counts.home++; return; }      // (home, off screen)
       list.push(P); ward.list.push(P); placeInBed(P); ward.counts.put++; return;
     }
     P.pos.copy(ward.foot); P.drawnY = P.pos.y; P.lastGain.copy(P.pos);
-    const to = B ? B.walkTo : wardHome.pos; P.heading = Math.atan2(to.x - P.pos.x, to.z - P.pos.z);
+    // (turned the way they will go: to the medical centre, for a bed or the scanner; the hangar's way out, for the station)
+    const to = B ? B.walkTo : about && r.scan && scanA ? scanA.pos : wardHome ? wardHome.pos : P.pos; P.heading = Math.atan2(to.x - P.pos.x, to.z - P.pos.z);
     P.zone = W.zoneAt(P.pos); if (P.zone) shine(P.c, W.envAt(P.pos));
-    r.state = B ? 'toBed' : 'home'; r.since = clock; r.from = P.pos.clone(); r.unseen = 0; if (B) B.P = P;
-    list.push(P); ward.list.push(P); ward.counts.came++; if (!B) ward.counts.home++;
-    begin(P, B ? bedAct(B) : homeAct());
+    r.state = B ? 'toBed' : about ? 'about' : 'home'; r.since = clock; r.from = P.pos.clone(); r.unseen = 0; if (B) B.P = P;
+    list.push(P); ward.list.push(P); ward.counts.came++; if (about) ward.counts.about++; else if (!B) ward.counts.home++;
+    // (about the station: their day begun, as anyone's)
+    if (about) next(P); else begin(P, B ? bedAct(B) : homeAct());
     ward.last = clock; stillV++;
   }
   // each frame: whose ward it is, the bodies made, the rescued come down the ramp one after another, and the rules
@@ -1562,7 +1647,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function wardUpdate(dt, player, camera) {
     // (whose ward: the crew member playing; another one, theirs, from their save: those still in bed)
     const c = crew ? crew() : null, id = c ? c.id : null;
-    if (id !== ward.for) { wardClear(); ward.for = id; if (c && c.ward) for (const r of kept(c.ward)) if (wardBeds[r.bed] && wardBeds[r.bed].side) ward.queue.push({ ...r, leaveAt: clock + (r.until - Date.now()) / 1000, placed: true, state: 'lying' }); }
+    // (and those of them about the station, bed -1, about it again, their turn at the scanner still to come if it was)
+    if (id !== ward.for) { wardClear(); ward.for = id; if (c && c.ward) for (const r of kept(c.ward)) if (r.bed < 0 || (wardBeds[r.bed] && wardBeds[r.bed].side)) ward.queue.push({ ...r, scan: !!r.scan, leaveAt: clock + (r.until - Date.now()) / 1000, placed: true, state: r.bed < 0 ? 'about' : 'lying' }); }
     if (!ward.queue.length && !ward.list.length) return;
     wardMake();
     const watch = !!player && watching(roomNow(player.pos)) || !!(player && boarding && /^medic\//.test(boarding.where(player.pos) || ''));
@@ -1582,14 +1668,16 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     for (const P of [...ward.list]) {
       const r = P.rescued;
-      if (r.state === 'toBed') {
+      if (r.state === 'about') aboutStep(P);
+      else if (r.state === 'toBed') {
         // (on their way to bed: in it at once if the crew member has gone off; not there by WARD.late: put there, loudly)
         if (!watch) { placeInBed(P); ward.counts.put++; continue; }
         if (clock - r.since > WARD.late) { alarms.wardLate = (alarms.wardLate || 0) + 1; ward.counts.late++; console.warn('people: ward: ' + P.id + ' not in bed after ' + WARD.late + ' s, put there (at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ')'); placeInBed(P); ward.counts.put++; }
       } else if (r.state === 'home' || r.state === 'leaving') {
         // (on their way out: gone once nobody sees them, a few metres on; at once with nobody along the way)
         r.unseen = P.shown ? 0 : (r.unseen || 0) + dt;
-        if (!watch || (r.unseen > WARD.gone && P.pos.distanceTo(r.from) > 6)) wardGone(P);
+        // (one who was about the station, wherever in it they are: gone once nobody sees them)
+        if (r.bed < 0 && r.state === 'leaving' ? r.unseen > WARD.gone : !watch || (r.unseen > WARD.gone && P.pos.distanceTo(r.from) > 6)) wardGone(P);
         // (no way out found by WARD.late: gone all the same, loudly)
         else if (clock - r.since > WARD.late) { alarms.wardLate = (alarms.wardLate || 0) + 1; ward.counts.late++; console.warn('people: ward: ' + P.id + ' found no way out in ' + WARD.late + ' s, gone (at ' + P.pos.toArray().map((v) => v.toFixed(2)) + ')'); wardGone(P); }
       }
@@ -1602,15 +1690,21 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (a bed is taken by whoever is on their way to it or in it, or still to come down the ramp to it)
     const taken = new Set([...ward.list.filter((P) => P.rescued.state === 'toBed' || P.rescued.state === 'lying').map((P) => P.rescued.bed), ...ward.queue.map((r) => r.bed)].filter((i) => i >= 0));
     const beds = assign(who.length, wardBeds.map((B) => ({ n: B.n, side: B.walkTo ? B.side : 0 })), taken);
+    // (the others, with no bed: to the scanner first, or about the station; home only past the room there is for them)
+    const isAbout = (r) => r.state === 'about';
+    const rest = othersDo(beds.filter((b) => b < 0).length, ABOUT.most - ward.list.filter((P) => isAbout(P.rescued)).length - ward.queue.filter(isAbout).length);
     ward.foot = wardFoot();
     const saved = [];
+    let j = 0;
     who.forEach((w, k) => {
-      const stay = stayFor(), r = { look: w.look, position: w.position || null, bed: beds[k], leaveAt: clock + stay, until: Date.now() + stay * 1000, state: beds[k] >= 0 ? 'toBed' : 'home' };
+      const stay = stayFor(), o = beds[k] >= 0 ? null : rest[j++];
+      const r = { look: w.look, position: w.position || null, bed: beds[k], leaveAt: clock + stay, until: Math.round(Date.now() + stay * 1000), state: beds[k] >= 0 ? 'toBed' : o === 'home' ? 'home' : 'about', scan: o === 'scan', k: o ? j - 1 : null };
       ward.queue.push(r);
-      if (r.bed >= 0) saved.push({ look: r.look, position: r.position, bed: r.bed, until: Math.round(r.until) });
+      if (r.bed >= 0) saved.push({ look: r.look, position: r.position, bed: r.bed, until: r.until });
+      else if (r.state === 'about') saved.push({ look: r.look, position: r.position, bed: -1, until: r.until, ...(r.scan ? { scan: 1 } : {}) });
     });
     ward.last = clock;      // (the first a moment after the crew member is up)
-    return { beds: beds.filter((b) => b >= 0).length, saved };
+    return { beds: beds.filter((b) => b >= 0).length, about: rest.filter((o) => o !== 'home').length, scan: rest.filter((o) => o === 'scan').length, saved };
   }
 
   // (anyone, or the player, within r of a point; `present`: only those about the player, not those away)
@@ -2165,7 +2259,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     foot: () => (ward.foot || wardFoot()),
     stay(s) { for (const P of ward.list) P.rescued.leaveAt = clock + s; for (const r of ward.queue) r.leaveAt = clock + s; },
     state: () => ({ watch: !!ward.watch, queue: ward.queue.length, making: ward.making, ms: Math.round(ward.ms), foot: ward.foot ? ward.foot.toArray().map((v) => +v.toFixed(2)) : null, counts: { ...ward.counts }, late: alarms.wardLate || 0,
-      list: ward.list.map((P) => ({ id: P.id, look: P.rescued.look, bed: P.rescued.bed >= 0 && wardBeds[P.rescued.bed] ? wardBeds[P.rescued.bed].n : null, state: P.rescued.state, act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, walking: !!P.walking, planning: !!P.req, shown: !!P.shown, far: !!P.c.far, pos: P.pos.toArray().map((v) => +v.toFixed(2)), left: +(P.rescued.leaveAt - clock).toFixed(1) })) }),
+      list: ward.list.map((P) => ({ id: P.id, look: P.rescued.look, bed: P.rescued.bed >= 0 && wardBeds[P.rescued.bed] ? wardBeds[P.rescued.bed].n : null, state: P.rescued.state, act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, walking: !!P.walking, planning: !!P.req, shown: !!P.shown, far: !!P.c.far, pos: P.pos.toArray().map((v) => +v.toFixed(2)), left: +(P.rescued.leaveAt - clock).toFixed(1),
+        // (the others: their turn at the scanner still to come, out of the way just now, what they are at, the room)
+        scan: !!P.rescued.scan, away: !!P.away, at: (P.act && P.act.spot && P.act.spot.name) || null, room: roomNow(P.pos) })) }),
   };
   const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, ward: wardApi, inView: (P) => inView(P, W.camera),
     // (said to the player from elsewhere in the game, src/cargolap.js: their mouth moves as they say it, and no hello

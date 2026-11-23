@@ -176,6 +176,8 @@ export const SEATS = {
   cafe: [{ room: 'terminal', piece: 'chair', variant: 'stool', face: 'table' }],
   window: [{ room: 'terminal', piece: 'chair', variant: 'bench', two: true }],
   waiting: [{ room: 'medical', piece: 'chair', variant: 'bench', two: true }, { room: 'smelter-lobby', piece: 'chair', variant: 'bench', two: true }],
+  // (the medical centre's own waiting seats alone: where the rescued wait their turn at the big scanner, wardplan.js)
+  medWaiting: [{ room: 'medical', piece: 'chair', variant: 'bench', two: true }],
   control: [{ room: 'smelter-control', piece: 'chair', variant: 'stool', face: 'table' }],
   // (the control room's four desks, two chairs at each; Cargo's shipping desk, one)
   radioSeat: [{ room: 'tower', piece: 'chair', variant: 'desk', face: 'own', near: { piece: 'console', variant: 'radio' } }],

@@ -5,7 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, numberWord, fromWords, outcome, kept } from '../src/wardplan.js';
+import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, numberWord, fromWords, outcome, kept, ABOUT, ABOUT_DAY, SCAN_WAIT, SCAN_STEP, othersDo, startOf } from '../src/wardplan.js';
+import { SPOTS, SEATS, ROSTER } from '../src/life.js';
 import { ANNOUNCE, LINES, makeAnnouncer, readSecs, TEXT } from '../src/announce.js';
 import { TALKS } from '../src/lines.js';
 import { pose, SECS } from '../src/onbed.js';
@@ -49,9 +50,75 @@ test('they stay 8 to 12 minutes each; kept over a reload while in bed, one to a 
   const list = [{ look: 'zuri', position: 'pilot', bed: 0, until: now + 5e3 }, { look: 'sol', bed: 1, until: now - 1 }, { look: 'noor', bed: 0, until: now + 9e3 },
     { look: 'mira', bed: 2, until: now + 1 }, { look: 7, bed: 1, until: now + 1e4 }, { look: 'kai', bed: -1, until: now + 1e4 }, { look: 'ana', bed: 1, until: now + 1e4 }, null];
   const k = kept(list, now);
-  assert.deepEqual(k.map((r) => [r.look, r.bed]), [['zuri', 0], ['mira', 2], ['ana', 1]]);
+  // (kai, with no bed, is about the station: kept too, below)
+  assert.deepEqual(k.filter((r) => r.bed >= 0).map((r) => [r.look, r.bed]), [['zuri', 0], ['mira', 2], ['ana', 1]]);
   assert.equal(k[0].position, 'pilot'); assert.equal(k[1].position, null);
   assert.deepEqual(kept(undefined, now), []); assert.deepEqual(kept('x', now), []);
+});
+
+// THE OTHERS, with no bed. The game's maker, asked where they should go: "the others go home", and: "They can exist in
+// the station too. Also, they can go to the scanner."
+test('the others, with no bed: every other one to the scanner first, the first among them; the rest about the station; home only past the room there is', () => {
+  assert.deepEqual(othersDo(1), ['scan']);
+  assert.deepEqual(othersDo(2), ['scan', 'about']);
+  assert.deepEqual(othersDo(3), ['scan', 'about', 'scan']);
+  assert.deepEqual(othersDo(0), []); assert.deepEqual(othersDo(-2), []);
+  // (six pods, three beds: three others, none of them home)
+  const beds = assign(6, [{ n: 1, side: 1 }, { n: 2, side: 1 }, { n: 3, side: 1 }]);
+  assert.ok(!othersDo(beds.filter((b) => b < 0).length).includes('home'));
+  // (a second rescue home while the first one's are still about: no more than ABOUT.most about at a time)
+  assert.equal(ABOUT.most, 6);
+  assert.deepEqual(othersDo(6), ['scan', 'about', 'scan', 'about', 'scan', 'about']);
+  assert.deepEqual(othersDo(6, ABOUT.most - 3), ['scan', 'about', 'scan', 'home', 'home', 'home']);
+  assert.deepEqual(othersDo(2, 0), ['home', 'home']); assert.deepEqual(othersDo(2, -1), ['home', 'home']);
+});
+
+test('about the station they do what its own people do: its halls, its windows, its cafeteria; nothing of their own, no talk', () => {
+  const kinds = ABOUT_DAY.map((s) => s.do.split(':')[0]), groups = ABOUT_DAY.map((s) => s.do.split(':')[1]);
+  for (let i = 0; i < ABOUT_DAY.length; i++) {
+    assert.ok(['walk', 'stand', 'sit'].includes(kinds[i]), ABOUT_DAY[i].do);
+    // (a group of the station's own: its spots, or its seats)
+    assert.ok(kinds[i] === 'sit' ? SEATS[groups[i]] : SPOTS[groups[i]], ABOUT_DAY[i].do + ': no such group in life.js');
+    // (and one somebody of the station's own does already)
+    assert.ok(ROSTER.some((d) => d.day.some((s) => s.do === ABOUT_DAY[i].do)), ABOUT_DAY[i].do + ': nobody of the station does it');
+    if (kinds[i] !== 'walk') assert.ok(ABOUT_DAY[i].for[0] > 0 && ABOUT_DAY[i].for[1] >= ABOUT_DAY[i].for[0]);
+  }
+  // (his words' three: walking the halls, sitting in the cafeteria, looking out of a window)
+  for (const d of ['walk:patrol', 'sit:cafe', 'stand:windows']) assert.ok(ABOUT_DAY.some((s) => s.do === d), d);
+  // (each begins at a step of their own, so three come home and do three things)
+  assert.equal(new Set([0, 1, 2].map(startOf)).size, 3);
+  for (let i = 0; i < 12; i++) assert.ok(startOf(i) >= 0 && startOf(i) < ABOUT_DAY.length);
+  assert.equal(startOf(-3), 0); assert.equal(startOf(undefined), 0);
+});
+
+test('the scanner\'s turn: waited for on the medical centre\'s own seats, then the station\'s patients\' own errand', () => {
+  // (the same errand as the roster's patients have in their day: nothing of the scan is the rescued's alone)
+  assert.equal(SCAN_STEP.do, 'scan');
+  assert.ok(ROSTER.some((d) => d.day.some((s) => s.do === SCAN_STEP.do)));
+  // (waiting: seats first, then the floor; the seats the medical centre's alone, and the station has them)
+  assert.deepEqual(SCAN_WAIT.map((s) => s.do), ['sit:medWaiting', 'stand:medicalFloor']);
+  assert.ok(SEATS.medWaiting.length && SEATS.medWaiting.every((d) => d.room === 'medical'));
+  assert.ok(SPOTS.medicalFloor.length);
+  const med = station.rooms.find((r) => r.id === 'medical');
+  for (const d of SEATS.medWaiting) assert.ok(med.pieces.some((p) => p.piece === d.piece && p.variant === d.variant), 'the medical centre has no ' + d.piece + ' ' + d.variant);
+  for (const s of SCAN_WAIT) assert.ok(s.for[0] >= ABOUT.wait[0] && s.for[1] <= ABOUT.wait[1]);
+});
+
+test('their while is the ward\'s, kept over a reload: about the station again, a scan still to come among them', () => {
+  const now = 2e12;
+  const list = [{ look: 'zuri', position: 'pilot', bed: 0, until: now + 5e3 }, { look: 'kai', position: 'medic', bed: -1, until: now + 6e3, scan: 1 }, { look: 'sol', bed: -1, until: now + 7e3 },
+    { look: 'ana', bed: -1, until: now - 1 }, { look: 'mira', bed: -2, until: now + 1e4 }, { look: 'noor', bed: 0.5, until: now + 1e4 }, { look: 'ren', bed: -1, until: now + 8e3, scan: 0 }];
+  const k = kept(list, now);
+  assert.deepEqual(k.map((r) => [r.look, r.bed, r.scan || 0]), [['zuri', 0, 0], ['kai', -1, 1], ['sol', -1, 0], ['ren', -1, 0]]);
+  assert.equal(k[1].position, 'medic'); assert.ok(!('scan' in k[2]));
+  // (kept again as it was kept: a save written back is read the same)
+  assert.deepEqual(kept(k, now), k);
+  // (at most ABOUT.most about, however many the save holds; the beds' three are not counted among them)
+  const many = [...Array.from({ length: 9 }, (_, i) => ({ look: 'p' + i, bed: -1, until: now + 1e4 })), { look: 'a', bed: 0, until: now + 1 }, { look: 'b', bed: 1, until: now + 1 }, { look: 'c', bed: 2, until: now + 1 }];
+  const km = kept(many, now);
+  assert.equal(km.filter((r) => r.bed === -1).length, ABOUT.most); assert.equal(km.filter((r) => r.bed >= 0).length, WARD.most);
+  // (the same stay as the ward's: one number for everyone brought home)
+  assert.deepEqual(WARD.stay, [480, 720]);
 });
 
 test('lying on a ward bed: the head on the pillow, the toes short of the foot board, whatever their legs\' length', () => {

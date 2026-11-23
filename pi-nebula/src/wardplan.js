@@ -25,14 +25,38 @@
 //     the side whose long rail is folded down (its variant 'right rail down' or 'left rail down'); a bed with both rails
 //     up is not used (someone getting onto it would pass through its rail).
 //
+// THE OTHERS, WITH NO BED (2026-11-22; asked where the rescued past the ward's three beds should go, the game's maker
+// picked "the others go home" and wrote: "They can exist in the station too. Also, they can go to the scanner."). So
+// they no longer vanish at the hangar's way out:
+//   - SOME GO TO THE BIG SCANNER FIRST (othersDo(): every other one of them, the first to come down among them): to the
+//     medical centre's waiting seats (SCAN_WAIT), seated there until the scanner is free and a medic free to run it,
+//     the one who came down first before the next (their turn); then scanned as the station's own patients are, by the
+//     same errand (SCAN_STEP: life.js 'scan', people.js SCAN); then on, about the station as the rest.
+//   - THE REST ARE ABOUT THE STATION for their while, as its own people are (ABOUT_DAY: things the station's people
+//     already do, life.js: walking its halls, looking out of the terminal's windows, at its counter and its tables, at
+//     a screen, on a bench by the windows), in what they wore in their pod and their crew position's colour. They are
+//     counted among the nearest about the player as the station's people are (people.js PRESENCE), so there are never
+//     more people about at once than there were. They talk with nobody and say no hellos, as in the ward.
+//   - THEIR WHILE is the ward's (WARD.stay: 8 to 12 minutes each from coming home, on the wall clock, kept over a
+//     reload: those still within it are about again, a scan still to come among them). Over: gone, if nobody sees them;
+//     seen, they walk off (up from a seat first, a scan finished first) and are gone once nobody sees them.
+//   - NOT WATCHED as they come home (the crew member gone off), they are about the station at once, as those with a
+//     bed are in it at once.
+//   - No more than ABOUT.most of them at a time (a second rescue home while the first one's are still about): past
+//     that they go home at once, as all the others did before.
+//   - THOSE WHO LAY IN THE WARD leave as they did (up, off the bed, out, gone): his words were of the others.
+//
 //   WARD                        the numbers (above)
+//   ABOUT, ABOUT_DAY, SCAN_WAIT, SCAN_STEP    the others: the numbers, what they do about the station, the scanner's turn
+//   othersDo(n, room)             -> for each of n rescued with no bed: 'scan', 'about' or 'home' (no room left)
 //   WARD_BED                    the ward's bed as an onbed.js bed, in its piece's own frame (bedOf)
 //   bedSide(variant)            -> 1 (got onto from its +x: 'right rail down'), -1 ('left rail down'), 0 (both rails up)
 //   assign(n, beds, taken)      -> for each of n rescued, the bed index they take, or -1 (home): the free beds in turn
 //   stayFor(rand)               -> s a rescued person stays in the ward
 //   watching(room)              -> is the crew member somewhere along the way (a room's id)
 //   numberWord(n), outcome({ people, from, resting })  the words: "five", the station's line for the rescue's outcome
-//   kept(list, now)             -> the saved ward (crew.ward) still in bed at `now` (ms on the wall clock)
+//   kept(list, now)             -> the saved ward (crew.ward) still in bed, or about the station, at `now` (ms on the
+//                                  wall clock)
 
 // THE NUMBERS: the rooms the crew member watches from (the station file's room ids; a ship's own room counts as its
 // hangar); how long each stays (s, the least and the most); between one coming down the ramp and the next (s); a way to
@@ -82,6 +106,35 @@ export function assign(n, beds, taken = new Set()) {
 export const stayFor = (rand = Math.random) => WARD.stay[0] + (WARD.stay[1] - WARD.stay[0]) * rand();
 export const watching = (room) => !!room && WARD.rooms.includes(room);
 
+// THE OTHERS (above). The numbers: the most about the station at a time; how long one waiting for the scanner sits
+// before they look up for their turn (s, the least and the most)
+export const ABOUT = { most: 6, wait: [8, 16] };
+// WHAT THEY DO ABOUT THE STATION: a day as the station's people have theirs (life.js: its kinds and its groups of
+// spots and seats, nothing of their own), done in turn and again, each starting at a step of their own (startOf):
+// a walk round its halls (the terminal, the hangar corridor, the junction, the spine, the loop, the quarters'
+// corridor), out of the terminal's big windows, at the serving counter and then at a table, reading one of the
+// terminal's screens, on a bench by the windows
+export const ABOUT_DAY = [
+  { do: 'walk:patrol' },
+  { do: 'stand:windows', for: [25, 50] },
+  { do: 'stand:counter', for: [6, 12] },
+  { do: 'sit:cafe', for: [60, 120] },
+  { do: 'stand:terminal', for: [12, 25] },
+  { do: 'sit:window', for: [40, 80] },
+];
+// (the i-th of them begins at: the walk, the counter and a table, a screen and a bench, and round again)
+export const startOf = (i) => ((Math.max(0, i | 0) * 2) % ABOUT_DAY.length);
+// WAITING FOR THE SCANNER: on the medical centre's own waiting seats (or, none free, on its floor), and the scan itself,
+// the station's patients' own errand
+export const SCAN_WAIT = [{ do: 'sit:medWaiting', for: ABOUT.wait }, { do: 'stand:medicalFloor', for: ABOUT.wait }];
+export const SCAN_STEP = { do: 'scan', for: [40, 60] };
+// what each of n rescued with no bed does, in the order they come down the ramp: the scanner first ('scan') for every
+// other one, the first among them; about the station ('about') for the rest; home ('home') past the room there is
+// (ABOUT.most less those about already)
+export function othersDo(n, room = ABOUT.most) {
+  return Array.from({ length: Math.max(0, n | 0) }, (_, k) => (k >= room ? 'home' : k % 2 === 0 ? 'scan' : 'about'));
+}
+
 // THE WORDS
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 export const numberWord = (n) => WORDS[n] || String(n);
@@ -101,14 +154,20 @@ export function outcome({ people = 0, from = '', resting = 0 } = {}) {
   if (resting > 0) s += resting >= n ? (n === 1 ? ' They are resting in the ward.' : ' They are resting in the ward.') : ` ${cap(numberWord(resting))} of them ${resting === 1 ? 'is' : 'are'} resting in the ward.`;
   return s;
 }
-// THE SAVED WARD (crew.ward: [{ look, position, bed, until }], `until` on the wall clock, ms): those still in bed at `now`,
-// one to a bed, at most WARD.most
+// THE SAVED WARD (crew.ward: [{ look, position, bed, until, scan }], `until` on the wall clock, ms): those still within
+// their stay at `now`: in bed (bed: which), one to a bed, at most WARD.most; about the station (bed: -1; scan: 1 while
+// their turn at the scanner is still to come), at most ABOUT.most
 export function kept(list, now = Date.now()) {
   const out = [], beds = new Set();
+  let about = 0;
   for (const r of Array.isArray(list) ? list : []) {
-    if (!r || typeof r.look !== 'string' || !(r.until > now) || !Number.isInteger(r.bed) || r.bed < 0 || beds.has(r.bed)) continue;
-    beds.add(r.bed); out.push({ look: r.look, position: r.position || null, bed: r.bed, until: r.until });
-    if (out.length >= WARD.most) break;
+    if (!r || typeof r.look !== 'string' || !(r.until > now) || !Number.isInteger(r.bed)) continue;
+    if (r.bed >= 0) {
+      if (beds.has(r.bed) || beds.size >= WARD.most) continue;
+      beds.add(r.bed); out.push({ look: r.look, position: r.position || null, bed: r.bed, until: r.until });
+    } else if (r.bed === -1 && about < ABOUT.most) {
+      about++; out.push({ look: r.look, position: r.position || null, bed: -1, until: r.until, ...(r.scan ? { scan: 1 } : {}) });
+    }
   }
   return out;
 }
