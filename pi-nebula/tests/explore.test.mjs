@@ -11,8 +11,9 @@ import { readFileSync } from 'node:fs';
 import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
 import { missions, ROLES, MISSIONS, CORE } from '../src/missions.js';
-import { planOf, SCENARIOS, SCENARIO_IDS, WORLD_NAMES, antennaUp, foundOf, keepFind, EXPLORE, TOWER_LINE, findNews } from '../src/exploreplan.js';
+import { planOf, SCENARIOS, SCENARIO_IDS, WORLD_NAMES, foundOf, keepFind, EXPLORE, TOWER_LINE, findNews } from '../src/exploreplan.js';
 import { ANNOUNCE, makeAnnouncer, newsClip } from '../src/announce.js';
+import { antennaRepaired as antennaUp } from '../src/jobs/antenna.js';
 import { TALKS } from '../src/lines.js';
 import { JOB as pilot } from '../src/jobs/pilot.js';
 import { JOB as survey } from '../src/jobs/survey.js';
@@ -73,7 +74,7 @@ test('the run\'s plan from its seed: one of his scenarios by chance, 1 to 3 jump
 });
 
 test('the station in distress: only once the radio tower is repaired, on the next run, and never again; the one flag read defensively', () => {
-  // (the radio tower's own job keeps it with the crew member: crew.jobs.antenna.repaired, src/jobs/antenna.js)
+  // (the radio tower's own job keeps it with the crew member and reads it: src/jobs/antenna.js antennaRepaired)
   assert.equal(antennaUp(null), false); assert.equal(antennaUp({}), false); assert.equal(antennaUp({ jobs: {} }), false); assert.equal(antennaUp({ jobs: { antenna: { built: 3 } } }), false);
   assert.equal(antennaUp({ jobs: { antenna: { repaired: false } } }), false); assert.equal(antennaUp({ jobs: { antenna: 'yes' } }), false);
   assert.equal(antennaUp({ jobs: { antenna: { repaired: true, built: 8 } } }), true);

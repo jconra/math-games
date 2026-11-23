@@ -44,7 +44,8 @@ import { JOB as medical } from './jobs/medical.js';
 import { makeHull } from './shiphull.js';
 import { shipOf as shipFacts, flightOf } from './fleet.js';
 import { makeVisit } from './visit.js';
-import { planOf, antennaUp, foundOf } from './exploreplan.js';
+import { planOf, foundOf } from './exploreplan.js';
+import { antennaRepaired } from './jobs/antenna.js';
 import { JOB as survey } from './jobs/survey.js';
 import { openPanel } from './jobs/panel.js';
 
@@ -215,7 +216,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (seed: the planet a run to a planet goes to, kept with the contract; lib: the crew kit, for whoever sleeps in its pods)
       // (input: the keys and the thumb stick, for walking on a planet's ground, src/rescue.js: the trip walks them there)
       // (plan: an exploring run's, from its seed and what is so for this crew member now: src/exploreplan.js)
-      const plan = MISSIONS[m.id].legs ? planOf(seedOf(c), { antenna: antennaUp(c), found: foundOf(c) }) : null;
+      const plan = MISSIONS[m.id].legs ? planOf(seedOf(c), { antenna: antennaRepaired(c), found: foundOf(c) }) : null;
       trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: nameOf(m.captain), seed: seedOf(c), lib, input, plan,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         onEnd: (r) => {

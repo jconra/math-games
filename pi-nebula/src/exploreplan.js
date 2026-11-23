@@ -42,18 +42,12 @@
 // NO ANSWER CHANGES ANY OF IT: what is found is the run's, from its seed, as what a mining haul brings home is.
 //
 //   planOf(seed, { antenna, found })   -> the run: { seed, scenario, legs: [{ i, last, place, lead }], find, name, talk }
-//       antenna: the station's radio tower is repaired (antennaUp); found: what this crew member has found already
+//       antenna: the station's radio tower is repaired (src/jobs/antenna.js antennaRepaired); found: what this crew
+//       member has found already
 //       (their crew.explored: the distress call is heard once, a world's name is not given twice)
-//   antennaUp(crew)                    the one flag read from the radio tower's repair (its job: another helper's)
 //   foundOf(crew), keepFind(crew, plan)   what has been found, kept with the crew member
 import { rng, subSeed } from './planet/noise.js';
 import { newSeed } from './planet/kinds.js';
-
-// THE STATION'S RADIO TOWER, REPAIRED: one saved value, kept with the crew member by the tower's own repair job at the
-// control room's radio desk (src/jobs/antenna.js, another helper's, built at the same time as this: its job's own
-// record, crew.jobs.antenna = { repaired: true, ... }, read there by antennaRepaired(crew)). Read here the same way and
-// defensively, without that file: anything else (or nothing: the tower's job not in this build) is not repaired.
-export const antennaUp = (crew) => !!(crew && crew.jobs && typeof crew.jobs === 'object' && crew.jobs.antenna && crew.jobs.antenna.repaired === true);
 
 // the six names the station's speakers can say of a new world (src/announce.js 'planet-...': recorded)
 export const WORLD_NAMES = ['Kepler Blue', 'Ora', 'New Tethys', 'Vesper', 'Lumen', 'Halcyon'];

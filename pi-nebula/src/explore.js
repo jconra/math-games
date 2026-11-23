@@ -175,6 +175,8 @@ export function makePlace(ctx, opts = {}) {
   const api = {
     get ready() { return st.ready; }, get failed() { return st.failed; }, get phase() { return st.phase; }, get words() { return st.words; },
     get fl() { return ship.fl; }, get matrix() { return ship.matrix; }, get down() { return false; }, get held() { return st.phase === 'held'; },
+    // (what the trip asks of any far place, a rescue's planet's own: nobody to bring aboard here, nothing at the controls)
+    get count() { return { aboard: 0, of: 0 }; }, get atControls() { return false; },
     get canSkip() { return !!ship.fl && (st.phase === 'fly' || st.phase === 'round'); },
     leg: opts.leg ?? 0, place,
     open,
