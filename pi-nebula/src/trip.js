@@ -1173,7 +1173,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // (on their feet when the run ends at home: they stay where they stand, in the ship as it now stands)
     if (T.rest) rise();
     const wasAfoot = T.afoot && !T.aborted;
-    if (T.ground) leaveGround();
+    // (given up while out on foot in the old station: back aboard, where they sat down, not left standing in whatever
+    // of our own station is in that place)
+    if (T.ground) { const out = SUPPLY && site && !site.footIn; leaveGround(); if (out && stand && P()) ctx.put(stand, P().heading || 0); }
     // (a ship at the dock: whatever was going on, it is docked as it stands again)
     if (SHIP.dock && ctx.dock) ctx.dock.seal(1);
     fromField(); T.afoot = false; T.out = false; el.classList.remove('is-afoot'); if (boarding.ride) boarding.ride(M.ship, true);
