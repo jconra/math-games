@@ -47,6 +47,12 @@
 //   A.update(dt, { player: { pos (the walking frame) } | null })   A.late(M)   M: the ship's kit frame in the world now
 //   A.near(pos) -> the free place within reach of the player (pos: the walking frame), or null
 //   A.take(place, who) / A.free(who)   A.places, A.list, A.state(), A.dispose()
+//   A.lend(id) -> { c, name, pos, heading, home } | null   ONE OF THEM OFF THE SHIP FOR A WHILE (a rescue's paramedic,
+//       down the ramp to the pods: src/rescued.js walks them out there): up from where they sit or lie; their figure is
+//       the borrower's to place and move (c: the crew kit's person) until A.back(id); pos, heading: where they stand
+//       now, in the ship's own frame; home: the seat kept for them to come back to (a free one: its `stand`, where one
+//       stands to sit down on it). Meanwhile nothing here moves or draws them, and nobody aboard walks round them.
+//   A.back(id)   aboard again: sat down on the seat kept for them, and along for the ride as before
 import * as THREE from 'three';
 import { placesOf, wayOf, walkStep, wayBack, floorOf, WALK, BED, CLIP } from './aboardplan.js';
 import { shine } from './player.js';
@@ -78,7 +84,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   const cabin = walls && walls.parts ? walls.parts.get('cabin:' + s.id) : null, wall = cabin && cabin.r ? cabin.r : floor.r || 0.15;
   // (the rest aboard, as someone walking meets them: where each is, walking or not, which way, and whether they come
   // before W in the list: two who cannot pass, the later turns back first)
-  const othersOf = (W) => list.filter((Q) => Q !== W).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.doing === 'walk', heading: Q.heading, held: Q.doing === 'walk' && Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(W) }));
+  const othersOf = (W) => list.filter((Q) => Q !== W && !Q.out).map((Q) => ({ x: Q.pos.x, z: Q.pos.z, walking: Q.doing === 'walk', heading: Q.heading, held: Q.doing === 'walk' && Q.wait > 0.3, first: list.indexOf(Q) < list.indexOf(W) }));
   const play = (W, n, fade = 0.35, speed = 1) => { if (W.clip !== n) { W.c.play(n, { fade, speed }); W.clip = n; } };
   const take = (p, who) => { for (const [k, v] of users) if (v === who) users.delete(k); if (p) users.set(p.id, who); };
   // (a place as a figure uses it: where its root is and which way it is turned, in the ship's own frame)
@@ -120,6 +126,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
     inv.copy(s.M).invert();
     const pp = player && player.pos ? _p.copy(player.pos).applyMatrix4(inv) : null;
     for (const W of list) {
+      if (W.out) continue;      // (off the ship just now: the borrower's, A.lend)
       W.t += dt;
       if (W.doing === 'walk') {
         // (on along the way: aboardplan.js walkStep. Met head on where it is wide enough for two, the player or another
@@ -155,6 +162,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   function late(M, scene) {
     for (const W of list) {
       if (scene && !W.c.root.parent) scene.add(W.c.root);
+      if (W.out) continue;
       if (W.local) { W.c.root.matrix.multiplyMatrices(M, W.local); W.c.root.matrixWorldNeedsUpdate = true; }
     }
   }
@@ -170,9 +178,30 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
     if (p.kind === 'lie') { const hx = Math.sin(p.heading), hz = Math.cos(p.heading); _q.setFromEuler(_e.set(-Math.PI / 2, Math.atan2(-hx, -hz), 0, 'YXZ')); return out.compose(_v.set(p.x - hx * BED.feet, p.y + BED.back, p.z - hz * BED.feet), _q, _s); }
     _q.setFromEuler(_e.set(0, p.heading, 0)); return out.compose(_v.set(p.x, p.y, p.z), _q, _s);
   }
+  // OFF THE SHIP FOR A WHILE, AND BACK (the header): up from their place (it is free again, unless it is the seat kept
+  // for them: a seat nobody has and no job has, off the flight deck first; the one they sit on, if it is such a one)
+  function lend(id) {
+    const W = list.find((w) => w.id === id); if (!W || W.out) return null;
+    const ok = (p) => p.kind === 'sit' && (users.get(p.id) === W.id || free(p, W));
+    const at = W.place || W.target || null, here = W.doing === 'walk' ? null : at;
+    const home = (here && ok(here) ? here : null) || places.find((p) => ok(p) && !p.cockpit) || places.find((p) => ok(p)) || here || at;
+    // (on their feet where one stands by the place they were in; walking, where they are)
+    const pos = here ? new THREE.Vector3(here.stand[0], s.space.deck, here.stand[1]) : new THREE.Vector3(W.pos.x, s.space.deck, W.pos.z);
+    take(home, W.id);
+    Object.assign(W, { out: true, doing: 'out', way: null, place: null, target: home, from: null, side: 0, sideAim: 0, wait: 0, clip: '' });
+    W.c.root.matrixAutoUpdate = true; W.c.setEyes('blink');
+    return { c: W.c, name: W.name, pos, heading: W.heading, home };
+  }
+  function back(id) {
+    const W = list.find((w) => w.id === id); if (!W || !W.out) return false;
+    W.out = false; W.c.root.matrixAutoUpdate = false; W.clip = '';
+    const p = W.target; W.target = null;
+    if (p) arrive(W, p); else { W.doing = 'stand'; W.t = 0; W.stay = 5; }
+    return true;
+  }
   function dispose() { for (const W of list) { if (W.c.root.parent) W.c.root.parent.remove(W.c.root); W.c.dispose(); } list.length = 0; users.clear(); }
-  return { places, list, update, late, near, poseOf, take, free: (who) => take(null, who), user: (p) => users.get(p.id) || null, mine: mineP, dispose,
+  return { places, list, update, late, near, poseOf, take, lend, back, free: (who) => take(null, who), user: (p) => users.get(p.id) || null, mine: mineP, dispose,
     // (for the player's own walking: the crew are people to walk round, where they are just now)
-    get others() { return list.map((W) => ({ pos: W.posW, hidden: false, away: false, walking: W.doing === 'walk' })); },
+    get others() { return list.filter((W) => !W.out).map((W) => ({ pos: W.posW, hidden: false, away: false, walking: W.doing === 'walk' })); },
     state: () => ({ list: list.map((W) => ({ id: W.id, jobs: W.jobs, doing: W.doing, place: W.place ? W.place.id : W.target ? '-> ' + W.target.id : null, pos: W.pos.toArray().map((v) => +v.toFixed(2)), wait: +W.wait.toFixed(1), turned: W.turned })), places: places.map((p) => ({ id: p.id, kind: p.kind, room: p.room, job: p.job, user: users.get(p.id) || null })) }) };
 }

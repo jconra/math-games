@@ -357,11 +357,16 @@ async function boot() {
     const P = player.P;
     // (held up a second, by someone in the way or pushed off the way round them: the way worked out again from here)
     auto.still = P.speed < 0.2 ? (auto.still || 0) + 1 : 0;
-    if (auto.still > 40 && auto.to) { auto.still = 0; const w = walls.path(P.pos, auto.to); if (w) { auto.way = w; auto.i = 1; } }
+    // (and, held up against something beside the way (it walks a straight line at each next point of the way, so it
+    // cuts a corner into whatever stands by it: in the Medic, a fitting on the bay's wall beside its door, 3 walks of 14
+    // from the top of its ramps, rigs/rescue-8/door.cjs), a few steps to one side as it goes on, the other side the
+    // next time: as a player caught on a corner steps round it)
+    if (auto.still > 40 && auto.to) { auto.still = 0; auto.side = -(auto.side || -1); auto.sideT = 20; const w = walls.path(P.pos, auto.to); if (w) { auto.way = w; auto.i = 1; } }
     let goal = auto.way[auto.i];
     while (goal && Math.hypot(goal.x - P.pos.x, goal.z - P.pos.z) < 0.35) { auto.i++; goal = auto.way[auto.i]; }
     if (!goal) { auto.way = null; return { x: 0, y: 0, mag: 0 }; }
     _w.set(goal.x - P.pos.x, 0, goal.z - P.pos.z).normalize();
+    if (auto.sideT > 0) { auto.sideT--; const sx = -_w.z * auto.side, sz = _w.x * auto.side; _w.x += sx * 0.9; _w.z += sz * 0.9; _w.normalize(); }
     const yaw = chase.yaw, fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     return { y: _w.x * fx + _w.z * fz, x: _w.x * rx + _w.z * rz, mag: 1 };
   }
@@ -369,7 +374,7 @@ async function boot() {
     // (a spot by name, or { at: [x, y, z] }: the nearest place to stand there)
     const s = spot.at ? { pos: walls.snap(spot.at[0], spot.at[1] + 0.15, spot.at[2], 1.5) } : resolve(W, walls, spot); if (!s || !s.pos || !player) return false;
     const way = walls.path(player.P.pos, s.pos); if (!way) return false;
-    auto.way = way; auto.i = 1; auto.run = run; auto.to = s.pos; auto.still = 0; return way.length;
+    auto.way = way; auto.i = 1; auto.run = run; auto.to = s.pos; auto.still = 0; auto.sideT = 0; return way.length;
   };
   GAME.walking = () => !!auto.way;
   // (a rig looking at the player's own figure: the crew kit's character, as built from their look)

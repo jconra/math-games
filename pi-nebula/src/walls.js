@@ -211,10 +211,28 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
       // a wall: slide along it (the station's walls run along x and z; in a part stood somewhere else, a ship set down
       // crooked, they run along that part's own two ways, so a person slides along its cabin's walls as ever)
       const fr = turned ? frameAt(pos) : null;
-      let a, b;
-      if (fr) { const l0 = fr.c * sx - fr.s * sz, l1 = fr.s * sx + fr.c * sz; a = Math.abs(l0) > 1e-6 && tryStep(pos, fr.c * l0, -fr.s * l0, r, doorsOpen); b = Math.abs(l1) > 1e-6 && tryStep(pos, fr.s * l1, fr.c * l1, r, doorsOpen); }
-      else { a = Math.abs(sx) > 1e-6 && tryStep(pos, sx, 0, r, doorsOpen); b = Math.abs(sz) > 1e-6 && tryStep(pos, 0, sz, r, doorsOpen); }
-      if (a || b) continue;
+      // (the step's two parts, along the walls' own two ways)
+      let ax = sx, az = 0, bx = 0, bz = sz;
+      if (fr) { const l0 = fr.c * sx - fr.s * sz, l1 = fr.s * sx + fr.c * sz; ax = fr.c * l0; az = -fr.s * l0; bx = fr.s * l1; bz = fr.c * l1; }
+      const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
+      const a = la > 1e-6 && tryStep(pos, ax, az, r, doorsOpen), b = lb > 1e-6 && tryStep(pos, bx, bz, r, doorsOpen);
+      const L = Math.hypot(sx, sz), crawl = L < BODY.stride - 1e-6;
+      // (one part taken, a slide along a wall. But if the part that went nowhere is the greater one, it may be a sliver
+      // across their way that stopped it, below: that part tried again a stride long, once the slide is taken)
+      if (a || b) { if (crawl && !b && lb > la) tryStep(pos, bx / lb * BODY.stride, bz / lb * BODY.stride, r, doorsOpen); else if (crawl && !a && la > lb) tryStep(pos, ax / la * BODY.stride, az / la * BODY.stride, r, doorsOpen); continue; }
+      // A SLIVER, STEPPED OVER. A strip a few centimetres across where a body may not stand, or no floor is found (the
+      // edge of a riser where one floor ends and the next begins; the corner of a cabinet's end, felt only where it falls
+      // on one of the eight points a body is felt at), is crossed by a walking step without knowing. But someone held
+      // up a moment walks on at a crawl, a few millimetres a frame, and such a step lands in the strip every time: they
+      // stood there for good with the key held (the Medic: at the step up into its cockpit, and beside its bay's door,
+      // by a cabinet's end, coming from the top of its port ramp; rigs/rescue-8/lab.cjs --mode=door, RESCUE_8.md). So a
+      // step that goes nowhere is tried again a stride long: the way they push, then along the wall they slide on. It
+      // lands only where a body may stand, as any step (nothing a body cannot pass is passed)
+      if (crawl) {
+        const k = BODY.stride / L;
+        if (tryStep(pos, sx * k, sz * k, r, doorsOpen)) continue;
+        if (la >= lb ? la > 1e-6 && tryStep(pos, ax / la * BODY.stride, az / la * BODY.stride, r, doorsOpen) : lb > 1e-6 && tryStep(pos, bx / lb * BODY.stride, bz / lb * BODY.stride, r, doorsOpen)) continue;
+      }
       // head on into a door's frame, a little off its middle: eased sideways into the opening (a narrow ship's door
       // needs a person lined up within a hand's width, too fine for a thumb on a stick)
       if (!nudge(pos, sx, sz, r, doorsOpen)) break;

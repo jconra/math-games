@@ -8,7 +8,8 @@
 // what is higher than a step and lower than a person's middle is walked round): a rock on a slope, felt only at a
 // person's knees from uphill, was walked through.
 //
-//   const F = await makeOnFoot({ planet, scene, camera, lib, recipe, wreck, pods, medic })
+//   const F = await makeOnFoot({ planet, scene, camera, lib, recipe, wreck, pods, medic, env })   env: the Medic's cabin's own
+//                              picture of itself, for the player's shine inside it (boarding's; none: as they are made)
 //   F.walls (src/walls.js, the planet's), F.player (src/player.js), F.chase (src/chase.js)
 //   F.put(feet, heading)       stand the player there (the nearest spot a person can stand), the camera behind them
 //   F.update(dt, { move, run, look, zoom, others })   each frame: the player walks (move, run: the shared input's), the
@@ -19,6 +20,7 @@ import * as THREE from 'three';
 import { makeWalls } from '../walls.js';
 import { makePlayer } from '../player.js';
 import { makeChase } from '../chase.js';
+import { peopleLight } from './inside.js';
 
 // THE ROCKS felt: those whose top stands more than `step` metres over the ground under them (a pebble is walked over, a
 // boulder walked round), within `near` metres of the player, felt again once they have gone `again` metres on; the
@@ -26,7 +28,7 @@ import { makeChase } from '../chase.js';
 export const ONFOOT = { step: 0.25, near: 36, again: 12, cam: 0.35, nearPlane: 0.08 };
 
 const _m = new THREE.Matrix4(), _b = new THREE.Box3(), _v = new THREE.Vector3();
-export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = null, pods = null, medic = null }) {
+export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = null, pods = null, medic = null, env = null }) {
   const t0 = performance.now(), land = planet.land, ground = (x, z) => land.heightAt(x, z);
   const walls = makeWalls({ zones: [], doors: [] }, { ground });
   // the wreck's pieces, as they lie (their triangles, src/planet/wreckship.js W.world)
@@ -75,6 +77,8 @@ export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = n
     if (geos.length) walls.add('rocks', { solid: geos, up: geos }); else walls.drop('rocks');
   }
   const player = await makePlayer({ lib, recipe, walls, scene });
+  // (inside the Medic they are lit as its cabin is, not by the planet's sun through its hull: src/planet/inside.js)
+  const light = medic ? peopleLight(player.c, env || medic.env || null) : null;
   const chase = makeChase(camera, walls);
   const near0 = camera.near; camera.near = ONFOOT.nearPlane; camera.updateProjectionMatrix();
   stats.wallsMs = Math.round(performance.now() - t0);
@@ -82,6 +86,7 @@ export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = n
   function put(feet, heading = 0) {
     const s = walls.snap(feet.x, feet.y + 0.5, feet.z, 2.5) || feet.clone();
     player.place(s, heading); chase.snap(player.pos, heading);
+    if (light) light.set(medic.inside(player.pos) ? 1 : 0);
     player.c.update(0.5);      // (the standing clip faded all the way in: no first frame with the arms out)
     rocksIn(player.pos);
   }
@@ -89,6 +94,7 @@ export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = n
   function update(dt, { move = null, run = false, look = null, zoom = 0, others = [] } = {}) {
     if (!rocksAt || Math.hypot(player.pos.x - rocksAt.x, player.pos.z - rocksAt.z) > ONFOOT.again) rocksIn(player.pos);
     player.update(dt, { move, run, yaw: chase.yaw, others });
+    if (light) light.to(medic.inside(player.pos) ? 1 : 0, dt);
     chase.update(dt, { feet: player.pos, heading: player.heading, speed: player.speed, look: look || { dx: 0, dy: 0 }, zoom });
     // (never under the ground: lifted over it, still looking at the head)
     const g = ground(camera.position.x, camera.position.z) + ONFOOT.cam;

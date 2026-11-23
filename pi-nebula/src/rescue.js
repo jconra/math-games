@@ -409,8 +409,14 @@ export function makeSite(ctx, opts = {}) {
         if (st.groundFailed && !st.swapped) { if (!st.fallback) { st.fallback = true; console.error('rescue: no ground to walk on: her crew brings everyone aboard'); } for (let i = 0; i < st.of; i++) openPod(i); st.all = true; }
         if (st.swapped && rescued && st.skipAll) rescued.settle();
         const rampDown = medic && medic.rampT >= SITE.ramp;
-        if (P === 'pods' && st.swapped && !iMedic && rampDown) { st.podT += dt; const i = Math.floor(st.podT / SITE.pod); if (i < st.of && st.opened <= i) openPod(st.opened); }
-        if (P === 'pods' && st.swapped && rescued && rescued.placed >= st.of && st.opened >= st.of) st.all = true;
+        // (HER PARAMEDIC, the pods not the crew member's: one of the crew aboard walks down the ramp to them and opens each
+        // in turn, then back aboard: src/rescued.js paramedic, the figure lent by the trip. Nobody to walk (no crew aboard
+        // made): the pods open one after another by themselves, SITE.pod apart, as before)
+        if (P === 'pods' && st.swapped && !iMedic && rampDown && !st.skipAll) {
+          if (st.para === undefined) st.para = (rescued && opts.paramedic && rescued.paramedic(opts.paramedic(), { open: openPod })) || null;
+          if (!st.para) { st.podT += dt; const i = Math.floor(st.podT / SITE.pod); if (i < st.of && st.opened <= i) openPod(st.opened); }
+        }
+        if (P === 'pods' && st.swapped && rescued && rescued.placed >= st.of && st.opened >= st.of && (!st.para || st.para.done)) st.all = true;
         if (P === 'pods' && st.all) setPhase(opts.outside && opts.outside() ? 'wait' : 'board');
         if (P === 'wait' && !(opts.outside && opts.outside())) setPhase('board');
         if (P === 'board') {
@@ -477,6 +483,9 @@ export function makeSite(ctx, opts = {}) {
       if (medic && !st.swapped && rescued && rescued.list.length) { carrier.matrix.multiplyMatrices(frameNow(), medic.inv); } else carrier.matrix.identity();
       carrier.matrixWorldNeedsUpdate = true;
     },
+    // THE FLIGHT HOME: the rescued kept as they are, where they settled (src/rescued.js ride: theirs from here on, drawn
+    // where the ship is by whoever takes them: src/trip.js); the planet and the Medic set down are put away without them
+    ride(scene) { if (!rescued || st.rode || !rescued.list.length) return null; st.rode = true; const R = rescued.ride({ scene, order: st.came }); rescued = null; return R; },
     state: () => ({ phase: st.phase, t: +st.t.toFixed(2), ready: st.ready, failed: st.failed, seed, kind: land ? land.kind.id : null, wreck: wreck ? wreck.ship : null, pods: st.of, opened: st.opened, aboard: api.count.aboard,
       p: at.p.toArray().map((v) => +v.toFixed(2)), up: land ? +(at.p.y - ground(at.p.x, at.p.z)).toFixed(2) : null, landing: L ? [L.x, L.y, L.z].map((v) => +v.toFixed(1)) : null, view: fl ? fl.view : null, times: st.times, words: st.words,
       groundReady: st.groundReady, swapped: st.swapped, ground: api.ground, ramp: medic ? +medic.rampT.toFixed(2) : null, stand: st.stand ? { ...st.stand, x: +st.stand.x.toFixed(2), z: +st.stand.z.toFixed(2), yaw: +st.stand.yaw.toFixed(3) } : null,

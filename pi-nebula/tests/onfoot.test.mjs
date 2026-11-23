@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, benchPerches, BENCH, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
+import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, benchPerches, bedFor, nextShut, BENCH, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
 import { placesOf } from '../src/aboardplan.js';
 import { pose, SECS } from '../src/onbed.js';
 import { bedFrame, POD, podScale } from '../kit/stasispod-plan.js';
@@ -57,7 +57,8 @@ test('the two patient beds: heads at the hull, got onto from the bay floor towar
     const st = bedToShip(b, [b.bed.stand[0], 0, b.bed.stand[1]]);
     assert.ok(st[2] > it.rect[3] - 0.01 && st[2] < bay.rect[3], `${b.id} stand ${st}`);
     assert.ok(st[0] > bay.rect[0] && st[0] < bay.rect[2]);
-    assert.equal(b.bed.top, +it.h);
+    // (its pads' top: under the item's height by what the kit's bed and stretcher leave, PATIENT.under)
+    assert.ok(near(b.bed.top, +it.h - PATIENT.under, 1e-9));
   }
 });
 
@@ -149,4 +150,66 @@ test('lying on a patient bed: the back on the stretcher\'s raised back, the hips
     for (const f of p.feet) assert.ok(f[2] < 2.0 && Math.abs(f[0]) < b.bed.pad, `feet at ${f}`);
   }
   assert.equal(leanOn(0.4), 0.4);
+});
+
+// ── rescue-8 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+test('a patient bed\'s top is its stretcher\'s pads\' own top, as the kit builds it: under the item\'s height by what the base and the stretcher leave', () => {
+  // (kit/shipparts/cabin/medbay.js patientBed: the base's top `pad` under the item's height, the stretcher's frame 0.02
+  // under that; stretcher.js: its pads from 0.02 over its frame, `th` thick)
+  const bay = fs.readFileSync(new URL('../kit/shipparts/cabin/medbay.js', import.meta.url), 'utf8'), str = fs.readFileSync(new URL('../kit/shipparts/cabin/stretcher.js', import.meta.url), 'utf8');
+  const pad = +/top = o\.top \?\? 0\.8,.*?pad = ([\d.]+), bt = top - pad/.exec(bay)[1], frame = +/frame: r3\(bt - ([\d.]+)\)/.exec(bay)[1];
+  const m = /yP = yF \+ ([\d.]+), th = ([\d.]+)/.exec(str), up = +m[1], th = +m[2], back = +/back: o\.back \?\? ([\d.]+)/.exec(bay)[1];
+  assert.ok(near(PATIENT.under, pad + frame - up - th, 1e-9), `the pads' top is ${pad + frame - up - th} under the item's height`);
+  assert.ok(near(PATIENT.back, back, 1e-9), 'and its back section is raised as the kit raises it');
+  for (const b of patientBeds(BP, DECK)) assert.ok(near(b.bed.top, 0.8 - PATIENT.under, 1e-9));
+});
+
+test('on a patient bed each one\'s hips are placed by their own trunk, so their head comes onto the pillow; any other bed is as it is', () => {
+  const [b] = patientBeds(BP, DECK);
+  // (trunks, the hip joints' middle to the head's bone: short, middling, long)
+  const zs = [0.5, 0.62, 0.7, 0.8, 1.2].map((t) => bedFor(b, { t }).z);
+  for (let k = 1; k < zs.length; k++) assert.ok(zs[k] >= zs[k - 1], 'a longer trunk lies no nearer the head\'s wall');
+  assert.equal(zs[0], PATIENT.hips, 'never nearer the wall than the back section\'s hinge');
+  assert.equal(zs[zs.length - 1], PATIENT.most, 'nor further down the bed than its pads let the feet lie');
+  // (between: the head's own bone over the pillow's middle, the trunk lying up the raised back)
+  const mid = bedFor(b, { t: 0.7 });
+  assert.ok(near(mid.z - 0.7 * Math.cos(PATIENT.back), PATIENT.head, 2e-3));
+  assert.ok(PATIENT.head > 0.15 && PATIENT.head < 0.43, 'the pillow lies 0.15 to 0.43 m from the wall');
+  assert.equal(mid.stand[1], mid.z, 'and they stand at its side where their hips will lie');
+  assert.equal(mid.top, b.bed.top);
+  // (the feet still on its pads, short of its foot: the stretcher's pads end 1.83 m from the wall)
+  for (const who of WHO) for (const t of [0.55, 0.7, 0.8]) { const own = bedFor(b, { ...who, t }), p = pose('lying', 0, own, who); for (const f of p.feet) assert.ok(f[2] < 1.99, `feet at ${f[2]}`); }
+  // (nobody's measures, or another kind of bed: the bed's own numbers)
+  assert.equal(bedFor(b, null), b.bed);
+  for (const c of [...crewBeds(BP, DECK), ...benchPerches(BP, DECK)]) assert.equal(bedFor(c, { t: 0.7 }), c.bed);
+});
+
+test('her paramedic goes to the nearest pod still shut, and aboard again when none is', () => {
+  const pods = [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 8, z: 0 }, { x: 12, z: 0 }].map((p) => ({ ...p, open: false }));
+  // (down the row from where they come to it, never back and forth across it)
+  let at = { x: 13, z: 5 }; const order = [];
+  for (let k = 0; k < 4; k++) { const i = nextShut(pods, at); order.push(i); pods[i].open = true; at = pods[i]; }
+  assert.deepEqual(order, [3, 2, 1, 0]);
+  assert.equal(nextShut(pods, at), -1);
+  // (one opened by someone else meanwhile is passed over)
+  assert.equal(nextShut([{ x: 0, z: 0, open: true }, { x: 9, z: 0, open: false }], { x: 1, z: 0 }), 1);
+});
+
+test('getting out of a pod, the feet are carried over its front rim: higher than over a plain bed by the rim\'s own height', () => {
+  const F = bedFrame(podScale()), plain = { ...F.bed, stand: [F.bed.edge + POD_OUT.stand, F.bed.z] }, pod = { ...plain, rim: POD_OUT.rim };
+  assert.ok(POD_OUT.rim >= 0.07, 'the rim stands up to 7 cm over the pad\'s height');
+  for (const who of WHO) {
+    let over = 0;
+    for (let t = 0; t <= SECS.swingout + 1e-9; t += 1 / 30) {
+      const a = pose('swingout', t, plain, who), b = pose('swingout', t, pod, who);
+      // (the same turn, the same hips; only the feet are higher, and never lower)
+      assert.deepEqual(a.hips, b.hips); assert.equal(a.heading, b.heading);
+      b.feet.forEach((f, i) => { assert.ok(f[1] >= a.feet[i][1] - 1e-9); over = Math.max(over, f[1] - a.feet[i][1]); });
+      // (carried round, out past the pad's edge: clear of the rim's top)
+      if (t / SECS.swingout > 0.25 && t / SECS.swingout < 0.5) for (const f of b.feet) if (f[0] > pod.edge) assert.ok(f[1] > pod.top + POD_OUT.rim + 0.04, `a foot at ${f} over the rim`);
+    }
+    assert.ok(near(over, POD_OUT.rim, 1e-6));
+    // (and on their feet at the end as before: the last move is the plain one's)
+    assert.deepEqual(pose('hopdown', SECS.hopdown, pod, who).feet, pose('hopdown', SECS.hopdown, plain, who).feet);
+  }
 });

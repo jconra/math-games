@@ -21,7 +21,7 @@
 //                                  clip's own legs)
 //   M.body                         the person's own measures, taken once standing: { a thigh, b shin (hip, knee, the
 //                                  foot's root, m), w half the hips' width, hs the hip joints' height, u upper arm, f
-//                                  forearm }
+//                                  forearm, t the trunk (the hip joints' middle to the head's bone) }
 //   M.hipAt                        where the clips put the hip joints' middle from the root (the world's measure, along
 //                                  the root's own axes), taken each frame a bed pose is laid on: people.js places the
 //                                  root by it
@@ -92,7 +92,8 @@ export function addMoves(c) {
     const at = (n, v) => (B[n] ? B[n].getWorldPosition(v) : null), d = (p, q) => (at(p, _v1) && at(q, _v2) ? _v1.distanceTo(_v2) : 0);
     const hl = at('UpperLegL', new THREE.Vector3()), hr = at('UpperLegR', new THREE.Vector3());
     M.body = { a: d('UpperLegL', 'LowerLegL') || 0.41, b: d('LowerLegL', 'FootL') || 0.47, w: hl && hr ? hl.distanceTo(hr) / 2 : 0.12,
-      hs: hl && hr ? (hl.y + hr.y) / 2 - c.root.position.y : 0.87, u: d('UpperArmL', 'LowerArmL') || 0.31, f: d('LowerArmL', 'WristL') || 0.27 };
+      hs: hl && hr ? (hl.y + hr.y) / 2 - c.root.position.y : 0.87, u: d('UpperArmL', 'LowerArmL') || 0.31, f: d('LowerArmL', 'WristL') || 0.27,
+      t: hl && hr && B.Head ? B.Head.getWorldPosition(_v1).distanceTo(_v2.addVectors(hl, hr).multiplyScalar(0.5)) : 0.62 };
     M.hipAt = new THREE.Vector3(0, M.body.hs, 0);
     // (each hand's palm: the wrist's own axis, x or z either way, that points in toward the body standing, as the calm
     // standing pose holds the palms to the thighs; the fingers run along its +y)

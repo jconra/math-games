@@ -190,7 +190,7 @@ import { openPanel } from './jobs/panel.js';
 import { JOB as PILOT } from './jobs/pilot.js';
 import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/smelter.js';
 import { stepsFor, land, LAMPS, lampPlan, lampAt, rockCards, aboardOf, roleOf } from './missions.js';
-import { restOrder } from './rescueplan.js';
+import { restOrder, MEDIC } from './rescueplan.js';
 import { RUN_TALK } from './lines.js';
 import { HAULER_CAPTAIN } from './life.js';
 import { news } from './news.js';
@@ -202,6 +202,8 @@ import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 import { makeDash, stepDash } from './dash.js';
 import { recipeOf } from './looks.js';
+import { shine } from './player.js';
+import { peopleLight } from './planet/inside.js';
 import { keepFind, findNews } from './exploreplan.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
@@ -354,6 +356,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (a rescue's far place, the planet: src/rescue.js, fetched as the crew member sits down and made as the jump out is
   // worked out, unseen, so the wormhole's far end opens on it)
   let site = null, siteMod = null, siteErr = null;
+  // (a rescue's rescued, from the jump home until they are the station's: src/rescued.js ride; THE RESCUED ABOARD, below)
+  let riders = null;
   // (an exploring run's next place, being made while the jump to it is worked out: src/explore.js)
   let nextSite = null;
   // THE DASHBOARD'S NUMBERS FOR THE WHOLE RUN (src/dash.js; the dashboard itself is the flying's, src/flying.js): one tank
@@ -913,7 +917,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   }
   const crewBusy = (id) => { if (!crewA) return false; const p = crewA.places.find((q) => q.id === id), u = p && crewA.user(p); return !!u && !String(u).startsWith('rescued'); };
   // (the crew aboard as people on foot out there: where each stands, in the world as it is out there)
-  const crewOut = () => (crewA && site ? crewA.list.map((W) => ({ pos: site.toPlanet(W.posW.clone()), walking: W.doing === 'walk', hidden: false, away: false })) : []);
+  const crewOut = () => (crewA && site ? crewA.list.filter((W) => !W.out).map((W) => ({ pos: site.toPlanet(W.posW.clone()), walking: W.doing === 'walk', hidden: false, away: false })) : []);
   // V: out to behind the ship and back, with a quick glide (aboard() draws it)
   function outside(v) {
     if (!T.afoot || T.done || v === T.out) return;
@@ -1048,12 +1052,45 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         crew, save: () => save(crew), recipe: ctx.lib && crew.look ? recipeOf(crew.look, ctx.lib) : null,
         // (a pod's lock up: their walking rests meanwhile)
         onLock: (up) => { T.lockUp = up; el.classList.toggle('has-lock', up); if (ctx.walk) ctx.walk(!up && T.ground); },
-        busy: crewBusy, crewAt: () => crewOut().map((o) => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z, walking: o.walking })),
+        busy: crewBusy, crewAt: () => crewOut().map((o) => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z, walking: o.walking })), paramedic: lendMedic,
         walking: () => !!T.ground, outside: () => !!T.ground && !!site && !site.footIn,
         // (anyone on foot in the rooms as the ship is parked, where they are there: the crew aboard walking, the crew member
         // not out on the planet)
         eyes: () => [...(crewA ? crewA.list.filter((w) => w.doing === 'walk').map((w) => w.posW) : []), ...(T.afoot && !T.ground && P() ? [P().pos] : [])] });
     api.site = site;
+  }
+  // HER PARAMEDIC, the pods left to the captain's crew: whoever of the crew aboard has that job (her paramedic, or the
+  // captain herself when her pilot came along instead: src/missions.js aboardOf) is lent to the planet's part, which walks
+  // them down the ramp to the pods and back (src/aboard.js lend, src/rescued.js paramedic): where they stand and the way
+  // they face out there, the seat kept for them, and aboard again
+  function lendMedic() {
+    const w = crewA && site ? crewA.list.find((x) => x.jobs.includes('medic')) : null, L = w ? crewA.lend(w.id) : null; if (!L) return null;
+    const Mn = site.matrix, lit = cabinLit && cabinLit.find((q) => q.c === L.c);
+    return { c: L.c, name: w.name, pos: L.pos.clone().applyMatrix4(Mn), heading: L.heading + Math.atan2(Mn.elements[8], Mn.elements[10]), home: L.home, light: lit ? lit.L : null, back: () => { if (crewA) crewA.back(w.id); } };
+  }
+  // THE PEOPLE ABOARD, LIT AS THE CABIN IS while the planet's sun is out there (src/planet/inside.js): the crew aboard and
+  // the crew member's own figure, from the planet shown until the colours of the jump home are all round. (Lit by the
+  // scene's lights as they are, the planet's sun lit them through the hull. One of them out on the ground, her
+  // paramedic, is lit by it out there: src/rescued.js)
+  let cabinLit = null;
+  function lightAboard(on) {
+    if (on && !cabinLit) cabinLit = [...(crewA ? crewA.list.map((w) => w.c) : []), ...(P() ? [P().c] : [])].map((c) => ({ c, L: peopleLight(c, (S.cabin && S.cabin.env) || null) }));
+    if (cabinLit) for (const q of cabinLit) q.L.set(on ? 1 : 0);
+    // (home: in the station's own light again, the room's picture of itself their shine as it was)
+    if (!on && cabinLit) { for (const w of crewA ? crewA.list : []) if (S.cabin && S.cabin.env) shine(w.c, S.cabin.env); const b = P(); if (b) { b.zone = null; shine(b.c, W.envAt(b.pos)); } }
+  }
+  // THE RESCUED ABOARD FOR THE FLIGHT HOME (the game's maker's rescued "take a bed or seat aboard": they stay in it): as
+  // the jump home's colours are all round and the planet is put away, the rescued are kept (src/rescue.js ride), the same
+  // figures where they settled, lit as the crew aboard are, their places kept from the crew; each frame their moves and
+  // the one matrix that draws them where the ship is. Home, they are the ward's (rescuedHome)
+  function keepRiders() {
+    riders = site && site.ride ? site.ride(W.scene) : null; api.riders = riders;
+    if (!riders) return;
+    for (const R of riders.list) {
+      if (S.cabin && S.cabin.env) shine(R.c, S.cabin.env);
+      const p = crewA && R.place ? crewA.places.find((q) => q.id === R.place.place.id) : null;
+      if (p && !crewA.user(p)) crewA.take(p, 'rescued-in-' + R.i);
+    }
   }
   // THE OLD STATION, the supply run's far place (src/oldstationsite.js): made unseen as the jump out is worked out
   function makeOld() {
@@ -1072,7 +1109,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   }
   function openPlanet() {
     if (!site || site.fl || !site.ready) return;
-    if (!site.open(T.view || 'cockpit')) { console.error('trip: the planet could not be shown'); abort(); }
+    if (!site.open(T.view || 'cockpit')) { console.error('trip: the planet could not be shown'); abort(); return; }
+    if (PLANET) lightAboard(true);
   }
   function endSite() { if (site) { site.close(); site = null; api.site = null; } }
   // HOME FROM A RESCUE: the rescued to the station's ward (src/people.js THE WARD: down the Medic's ramp one after
@@ -1087,11 +1125,22 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     try {
       const pp = ctx.people ? ctx.people() : null;
       if (pp && pp.ward && n > 0) {
-        const r = pp.ward.admit(who.map((w, i) => ({ look: w.look || SLEEPERS[i % SLEEPERS.length], position: w.position })));
+        // (the very people aboard: posed where the ship now stands, on the station's own walls; each gets up in their
+        // turn and walks down the ramp nearest the ward (once it is down), round the crew still aboard: the ward's from
+        // here on, src/people.js THE WARD)
+        const R = riders, A = crewA; riders = null; api.riders = null;
+        if (R) {
+          const foot = pp.ward.foot(), ramps = (S.ways || []).filter((D) => /ramp/i.test(D.piece || '')), at = (D) => (S.moved ? D.sense.clone().applyMatrix4(S.D) : D.sense);
+          const ramp = foot && ramps.length ? ramps.reduce((a, b) => (at(b).distanceTo(foot) < at(a).distanceTo(foot) ? b : a)) : null;
+          R.home({ M: S.M, walls, foot: ramp ? foot : null, inside: (v) => String(boarding.where(v) || '').startsWith(M.ship + '/'), open: () => !!ramp && ramp.t >= MEDIC.wayOpen,
+            crew: () => (A ? A.list.filter((w) => !w.out).map((w) => ({ x: w.posW.x, y: w.posW.y, z: w.posW.z, walking: w.doing === 'walk' })) : []) });
+        }
+        const r = pp.ward.admit(who.map((w, i) => ({ look: w.look || SLEEPERS[i % SLEEPERS.length], position: w.position, rider: R && R.list[i] ? R.list[i].i : null })), R);
         resting = r.beds;
         crew.ward = [...kept(crew.ward), ...r.saved]; save(crew);
       }
     } catch (e) { console.error('trip: the rescued did not come to the ward', e); }
+    if (riders) { riders.dispose(); riders = null; api.riders = null; }
     try {
       // (a run of the crew member's own: the station's news of the Medic is as it is of any rescue of hers)
       news.add({ kind: 'rescue', ship: SHIP.name, captain: own ? 'Captain Hale' : ctx.captainName || 'Captain Hale', crew: `${numberWord(n)} stranded crew`,
@@ -1121,6 +1170,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   function arriveHome() {
     // (whoever only watches comes home in the view they went out in: from behind the ship, unless they changed it)
     const view = ff ? ff.fl.view : site && site.fl ? site.fl.view : iWatch ? T.view || 'cockpit' : 'cockpit';
+    if (PLANET) { keepRiders(); lightAboard(false); }
     endDrill(); endSite();
     space(false);
     // (the haul is in its canisters from here on: it is seen flown home with them as full as they came)
@@ -1238,6 +1288,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     seatEl.remove(); upEl.hidden = true; viewEl.hidden = true;
     endDrill(); if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
     endSite(); if (nextSite) { nextSite.close(); nextSite = null; api.next = null; }
+    if (riders) { riders.dispose(); riders = null; api.riders = null; }
+    lightAboard(false);
     if (fl) { fl.close(); fl = null; api.fly = null; }
     jobs.show(true);
     if (panel) { panel.close(true); panel = null; }
@@ -1272,6 +1324,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     field: null,    // (the flying at the rocks, while there is one: src/fieldfly.js)
     tune: null,     // (the core's tuning, while it is on: src/tune.js)
     site: null,     // (a rescue's planet, while there is one: src/rescue.js)
+    riders: null,   // (the rescued aboard, from the jump home to the landing: src/rescued.js)
     update(dt) {
       T.clock += dt; T.dt = dt;
       // (the captain's bubble outlives the trip a moment)
@@ -1296,6 +1349,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       // go on for it, up to the wormhole's longest: src/wormplan.js JUMP.most): shown as soon as it is; it could not be
       // made: the run given up)
       if (site) { if (site.fl) site.fl.panel = !!panel; site.update(dt); }
+      if (riders) riders.update(dt, { camera: W.camera });
       if ((PLANET || EXPLORE || SUPPLY) && T.inField && site && !site.fl) { if (site.failed) { console.error('trip: the planet never came'); abort(); return; } openPlanet(); }
       if (wh) { wh.update(dt); if (T.done) return; }
       // (the crew aboard: what each is doing, out of the way of the crew member on their feet)
@@ -1344,8 +1398,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       if (fl && fl.on) fl.late(); else if (T.space && W.scene.fog) { W.scene.fog.near = 1e4; W.scene.fog.far = 2e4; }
       // (the wormhole, round the eye: ahead is the way the nose of the ship points, whichever ship is being drawn)
       if (wh && wh.on) wh.place(W.camera, ff ? ff.matrix : site && site.fl ? site.matrix : fl && fl.on ? fl.matrix : S.M);
-      // (the crew aboard, drawn where the ship is just now)
+      // (the crew aboard, drawn where the ship is just now; and the rescued aboard on the flight home)
       if (crewA && !T.done) crewA.late(shipNow(), W.scene);
+      if (riders && !T.done) riders.late(shipNow());
     },
     abort,
     // (the rigs: the cut-scene hurried on)

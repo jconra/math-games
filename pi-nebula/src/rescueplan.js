@@ -33,11 +33,24 @@ export const MEDIC = { bp: 'medic-open-bench', cabin: { voxel: 0.05, r: 0.15 }, 
 // 0.78 m along the stretcher from its head), where the hands keep off (the pillow), where one stands at its side (the
 // base is 0.9 m across: the hip joints 0.17 m out past it, the back just clear), the seat's height over the pad when
 // sitting on its edge, and the back section's raise (its stretcher's `back`, radians: lying, the back lies on it)
-export const PATIENT = { pad: 0.36, hips: 0.88, rest: [0, 0.5], stand: 0.62, hipUp: 0.095, back: 0.3 };
+// ITS PADS' TOP IS LOWER THAN THE ITEM'S HEIGHT (`under`, m: medbay.js patientBed puts the base's top 0.12 under the
+// item's height, the stretcher's frame 0.02 under that, and stretcher.js its pads from 0.02 over the frame, 0.075 thick:
+// 0.045 under). Taken for the item's height, everyone lay that much over the pads: the hips just touching, the legs and
+// the heels 4 to 10 cm in the air (measured, rigs/rescue-8/lab.cjs: RESCUE_8.md). AND THE HEAD ON ITS PILLOW (`head`: how
+// far from the head's wall the head's own bone lies, m: over the pillow's middle; the pillow lies 0.15 to 0.43 m from
+// the wall on the raised back): each person's hips are placed by their own trunk's length (patientBedFor, as the ward's
+// bed places them by their legs': src/wardplan.js bedFor), no nearer the wall than the back section's hinge (`hips`)
+// and no further than `most`. With everyone's hips at the hinge the longer trunks had their shoulders on the pillow and
+// the head past it, against the wall. THE PILLOW PROPS THE HEAD AND SHOULDERS (`prop`, radians): lying, the trunk is
+// raised that much more than the back section it lies on, so the back rests on the pad and the shoulders and the head
+// on the pillow (7 cm thick) instead of in it (measured: the head's back was 10 cm under the pillow's top).
+export const PATIENT = { pad: 0.36, hips: 0.88, rest: [0, 0.5], stand: 0.62, hipUp: 0.095, back: 0.3, under: 0.045, head: 0.3, most: 1.12, prop: 0.06 };
 // THE POD'S BED (kit/stasispod-plan.js bedFrame) as the rescued get out of it: one stands up at its front, the side its
 // screen is on, a little further out than the bed frame's own stand (0.3 past the pad's edge), so the back is clear of
 // the pod's front, which bulges out past the pad's edge (m past the pad's edge)
-export const POD_OUT = { stand: 0.45 };
+// ITS FRONT RIM stands over its pad's own height toward its foot end, by up to 7 cm (measured, rigs/rescue-8/lab.cjs: the
+// feet, carried round 6 cm over the pad, went through it there): `rim`, the feet carried that much higher (onbed.js)
+export const POD_OUT = { stand: 0.45, rim: 0.08 };
 // THE WAKE: the eyes open (the crew kit's lids open over 0.35 s, kit/lids.js), and a moment lying still, awake, before
 // sitting up (s); the lid must be this far open first (0..1)
 export const WAKE = { lid: 0.85, still: 1.4 };
@@ -70,14 +83,22 @@ export function patientBeds(bp, deck) {
   for (const it of (bp.items || []).filter((x) => x.kind === 'patient')) {
     const [x0, z0, x1, z1] = it.rect, alongX = x1 - x0 >= z1 - z0;
     if (!alongX) continue;                          // (the Medic's run across the ship; one along it would be the other way)
-    const port = (x0 + x1) / 2 > 0, wall = port ? x1 : x0, zm = (z0 + z1) / 2, top = +it.h || 0.8;
+    const port = (x0 + x1) / 2 > 0, wall = port ? x1 : x0, zm = (z0 + z1) / 2, top = r3((+it.h || 0.8) - PATIENT.under);
     // (along: away from the wall; across, as a turn of the ship's frame: port, along -x so across +z; starboard, along
     // +x so across -z, and the open side, the nose's, is then its -x)
     const along = [port ? -1 : 1, 0, 0], across = [0, 0, port ? 1 : -1];
     const bed = { top, edge: PATIENT.pad, pad: PATIENT.pad, z: PATIENT.hips, stand: [PATIENT.stand, PATIENT.hips], hipUp: PATIENT.hipUp, rest: PATIENT.rest };
-    out.push({ id: it.id, name: it.name || 'Patient bed', side: port ? 'port' : 'starboard', frame: { o: [wall, deck, zm], x: across, z: along }, mirror: !port, bed, back: PATIENT.back });
+    out.push({ id: it.id, name: it.name || 'Patient bed', side: port ? 'port' : 'starboard', frame: { o: [wall, deck, zm], x: across, z: along }, mirror: !port, bed, back: PATIENT.back, prop: PATIENT.prop });
   }
   return out;
+}
+// A PATIENT BED FOR ONE PERSON, as onbed takes it (who: their measures, src/moves.js M.body: `t` their trunk, the hip
+// joints' middle to the head's bone): their hips as far from the head's wall as puts their head on the pillow, the back
+// lying on the raised back section (its raise shortens the trunk's reach along the bed). Any other bed: as it is
+export function bedFor(B, who) {
+  if (!B || !B.back || B.lie || B.perch || !(who && who.t > 0)) return B ? B.bed : null;
+  const z = r3(Math.min(PATIENT.most, Math.max(PATIENT.hips, PATIENT.head + who.t * Math.cos(B.back))));
+  return { ...B.bed, z, stand: [B.bed.stand[0], z] };
 }
 // a point of a patient bed's own frame (onbed's, mirrored as the bed is) in the ship's
 export function bedToShip(B, [x, y, z]) {
@@ -193,6 +214,15 @@ export function choose(order, taken, seats = null) {
   const list = seats ? [...order.map((p) => ({ kind: 'bed', place: p })), ...seats.map((p) => ({ kind: 'seat', place: p }))] : order;
   return list.find((c) => !taken.has(c.place.id)) || null;
 }
+// HER PARAMEDIC'S NEXT POD (the pods left to the captain's crew: src/rescued.js walks one of them from pod to pod): the
+// nearest one still shut to where they stand (pods: [{ x, z, open }], from: { x, z }) -> its index, or -1 (every pod open:
+// back aboard). So they go down the row as it lies, never back and forth across it
+export function nextShut(pods, from) {
+  let best = -1, bd = Infinity;
+  pods.forEach((p, i) => { if (p.open) return; const d = Math.hypot(p.x - from.x, p.z - from.z); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
 // LYING ON A PATIENT BED: its stretcher's back section is raised (PATIENT.back), so the lean back stops that far short of
 // flat, the back on it (onbed's own moves lie flat, as on the scanner's bed)
-export const leanOn = (lean, back = PATIENT.back) => Math.min(lean, Math.PI / 2 - back);
+// (and `prop` more, where a pillow props the head and shoulders: PATIENT.prop)
+export const leanOn = (lean, back = PATIENT.back, prop = 0) => Math.min(lean, Math.PI / 2 - back - prop);

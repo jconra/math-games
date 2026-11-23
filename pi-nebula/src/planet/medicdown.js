@@ -10,6 +10,7 @@
 //       ramp comes down: 'port' or 'starboard'); ground, sky: the planet's (src/planet/planet.js: its ground's shared
 //       settings, its cloud sky if it has air), so its hull is lit as the planet's own things are
 //   M.group, M.M (its own frame in the world: x to port, y up from its ground line, z to the nose), M.inv, M.stand
+//   M.env                   its cabin's own picture of itself (a person inside is lit by it: src/planet/inside.js)
 //   M.addTo(walls)          what a person meets of it, added to where a person can walk (src/walls.js): its hull (its
 //                           legs, its shut doors), its cabin (finer, a person slimmer in it, as boarding.js has it), and
 //                           its ramp's treads once it is down; each made in its own frame and stood where it is (walls.place)
@@ -33,35 +34,19 @@ import { makeBeams } from '../../kit/beams.js';
 import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
 import { MEDIC, patientBeds, restOrder } from '../rescueplan.js';
+import { INSIDE_FILL, FILL_UNIFORMS, insideLight } from './inside.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 // the hull's corners' darkness baked coarser than the Ship Lab's (it is made each time a planet is landed on: as the
 // wreck's, src/planet/wreckship.js WRECK_BAKE)
 export const MEDIC_BAKE = { voxel: 0.12, rays: 12 };
-// INSIDE, THE STATION'S LIGHT: the cabin is lit by its own strips (its baked light) and, as in the station's hangar, the
-// station's soft fill (src/station.js: 0xdde2e8 over 0x5d6065, 0.75); the planet's sun is kept off it (nothing casts a
-// shadow here: it would light the cabin through the hull)
-export const INSIDE_FILL = { sky: 0xdde2e8, ground: 0x5d6065, power: 0.75 };
+// INSIDE, THE STATION'S LIGHT: src/planet/inside.js (the cabin's materials, and the people in it)
+export { INSIDE_FILL };
 
 const ONE = [null], FAR = new THREE.Vector3(1e6, 1e6, 1e6);
 const fetchJSON = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error('the Medic: no file at ' + url); return r.json(); });
 const breath = () => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
 
-// the cabin's materials: the planet's sun off, its sky's light the station's fill
-function insideLight(mat, U) {
-  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey && mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => '';
-  mat.onBeforeCompile = (sh, r) => {
-    if (prev) prev.call(mat, sh, r);
-    Object.assign(sh.uniforms, U);
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <lights_pars_begin>', '#include <lights_pars_begin>\nuniform vec3 uFillSky, uFillGround;\n#if NUM_HEMI_LIGHTS > 0\nHemisphereLight fillOf( HemisphereLight h ) { h.skyColor = uFillSky; h.groundColor = uFillGround; return h; }\n#endif')
-      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin
-        .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= 0.0;')
-        .replace(/getHemisphereLightIrradiance\( hemisphereLights\[ i \], /g, 'getHemisphereLightIrradiance( fillOf( hemisphereLights[ i ] ), '));
-  };
-  mat.customProgramCacheKey = () => prevKey() + '|medic-inside';
-  return mat;
-}
 const eachMaterial = (mats, fn) => { const seen = new Set(); for (const m of Object.values(mats)) if (m && m.isMaterial && !seen.has(m)) { seen.add(m); fn(m); } };
 
 export async function makeMedicDown({ scene, renderer = null, camera = null, ground, sky = null, stand, quality = 'medium' }) {
@@ -94,7 +79,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   // ── its cabin, as the game builds it ─────────────────────────────────────────────────────────────────────────────
   t = performance.now();
   const cabinMats = cabinMaterials('light'); livePalette(cabinMats.live, 'vivid');
-  const fill = { uFillSky: { value: new THREE.Color(INSIDE_FILL.sky).multiplyScalar(INSIDE_FILL.power) }, uFillGround: { value: new THREE.Color(INSIDE_FILL.ground).multiplyScalar(INSIDE_FILL.power) } };
+  const fill = FILL_UNIFORMS();
   eachMaterial(cabinMats, (m) => { if (m.isMeshStandardMaterial) insideLight(m, fill); });
   const C = buildCabinRoom(bp, { space, outer: MD.LAB.cabin.outer, look: 'light', mats: cabinMats });
   group.add(C.built.group);
@@ -104,6 +89,23 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   scene.add(group);
   group.updateMatrixWorld(true);
   if (renderer && camera) { try { if (renderer.compileAsync) await renderer.compileAsync(group, camera); else renderer.compile(group, camera); } catch (e) { /* made on the first frame instead */ } }
+  // ITS CABIN'S PICTURE OF ITSELF (as src/boarding.js cabinPicture makes the parked ship's): a cube picture from the middle
+  // of its biggest room with nothing else of the scene in it (the planet, its sky), under the scene's own lights: what a
+  // person inside it is lit by (src/planet/inside.js peopleLight: their shine in the cabin, as in the hangar)
+  let env = null;
+  if (renderer) {
+    try {
+      const big = [...bp.rooms].filter((r) => r.ceiling !== 'canopy').sort((a, b) => (b.rect[2] - b.rect[0]) * (b.rect[3] - b.rect[1]) - (a.rect[2] - a.rect[0]) * (a.rect[3] - a.rect[1]))[0];
+      const rt = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(0.05, 30, rt), put = [];
+      cc.position.set((big.rect[0] + big.rect[2]) / 2, space.deck + 1.5, (big.rect[1] + big.rect[3]) / 2).applyMatrix4(M);
+      // (everything beside it, and beside each thing it is in, put away for the picture; whatever holds it shown)
+      let top = group;
+      for (let o = group; o.parent; o = o.parent) { top = o.parent; for (const q of o.parent.children) if (q !== o && !q.isLight && q.visible) { q.visible = false; put.push([q, true]); } if (!o.parent.visible) { o.parent.visible = true; put.push([o.parent, false]); } }
+      top.add(cc); cc.update(renderer, top); top.remove(cc);
+      for (const [q, v] of put) q.visible = v;
+      const pm = new THREE.PMREMGenerator(renderer); env = pm.fromCubemap(rt.texture).texture; rt.dispose(); pm.dispose();
+    } catch (e) { console.warn('the Medic set down: no picture of its cabin', e); env = null; }
+  }
 
   // ── what a person meets of it (each in its own frame, stood where it is: walls.place) ──────────────────────────
   const geoOf = (g) => { const w = new THREE.BufferGeometry(); w.setAttribute('position', g.attributes.position.clone()); if (g.index) w.setIndex(g.index); return w; };
@@ -192,13 +194,13 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   }
   const stats = { ms: Math.round(performance.now() - t0), hullMs, cabinMs, bake: Math.round(B.stats.bake?.ms || 0), tris: Math.round(B.stats.tris + C.built.stats.tris), draws: B.stats.draws + C.built.stats.draws + (beams ? 2 : 0) };
   return {
-    group, M, inv, get stand() { return stand; }, get side() { return side; }, foot, bp, space, places, beds: patientBeds(bp, space.deck), order: restOrder(bp, space.deck, places), built: B, cabin: C, stats, addTo, update, inside, place,
+    group, M, inv, env, get stand() { return stand; }, get side() { return side; }, foot, bp, space, places, beds: patientBeds(bp, space.deck), order: restOrder(bp, space.deck, places), built: B, cabin: C, stats, addTo, update, inside, place,
     get rampT() { return ramp ? ramp.t : 0; },
     ramp(k) { rampWant = k ? 1 : 0; },
     dispose() {
       if (walls) { walls.drop('medic:hull'); walls.drop('medic:cabin'); walls.drop('medic:ramp'); }
       group.removeFromParent(); B.dispose(); C.built.dispose(); if (beams) beams.dispose();
-      for (const g of [...hull.solid, ...cabin.solid]) g.dispose();
+      for (const g of [...hull.solid, ...cabin.solid]) g.dispose(); if (env) env.dispose();
       eachMaterial(hullMats, (m) => m.dispose()); eachMaterial(cabinMats, (m) => m.dispose());
     },
   };

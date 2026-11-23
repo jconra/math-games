@@ -15,7 +15,8 @@
 //   import { MOVES_ON, MOVES_OFF, pose, twoBone } from './onbed.js'
 //   pose(move, t, bed, who)  where the person is `t` seconds into one of the moves:
 //     bed  { top (the pad's top, m), edge (the board's edge, x), pad (the pad's half width), z (where the hips are once
-//          on it), stand (where they stand at its side, [x, z]), hipUp (the hip joints over the seat, sitting) }
+//          on it), stand (where they stand at its side, [x, z]), hipUp (the hip joints over the seat, sitting), rim
+//          (a rim standing over the pad's top along that side, m: the feet are carried over it; none: 0) }
 //     who  { a (thigh, hip to knee), b (shin, knee to the foot's root), w (half the hips' width), hs (the hip joints'
 //          height standing) }: the person's own, measured from their bones
 //   -> { hips [x,y,z] (the middle of the two hip joints), heading (the way they face: 0 along +z, pi/2 along +x), lean
@@ -300,7 +301,9 @@ function poseOf(move, t, bed, who) {
     const slideAt = (q) => 0.5 * ease(seg(q, 0.08, 0.42)) + 0.5 * ease(seg(q, 0.52, 0.9));
     const hipsAt = (q) => [mix(PX, 0, slideAt(q)), sitY, bed.z];
     const h = headAt(v), hips = add(hipsAt(v), UP, 0.014 * (Math.sin(Math.PI * seg(v, 0.08, 0.42)) + Math.sin(Math.PI * seg(v, 0.52, 0.9))));
-    const [ha, hu] = hang(who), lift = bed.top + ON.clear + ON.foot - sitY, d = reachAt(who, ON.knee);
+    // (a rim along the side they get on and off over, standing over the pad's top (bed.rim, m: a stasis pod's front
+    // rim): the feet are carried that much higher as they come round, over it)
+    const [ha, hu] = hang(who), lift = bed.top + (bed.rim || 0) + ON.clear + ON.foot - sitY, d = reachAt(who, ON.knee);
     const FL = Math.sqrt(Math.max(0.01, d * d - lift * lift));
     // (getting on, the legs are lifted first, then carried round, and settle as the turn ends; getting off, they are
     // drawn in and lifted at once, as the back is still coming up, and let down as soon as the feet are out past the
