@@ -146,10 +146,10 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     } else if (s.phase === 'count') {
       set(M.box, COL.next, 0.95); set(M.line, COL.next, 0.9); M.gates.forEach((G) => set(G, COL.pale, 0.16)); afterT = 0;
     } else {
-      // (a lap just done: its waypoints stay lit as they ended a few seconds, the line green; then, on the forklift
-      // with a lap to be had, the start box glows softly)
+      // (a lap just done: its waypoints stay lit as they ended a few seconds, the line green for an official lap, red
+      // for one that is not; then, on the forklift with a lap to be had, the start box glows softly)
       afterT = Math.max(0, afterT - dt);
-      if (afterT > 0 && s.result && driving) { M.gates.forEach((G, i) => (s.hit[i] ? set(G, COL.hit, 0.75) : set(G, COL.miss, 0.7))); set(M.line, COL.hit, 0.9); set(M.box, COL.hit, 0); }
+      if (afterT > 0 && s.result && driving) { M.gates.forEach((G, i) => (s.hit[i] ? set(G, COL.hit, 0.75) : set(G, COL.miss, 0.7))); set(M.line, s.result.official ? COL.hit : COL.miss, 0.9); set(M.box, COL.hit, 0); }
       else { M.gates.forEach((G) => set(G, COL.next, 0)); set(M.line, COL.next, 0); set(M.box, COL.next, ok ? 0.5 : 0, 1); }
     }
     for (const X of [M.box, M.line, ...M.gates]) {
