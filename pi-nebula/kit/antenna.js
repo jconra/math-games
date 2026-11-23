@@ -96,7 +96,7 @@ export function parts() {
     const p = new Piece(), d = Math.hypot(x, z), ux = x / d, uz = z / d;
     // (from the mast's side facing the anchor, at that height, to the anchor's ring)
     const at = [ux * ANTENNA.half * 1.05, h, uz * ANTENNA.half * 1.05];
-    rod(p, 'cable', at, [x - ux * 0.06, ANTENNA.drop[k] + 0.27, z - uz * 0.06], ANTENNA.cable, 5);
+    rod(p, 'rail', at, [x - ux * 0.06, ANTENNA.drop[k] + 0.27, z - uz * 0.06], ANTENNA.cable, 5);
     p.cyl('rail', 0.03, 0.08, [at[0], at[1], at[2]], null, 6);
     cables.push(p);
   });

@@ -24,7 +24,7 @@ export const ANTENNA = {
   half: 1, sec: 1.5, n: 8, out: 5, bearings: [0, 142, 218], drop: [0, -0.43, -0.47], holds: [6, 12],
   dish: { r: 0.8, deep: 0.24, tilt: 30, turn: 135, post: 0.7 },
   old: { at: [-3.2, 0, 0.6], pole: 3, r: 0.32 },
-  post: 0.055, strut: 0.035, cable: 0.014,
+  post: 0.055, strut: 0.035, cable: 0.022,
 };
 export const TOP = ANTENNA.sec * ANTENNA.n;   // 12 m
 // the anchors' places in the frame [x, z]
