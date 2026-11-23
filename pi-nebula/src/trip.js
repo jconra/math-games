@@ -259,7 +259,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (an exploring run: its places, one after another (src/explore.js), and its plan; the jump to a place is to the lead
   // it follows. FIELD: the mining run's rocks)
   const EXPLORE = M.place === 'explore', FIELD = !PLANET && !EXPLORE, plan = EXPLORE ? ctx.plan || null : null;
-  const toOf = (st) => (EXPLORE && st && st.leg != null && plan && plan.legs[st.leg] ? plan.legs[st.leg].lead : TO);
+  // (the jump home's cards speak of the last lead followed)
+  const toOf = (st) => (EXPLORE && plan && plan.legs.length ? plan.legs[st && st.leg != null && plan.legs[st.leg] ? st.leg : plan.legs.length - 1].lead : TO);
   // ON FOOT AT A PART OF THE SHIP (RUN.tune): the core's tuning, and an exploring run's scan at the survey table when it
   // is the crew member's: the strip's words, the seat's prompt; the phases of it; how long the captain's own sensor
   // operator scans (s); what a place's scan is of (the land below, or out in space the rocks), and what its card's top says
@@ -636,7 +637,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (T.phase === 'crewScan') { T.scanT += dt; countEl.querySelector('b').textContent = `${Math.min(100, Math.floor(T.scanT / SCAN.crew * 100))}%`; if (T.scanT < SCAN.crew) return; T.phase = 'reveal'; words(''); countEl.hidden = true; }
     if (T.phase === 'reveal') {
       T.phase = L.last ? 'find' : 'lead'; T.t = 0; T.log.push('found: ' + (L.last ? plan && plan.find.what : 'the next lead'));
-      if (L.last) { site.reveal(); site.go(); queue('found', { all: true }); queue('radio', { who: 'Radio', all: true }); queue('tower'); }
+      // (at the old station its people speak first, on the radio, and then he answers)
+      if (L.last) { site.reveal(); site.go(); queue('radio', { who: 'Radio', all: true }); queue('found', { all: true }); queue('tower'); }
       else queue('lead', { at: st.leg });
     }
     // (a lead: said, and on to the jump it points to at once)

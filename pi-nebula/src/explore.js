@@ -96,7 +96,9 @@ export function makePlace(ctx, opts = {}) {
       // (the way to it: the beam and the arrow, in a colour unlike the ground; lit once the scan finds it)
       if (place.show === 'wreck' || place.show === 'artifact') {
         guide = makeWreckGuide({ scene: group, ground: planet.ground, colour: guideColour(land.palette), at: [at.target.x, at.target.y, at.target.z], root: document.body,
-          bounds: () => ({ left: 0, top: innerWidth <= 640 ? 104 : 58, right: innerWidth, bottom: innerHeight }), label: place.show === 'wreck' ? 'Wreck' : 'Find' });
+          // (the radar in the corner kept under the captain's words, which come up at the top: on the right on a wide
+          // screen, on the left of a phone's and across most of it)
+          bounds: () => ({ left: 0, top: innerWidth <= 640 ? 250 : 236, right: innerWidth, bottom: innerHeight }), label: place.show === 'wreck' ? 'Wreck' : 'Find' });
         guide.show(false);
       }
     } else if (place.show === 'station') {
