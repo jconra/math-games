@@ -285,7 +285,7 @@ export function makeSite(ctx, opts = {}) {
     // A PART NOT THEIRS, SKIPPED: the crew's pilot's flying in (docked at once); the visit (the supplies off, its
     // lights up); the crew's pilot's flying clear
     get canSkip() { return ((st.phase === 'fly' || st.phase === 'away') && !iPilot) || (st.phase === 'docked' && !(st.done && st.unloaded >= of)); },
-    get skipWords() { return st.phase === 'fly' ? 'Skip the docking' : st.phase === 'away' ? 'Skip the flying' : st.visited ? 'Skip the unloading' : 'Skip the visit'; },
+    get skipWords() { return st.phase === 'fly' ? 'Skip the docking' : st.phase === 'away' ? 'Skip the flying' : !st.visited ? 'Skip the visit' : st.unloaded < of ? 'Skip the unloading' : 'Skip ahead'; },
     skip() {
       // (the flying's own skip: docked at once, as it lies there; clear of the bridge at once)
       if ((st.phase === 'fly' || st.phase === 'away') && fl) return fl.skip();
