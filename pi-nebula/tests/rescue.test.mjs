@@ -136,7 +136,7 @@ test('the payout card at the triage desk: count the people, so many at so much e
 
 test('her words and her crew\'s along the run: a line for every moment the trip has', () => {
   const T = RUN_TALK.rescue;
-  for (const k of ['out', 'crewOut', 'there', 'down', 'find', 'found', 'site', 'sitePod', 'backAboard', 'aboard', 'aboardCrew', 'home', 'homeCrew', 'landed', 'landedCrew', 'tune', 'tuned', 'tunedFree', 'backJump']) assert.ok(Array.isArray(T[k]) && T[k].length, k);
+  for (const k of ['out', 'crewOut', 'there', 'down', 'find', 'found', 'site', 'sitePod', 'backAboard', 'aboard', 'aboardCrew', 'home', 'homeCrew', 'landed', 'landedCrew', 'tune', 'tuned', 'tunedFree', 'backJump', 'backFind']) assert.ok(Array.isArray(T[k]) && T[k].length, k);
   const all = Object.values(T).flat().join(' ');
   assert.ok(!/rocks|smelter|canister|Juno|drill/i.test(all), 'nothing of the mining run');
   assert.match(T.landed.join(' '), /triage desk/);

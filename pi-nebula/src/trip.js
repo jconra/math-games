@@ -505,6 +505,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     // pods and brings everyone aboard, then lifts it clear for the jump home; watched from the seat or from behind (V),
     // or skipped (K). The rescued are counted aboard as they come.
     rescue(dt, st) {
+      // (the pilot on their feet as it begins, the core tuned on arrival: the sensors' card and the flying down wait for
+      // them in their seat, the ship holding where it is)
+      if (iPilot && waitSeat(true, 'backFind')) return;
       if (!T.phase) {
         if (!site || site.failed) { console.error('trip: the planet never came'); abort(); return; }
         // (still being made: a moment more where the ship is, as at the rocks)
@@ -540,7 +543,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (the count of canisters is put away until they are seated again: the seat's prompt comes up where it is)
         T.countUp = !countEl.hidden; countEl.hidden = true;
         // (tuned: the captain asks them back to their seat only if the next part is theirs; else they carry on as they like)
-        const then = steps[T.i + 1], theirs = !!then && ((then.kind === 'jump' && then.mine) || (then.kind === 'work' && iDrill));
+        const then = steps[T.i + 1], theirs = !!then && ((then.kind === 'jump' && then.mine) || (then.kind === 'work' && iDrill) || (then.kind === 'rescue' && iPilot));
         tn = tuneMod.startTune({ boarding, crew, save }, { mission: M, step: st, say: (key, more) => say(key === 'tuned' && !theirs ? 'tunedFree' : key, more), strip: words,
           onPanel: (up) => { el.classList.toggle('has-panel', up); if (ctx.walk) ctx.walk(!up && T.afoot && !T.out); },
           // (tuned: the strip is the run's own again, and asks them back if the next part is theirs)
@@ -589,6 +592,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     const st = steps[T.i]; if (!st || T.done) return null;
     if (st.kind === 'jump' && st.mine && T.phase !== 'jumping' && fireIn < 0) return 'The jump is yours: back to your seat';
     if (st.kind === 'work' && iDrill && (!T.phase || T.phase === 'wantSeat')) return 'The drill is yours: back to your seat';
+    // (a rescue: finding the wreck and flying down to it is the pilot's: from the seat)
+    if (st.kind === 'rescue' && iPilot && (!T.phase || T.phase === 'wantSeat')) return 'The wreck is yours to find: back to your seat';
     return null;
   }
   // (at the controls just now: flying by hand, at the drill, with the jump's cards, or the core's card, up)

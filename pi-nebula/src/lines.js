@@ -102,6 +102,8 @@ export const RUN_TALK = {
     tuned: ['The core is steady. Back to your seat, {player}.'],
     tunedFree: ['The core is steady. Good work, {player}.'],
     backJump: ['Back to your seat, {player}. The jump is yours.'],
+    // (the pilot on their feet as the rescue begins, the core tuned on arrival: finding the wreck is theirs, from the seat)
+    backFind: ['Back to your seat, {player}. Find us that wreck.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
     there: ['There\'s the planet. Their ship came down just ahead.', 'That\'s the jump. There\'s the planet.'],
