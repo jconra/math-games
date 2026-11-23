@@ -190,6 +190,7 @@
 .pnj-wallet small[hidden] { display: none; }
 .pnj-wallet.has-ships { height: 54px; display: grid; grid-template-columns: auto auto; align-content: center; justify-content: end; column-gap: 8px; row-gap: 2px; max-width: min(64vw, 360px); }
 .pnj-wallet.has-ships small { grid-column: 1 / -1; text-align: right; }
+@media (max-width: 640px) { .pnj-wallet.has-ships { height: 46px; row-gap: 0; padding: 0 12px; } .pnj-wallet.has-ships small { font-size: 10.5px; } }
 
 /* ── a phone: the panel along the bottom, the props in view above ─────────────────────────────────────────── */
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
@@ -244,9 +245,11 @@
 .pnj-lamp.is-late i { background: #ffb02e; box-shadow: 0 0 8px rgba(255, 176, 46, 0.9); }
 @keyframes pnj-lampnow { 50% { background: #5b7384; } }
 /* (a lamp lit by more than one card, on a run of the crew member's own: a small pip for each of its cards: src/trip.js) */
-.pnj-pips { display: inline-flex; gap: 3px; margin-left: auto; flex: none; text-decoration: none; }
-.pnj-pips b { width: 6px; height: 6px; border-radius: 50%; background: #27323c; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.5); }
+.pnj-lamp.has-pips { position: relative; padding-bottom: 11px; }
+.pnj-pips { position: absolute; left: 27px; bottom: 4px; display: flex; gap: 3px; text-decoration: none; }
+.pnj-pips b { width: 5px; height: 5px; border-radius: 50%; background: #27323c; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.5); }
 .pnj-pips b.is-on { background: var(--good); box-shadow: none; }
+@media (max-width: 640px) { .pnj-pips { left: 23px; } }
 @media (max-width: 640px) { .pnj-lamp { font-size: 11px; padding: 5px 6px; gap: 5px; letter-spacing: 0.05em; } }
 /* (the pilot's maps and diagrams as answers: larger than the dock's panes, so a point on a map can be told from its neighbour) */
 .pnj[data-job="pilot"] .pnj-answers.is-pics .pnj-coin { min-height: 120px; }

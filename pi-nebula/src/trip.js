@@ -419,7 +419,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
       const cards = T.lamps.slice(from, at), done = P[k] > 0 && cards.length >= P[k], s = done ? (cards.includes('late') ? 'late' : 'lit') : '', now = !done && T.lit >= from && T.lit < at;
       // (a lamp with more than one card: a small pip for each, filled as each is answered)
       const pips = P[k] > 1 ? `<u class="pnj-pips" aria-hidden="true">${Array.from({ length: P[k] }, (_, j) => `<b${j < cards.length ? ' class="is-on"' : ''}></b>`).join('')}</u>` : '';
-      return `<span class="pnj-lamp${s ? ' is-' + s : now ? ' is-now' : ''}" title="${name}${s === 'lit' ? ': lit at the first try' : s === 'late' ? ': lit' : now && P[k] > 1 ? `: card ${T.lit - from + 1} of ${P[k]}` : ''}"><i></i><span>${name}</span>${pips}</span>`;
+      return `<span class="pnj-lamp${s ? ' is-' + s : now ? ' is-now' : ''}${pips ? ' has-pips' : ''}" title="${name}${s === 'lit' ? ': lit at the first try' : s === 'late' ? ': lit' : now && P[k] > 1 ? `: card ${T.lit - from + 1} of ${P[k]}` : ''}"><i></i><span>${name}</span>${pips}</span>`;
     }).join('')}</div>`;
   };
   const link = {
