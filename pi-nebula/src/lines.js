@@ -7,7 +7,7 @@
 //   lines     the words, in turns. {A} and {B} are the two speakers' names; {player} the player's name
 //   news      (optional) a kind of news it is about (news.js): it is picked only while such news is going round, and
 //             its facts fill in the lines where they say {winner}, {loser}, {score}, {ship}, {captain}, {crew}, {people},
-//             {from} (a rescue the crew member was on: news.js), {planet},
+//             {from} (a rescue the crew member was on: news.js), {what} (an exploring run's finding), {planet},
 //             {ore}, {tons}, {job}
 //   about     (optional) the people it talks about, by their roster id: never said by them
 //   who       (optional) only between these people, by roster id (both speakers among them)
@@ -174,6 +174,8 @@ export const TALKS = [
   { id: 'rescue-2', news: 'rescue', lines: ["The {ship} ship is back from the rescue.", "Is everyone all right?", "{crew}, all safe and sound.", "That's the best news all week."] },
   // (a rescue the crew member was on: how many came home and from where, as the station's line says it)
   { id: 'rescue-3', news: 'rescue', lines: ["The {ship} brought {people} home today!", "From where?", "{from}. They were asleep in stasis pods.", "I'm so glad they're safe."] },
+  // (a finding of Captain Vega's exploring run: news.js 'find', its {what} the run's own words)
+  { id: 'find-1', news: 'find', about: ['vega'], lines: ["Captain Vega's crew found {what}!", "Way out past the charts?", "That's what I heard. Who knows what they'll find next."] },
   { id: 'planet-1', news: 'planet', lines: ["They found a new planet people could live on!", "Really? What's it called?", "{planet}. It has oceans, I heard.", "Oceans! I'd go just to swim."] },
   { id: 'planet-2', news: 'planet', lines: ["Would you live on {planet}?", "Only if they have a galley as good as ours."] },
   { id: 'haul-1', news: 'haul', about: ['ruiz'], lines: ["The {ship} ship came back with {tons} tons of {ore}!", "That's one lucky rock.", "Captain Ruiz says it was the richest one yet."] },

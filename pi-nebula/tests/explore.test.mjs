@@ -11,7 +11,9 @@ import { readFileSync } from 'node:fs';
 import * as E from '../src/jobs/engine.js';
 import * as MS from '../src/missions.js';
 import { missions, ROLES, MISSIONS, CORE } from '../src/missions.js';
-import { planOf, SCENARIOS, SCENARIO_IDS, WORLD_NAMES, antennaUp, foundOf, keepFind, EXPLORE, TOWER_LINE } from '../src/exploreplan.js';
+import { planOf, SCENARIOS, SCENARIO_IDS, WORLD_NAMES, antennaUp, foundOf, keepFind, EXPLORE, TOWER_LINE, findNews } from '../src/exploreplan.js';
+import { ANNOUNCE, makeAnnouncer, newsClip } from '../src/announce.js';
+import { TALKS } from '../src/lines.js';
 import { JOB as pilot } from '../src/jobs/pilot.js';
 import { JOB as survey } from '../src/jobs/survey.js';
 import { helpPicture } from '../src/jobs/pics.js';
@@ -203,4 +205,28 @@ test('who is aboard: Captain Vega and one of his crew, in their own clothes (his
   }
   const words = MS.crewFor(X, ['sensor'], 'You', 'Captain Vega').map((c) => c.role + ':' + c.name).join();
   assert.equal(words, 'pilot:Pilot Wren,sensor:You,engineer:Captain Vega');
+});
+
+test('the station\'s news of a finding: a new world by its recorded line; anything else a text line in the run\'s own words, said once, and talked of', () => {
+  const by = {};
+  for (const sd of SEEDS) { const P = planOf(sd); if (!by[P.scenario]) by[P.scenario] = P; }
+  by.distress = planOf(9, { antenna: true });
+  const W = findNews(by.world); assert.equal(W.kind, 'planet'); assert.ok(WORLD_NAMES.includes(W.planet)); assert.ok(newsClip({ ...W, id: 'planet:1' }), 'its recorded line');
+  for (const id of ['wreck', 'field', 'artifact', 'distress']) {
+    const N = findNews(by[id]);
+    assert.equal(N.kind, 'find'); assert.equal(newsClip({ ...N, id: 'find:1' }), null, 'no recorded line says it');
+    assert.match(N.text, /^News from the Explorer\. Captain Vega's crew has found .+\.$/); assert.ok(N.text.length <= 150, N.text);
+    if (id === 'wreck' || id === 'artifact') assert.match(N.what, /(on a cratered moon|on a meadow world|in a canyon world)/);
+  }
+  assert.equal(findNews(null), null);
+  // (on the speakers: the chime and its words shown, once)
+  const S = { played: [], load() {}, has: () => true, length: (n) => (n.endsWith(':chime') ? ANNOUNCE.chime : 4), play(name, o) { const h = { name, v: o.volume, volume(v) { h.v = v; } }; S.played.push(h); return h; } };
+  const shown = [], item = { id: 'find:3', ...findNews(by.field) };
+  const A = makeAnnouncer({ sound: S, read: null, rand: seq(0.3, 0.6, 0.1, 0.8), onText: (w) => shown.push(w) });
+  const facts = { playing: true, place: 'terminal', math: false, news: [item], captains: {}, scan: null, alarm: null, events: [] };
+  for (let t = 0; t < 400; t += 0.1) A.update(0.1, facts);
+  const L = A.log.filter((x) => x.id === 'found');
+  assert.equal(L.length, 1); assert.deepEqual(L[0].clips, ['chime']); assert.equal(L[0].words, item.text); assert.deepEqual(shown, [item.text, null]);
+  // (and the station's people talk of it, its words filled in)
+  const T = TALKS.find((x) => x.news === 'find'); assert.ok(T && T.lines[0].includes('{what}'));
 });

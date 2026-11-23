@@ -174,7 +174,7 @@ import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
 import { makeDash, stepDash } from './dash.js';
 import { recipeOf } from './looks.js';
-import { keepFind } from './exploreplan.js';
+import { keepFind, findNews } from './exploreplan.js';
 
 // the pilot's eyes and where they look, in the ship's own frame (x to port, y up from its ground line, z to the nose:
 // ~/pw/space-math/SHIP_miner_arms.md), wide and on a phone, with the job panel up (it covers the right of a wide
@@ -547,7 +547,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         T.payout = land(crew, { n: T.n, store: T.store, people: T.rescued || 0, places: plan ? plan.places : 0, find: plan ? plan.scenario : null }); save(crew);
         if (drillKit) { drillKit.ship.dispose(); drillKit = null; }
         // (the station's news: a haul, or the rescue (its people talk of it, and the speakers say so: src/announce.js))
-        if (EXPLORE) { try { keepFind(crew, plan); save(crew); if (plan && plan.scenario === 'world' && plan.name) news.add({ kind: 'planet', planet: plan.name }); } catch (e) { console.error(e); } }
+        // (an exploring run: what it found kept with the crew member, and the station's news of it: src/exploreplan.js findNews)
+        if (EXPLORE) { try { keepFind(crew, plan); save(crew); const N = findNews(plan); if (N) news.add(N); } catch (e) { console.error(e); } }
         else if (PLANET) rescuedHome();
         else try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Home'); say(iPilot ? 'landed' : 'landedCrew');

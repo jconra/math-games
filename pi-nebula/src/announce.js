@@ -40,6 +40,8 @@
 //     browser speech"), never while a question card is up (it waits for the card to go; a card come up puts it away). One so far: THE RESCUE'S OUTCOME ('rescued', src/wardplan.js outcome), said once after the
 //     recorded "The Medic has brought a stranded crew home safely" for a rescue the crew member was on: "News from the
 //     Medic. Five people have been brought home from a crashed ship on a canyon world. They are resting in the ward."
+//     And THE EXPLORER'S FINDINGS ('found', src/exploreplan.js findNews), but for a new world, whose recorded line names it:
+//     "News from the Explorer. Captain Vega's crew has found a rich asteroid field past the edge of the charts."
 //   - THE MATHBALL HIGH SCORE (2026-11-20, the game's maker: "Keep only your own best round. This plays when you beat
 //     it."): "A new Mathball high score has been set in the arena." is said once a round is over that beat the crew
 //     member's own best round (src/mathball/best.js: their first round only sets it). Mathball tells it as it happens:
@@ -168,6 +170,9 @@ export const LINES = [
   { id: 'news', where: 'station', first: 2, say: (G) => { for (const n of G.news || []) { if (G.told.has(n.id)) continue; const c = newsClip(n); if (c) return { clips: [c], news: n.id }; } return null; }, again: 0 },
   // (the rescue's outcome, after its recorded line: how many came home, from where, how many are resting in the ward. A
   // text line: no clip has the numbers in it)
+  // (a finding of Captain Vega's exploring run the crew member was on, other than a new world (whose recorded line names
+  // it): a text line, its words the run's own: src/exploreplan.js findNews)
+  { id: 'found', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if (n.kind !== 'find' || !n.text || G.told.has(n.id)) continue; return { text: n.text, news: n.id }; } return null; } },
   { id: 'rescued', where: 'station', first: 3, again: 0, say: (G) => { for (const n of G.news || []) { if (n.kind !== 'rescue' || !n.count || G.told.has(n.id + ':outcome') || !G.told.has(n.id)) continue; return { text: outcome({ people: n.count, from: n.from, resting: n.resting }), news: n.id + ':outcome' }; } return null; } },
   { id: 'welcome', where: 'station', first: 1, once: true, say: (G) => (['vega', 'ruiz', 'hale'].some((k) => asking(G.captains[k]) && G.captains[k].room === 'terminal') ? { clips: ['welcome'] } : null) },
   { id: 'crew-hale', group: 'crew', where: 'station', say: (G) => (asking(G.captains.hale) && G.captains.hale.room === 'terminal' ? { clips: ['crew-hale'] } : null) },

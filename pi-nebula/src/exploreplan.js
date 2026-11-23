@@ -172,6 +172,21 @@ function talkOf(S, { antenna }) {
   return { out: S.out, crewOut: S.crewOut, arrive: S.arrive, lead: S.lead, there: S.there, found: S.found, radio: S.radio || [], tower: antenna ? [] : [TOWER_LINE], homeward: COMMON.homeward, homewardCrew: COMMON.homewardCrew };
 }
 
+// THE STATION'S NEWS OF A FINDING (src/trip.js, home): a new world is the station's own 'planet' news (its recorded
+// line names it: src/announce.js); anything else found is a 'find', its words a line no clip says (shown, the chime
+// first: announce.js TEXT LINES, the rescue's outcome's way), in the manner of the recorded news, and what the station's
+// people say of it (src/lines.js 'find-1'). -> { kind, ... } for news.add, or null
+const ON = { moon: 'on a cratered moon', meadow: 'on a meadow world', canyon: 'in a canyon world' };
+export function findNews(plan) {
+  if (!plan) return null;
+  if (plan.scenario === 'world') return plan.name ? { kind: 'planet', planet: plan.name } : null;
+  const end = plan.legs[plan.legs.length - 1].place, on = ON[end.kind] || 'out past the charts';
+  const what = { wreck: `a crashed ship ${on}, its crew asleep in their stasis pods`, artifact: `something nobody we know could have made, standing ${on}`,
+    field: 'a rich asteroid field past the edge of the charts', distress: 'an old station far out in open space, its people in need of help' }[plan.scenario];
+  if (!what) return null;
+  return { kind: 'find', ship: 'Explorer', captain: 'Captain Vega', what, text: `News from the Explorer. Captain Vega's crew has found ${what}.` };
+}
+
 // WHAT A RUN PAYS (the game's maker, RESC1-2, of the rescue: "It needs to be a similar payout to what a mining mission
 // pays. So it would be nice to know how long it takes and use that to figure out how much it should pay"; and of the
 // exploring run, EXP-2: "I feel like now we just get paid for the knowledge we bring back"). So much for each place
