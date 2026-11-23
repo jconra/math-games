@@ -191,7 +191,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
   // the cabin, or the other way round: a way from far off into the cabin's narrow rooms, worked out at once on the
   // cabin's fine grid, ran out of steps); `seat`: a last step onto a seat ──
   function setWay(R, goal, seat = null) {
-    Object.assign(R, { walking: true, leg: 0, wait: 0, side: 0, sideAim: 0, way: null, stopI: 0, wayAll: [], tries: 0, stall: 0, wayGoal: goal, waySeat: seat, retry: 0 });
+    Object.assign(R, { walking: true, leg: 0, wait: 0, side: 0, sideAim: 0, way: null, stopI: 0, wayAll: [], tries: 0, stall: 0, wayGoal: goal, waySeat: seat, retry: 0, short: false });
     const f0 = ship.foot(), stops = [goal];
     if (f0 && ship.inside(R.pos) !== ship.inside(goal) && Math.hypot(f0.x - goal.x, f0.z - goal.z) > 0.5) { const foot = f0.clone(); foot.y = walls.floorAt(foot.x, foot.z, foot.y + 3, 6) ?? foot.y; stops.unshift(foot); }
     R.stops = stops;
@@ -217,7 +217,14 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
     if (R.plan && !R.plan.done) { R.plan.step(RESCUED.planMs); play(R, STAND); }
     else if (R.plan && R.plan.done && !R.way) {
       const w = R.plan.way;
-      if (!w || w.short > 0.6) { R.tries++; R.plan = null; R.retry = RESCUED.retry; if (R.tries >= RESCUED.tries) { alarms.putThere++; console.warn('rescued: ' + R.name + ' found no way, put where they were going'); return 'put'; } }
+      if (!w || w.short > 0.6) {
+        R.tries++; R.plan = null; R.retry = RESCUED.retry;
+        if (R.tries >= RESCUED.tries) {
+          alarms.putThere++; console.warn('rescued: ' + R.name + ' found no way' + (R.wayAll.length > 1 ? ' past the ramp\'s foot: walked that far, then put where they were going' : ', put where they were going'));
+          // (the first leg found, to the ramp's foot: walked, and put only from there, not from far off in plain sight)
+          if (R.wayAll.length > 1) { R.way = [...R.wayAll]; R.leg = 0; R.getUp = false; R.short = true; } else return 'put';
+        }
+      }
       else {
         R.wayAll.push(...(R.wayAll.length ? w.slice(1) : w).map((v) => v.clone())); R.stopI++;
         if (R.stopI < R.stops.length) planNext(R);
@@ -241,7 +248,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
     const f = walls.floorAt(R.pos.x, R.pos.z, R.pos.y + BODY.stepUp, BODY.stepUp + BODY.stepDown); if (f !== null) R.pos.y = f;
     R.drawnY = Math.abs(R.pos.y - R.drawnY) > 0.6 ? R.pos.y : damp(R.drawnY, R.pos.y, 18, dt);
     stand(R);
-    return r === 'there' ? 'there' : null;
+    return r === 'there' ? (R.short ? 'put' : 'there') : null;
   }
   const stopWay = (R) => { R.way = null; R.plan = null; R.walking = false; };
 
@@ -260,10 +267,10 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
     if (best >= 0) { T.pod = best; T.spot = lockSpot(best); T.phase = 'walk'; setWay(T, T.spot.at); return; }
     const h = T.fig.home; T.pod = null; T.phase = 'home';
     if (!h) { T.goal = shipPoint([0, deck, 0.25]); setWay(T, T.goal); return; }
-    T.goal = shipPoint([h.stand[0], deck, h.stand[1]]);
-    // (a seat on the cabin's own deck is stepped onto, as the rescued step onto theirs; one up on the flight deck is
-    // sat on from where one stands by it)
-    T.seat = h.kind === 'sit' && Math.abs(h.y - deck) < 0.2 ? shipPoint([h.x, h.y, h.z]) : null; T.target = T.seat ? { kind: 'sit' } : null;
+    // (where one stands by it, on its own floor: a seat's is its room's (the flight deck's seats stand higher than the
+    // cabin's deck: asked a way to a point under that floor, none was found); a bed's is the deck)
+    T.goal = shipPoint([h.stand[0], h.kind === 'sit' ? h.y : deck, h.stand[1]]);
+    T.seat = h.kind === 'sit' ? shipPoint([h.x, h.y, h.z]) : null; T.target = T.seat ? { kind: 'sit' } : null;
     setWay(T, T.goal, T.seat);
   }
   function aboardAgain() {

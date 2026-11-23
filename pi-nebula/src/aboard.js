@@ -179,12 +179,13 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
     _q.setFromEuler(_e.set(0, p.heading, 0)); return out.compose(_v.set(p.x, p.y, p.z), _q, _s);
   }
   // OFF THE SHIP FOR A WHILE, AND BACK (the header): up from their place (it is free again, unless it is the seat kept
-  // for them: a seat nobody has and no job has, off the flight deck first; the one they sit on, if it is such a one)
+  // for them: a seat nobody has and no job has, off the flight deck first (the one they sit on, if it is such a one);
+  // a seat up on the flight deck only if there is no other)
   function lend(id) {
     const W = list.find((w) => w.id === id); if (!W || W.out) return null;
     const ok = (p) => p.kind === 'sit' && (users.get(p.id) === W.id || free(p, W));
     const at = W.place || W.target || null, here = W.doing === 'walk' ? null : at;
-    const home = (here && ok(here) ? here : null) || places.find((p) => ok(p) && !p.cockpit) || places.find((p) => ok(p)) || here || at;
+    const home = (here && ok(here) && !here.cockpit ? here : null) || places.find((p) => ok(p) && !p.cockpit) || (here && ok(here) ? here : null) || places.find((p) => ok(p)) || here || at;
     // (on their feet where one stands by the place they were in; walking, where they are)
     const pos = here ? new THREE.Vector3(here.stand[0], s.space.deck, here.stand[1]) : new THREE.Vector3(W.pos.x, s.space.deck, W.pos.z);
     take(home, W.id);
