@@ -301,6 +301,11 @@ export function makeSite(ctx, opts = {}) {
     const head = new THREE.Vector3(); reach.eye = () => head.copy(F.player.pos).setY(F.player.pos.y + 1.6);
     reach.busy(true);
   }
+  // (A POD WITH TWO LOCKS, on a run of the crew member's own in a Medic they bought: opts.locksFor(i), how many pod i has
+  // (src/missions.js rockCards: two on the first pod, one on the second, two on the third ...). Each is one of the lock
+  // box's equations at their level; the first solved, its button reads "Next lock" and the second comes up at once;
+  // the pod opens with its last. Put away between the two, the first stays solved)
+  const locksOn = (i) => Math.max(1, Math.floor(opts.locksFor ? opts.locksFor(i) : 1) || 1), locksDone = {};
   async function openLock(i) {
     if (lock || !pods || !pods.pods[i] || st.closed) return null;
     lock = 'loading'; if (reach) reach.busy(true); if (opts.onLock) opts.onLock(true);
@@ -308,10 +313,12 @@ export function makeSite(ctx, opts = {}) {
     if (st.closed) { lock = null; return null; }
     const save = () => { if (opts.save) opts.save(); };
     // (debug: under the game's own rig switches, the lock box shows its workings to the rigs, as in the labs)
+    const need = locksOn(i), got = Math.min(need - 1, locksDone[i] || 0), last = got + 1 >= need; let solved = false;
     lock = lockMod.openPodLock(document.body, { rider: opts.crew || null, saveRider: save, debug: /[?&](rig|hold)(&|=|$)/.test(location.search),
-      pod: { name: `Stasis pod ${i + 1}`, where: `${i + 1} of ${st.of} beside the wreck · its lock` },
-      onOpen: () => { openPod(i); save(); },
-      onClose: () => { lock = null; save(); if (opts.onLock) opts.onLock(false); } });
+      finish: last ? null : 'Next lock',
+      pod: { name: `Stasis pod ${i + 1}`, where: `${i + 1} of ${st.of} beside the wreck · ${need > 1 ? `lock ${got + 1} of ${need}` : 'its lock'}` },
+      onOpen: () => { solved = true; locksDone[i] = got + 1; if (last) openPod(i); save(); },
+      onClose: () => { lock = null; save(); if (opts.onLock) opts.onLock(false); if (solved && !last && !st.closed) openLock(i); } });
     return lock;
   }
 
@@ -333,7 +340,7 @@ export function makeSite(ctx, opts = {}) {
     get ground() { return st.ground && !!F; }, get foot() { return F ? F.player : null; }, get footIn() { return !!(F && medic && medic.inside(F.player.pos)); },
     // (for the rigs: on foot out here, the pods and where they lie, a pod's lock opened as a tap opens it)
     get onfoot() { return F; }, get pods() { return pods; }, get plan() { return podPlan; }, lockPod: (i) => openLock(i),
-    get matrix() { return frameNow(); }, get lock() { return lock; }, get lockOffered() { return !!(reach && reach.now); }, get order() { return medic ? medic.order : []; }, get medic() { return medic; },
+    get matrix() { return frameNow(); }, get lock() { return lock; }, get locks() { return { done: { ...locksDone }, need: pods ? pods.pods.map((_, i) => locksOn(i)) : [] }; }, get lockOffered() { return !!(reach && reach.now); }, get order() { return medic ? medic.order : []; }, get medic() { return medic; },
     get sensors() { return { up: !!(search && search.panel), found: !!(search && search.found) }; },
     // (the crew member at the controls: the card up, flying by hand, down in the seat with its own prompt)
     get atControls() { if (!iPilot || !fl) return false; if (st.phase === 'find') return true; if (st.phase === 'fly') return !fl.auto; return false; },

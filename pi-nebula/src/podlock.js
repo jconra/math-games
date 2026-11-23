@@ -22,6 +22,8 @@
 //     onClose(t) the panel gone, opened or not (t: Mathwood's totals; t.solved)
 //     saveRider  saves the rider when its level is stepped with the arrows in the top strip
 //     rung, level  (for rigs) one of Mathwood's rungs at a size, as its test page does
+//     finish     the words on the button a solved lock brings, in place of "Open the pod" (a pod with a second lock
+//                still to come, on a run of the crew member's own: "Next lock": src/rescue.js)
 //   L.close(), L.el, L.handle (Mathwood's: debug, workSum, redeal)
 //   SPACE_LOOK   the look handed to Mathwood's panel (opts.look), and spaceWords(text) its words
 import { openLockbox } from '../../mathwood-valley/src/lockbox/index.js';
@@ -97,7 +99,7 @@ export function labMedic() {
   return { rider, save: (r) => { try { localStorage.setItem(LAB_KEY, JSON.stringify(r)); } catch (e) { /* blocked: not kept */ } } };
 }
 
-export function openPodLock(root = document.body, { rider = null, pod = {}, onOpen = () => {}, onClose = () => {}, saveRider = null, rung, level, size, debug = false } = {}) {
+export function openPodLock(root = document.body, { rider = null, pod = {}, onOpen = () => {}, onClose = () => {}, saveRider = null, rung, level, size, debug = false, finish = null } = {}) {
   let sheet = null, opened = false;
   // WORK IT OUT, as Mathwood's tools do it over the box: the part being asked in columns (its own sheet, longwork.js),
   // or, between parts (nothing to work out on screen), the entry to type a sum by hand
@@ -119,7 +121,7 @@ export function openPodLock(root = document.body, { rider = null, pod = {}, onOp
   }
   const closeSheet = () => { if (sheet) { try { sheet.close(); } catch (e) { /* gone */ } sheet = null; } };
   const handle = openLockbox(root, {
-    rider, box: { tier: 'iron', from: 'pod', name: pod.name, where: pod.where }, one: true, look: SPACE_LOOK, debug,
+    rider, box: { tier: 'iron', from: 'pod', name: pod.name, where: pod.where }, one: true, look: finish ? { ...SPACE_LOOK, finish } : SPACE_LOOK, debug,
     ...(rung ? { rung, level: level ?? 4, size: size ?? 2 } : {}),
     saveRider: (r) => { if (typeof saveRider === 'function') saveRider(r); },
     workOut: () => { closeSheet(); const s = handle.workSum(); if (s) openWork(s); else openOwn(); },

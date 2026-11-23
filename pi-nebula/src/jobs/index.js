@@ -26,6 +26,7 @@ import * as THREE from 'three';
 import { resolve } from '../people.js';
 import { openPanel, ensureCss } from './panel.js';
 import { credits, jobTally } from './engine.js';
+import { shipsOf, SHIP_NAMES } from '../own.js';
 import { JOB as galley } from './galley.js';
 import { JOB as medical } from './medical.js';
 import { JOB as smelter } from './smelter.js';
@@ -89,7 +90,10 @@ function sideMarks(s) {
 // shipping computer's supply run in Cargo: src/jobs/cargolink.js)
 // before: { [job id]: fn -> true if it took the Start itself } (a contract offered at the job's desk, shown in place of
 // the job: the supply run's at the shipping computer, src/mission.js deskStart)
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {} } = {}) {
+// more: { [job id]: fn -> { words, small, on() } or null }: a second button on a job's prompt for something else that is
+// done at its desk (the Hauler's sale at the shipping computer, and then the owner's own Hauler: src/mission.js deskMore)
+// THE WALLET, top right while walking: the crew member's credits, and under them the ships that are theirs (src/own.js)
+export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {}, more = {} } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -125,11 +129,18 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   document.body.appendChild(prompt);
   const goBtn = prompt.querySelector('.pnj-go'), otherBtn = prompt.querySelector('.pnj-other');
   goBtn.addEventListener('click', () => { if (near && near.job.open) start(near.job.id); });
-  otherBtn.addEventListener('click', () => { if (other) start(other.job.id); });
+  // (a job's second button, `more`: what it does now, asked as the prompt comes up and while it stays)
+  let moreNow = null;
+  otherBtn.addEventListener('click', () => { if (other) start(other.job.id); else if (moreNow && near) moreNow.on(); });
   const wallet = document.createElement('div');
-  wallet.className = 'pnj-wallet'; wallet.hidden = true; wallet.innerHTML = '<i aria-hidden="true"></i><span></span>';
+  wallet.className = 'pnj-wallet'; wallet.hidden = true; wallet.innerHTML = '<i aria-hidden="true"></i><span></span><small hidden></small>';
   document.body.appendChild(wallet);
-  const showWallet = () => { const c = crew(); wallet.querySelector('span').textContent = `${credits(c)} ${credits(c) === 1 ? 'credit' : 'credits'}`; };
+  const showWallet = () => {
+    const c = crew(), mine = shipsOf(c).map((id) => SHIP_NAMES[id]), sm = wallet.querySelector('small');
+    wallet.querySelector('span').textContent = `${credits(c)} ${credits(c) === 1 ? 'credit' : 'credits'}`;
+    // (the ships that are theirs: a small line under the credits)
+    sm.hidden = !mine.length; sm.textContent = mine.length ? `Yours: ${mine.join(' · ')}` : ''; wallet.classList.toggle('has-ships', mine.length > 0);
+  };
 
   let near = null, other = null, panel = null, link = null, at = null, playing = false, t = 0, faced = null;
   const camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
@@ -266,11 +277,20 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
           otherBtn.querySelector('span').textContent = alt.job.sign;
           otherBtn.setAttribute('aria-label', `${alt.job.sign} (turn to its side, or pick it here)`);
         }
+        moreNow = null;
       }
     } else if (best && hints[best.job.id]) {
       // (still at the same spot: its line for now may have changed meanwhile: a contract signed there, a share paid)
       const w = hints[best.job.id]() || best.job.hint, sm = prompt.querySelector('small');
       if (sm.textContent !== w) sm.textContent = w;
+    }
+    // (a job's second button: there or not, and its words, as they are now)
+    if (best && !other && more[best.job.id]) {
+      const m = more[best.job.id]() || null, key = m ? m.words + '|' + (m.small || '') : '';
+      if (key !== (moreNow ? moreNow.key : '')) {
+        moreNow = m ? { ...m, key } : null; otherBtn.hidden = !m; prompt.classList.toggle('is-pair', !!m);
+        if (m) { otherBtn.dataset.job = best.job.id + ':more'; otherBtn.querySelector('span').textContent = m.words; otherBtn.querySelector('small').textContent = m.small || ''; otherBtn.setAttribute('aria-label', m.words); }
+      } else if (m && moreNow) moreNow.on = m.on;
     }
     // (the other side: which way to turn to it, from the view as it is)
     if (other) {
@@ -319,6 +339,8 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   const control = (dt, P) => (panel && at && at.job.game && panel.control ? panel.control(dt, P) : null);
   // (the rings and signs put away while a ship is out on a trip, where the station is not: src/trip.js)
   const show = (on) => { group.visible = !!on; };
-  const api = { show, update, aim, close, start, control, spots, missing, antenna: standing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
+  const api = { show, update, aim, close, start, control, spots, missing, antenna: standing, near: null, nearJobs: [], panel: null, crane: null, busy: () => !!panel, inEyes, faceOf: () => (at ? at.heading : null), get link() { return link; },
+    // (the wallet shown again: credits spent on a ship, src/mission.js; a job's second button, for the rigs)
+    wallet: showWallet, get more() { return moreNow ? { words: moreNow.words, small: moreNow.small || '', on: moreNow.on } : null; }, swap: (how) => (at && at.job.id === 'crane' && panel ? (swapCrane(at, crew(), craneDone, how), true) : false) };
   return api;
 }

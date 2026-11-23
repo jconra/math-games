@@ -505,7 +505,10 @@ const say = (n) => Math.round(n).toLocaleString('en-US');
 // (the tonnes of a metal aboard: to the hundredth of a tonne during the run; in eighths, as a fraction, headed home early)
 const tons = (t, eighths = false) => `${eighths ? eighthsText(t) : Math.round(t * 100) / 100} t`;
 
-export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'dots', rock = 'natural', byCrew = null }) {
+// cardsFor(k): how many cards the rock scan asks at the k-th rock taken (from 0); none given: one a rock. (A run of the
+// crew member's own, in a Miner they bought, asks half as many again: two at the first rock, one at the next, two at
+// the third ...: src/missions.js rockCards)
+export function makeDrillView({ scene, camera, renderer, root = document.body, ship, at = new THREE.Matrix4(), crew = { id: 'lab', name: 'Driller' }, save = () => {}, rand = Math.random, ask = true, lab = false, flier = 'The pilot', pilot = false, onFly = null, onDone = () => {}, onSay = () => {}, ore = 'dots', rock = 'natural', byCrew = null, cardsFor = null }) {
   if (!document.getElementById('pdr-css')) { const st = document.createElement('style'); st.id = 'pdr-css'; st.textContent = CSS; document.head.appendChild(st); }
   const run = makeRun({ rand }), built = ship.built;
   // THE CREW'S OWN DRILLER (byCrew: { driller (a name), auto }: the crew member did not sign for the drill; src/drill.js
@@ -960,14 +963,18 @@ export function makeDrillView({ scene, camera, renderer, root = document.body, s
 
   // ── the question: the job panel with one of the drill ladder's cards, about the rock in the claw. Whatever the
   // answer, the game goes on the same ──
+  // (asks: this rock's cards: how many it asks and how many are answered; rocksAsked: the rocks scanned so far)
+  const asks = { need: 1, got: 0 }; let rocksAsked = 0;
   const link = {
     now: () => (H ? { rock: H.rock, cans: { full: run.full, of: DRILL.cans } } : null),
-    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Rock scan</b><small>${H ? esc(cap(SHAPES[H.rock.shape].word)) : ''}</small></header>`,
-    right() { closeIn = 0.95; },
+    head: () => `<header class="pnj-cardtop is-jump"><span class="pnj-icon is-jump" aria-hidden="true"></span><b>Rock scan</b><small>${H ? esc(cap(SHAPES[H.rock.shape].word)) : ''}${asks.need > 1 ? ` · ${Math.min(asks.got + 1, asks.need)} of ${asks.need}` : ''}</small></header>`,
+    // (the rock's last card: the card goes; one more to come: the panel deals it by itself)
+    right() { asks.got++; if (asks.got >= asks.need) closeIn = 0.95; },
   };
   function openAsk() {
     V.asked = false; closeIn = -1;
     if (!ask) { asked(); return; }
+    asks.need = Math.max(1, Math.floor(cardsFor ? cardsFor(rocksAsked) : 1) || 1); asks.got = 0; rocksAsked++;
     panel = openPanel(root, { job: SCAN, crew, live: link, pay: false, onSave: () => save(crew), onCredits: () => {}, onClose: () => { if (panel) { panel = null; asked(); } } });
     el.classList.add('has-panel');
   }

@@ -169,6 +169,8 @@ async function boot() {
     // (and at the shipping computer the supply run: its contract offered there, its share waiting there: src/mission.js)
     hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null), cargo: () => (mission ? mission.deskHint('cargo') : null) }, crane, lib, people: () => people,
     before: { cargo: () => (mission ? mission.deskStart('cargo') : false) },
+    // (and the Hauler's sale there, once the crew member's bridge out to it is built; then their own Hauler: src/mission.js)
+    more: { cargo: () => (mission ? mission.deskMore('cargo') : null) },
     // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js; home from the run, its
     // share's pay slip first)
     links: { cargo: ({ crew, save: keep }) => (mission && mission.deskLive('cargo')) || cargoLink({ crew, save: keep, supply: GAME.supply, contract: !!(mission && mission.deskSigned('cargo')) }) } });

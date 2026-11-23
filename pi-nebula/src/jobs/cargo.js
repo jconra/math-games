@@ -254,6 +254,8 @@ export const MAKERS = {
   load: {
     strand: 'words', at: (step) => STEPS[Math.max(1, Math.min(STEPS.length, step)) - 1].grade,
     make(step, { rand = Math.random, live = null } = {}) {
+      // (a run of the crew member's own asks more than five: its link says which card each question is: src/jobs/cargolink.js)
+      if (live && live.cardAt) { const k = Math.max(0, live.k || 0); return orderOf(live.cardAt(step, k), step, k, rand); }
       if (live && live.chain) { const C = live.chain(step), k = Math.max(0, Math.min(CARDS - 1, live.k || 0)); return orderOf(C.cards[k], step, k, rand); }
       const C = chainAt(step, rand() < 0.5 ? 3 : 4, rand), k = Math.floor(rand() * CARDS);
       return orderOf(C.cards[k], step, k, rand);

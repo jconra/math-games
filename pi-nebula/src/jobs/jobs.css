@@ -185,6 +185,11 @@
 .pnj-wallet { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 14; height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 8px;
   font-size: 14px; font-weight: 700; color: var(--accent); background: rgba(14, 18, 24, 0.72); box-shadow: inset 0 0 0 1.5px rgba(150, 200, 240, 0.45); clip-path: var(--oct); --cut: 10px; pointer-events: none; }
 .pnj-wallet[hidden] { display: none; }
+/* (the ships that are the crew member's own, a small line under their credits: src/own.js) */
+.pnj-wallet small { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnj-wallet small[hidden] { display: none; }
+.pnj-wallet.has-ships { height: 54px; display: grid; grid-template-columns: auto auto; align-content: center; justify-content: end; column-gap: 8px; row-gap: 2px; max-width: min(64vw, 360px); }
+.pnj-wallet.has-ships small { grid-column: 1 / -1; text-align: right; }
 
 /* ── a phone: the panel along the bottom, the props in view above ─────────────────────────────────────────── */
 @media (max-width: 640px), (max-height: 480px) and (max-width: 900px) {
@@ -238,6 +243,10 @@
 .pnj-lamp.is-late { color: #ffe2b0; }
 .pnj-lamp.is-late i { background: #ffb02e; box-shadow: 0 0 8px rgba(255, 176, 46, 0.9); }
 @keyframes pnj-lampnow { 50% { background: #5b7384; } }
+/* (a lamp lit by more than one card, on a run of the crew member's own: a small pip for each of its cards: src/trip.js) */
+.pnj-pips { display: inline-flex; gap: 3px; margin-left: auto; flex: none; text-decoration: none; }
+.pnj-pips b { width: 6px; height: 6px; border-radius: 50%; background: #27323c; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.5); }
+.pnj-pips b.is-on { background: var(--good); box-shadow: none; }
 @media (max-width: 640px) { .pnj-lamp { font-size: 11px; padding: 5px 6px; gap: 5px; letter-spacing: 0.05em; } }
 /* (the pilot's maps and diagrams as answers: larger than the dock's panes, so a point on a map can be told from its neighbour) */
 .pnj[data-job="pilot"] .pnj-answers.is-pics .pnj-coin { min-height: 120px; }

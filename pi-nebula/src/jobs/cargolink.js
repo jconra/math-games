@@ -7,8 +7,16 @@
 // end card says what to load where, and that the forklift is parked in its bay beside the desk.
 //   const L = cargoLink({ crew, save, supply })   L.now() (for the maker: { k, chain(step) }), L.head(o) (the card's
 //   top: the supply run, which question of five), L.right(), L.over() (the end card), L.close()
+//
+// A RUN OF THE CREW MEMBER'S OWN, in a Hauler they bought (run.own: src/supplyrun.js contract; the game's maker, BUY1-2:
+// "the amount of questions that you are asked should probably go up by about 50% if you take it out yourself"): EIGHT
+// QUESTIONS in place of five (src/own.js moreCards). The first five are the same five, working out this load. The other
+// three BEGIN THE NEXT LOAD: its crates, its water and its pallets (the second, third and fourth cards of another run's
+// chain at the same level, for the same number of people at the old station wherever a card says how many), the
+// card's top saying so. They are the same kinds of card, no harder. Answered, the run is worked out as ever.
 import { CARDS, chainAt, seeded, PER_BOX } from './cargo.js';
-import { startRun, runOf } from '../supplyrun.js';
+import { startRun, runOf, RUN } from '../supplyrun.js';
+import { moreCards } from '../own.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const u = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -23,21 +31,36 @@ export function cargoLink({ crew, save = () => {}, supply = null, contract = fal
   const chains = new Map();
   // (the run's numbers at a step: the same each time, seeded by the run)
   const chain = (step) => { if (!chains.has(step)) chains.set(step, chainAt(step, run.pallets, seeded(run.n * 7919 + step * 131 + (run.began || 0) % 100000))); return chains.get(step); };
-  const dots = () => Array.from({ length: CARDS }, (_, i) => `<i class="${i < run.k ? 'is-done' : i === run.k ? 'is-now' : ''}"></i>`).join('');
+  // (a run of their own: how many questions in all; and the next load's chain at a step: another run's numbers, the
+  // other number of pallets first, with as many people as this load's if such a run can be worked out at all)
+  const total = run.own ? moreCards(CARDS, 0) : CARDS, nexts = new Map();
+  const next = (step) => {
+    if (!nexts.has(step)) {
+      const first = chain(step), others = [...RUN.pallets.filter((n) => n !== run.pallets), run.pallets];
+      let C = null, any = null;
+      for (const N of others) for (let i = 0; i < 60 && !C; i++) { const c = chainAt(step, N, seeded(run.n * 104729 + step * 977 + i * 31 + N)); any = any || c; if (c.people === first.people) C = c; }
+      nexts.set(step, C || any);
+    }
+    return nexts.get(step);
+  };
+  // (the k-th question's card at a step: this load's five, then the next load's crates, water and pallets)
+  const cardAt = (step, k) => (k < CARDS ? chain(step).cards[k] : next(step).cards[Math.min(CARDS - 2, 1 + (k - CARDS))]);
+  const dots = () => Array.from({ length: total }, (_, i) => `<i class="${i < run.k ? 'is-done' : i === run.k ? 'is-now' : ''}"></i>`).join('');
   function head(o, end = false) {
-    const sub = end ? 'Worked out' : `To ${'the old station'} · question ${Math.min(CARDS, run.k + 1)} of ${CARDS}`;
+    const sub = end ? 'Worked out' : `${run.k >= CARDS ? 'The next load' : `To ${'the old station'}`} · question ${Math.min(total, run.k + 1)} of ${total}`;
     return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Supply run</b><small>${esc(sub)}</small></header>
-      <div class="pcc-steps" role="img" aria-label="${Math.min(run.k, CARDS)} of ${CARDS} worked out">${dots()}</div>`;
+      <div class="pcc-steps" role="img" aria-label="${Math.min(run.k, total)} of ${total} worked out">${dots()}</div>`;
   }
   const L = {
     ...(contract ? { pay: false } : {}),
-    now: () => ({ k: run.k, N: run.pallets, chain }),
+    now: () => ({ k: run.k, N: run.pallets, chain, ...(run.own ? { cardAt } : {}) }),
     head: (o) => head(o),
-    right() { run.k = Math.min(CARDS, run.k + 1); if (run.k >= CARDS && supply) supply.worked(); save(); },
+    total,
+    right() { run.k = Math.min(total, run.k + 1); if (run.k >= total && supply) supply.worked(); save(); },
     wrong() {},
     // the end card: worked out, what to load where (and how far the loading has got, opened again later)
     over() {
-      if (run.k < CARDS && !run.worked) return null;
+      if (run.k < total && !run.worked) return null;
       const S = supply ? supply.status() : null, loaded = S ? S.loaded : run.loaded || 0, N = run.pallets, K = Math.ceil(N / PER_BOX);
       const boxes = (run.slots || []).map(nameOf), where = boxes.length > 1 ? `containers ${boxes.slice(0, -1).join(', ')} and ${boxes[boxes.length - 1]}` : `container ${boxes[0]}`;
       const done = run.done || (S && S.left === 0);

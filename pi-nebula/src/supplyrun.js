@@ -98,9 +98,12 @@ export function makeSupplyRun({ crew = () => null, save = () => {}, forklift, br
     },
     // THE SUPPLY CONTRACT SIGNED (src/mission.js): its run, the one on now or a new one; loader: the crew member signed
     // as the run's Loader (the computer and the forklift are theirs); not: Cargo's crew's, worked out and loading
-    contract(loader) {
+    // (own: a run of the crew member's own, in a Hauler they bought: kept with the run, so its Loader's questions are
+    // half as many again whenever the computer is opened: src/jobs/cargolink.js)
+    contract(loader, { own = false } = {}) {
       const c = crew(); if (!c) return null;
       const r = R.begin(); if (!r) return null;
+      if (own) r.own = true; else delete r.own;
       if (!loader) { r.byCrew = true; r.worked = true; handed = true; banner = { t: 0, title: 'Cargo\'s crew load the Hauler', words: `${r.pallets} pallets for the old station go into the containers without you. The Hauler will be ready: up the lift, across the bridge, aboard.` }; }
       save(c);
       return r;

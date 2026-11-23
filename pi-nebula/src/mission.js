@@ -36,6 +36,18 @@
 //     keeper is the dock's own hull (src/shiphull.js `dock`); home, the share waits at the shipping computer (the cargo
 //     job's first card there, deskLive), and the run can be signed for again as a plain hauling run.
 //
+//   - A SHIP BOUGHT, AND TAKEN OUT AS YOUR OWN (src/own.js has the game's maker's words; src/contract.js the cards):
+//     every captain's card has the ship's sale as its last line (saleFor: the price, how many credits short, or the
+//     buying itself: the credits spent and the ship kept with the crew member); the Hauler's is at the shipping computer,
+//     whose prompt has a second button for it once the crew member's bridge is built (deskMore). IN THE COCKPIT OF A SHIP
+//     THAT IS THEIRS, with no contract on it, the seat's prompt reads "Your Miner: take it out" (Take it out, E) and
+//     brings up the owner's card (ownCard): a run of their own, which starts at once from the seat they are standing by
+//     (the same trip, `own`: no captain aboard, the hired crew for the jobs left to them, more cards for their own jobs),
+//     or just flying (startFree: out, round the station and back, nothing asked and nothing paid). An own run is never
+//     left signed in a hangar's ship: given up, or the page loaded again in the middle of it, it is gone and the seat
+//     offers again. The Hauler's own run is begun at the shipping computer, where its load is worked out, and is kept as
+//     the supply contract is until it is flown. Going to a captain for a contract is exactly as it was, owned or not.
+//
 //   const mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, people, crew, save, body, put, lib })
 //   mission.update(dt, P, playing) -> true while a trip has the player (seated: no walking, the trip's camera); on
 //                                    their feet out at the rocks, tuning the core, their walking is their own: false
@@ -45,7 +57,9 @@
 //                                                rescue: src/missions.js payAt)
 //   mission.offer(id), mission.start(), mission.state(), mission.trip   (the rigs)
 import * as THREE from 'three';
-import { missions, missionOf, contractOf, sign, collect, payoutOrder, tuneWhen, seedOf, MISSIONS, stationFound, supplyRuns } from './missions.js';
+import { missions, missionOf, contractOf, sign, signOwn, tearUp, freeFlight, collect, payoutOrder, tuneWhen, seedOf, MISSIONS, stationFound, supplyRuns } from './missions.js';
+import { saleOf, buy, owns } from './own.js';
+import { bridgeStands } from './jobs/dock.js';
 import { CAPTAINS } from './lines.js';
 import * as E from './jobs/engine.js';
 import { JOB as smelter } from './jobs/smelter.js';
@@ -66,7 +80,10 @@ const LINE = { ship: '#ffd560', payout: '#ff8a3a' };
 const PAY_AT = { smelter, medical, survey, cargo };
 // (where each run goes, as the seat's prompt says it)
 const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts', oldstation: 'the old station' };
-const shipName = (M) => (shipFacts(M.ship) || {}).name || 'ship';
+const nameOfShip = (id) => (shipFacts(id) || {}).name || 'ship';
+const shipName = (M) => nameOfShip(M.ship);
+// (the run each ship flies: its captain's, and the owner's own)
+const runOfShip = (id) => Object.values(MISSIONS).find((M) => M.ship === id) || null;
 // (a run of the Miner's: its crane holds it on its pad for the run, and takes its canisters off it after)
 const minerRun = (m) => !!m && MISSIONS[m.id].ship === 'miner';
 
@@ -80,6 +97,17 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   prompt.innerHTML = '<div class="pnj-pw"><b>Pilot\'s seat</b><small>Sit at the controls and fly the Miner out</small></div><button type="button" class="pnj-go">Sit down<kbd>E</kbd></button>';
   // (signed for the drill and not the pilot's seat: the captain's own pilot flies; the crew member rides out)
   let prompted = null;
+  // (IN THE COCKPIT OF A SHIP THAT IS THEIRS, no contract on it: the seat offers it, and the owner's card comes up)
+  let ownAt = null;
+  const promptOwn = (ship) => {
+    const key = 'own:' + ship; if (key === prompted) return; prompted = key;
+    prompt.querySelector('.pnj-go').hidden = false;
+    prompt.querySelector('b').textContent = 'Pilot\'s seat';
+    prompt.querySelector('small').textContent = `Your ${nameOfShip(ship)}: take it out`;
+    prompt.querySelector('.pnj-go').innerHTML = 'Take it out<kbd>E</kbd>';
+  };
+  // (the seat's button, pressed: the run signed for, or the owner's card)
+  const seatGo = () => (ownAt ? ownCard(ownAt) : start());
   // (signed only as the ship's engineer: no seat is theirs, the two chairs are the crew's (src/trip.js); they tell the
   // crew they are aboard, and the run begins with them on their feet)
   const promptFor = (m) => {
@@ -101,8 +129,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     const S = supply(), r = S && S.contractRun ? S.contractRun(m.run) : null;
     return r && (r.worked || r.done) ? null : 'The supplies are not worked out yet: the shipping computer in Cargo, down the lift';
   }
-  prompt.querySelector('.pnj-go').addEventListener('click', () => start());
-  addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); start(); } });
+  prompt.querySelector('.pnj-go').addEventListener('click', () => seatGo());
+  addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && !card && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); seatGo(); } });
 
   // ── WHO KEEPS EACH SHIP'S HULL WHERE IT IS FLOWN AND STANDS (src/flying.js `hull`): the Miner's crane (its canisters
   // ride on it), or the ship's own shared hull (src/shiphull.js), made once and kept for the game, as the Flight Lab
@@ -174,8 +202,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     return meetAll.length ? meetAll[skip % meetAll.length] : null;
   }
   const meet = (id) => { const pp = people(); if (pp && pp.captain.meet) pp.captain.meet(id, meetSpot); };
-  // (a run nobody walks to the ship for: the supply run, offered at a desk)
-  const walksTo = (m) => !!m && !MISSIONS[m.id].desk;
+  // (a run nobody walks to the ship for: the supply run, offered at a desk; a run of the crew member's own, whose
+  // captain stays in the station)
+  const walksTo = (m) => !!m && !MISSIONS[m.id].desk && !m.own;
 
   // ── the line on the floor: to the run's ship with a contract signed (its first way in once its cabin is in, its
   // hangar till then), to where the share waits (the mission's payAt job) with a share waiting ──
@@ -184,15 +213,16 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     const m = contractOf(crew());
     // (the ship at the dock: across the bridge, to just inside its crew door; from Cargo no line leads there (only the
     // lift goes up): the cargo game's own last words say the way)
-    if (where === 'ship' && m && MISSIONS[m.id].desk) {
+    if (where === 'own' ? !!(runOfShip(ownLead) || {}).desk : where === 'ship' && m && MISSIONS[m.id].desk) {
       const sp = dock && dock.spots ? dock.spots() : null;
       if (sp && !inCargo()) { guide.to(new THREE.Vector3(...sp.inside), { near: 1.2, label: 'mission', colour: LINE.ship }, P.pos); lineTo = 'dock'; }
       return;
     }
-    if (where === 'ship') {
-      const id = shipOf(m), sp = boarding.spots(id), e = W.R.places?.entrances?.[id];
+    if (where === 'ship' || where === 'own') {
+      // ('own': to a ship that is theirs, no contract signed: `ownLead`)
+      const id = where === 'own' ? ownLead : shipOf(m), sp = boarding.spots(id), e = W.R.places?.entrances?.[id];
       const at = sp && sp.ways && sp.ways[0] ? new THREE.Vector3(...sp.ways[0]) : e ? walls.snap(e[0] + 3, e[1] + 0.4, e[2], 4) : null;
-      if (at) { guide.to(at, { near: 1.6, label: 'mission', colour: LINE.ship }, P.pos); lineTo = sp ? 'lift' : 'hangar'; }
+      if (at) { guide.to(at, { near: 1.6, label: 'mission', colour: LINE.ship }, P.pos); lineTo = where === 'own' ? (sp ? 'ownLift' : 'ownHangar') : sp ? 'lift' : 'hangar'; }
     } else {
       const job = (m && MISSIONS[m.id].payAt) || 'smelter', s = jobs.spots.find((x) => x.job.id === job);
       // (the shipping computer is down the lift, in Cargo: a line only from there)
@@ -204,10 +234,36 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     }
   }
 
+  // ── THE SHIP'S SALE, as its captain's card has it (src/own.js): what it costs this crew member now; the buying (the
+  // credits spent, the ship kept with them, saved at once, the wallet told); take: what "Take your Miner out" does ──
+  const bridgeUp = () => { const c = crew(); return !!(c && bridgeStands(c)); };
+  let lastBuy = null;
+  function saleFor(ship, take = null, onBought = null) {
+    return {
+      now: () => saleOf(crew(), ship, { bridge: bridgeUp() }),
+      buy: () => {
+        const c = crew(), r = c ? buy(c, ship, { bridge: bridgeUp() }) : { ok: false };
+        if (r.ok) { save(c); if (jobs.wallet) jobs.wallet(); lastBuy = { ship, price: r.price, credits: r.credits }; if (onBought) onBought(); }
+        return !!r.ok;
+      },
+      take,
+    };
+  }
+  // (the crew member led to a ship that is theirs, no contract signed: the line to its way in, a word at the top)
+  let ownLead = null;
+  function leadOwn(ship) {
+    ownLead = ship; lead('own');
+    toastUp(runOfShip(ship) && runOfShip(ship).desk ? `The ${nameOfShip(ship)} is at the dock, across the bridge. Take it out from its pilot's seat.` : `The ${nameOfShip(ship)} is in its hangar. Take it out from its pilot's seat.`, `Your ${nameOfShip(ship)}`);
+  }
+  // (?tune=arrive or ?tune=leave in the address: this run's tuning of the core then, for trying each)
+  const tuneRand = () => { const want = new URLSearchParams(location.search).get('tune'); return want === 'arrive' ? () => 0 : want === 'leave' ? () => 0.999 : Math.random; };
+
   // ── the contract ──
-  function offer(captain) {
+  // (mode: the captain's offer, 'contract'; at a desk with nothing to sign, the ship's sale alone, 'sale'; the owner's
+  // own card there, 'own': src/contract.js)
+  function offer(captain, { mode = 'contract' } = {}) {
     const M = missionOf(captain.id), c = crew();
-    if (!M || !c || card || trip || contractOf(c)) return false;
+    if (!M || !c || card || trip || (mode === 'contract' && contractOf(c))) return false;
     card = 'loading';
     const desk = !!M.desk;
     const p = people(); if (p && !desk) p.captain.hold(captain.id, 90);
@@ -217,23 +273,72 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       const done = () => { card = null; if (input) input.enabled = was && playing; };
       // (a supply run after the first: the same contract, as a plain hauling run)
       const Mc = desk && M.aboutAgain && supplyRuns(c) > 0 ? { ...M, about: M.aboutAgain, name: 'Hauling run' } : M;
-      card = openContract(document.body, { mission: Mc, captain: captain.name || nameOf(captain.id),
+      // (the supply run's cargo run begun with the contract, the one call that starts it: src/supplyrun.js; the Loader's
+      // own at the computer, or Cargo's crew's, already worked out and loading. own: a run of the crew member's own, its
+      // Loader's questions half as many again: src/jobs/cargolink.js)
+      const begunAtDesk = (m, roles, own) => {
+        const S = supply(); if (S && S.contract) { const r = S.contract(roles.includes('cargo'), { own }); if (r) m.run = r.n; }
+        save(c);
+        toastUp(roles.includes('cargo') ? `${own ? 'Your run is on' : 'Signed'}. The supplies are yours to work out: start at this computer.` : `${own ? 'Your run is on' : 'Signed'}. Cargo's crew loads the Hauler: up the lift, across the bridge and aboard.`);
+      };
+      const K = CAPTAINS[captain.id] || {};
+      card = openContract(document.body, { mission: desk ? { ...Mc, saleAbout: 'The Hauler waits at the dock, across the bridge. Bought, it is yours to fly round the station whenever you like. Hauling runs of your own start once the old station is found.' } : Mc,
+        captain: captain.name || nameOf(captain.id), mode,
+        // THE SHIP'S SALE: bought, its captain says so; "Take your Miner out": the line to it, and its seat offers it; the
+        // Hauler's: this card turns to the owner's, where its own run is begun (its load is worked out here)
+        sale: saleFor(M.ship,
+          () => { if (desk) return 'own'; done(); const pp = people(); if (pp) pp.captain.release(captain.id, 30); leadOwn(M.ship); return null; },
+          () => { const pp = people(); if (pp && !desk) pp.captain.say(captain.id, `The ${shipName(M)} is yours. Take it out whenever you like.`); }),
+        own: desk ? {
+          get run() { return stationFound(c) && !contractOf(c); },
+          get why() { return !stationFound(c) ? 'Hauling runs of your own start once the old station is found. Until then the Hauler is yours to fly round the station.' : 'You have a run on already. A run of your own can start once it is done and paid.'; },
+          fly: false, note: 'Just flying, for no pay: from the Hauler\'s pilot\'s seat, any time.',
+          onRun: (roles) => { done(); const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (m) begunAtDesk(m, roles, true); },
+          onFly: () => {},
+        } : null,
         onSign: (roles) => {
           done();
-          // (?tune=arrive or ?tune=leave in the address: this run's tuning of the core then, for trying each)
-          const want = new URLSearchParams(location.search).get('tune'), m = sign(c, M.id, roles, Date.now(), want === 'arrive' ? () => 0 : want === 'leave' ? () => 0.999 : Math.random); if (!m) return;
-          // (the supply run: its cargo run begun with the contract, the one call that starts it: src/supplyrun.js; the
-          // Loader's own at the computer, or Cargo's crew's, already worked out and loading)
-          if (desk) { const S = supply(); if (S && S.contract) { const r = S.contract(roles.includes('cargo')); if (r) m.run = r.n; } save(c); toastUp(roles.includes('cargo') ? 'Signed. The supplies are yours to work out: start at this computer.' : 'Signed. Cargo\'s crew loads the Hauler: up the lift, across the bridge and aboard.'); return; }
+          const m = sign(c, M.id, roles, Date.now(), tuneRand()); if (!m) return;
+          if (desk) { begunAtDesk(m, roles, false); return; }
           save(c);
           if (M.ship === 'miner') { crane.awayHeld = true; if (crane.mode === 'away') crane.arrive(); }      // (found parked and ready)
           // (he says so, turned to the crew member while he says it, and then walks to his ship)
-          const K = CAPTAINS[captain.id] || {}, pp = people();
+          const pp = people();
           if (pp) { pp.captain.say(captain.id, K.signed); pp.captain.hold(captain.id, 3); }
           meet(captain.id); meeting = captain.id;
           lead('ship');
         },
-        onLater: () => { done(); missions.declined(captain.id); if (desk) return; const pp = people(); if (pp) { pp.captain.say(captain.id, (CAPTAINS[captain.id] || {}).no); pp.captain.release(captain.id, 30); } } });
+        onLater: () => { done(); if (mode !== 'contract') return; missions.declined(captain.id); if (desk) return; const pp = people(); if (pp) { pp.captain.say(captain.id, K.no); pp.captain.release(captain.id, 30); } } });
+    }).catch((e) => { card = null; fail(e); });
+    return true;
+  }
+  // ── THE OWNER'S CARD, at the pilot's seat of a ship that is theirs (src/contract.js `own`): a run of their own, begun
+  // and flown at once from where they stand, or just flying. The Hauler's own run is begun at the shipping computer
+  // (its load is worked out there): here it is the flying alone, and the card says where the run starts ──
+  function ownCard(ship) {
+    const M = runOfShip(ship), c = crew();
+    if (!M || !c || !owns(c, ship) || card || trip || loading) return false;
+    card = 'loading';
+    import('./contract.js').then(({ openContract }) => {
+      if (card !== 'loading') return;
+      const was = input ? input.enabled : true; if (input) input.enabled = false;
+      const done = () => { card = null; if (input) input.enabled = was && playing; };
+      const on = contractOf(c), desk = !!M.desk, run = !on && !desk;
+      card = openContract(document.body, { mission: M, captain: `Your ${nameOfShip(ship)}`, mode: 'own',
+        sale: { now: () => saleOf(c, ship, { bridge: bridgeUp() }) },
+        own: { run, fly: true,
+          why: run ? '' : desk ? (stationFound(c) ? 'The Hauler is yours to fly round the station. A supply run of your own starts at the shipping computer in Cargo, where its load is worked out.' : 'The Hauler is yours to fly round the station. Hauling runs of your own start once the old station is found.')
+            : `The ${nameOfShip(ship)} is yours to fly round the station. You have a contract on: a run of your own can start once it is done and paid.`,
+          note: 'Just flying: out, round the station and back. Nothing is asked and nothing is paid.',
+          onRun: (roles) => {
+            done();
+            const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (!m) return;
+            save(c);
+            if (M.ship === 'miner') crane.awayHeld = true;
+            if (!start()) { tearUp(c); save(c); }
+          },
+          onFly: () => { done(); startFree(ship); } },
+        onLater: () => { done(); } });
     }).catch((e) => { card = null; fail(e); });
     return true;
   }
@@ -261,7 +366,18 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // (a word at the top for a moment: the contract signed at the desk, where no captain says so)
   const toastEl = document.createElement('div'); toastEl.className = 'pnj-prompt pmt-wide'; toastEl.hidden = true; toastEl.style.cssText = 'top: max(70px, env(safe-area-inset-top)); bottom: auto; pointer-events: none;';
   toastEl.innerHTML = '<div class="pnj-pw"><b>Supply run</b><small></small></div>'; document.body.appendChild(toastEl);
-  function toastUp(w) { toastEl.querySelector('small').textContent = w; toastEl.hidden = false; toastT = 7; }
+  function toastUp(w, title = 'Supply run') { toastEl.querySelector('b').textContent = title; toastEl.querySelector('small').textContent = w; toastEl.hidden = false; toastT = 7; }
+  // THE SHIPPING COMPUTER'S SECOND BUTTON (src/jobs/index.js `more`): the Hauler's sale, once this crew member's bridge
+  // out to it is built, and then their own Hauler; it brings up the card with the sale's line alone, or the owner's own
+  // (where a supply run of their own is begun, once the old station is found). Not while a supply run is on there: the
+  // computer is that run's. -> { words, small, on() } or null
+  function deskMore(at) {
+    const M = deskOf(at), c = crew(); if (!M || !c || card || trip) return null;
+    const S = saleOf(c, M.ship, { bridge: bridgeUp() }), m = contractOf(c);
+    if (!S || (!S.open && !S.owned) || (m && m.id === M.id)) return null;
+    return { words: S.owned ? `Your ${S.name}` : `The ${S.name}: for sale`, small: S.owned ? 'Take it out' : `${S.price.toLocaleString('en-US')} credits`,
+      on: () => offer({ id: M.captain, name: `${M.by || 'The station'} at the shipping desk` }, { mode: S.owned ? 'own' : 'sale' }) };
+  }
   // THE SHIPPING COMPUTER'S CARD while a supply run's share waits there (the cargo job's panel, src/jobs/index.js
   // `links`): the payout card first, as at the smelter's controls; paid, a last card saying so. null: nothing waits, the
   // computer is the cargo game's own (src/jobs/cargolink.js)
@@ -300,9 +416,11 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (a run led by someone who walks no station, the supply run's first mate: their name on the run's words; dock: the
       // Hauler's bridge, let go and taken again; pallets: what a supply run carries; again: the old station saved before)
       const Mn = MISSIONS[m.id], S = supply(), cr = Mn.desk && S && S.contractRun ? S.contractRun(m.run) : null;
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: Mn.lead ? Mn.lead.name : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
+      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: m.own ? `The ${shipName(Mn)}` : Mn.lead ? Mn.lead.name : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
         dock, pallets: cr ? cr.pallets : 0, again: supplyRuns(c) > 0,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
+        // (a run of the crew member's own, in a ship they bought: no captain aboard, the hired crew, more cards: src/trip.js)
+        own: !!m.own,
         onEnd: (r) => {
           const mine = MISSIONS[m.id].ship === 'miner', v = visits.get(MISSIONS[m.id].ship);
           if (v) { for (const w of v.views) if (w.O.moved) v.reset(w.cfg.id); v.dispose(); visits.delete(MISSIONS[m.id].ship); }
@@ -316,6 +434,35 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         } });
       api.trip = trip;
     }).catch((e) => { loading = false; if (input) input.enabled = playing; fail(e); });
+    return true;
+  }
+
+  // ── JUST FLYING (src/trip.js `free`; the game's maker: "You have to buy the ship if you want to fly it at your
+  // leisure", and "it's not math so you don't get money"): a ship that is theirs taken out of its hangar, or off its
+  // dock, round the station and back, from its pilot's seat. Nothing is signed, asked or paid, and a contract of theirs
+  // with another captain is left as it is ──
+  function startFree(ship) {
+    const c = crew(), m = c && contractOf(c);
+    if (!c || !owns(c, ship) || trip || loading || card || !body()) return false;
+    if (boarding.where(body().pos) !== ship + '/cockpit') return false;
+    // (a run signed for this very ship: its seat is that run's)
+    if (m && m.state === 'signed' && MISSIONS[m.id].ship === ship) return false;
+    loading = true; prompt.hidden = true;
+    if (input) input.enabled = false;
+    const held = !!crane.awayHeld; if (ship === 'miner') crane.awayHeld = true;
+    import('./trip.js').then(({ startTrip }) => {
+      loading = false;
+      if (!playing) { if (input) input.enabled = false; if (ship === 'miner') crane.awayHeld = held; return; }
+      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(ship), jobs, guide, outside, visit: visitOf(ship), people, crew: c, save, body, put, captainName: `The ${nameOfShip(ship)}`, lib, input, dock,
+        walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: freeFlight(ship), roles: ['pilot'], tune: null, free: true,
+        onEnd: (r) => {
+          const v = visits.get(ship);
+          if (v) { for (const w of v.views) if (w.O.moved) v.reset(w.cfg.id); v.dispose(); visits.delete(ship); }
+          lastRun = { ...r, aboard: undefined, free: true }; if (ship === 'miner') crane.awayHeld = held;
+          if (input) input.enabled = playing;
+        } });
+      api.trip = trip;
+    }).catch((e) => { loading = false; if (ship === 'miner') crane.awayHeld = held; if (input) input.enabled = playing; fail(e); });
     return true;
   }
 
@@ -341,8 +488,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   }
   // (its top, at a job whose own cards are not pay slips (the triage desk's are patient charts): a pay slip's, as at the
   // smelter's controls)
-  const payoutHead = (o) => (o && o.payout != null && o.facts && o.facts.from === 'Your share' ? '<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Your share</small></header>' : null);
-  const hint = (at = 'smelter') => { const m = contractOf(crew()); return m && m.state === 'payout' && (MISSIONS[m.id].payAt || 'smelter') === at ? `Your share is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
+  // (a run of the crew member's own: "Your own run", and the pay is no share: src/missions.js)
+  const payoutHead = (o) => (o && o.payout != null && o.facts && (o.facts.from === 'Your share' || o.facts.from === 'Your own run') ? `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>${o.facts.from}</small></header>` : null);
+  const hint = (at = 'smelter') => { const m = contractOf(crew()); return m && m.state === 'payout' && (MISSIONS[m.id].payAt || 'smelter') === at ? `Your ${m.own ? 'pay' : 'share'} is waiting: ${m.payout.pay.toLocaleString('en-US')} credits` : null; };
 
   // ── THE EXPLORER'S SURVEY TABLE, where an exploring run's share waits (payAt 'survey'): standing at it aboard, the
   // table's prompt (as a job spot's: Start, E); pressed, the job panel with the survey table's own card and, as its first
@@ -396,10 +544,15 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   let kept = null;
   const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard && kept.captain) pp.aboard(kept.captain, false); kept = null; };
   const api = {
-    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskStart, deskHint, deskLive, deskSigned, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
+    trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskStart, deskHint, deskLive, deskSigned, deskMore,
+    // (a ship that is theirs: the owner's card at its seat, just flying; its sale as the cards have it; the last bought)
+    ownCard, startFree, saleOf: (ship) => saleOf(crew(), ship, { bridge: bridgeUp() }), get lastBuy() { return lastBuy; }, get card() { return card && card !== 'loading' ? card : null; }, get lastRun() { return lastRun; },
     update(dt, P, isPlaying = true) {
       playing = isPlaying && !!P; lastDt = dt;
-      const c = crew(), m = c ? contractOf(c) : null;
+      const c = crew(); let m = c ? contractOf(c) : null;
+      // (a run of their own in a hangar's ship is never left signed: given up, or the page loaded again in the middle
+      // of it, it is gone, and the ship's seat offers again)
+      if (m && m.own && m.state === 'signed' && !MISSIONS[m.id].desk && !trip && !loading) { tearUp(c); save(c); m = null; }
       // (a crew member come aboard with a contract already signed: the Miner waits for them; a line once, to where they are wanted)
       if (c && synced !== c.id + ':' + (m ? m.state : '')) {
         const first = synced == null || !String(synced).startsWith(c.id + ':'); synced = c.id + ':' + (m ? m.state : '');
@@ -415,6 +568,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (the line reached the hangar: on to the lift's foot, once the ship's cabin is in; the ship stood somewhere else
       // (set back in its proper place while the crew member was away): the line to its lift where it is now)
       if (lineTo === 'hangar' && guide.active === 'mission' && m && boarding.spots(shipOf(m))) lead('ship');
+      if (lineTo === 'ownHangar' && guide.active === 'mission' && ownLead && boarding.spots(ownLead)) lead('own');
       // (a supply run signed and its supplies worked out: the line to the Hauler from wherever they are on the main deck,
       // looked for now and then until they are aboard; a share waiting at the shipping computer: its line once in Cargo)
       if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
@@ -436,9 +590,14 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (tail) { tail.update(dt); tailT -= dt; if (tailT <= 0) tail = null; }
       if (kept) { const w = P ? boarding.where(P.pos) : null; if (!w || !w.startsWith(kept.ship + '/')) letGo(); else kept.A.update(dt, { player: P }); }
       // the pilot's seat: in the cockpit with a contract signed
-      const at = playing && m && m.state === 'signed' && !card && !loading && !jobs.panel && boarding.where(P.pos) === MISSIONS[m.id].ship + '/cockpit' && !(minerRun(m) && crane.mode === 'out');
-      if (at) promptFor(m);
-      prompt.hidden = !at;
+      const here = playing && !card && !loading && !jobs.panel ? boarding.where(P.pos) : null;
+      const at = !!here && !!m && m.state === 'signed' && here === MISSIONS[m.id].ship + '/cockpit' && !(minerRun(m) && crane.mode === 'out');
+      // (the cockpit of a ship that is theirs, no run signed for it: the seat offers it; never the Miner while its crane
+      // is being worked by hand)
+      const mineId = !at && here && here.endsWith('/cockpit') ? here.slice(0, -'/cockpit'.length) : null;
+      ownAt = mineId && owns(c, mineId) && !(m && m.state === 'signed' && MISSIONS[m.id].ship === mineId) && !(mineId === 'miner' && ['out', 'live', 'handover'].includes(crane.mode)) ? mineId : null;
+      if (at) promptFor(m); else if (ownAt) promptOwn(ownAt);
+      prompt.hidden = !at && !ownAt;
       tableStep(P);
       return loading || !!table.panel;
     },
@@ -452,9 +611,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     get clip() { return trip ? trip.clip : null; },
     // (in the seat on a run, or at the ship's core with its card up: seen through their own eyes, their body put away)
     get seated() { return !!(trip && trip.seated) || !!table.panel; },
-    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; toastEl.hidden = true; tableShut(); playing = false; },
+    stop() { letGo(); if (trip) { trip.abort(); trip = null; api.trip = null; } { const c = crew(), m = c && contractOf(c); if (m && m.own && m.state === 'signed' && !MISSIONS[m.id].desk) { tearUp(c); save(c); } } if (card && card.close) { card.close(); card = null; } prompt.hidden = true; toastEl.hidden = true; tableShut(); playing = false; },
     get table() { return { prompt: !table.prompt.hidden, panel: table.panel ? table.panel.state() : null }; },
-    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: trip && trip.tune ? trip.tune.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
+    state: () => ({ contract: contractOf(crew()), trip: trip ? trip.state() : null, tune: trip && trip.tune ? trip.tune.state() : null, card: card && card.state ? card.state() : null, prompt: !prompt.hidden, promptWords: prompt.hidden ? null : prompt.textContent, ownAt, loading, lastRun, awayHeld: !!crane.awayHeld, line: guide ? guide.active : null, lineTo,
       meeting: meeting && people() && people().captain.meeting ? people().captain.meeting(meeting) : null }),
   };
   return api;
