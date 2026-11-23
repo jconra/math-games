@@ -261,15 +261,16 @@ export function makeArtifact(seed = 1, planet = null) {
   const H = 15 + R() * 5, r0 = 2.6, r1 = 1.1, n = 8, pos = [];
   const ring = (y, r, tw) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2 + tw; return [Math.cos(a) * r, y, Math.sin(a) * r]; });
   const A = ring(0, r0, 0), B = ring(H * 0.62, (r0 + r1) / 2, 0.08), C = ring(H, r1, 0.16).map((p, i) => [p[0], p[1] - (i < n / 2 ? i : n - i) * 0.35, p[2]]);
-  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+  // (each face wound to face outward: the rings go round anticlockwise seen from above)
+  const quad = (a, b, c, d) => pos.push(...a, ...c, ...b, ...a, ...d, ...c);
   for (const [L0, L1] of [[A, B], [B, C]]) for (let i = 0; i < n; i++) { const j = (i + 1) % n; quad(L0[i], L0[j], L1[j], L1[i]); }
   const top = C.reduce((s, p) => [s[0] + p[0] / n, s[1] + p[1] / n, s[2] + p[2] / n], [0, 0, 0]);
-  for (let i = 0; i < n; i++) { const j = (i + 1) % n; pos.push(...C[i], ...C[j], ...top); }
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; pos.push(...C[i], ...top, ...C[j]); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: 0x15181f, roughness: 0.38, metalness: 0.65, flatShading: true });
   const spire = new THREE.Mesh(geo, mat); group.add(spire); own.push(geo, mat);
   // the writing: short glowing strokes on its faces, in rows, as lines of marks nobody can read
-  const glow = new THREE.MeshBasicMaterial({ color: 0x6ff3ff, toneMapped: false, transparent: true, opacity: 0.9, depthWrite: false });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x6ff3ff, toneMapped: false, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide });
   const marks = [], up = new THREE.Vector3(), out = new THREE.Vector3();
   for (let f = 0; f < n; f++) {
     const a = ((f + 0.5) / n) * Math.PI * 2 + 0.04;
@@ -280,7 +281,7 @@ export function makeArtifact(seed = 1, planet = null) {
       out.set(Math.cos(a), 0, Math.sin(a)); up.set(-Math.sin(a), 0, Math.cos(a));
       const cx = out.x * r * Math.cos(Math.PI / n), cz = out.z * r * Math.cos(Math.PI / n), off = (R() - 0.5) * 0.6;
       const p = [[cx + up.x * (off - w), y, cz + up.z * (off - w)], [cx + up.x * (off + w), y, cz + up.z * (off + w)], [cx + up.x * (off + w), y + 0.12 + R() * 0.25, cz + up.z * (off + w)], [cx + up.x * (off - w), y + 0.12, cz + up.z * (off - w)]];
-      marks.push(...p[0], ...p[1], ...p[2], ...p[0], ...p[2], ...p[3]);
+      marks.push(...p[0], ...p[2], ...p[1], ...p[0], ...p[3], ...p[2]);
     }
   }
   const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(marks, 3));
