@@ -65,10 +65,10 @@ const FRAG = `
 
 // THE COLUMN OF LIGHT over the place: two crossed upright quads, brightest at the floor, fading up, a slow pulse
 // climbing it; added to what is behind (it glows), hidden by walls as anything is
-const BEACON_VERT = `
+export const BEACON_VERT = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-const BEACON_FRAG = `
+export const BEACON_FRAG = `
   uniform float uTime, uOpacity;
   uniform vec3 uColour;
   varying vec2 vUv;
@@ -80,7 +80,7 @@ const BEACON_FRAG = `
     if (a < 0.004) discard;
     gl_FragColor = vec4(uColour, a);
   }`;
-function beaconGeometry([w, h]) {
+export function beaconGeometry([w, h]) {
   const pos = [], uv = [], ix = [];
   for (const [ax, az] of [[1, 0], [0, 1]]) {
     const k = pos.length / 3;

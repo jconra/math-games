@@ -54,6 +54,7 @@ import { makeLift } from './lift.js';
 import { makeCargoForklift } from './cargoforklift.js';
 import { makeCargoDrive } from './cargodrive.js';
 import { makeSupplyRun } from './supplyrun.js';
+import { makeCargoLap } from './cargolap.js';
 import { bridgeStands } from './jobs/dock.js';
 import { pointGap } from '../kit/forkliftround.js';
 import { STORE } from '../kit/places-plan.js';
@@ -182,10 +183,13 @@ async function boot() {
   // one of Cargo's people drives it, a pallet from the loading floor to the shelves (src/cargoforklift.js)
   // (and the player can drive it, parked: the supply run's pallets into the containers, src/cargodrive.js,
   // src/supplyrun.js; while a worked-out run waits for the player, Cargo's people leave it parked)
-  let supply = null;
-  const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!(supply && supply.hold()), open: () => (supply ? supply.open() : []) });
+  let supply = null, lap = null;
+  const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!((supply && supply.hold()) || (lap && lap.hold())), open: () => (supply ? supply.open() : []) });
   supply = GAME.supply = makeSupplyRun({ crew: () => GAME.player, save: (p) => save.save(p), forklift, bridge: () => bridgeStands(GAME.player), people: () => people });
   const cargo = GAME.cargo = makeCargoDrive({ W, walls, input, forklift, run: supply, people: () => people });
+  // (and a timed lap of Cargo on it: Cargo's loader says how fast they do one; the start box, the countdown, the four
+  // waypoints, the clock: src/cargolap.js. Never while a supply run waits to be loaded)
+  lap = GAME.lap = makeCargoLap({ W, forklift, cargo, run: supply, people: () => people });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -224,6 +228,7 @@ async function boot() {
       const riding = lift.busy;      // (in the lift while it goes: held still)
       // (on Cargo's forklift: seated, the forklift driven by the keys and the stick: src/cargodrive.js)
       const driving = cargo.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding, { inLift: !!lift.here });
+      lap.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding);
       const move = ctl ? ctl.move : atJob || onTrip || riding || driving ? null : auto.way ? autoMove() : input.move;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
       const aboardOthers = mission.others;
@@ -318,7 +323,7 @@ async function boot() {
   }
   function toTitle() {
     if (GAME.mode !== 'play') return;
-    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); cargo.stop(); jobs.update(0, null, false); jobs.close();
+    GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); cargo.stop(); lap.stop(); jobs.update(0, null, false); jobs.close();
     board.update(0, null, false); board.stop();
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();

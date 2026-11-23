@@ -2168,7 +2168,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       list: ward.list.map((P) => ({ id: P.id, look: P.rescued.look, bed: P.rescued.bed >= 0 && wardBeds[P.rescued.bed] ? wardBeds[P.rescued.bed].n : null, state: P.rescued.state, act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, walking: !!P.walking, planning: !!P.req, shown: !!P.shown, far: !!P.c.far, pos: P.pos.toArray().map((v) => +v.toFixed(2)), left: +(P.rescued.leaveAt - clock).toFixed(1) })) }),
   };
   const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, ward: wardApi, inView: (P) => inView(P, W.camera),
-    say: (P, words, o) => bubbles.say(P, words, o),
+    // (said to the player from elsewhere in the game, src/cargolap.js: their mouth moves as they say it, and no hello
+    // of theirs comes on top of it)
+    say: (P, words, o) => { P.talkUntil = clock + Math.min(3, READ(words)); P.greeted = clock; return bubbles.say(P, words, o); },
     // (for the rigs: the control room's and Cargo's people, made or not, and what each is doing)
     homes: () => Object.fromEntries(Object.values(HOMES).map((H) => [H.id, { made: H.made, ms: Math.round(H.ms), tries: H.tries, people: H.people.map((P) => ({ id: P.id, name: P.name, in: !P.hidden, shown: !!P.shown, act: P.act ? P.act.kind + ':' + (P.act.phase || '') + ':' + (P.act.spot?.name || '') : null, walking: !!P.walking, pos: P.pos.toArray().map((v) => +v.toFixed(2)), far: !!P.c.far })) }])),
     // (A SHIP'S CREW ABOARD, src/aboard.js: a figure built from a look as the station's people are (a roster id, a

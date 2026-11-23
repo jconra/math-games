@@ -25,6 +25,8 @@
 //   C.clip                       the player's clip while on it (seated), or null
 //   C.stop()                     off at once (the crew screen)
 //   C.state()                    for the rigs: { on, phase, near, hint, read, ... }; C.pilot: a rig's own hand
+//   C.brake, C.hint              the forklift lap's hand on it (src/cargolap.js): brake() true holds it still (its
+//                                countdown); hint() its words along the bottom in place of the forklift's own
 import * as THREE from 'three';
 import { ensureCss as craneCss } from './cranedrive.js';
 import { STORE } from '../kit/places-plan.js';
@@ -94,7 +96,7 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
   // ── on and off ────────────────────────────────────────────────────────────────────────────────────────────────
   // phase: null (walking), 'on' (getting on), 'drive', 'off' (getting off); from: where they stood
   let phase = null, t = 0, from = null, to = null, near = false, playing = false, hint = '', noteT = -9, note = '', P0 = null;
-  const C = { get on() { return !!phase; }, get clip() { return phase ? (phase === 'on' && t < ON.on * 0.35) || (phase === 'off' && t > ON.off * 0.6) ? 'Stand_Listen' : SIT : null; }, pilot: null };
+  const C = { get on() { return !!phase; }, get clip() { return phase ? (phase === 'on' && t < ON.on * 0.35) || (phase === 'off' && t > ON.off * 0.6) ? 'Stand_Listen' : SIT : null; }, pilot: null, brake: null, hint: null };
   function getOn() {
     if (phase || !P0 || !forklift.hand.take()) return false;
     phase = 'on'; t = 0; from = { pos: P0.pos.clone(), heading: P0.heading };
@@ -210,6 +212,8 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
     let cmd = { go: keyGo || keyTurn ? keyGo : mv ? dead(mv.y, 1.25) : 0, turn: keyGo || keyTurn ? keyTurn : mv ? dead(mv.x, 1.4) : 0,
       forks: (held.up || kb('KeyR') || kb('Space') ? 1 : 0) - (held.down || kb('KeyF') || kb('KeyC') ? 1 : 0) };
     if (C.pilot) cmd = C.pilot(forklift.hand.read()) || cmd;
+    // (held still while the lap's countdown runs: src/cargolap.js)
+    if (C.brake && C.brake()) cmd = { ...cmd, go: 0 };
     forklift.hand.step(cmd, dt, feet());
     show(cmd);
     return true;
@@ -234,6 +238,8 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
     else if (r.front && /^b/.test(r.front.place || '')) h = R && R.left > 0 && R.open ? `Pick up a pallet from the loading floor: ${R.left} to load.` : 'Loaded: back away from it.';
     else if (r.front) h = 'Lined up: drive the forks in under it.';
     else h = R && R.left > 0 && R.open ? `Pick up a pallet from the loading floor: ${R.left} to load.` : 'Line the forks up with a pallet\'s end to pick it up.';
+    // (the lap's words in place of the forklift's own, while it has any: src/cargolap.js; a note of what is in the way still shows)
+    if (C.hint && !(note && performance.now() - noteT < 2200)) { const w = C.hint(); if (w) h = w; }
     const e = $('.pcf-hint'); if (e.textContent !== h) { e.textContent = h; e.classList.toggle('is-note', !!note && performance.now() - noteT < 2200); }
     const sub = R && R.open ? `Supply run: ${R.loaded} of ${R.pallets} loaded` : 'Cargo\'s forklift';
     if ($('.pcf-sub').textContent !== sub) $('.pcf-sub').textContent = sub;

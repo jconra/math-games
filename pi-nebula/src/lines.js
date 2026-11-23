@@ -165,6 +165,20 @@ export const SCAN_TALK = {
   thanks: ["Thanks, {medic}!", "Thank you!", "Thanks! See you soon."],
 };
 
+// THE FORKLIFT LAP in Cargo (src/cargolap.js; the game's maker, 2026-11-22: "an employee might say they can do a lap in
+// 30 seconds or whatever"): what Cargo's loader says, in bubbles (words only). offer: as the player comes near, two
+// bubbles one after the other; then, of the player's lap: beat (official and under the loader's time), slower
+// (official, not under it), missed (a waypoint missed: not official). {secs}: the loader's time; {time}: the player's
+export const LAP_TALK = {
+  offer: [
+    ['I can do a lap of Cargo on the forklift in {secs} seconds.', 'Stop it on the START box by the lift and try to beat me!'],
+    ['My best lap of Cargo on the forklift is {secs} seconds.', 'Think you can beat it? Stop it on the START box by the lift.'],
+  ],
+  beat: ['{time} seconds! You beat my {secs}. Nice driving!', '{time}? That beats my {secs} seconds. Well driven!'],
+  slower: ['{time} seconds. Not bad! My {secs} still stands.', '{time} seconds. Close! My {secs} is still the time to beat.'],
+  missed: ['You missed a corner, so that lap does not count. Try again!', 'All four corners, or it is not official. Go again!'],
+};
+
 export const TALKS = [
   // ── the news going round ──
   { id: 'mathball-1', news: 'mathball', lines: ["Did you hear {loser} lost at Mathball last night?", "Oh wow, I thought {loser} was unbeatable!", "{winner} won, {score}. Everyone was cheering."] },

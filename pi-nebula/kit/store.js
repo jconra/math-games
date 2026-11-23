@@ -7,8 +7,9 @@
 //              3.75 m tall) on the grid lines inside the deck's hull and one slanting across the cut corner, the four
 //              cargo slots in the west wall (three with a container's end come in through its socket, the fourth empty
 //              with a shield across it, as a hangar door has), two cold store doors in the east wall (doors only:
-//              nothing is behind them), the ceiling and its long lamps over the aisles and the lane, and the
-//              forklift's painted place (his forklift parks in it: kit/places-plan.js FORKLIFT)
+//              nothing is behind them), the ceiling and its long lamps over the aisles and the lane, the
+//              forklift's painted place (his forklift parks in it: kit/places-plan.js FORKLIFT), and the forklift
+//              lap's paint: its start box and line, a numbered square at each of its four corners (LAP)
 //   rack       a FREE piece: 'bays <n>', a row of shelving n bays long from x = 0 along +x, its middle on z = 0: two
 //              shelves over the floor, orange beams on dark uprights
 //   pallet     a FREE piece, a pallet and its load, 1.2 m by 1 m: 'crates', 'boxes', 'drums', 'wrapped', 'totes'
@@ -26,7 +27,7 @@ import { SCREEN_RECT } from './tex.js';
 import { segText, textWidth } from './shipparts/cabin/segtext.js';
 import { subInto } from './lift.js';
 import { flatOver } from './tower.js';
-import { STORE, SLOT, RACKS, FLOOR, STOPS, LIFT, LOAD } from './places-plan.js';
+import { STORE, SLOT, RACKS, FLOOR, STOPS, LIFT, LOAD, LAP } from './places-plan.js';
 
 const PI = Math.PI, H = STORE.h, TOPW = 3.25, SIZES = { h: H, top: TOPW };
 const ROOF = H;
@@ -188,11 +189,37 @@ function coldDoor(p, { z, n }) {
 
 // ── paint on the floor ───────────────────────────────────────────────────────────────────────────────────────────
 const PLATES = { c: '#5f6368', r: 0.34, m: 0.35, w: 0.45 }, PAINT = { c: '#c9a032', r: 0.6, m: 0, w: 0.9 }, WHITE_PAINT = { c: '#b9bcbf', r: 0.6, m: 0, w: 0.9 };
-function line(p, look, a, b, w = 0.1) {
+function line(p, look, a, b, w = 0.1, y = 0.003) {
   const L = Math.hypot(b[0] - a[0], b[1] - a[1]), g = bevelBox([L + w, 0.004, w], [0, 0, 0], { r: 0, cell: 9 });
-  put(g, [(a[0] + b[0]) / 2, 0.003, (a[1] + b[1]) / 2], [0, -Math.atan2(b[1] - a[1], b[0] - a[0]), 0]); return p.add('solid', g, look);
+  put(g, [(a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2], [0, -Math.atan2(b[1] - a[1], b[0] - a[0]), 0]); return p.add('solid', g, look);
 }
-function box(p, look, [x0, x1, z0, z1], w = 0.1) { line(p, look, [x0, z0], [x1, z0], w); line(p, look, [x1, z0], [x1, z1], w); line(p, look, [x1, z1], [x0, z1], w); line(p, look, [x0, z1], [x0, z0], w); }
+function box(p, look, [x0, x1, z0, z1], w = 0.1, y = 0.003) { line(p, look, [x0, z0], [x1, z0], w, y); line(p, look, [x1, z0], [x1, z1], w, y); line(p, look, [x1, z1], [x0, z1], w, y); line(p, look, [x0, z1], [x0, z0], w, y); }
+// THE FORKLIFT LAP's paint (kit/places-plan.js LAP has the game's maker's words): the start box in the lane with START
+// in it, read by the driver stopped in it; its line, the box's edge the lap sets off over, two rows of chequers across
+// the box and a plain line across the rest of the lane; and at each of the lap's four corners a square with its number,
+// read by the driver coming to it. White, as the lane's own line is (the yellow is the loading floor's and the
+// forklift's place), a millimetre over the room's other paint (the first corner's square crosses the loading floor's
+// edge). The game lights them as a lap goes (src/cargolap.js).
+export function lapPaint(p) {
+  const [x0, x1, z0, z1] = LAP.box, west = Math.cos(LAP.face) < 0, lx = west ? x0 : x1, bx = west ? x1 : x0, into = west ? 1 : -1, C = 0.2, Y = 0.004;
+  // (the box: its back and its two sides; its fourth side is the line)
+  line(p, WHITE_PAINT, [lx, z0], [bx, z0], 0.1, Y); line(p, WHITE_PAINT, [bx, z0], [bx, z1], 0.1, Y); line(p, WHITE_PAINT, [bx, z1], [lx, z1], 0.1, Y);
+  line(p, WHITE_PAINT, [lx, LAP.lane[0]], [lx, LAP.lane[1]], 0.12, Y);
+  for (let r = 0; r < 2; r++) for (let k = 0; k * C < z1 - z0 - 1e-6; k++) {
+    if ((r + k) % 2) continue;
+    const a = lx + into * (0.06 + r * C), b = a + into * C;
+    p.slab(WHITE_PAINT, Math.min(a, b), Math.max(a, b), Y - 0.002, Y + 0.002, z0 + k * C, Math.min(z1, z0 + (k + 1) * C), { r: 0, cell: 9 });
+  }
+  // (lettering on the floor, its top the way the driver is going: h, a pose's turn)
+  const words = (text, at, h, o) => segText(p, text, { ...o, at: [at[0], Y + 0.003, at[1]], rot: [-PI / 2, 0, h - PI / 2], look: WHITE_PAINT });
+  words('START', [(x0 + x1) / 2 + into * 0.35, (z0 + z1) / 2], LAP.face, { h: 0.44, t: 0.07 });
+  let from = [lx, (z0 + z1) / 2];
+  LAP.corners.forEach((c, i) => {
+    box(p, WHITE_PAINT, [c[0] - LAP.gate / 2, c[0] + LAP.gate / 2, c[1] - LAP.gate / 2, c[1] + LAP.gate / 2], 0.1, Y);
+    words(String(i + 1), c, Math.atan2(-(c[1] - from[1]), c[0] - from[0]), { h: 0.9, t: 0.13 });
+    from = c;
+  });
+}
 
 export function storeHall(p) {
   // the floor (the lift's box has its own)
@@ -246,6 +273,8 @@ export function storeHall(p) {
   for (let t = 0; t < 4; t++) line(p, PAINT, [fx0 + 0.3 + t * 1.05, fz1 - 0.3], [fx0 + 0.9 + t * 1.05, fz1 - 0.95], 0.08);
   segText(p, 'FORKLIFT', { h: 0.42, t: 0.07, at: [(fx0 + fx1) / 2, 0.006, fz0 + 0.75], rot: [-PI / 2, 0, 0], look: PAINT });
   line(p, WHITE_PAINT, [20.6, -7.6], [20.6, 34.5], 0.08);
+  // the forklift lap: its start box and line, a numbered square at each of its four corners
+  lapPaint(p);
 }
 
 // ── the shelving ─────────────────────────────────────────────────────────────────────────────────────────────────────

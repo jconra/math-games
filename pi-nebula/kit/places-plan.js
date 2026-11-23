@@ -157,6 +157,27 @@ export function doorHinge(slot, side) {
   return { x: x1 + LOAD.hinge.out, z: SLOT.z[slot] + s * (hz + LOAD.hinge.beyond), s };
 }
 export const doorTurn = (s, k) => { const t = Math.max(0, Math.min(1, k)); return -s * LOAD.hinge.swing * t * t * (3 - 2 * t); };
+// THE FORKLIFT LAP (2026-11-22, the game's maker: "It would be cool to have the game with the forklift too where if you
+// go down there an employee might say they can do a lap in 30 seconds or whatever and you can get the forklift to a
+// position and it will count down and time you. Maybe there can be some waypoints at the corners that you have to hit
+// to make the time official."). A lap of Cargo is round its racks by its lanes: from the start box in the lane south of
+// the last racks, west; north up the racks' west ends, beside the loading floor; east along the first aisle; south
+// down the lane by the east wall; and west along the south lane, back over the line. (Round five of the six rows: the
+// lane behind the first row, by the north wall, is 2.3 m clear, and the forklift's back end swings out 0.9 m as it
+// turns; the first aisle is 3.5 m. This way round, the driving view's side of the forklift is the open side all the
+// way: the loading floor, the east wall, the south end.)
+//   box      the start box painted on the floor [x0, x1, z0, z1], north-east of the lift (far enough from it that the
+//            lift's box does not stand in the driving view's way: the view is from behind the forklift's left, its
+//            south side here); face: the way the lap sets off (a pose's h: west), so the start and finish line is the
+//            box's west edge
+//   lane     how far the line reaches across the lane (z: from the last racks' side to the lift's), painted that long
+//   corners  the lap's four corners in the order they are driven, a waypoint painted at each (a square `gate` metres
+//            across with its number): the south-west, north-west, north-east and south-east corners of the way round
+//   time     how long Cargo's loader takes (s): the lap driven by a careful hand at the forklift's own speeds
+//            (kit/forkliftdrive.js HAND), measured (tests/forklap.test.mjs; ~/pw/space-math/FORKLAP_1.md)
+//   who      the one of Cargo's people who says so (src/life.js ROOM_CREW: the loader, who drives it most)
+export const LAP = { box: [11.5, 15.7, 21.7, 24.1], face: Math.PI, lane: [20.6, 26.2],
+  corners: [[5.15, 22.9], [5.15, -3.05], [22.45, -3.05], [22.45, 22.9]], gate: 3.4, time: 65, who: 'loader-otto' };
 // THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
 // in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js
 // draws it), parked in its painted place. In his file it is one unit long, its forks along +x, its foot on y = 0:
