@@ -83,12 +83,19 @@ test('about the station they do what its own people do: its halls, its windows, 
     assert.ok(ROSTER.some((d) => d.day.some((s) => s.do === ABOUT_DAY[i].do)), ABOUT_DAY[i].do + ': nobody of the station does it');
     if (kinds[i] !== 'walk') assert.ok(ABOUT_DAY[i].for[0] > 0 && ABOUT_DAY[i].for[1] >= ABOUT_DAY[i].for[0]);
   }
-  // (his words' three: walking the halls, sitting in the cafeteria, looking out of a window)
+  // (among them: walking the halls, sitting in the cafeteria, looking out of a window)
   for (const d of ['walk:patrol', 'sit:cafe', 'stand:windows']) assert.ok(ABOUT_DAY.some((s) => s.do === d), d);
   // (each begins at a step of their own, so three come home and do three things)
   assert.equal(new Set([0, 1, 2].map(startOf)).size, 3);
-  for (let i = 0; i < 12; i++) assert.ok(startOf(i) >= 0 && startOf(i) < ABOUT_DAY.length);
-  assert.equal(startOf(-3), 0); assert.equal(startOf(undefined), 0);
+  for (let i = 0; i < 12; i++) {
+    assert.ok(startOf(i) >= 0 && startOf(i) < ABOUT_DAY.length);
+    // (never the walk round the halls first: begun from the hangars' end it doubles back on itself, and a walker back
+    // where they were three seconds ago is counted as stuck; it comes after something in the terminal, where it begins)
+    assert.notEqual(kinds[startOf(i)], 'walk', 'the ' + i + '-th begins with the walk');
+  }
+  const w = kinds.indexOf('walk'), before = ABOUT_DAY[(w + ABOUT_DAY.length - 1) % ABOUT_DAY.length], after = ABOUT_DAY[(w + 1) % ABOUT_DAY.length];
+  for (const s of [before, after]) { const [k, g] = s.do.split(':'); assert.ok((k === 'sit' ? SEATS[g] : SPOTS[g]).every((d) => d.room === 'terminal'), s.do + ': not in the terminal'); }
+  assert.equal(startOf(-3), startOf(0)); assert.equal(startOf(undefined), startOf(0));
 });
 
 test('the scanner\'s turn: waited for on the medical centre\'s own seats, then the station\'s patients\' own errand', () => {

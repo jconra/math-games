@@ -111,9 +111,10 @@ export const watching = (room) => !!room && WARD.rooms.includes(room);
 export const ABOUT = { most: 6, wait: [8, 16] };
 // WHAT THEY DO ABOUT THE STATION: a day as the station's people have theirs (life.js: its kinds and its groups of
 // spots and seats, nothing of their own), done in turn and again, each starting at a step of their own (startOf):
-// a walk round its halls (the terminal, the hangar corridor, the junction, the spine, the loop, the quarters'
-// corridor), out of the terminal's big windows, at the serving counter and then at a table, reading one of the
-// terminal's screens, on a bench by the windows
+// a walk round its halls (the hangar corridor, the spine, the loop, the quarters' corridor, the corridor), out of the
+// terminal's big windows, at the serving counter and then at a table, reading one of the terminal's screens, on a
+// bench by the windows. (From the Medic's hangar or the scanner to the first of them is itself a walk through the
+// station's halls, 60 to 90 m.)
 export const ABOUT_DAY = [
   { do: 'walk:patrol' },
   { do: 'stand:windows', for: [25, 50] },
@@ -122,8 +123,12 @@ export const ABOUT_DAY = [
   { do: 'stand:terminal', for: [12, 25] },
   { do: 'sit:window', for: [40, 80] },
 ];
-// (the i-th of them begins at: the walk, the counter and a table, a screen and a bench, and round again)
-export const startOf = (i) => ((Math.max(0, i | 0) * 2) % ABOUT_DAY.length);
+// (the i-th of them begins at: the counter and then a table; a screen and then a bench; the windows; and round again.
+// Never at the walk round the halls: its round begins at the terminal's end of the station, and begun from the
+// hangars' end (where they come from) it doubles back on itself in the hangar corridor, where a walker back where
+// they were three seconds ago is counted as stuck (people.js audit); it comes in its turn, after the bench)
+const STARTS = [2, 4, 1];
+export const startOf = (i) => STARTS[Math.max(0, i | 0) % STARTS.length];
 // WAITING FOR THE SCANNER: on the medical centre's own waiting seats (or, none free, on its floor), and the scan itself,
 // the station's patients' own errand
 export const SCAN_WAIT = [{ do: 'sit:medWaiting', for: ABOUT.wait }, { do: 'stand:medicalFloor', for: ABOUT.wait }];
