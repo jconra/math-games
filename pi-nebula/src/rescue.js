@@ -380,16 +380,21 @@ export function makeSite(ctx, opts = {}) {
         // (kept over the ground on the way)
         at.p.y = Math.max(at.p.y, ground(at.p.x, at.p.z) + SITE.clear * (1 - ease((k - 0.85) / 0.15)));
         if (k >= 1) setPhase('hover');
+        put();
       } else if (P === 'hover') {
         // (turned side on to the pods as it hovers: its ramps' side toward them)
         at.p.copy(at.hover); at.p.y += Math.sin(st.t * 2.2) * 0.08;
         const k = ease(st.t / SITE.hover), a0 = Math.atan2(at.dir0.x, at.dir0.z), a1 = a0 + wrap(Math.atan2(at.pad.x, at.pad.z) - a0) * k;
         at.dir.set(Math.sin(a1), 0, Math.cos(a1));
         if (st.t >= SITE.hover) setPhase('down');
+        put();
       } else if (P === 'down') {
         const k = ease(st.t / SITE.down);
         at.p.lerpVectors(at.hover, at.ground, k);
-        if (k >= 1) { at.p.copy(at.ground); touchdown(); }
+        // (down: put where it comes down, then that is where it stands)
+        if (k >= 1) at.p.copy(at.ground);
+        put();
+        if (k >= 1) touchdown();
       } else if (P === 'pods' || P === 'wait' || P === 'board') {
         // ON THE GROUND: the Medic set down drawn in its place as soon as it is made; the ramp comes down; the pods
         // opened (the paramedic's locks, or hers one after another once the ramp is down); the rescued come aboard
