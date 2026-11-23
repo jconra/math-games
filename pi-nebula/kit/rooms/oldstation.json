@@ -2,6 +2,7 @@
  "name": "The old station",
  "about": "The old station in distress, as far as the supply run goes in: its dock airlock (the same port as ours) and the hall behind it, where its people wait. Built in the cells our own airlock has, so the Hauler docked at its old bridge meets it exactly as it meets ours (src/oldstationsite.js stands it at the old station's own port). No saved light: its light is worked out as it is built, twice (its power failing, and its lights back up).",
  "spawn": {"at":[-5,1.7,31],"look":[-9,1.5,31],"room":"old-hall"},
+ "views": {"start":{"at":[-8.4,1.7,31],"look":[-3,1.25,31],"fov":72},"hall":{"at":[-2.2,1.75,34.2],"look":[-8.5,1.1,29.5],"fov":74},"airlock":{"at":[-9.4,1.6,31],"look":[-15,1.35,31],"fov":66}},
  "places": {"people":[{"at":[-5.2,0,30.2],"heading":-1.75},{"at":[-4.4,0,31.6],"heading":-1.45},{"at":[-5.6,0,32.9],"heading":-1.2}],"thanks":[-7.2,0,31],"hall":[-5,0,31]},
  "rooms": [
   { "id": "old-airlock", "name": "The old station's dock airlock", "probe": [-13,1.6,31], "pieces": [
