@@ -47,8 +47,9 @@
 // the same forklift, driven by the same stick, wheel and forks' buttons as the player's (kit/forkliftloader.js gives
 // them; kit/forkliftway.js finds its way), so a pallet goes on and off its forks exactly as it does for the player, in
 // sight. A pallet the player left on its forks goes in first. Then it is driven to its bay, backed in and parked, and
-// the loader gets off and goes on with their day. UNTIL THE LOADER HAS CLIMBED ON, the player can get back on (the
-// prompt beside its seat) and the loader turns back to their day; once the loader is driving, it is theirs till it is
+// the loader gets off and goes on with their day. The loader is called a moment (RIDE.grace) after the player gets off.
+// UNTIL THE LOADER HAS CLIMBED ON, the player can get back on (the prompt beside its seat) and the loader turns back
+// to their day; once the loader is driving, it is theirs till it is
 // parked. The player gone from Cargo (the loader taken away with Cargo's people): finished at once, as a round is.
 // Should the loader not come, or not find a way (forklift.loader.state().gaveUp), the run loads the rest as it did
 // before, where nobody sees.
@@ -74,9 +75,10 @@ const CARE = { near: 0.5, ahead: 1.1, clear: 0.8 };
 // on its seat as on a chair, lifted by the difference
 // NOW AND THEN: after a round, this long before another (s); how often a pallet may arrive (s), and nobody nearer the
 // place it comes to than `clear` (m)
-// THE LOADER CALLED to load the rest: called again every `call` seconds till they come; not come in `come` seconds, or
+// THE LOADER CALLED to load the rest: `grace` seconds after the run first asks (the player just off it may get straight
+// back on); called again every `call` seconds till they come; not come in `come` seconds, or
 // their loading given up: not asked again for `again` seconds (the run loads the rest where nobody sees meanwhile)
-export const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6, call: 2, come: 75, again: 40 };
+export const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6, grace: 3, call: 2, come: 75, again: 40 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeCargoForklift({ W, walls, hold = () => false, open = () => [], summon = null, dismiss = null }) {
@@ -564,8 +566,10 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       if (clock - load.failed <= RIDE.again) return false;
       if (state === 'loadon' || state === 'load' || state === 'loadoff') { load.since = null; return true; }
       if (!(state === 'parked' || state === 'left' || state === 'loadcall') || (driver && state !== 'loadcall') || (state !== 'loadcall' && !load.can())) { load.since = null; return false; }
-      // (called, and again every little while till they are on their way; not on it in all this time: given up for now)
+      // (a moment first, RIDE.grace: someone who got off by mistake is back on before anyone is called; then called, and
+      // again every little while till they are on their way; not on it in all this time: given up for now)
       if (load.since == null) load.since = clock;
+      if (clock - load.since < RIDE.grace) return true;
       if (clock - load.since > RIDE.come) { load.since = null; load.fail('the loader did not come'); if (state === 'loadcall') { const P = driver; driver = null; spot = null; state = load.from; if (dismiss && P) dismiss(P); } return false; }
       if (state !== 'loadcall' && clock >= load.next) { load.next = clock + RIDE.call; if (summon) summon(CARGO.loader); }
       return true;
