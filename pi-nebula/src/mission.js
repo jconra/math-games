@@ -386,6 +386,16 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // offered now, to this crew member (the old station found, no contract of theirs on)? deskHint(at): the job's prompt
   // line there for now: who has the contract and where, the share waiting, or what the run waits for ──
   const deskOf = (at) => Object.values(MISSIONS).find((q) => q.desk === at) || null;
+  // THAT RUN'S CAPTAIN, LOOKED FOR. The station has only its nearest few people about at once, and nobody comes back
+  // where the player is looking or right beside them (src/people.js PRESENCE): a captain the game has just told the
+  // player to go and find "by the docking port" was as often as not out of the way when they got there, and stayed so
+  // for as long as they stood and waited. So whenever this crew member is told where the supply run is to be had (as
+  // they come aboard, on the shipping computer's line, on the pay slip's last card) the people are told too, as when a
+  // captain's line is picked on a jobs board (people.captain.seek: that captain is kept about however many are
+  // nearer, and is the one who speaks up when walked up to); done with as their offer begins. (Asked for before the
+  // station's people are aboard, it is done once they are: update, below. false: nobody is looked for any more.)
+  let wantSeek = null;
+  const seekCaptain = (id) => { wantSeek = id; };
   function deskOpen(at) { const M = deskOf(at), c = crew(); return !!(M && c && !contractOf(c) && missions.open(M.captain, c)); }
   // (a contract of that desk's signed and not flown yet, with the desk's own job among its jobs: the Loadmaster's)
   function deskSigned(at) { const M = deskOf(at), c = crew(), m = c && contractOf(c); return !!(M && m && m.id === M.id && m.state === 'signed' && m.roles.includes(at)); }
@@ -397,6 +407,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (r && (r.worked || r.done)) return r.done ? 'The Hauler is loaded: up the lift, across the bridge and aboard' : m.roles.includes('cargo') ? 'Load the pallets with the forklift, or leave them to Cargo\'s crew' : 'Cargo\'s crew is loading the Hauler: up the lift, across the bridge and aboard';
       return null;
     }
+    if (deskOpen(at)) { const pp = people(); if (!pp || pp.captain.seeking !== M.captain) seekCaptain(M.captain); }
     if (deskOpen(at)) return supplyRuns(c) > 0 ? `${nameOf(M.captain)} has a hauling run for the Hauler: up the lift, by the docking port` : `${nameOf(M.captain)} has a contract, supplies for the old station: up the lift, by the docking port`;
     return null;
   }
@@ -423,7 +434,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     if (!m || m.state !== 'payout' || MISSIONS[m.id].payAt !== at) return null;
     let paid = null; const own = !!m.own;
     return { card: () => (paid ? null : payoutCard(at)), head: (o) => payoutHead(o),
-      right: (q) => { if (q && q.order && q.order.payout != null) paid = { pay: q.order.payout, first: !!(m.payout && m.payout.first) }; },
+      right: (q) => { if (q && q.order && q.order.payout != null) { paid = { pay: q.order.payout, first: !!(m.payout && m.payout.first) }; if (!own) seekCaptain(deskOf(at).captain); } },
       over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'The old station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to the old station.'} ${own ? 'Another run of your own whenever you like: Your Hauler, at this computer.' : `${nameOf(deskOf(at).captain)} has another run whenever you want one: up the lift, by the docking port.`}</p>`, buttons: [{ label: 'Done' }] } : null),
       close() {} };
   }
@@ -599,9 +610,13 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         crane.awayHeld = !!(m && m.state === 'signed' && minerRun(m));
         // (never to a ship whose load is not worked out yet: the supply run's Loadmaster's work comes first, in Cargo)
         if (first && playing && m && !trip && !(m.state === 'signed' && loadWait(m))) lead(m.state === 'signed' ? 'ship' : 'payout');
-        // (the old station found and no supply run made yet: who has its contract and where, said once as they come aboard)
+        // (the old station found and no supply run made yet: who has its contract and where, said once as they come
+        // aboard; and whenever that run is on offer to them as they come aboard its captain is kept about to be found:
+        // seekCaptain, above; another crew member's captain is looked for no more)
         if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp(`${nameOf(MISSIONS.supply.captain)} has a contract: supplies for the old station. Find the captain by the docking port, in the terminal.`);
+        if (first && playing && !trip) seekCaptain(!m && missions.open(MISSIONS.supply.captain, c) ? MISSIONS.supply.captain : false);
       }
+      if (wantSeek != null && people() && people().captain.seek) { const cap = people().captain; if (wantSeek) cap.seek(wantSeek); else if (cap.seeking === MISSIONS.supply.captain) cap.seek(null); wantSeek = null; }
       // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
       // station's people are aboard; any other state: he is not)
       const want = m && m.state === 'signed' && walksTo(m) ? m.captain : null;
