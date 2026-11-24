@@ -838,7 +838,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (!T.afoot || T.rest || !crewA || !P()) return;
     T.rest = p; T.restFrom = P().pos.clone(); T.restHeading = P().heading || 0; crewA.take(p, 'player'); seatEl.dataset.as = '';
     if (ctx.walk) ctx.walk(false);
-    const at = _rv.set(p.x, p.y, p.z).applyMatrix4(S.M), f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading)).transformDirection(S.M);
+    const at = _rv.set(p.x, p.y + (p.kind === 'sit' ? p.up || 0 : 0), p.z).applyMatrix4(S.M), f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading)).transformDirection(S.M);
     ctx.put(p.kind === 'lie' ? new THREE.Vector3().set(p.stand[0], S.space.deck, p.stand[1]).applyMatrix4(S.M) : at.clone(), Math.atan2(f.x, f.z));
     T.log.push((p.kind === 'lie' ? 'lies down: ' : 'sits down: ') + p.id);
   }

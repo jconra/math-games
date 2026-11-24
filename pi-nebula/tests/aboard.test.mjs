@@ -202,3 +202,25 @@ test('the player and someone walking aboard squeeze past each other in a 0.75 m 
     assert.ok(side > 1.2, `${what}: he turned side-on (${side.toFixed(2)} rad)`);
   }
 });
+
+test('a stool at a worktop is sat on where the kit stands it: tucked in, turned to the worktop, on its taller seat', async () => {
+  // (the game's maker, 2026-11-23: the rescued sit on "stools"; the Medic's lab has one, at its worktop)
+  const { AT_COUNTER } = await import('../src/aboardplan.js');
+  const bp = bpOf('medic-open-bench'), P = placesOf(bp, { deck: 1.74 }), p = P.find((q) => q.id === 'lab-stool');
+  const st = bp.items.find((it) => it.id === 'lab-stool'), bench = bp.items.find((it) => it.id === 'bench');
+  assert.ok(p && st && bench && bench.kind === 'counter' && Math.abs(st.rect[0] - bench.rect[2]) < 1e-6, 'the plan: the stool against the bench\'s front');
+  // (turned to the worktop, which is toward -x; its middle AT_COUNTER.out from the worktop's front, where the stool is along it)
+  assert.ok(Math.sin(p.heading) < -0.99, 'faces the worktop');
+  assert.ok(Math.abs(p.x - (bench.rect[2] + AT_COUNTER.out)) < 1e-6 && Math.abs(p.z - (st.rect[1] + st.rect[3]) / 2) < 1e-6);
+  // (the floor they walk on is the room's; drawn up by the stool's seat over a chair's)
+  assert.equal(p.y, 1.74); assert.ok(Math.abs(p.up - (AT_COUNTER.seat - AT_COUNTER.chair)) < 1e-6 && p.up > 0.1);
+  // (the plan's numbers are the kit's own: where it stands the lab's stool, that stool's seat, the crew room's stools')
+  const kit = (f) => readFileSync(new URL('../kit/' + f, import.meta.url), 'utf8');
+  assert.ok(kit('ships/medic-furnish.js').includes(`W.depth + ${AT_COUNTER.out}]); ctx.put('lab: stool'`), 'the kit tucks the lab stool in that far');
+  assert.match(kit('shipparts/cabin/lab.js'), new RegExp(`export function labStool\\(p, o = \\{\\}\\) \\{\\s*const h = o\\.h \\?\\? ${AT_COUNTER.seat}\\b`));
+  assert.match(kit('shipparts/cabin/mess.js'), new RegExp(`export function stool\\(p, o = \\{\\}\\) \\{\\s*const h = o\\.h \\?\\? ${AT_COUNTER.chair}\\b`));
+  // (where they stand to sit down is open floor: clear of the supplies rack and the island)
+  for (const it of bp.items.filter((q) => q.room === 'open' && q.id !== 'lab-stool' && q.kind !== 'overhead')) assert.ok(p.stand[0] < it.rect[0] - 0.15 || p.stand[0] > it.rect[2] + 0.15 || p.stand[1] < it.rect[1] - 0.1 || p.stand[1] > it.rect[3] + 0.1, 'stands clear of ' + it.id);
+  // (nobody else's place moves: a seat with a table by it faces the table, as before; no other seat is raised)
+  for (const s of SHIPS) for (const q of placesOf(bpOf(s.bp), { deck: 1.8 })) if (q.id !== 'lab-stool') assert.equal(q.up, undefined, s.bp + ' ' + q.id);
+});

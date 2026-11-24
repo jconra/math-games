@@ -56,13 +56,16 @@ export const CLINIC = {
 // even over the worktop and over the island, from strips set in the ceiling along each (lights.js stripLight: a light
 // with its source in sight), where the downlights alone gave a pool here and there and dark between. The downlights and
 // their beams stay, and the rest of the Medic keeps its moody light.
+// It is the BAKE's light, and has no real-time pool of its own: an even light is what a bake draws well, and a phone
+// plays on Medium, which has no real-time pools at all (src/boarding.js POOLS: High only), so a working light made of
+// pools left a phone's lab as dark as it was. (A cabin bakes every strip at LIGHT.scale x LIGHT.strips, 0.47 of what
+// is asked here: kit/ships/cabin-built.js.)
 //   i, reach     each strip's light in the bake, for every half metre of it, and how far it reaches
-//   pool, poolReach, drop   its real-time pool (for a metre of strip), that pool's reach, how far under the ceiling it is
 //   wid          the strip's width;  gap: kept clear of a downlight in its line;  end: short of the worktop's ends
-export const LAB_LIGHT = { i: 1.0, reach: 3.0, pool: 0.7, poolReach: 2.6, drop: 1.1, wid: 0.034, gap: 0.22, end: 0.15 };
+export const LAB_LIGHT = { i: 4.0, reach: 3.2, wid: 0.034, gap: 0.22, end: 0.15 };
 // (a strip set in the ceiling, shining straight down: on the ceiling at y 0 of its own frame, its length along x)
 function workLight(p, o) {
-  return stripLight(p, o.len, [0, -0.004, 0], [PI / 2, 0, 0], { wid: LAB_LIGHT.wid, glow: CLINIC.glow, color: CLINIC.color, i: LAB_LIGHT.i, reach: LAB_LIGHT.reach, pool: LAB_LIGHT.pool, poolReach: LAB_LIGHT.poolReach, poolAt: [0, -LAB_LIGHT.drop, 0] });
+  return stripLight(p, o.len, [0, -0.004, 0], [PI / 2, 0, 0], { wid: LAB_LIGHT.wid, glow: CLINIC.glow, color: CLINIC.color, i: LAB_LIGHT.i, reach: LAB_LIGHT.reach, pool: 0 });
 }
 // (a downlight's options in the two rooms; null: the kit's own)
 const clinicDisc = (beam = true) => (CLINIC.on ? { i: CLINIC.disc.i, pool: CLINIC.disc.pool, poolReach: CLINIC.disc.poolReach, r: CLINIC.disc.r, color: CLINIC.color, beam: beam ? CLINIC.beam : 0 } : undefined);

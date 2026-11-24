@@ -150,7 +150,11 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
         const h = W.heading, hx = Math.sin(h), hz = Math.cos(h);
         _q.setFromEuler(_e.set(-Math.PI / 2, Math.atan2(-hx, -hz), 0, 'YXZ'));
         _m.compose(_v.set(W.pos.x - hx * BED.feet, W.pos.y + BED.back, W.pos.z - hz * BED.feet), _q, _s);
-      } else { _q.setFromEuler(_e.set(0, W.heading + (W.doing === 'walk' ? W.side || 0 : 0), 0)); _m.compose(W.pos, _q, _s); }
+      } else {
+        // (sat on a seat taller than a chair, a stool at a worktop: drawn that much higher, src/aboardplan.js AT_COUNTER)
+        _q.setFromEuler(_e.set(0, W.heading + (W.doing === 'walk' ? W.side || 0 : 0), 0));
+        _m.compose(W.doing === 'sit' && W.place && W.place.up ? _v.copy(W.pos).setY(W.pos.y + W.place.up) : W.pos, _q, _s);
+      }
       W.local = (W.local || new THREE.Matrix4()).copy(_m);
       W.c.root.matrix.copy(_m); W.c.root.matrixWorldNeedsUpdate = true; W.c.root.updateMatrixWorld(true);
       W.c.setEyes(W.doing === 'lie' ? 'shut' : 'blink');     // (lying on a bed to rest: eyes shut, kit/lids.js)
@@ -176,7 +180,7 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
   // (where a place's figure goes, as a matrix in the ship's own frame: the player's own body, sitting or lying there)
   function poseOf(p, out = new THREE.Matrix4()) {
     if (p.kind === 'lie') { const hx = Math.sin(p.heading), hz = Math.cos(p.heading); _q.setFromEuler(_e.set(-Math.PI / 2, Math.atan2(-hx, -hz), 0, 'YXZ')); return out.compose(_v.set(p.x - hx * BED.feet, p.y + BED.back, p.z - hz * BED.feet), _q, _s); }
-    _q.setFromEuler(_e.set(0, p.heading, 0)); return out.compose(_v.set(p.x, p.y, p.z), _q, _s);
+    _q.setFromEuler(_e.set(0, p.heading, 0)); return out.compose(_v.set(p.x, p.y + (p.up || 0), p.z), _q, _s);
   }
   // OFF THE SHIP FOR A WHILE, AND BACK (the header): up from their place (it is free again, unless it is the seat kept
   // for them: a seat nobody has and no job has, off the flight deck first (the one they sit on, if it is such a one);

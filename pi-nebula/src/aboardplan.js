@@ -18,6 +18,15 @@ export const WALK = { speed: 1.05, turn: 4, room: 0.85, sit: [20, 45], lie: [45,
 export const BED = { pad: 0.42, back: 0.13, feet: 0.92 };
 // (side: stepping sideways, turned side-on to squeeze past someone: to the body's left, to its right; at sideSpeed)
 export const CLIP = { stand: 'Stand_Listen', sit: 'Sit_Listen', walk: 'Walk', side: ['Run_Left', 'Run_Right'], sideSpeed: 0.4 };
+// A STOOL AT A WORKTOP (one seat standing against a counter, no table by it: the Medic's lab stool; the game's maker,
+// 2026-11-23: the rescued sit on "stools"). The kit stands it tucked in at the worktop's knee space, turned to the
+// worktop, a backrest behind, its seat higher than a chair's (kit/ships/medic-furnish.js furnishLab, `W.depth + 0.14`;
+// kit/shipparts/cabin/lab.js labStool, 0.62 m). Whoever sits there sits on it as it is drawn, at work at the worktop
+// (faced away from the wall, as a seat with no table is, they sat 11 cm off it and 17 cm down in it, its backrest in
+// their belly). out: its middle from the worktop's front edge (m); seat: its seat's height; chair: the height the
+// sitting clip sits at (a chair's: the crew room's stools, kit/shipparts/cabin/mess.js stool). A place there carries
+// `up`: how far over a chair's its sitter is drawn (src/aboard.js, src/rescued.js; the floor they walk on is still y)
+export const AT_COUNTER = { out: 0.14, seat: 0.62, chair: 0.45 };
 
 // EVERY PLACE TO SIT OR LIE in a ship's rooms, in the ship's own frame (x to port, z to the nose, y up from its ground
 // line), from its blueprint: [{ id, item, kind: 'sit' | 'lie', room, x, y, z, heading (sitting: the way they face;
@@ -26,6 +35,20 @@ export const CLIP = { stand: 'Stand_Listen', sit: 'Sit_Listen', walk: 'Walk', si
 export function placesOf(bp, { deck = 0, cockpitFloor = null, jobs = ['pilot', 'drill'] } = {}) {
   const out = [], rooms = new Map((bp.rooms || []).map((r) => [r.id, r])), items = bp.items || [];
   const tables = items.filter((it) => it.kind === 'table').map((it) => ({ room: it.room, x: (it.rect[0] + it.rect[2]) / 2, z: (it.rect[1] + it.rect[3]) / 2 }));
+  // (the counter a seat stands against, its rect sharing an edge with the counter's: where its stool is tucked in (its
+  // middle AT_COUNTER.out from that edge, where the seat is along it) and the way to the counter)
+  const counterAt = (it) => {
+    const [x0, z0, x1, z1] = it.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, o = AT_COUNTER.out, E = 0.011;
+    for (const c of items) {
+      if (c.kind !== 'counter' || c.room !== it.room) continue;
+      const [a0, b0, a1, b1] = c.rect, alongZ = Math.min(z1, b1) - Math.max(z0, b0) > 0.1, alongX = Math.min(x1, a1) - Math.max(x0, a0) > 0.1;
+      if (alongZ && Math.abs(x0 - a1) < E) return { x: a1 + o, z: cz, heading: -Math.PI / 2 };
+      if (alongZ && Math.abs(x1 - a0) < E) return { x: a0 - o, z: cz, heading: Math.PI / 2 };
+      if (alongX && Math.abs(z0 - b1) < E) return { x: cx, z: b1 + o, heading: Math.PI };
+      if (alongX && Math.abs(z1 - b0) < E) return { x: cx, z: b0 - o, heading: 0 };
+    }
+    return null;
+  };
   const doorsOf = (room) => (bp.doors || []).filter((d) => d.rooms.includes(room) && !d.hatch);
   let cockpitN = 0;
   for (const it of items) {
@@ -39,18 +62,20 @@ export function placesOf(bp, { deck = 0, cockpitFloor = null, jobs = ['pilot', '
     const doors = doorsOf(it.room), nearDoor = (x, z) => doors.reduce((b, q) => (!b || Math.hypot(q.at[0] - x, q.at[1] - z) < Math.hypot(b.at[0] - x, b.at[1] - z) ? q : b), null);
     const standOf = (x, z) => { const q = nearDoor(x, z); if (!q) return [x, z]; const dx = q.at[0] - x, dz = q.at[1] - z, L = Math.hypot(dx, dz) || 1, k = Math.min(0.62, L * 0.7); return [+(x + dx / L * k).toFixed(3), +(z + dz / L * k).toFixed(3)]; };
     if (sit) {
-      // (facing: a cockpit's seats, the nose; else the nearest table in the room; else away from the nearest wall)
-      let heading;
+      // (facing: a cockpit's seats, the nose; else the nearest table in the room; else the worktop it stands against;
+      // else away from the nearest wall)
+      let heading, at = null;
       const tb = tables.filter((t) => t.room === it.room).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz))[0];
       if (cockpit) heading = 0;
       else if (tb && Math.hypot(tb.x - cx, tb.z - cz) < 1.6) heading = Math.atan2(tb.x - cx, tb.z - cz);
+      else if (Math.max(w, d) < 1.2 - 1e-6 && (at = counterAt(it))) heading = at.heading;
       else { const [rx0, rz0, rx1, rz1] = r.rect, e = [[cx - rx0, Math.PI / 2], [rx1 - cx, -Math.PI / 2], [cz - rz0, 0], [rz1 - cz, Math.PI]].sort((a, b) => a[0] - b[0]); heading = e[0][1]; }
       // (a long bench seats more than one: a place each 0.6 m along it)
       const long = Math.max(w, d), n = it.kind === 'bench' ? Math.max(1, Math.floor(long / 0.6 + 1e-6)) : 1;
       for (let k = 0; k < n; k++) {
-        const f = (k + 0.5) / n, x = w >= d ? x0 + w * f : cx, z = w >= d ? cz : z0 + d * f;
+        const f = (k + 0.5) / n, x = at ? at.x : w >= d ? x0 + w * f : cx, z = at ? at.z : w >= d ? cz : z0 + d * f;
         const job = cockpit && it.kind === 'seat' ? (/pilot/i.test(it.name || '') && !/co-?pilot/i.test(it.name || '') ? 'pilot' : null) : null;
-        out.push({ id: it.id + (n > 1 ? '.' + k : ''), item: it.id, name: it.name || it.kind, kind: 'sit', room: it.room, x: +x.toFixed(3), y: +floor.toFixed(3), z: +z.toFixed(3), heading, job, cockpit, stand: standOf(x, z) });
+        out.push({ id: it.id + (n > 1 ? '.' + k : ''), item: it.id, name: it.name || it.kind, kind: 'sit', room: it.room, x: +x.toFixed(3), y: +floor.toFixed(3), z: +z.toFixed(3), heading, job, cockpit, stand: standOf(x, z), ...(at ? { up: +(AT_COUNTER.seat - AT_COUNTER.chair).toFixed(3) } : {}) });
       }
       if (cockpit && it.kind === 'seat') cockpitN++;
     } else {

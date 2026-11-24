@@ -176,7 +176,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
       R.target = { kind: 'bed', lie: !!B.lie }; R.bedWorld = bedFrame(B); R.goal = shipPoint(bedToShip(B, [R.own.stand[0], 0, R.own.stand[1]]));
       const o = bedToShip(B, [1, 0, 0]), z0 = bedToShip(B, [0, 0, 0]); R.out = Math.atan2(o[0] - z0[0], o[2] - z0[2]) + ship.yaw();
     } else {
-      const p = ch.place; R.goal = shipPoint([p.stand[0], p.y, p.stand[1]]); R.seat = shipPoint([p.x, p.y, p.z]); R.target = { kind: 'sit' }; R.seatHeading = shipHeading(p.heading);
+      const p = ch.place; R.goal = shipPoint([p.stand[0], p.y, p.stand[1]]); R.seat = shipPoint([p.x, p.y, p.z]); R.seatUp = p.up || 0; R.target = { kind: 'sit' }; R.seatHeading = shipHeading(p.heading);
     }
   }
   function setOff(R) {
@@ -322,7 +322,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
       if (SETTLED.includes(R.phase)) continue;
       stopWay(R); R.t = 0;
       if (!pick(R)) { R.goal = shipPoint([0, deck, 0.25]); R.pos.copy(R.goal); R.drawnY = R.pos.y; R.phase = 'standing'; stand(R); play(R, STAND, 0); continue; }
-      if (R.target.kind === 'sit') { R.pos.copy(R.seat); R.drawnY = R.seat.y; R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; stand(R); play(R, CLIP.sit, 0); }
+      if (R.target.kind === 'sit') { R.pos.copy(R.seat); R.drawnY = R.seat.y + (R.seatUp || 0); R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; stand(R); play(R, CLIP.sit, 0); }
       else { R.pos.copy(R.goal); R.drawnY = R.pos.y; R.phase = 'lying'; }
     }
   }
@@ -409,7 +409,8 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
       if (R.target.lie) { R.phase = 'lying'; R.t = 0; return; }
       R.phase = 'back'; R.t = 0; R.from = R.pos.clone(); R.fromH = R.heading;
     } else if (R.target && R.target.kind === 'sit') {
-      R.pos.copy(R.seat); R.drawnY = R.seat.y; R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; R.t = 0;
+      // (on a seat taller than a chair, a stool at a worktop: drawn that much higher, src/aboardplan.js AT_COUNTER)
+      R.pos.copy(R.seat); R.drawnY = R.seat.y + (R.seatUp || 0); R.heading = R.seatHeading; R.side = 0; R.phase = 'sit'; R.t = 0;
       stand(R); play(R, CLIP.sit, 0.35);
     } else { if (put) { R.pos.copy(R.goal); R.drawnY = R.pos.y; } R.phase = 'standing'; stand(R); play(R, STAND); }
   }
@@ -440,7 +441,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
     for (const R of list) {
       R.pos.applyMatrix4(was).applyMatrix4(M1); R.drawnY = R.pos.y; R.heading += yaw - yawWas; R.D = null;
       frames(R);
-      if (R.phase === 'sit') { R.pos.copy(R.seat); R.drawnY = R.seat.y; R.heading = R.seatHeading; }
+      if (R.phase === 'sit') { R.pos.copy(R.seat); R.drawnY = R.seat.y + (R.seatUp || 0); R.heading = R.seatHeading; }
       if (R.phase === 'sit' || R.phase === 'standing') stand(R);
     }
   }
