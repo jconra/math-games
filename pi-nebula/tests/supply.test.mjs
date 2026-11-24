@@ -350,6 +350,8 @@ test('the Hauler\'s captain\'s words: the offer, the contract signed, the share;
   assert.ok(!JSON.stringify(K).includes('"clip"'));
   for (const id of ['vega', 'ruiz', 'hale']) assert.ok(CAPTAINS[id].offer.clip && typeof CAPTAINS[id].contract === 'string');
   for (const f of ['../src/people.js', '../src/lines.js', '../src/bubbles.js']) assert.ok(!/speechSynthesis|SpeechSynthesisUtterance/.test(read(f)), f);
+  // (asked over to talk now and then, as any captain is: the news of the supply run is never theirs to tell as hearsay)
+  assert.ok(TALKS.find((t) => t.news === 'supply').about.includes(HAULER_CAPTAIN.id));
   // (on the run they speak from the captain's seat: the lines the first mate had)
   assert.ok(RUN_TALK.supply.letGo.length && RUN_TALK.supply.landed.length); assert.ok(!/first mate/i.test(JSON.stringify(RUN_TALK.supply)));
 });

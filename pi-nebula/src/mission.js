@@ -392,10 +392,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // for as long as they stood and waited (3 of 7 comings aboard on a phone's picture: the helpers' notes, HAULRUN_1.md,
   // Round 2). So whenever this crew member is told where the supply run is to be had (as they come aboard, on the
   // shipping computer's line, on the pay slip's last card), and whenever the captain has the run or the Hauler's sale
-  // to offer them as they come aboard, the people are told too, as when a
-  // captain's line is picked on a jobs board (people.captain.seek: that captain is kept about however many are
-  // nearer, and is the one who speaks up when walked up to); done with as their offer begins. (Asked for before the
-  // station's people are aboard, it is done once they are: update, below. false: nobody is looked for any more.)
+  // to offer them as they come aboard, the people are told too, as when a captain's line is picked on a jobs board
+  // (people.captain.seek: that captain is kept about however many are nearer, and is the one who speaks up when
+  // walked up to); done with as their offer begins. (Asked for before the station's people are aboard, it is done
+  // once they are: update, below. false: nobody is looked for any more.)
   let wantSeek = null;
   const seekCaptain = (id) => { wantSeek = id; };
   function deskOpen(at) { const M = deskOf(at), c = crew(); return !!(M && c && !contractOf(c) && missions.open(M.captain, c)); }

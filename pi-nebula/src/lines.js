@@ -264,7 +264,8 @@ export const TALKS = [
   { id: 'rescue-3', news: 'rescue', lines: ["The {ship} brought {people} home today!", "From where?", "{from}. They were asleep in stasis pods.", "I'm so glad they're safe."] },
   // (a finding of Captain Vega's exploring run: news.js 'find', its {what} the run's own words)
   // (the supply run that saved the old station: src/trip.js, news.js 'supply')
-  { id: 'supply-1', news: 'supply', lines: ['The Hauler got through to the old station!', 'With the fuel cells?', 'Its lights are back on, they say.'] },
+  // (never said by the Hauler's own captain, who was there: now and then a captain is asked over to talk, as anyone is)
+  { id: 'supply-1', news: 'supply', about: [HAULER_CAPTAIN.id], lines: ['The Hauler got through to the old station!', 'With the fuel cells?', 'Its lights are back on, they say.'] },
   { id: 'find-1', news: 'find', about: ['vega'], lines: ["Captain Vega's crew found {what}!", "Way out past the charts?", "That's what I heard. Who knows what they'll find next."] },
   { id: 'planet-1', news: 'planet', lines: ["They found a new planet people could live on!", "Really? What's it called?", "{planet}. It has oceans, I heard.", "Oceans! I'd go just to swim."] },
   { id: 'planet-2', news: 'planet', lines: ["Would you live on {planet}?", "Only if they have a galley as good as ours."] },
