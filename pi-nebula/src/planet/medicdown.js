@@ -8,7 +8,8 @@
 //   const M = await makeMedicDown({ scene, renderer, camera, ground, sky, stand, quality })
 //       stand: { x, y, z, yaw, side } (src/rescueplan.js medicStand: its middle on the ground, its nose's turn, which
 //       ramp comes down: 'port' or 'starboard'); ground, sky: the planet's (src/planet/planet.js: its ground's shared
-//       settings, its cloud sky if it has air), so its hull is lit as the planet's own things are
+//       settings, its cloud sky if it has air), so its hull is lit as the planet's own things are; sunDir: toward the
+//       planet's sun: its hull's shadow on the ground (src/planet/groundshadow.js; none given, none drawn)
 //   M.group, M.M (its own frame in the world: x to port, y up from its ground line, z to the nose), M.inv, M.stand
 //   M.env                   its cabin's own picture of itself (a person inside is lit by it: src/planet/inside.js)
 //   M.addTo(walls)          what a person meets of it, added to where a person can walk (src/walls.js): its hull (its
@@ -35,6 +36,7 @@ import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
 import { MEDIC, patientBeds, restOrder } from '../rescueplan.js';
 import { INSIDE_FILL, FILL_UNIFORMS, insideLight } from './inside.js';
+import { groundShadowMaterial, shadowUnder } from './groundshadow.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 // the hull's corners' darkness baked coarser than the Ship Lab's (it is made each time a planet is landed on: as the
@@ -49,7 +51,7 @@ const breath = () => new Promise((done) => requestAnimationFrame(() => setTimeou
 
 const eachMaterial = (mats, fn) => { const seen = new Set(); for (const m of Object.values(mats)) if (m && m.isMaterial && !seen.has(m)) { seen.add(m); fn(m); } };
 
-export async function makeMedicDown({ scene, renderer = null, camera = null, ground, sky = null, stand, quality = 'medium' }) {
+export async function makeMedicDown({ scene, renderer = null, camera = null, ground, sky = null, sunDir = null, stand, quality = 'medium' }) {
   const t0 = performance.now();
   let side = stand.side === 'starboard' ? 'starboard' : 'port', sideSign = side === 'port' ? 1 : -1;
   const M = new THREE.Matrix4().makeRotationY(stand.yaw).setPosition(stand.x, stand.y, stand.z), inv = M.clone().invert();
@@ -75,6 +77,9 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   MD.equipStep(B, false);
   if (ramp) { ONE[0] = ramp; setDoors(ONE, 1); }
   MD.rampFoot(B);
+  // ITS SHADOW on the ground, as the wreck's and the pods' (src/planet/groundshadow.js): its hull, its legs and its
+  // ramps once more, down the sun's rays (its place carries the planet's curve: update, below)
+  const shadowMat = sunDir ? groundShadowMaterial({ ground, sunDir, air: !!sky, curved: true }) : null, shade = shadowMat ? shadowUnder(B.group, shadowMat) : null;
   await breath();
   // ── its cabin, as the game builds it ─────────────────────────────────────────────────────────────────────────────
   t = performance.now();
@@ -101,7 +106,9 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
       // (everything beside it, and beside each thing it is in, put away for the picture; whatever holds it shown)
       let top = group;
       for (let o = group; o.parent; o = o.parent) { top = o.parent; for (const q of o.parent.children) if (q !== o && !q.isLight && q.visible) { q.visible = false; put.push([q, true]); } if (!o.parent.visible) { o.parent.visible = true; put.push([o.parent, false]); } }
+      if (shade) shade.show(false);     // (its shadow is the ground's, not the cabin's)
       top.add(cc); cc.update(renderer, top); top.remove(cc);
+      if (shade) shade.show(true);
       for (const [q, v] of put) q.visible = v;
       const pm = new THREE.PMREMGenerator(renderer); env = pm.fromCubemap(rt.texture).texture; rt.dispose(); pm.dispose();
     } catch (e) { console.warn('the Medic set down: no picture of its cabin', e); env = null; }
@@ -192,13 +199,14 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     MD.rampFoot(B); rampWant = down ? 1 : 0; footAt();
     if (walls) { walls.place('medic:hull', M); walls.place('medic:cabin', M); if (rampIn) { walls.drop('medic:ramp'); rampIn = false; } rampWalls(); }
   }
-  const stats = { ms: Math.round(performance.now() - t0), hullMs, cabinMs, bake: Math.round(B.stats.bake?.ms || 0), tris: Math.round(B.stats.tris + C.built.stats.tris), draws: B.stats.draws + C.built.stats.draws + (beams ? 2 : 0) };
+  const stats = { ms: Math.round(performance.now() - t0), hullMs, cabinMs, bake: Math.round(B.stats.bake?.ms || 0), tris: Math.round(B.stats.tris + C.built.stats.tris), draws: B.stats.draws + C.built.stats.draws + (beams ? 2 : 0) + (shade ? shade.count : 0), shadows: shade ? shade.count : 0 };
   return {
     group, M, inv, env, get stand() { return stand; }, get side() { return side; }, foot, bp, space, places, beds: patientBeds(bp, space.deck), order: restOrder(bp, space.deck, places), built: B, cabin: C, stats, addTo, update, inside, place,
     get rampT() { return ramp ? ramp.t : 0; },
     ramp(k) { rampWant = k ? 1 : 0; },
     dispose() {
       if (walls) { walls.drop('medic:hull'); walls.drop('medic:cabin'); walls.drop('medic:ramp'); }
+      if (shade) shade.dispose(); if (shadowMat) shadowMat.dispose();
       group.removeFromParent(); B.dispose(); C.built.dispose(); if (beams) beams.dispose();
       for (const g of [...hull.solid, ...cabin.solid]) g.dispose(); if (env) env.dispose();
       eachMaterial(hullMats, (m) => m.dispose()); eachMaterial(cabinMats, (m) => m.dispose());

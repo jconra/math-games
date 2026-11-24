@@ -96,6 +96,7 @@ import { planetPad, groundSolid, planDown, padNose } from './planet/landing.js';
 import { makeSearch } from './planet/search.js';
 import { makeMedicDown } from './planet/medicdown.js';
 import { makeOnFoot, ONFOOT } from './planet/onfoot.js';
+import { makePeopleShadows } from './planet/groundshadow.js';
 import { makeRescued } from './rescued.js';
 import { medicStand } from './rescueplan.js';
 import { makePodReach } from './podreach.js';
@@ -128,7 +129,7 @@ export function makeSite(ctx, opts = {}) {
   const carrier = new THREE.Group(); carrier.name = 'rescue:the rescued'; carrier.matrixAutoUpdate = false; group.add(carrier);
   const st = { phase: 'made', t: 0, ready: false, failed: false, closed: false, of: 0, opened: 0, words: '', times: {}, groundReady: false, groundFailed: false, swapped: false, ground: false, all: false, skipAll: false, podT: 0, said: {}, came: [] };
   let planet = null, wreck = null, pods = null, land = null, fl = null, L = null, podPlan = null, podsMid = null;
-  let medic = null, F = null, rescued = null, search = null, reach = null, lock = null, lockMod = null, cfg = null;
+  let medic = null, F = null, rescued = null, shades = null, search = null, reach = null, lock = null, lockMod = null, cfg = null;
   const at = { p: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), from: new THREE.Vector3(), hover: new THREE.Vector3(), ground: new THREE.Vector3(), up: new THREE.Vector3(), flyT: 1, dir0: new THREE.Vector3(), pad: new THREE.Vector3(1, 0, 0) };
   const ground = (x, z) => (land ? land.heightAt(x, z) : 0);
   const who = { flier: String(opts.flier || 'The pilot'), medic: String(opts.medicName || 'The paramedic') };
@@ -174,7 +175,7 @@ export function makeSite(ctx, opts = {}) {
   async function makeGround() {
     const t0 = performance.now();
     try {
-      medic = await makeMedicDown({ scene: group, renderer: W.renderer, camera: W.camera, ground: planet.ground, sky: planet.dome, stand: medicStand(L, podPlan.pods), quality: W.quality });
+      medic = await makeMedicDown({ scene: group, renderer: W.renderer, camera: W.camera, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, stand: medicStand(L, podPlan.pods), quality: W.quality });
       if (st.closed) { medic.dispose(); medic = null; return; }
       medic.group.visible = false;
       const near0 = W.camera.near;
@@ -182,6 +183,8 @@ export function makeSite(ctx, opts = {}) {
       W.camera.near = near0; W.camera.updateProjectionMatrix();
       if (st.closed) { F.dispose(); F = null; return; }
       F.player.c.root.visible = false;
+      // (the people's shadows on the ground out here, as the wreck's and the pods': src/planet/groundshadow.js)
+      shades = makePeopleShadows({ scene: group, ground: planet.ground, sunDir: planet.sunDir, air: !!planet.dome });
       rescued = makeRescued({ pods, medic, walls: F.walls, scene: carrier, busy: (id) => !!(opts.busy && opts.busy(id)), crew: () => (opts.crewAt ? opts.crewAt() : []) });
       st.times.ground = Math.round(performance.now() - t0);
       st.groundReady = true;
@@ -413,7 +416,7 @@ export function makeSite(ctx, opts = {}) {
         // in turn, then back aboard: src/rescued.js paramedic, the figure lent by the trip. Nobody to walk (no crew aboard
         // made): the pods open one after another by themselves, SITE.pod apart, as before)
         if (P === 'pods' && st.swapped && !iMedic && rampDown && !st.skipAll) {
-          if (st.para === undefined) st.para = (rescued && opts.paramedic && rescued.paramedic(opts.paramedic(), { open: openPod })) || null;
+          if (st.para === undefined) { const fig = rescued && opts.paramedic ? opts.paramedic() : null; st.para = (fig && rescued.paramedic(fig, { open: openPod })) || null; st.paraC = st.para && fig.c ? fig.c : null; }
           if (!st.para) { st.podT += dt; const i = Math.floor(st.podT / SITE.pod); if (i < st.of && st.opened <= i) openPod(st.opened); }
         }
         if (P === 'pods' && st.swapped && rescued && rescued.placed >= st.of && st.opened >= st.of && (!st.para || st.para.done)) st.all = true;
@@ -482,6 +485,9 @@ export function makeSite(ctx, opts = {}) {
       // (the rescued drawn where the ship is now: the one matrix from where the Medic stood on the ground)
       if (medic && !st.swapped && rescued && rescued.list.length) { carrier.matrix.multiplyMatrices(frameNow(), medic.inv); } else carrier.matrix.identity();
       carrier.matrixWorldNeedsUpdate = true;
+      // (whoever is out on the ground casts a shadow there: the crew member, the rescued, her paramedic; inside the
+      // Medic its hull's shadow is theirs)
+      if (shades) shades.sync(st.swapped ? [F ? F.player.c : null, ...(pods ? pods.pods.map((p) => p.sleeper && p.sleeper.c) : []), st.para && !st.para.done ? st.paraC : null] : [], medic ? medic.inside : null);
     },
     // THE FLIGHT HOME: the rescued kept as they are, where they settled (src/rescued.js ride: theirs from here on, drawn
     // where the ship is by whoever takes them: src/trip.js); the planet and the Medic set down are put away without them
@@ -502,6 +508,7 @@ export function makeSite(ctx, opts = {}) {
       if (kept.sky != null && W.sky && W.sky.object) W.sky.object.visible = kept.sky;
       if (kept.fill != null && W.fill) W.fill.visible = kept.fill;
       if (kept.exposure != null) W.renderer.toneMappingExposure = kept.exposure;
+      if (shades) { shades.dispose(); shades = null; }
       if (rescued) rescued.dispose(); if (F) F.dispose(); if (medic) medic.dispose();
       if (pods) pods.dispose(); if (wreck) wreck.dispose(); if (planet) planet.dispose();
       group.removeFromParent(); pods = wreck = planet = medic = F = rescued = null;

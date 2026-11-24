@@ -21,6 +21,7 @@ import { makeInput } from '../../../shared/input.js';
 import { makeMedicDown } from '../../src/planet/medicdown.js';
 import { makeOnFoot } from '../../src/planet/onfoot.js';
 import { makeRescued } from '../../src/rescued.js';
+import { makePeopleShadows } from '../../src/planet/groundshadow.js';
 import { medicStand } from '../../src/rescueplan.js';
 import { LOOKS, recipeOf } from '../../src/looks.js';
 
@@ -58,7 +59,7 @@ export function makeWalkLab({ LAB, scene, camera, canvas, renderer, quality, lab
     if (site && site.planet === L.planet) return site;
     drop();
     const planet = L.planet, stand = medicStand(planet.land.landing, L.podPlan.pods);
-    const medic = await makeMedicDown({ scene, renderer, camera, ground: planet.ground, sky: planet.dome, stand, quality });
+    const medic = await makeMedicDown({ scene, renderer, camera, ground: planet.ground, sky: planet.dome, sunDir: planet.sunDir, stand, quality });
     const lib = await L.crewLib();
     // (the player in a look none of the sleepers here wears)
     const used = new Set(L.podPlan.pods.map((p) => p.look)), mine = LOOKS.filter((l) => !/^android/.test(l.id)).find((l, k) => !used.has(k)) || LOOKS[0];
@@ -66,12 +67,14 @@ export function makeWalkLab({ LAB, scene, camera, canvas, renderer, quality, lab
     F.player.c.root.visible = false;
     const rescued = makeRescued({ pods: L.pods, medic, walls: F.walls, scene });
     if (lab().planet !== planet) { medic.dispose(); F.dispose(); rescued.dispose(); return null; }
-    site = { planet, medic, F, rescued, look: mine.id };
+    // (the people's shadows on the ground, as in the game: src/planet/groundshadow.js)
+    const shades = makePeopleShadows({ scene, ground: planet.ground, sunDir: planet.sunDir, air: !!planet.dome });
+    site = { planet, medic, F, rescued, shades, look: mine.id };
     return site;
   }
   function drop() {
     if (!site) return;
-    site.rescued.dispose(); site.F.dispose(); site.medic.dispose(); site = null;
+    site.shades.dispose(); site.rescued.dispose(); site.F.dispose(); site.medic.dispose(); site = null;
   }
   // the player put in the med bay at the ramp's head, facing down it
   function startAt(S) {
@@ -120,6 +123,7 @@ export function makeWalkLab({ LAB, scene, camera, canvas, renderer, quality, lab
     if (on) F.update(dt, { move: input.move, run: input.run, look: input.takeLook(), zoom: input.takeZoom(), others: rescued.others });
     rescued.update(dt, { player: on ? P : null, camera });
     medic.update(dt, camera, [...(on ? [P.pos] : []), ...rescued.eyes()]);
+    site.shades.sync([P.c, ...L.pods.pods.map((p) => p.sleeper && p.sleeper.c)], medic.inside);
     return on;
   }
   LAB.walk = (want = true) => setOn(want);
