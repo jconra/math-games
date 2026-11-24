@@ -841,7 +841,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const H = c.bones.Head, hy = (H ? H.getWorldPosition(_v).y - c.root.position.y : 1.65 * (c.size || 1)) / (c.size || 1) + (MARK.over + Math.sin(clock * 2.1 + P.order) * MARK.bob) / (c.size || 1);
         P.marker.position.set(0, hy, 0);
         const my = c.root.position.y + hy * (c.size || 1) - camera.position.y;
-        P.marker.visible = cx * cx + cz * cz + my * my > MARK.near * MARK.near;
+        // (not while they are on the big scanner's bed, a check-up: lying, it would hang over their middle, THE SCANNER'S QUEUE)
+        P.marker.visible = !P.pose && cx * cx + cz * cz + my * my > MARK.near * MARK.near;
       }
       // (someone speaking up on their own (a captain, the medic) moves their hands as they talk, as two people talking
       // do (moves.js), never while their hands are at work; the scanner's patient getting on, lying and getting off:
