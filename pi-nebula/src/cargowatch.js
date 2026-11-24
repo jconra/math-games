@@ -17,14 +17,14 @@
 //   A CHEER    at the finish, one of them (not the loader, who has their own word on the card) says a line of it, in a
 //              bubble, words only (src/lines.js LAP_TALK.cheer).
 //   BACK TO THEIR DAY  when the player gets off, or drives away from the lap (WATCH.away metres from the start box with
-//              no lap running, or WATCH.idle seconds with none begun).
+//              no lap running, WATCH.idle seconds with none begun, or a lap left running WATCH.long seconds).
 // Should the forklift be driven at one of them all the same (on its way in or out), it waits for them, as it does for
 // anyone.
 //
 //   const crowd = makeCargoWatch({ people, forklift })
 //   crowd.call()            everyone to the finish line
 //   crowd.clear()           -> { clear, who } nobody in the lane in the forklift's way (kit/forkliftlap.js clearToGo)
-//   crowd.update(dt, { driving, s (the drive's state), phase (the lap's) })   each frame
+//   crowd.update(dt, { driving, s (the drive's state), phase (the lap's), clock (its clock) })   each frame
 //   crowd.cheer(kind)       a line at the finish: 'beat' | 'slower' | 'missed'
 //   crowd.release()         back to their day
 //   crowd.state()           for the rigs
@@ -34,11 +34,11 @@ import { lapAt, clearToGo, keepOff, BOX } from '../kit/forkliftlap.js';
 import { LAP_TALK } from './lines.js';
 
 // hurry: how much faster than their own pace they come (times); away: the forklift this far from the start box (m) with
-// no lap running, or idle so long (s) with none begun: they go back to their day; turn: how fast their feet turn to
+// no lap running, or idle so long (s) with none begun, or a lap running as `long` as this (s): they go back to their day; turn: how fast their feet turn to
 // follow it (radians a second), and how far round from facing the lane (radians: their head does the rest); again: one
 // who could not get to their place is sent again after this long (s), by any way there is; out: someone in the lap's
 // first two stretches when called may walk this far along them (m) on their way out of them
-export const WATCH = { hurry: 1.7, away: 15, idle: 40, turn: 1.6, most: 1.15, again: 1.5, out: 3.2 };
+export const WATCH = { hurry: 1.7, away: 15, idle: 40, long: 150, turn: 1.6, most: 1.15, again: 1.5, out: 3.2 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
@@ -93,12 +93,12 @@ export function makeCargoWatch({ people = () => null, forklift }) {
       if (pp && pp.send) for (const P of crew()) if (watching(P) || P.sent) pp.send(P, null);
       at.clear(); mine.clear();
     },
-    update(dt, { driving = false, s = null, phase = 'idle' } = {}) {
+    update(dt, { driving = false, s = null, phase = 'idle', clock = 0 } = {}) {
       if (!S.on) return;
       // BACK TO THEIR DAY: off the forklift; or away from the lap with none running
       const far = s ? Math.hypot(s.x - BOX.c[0], s.z - BOX.c[1]) : Infinity;
       idleT = phase === 'idle' ? idleT + dt : 0;
-      if (!driving || (phase === 'idle' && (far > WATCH.away || idleT > WATCH.idle))) { C.release(); return; }
+      if (!driving || (phase === 'idle' && (far > WATCH.away || idleT > WATCH.idle)) || (phase === 'run' && clock > WATCH.long)) { C.release(); return; }
       const f = [Math.cos(s.h), -Math.sin(s.h)];
       seat.set(s.x - f[0] * 0.5, STORE.floor + 1.5, s.z - f[1] * 0.5);
       for (const P of crew()) {

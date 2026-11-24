@@ -14,7 +14,7 @@
 //   THE REST     the same, one after another, while the run wants more (`want`)
 //   THEN         a way to its bay, backed into it as it parks, the forks down where they rest
 // As the player left it: a pallet already on its forks goes to a container first; its forks left in under a pallet,
-// it backs out first. Someone in its way: it waits for them; after LOADER.wait seconds it backs off a little and works
+// it backs out first; left lined up before a pallet or before a place inside the doors, it goes straight in. Someone in its way: it waits for them; after LOADER.wait seconds it backs off a little and works
 // its way out again round them. A way that cannot be found, or a pallet that will not go on or off, is tried again
 // LOADER.tries times, then given up (L.failed: the game loads the rest where nobody sees, as it did before).
 //
@@ -35,8 +35,9 @@ import { makePlan, makeFollower, clearOf, WAY } from './forkliftway.js';
 // or in through a doorway; park: the last stretch backed into its bay (m); think: a moment before each way (s: the
 // loader looks where to go); planMs: a way is worked out this long each frame (ms); wait: this long behind someone
 // before backing off (s), backOff: so far (m); tries: so many things gone wrong in a row before it is given up;
-// most: no step of it takes longer than this (s)
-export const LOADER = { short: 0.35, in: 1.8, boxShort: 1.6, out: 1.5, push: 0.9, park: 2.2, think: 0.45, planMs: 3, wait: 2.5, backOff: 0.8, tries: 4, most: 14 };
+// most: no step of it takes longer than this (s); room: a way is first looked for this clear of everything (m), and
+// only if there is none, as near things as a way may come (kit/forkliftway.js WAY.margin)
+export const LOADER = { short: 0.35, in: 1.8, boxShort: 1.6, out: 1.5, push: 0.9, park: 2.2, think: 0.45, planMs: 3, wait: 2.5, backOff: 0.8, tries: 4, most: 14, room: 0.3 };
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const fwd = (h) => [Math.cos(h), -Math.sin(h)];
@@ -70,6 +71,8 @@ export function makeLoader(opts = {}) {
       cands.sort((a, b) => near(a.to) - near(b.to));
     }
     if (!cands.length && s.carry == null) cands.push({ kind: 'home', to: { ...PARKED, in: -O.park } });
+    // (each tried with more room round it first, LOADER.room; then, if none of them will do, with the way's own margin)
+    cands = [...cands.map((c) => ({ ...c, room: O.room })), ...cands.map((c) => ({ ...c, room: WAY.margin }))];
     return cands.length;
   }
   function nextPlan(D, W) {
@@ -77,7 +80,7 @@ export function makeLoader(opts = {}) {
     if (!target) return false;
     // (people left out of the room as a way is worked out: they walk on; after waiting behind someone, round them)
     const Wp = roundPeople ? W : { ...W, people: [] };
-    plan = makePlan(D.s, target.to, clearOf(Wp, D.s, WAY.margin), { loose: clearOf(Wp, D.s, 0.005) });
+    plan = makePlan(D.s, target.to, clearOf(Wp, D.s, target.room), { loose: clearOf(Wp, D.s, 0.005) });
     L.goal = { kind: target.kind, at: target.q ? target.q.id : target.p ? target.p.place : 'bay' };
     return true;
   }
@@ -92,6 +95,10 @@ export function makeLoader(opts = {}) {
       // (its forks left in under a pallet: out first)
       if (s.under != null && s.carry == null) { from = { x: s.x, z: s.z }; to('out'); return stop; }
       if (t < O.think) return { go: 0, turn: 0, forks: s.carry == null && s.lift > FORKS.rest + 0.004 ? -1 : 0 };
+      // (left right where the next thing is done: a pallet on its forks lined up before a place inside a container's
+      // doors: straight in; its forks lined up before a pallet waiting: straight in under it)
+      if (s.carry != null) { const P = D.placeNear(W); if (P && P.q.box && Math.abs(P.side) < 0.15 && P.ahead < HAND.line.near) { target = { kind: 'place', q: P.q }; L.goal = { kind: 'place', at: P.q.id }; to('place'); return stop; } }
+      else if (want > 0 && W.free.some((q) => q.box)) { const A = D.inFront(W); if (A && !A.q.box && A.q.y < 0.01 && A.L.along < 0.9) { target = { kind: 'pallet', p: A.q }; L.goal = { kind: 'pallet', at: A.q.place }; to('in'); return stop; } }
       if (!think(D, W, want) || !nextPlan(D, W)) { fail('nowhere to go'); return stop; }
       to('plan'); return stop;
     }
@@ -154,7 +161,7 @@ export function makeLoader(opts = {}) {
       const d = Math.hypot(s.x - from.x, s.z - from.z);
       if (d >= O.out && s.under == null) { to('think'); return stop; }
       if (Math.abs(s.v) < 0.01 && last.blocked && last.blocked !== 'someone' && t > 1) { held += dt; if (held > 1.5) { if (s.under == null) { to('think'); return stop; } fail('could not back out: ' + last.blocked); return stop; } }
-      return { go: -0.6, turn: 0, forks: s.under == null && s.lift > FORKS.rest + 0.004 ? -1 : 0 };
+      return { go: -1, turn: 0, forks: s.under == null && s.lift > FORKS.rest + 0.004 ? -1 : 0 };
     }
     return stop;
   };

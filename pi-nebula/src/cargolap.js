@@ -235,7 +235,7 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     if (cardT > 0 && (cardT -= dt) <= 0) { cardEl.hidden = true; showing(); }
     offer(dt, P, playing);
     light(dt, driving);
-    crowd.update(dt, { driving, s: D ? D.s : null, phase: L.s.phase });
+    crowd.update(dt, { driving, s: D ? D.s : null, phase: L.s.phase, clock: L.s.clock });
     // THE BOARD: made the first time Cargo is in view, written afresh as it comes into view and when another crew member plays
     if (zone && zone.group.visible) {
       const c = crew(), key = c ? c.id : '';

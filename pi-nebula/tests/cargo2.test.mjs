@@ -190,6 +190,12 @@ test('the loader takes it as the player left it: anywhere, turned any way, a pal
   const L = makeLoader(); let backed = false;
   for (let f = 0; f < 600 && !backed; f++) { const c = L.cmd(D0, W, 1 / 60, { want: 2 }); L.after(D0.step(c, 1 / 60, W)); if (L.phase === 'out' && c.go < 0) backed = true; }
   assert.ok(backed, 'it backs out from under it first');
+  // left with a pallet on its forks in front of a container's doors, lined up: straight in and down, no way worked out first
+  const b0 = placeOf('b0'), at = load({ ...beforePlace(b0.at, Math.PI, 0.9), z: b0.at[1] + 0.05 }, 3, { carry: 'w3' });
+  assert.ok(at.L.done && at.loaded === 3 && at.order[0] === 'b0', 'the one on its forks into the place it was left before');
+  // left lined up a little way before a pallet waiting: straight in under it
+  const w2 = placeOf('w2'), near = load({ ...beforePallet(w2.at, Math.PI / 2, 0.5), x: w2.at[0] + 0.06 }, 1);
+  assert.ok(near.L.done && near.loaded === 1 && !near.here.has('w2'), 'the pallet it was left before is the one it took');
 });
 
 test('someone in the loader\'s way: it waits for them, then backs off and goes round; no way at all: given up, not tried for ever', () => {
