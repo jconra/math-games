@@ -188,8 +188,8 @@ export const doorTurn = (s, k) => { const t = Math.max(0, Math.min(1, k)); retur
 //            south lane again. Anyone nearer the line than this is in the lane, in the forklift's way
 //   watch    where they stand to watch, [x, z]: in a row along the lift's north wall, at the south end of the finish
 //            line, on the outside of the lap's last stretch (the forklift comes down the lane's middle, or cuts in by
-//            the racks on its other side), clear of the way from the forklift's bay up the lift's west side; they face
-//            the lane (`look`, a person's heading: north)
+//            the racks on its other side), a metre and more east of the lift's north-west corner, which the forklift
+//            comes round on its way from its bay and back; they face the lane (`look`, a person's heading: north)
 // THE BEST LAP'S BOARD (2026-11-23, the game's maker, LAP1-2, B: "Something to show for it in Cargo: a small board by the
 // forklift's bay with the best lap on it and whose it is."):
 //   board    on the south wall, behind the forklift's bay: x (its middle, between two of the wall's uprights), w, h (its
@@ -198,7 +198,7 @@ export const doorTurn = (s, k) => { const t = Math.max(0, Math.min(1, k)); retur
 //            board's foot (kit/lapboard.js; the rest is the board itself, kit/store.js)
 export const LAP = { box: [11.5, 15.7, 21.7, 24.1], face: Math.PI, lane: [20.6, 26.2],
   corners: [[5.15, 22.9], [5.15, -3.05], [22.45, -3.05], [22.45, 22.9]], gate: 3.4, time: 65, who: 'loader-otto',
-  wide: [2.8, 2.0, 1.9, 2.6, 2.8], watch: [[11.1, 26.25], [11.85, 26.25], [12.6, 26.25], [13.35, 26.25]], look: Math.PI,
+  wide: [2.8, 2.0, 1.9, 2.6, 2.8], watch: [[11.75, 26.25], [12.5, 26.25], [13.25, 26.25], [14.0, 26.25]], look: Math.PI,
   board: { x: 7.225, w: 1.72, h: 1.02, y: 1.62, out: 0.05, face: [1.56, 0.6, 0.37] } };
 // THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
 // in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js

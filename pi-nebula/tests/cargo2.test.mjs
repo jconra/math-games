@@ -315,10 +315,10 @@ test('the lane: where the forklift comes round; the places to watch from are by 
   assert.equal(LAP.watch.length, crewN, 'a place for each of them');
   LAP.watch.forEach(([x, z], i) => {
     assert.equal(lapAt(x, z), null, 'out of the lane');
-    assert.ok(Math.hypot(x - LINE.at[0], z - LAP.lane[1]) < 2.2, 'by the finish line\'s south end: ' + Math.hypot(x - LINE.at[0], z - LAP.lane[1]).toFixed(1) + ' m');
+    assert.ok(Math.hypot(x - LINE.at[0], z - LAP.lane[1]) < 2.8, 'by the finish line\'s south end: ' + Math.hypot(x - LINE.at[0], z - LAP.lane[1]).toFixed(1) + ' m');
     assert.ok(z > BOX.c[1] + 3, 'on the outside of the last stretch, well off the lap\'s own line');
     for (const b of roomBlocks()) assert.ok(boxGap(aabb('', [x - 0.01, x + 0.01, z - 0.01, z + 0.01]), aabb('', b.box)) > 0.3, 'a body\'s room from ' + b.what);
-    assert.ok(lift[2] - z > 0.3 && lift[2] - z < 0.7 && x > lift[0] + 0.3, 'along the lift\'s north wall');
+    assert.ok(lift[2] - z > 0.3 && lift[2] - z < 0.7 && x > lift[0] + 1 && x < lift[1] + 1, 'along the lift\'s north wall, a metre and more from its west corner (the forklift\'s way from its bay)');
     assert.ok(wallGap(x, z) > 2);
     if (i) assert.ok(Math.hypot(x - LAP.watch[i - 1][0], z - LAP.watch[i - 1][1]) >= 0.75 - 1e-9, 'a body\'s room apart');
   });

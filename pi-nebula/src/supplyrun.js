@@ -128,7 +128,7 @@ export function makeSupplyRun({ crew = () => null, save = () => {}, forklift, br
     gotOff() {
       const r = R.run(); if (!(r && r.worked && r.loaded < r.pallets)) return;
       handed = true; const left = r.pallets - r.loaded, pp = people(), O = pp && pp.list ? pp.list.find((q) => q.id === CARGO.loader) : null, who = (O && O.name) || 'Cargo\'s loader';
-      banner = { t: 0, title: `${who} loads the rest`, words: `${who} drives the other ${left === 1 ? 'pallet' : `${left} pallets`} into the containers. Watch, or go on up the lift: the Hauler will be ready, across the bridge.` };
+      banner = { t: 0, title: `${who} loads the rest`, words: `${who} drives the other ${left === 1 ? 'pallet' : `${left} pallets`} into the containers. Watch, or go on up the lift: the Hauler will be ready.` };
     },
     // back on the forklift before the loader has climbed on: the loading is the player's again
     gotOn() { const r = R.run(); if (r && !r.byCrew && handed) { handed = false; banner = null; } },
