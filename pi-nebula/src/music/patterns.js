@@ -6,6 +6,9 @@
 // drop out and come back, the last bar of a section has a drum fill, and the heavy songs have builds (a snare roll
 // getting quicker under a rising hiss) into drops. After the opening section the sections go round in a loop; each time
 // round (a "cycle") the tunes and chords are made afresh from the seed, so ten minutes are not the same two bars.
+// A song that names a written tune (song.tune, src/music/tunes.js) goes its own way (FORMS.remix, tuneOf below): its
+// lead, melody, bass and pads play the tune's notes and chords as its sections arrange them; only the drums' little
+// variations still come from the seed.
 //
 //   barBlock(song, bar) -> the bar in the Sound Lab sequencer's own form (sound-lab/seq.js SONGS):
 //       { bpm, bars: 1, beats: 4, div: 4, swing, section, tracks: [{ inst, part, vol, notes: [[step, semi, len, vel]] }] }
@@ -25,6 +28,7 @@
 // band's seeded songs (mathwood-valley/src/stage.js): written afresh here, nothing imported.
 import { SCALES, KEYS, formOf } from './song.js';
 import { DRUMS, INSTRUMENTS, ROOT } from './patches.js';
+import { tuneBars } from './tunes.js';
 
 export const STEPS = 16, SECTION = 8;
 
@@ -72,14 +76,27 @@ export const FORMS = {
     { kind: 'drop', mask: M('full', 1, 1, 1, 1) },
     { kind: 'calm', mask: M('light', 0, 1, 0, 1) },
   ] },
+  // a song with a written tune (song.tune; the Old Joe Clark Remix): each section says which of the tune's parts it
+  // uses (part: 'A' or 'B', a section's 8 bars the part's 8) and how the lead, melody and bass play it (play, below at
+  // tuneOf); beat 'half': the chosen drums in half-time
+  remix: { tune: true, intro: { kind: 'intro', part: 'A', mask: M('light', 0, 1, 0, 1), play: { melody: 'riff' } }, loop: [
+    { kind: 'riff', part: 'A', mask: M('full', 1, 0, 0, 1), play: { bass: 'pump', melody: 'riff' } },
+    { kind: 'tune', part: 'A', mask: M('full', 1, 0, 1, 1), play: { bass: 'pump', lead: 'tune', melody: 'gaps' } },
+    { kind: 'tune', part: 'B', mask: M('full', 1, 0, 1, 1), play: { bass: 'pump', lead: 'tune', melody: 'gaps' } },
+    { kind: 'low', part: 'A', mask: M('half', 1, 1, 0, 0), play: { bass: 'tune' } },
+    { kind: 'breakdown', part: 'B', mask: M(0, 0, 1, 0, 1), play: { melody: 'slow' } },
+    { kind: 'build', part: 'A', mask: M('build', 0, 0, 1, 0), play: { lead: 'stutter' } },
+    { kind: 'drop', part: 'A', mask: M('full', 1, 0, 1, 1), play: { bass: 'pump', lead: 'tune', melody: 'riffhigh' } },
+    { kind: 'answer', part: 'B', mask: M('full', 1, 0, 1, 0), play: { bass: 'halves', lead: 'halves' } },
+  ] },
 };
 
 export function sectionAt(song, bar) {
   const F = FORMS[formOf(song)];
-  const barIn = bar % SECTION;
-  if (bar < SECTION) return { kind: F.intro.kind, mask: F.intro.mask, number: 0, barIn, cycle: 0, last: barIn === SECTION - 1 };
+  const barIn = bar % SECTION, more = (S) => (F.tune ? { part: S.part, play: S.play } : {});
+  if (bar < SECTION) return { kind: F.intro.kind, mask: F.intro.mask, number: 0, barIn, cycle: 0, last: barIn === SECTION - 1, ...more(F.intro) };
   const k = Math.floor((bar - SECTION) / SECTION), S = F.loop[k % F.loop.length];
-  return { kind: S.kind, mask: S.mask, number: k + 1, barIn, cycle: Math.floor(k / F.loop.length), last: barIn === SECTION - 1 };
+  return { kind: S.kind, mask: S.mask, number: k + 1, barIn, cycle: Math.floor(k / F.loop.length), last: barIn === SECTION - 1, ...more(S) };
 }
 
 // ── the key ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -217,7 +234,86 @@ function melodyOf(song, S, choice, chord) {
   return out;
 }
 
+// ── a written tune (song.tune), arranged ─────────────────────────────────────────────────────────────────────────
+// The tune's notes are scale steps (src/music/tunes.js), put into the song's key and scale here, so they are always in
+// its key. How each part plays it, by the section's `play`:
+//   lead   'tune'     the part's bar as written (A4 for the key's note in A): the tune plain, to be known by
+//          'stutter'  the build: the riff (below) cut shorter and shorter, said again and again (a whole bar, half,
+//                     a quarter, an eighth, then sixteenths), one beat of quiet before the drop
+//          'halves'   lead and bass trade bars: the lead the first of each two, the bass (two octaves down) the second
+//   melody 'riff'     the A part's first two bars (e f g f, e d c) at twice the speed: one bar, said over and over; the
+//                     fourth bar of each four ends with the A part's last turn instead (A B c A B G)
+//          'riffhigh' the same an octave up and softer, over the tune in the drop
+//          'gaps'     only where the tune breathes (the second half of bars 4 and 8): the riff's head answering it
+//          'slow'     the breakdown: the part's first four bars at half speed over its eight
+//   bass   'pump'     short notes between the kicks (the off-beats) on the chords' roots, the last of the bar an octave
+//                     up (four a bar: the FM ladder's every note is ten sources, so it is kept to four)
+//          'tune'     the tune's line itself, two octaves under the lead, under half-time drums
+//          'halves'   (with the lead, above)
+//   pads   the chords as the tune has them (A and G: the key's chord and the one a whole step under it), changing
+//          where the tune's chords change (mid-bar in some bars); they rest where the bar is already full (the tune,
+//          the build, the drop), so no more sounds are alive at once than in the busiest of the other presets
+const RIFF = [[0, 2, 4], [2, 2, 5], [4, 2, 6], [6, 2, 5], [8, 2, 4], [10, 2, 3], [12, 4, 2]];
+const RIFF_TURN = [[0, 2, 4], [2, 2, 5], [4, 2, 6], [6, 2, 5], [8, 1, 0], [9, 1, 1], [10, 1, 2], [11, 1, 0], [12, 2, 1], [14, 2, -1]];
+const PUMP = [[2, 2, 0], [6, 2, 0], [10, 2, 0], [14, 2, 1]];
+const chordStep = (tb, step) => { let c = tb.chords[0][1]; for (const [s, d] of tb.chords) if (s <= step) c = d; return c; };
+
+function tuneOf(song, S) {
+  const T = tonicOf(song), bars = tuneBars(song.tune), part = bars[S.part] || bars.A, play = S.play || {};
+  const tb = part[S.barIn % part.length], notes = [], b = S.barIn;
+  const at = (base, d) => degMidi(song, base, d);
+  const put = (p, sound, list, base, vel = 1, more) => { for (const [s, l, d] of list) if (s < 16) notes.push({ part: p, sound, step: s, len: Math.min(l, 16 - s), vel: Math.min(1, (s % 4 === 0 ? 0.75 : 0.62) * vel), midi: at(base, d), ...more }); };
+  const riffBar = () => (b % 4 === 3 ? RIFF_TURN : RIFF);
+  // (the breakdown's slow bar: the part's bar b/2, its first or second half spread over a whole bar)
+  const slowHalf = b % 2, slowBar = part[Math.floor(b / 2) % part.length];
+  const slow = slowBar.notes.filter(([s]) => s >= 8 * slowHalf && s < 8 * slowHalf + 8).map(([s, l, d]) => [(s - 8 * slowHalf) * 2, Math.min(l, 8 * slowHalf + 8 - s) * 2, d]);
+  const chords = play.melody === 'slow' ? [[0, chordStep(slowBar, 8 * slowHalf)]] : tb.chords;
+
+  const on = (p) => song[p] && song[p] !== 'off' && S.mask[p];
+  if (on('lead')) {
+    const L = play.lead, base = T + 12;
+    if (L === 'tune') put('lead', song.lead, tb.notes, base);
+    else if (L === 'halves' && b % 2 === 0) put('lead', song.lead, tb.notes, base);
+    else if (L === 'stutter') {
+      const cut = [16, 16, 8, 8, 4, 4, 2, 1][b], end = b === 7 ? 12 : 16, src = RIFF, out = [];
+      for (let o = 0; o < end; o += cut) for (const [s, l, d] of src) if (s < cut && o + s < end) out.push([o + s, Math.min(l, cut - s, end - o - s), d]);
+      put('lead', song.lead, out, base, 0.8 + 0.04 * b);
+    }
+  }
+  if (on('melody')) {
+    const L = play.melody, base = T + 12;
+    if (L === 'riff') put('melody', song.melody, riffBar(), base, 0.55);
+    else if (L === 'riffhigh') put('melody', song.melody, riffBar(), base + 12, 0.35);
+    else if (L === 'gaps') {
+      const end = tb.notes.reduce((e, [s, l]) => Math.max(e, s + l), 0);
+      if (end <= 8) put('melody', song.melody, RIFF.filter(([s]) => s < 8).map(([s, l, d]) => [s + 8, l, d]), base, 0.6);
+    } else if (L === 'slow') put('melody', song.melody, slow, base, 0.9);
+  }
+  if (on('bass')) {
+    const L = play.bass, lo = T - 17, sound = song.bass, more = sound === 'wobble' ? { wob: 2 } : {};
+    if (L === 'pump') {
+      for (const [s, l, up] of PUMP) notes.push({ part: 'bass', sound, step: s, len: l, vel: up ? 0.42 : 0.5, midi: into(at(T, chordStep(tb, s)), lo) + 12 * up, ...more });
+    } else if (L === 'tune' || (L === 'halves' && b % 2 === 1)) put('bass', sound, tb.notes, T - 12, 0.7, more);
+  }
+  if (on('pads')) {
+    const lo = song.pads === 'airy' ? T + 7 : song.pads === 'dark' ? T - 3 : T + 2;
+    chords.forEach(([s, d], i) => {
+      const end = i + 1 < chords.length ? chords[i + 1][0] : 16;
+      notes.push({ part: 'pads', sound: song.pads, step: s, len: end - s, vel: 0.7, midi: [d, d + 2, d + 4].map((x) => into(at(T, x), lo)).sort((a, b) => a - b) });
+    });
+  }
+  return { notes, chord: { root: chords[0][1], tones: [chords[0][1], chords[0][1] + 2, chords[0][1] + 4] } };
+}
+
 export function barNotes(song, bar) {
+  if (song.tune && tuneBars(song.tune)) {
+    const S = sectionAt(song, bar), notes = [];
+    const half = S.mask.beat === 'half';
+    if (song.beat && song.beat !== 'off' && S.mask.beat) notes.push(...beatOf(song, half ? { ...S, mask: { ...S.mask, beat: 'full' } } : S, bar, half ? 'half' : song.beat));
+    const t = tuneOf(song, S);
+    notes.push(...t.notes);
+    return { section: S, chord: t.chord, notes };
+  }
   const S = sectionAt(song, bar), chord = chordAt(song, S, bar), notes = [];
   const on = (p) => song[p] && song[p] !== 'off' && S.mask[p];
   const fast = formOf(song) !== 'flow';

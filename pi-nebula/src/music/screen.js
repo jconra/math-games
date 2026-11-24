@@ -27,7 +27,7 @@ const CSS = `
 .pnm-top { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
 .pnm-top b { font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); }
 .pnm-top small { flex: 1; font-size: 13px; color: var(--dim); letter-spacing: 0.04em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pnm-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; margin-bottom: 12px; }
+.pnm-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 6px; margin-bottom: 12px; }
 .pnm-b { min-height: 42px; padding: 4px 8px; font-size: 14px; letter-spacing: 0.03em; background: rgba(150, 210, 250, 0.07) !important;
   box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.25); clip-path: var(--oct); --cut: 8px; }
 .pnm-b:hover { box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.6); }
@@ -70,7 +70,7 @@ const CSS = `
 let styled = false;
 function style() { if (styled || typeof document === 'undefined') return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); }
 
-const same = (a, b) => ['bpm', 'key', 'scale', 'swing', 'seed', ...PARTS.map((p) => p.id)].every((k) => a[k] === b[k]);
+const same = (a, b) => ['bpm', 'key', 'scale', 'swing', 'seed', 'tune', ...PARTS.map((p) => p.id)].every((k) => a[k] === b[k]);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula.music' } = {}) {

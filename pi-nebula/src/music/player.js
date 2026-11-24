@@ -45,8 +45,8 @@ export const PLACES = [
 export const MIX = {
   parts: { beat: 1, bass: 1, pads: 1, lead: 1, melody: 1 },   // each part's level
   duck: 0.72,                                                  // the bass, pads, lead and melody under a kick (techno, heavy)
-  tone: { flow: 6000, drive: 8000, drop: 7500 },               // the whole music's top, Hz
-  trim: { flow: 1, drive: 1, drop: 1 },                        // each kind of song's level, so the presets match
+  tone: { flow: 6000, drive: 8000, drop: 7500, remix: 7500 },  // the whole music's top, Hz
+  trim: { flow: 1, drive: 1, drop: 1, remix: 1.08 },          // each kind of song's level, so the presets match
   rooms: { small: 0.7, big: 2.6 },                             // the two rooms' echo lengths, s
   out: 0.9,
 };
