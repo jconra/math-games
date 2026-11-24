@@ -12,7 +12,7 @@
 //     the legs and the braces, back for the stacking and the cables, up for the dish and the sky. A right answer and
 //     that step's parts go in: the faint plan of the 12 m mast; the pads go down one after another; the legs stand up;
 //     the braces go in (the youngest tap each wobbly face, on the card or on the mast itself, as at the dock's bridge);
-//     seven sections go up; the three arms reach out, the anchors and the six cables go on; the dish is
+//     seven sections go up; the anchors and the six cables go on; the dish is
 //     lifted to the top, tilted up and turned round (the old one goes down). Then THE TEST: switched on, the light at
 //     the top blinks, the dish sweeps the sky and the mast holds; and the last card is the call. Answered, the dish
 //     turns the last 5 degrees, its feed lights green, and the end card has the call, line by line (text only: no
@@ -20,7 +20,8 @@
 // The panel's `live` (src/jobs/panel.js): now() (the step being asked), ready(), right(q, coin), wrong(q, coin),
 // head(o), play(o, ui), over(), update(dt), aim(camera, dt), close(); state() for the rigs.
 import * as THREE from 'three';
-import { ANTENNA, TOP, parts, DISH_FOOT, dishPose, cableFrom, armWays, FACES as KFACES } from '../../kit/antenna.js';
+import { ANTENNA, TOP, parts, DISH_FOOT, dishPose, cableFrom, FACES as KFACES } from '../../kit/antenna.js';
+import { standingBoxes } from '../../kit/antenna-plan.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meshesOf } from '../../kit/dockbridge.js';
 import { makeMaterials } from '../../kit/materials.js';
@@ -35,7 +36,7 @@ function ensureCss() {
 if (typeof document !== 'undefined') ensureCss();
 
 // how long things take (seconds)
-export const TIMES = { intro: 3.8, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, arm: 0.4, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
+export const TIMES = { intro: 3.8, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
 export const WOBBLE = { amp: 0.07, hz: 1.2, jolt: 0.08 };
 const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the end card)
 // THE VIEWS (metres, in the antenna's frame: x east, y up from the tower's roof, z south): the camera stands `from` the
@@ -44,11 +45,11 @@ const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the e
 // phone (the band is short, so it stands further back). All from out in the open beside the tower's top, to the
 // south-west of it and over the roof's own height (the dish turns round to face that way, and nothing of the tower is
 // ever between): `low` looks down onto the roof for the footing, the legs and the braces; `whole` stands back for the
-// stacking, the arms and the cables; `top` and `sky` are up at the dish; `end` is the whole of it on the tower, the
+// stacking and the cables; `top` and `sky` are up at the dish; `end` is the whole of it on the tower, the
 // control room's windows below.
 // ON A PHONE the band over the card is a third of the screen, so a view's `tall` says where it looks and how much
 // further back it stands there, for the whole of what the step builds to be in that band: `whole` from the roof and
-// the arms' ends to the light at the very top; `end` the whole antenna on the tower's top (the control room's windows
+// the anchors on it to the light at the very top; `end` the whole antenna on the tower's top (the control room's windows
 // are under the card there). (Looking down from over the roof, the top edge of a phone's screen is just under level:
 // far enough back, the light at the very top is under that edge and the roof still over the card's.)
 export const VIEW = {
@@ -128,9 +129,7 @@ function make(W) {
   const targets = P.faces.map((f, k) => { const m = new THREE.Mesh(f.target, hitMat); m.visible = false; m.userData.face = k; root.add(m); return m; });
   const flashes = P.faces.map((f) => { const m = new THREE.Mesh(f.target, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 2.2, 2.6), transparent: true, opacity: 0, depthWrite: false, toneMapped: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); m.renderOrder = 4; sec0.add(m); return m; });
   const sections = P.sections.map((s, k) => { const g = groupOf('antenna: section ' + (k + 2), lit(s, mats, light)); g.matrixAutoUpdate = false; g.userData.y0 = (k + 1) * ANTENNA.sec; return g; });
-  // (each arm grows out from its inner end on the roof; each cable from where it leaves the mast)
-  const ways = armWays();
-  const arms = P.arms.map((a, k) => { const g = groupOf('antenna: arm ' + (k + 1), lit(a, mats, light)); g.matrixAutoUpdate = false; g.userData.at = new THREE.Vector3(ways[k][0] * ANTENNA.arm.from[k], ANTENNA.arm.y, ways[k][1] * ANTENNA.arm.from[k]); return g; });
+  // (each cable grows from where it leaves the mast)
   const anchors = P.anchors.map((a, k) => groupOf('antenna: anchor ' + (k + 1), lit(a, mats, light)));
   const cables = P.cables.map((c, k) => { const g = groupOf('antenna: cable ' + (k + 1), lit(c, mats, light)); g.matrixAutoUpdate = false; g.userData.at = new THREE.Vector3(...cableFrom(ANTENNA.bearings[k % 3], ANTENNA.holds[Math.floor(k / 3)])); return g; });
   const mount = groupOf('antenna: the dish mount', lit(P.mount, mats, light));
@@ -147,8 +146,8 @@ function make(W) {
   const bowl = groupOf('antenna: the bowl', lit(P.dish.bowl, mats, light, bowlM)); bowl.position.set(0, P.dish.pivot, 0); yoke.add(bowl);
   const feedMat = mats.glow.clone(); feedMat.color.setRGB(0.05, 0.12, 0.06);
   bowl.add(...meshesOf(P.dish.feed, { glow: feedMat }, light));
-  root.add(old, ghost, ...pads, sec0, ...sections, ...arms, ...anchors, ...cables, mount, beacon, tip, yoke);
-  MADE = { root, mats, old, ghost, planMat, pads, sec0, legs, braces, outlines, outlineMat, targets, flashes, sections, arms, anchors, cables, mount, beacon, beaconMat, halo, tip, yoke, bowl, feedMat, ms: Math.round(performance.now() - t0) };
+  root.add(old, ghost, ...pads, sec0, ...sections, ...anchors, ...cables, mount, beacon, tip, yoke);
+  MADE = { root, mats, old, ghost, planMat, pads, sec0, legs, braces, outlines, outlineMat, targets, flashes, sections, anchors, cables, mount, beacon, beaconMat, halo, tip, yoke, bowl, feedMat, ms: Math.round(performance.now() - t0) };
   return MADE;
 }
 // the antenna's frame in the world: on the control tower's roof where it stands, turned as the station is
@@ -165,7 +164,6 @@ function showBuilt(M, built, { on = built >= STEPS.length } = {}) {
   M.braces.forEach((b) => { b.visible = has(3); b.scale.setScalar(1); b.position.set(0, 0, 0); });
   M.outlines.forEach((o) => { o.visible = false; }); M.flashes.forEach((f) => { f.visible = false; });
   M.sections.forEach((s) => { s.visible = has(4); s.matrix.identity(); s.matrixWorldNeedsUpdate = true; });
-  M.arms.forEach((a) => { a.visible = has(5); a.matrix.identity(); a.matrixWorldNeedsUpdate = true; });
   M.anchors.forEach((a) => { a.visible = has(5); a.position.set(0, 0, 0); });
   M.cables.forEach((c) => { c.visible = has(5); c.matrix.identity(); c.matrixWorldNeedsUpdate = true; });
   M.mount.visible = has(6); M.yoke.visible = has(6);
@@ -177,7 +175,9 @@ function showBuilt(M, built, { on = built >= STEPS.length } = {}) {
 function aimDish(M, turn, tilt) { const p = dishPose(turn, tilt); M.yoke.rotation.set(0, p.yaw, 0); M.bowl.rotation.set(p.pitch, 0, 0); }
 // (the dish's own lighting was worked out with it aimed at 135 degrees: a few degrees off reads the same)
 
-// THE ANTENNA AS IT STANDS, with the station's outside: standingAntenna(W) -> { sync(crew), update(dt), held(on) }
+// THE ANTENNA AS IT STANDS, with the station's outside: standingAntenna(W) -> { sync(crew), update(dt), held(on), solid() }
+// (solid(): what a ship flown by hand bumps into there, as the crew member playing has it: { key, lists }, the lists
+// plain boxes in the station's frame (kit/antenna-plan.js standingBoxes) for src/outside.js triangles())
 export function standingAntenna(W) {
   const M = MADE || make(W);
   const parent = W.scene.getObjectByName('outside') || W.scene;
@@ -218,6 +218,8 @@ export function standingAntenna(W) {
     update(dt) { if (hold || !M.root.visible) return; clock += dt; if (key.endsWith(':true')) lightTop(M, (clock % 1.6) < 0.25 ? BEACON : DIM); },
     // (while the job is up it moves the parts itself)
     held(on) { hold = !!on; if (on) whole(false); else key = ''; },
+    // (what stands there as solid: the steps the crew member playing has built, all of them once repaired)
+    solid(crew = crewNow) { const a = antennaSeen(crew), n = a.repaired ? STEPS.length : a.built; return { key: 'antenna:' + n, lists: standingBoxes(n) }; },
     // (how many meshes it draws now, for the rigs)
     draws: () => { let n = 0; M.root.traverse((o) => { if ((o.isMesh || o.isSprite) && o.visible) { let shown = true; for (let p = o.parent; p && p !== M.root.parent; p = p.parent) if (!p.visible) shown = false; if (shown) n++; } }); return n; },
     M,
@@ -266,9 +268,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
       later(0.5, (k) => { M.planMat.opacity = 0.32 * (1 - k); }, () => { M.ghost.visible = false; M.beacon.visible = M.tip.visible = true; });
     }
     if (step === 5) {
-      // (the three arms reach out past the roof's edge, an anchor comes down on each one's end, the cables pull out)
-      const grow = (o, s) => { const A = o.userData.at; o.matrix.makeTranslation(A.x, A.y, A.z).multiply(new THREE.Matrix4().makeScale(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-A.x, -A.y, -A.z)); o.matrixWorldNeedsUpdate = true; };
-      M.arms.forEach((a) => later(TIMES.arm, (k) => { a.visible = true; grow(a, Math.max(0.01, ease(k))); }));
+      // (an anchor comes down on the roof toward each of three corners, the cables pull out)
       M.anchors.forEach((a) => later(TIMES.anchor, (k) => { a.visible = true; a.position.y = 0.9 * (1 - back(k)); }));
       M.cables.forEach((c) => later(TIMES.cable, (k) => { c.visible = true; const A = c.userData.at, s = Math.max(0.01, ease(k)); c.matrix.makeTranslation(A.x, A.y, A.z).multiply(new THREE.Matrix4().makeScale(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-A.x, -A.y, -A.z)); c.matrixWorldNeedsUpdate = true; }));
     }
@@ -331,7 +331,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
 
   // ── the panel's live ─────────────────────────────────────────────────────────────────────────────────────────
   const now = () => ({ step: Math.min(cur, STEPS.length - 1) });
-  const WAIT = ['The plan goes up...', 'The pads go down...', 'The legs stand up...', 'The braces go in...', 'The sections go up...', 'The arms and the cables go on...', 'The dish goes up...', 'Listening...'];
+  const WAIT = ['The plan goes up...', 'The pads go down...', 'The legs stand up...', 'The braces go in...', 'The sections go up...', 'The cables go on...', 'The dish goes up...', 'Listening...'];
   function ready() {
     if (finished || !queue.length) return true;
     return { ok: false, why: cur === 7 && !tested ? 'Switching on: the dish sweeps the sky...' : WAIT[Math.max(0, cur - 1)] || 'Building...' };

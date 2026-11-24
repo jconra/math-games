@@ -332,9 +332,11 @@ const CSS = `
 // what a ship of this bay bumps into, made once, as a job (about a third of a second's work on a desktop, more on a
 // phone: done a little each frame while the ship sits on its pad, and finished at once if it is wanted sooner)
 const SOLIDS = new Map();
-// (its own bay, and the other hangars' bays it can fly into by hand: cfg.others)
+// (its own bay, and the other hangars' bays it can fly into by hand: cfg.others; worked out again, the old one let go,
+// when what stands outside changes: outside.solidKey(), the radio tower as the crew member playing has it)
 export function solidFor(cfg, outside = null) {
-  const key = cfg.id;
+  const key = cfg.id + (outside && outside.solidKey ? '|' + outside.solidKey() : '');
+  for (const k of SOLIDS.keys()) if (k !== key && k.split('|')[0] === cfg.id) SOLIDS.delete(k);
   if (!SOLIDS.has(key)) SOLIDS.set(key, stationJob({ bay: cfg.dock ? null : cfg.bay || bayOf(cfg.pad[2]), bays: (cfg.others || []).map((o) => o.bay), lists: outside ? outside.triangles(cfg.id) : null }));
   return SOLIDS.get(key);
 }

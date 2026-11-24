@@ -51,6 +51,7 @@ import { createSky, DIR, skyDir } from '../../world/sky.js';
 import { shieldMaterial, U } from '../../kit/materials.js';
 import { hullMaterials, buildHull } from '../../kit/hull.js';
 import { buildOutside } from '../../kit/outside.js';
+import { standingAntenna } from '../../src/jobs/antennalink.js';
 import { OUTSIDE_BOX, OUTSIDE_VIEWS } from '../../kit/outside-plan.js';
 import { STATION_LOOK, SETTINGS, SETTING, HULL_LOOKS, LOOK_NAMES, GROUPS, GROUP_NAMES, FINISHES, FINISH_NAMES, FINISH_USES, readLook, writeLook, readShape, isLookText, sameLook, lookName, showValue } from '../../kit/hull-look.js';
 import { makeMenus } from '../crew/windows.js';
@@ -137,7 +138,12 @@ function rebuild() {
     // the whole station: the game's own outside (its plates laid again when their sizes change; the rest stays)
     if (hull && !outside) { hull.dispose(); hull = null; }
     if (outside) outside.relay(look);
-    else { const o = outside = buildOutside(look, mats, { shield }); hull = { group: o.group, get stats() { return o.stats; }, dispose() { o.dispose(); outside = null; } }; stage.add(o.group); }
+    else {
+      const o = outside = buildOutside(look, mats, { shield }); hull = { group: o.group, get stats() { return o.stats; }, dispose() { o.dispose(); outside = null; } }; stage.add(o.group);
+      // (the radio tower on the control tower's top, finished, as a crew member who has repaired it sees it:
+      // src/jobs/antennalink.js, with the station's outside)
+      try { standingAntenna({ scene: o.group.parent }).sync({ jobs: { antenna: { built: 8, repaired: true } } }, true); } catch (e) { console.warn('Hull Lab: the radio tower could not be made', e); }
+    }
   } else {
     if (hull) hull.dispose();
     // (every shape is laid flush: rows lapping like roof tiles are not offered any more)

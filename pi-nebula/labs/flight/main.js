@@ -55,6 +55,7 @@ import { makeVisit } from '../../src/visit.js';
 import { makeCrane } from '../../src/crane.js';
 import { makeHull } from '../../src/shiphull.js';
 import { addOutside } from '../../src/outside.js';
+import { standingAntenna } from '../../src/jobs/antennalink.js';
 import { startFlying } from '../../src/flying.js';
 import { flightOf, SHIP_IDS } from '../../src/fleet.js';
 import { sound } from '../../src/sound.js';
@@ -84,6 +85,11 @@ for (const D of W.built.glides || []) D.use = null;
 const boarding = LAB.boarding = makeBoarding({ W, walls, quality: W.quality });
 const crane = LAB.crane = makeCrane({ W, walls, boarding });
 const outside = LAB.outside = addOutside(W, { seed: q.has('seed') ? +q.get('seed') || 0 : Math.floor(Math.random() * 1e6) });
+// (the radio tower on the control tower's top, finished, as a crew member who has repaired it sees it: solid to a ship
+// flown here as in the game, src/jobs/antennalink.js)
+const REPAIRED = { jobs: { antenna: { built: 8, repaired: true } } };
+let tower = null;
+try { tower = LAB.tower = standingAntenna(W); tower.sync(REPAIRED, true); outside.solids.push(() => tower.solid(REPAIRED)); } catch (e) { console.warn('Flight Lab: the radio tower could not be made', e); }
 // (the other two hangars, for a ship flown into them: the alarm, the red lights, the parked ship shoved: src/visit.js;
 // the Miner's crane keeps the Miner, shoved, its canisters riding on it)
 const visit = LAB.visit = makeVisit({ W, boarding, outside, cfg, crane });
@@ -131,6 +137,7 @@ function tick(dt) {
   visit.update(dt, W.camera);
   sound.ears(W.camera);      // (the alarm is heard as coming from the hangar it is in)
   outside.update(W.camera, dt);
+  if (tower) tower.update(dt);
   if (F && hole.on) hole.place(W.camera, F.matrix);
   W.frame(dt, now, eyes);
 }

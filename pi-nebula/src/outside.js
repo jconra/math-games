@@ -39,7 +39,11 @@
 //   outside.near = hangarId | null        the other hangar a flown ship is lined up with and close to, or in (src/visit.js)
 //   outside.out                 true while the camera is out in space (a flown ship's, past the hull)
 //   outside.triangles()         the hull's and the gear's triangles as plain lists (what a flying ship bumps into), and
-//                               a plain box for each small ship parked on a roof pad
+//                               a plain box for each small ship parked on a roof pad, and whatever is in `solids`
+//   outside.solids              more that a flying ship bumps into, which may change: functions, each giving
+//                               { key, lists } (the radio tower as it stands for the crew member playing:
+//                               src/jobs/antennalink.js solid()); outside.solidKey() joins their keys, so that what a
+//                               ship bumps into is worked out again when one changes (src/flying.js solidFor)
 //   outside.jets                the small ships on the roof's pads this time (src/roofjets.js): [{ pad, at, yaw }];
 //                               outside.jetsDrawn: true once their file has come and they are drawn
 //   outside.jetCopy()           a promise of one more of them, for the control room's fly-past (src/lift.js)
@@ -235,8 +239,11 @@ export function addOutside(W, { seed = Math.floor(Math.random() * 1e6) } = {}) {
       out.group.traverse((o) => { if (o.isMesh && o.geometry.index && /^(hull:(band|tiers|trim)|outside:(gear|glow))$/.test(o.name)) lists.push({ position: o.geometry.attributes.position.array, index: o.geometry.index.array }); });
       for (const j of jets) lists.push(jetBox(j));
       const hb = skip === 'hauler' ? null : hauler.box(); if (hb) lists.push(hb);
+      for (const f of api.solids) { const s = f(); if (s) lists.push(...s.lists); }
       return lists;
     },
+    solids: [],
+    solidKey() { return api.solids.map((f) => { const s = f(); return s ? s.key : '-'; }).join('|'); },
     dispose() { W.rooms = null; bulk(null); if (jetTimer) clearTimeout(jetTimer); hauler.dispose(); for (const o of [...owned, ...jetOwned]) o.dispose(); out.dispose(); mats.dispose(); if (mirror) mirror.dispose(); },
   };
   // the last word on which rooms are drawn: the stand-in walls put away under the hull; from out in space, the rooms

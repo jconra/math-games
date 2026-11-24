@@ -20,8 +20,10 @@
 //   3 the first legs    four legs of 1.5 m: 3 m struts from the rack cut in half
 //   4 brace each face   a brace across each face, corner to corner (the youngest tap the wobbly faces, as at the dock)
 //   5 stack it up       eight sections of 1.5 m: 12 m
-//   6 cables to the arms   three at each of two heights; 12 m up and 5 m out: 13 m (the drawing: "cables to the roof";
-//                       the control tower's roof is 4.8 m across, so three arms carry the anchors 5 m out)
+//   6 cables to the roof   three at each of two heights; 6 m up and 2.5 m out: 6.5 m (the drawing: "cables to the
+//                       roof", 12 m up and 5 m out: 13 m; the control tower's roof is 4.8 m across, so the anchors stand
+//                       2.5 m out toward its corners: the game's maker, 2026-11-24, "B: No arms: short steep cables to
+//                       the roof's corners, and that one card's numbers change")
 //   7 the dish on top   tilted 30 degrees up, turned a right angle and half of one more: 135 degrees
 //   8 the test, a call  switched on, the dish sweeps and the mast holds; something is heard: three short, three long,
 //                       three short (SOS); one bar of five at 135 degrees, three bars turned 5 degrees more, to 140
@@ -46,7 +48,7 @@ export const STEPS = [
   { id: 'legs', name: 'The first legs' },
   { id: 'brace', name: 'Brace each face' },
   { id: 'stack', name: 'Stack it up' },
-  { id: 'cables', name: 'Cables to the arms' },
+  { id: 'cables', name: 'Cables to the roof' },
   { id: 'dish', name: 'The dish on top' },
   { id: 'call', name: 'The test, and a call' },
 ];
@@ -98,9 +100,8 @@ const sq = (V, A, B, r = 11) => {
 const ROOF_NAME = 'the control tower\'s roof';
 const roofLine = (y, x0 = 14, x1 = W - 14) => `<rect x="${x0}" y="${y}" width="${x1 - x0}" height="12" fill="${ROOF}"/>${text((x0 + x1) / 2, y + 26, ROOF_NAME, { size: 12, fill: SOFT, weight: 600 })}`;
 // the control tower's top seen from the side, x its middle: its roof 4.8 m across (u pixels a metre), its sides going
-// down from under it; and an arm out from the roof to an anchor at ax, propped from the tower's side
+// down from under it
 const towerTop = (x, y, u) => `<path d="M${f1(x - 2.4 * u)} ${y} H${f1(x + 2.4 * u)} L${f1(x + 3.4 * u)} ${f1(y + u)} V${y + 34} H${f1(x - 3.4 * u)} V${f1(y + u)} Z" fill="${ROOF}"/>${text(x, y + 28, 'the tower\'s roof', { size: 11, fill: SOFT, weight: 600 })}`;
-const armLine = (x, y, u, ax, col = STEEL) => { const d = Math.sign(ax - x); return seg([x + d * 2.4 * u, y + 3], [ax + d * 3, y + 3], col, 3) + seg([ax, y + 4], [x + d * 3.4 * u, y + 30], col, 2); };
 const fmt = (v) => (Number.isInteger(v) ? String(v) : String(+v.toFixed(2)));
 // a lattice mast seen from the side: x the middle, from y0 (its foot) up `n` sections of `s` pixels, `w` across
 function mastSide(x, y0, n, s, w = 26, { col = AMBER, braced = true, mark = false } = {}) {
@@ -228,24 +229,24 @@ function stackPicture({ mode = 'count', ask = true } = {}) {
   }
   return svg(248, o);
 }
-// 6. the cables: the mast, two heights, three cables from each; or the right triangle, 12 m up and 5 m out
+// 6. the cables: the mast, two heights, three cables from each; or the right triangle, 6 m up and 2.5 m out
 function cablesPicture({ mode = 'count', ask = true } = {}) {
   let o = '';
   if (mode === 'tri') {
-    const u = 15, A = [110, 204], T = [110, 204 - 12 * u], B = [110 + 5 * u, 204];
-    o += towerTop(110, 204, u) + armLine(110, 204, u, B[0]);
+    // (the whole 12 m mast on the tower's roof; the lower cable from 6 m up to its anchor on the roof, 2.5 m out)
+    const u = 15, A = [110, 204], T = [110, 204 - 6 * u], B = [110 + 2.5 * u, 204];
+    o += towerTop(110, 204, u);
     o += mastSide(110, 204, 8, 12 * u / 8, 18, { col: AMBER });
     o += seg(T, B, ask ? ASK : AMBER, 3, ask ? ' stroke-dasharray="8 6"' : '') + sq(A, B, T, 12) + dot(B, 6, AMBER);
-    o += text(92, 204 - 6 * u, '12 m', { size: 15, fill: GREEN, anchor: 'end' }) + text(B[0] + 12, 204 + 5, '5 m out', { size: 15, fill: GREEN, anchor: 'start' });
-    o += text(B[0] + 12, 204 + 24, 'on its arm', { size: 11, fill: SOFT, weight: 600, anchor: 'start' });
-    o += text((T[0] + B[0]) / 2 + 18, (T[1] + B[1]) / 2, ask ? '?' : '13 m', { size: ask ? 22 : 15, fill: ask ? ASK : GREEN, anchor: 'start' });
+    o += text(92, 204 - 3 * u, '6 m', { size: 15, fill: GREEN, anchor: 'end' }) + text(B[0] + 12, 204 + 5, '2.5 m out', { size: 15, fill: GREEN, anchor: 'start' });
+    o += text((T[0] + B[0]) / 2 + 18, (T[1] + B[1]) / 2, ask ? '?' : '6.5 m', { size: ask ? 22 : 15, fill: ask ? ASK : GREEN, anchor: 'start' });
     return svg(246, o);
   }
-  // the mast on the tower's roof, the three arms out from it, and three cables from each of two heights down to the
-  // anchors on the arms' ends (one arm behind the mast, seen as its own)
-  // (not to scale across: the arms drawn long, so that the six cables are easy to count)
-  const base = 204, x = 180, s = 22, u = s / 1.5, hi = base - 8 * s, lo = base - 4 * s, anchors = [x - 106, x + 106, x + 64];
-  o += towerTop(x, base, u) + anchors.map((ax, i) => armLine(x, base, u, ax, i === 2 ? 'rgba(159,176,194,.5)' : STEEL)).join('') + mastSide(x, base, 8, s, 20);
+  // the mast on the tower's roof, and three cables from each of two heights down to three anchors toward the roof's
+  // corners (one behind the mast, seen as its own)
+  // (not to scale across: the roof drawn wide, so that the six steep cables are easy to count)
+  const base = 204, x = 180, s = 22, hi = base - 8 * s, lo = base - 4 * s, anchors = [x - 60, x + 60, x + 34];
+  o += towerTop(x, base, 30) + mastSide(x, base, 8, s, 20);
   anchors.forEach((ax, i) => {
     const col = i === 2 ? 'rgba(123,224,160,.55)' : GREEN;
     o += seg([x + (ax < x ? -10 : 10), hi], [ax, base], col, 2) + seg([x + (ax < x ? -10 : 10), lo], [ax, base], col, 2) + dot([ax, base], 5, AMBER);
@@ -503,12 +504,11 @@ export const MAKERS = {
       return o;
     },
   },
-  // ── 6. cables to the arms: three at each of two heights; 12 m up, 5 m out: 13 m ──
+  // ── 6. cables to the roof: three at each of two heights; 6 m up, 2.5 m out: 6.5 m ──
   cables: {
     strand: 'number', at: (t) => [8, 8, 18, 86][t] ?? 86,
     make(tier = 1, { rand = Math.random } = {}) {
-      // (the anchors stand on the ends of three arms out from the tower's roof, which is too small for them)
-      const story = 'Cables from the mast down to an anchor ring on each of three arms, pulled tight: three at each of two heights.';
+      const story = 'Cables from the mast down to anchor rings on the roof, pulled tight: three at each of two heights.';
       if (tier <= 2) {
         const young = tier <= 1;
         const o = ownOrder({
@@ -524,13 +524,13 @@ export const MAKERS = {
         return o;
       }
       const o = ownOrder({
-        key: 'cables:3', story: `${story} The top ones run from 12 m up the mast to an anchor 5 m out.`, ask: 'How long is a top cable?',
-        right: M_(13),
-        slips: [{ ...M_(17), slip: 'added', why: '12 + 5 goes down the mast and out along the arm. The cable goes straight across.' }, { ...M_(12), slip: 'side', why: '12 m is the mast. The cable is the long side, longer than both.' }, { ...M_(14), slip: 'off', why: '14 × 14 = 196, but 5 × 5 + 12 × 12 = 169.' }],
-        rightWhy: '5 × 5 + 12 × 12 = 169, and 13 × 13 = 169: 13 m',
-        sum: [{ op: 'mul', a: 5, b: 5, say: 'Out to the anchor, squared' }, { op: 'mul', a: 12, b: 12, say: 'Up the mast, squared' }, { op: 'add', a: 25, b: 144, say: 'Add them: the cable squared' }],
-        help: { title: 'Squares on the sides', svg: cablesPicture({ mode: 'tri', ask: false }), line: 'The mast stands square to the roof and its arms, so the cable is the long side of a right triangle: the two short sides squared add up to it squared.', steps: ['5 × 5 and 12 × 12', 'Add them', 'Which number times itself makes that?'] },
-        own: { strand: 'geo', at: 86 }, credit: [{ strand: 'mul', at: 43, weight: 0.3 }], facts: { step: 'cables', tier, ans: 13 }, size: 2,
+        key: 'cables:3', story: `${story} The lower ones run from 6 m up the mast to an anchor 2.5 m out.`, ask: 'How long is a lower cable?',
+        right: M_(6.5),
+        slips: [{ ...M_(8.5), slip: 'added', why: '6 + 2.5 goes down the mast and along the roof. The cable goes straight across.' }, { ...M_(6), slip: 'side', why: '6 m is up the mast. The cable is the long side, longer than both.' }, { ...M_(7), slip: 'off', why: '7 × 7 = 49, but 2.5 × 2.5 + 6 × 6 = 42.25.' }],
+        rightWhy: '2.5 × 2.5 + 6 × 6 = 42.25, and 6.5 × 6.5 = 42.25: 6.5 m',
+        sum: [{ op: 'mul', a: 2.5, b: 2.5, say: 'Out along the roof, squared' }, { op: 'mul', a: 6, b: 6, say: 'Up the mast, squared' }, { op: 'add', a: 6.25, b: 36, say: 'Add them: the cable squared' }],
+        help: { title: 'Squares on the sides', svg: cablesPicture({ mode: 'tri', ask: false }), line: 'The mast stands square to the roof, so the cable is the long side of a right triangle: the two short sides squared add up to it squared.', steps: ['2.5 × 2.5 and 6 × 6', 'Add them', 'Which number times itself makes that?'] },
+        own: { strand: 'geo', at: 86 }, credit: [{ strand: 'mul', at: 43, weight: 0.3 }], facts: { step: 'cables', tier, ans: 6.5 }, size: 2,
       }, rand);
       o.lead = cablesPicture({ mode: 'tri' });
       return o;
@@ -623,7 +623,7 @@ export const PLACE = {
   levels: [
     { id: 'count', title: 'Count and shapes', line: 'Count the legs, the sections, the cables; find the square', grade: 4, strand: 'number', gen: { mix: mix(1) } },
     { id: 'groups', title: 'Halves, adding and groups', line: 'Half of a 3 m strut; 3 cables at each of 2 heights; 90° and 45°', grade: 22, strand: 'add', gen: { mix: mix(2) } },
-    { id: 'corners', title: 'Square corners and long sides', line: '1.5 m and 2 m at a square corner; 12 m up and 5 m out', grade: 60, strand: 'geo', gen: { mix: mix(3) } },
+    { id: 'corners', title: 'Square corners and long sides', line: '1.5 m and 2 m at a square corner; 6 m up and 2.5 m out', grade: 60, strand: 'geo', gen: { mix: mix(3) } },
   ],
 };
 // every level asks the step the antenna is at (live: the link's now(), { step }); with none (node, the levels page) any

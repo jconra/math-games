@@ -178,6 +178,8 @@ async function boot() {
     // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js; home from the run, its
     // share's pay slip first)
     links: { cargo: ({ crew, save: keep }) => (mission && mission.deskLive('cargo')) || cargoLink({ crew, save: keep, supply: GAME.supply, contract: !!(mission && mission.deskSigned('cargo')) }) } });
+  // (the radio tower on the control tower's top, as the crew member playing has it, is solid to a ship flown by hand)
+  outside.solids.push(() => (jobs.antenna ? jobs.antenna.solid(GAME.player) : null));
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });

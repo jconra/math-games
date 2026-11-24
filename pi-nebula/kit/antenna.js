@@ -6,12 +6,13 @@
 // the dish on top, tilted 30 degrees up and turned 135 degrees round from the station's bow.
 // IT STANDS AT THE VERY TOP OF THE STATION, on the control tower's roof (the game's maker, 2026-11-23: "at the very top
 // of the station, over the control tower"; kit/antenna-plan.js has the roof's measure). That roof is 4.8 m across, so
-// the anchors, 5 m out, stand on the ends of three arms that reach out past its edge, each bolted down on the roof and
-// propped from the tower's wall below; and the red light that was the station's tip stands on a slim rod over the dish.
+// the anchors stand on the roof itself, 2.5 m out toward three of its corners, and the cables run short and steep down
+// to them (the game's maker, 2026-11-24: "No arms: short steep cables to the roof's corners"); and the red light that
+// was the station's tip stands on a slim rod over the dish.
 // ITS OWN FRAME (metres): the footing's middle on the roof at y = 0, y up, x east (the station's bow, out of the hangar
 // doors), z south; the job stands it where it stands on the roof (ANTENNA.at).
 //   parts()        -> { old, ghost, pads: [Piece x4], legs, braces: [Piece x4], sections: [Piece x7] (2 to 8),
-//                     arms: [Piece x3], anchors: [Piece x3], cables: [Piece x6], mount, dish, beacon, tip,
+//                     anchors: [Piece x3], cables: [Piece x6], mount, dish, beacon, tip,
 //                     faces: [{ outline, target }] x4 }
 //                     every one in this frame, as it stands when built (the dish facing +z before its turn and tilt:
 //                     dishPose gives them)
@@ -21,8 +22,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Piece } from './piece.js';
 import { sweep, circle, line, lathe, put, bevelBox } from './geo.js';
-import { ANTENNA, TOWER_TOP, TOP, anchorsAt, armWays, squareOut, cableFrom, corners, FACES, DISH_PIVOT } from './antenna-plan.js';
-export { ANTENNA, TOWER_TOP, TOP, anchorsAt, armWays, cableFrom, corners, FACES, DISH_FOOT, DISH_PIVOT, DISH_TOP, dishPose } from './antenna-plan.js';
+import { ANTENNA, TOP, anchorsAt, cableFrom, corners, FACES, DISH_PIVOT } from './antenna-plan.js';
+export { ANTENNA, TOWER_TOP, TOP, anchorsAt, cableFrom, corners, FACES, DISH_FOOT, DISH_PIVOT, DISH_TOP, dishPose } from './antenna-plan.js';
 
 const PI = Math.PI;
 // a round rod from a to b
@@ -88,27 +89,11 @@ export function parts() {
   // ── sections 2 to 8, each braced as it goes up ──
   const sections = [];
   for (let k = 1; k < ANTENNA.n; k++) sections.push(sectionPiece(k));
-  // ── the three arms that carry the anchors out past the roof's edge: a tube bolted down on the roof at its inner end,
-  // a saddle under it at the roof's edge, a prop from under its outer end down to the tower's wall ──
-  const arm = ANTENNA.arm, D2R = PI / 180;
-  const arms = armWays().map(([ux, uz], k) => {
-    const p = new Piece(), turn = [0, -ANTENNA.bearings[k] * D2R, 0], at = (r, y = arm.y) => [ux * r, y, uz * r];
-    const from = arm.from[k], [long, wide] = arm.shoe;
-    rod(p, 'grey', at(from), at(arm.to), arm.r, 8);
-    p.add('solid', put(bevelBox([long, 0.06, wide], [0, 0, 0], { r: 0.012 }), at(from + long / 2 - 0.01, 0.03), turn), 'gun');
-    for (const s of [-1, 1]) for (const d of [0.05, long - 0.07]) p.cyl('rail', 0.022, 0.03, [ux * (from + d) - uz * s * (wide / 2 - 0.045), 0.075, uz * (from + d) + ux * s * (wide / 2 - 0.045)], null, 8);
-    // (the saddle stands down through the roof's plates, whatever their height there: 0.32 m at most)
-    const edge = squareOut(ux, uz, TOWER_TOP.half);
-    p.add('solid', put(bevelBox([0.36, 0.42, 0.3], [0, 0, 0], { r: 0.012 }), at(edge - 0.24, arm.y - arm.r - 0.2), turn), 'gun');
-    const wall = squareOut(ux, uz, TOWER_TOP.wall) + 0.3;
-    rod(p, 'grey', at(ANTENNA.out - 0.12, arm.y - arm.r * 0.6), at(wall, -arm.foot), arm.prop, 6);
-    p.add('solid', put(bevelBox([0.34, 0.3, 0.34], [0, 0, 0], { r: 0.012 }), at(wall, -arm.foot), turn), 'gun');
-    return p;
-  });
-  // ── the anchors on the arms' ends (a plate, a ring), and the cables: three from each height, one to each anchor ──
+  // ── the anchors on the roof (a block bolted down, a ring), and the cables: three from each height, one to each anchor ──
+  // (the block goes down to the roof's lowest plate under it)
   const anchors = A.map(([x, z], k) => {
     const p = new Piece(), y = ANTENNA.drop[k];
-    p.slab('gun', x - 0.22, x + 0.22, y, y + 0.05, z - 0.22, z + 0.22, { r: 0.012 });
+    p.slab('gun', x - 0.22, x + 0.22, y - 0.24, y + 0.05, z - 0.22, z + 0.22, { r: 0.012 });
     p.cyl('dark', 0.05, 0.16, [x, y + 0.12, z], null, 8);
     const ring = new THREE.TorusGeometry(0.07, 0.018, 6, 14); ring.rotateY(Math.atan2(-x, -z) + PI / 2); ring.translate(x, y + 0.26, z); p.add('solid', ring, 'rail');
     return p;
@@ -138,7 +123,7 @@ export function parts() {
   tip.cyl('dark', 0.05, 0.1, [T.at[0], T.h - 2 * T.r - 0.03, T.at[1]], null, 8);
   // ── the new dish, in its own frame: the turntable's top at its foot, the yoke, the bowl facing +z ──
   const dish = dishPiece();
-  return { old, ghost, pads, legs, braces, faces, sections, arms, anchors, cables, mount, beacon, tip, dish };
+  return { old, ghost, pads, legs, braces, faces, sections, anchors, cables, mount, beacon, tip, dish };
 }
 // the dish: a yoke (two arms up from the turntable) and the bowl between them, a feed out in front on three struts
 function dishPiece() {
