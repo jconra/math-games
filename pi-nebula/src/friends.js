@@ -92,8 +92,10 @@ export function waitWords(ms) {
 }
 
 // NAMES FOR THE RESCUED: nobody on the station knows theirs until they say it; each is given one as they come home
-// (kept with their record), none of them a name of the station's own people
-export const RESCUED_NAMES = ['Nell', 'Otto', 'Rosa', 'Finn', 'Mira', 'Dev', 'June', 'Kip', 'Lena', 'Abe', 'Zara', 'Theo', 'Iris', 'Cal', 'Wren', 'Omar', 'Nina', 'Gus', 'Elsa', 'Rafi', 'Bea', 'Lou', 'Hugo', 'Yara'];
+// (kept with their record), none of them a name of the station's own people: those who walk it (src/life.js ROSTER),
+// those at work in the control room and in Cargo (ROOM_CREW), the captains' crews (src/missions.js ROLES) and
+// Mathball's own players (tests/friends.test.mjs holds the list to that)
+export const RESCUED_NAMES = ['Nora', 'Emil', 'Rosa', 'Joss', 'Mira', 'Dev', 'June', 'Kip', 'Lena', 'Abe', 'Zara', 'Sid', 'Iris', 'Cal', 'Pru', 'Omar', 'Nina', 'Ned', 'Elsa', 'Rafi', 'Bea', 'Lou', 'Hugo', 'Yara'];
 export function nameFor(taken = [], rand = Math.random) {
   const free = RESCUED_NAMES.filter((n) => !taken.includes(n));
   const L = free.length ? free : RESCUED_NAMES;

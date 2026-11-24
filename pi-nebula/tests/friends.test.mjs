@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import { FRIENDS, meterOf, add, talk, talkWait, tap, staysForGood, agreesToCrew, leavesAt, left, makeFriends, waitWords, nameFor, nameOf, RESCUED_NAMES } from '../src/friends.js';
 import { kept, WARD, ABOUT } from '../src/wardplan.js';
 import { FRIEND_TALK, friendTalk } from '../src/lines.js';
-import { ROSTER } from '../src/life.js';
+import { ROSTER, ROOM_CREW } from '../src/life.js';
+import { MISSIONS, roleOf } from '../src/missions.js';
 
 const MIN = 60e3;
 
@@ -115,9 +116,13 @@ test('who left is kept (look, name, the meter they had) and their ward record le
 });
 
 test('the rescued get names of their own; the talks read well', () => {
-  const station = ROSTER.map((d) => String(d.name || '').toLowerCase());
+  // (everyone with a name already: who walks the station, who works in the control room and in Cargo, the captains'
+  // crews, Mathball's own players; "Teo" and "Theo" sound the same, so that one is held off by hand)
+  const station = [...ROSTER, ...ROOM_CREW, ...Object.values(MISSIONS).flatMap((M) => (M.roles || []).map((id) => ({ name: roleOf(M, id).crew }))), { name: 'Ola' }, { name: 'Theo' }].map((d) => String(d.name || '').toLowerCase());
+  assert.ok(station.includes('nell') && station.includes('pilot wren') && station.includes('ola'), 'the list of names in use reaches Cargo, the crews and the arena');
   for (const n of RESCUED_NAMES) assert.ok(!station.some((s) => s.split(/\s+/).includes(n.toLowerCase())), n + ' is a station person\'s name');
-  assert.notEqual(nameFor(['Nell'], () => 0), 'Nell');
+  assert.equal(new Set(RESCUED_NAMES).size, RESCUED_NAMES.length, 'no name twice');
+  assert.notEqual(nameFor(['Nora'], () => 0), 'Nora');
   assert.equal(nameOf('x'), nameOf('x'));
   for (const t of [...FRIEND_TALK.yours, ...FRIEND_TALK.rescued]) {
     assert.ok(t.lines.length >= 2 && t.lines.length <= 4, t.id);
