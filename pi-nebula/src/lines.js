@@ -238,6 +238,18 @@ export const SCAN_TALK = {
   done: ["All done! You're in great shape.", "All finished. Everything looks fine!", "That's it! All clear."],
   thanks: ["Thanks, {medic}!", "Thank you!", "Thanks! See you soon."],
 };
+// A ROUTINE CHECK-UP at the big scanner (src/checkup.js; the game's maker, 2026-11-23: "people that live on the station
+// getting routine check ups"): the medic's words to one of the station's own people called in for theirs, and their
+// answers, in bubbles (words only), the same moments as SCAN_TALK. Nothing is wrong with anyone: it is a check-up.
+export const CHECKUP_TALK = {
+  hello: ["Hi {patient}! Time for your check-up. Hop up on the bed.", "Hello, {patient}! Just your routine check-up. Up you get.", "Check-up time, {patient}! Up on the bed, please."],
+  answer: ["Okay!", "Sure thing.", "Is it that time again?"],
+  still: ["Lie nice and still now.", "Here we go. Keep still for me.", "Relax. It's only a check-up."],
+  during: ["Looking good.", "Everything looks just fine.", "Breathe normally. You're doing great."],
+  late: ["Almost done now.", "Nearly finished.", "One more pass to go."],
+  done: ["All done! Fit as ever.", "All finished. See you at your next check-up!", "That's it! Nothing to worry about."],
+  thanks: ["Thanks, {medic}!", "Thank you!", "Thanks! See you next time."],
+};
 
 // THE FORKLIFT LAP in Cargo (src/cargolap.js; the game's maker, 2026-11-22: "an employee might say they can do a lap in
 // 30 seconds or whatever"): what Cargo's loader says, in bubbles (words only). offer: as the player comes near, two

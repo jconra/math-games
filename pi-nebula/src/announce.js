@@ -60,6 +60,7 @@
 import { news } from './news.js';
 import { missions } from './missions.js';
 import { outcome } from './wardplan.js';
+import { paged } from './checkup.js';
 
 export const ANNOUNCE = {
   first: [25, 40],      // s after the crew member wakes, the first
@@ -340,7 +341,8 @@ export function makeAnnounce({ sound, W, visit = null, people = () => null, crew
     const pp = people(), c = crew(), captains = {};
     if (pp) for (const id of ['vega', 'ruiz', 'hale', 'adair']) { const P = pp.list.find((x) => x.id === id); if (P) captains[id] = { state: missions.state(id, c), room: roomOf(P) }; }
     const busy = pp && pp.SCAN ? pp.SCAN.busy : null;
-    if (busy && busy !== scanWas && busy.medic) events.push('scan');
+    // (not for a routine check-up of one of the station's own: src/checkup.js paged)
+    if (busy && busy !== scanWas && paged(busy)) events.push('scan');
     scanWas = busy;
     const alarm = visit && visit.alarm ? visit.alarm.hangar : null;
     if (alarm && alarm !== alarmWas) events.push('alarm');
