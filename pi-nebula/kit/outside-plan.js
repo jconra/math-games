@@ -55,7 +55,8 @@
 //                  landing pad each. On each end arm a pyramid with its top cut off
 //   the masses     below the lower terrace, two bulky bevelled masses, unlike each other: a block under the north end
 //                  that runs out over it, and a long thick slab under the south half, on the dock side
-//   the spire      above the middle hangar: a tower, the control centre with its windows, a mast and the beacon
+//   the spire      above the middle hangar: a tower, the control centre with its windows; on its top, the radio tower
+//                  (kit/antenna.js: where the plain mast and the beacon stood)
 //   the keel       below the middle hangar: the radiators round it, the reactor ball under it
 //   the girders    out of the smelter end and out of the medical end, two pairs of solar wings on each
 //   the west side  THE SHELL, as he sketched it: one big bevelled mass 12 m tall over the terminal, the arena, the
@@ -430,8 +431,10 @@ export const gearColour = (name) => { const c = GEAR_COLOURS[name]; return Array
 export function outsideGear(opts = {}) {
   const G = new Tris(), L = new Tris(), H = new Tris(), X = SPIRE.x, Z = SPIRE.z;
   const [steel, dark, gold, cell, frame, pale, yellow, red, white, teal] = ['steel', 'dark', 'gold', 'cell', 'frame', 'pale', 'yellow', 'red', 'white', 'teal'].map(gearColour);
-  // the spire's mast and beacon
-  G.drum([X, SPIRE_TOP + 6.5, Z], 0.45, 13, steel, 8); L.ball([X, SPIRE_TOP + 15, Z], 2.2, white, 14); L.ball([X, SPIRE_TOP + 17.9, Z], 0.6, red, 8);
+  // (the spire's top: the plain pole, its white ball and the red light at its tip stood here until 2026-11-23. The
+  // game's maker, asked where the radio tower should stand: "I was thinking it would be at the very top of the station,
+  // over the control tower." So the radio tower stands there now, each crew member's own as far as they have built it,
+  // its red light the station's tip: kit/antenna.js, src/jobs/antennalink.js)
   // the keel: four radiators round it; the reactor ball under it in its ring, four struts, a mast
   // THE RADIATORS (the game's maker, 2026-11-19, of the flat orange faces they had: "the radiator needs some work. It
   // looks like a cartoon. I was thinking it would be black and glowing red like hot metal, maybe pulsing."): each is a

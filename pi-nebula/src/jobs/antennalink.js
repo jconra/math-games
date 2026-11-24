@@ -1,15 +1,18 @@
-// THE RADIO TOWER, LIVE: what joins the radio desk's cards (src/jobs/antenna.js) to the antenna on the roof
-// (kit/antenna.js). It stands on the roof's raised level just south-west of the control tower's foot (kit/antenna.js
-// ANTENNA.at says why there), 21 m below the control room the job is worked from.
+// THE RADIO TOWER, LIVE: what joins the radio desk's cards (src/jobs/antenna.js) to the antenna (kit/antenna.js). It
+// stands at the very top of the station, on the control tower's roof (the game's maker, 2026-11-23: "at the very top of
+// the station, over the control tower"; kit/antenna-plan.js ANTENNA.at and the roof's measure), 15 m over the control
+// room the job is worked from.
 //   - THE ANTENNA AS IT STANDS (standingAntenna): drawn with the station's outside (a part of it: hidden whenever the
 //     outside is), as the crew member playing has it: the old dish on its pole until the new one is built; each step
-//     built so far; once the radio tower is repaired, the whole new antenna, its red light at the top lit.
-//   - WHILE THE JOB IS UP: the view glides from the radio desk out through the window and down to the antenna (no dark
-//     screen: the game's maker, 2026-11-18, "as little of black screen, magically appear in the game as possible"),
-//     and follows the build: low for the footing, the legs and the braces, back for the stacking and the cables, up for
-//     the dish and the sky. A right answer and that step's parts go in: the faint plan of the 12 m mast; the pads go
-//     down one after another; the legs stand up; the braces go in (the youngest tap each wobbly face, on the card or
-//     on the mast itself, as at the dock's bridge); seven sections go up; the anchors and the six cables; the dish is
+//     built so far; once the radio tower is repaired, the whole new antenna, its red light at the very top lit.
+//   - WHILE THE JOB IS UP: the view glides from the radio desk out through the corner window and up the tower's side to
+//     its top (no dark screen: the game's maker, 2026-11-18, "as little of black screen, magically appear in the game
+//     as possible"), and from out there, beside and a little over the roof (so neither the control room's ceiling nor
+//     the roof's own edge is ever in front of the work), it follows the build: near and looking down for the footing,
+//     the legs and the braces, back for the stacking and the cables, up for the dish and the sky. A right answer and
+//     that step's parts go in: the faint plan of the 12 m mast; the pads go down one after another; the legs stand up;
+//     the braces go in (the youngest tap each wobbly face, on the card or on the mast itself, as at the dock's bridge);
+//     seven sections go up; the three arms reach out, the anchors and the six cables go on; the dish is
 //     lifted to the top, tilted up and turned round (the old one goes down). Then THE TEST: switched on, the light at
 //     the top blinks, the dish sweeps the sky and the mast holds; and the last card is the call. Answered, the dish
 //     turns the last 5 degrees, its feed lights green, and the end card has the call, line by line (text only: no
@@ -17,7 +20,7 @@
 // The panel's `live` (src/jobs/panel.js): now() (the step being asked), ready(), right(q, coin), wrong(q, coin),
 // head(o), play(o, ui), over(), update(dt), aim(camera, dt), close(); state() for the rigs.
 import * as THREE from 'three';
-import { ANTENNA, TOP, parts, DISH_FOOT, dishPose, FACES as KFACES } from '../../kit/antenna.js';
+import { ANTENNA, TOP, parts, DISH_FOOT, dishPose, cableFrom, armWays, FACES as KFACES } from '../../kit/antenna.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meshesOf } from '../../kit/dockbridge.js';
 import { makeMaterials } from '../../kit/materials.js';
@@ -32,32 +35,54 @@ function ensureCss() {
 if (typeof document !== 'undefined') ensureCss();
 
 // how long things take (seconds)
-export const TIMES = { intro: 2.4, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
+export const TIMES = { intro: 3.2, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, arm: 0.4, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
 export const WOBBLE = { amp: 0.07, hz: 1.2, jolt: 0.08 };
 const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the end card)
-// THE VIEWS (metres, in the antenna's frame: x east, y up from the roof, z south): the camera stands `from` the point
-// it looks at, `look`, and turns so that point lands at the screen point `on` (-1..1 across, -1..1 up): left of the
-// panel on a wide screen, in the band above it on a phone, whatever the screen's shape; `far` on a phone (the band is
-// short, so it stands further back). From the south-west, the tower behind the mast.
+// THE VIEWS (metres, in the antenna's frame: x east, y up from the tower's roof, z south): the camera stands `from` the
+// point it looks at, `look`, and turns so that point lands at the screen point `on` (-1..1 across, -1..1 up): left of
+// the panel on a wide screen, in the band above it on a phone, whatever the screen's shape; `far` on a phone (the band
+// is short, so it stands further back). All from out in the open beside the tower's top, to the south-west of it and
+// over the roof's own height (the dish turns round to face that way, and nothing of the tower is ever between): `low`
+// looks down onto the roof for the footing, the legs and the braces; `whole` stands back for the stacking, the arms
+// and the cables; `top` and `sky` are up at the dish; `end` is the whole of it on the tower, the control room's windows
+// below.
 export const VIEW = {
   low: { look: [0, 0.8, 0], from: [-3.2, 4.4, 6.4], fov: 50 },
-  whole: { look: [0, 6.2, 0], from: [-6.5, 3.2, 18.5], fov: 52 },
+  whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52 },
   top: { look: [0, 12.6, 0], from: [-2.6, 1.6, 6.4], fov: 52 },
   sky: { look: [0, 12.9, 0], from: [-3.8, -1.2, 7.8], fov: 54 },
-  end: { look: [0, 9, 0], from: [-9.5, 2.2, 23], fov: 55 },
+  end: { look: [0, -2, 0], from: [-13, 6, 37], fov: 55 },
   on: { wide: [-0.36, 0], tall: [0, 0.6] }, far: 1.4,
 };
 // which view each step is asked from (the step being asked: 0 the old antenna ... 7 the call)
 const VIEW_OF = ['whole', 'low', 'low', 'low', 'whole', 'whole', 'top', 'sky'];
-// THE GLIDE OUT goes through the control room's south-west corner window (the one over the antenna; kit/tower.js, its
-// cut corner's middle at about (34, 31) in the station's frame), from a point just inside the pane to one outside it
-export const GLIDE = { inside: new THREE.Vector3(34.6, 46.1, 30.4), outside: new THREE.Vector3(32.6, 45.6, 32.4) };
+// THE GLIDE OUT goes through the control room's south-west corner window (kit/tower.js, its cut corner's middle at
+// about (34, 31) in the station's frame), from a point just inside the pane to one outside it, then out and up past the
+// control room's roof (`clear`: well out from the roof's edge, a little over it) to the view at the tower's top
+export const GLIDE = { inside: new THREE.Vector3(34.6, 46.1, 30.4), outside: new THREE.Vector3(32.6, 45.6, 32.4), clear: new THREE.Vector3(28.5, 53, 37.5) };
 // the light outside (the kit's saved-light units, as the dock's bridge has it): the sun and the planet's glow
 const SUN = { i: 2.2, c: [1, 0.95, 0.88] }, SHINE = { i: 0.45, c: [0.55, 0.75, 1.0] }, FILL = { i: 0.12, c: [0.6, 0.7, 0.85] };
 const ease = (t) => t * t * (3 - 2 * t);
 const back = (t) => { const s = 1.6; t -= 1; return t * t * ((s + 1) * t + s) + 1; };
 const clamp01 = (t) => Math.max(0, Math.min(1, t));
 const BEACON = [3.2, 0.25, 0.18], FEED = [0.6, 3.2, 1.0];
+// THE LIGHT AT THE VERY TOP IS SEEN FROM FAR: a small soft glow round it that keeps its size on the screen however far
+// off it is looked at from (HALO: its size, as a part of the view's height at a 60 degree lens: about 8 dots of 800), so
+// that the station's tip still shows its red light to a ship far out, as the old pole's red ball did. Near, it is
+// inside the light's own ball.
+const HALO = 0.011;
+let HALO_MAP = null;
+function haloMap() {
+  if (HALO_MAP) return HALO_MAP;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.3, 'rgba(255,255,255,0.5)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 32, 32);
+  return (HALO_MAP = new THREE.CanvasTexture(c));
+}
+// the top's lights: their colour (dark, dim between blinks, or lit), and the far glow with it
+function lightTop(M, c) { M.beaconMat.color.setRGB(c[0], c[1], c[2]); const k = clamp01((c[0] - 0.3) / 2); M.halo.material.opacity = k; M.halo.visible = k > 0.01; }
+const DARK = [0.12, 0.03, 0.03], DIM = [0.3, 0.03, 0.02];
 
 function lightOf() {
   const sun = SKY.sun.clone().normalize(), shine = SKY.planet.clone().normalize();
@@ -98,11 +123,17 @@ function make(W) {
   const targets = P.faces.map((f, k) => { const m = new THREE.Mesh(f.target, hitMat); m.visible = false; m.userData.face = k; root.add(m); return m; });
   const flashes = P.faces.map((f) => { const m = new THREE.Mesh(f.target, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 2.2, 2.6), transparent: true, opacity: 0, depthWrite: false, toneMapped: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); m.renderOrder = 4; sec0.add(m); return m; });
   const sections = P.sections.map((s, k) => { const g = groupOf('antenna: section ' + (k + 2), lit(s, mats, light)); g.matrixAutoUpdate = false; g.userData.y0 = (k + 1) * ANTENNA.sec; return g; });
+  // (each arm grows out from its inner end on the roof; each cable from where it leaves the mast)
+  const ways = armWays();
+  const arms = P.arms.map((a, k) => { const g = groupOf('antenna: arm ' + (k + 1), lit(a, mats, light)); g.matrixAutoUpdate = false; g.userData.at = new THREE.Vector3(ways[k][0] * ANTENNA.arm.from[k], ANTENNA.arm.y, ways[k][1] * ANTENNA.arm.from[k]); return g; });
   const anchors = P.anchors.map((a, k) => groupOf('antenna: anchor ' + (k + 1), lit(a, mats, light)));
-  const cables = P.cables.map((c, k) => { const g = groupOf('antenna: cable ' + (k + 1), lit(c, mats, light)); g.matrixAutoUpdate = false; const h = ANTENNA.holds[Math.floor(k / 3)], b = ANTENNA.bearings[k % 3] * Math.PI / 180; g.userData.at = new THREE.Vector3(Math.cos(b) * ANTENNA.half * 1.05, h, Math.sin(b) * ANTENNA.half * 1.05); return g; });
+  const cables = P.cables.map((c, k) => { const g = groupOf('antenna: cable ' + (k + 1), lit(c, mats, light)); g.matrixAutoUpdate = false; g.userData.at = new THREE.Vector3(...cableFrom(ANTENNA.bearings[k % 3], ANTENNA.holds[Math.floor(k / 3)])); return g; });
   const mount = groupOf('antenna: the dish mount', lit(P.mount, mats, light));
   const beaconMat = mats.glow.clone(); beaconMat.color.setRGB(0.12, 0.03, 0.03);
   const beacon = groupOf('antenna: the light at the top', meshesOf(P.beacon, { glow: beaconMat }, light));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap(), color: new THREE.Color(2.0, 0.14, 0.09), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false, toneMapped: false, fog: false }));
+  halo.name = 'antenna: the far glow of the light at the very top'; halo.scale.setScalar(HALO); halo.position.set(ANTENNA.tip.at[0], ANTENNA.tip.h - ANTENNA.tip.r, ANTENNA.tip.at[1]); halo.visible = false; beacon.add(halo);
+  const tip = groupOf('antenna: the rod of the light at the very top', lit(P.tip, mats, light));
   // the dish as it stands when aimed (its parts lit there): the yoke turns about y on the turntable, the bowl tilts on it
   const pose = dishPose(), foot = new THREE.Vector3(...DISH_FOOT());
   const yokeM = new THREE.Matrix4().makeRotationY(pose.yaw).setPosition(foot);
@@ -111,11 +142,11 @@ function make(W) {
   const bowl = groupOf('antenna: the bowl', lit(P.dish.bowl, mats, light, bowlM)); bowl.position.set(0, P.dish.pivot, 0); yoke.add(bowl);
   const feedMat = mats.glow.clone(); feedMat.color.setRGB(0.05, 0.12, 0.06);
   bowl.add(...meshesOf(P.dish.feed, { glow: feedMat }, light));
-  root.add(old, ghost, ...pads, sec0, ...sections, ...anchors, ...cables, mount, beacon, yoke);
-  MADE = { root, mats, old, ghost, planMat, pads, sec0, legs, braces, outlines, outlineMat, targets, flashes, sections, anchors, cables, mount, beacon, beaconMat, yoke, bowl, feedMat, ms: Math.round(performance.now() - t0) };
+  root.add(old, ghost, ...pads, sec0, ...sections, ...arms, ...anchors, ...cables, mount, beacon, tip, yoke);
+  MADE = { root, mats, old, ghost, planMat, pads, sec0, legs, braces, outlines, outlineMat, targets, flashes, sections, arms, anchors, cables, mount, beacon, beaconMat, halo, tip, yoke, bowl, feedMat, ms: Math.round(performance.now() - t0) };
   return MADE;
 }
-// the antenna's frame in the world: on the roof where it stands, turned as the station is
+// the antenna's frame in the world: on the control tower's roof where it stands, turned as the station is
 const FRAME = new THREE.Matrix4().makeTranslation(...ANTENNA.at);
 const toWorld = (v) => v.applyMatrix4(FRAME);
 
@@ -129,12 +160,13 @@ function showBuilt(M, built, { on = built >= STEPS.length } = {}) {
   M.braces.forEach((b) => { b.visible = has(3); b.scale.setScalar(1); b.position.set(0, 0, 0); });
   M.outlines.forEach((o) => { o.visible = false; }); M.flashes.forEach((f) => { f.visible = false; });
   M.sections.forEach((s) => { s.visible = has(4); s.matrix.identity(); s.matrixWorldNeedsUpdate = true; });
+  M.arms.forEach((a) => { a.visible = has(5); a.matrix.identity(); a.matrixWorldNeedsUpdate = true; });
   M.anchors.forEach((a) => { a.visible = has(5); a.position.set(0, 0, 0); });
   M.cables.forEach((c) => { c.visible = has(5); c.matrix.identity(); c.matrixWorldNeedsUpdate = true; });
   M.mount.visible = has(6); M.yoke.visible = has(6);
   aimDish(M, ANTENNA.dish.turn + (on ? SIGNAL.best - SIGNAL.at : 0), ANTENNA.dish.tilt);
   M.yoke.position.set(...DISH_FOOT());
-  M.beacon.visible = has(4); M.beaconMat.color.setRGB(...(on ? BEACON : [0.12, 0.03, 0.03]));
+  M.beacon.visible = M.tip.visible = has(4); lightTop(M, on ? BEACON : DARK);
   M.feedMat.color.setRGB(...(on ? FEED : [0.05, 0.12, 0.06]));
 }
 function aimDish(M, turn, tilt) { const p = dishPose(turn, tilt); M.yoke.rotation.set(0, p.yaw, 0); M.bowl.rotation.set(p.pitch, 0, 0); }
@@ -149,7 +181,8 @@ export function standingAntenna(W) {
   if (M.root.parent !== parent) parent.add(M.root);
   let crewNow = null, key = '', hold = false, clock = 0;
   // (the whole antenna standing still, repaired: its painted parts drawn as one mesh, made the first time it is wanted;
-  // its two lights stay their own, the red one at the top blinking. The job moves the parts themselves)
+  // its lights stay their own: the red ones at the top blinking, the far glow of the one at the very top, the dish's
+  // feed. The job moves the parts themselves)
   const solidParts = () => { const list = []; M.root.traverse((o) => { if (o.isMesh && o.material === M.mats.solid && o !== M.merged) list.push(o); }); return list; };
   function whole(on) {
     if (on && !M.merged) {
@@ -177,11 +210,11 @@ export function standingAntenna(W) {
       if (a.repaired) whole(true);
     },
     // (its light at the top blinks once it is switched on)
-    update(dt) { if (hold || !M.root.visible) return; clock += dt; if (key.endsWith(':true')) { const on = (clock % 1.6) < 0.25; M.beaconMat.color.setRGB(...(on ? BEACON : [0.3, 0.03, 0.02])); } },
+    update(dt) { if (hold || !M.root.visible) return; clock += dt; if (key.endsWith(':true')) lightTop(M, (clock % 1.6) < 0.25 ? BEACON : DIM); },
     // (while the job is up it moves the parts itself)
     held(on) { hold = !!on; if (on) whole(false); else key = ''; },
     // (how many meshes it draws now, for the rigs)
-    draws: () => { let n = 0; M.root.traverse((o) => { if (o.isMesh && o.visible) { let shown = true; for (let p = o.parent; p && p !== M.root.parent; p = p.parent) if (!p.visible) shown = false; if (shown) n++; } }); return n; },
+    draws: () => { let n = 0; M.root.traverse((o) => { if ((o.isMesh || o.isSprite) && o.visible) { let shown = true; for (let p = o.parent; p && p !== M.root.parent; p = p.parent) if (!p.visible) shown = false; if (shown) n++; } }); return n; },
     M,
   };
 }
@@ -193,8 +226,8 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
   const S0 = standing || standingAntenna(W), M = S0.M;
   S0.held(true);
   const dustWas = W.dust ? W.dust.visible : false;
-  // (while the view is out on the roof, only the control room is drawn of the station's rooms: the ones under the roof
-  // could not be seen, and the hangar below the camera cost as much again)
+  // (while the view is out at the tower's top, only the control room is drawn of the station's rooms: the ones under the
+  // roofs could not be seen, and the hangars far below cost as much again)
   const roomsWas = W.rooms;
   let out = false;
   W.rooms = (z, drawn) => { const d = roomsWas ? roomsWas(z, drawn) : drawn; return out ? z.id === 'tower' : d; };
@@ -225,14 +258,18 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
     }
     if (step === 4) {
       M.sections.forEach((s) => { later(TIMES.section, (k) => { s.visible = true; const y0 = s.userData.y0; s.matrix.makeTranslation(0, y0, 0).multiply(new THREE.Matrix4().makeScale(1, Math.max(0.02, back(k)), 1)).multiply(new THREE.Matrix4().makeTranslation(0, -y0, 0)); s.matrixWorldNeedsUpdate = true; }); });
-      later(0.5, (k) => { M.planMat.opacity = 0.32 * (1 - k); }, () => { M.ghost.visible = false; M.beacon.visible = true; });
+      later(0.5, (k) => { M.planMat.opacity = 0.32 * (1 - k); }, () => { M.ghost.visible = false; M.beacon.visible = M.tip.visible = true; });
     }
     if (step === 5) {
+      // (the three arms reach out past the roof's edge, an anchor comes down on each one's end, the cables pull out)
+      const grow = (o, s) => { const A = o.userData.at; o.matrix.makeTranslation(A.x, A.y, A.z).multiply(new THREE.Matrix4().makeScale(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-A.x, -A.y, -A.z)); o.matrixWorldNeedsUpdate = true; };
+      M.arms.forEach((a) => later(TIMES.arm, (k) => { a.visible = true; grow(a, Math.max(0.01, ease(k))); }));
       M.anchors.forEach((a) => later(TIMES.anchor, (k) => { a.visible = true; a.position.y = 0.9 * (1 - back(k)); }));
       M.cables.forEach((c) => later(TIMES.cable, (k) => { c.visible = true; const A = c.userData.at, s = Math.max(0.01, ease(k)); c.matrix.makeTranslation(A.x, A.y, A.z).multiply(new THREE.Matrix4().makeScale(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-A.x, -A.y, -A.z)); c.matrixWorldNeedsUpdate = true; }));
     }
     if (step === 6) {
-      // lifted from the roof to the top, then tilted up and turned round from the bow; the old one goes down meanwhile
+      // lifted from the tower's roof to the mast's top, then tilted up and turned round from the bow; the old one goes
+      // down meanwhile
       M.mount.visible = true; M.yoke.visible = true; aimDish(M, 0, 0);
       const foot = DISH_FOOT(), y0 = 0.4;
       later(TIMES.lift, (k) => { M.yoke.position.set(foot[0], y0 + (foot[1] - y0) * ease(k), foot[2]); M.old.scale.set(1, Math.max(0.01, 1 - ease(k)), 1); }, () => { M.old.visible = false; });
@@ -251,7 +288,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
     later(TIMES.test, (k) => {
       const sweep = Math.sin(k * Math.PI * 3) * 28 * Math.sin(Math.PI * k);
       aimDish(M, ANTENNA.dish.turn + sweep, ANTENNA.dish.tilt);
-      M.beaconMat.color.setRGB(...((k * 6) % 1 < 0.3 ? BEACON : [0.3, 0.03, 0.02]));
+      lightTop(M, (k * 6) % 1 < 0.3 ? BEACON : DIM);
       if (k > 0.45 && k < 0.6) jolt = Math.max(jolt, 0.35);
       M.feedMat.color.setRGB(...FEED.map((c) => c * (k > 0.85 ? 0.25 : 0.05)));
     }, () => { tested = true; aimDish(M, SIGNAL.at, ANTENNA.dish.tilt); });
@@ -289,7 +326,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
 
   // ── the panel's live ─────────────────────────────────────────────────────────────────────────────────────────
   const now = () => ({ step: Math.min(cur, STEPS.length - 1) });
-  const WAIT = ['The plan goes up...', 'The pads go down...', 'The legs stand up...', 'The braces go in...', 'The sections go up...', 'The cables go on...', 'The dish goes up...', 'Listening...'];
+  const WAIT = ['The plan goes up...', 'The pads go down...', 'The legs stand up...', 'The braces go in...', 'The sections go up...', 'The arms and the cables go on...', 'The dish goes up...', 'Listening...'];
   function ready() {
     if (finished || !queue.length) return true;
     return { ok: false, why: cur === 7 && !tested ? 'Switching on: the dish sweeps the sky...' : WAIT[Math.max(0, cur - 1)] || 'Building...' };
@@ -378,40 +415,48 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
     _sh.set(1, k, 0, 0, 0, 1, 0, 0, 0, k * 0.4, 1, 0, 0, 0, 0, 1);
     M.sec0.matrix.copy(_sh); M.sec0.matrixWorldNeedsUpdate = true;
     // (the call heard: the light at the top blinks on)
-    if (heard || finished) { const on = (clock % 1.6) < 0.25; M.beaconMat.color.setRGB(...(on ? BEACON : [0.3, 0.03, 0.02])); }
+    if (heard || finished) lightTop(M, (clock % 1.6) < 0.25 ? BEACON : DIM);
   }
 
-  // ── the camera: out of the window and down to the roof ──────────────────────────────────────────────────────────
+  // ── the camera: out of the window and up to the tower's top ─────────────────────────────────────────────────────
   const want = new THREE.Vector3(), lookAt = new THREE.Vector3(), probe = new THREE.PerspectiveCamera();
   const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion(), from0 = new THREE.Vector3(), q0 = new THREE.Quaternion();
-  let fresh = true, forced = null, intro = TIMES.intro, introT = 0, fov0 = 60;
+  let fresh = true, forced = null, intro = TIMES.intro, introT = 0, fov0 = 60, viewNow = 'whole';
+  // (the probe turned to look at the view's point from a place, that point at the screen point `on`)
+  function lookFrom(at, V, tall, aspect) {
+    const on = VIEW.on[tall ? 'tall' : 'wide'], tv = Math.tan(V.fov * Math.PI / 360), th = tv * aspect;
+    probe.position.copy(at); probe.up.set(0, 1, 0); probe.lookAt(lookAt);
+    probe.rotateY(Math.atan(on[0] * th)); probe.rotateX(-Math.atan(on[1] * tv));
+  }
   function poseFor(V, tall, aspect) {
-    const k = tall ? VIEW.far : 1, on = VIEW.on[tall ? 'tall' : 'wide'];
+    const k = tall ? VIEW.far : 1;
     toWorld(lookAt.set(...V.look));
     toWorld(want.set(V.look[0] + V.from[0] * k, V.look[1] + V.from[1] * k, V.look[2] + V.from[2] * k));
-    probe.position.copy(want); probe.up.set(0, 1, 0); probe.lookAt(lookAt);
-    const tv = Math.tan(V.fov * Math.PI / 360), th = tv * aspect;
-    probe.rotateY(Math.atan(on[0] * th)); probe.rotateX(-Math.atan(on[1] * tv));
+    lookFrom(want, V, tall, aspect);
   }
   function aim(camera, dt = 1 / 60) {
     const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640;
     const end = finished && !queue.length;
-    const V = VIEW[forced || (end ? 'end' : VIEW_OF[Math.min(queue.length && anim != null ? anim : cur, STEPS.length - 1)])];
+    viewNow = forced || (end ? 'end' : VIEW_OF[Math.min(queue.length && anim != null ? anim : cur, STEPS.length - 1)]);
+    const V = VIEW[viewNow];
     poseFor(V, tall, camera.aspect || innerWidth / innerHeight);
     out = true;
     if (fresh) {
-      // (the glide out: from the player's own view at the desk, out through the window over it, round and down to the
-      // roof; the lens eased from the walking camera's to the view's)
+      // (the glide out: from the player's own view at the desk, out through the corner window, out past the control
+      // room's roof and up the tower's side to its top; the lens eased from the walking camera's to the view's)
       from0.copy(camera.position); q0.copy(camera.quaternion); fov0 = camera.fov; fresh = false; introT = 0;
       if (intro <= 0) { camPos.copy(want); camQ.copy(probe.quaternion); }
     }
     if (intro > 0) {
       introT += dt; const t = clamp01(introT / intro), e = ease(t);
       // (a curve from the desk, through the control room's south-west corner window (GLIDE: a point just inside its
-      // pane and one outside it), round and down to the view, at an even speed along it)
-      const curve = new THREE.CatmullRomCurve3([from0.clone(), GLIDE.inside.clone(), GLIDE.outside.clone(), want.clone()], false, 'centripetal');
+      // pane and one outside it), out clear of the roof over it, and up to the view, at an even speed along it)
+      const curve = new THREE.CatmullRomCurve3([from0.clone(), GLIDE.inside.clone(), GLIDE.outside.clone(), GLIDE.clear.clone(), want.clone()], false, 'centripetal');
       curve.getPointAt(e, camPos);
-      camQ.copy(q0).slerp(probe.quaternion, ease(clamp01((t - 0.1) / 0.8)));
+      // (turned toward the work from wherever it is on the way: out of the window it looks up the tower's side at its
+      // top, so the place it is going to is in sight the whole way up, and it arrives turned as the view is)
+      lookFrom(camPos, V, tall, camera.aspect || innerWidth / innerHeight);
+      camQ.copy(q0).slerp(probe.quaternion, ease(clamp01((t - 0.08) / 0.6)));
       camera.fov = fov0 + (V.fov - fov0) * e; camera.updateProjectionMatrix();
       // (the station's rooms drawn as ever while the camera is still in the control room)
       const z = W.room('tower'); out = !(z && z.box.containsPoint(camPos));
@@ -445,7 +490,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
   return {
     now, ready, right, wrong, head, play, over, update, aim, close,
     // (for the rigs: where the build is, the faces to tap on screen, a tap on one, a view to look from)
-    state: () => ({ cur, finished, tested, heard, queue: queue.length, braced: [...braced].sort(), loose: +loose.toFixed(2), built: crew ? antennaOf(crew).built : cur, repaired: crew ? antennaOf(crew).repaired : false, out, intro: +Math.max(0, intro - introT).toFixed(2), made: M.ms }),
+    state: () => ({ cur, finished, tested, heard, view: viewNow, queue: queue.length, braced: [...braced].sort(), loose: +loose.toFixed(2), built: crew ? antennaOf(crew).built : cur, repaired: crew ? antennaOf(crew).repaired : false, out, intro: +Math.max(0, intro - introT).toFixed(2), made: M.ms }),
     look: (name = null) => { forced = name && VIEW[name] ? name : null; },
     facesOnScreen: () => {
       const r = W.renderer.domElement.getBoundingClientRect(), list = [], v = new THREE.Vector3();

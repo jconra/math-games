@@ -9,14 +9,19 @@
 //   2026-11-22  (EXPL1-2) the station in distress "should be quickly discovered after the radio tower is repaired. And if
 //               the radio tower is not repaired I think Capt Vega should mention that we might be able to find more
 //               signals if the radio tower was built."
+//   2026-11-23  asked where it should stand: "I was thinking it would be at the very top of the station, over the
+//               control tower." So it stands on the control tower's roof (kit/antenna-plan.js), and the cards' words
+//               name that place.
 // THE EIGHT STEPS, one card each, as the drawing's eight panels (what is placed in each, and its math):
 //   1 the old antenna   how tall the new one must be: past 9 m, and more: 12 m (the drawing: "over the hangar roofs, 9 m,
-//                       and more"; where it stands now, by the tower's foot, the 9 m is what it must get past)
+//                       and more"; where it stands now, on top of the control tower, nothing is over it: the 9 m is
+//                       how tall it must stand to hear further out than our own ships)
 //   2 lay the footing   four pads at the corners of a 2 m square (a square; is its corner square? 1.5, 2, 2.5)
 //   3 the first legs    four legs of 1.5 m: 3 m struts from the rack cut in half
 //   4 brace each face   a brace across each face, corner to corner (the youngest tap the wobbly faces, as at the dock)
 //   5 stack it up       eight sections of 1.5 m: 12 m
-//   6 cables to the roof   three at each of two heights; 12 m up and 5 m out: 13 m
+//   6 cables to the arms   three at each of two heights; 12 m up and 5 m out: 13 m (the drawing: "cables to the roof";
+//                       the control tower's roof is 4.8 m across, so three arms carry the anchors 5 m out)
 //   7 the dish on top   tilted 30 degrees up, turned a right angle and half of one more: 135 degrees
 //   8 the test, a call  switched on, the dish sweeps and the mast holds; something is heard: three short, three long,
 //                       three short (SOS); one bar of five at 135 degrees, three bars turned 5 degrees more, to 140
@@ -41,7 +46,7 @@ export const STEPS = [
   { id: 'legs', name: 'The first legs' },
   { id: 'brace', name: 'Brace each face' },
   { id: 'stack', name: 'Stack it up' },
-  { id: 'cables', name: 'Cables to the roof' },
+  { id: 'cables', name: 'Cables to the arms' },
   { id: 'dish', name: 'The dish on top' },
   { id: 'call', name: 'The test, and a call' },
 ];
@@ -90,7 +95,12 @@ const sq = (V, A, B, r = 11) => {
   const [a, b, c] = [p(1, 0), p(1, 1), p(0, 1)];
   return `<path d="M${f1(a[0])} ${f1(a[1])} L${f1(b[0])} ${f1(b[1])} L${f1(c[0])} ${f1(c[1])}" fill="none" stroke="${INK}" stroke-width="2"/>`;
 };
-const roofLine = (y, x0 = 14, x1 = W - 14) => `<rect x="${x0}" y="${y}" width="${x1 - x0}" height="12" fill="${ROOF}"/>${text((x0 + x1) / 2, y + 26, 'the roof', { size: 12, fill: SOFT, weight: 600 })}`;
+const ROOF_NAME = 'the control tower\'s roof';
+const roofLine = (y, x0 = 14, x1 = W - 14) => `<rect x="${x0}" y="${y}" width="${x1 - x0}" height="12" fill="${ROOF}"/>${text((x0 + x1) / 2, y + 26, ROOF_NAME, { size: 12, fill: SOFT, weight: 600 })}`;
+// the control tower's top seen from the side, x its middle: its roof 4.8 m across (u pixels a metre), its sides going
+// down from under it; and an arm out from the roof to an anchor at ax, propped from the tower's side
+const towerTop = (x, y, u) => `<path d="M${f1(x - 2.4 * u)} ${y} H${f1(x + 2.4 * u)} L${f1(x + 3.4 * u)} ${f1(y + u)} V${y + 34} H${f1(x - 3.4 * u)} V${f1(y + u)} Z" fill="${ROOF}"/>${text(x, y + 28, 'the tower\'s roof', { size: 11, fill: SOFT, weight: 600 })}`;
+const armLine = (x, y, u, ax, col = STEEL) => { const d = Math.sign(ax - x); return seg([x + d * 2.4 * u, y + 3], [ax + d * 3, y + 3], col, 3) + seg([ax, y + 4], [x + d * 3.4 * u, y + 30], col, 2); };
 const fmt = (v) => (Number.isInteger(v) ? String(v) : String(+v.toFixed(2)));
 // a lattice mast seen from the side: x the middle, from y0 (its foot) up `n` sections of `s` pixels, `w` across
 function mastSide(x, y0, n, s, w = 26, { col = AMBER, braced = true, mark = false } = {}) {
@@ -110,7 +120,7 @@ function mastSide(x, y0, n, s, w = 26, { col = AMBER, braced = true, mark = fals
 function tallPicture({ ask = true, lowM = 9, newM = 12, oldM = 3 } = {}) {
   const u = 13, base = 196, top = (m) => base - m * u;
   let o = roofLine(base);
-  // the 9 m line: below it, the sky is blocked
+  // the 9 m line: below it, too low to hear further out
   o += `<rect x="14" y="${top(lowM)}" width="${W - 28}" height="${lowM * u}" fill="rgba(255,120,90,.07)"/>` + dash([14, top(lowM)], [W - 14, top(lowM)], 'rgba(255,150,120,.75)');
   o += seg([300, base], [300, top(lowM)], GREEN, 2) + text(312, top(lowM / 2) + 5, `${lowM} m`, { size: 15, fill: GREEN, anchor: 'start' });
   o += text(258, top(lowM) + 18, 'too low', { size: 12, fill: 'rgba(255,170,150,.9)', weight: 600 });
@@ -222,21 +232,27 @@ function stackPicture({ mode = 'count', ask = true } = {}) {
 function cablesPicture({ mode = 'count', ask = true } = {}) {
   let o = '';
   if (mode === 'tri') {
-    const u = 15, A = [70, 210], T = [70, 210 - 12 * u], B = [70 + 5 * u, 210];
-    o += roofLine(210, 30, 330) + mastSide(70, 210, 8, 12 * u / 8, 18, { col: AMBER });
+    const u = 15, A = [110, 204], T = [110, 204 - 12 * u], B = [110 + 5 * u, 204];
+    o += towerTop(110, 204, u) + armLine(110, 204, u, B[0]);
+    o += mastSide(110, 204, 8, 12 * u / 8, 18, { col: AMBER });
     o += seg(T, B, ask ? ASK : AMBER, 3, ask ? ' stroke-dasharray="8 6"' : '') + sq(A, B, T, 12) + dot(B, 6, AMBER);
-    o += text(52, 210 - 6 * u, '12 m', { size: 15, fill: GREEN, anchor: 'end' }) + text((A[0] + B[0]) / 2 + 10, 236, '5 m', { size: 15, fill: GREEN });
+    o += text(92, 204 - 6 * u, '12 m', { size: 15, fill: GREEN, anchor: 'end' }) + text(B[0] + 12, 204 + 5, '5 m out', { size: 15, fill: GREEN, anchor: 'start' });
+    o += text(B[0] + 12, 204 + 24, 'on its arm', { size: 11, fill: SOFT, weight: 600, anchor: 'start' });
     o += text((T[0] + B[0]) / 2 + 18, (T[1] + B[1]) / 2, ask ? '?' : '13 m', { size: ask ? 22 : 15, fill: ask ? ASK : GREEN, anchor: 'start' });
     return svg(246, o);
   }
-  // the mast, and three cables from each of two heights, out to three anchors (one behind the mast, seen as its own)
-  const base = 210, x = 180, s = 22, hi = base - 8 * s, lo = base - 4 * s, anchors = [60, 300, 236];
-  o += roofLine(base, 30, 330) + mastSide(x, base, 8, s, 20);
+  // the mast on the tower's roof, the three arms out from it, and three cables from each of two heights down to the
+  // anchors on the arms' ends (one arm behind the mast, seen as its own)
+  // (not to scale across: the arms drawn long, so that the six cables are easy to count)
+  const base = 204, x = 180, s = 22, u = s / 1.5, hi = base - 8 * s, lo = base - 4 * s, anchors = [x - 106, x + 106, x + 64];
+  o += towerTop(x, base, u) + anchors.map((ax, i) => armLine(x, base, u, ax, i === 2 ? 'rgba(159,176,194,.5)' : STEEL)).join('') + mastSide(x, base, 8, s, 20);
   anchors.forEach((ax, i) => {
     const col = i === 2 ? 'rgba(123,224,160,.55)' : GREEN;
     o += seg([x + (ax < x ? -10 : 10), hi], [ax, base], col, 2) + seg([x + (ax < x ? -10 : 10), lo], [ax, base], col, 2) + dot([ax, base], 5, AMBER);
   });
-  o += text(x + 26, hi + 4, 'here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 }) + text(x + 26, lo + 4, 'and here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 });
+  // (the two heights named out at the side, clear of the cables, a faint line from each to the mast)
+  o += dash([x + 14, hi], [x + 122, hi], 'rgba(143,163,182,.45)', 1) + dash([x + 14, lo], [x + 122, lo], 'rgba(143,163,182,.45)', 1);
+  o += text(x + 126, hi + 4, 'here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 }) + text(x + 126, lo + 4, 'and here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 });
   if (!ask) o += text(W / 2, 22, mode === 'groups' ? '3 and 3: 6 cables' : '6 cables', { size: 15, fill: GREEN });
   return svg(240, o);
 }
@@ -303,8 +319,10 @@ export const MAKERS = {
     strand: 'number', at: (t) => [4, 4, 22, 22][t] ?? 22,
     make(tier = 1, { rand = Math.random } = {}) {
       // (the drawing's story had the old pole on the terminal's roof with the hangars beside it, 9 m over it; where the
-      // antenna stands now, at the tower's foot, the 9 m is told as what it must get past to hear further)
-      const story = 'The old dish is on a 3 m pole: too low, it only hears our own ships. To hear further out, the new antenna must stand more than 9 m tall.';
+      // antenna stands now, on top of the control tower, nothing stands over it: the 9 m is told as how tall it must
+      // be to hear further out than our own ships)
+      // (kept as short as it was: a phone's card has no room for another line)
+      const story = 'The old dish on top of the control tower is on a 3 m pole: too low, it only hears our own ships. To hear further, the new antenna must stand more than 9 m tall.';
       if (tier <= 1) {
         return ownOrder({
           key: 'tall:1', story, ask: 'Which new antenna is taller than 9 m?',
@@ -485,11 +503,12 @@ export const MAKERS = {
       return o;
     },
   },
-  // ── 6. cables to the roof: three at each of two heights; 12 m up, 5 m out: 13 m ──
+  // ── 6. cables to the arms: three at each of two heights; 12 m up, 5 m out: 13 m ──
   cables: {
     strand: 'number', at: (t) => [8, 8, 18, 86][t] ?? 86,
     make(tier = 1, { rand = Math.random } = {}) {
-      const story = 'Cables from the mast down to anchor rings on the roof, pulled tight: three at each of two heights.';
+      // (the anchors stand on the ends of three arms out from the tower's roof, which is too small for them)
+      const story = 'Cables from the mast down to an anchor ring on each of three arms, pulled tight: three at each of two heights.';
       if (tier <= 2) {
         const young = tier <= 1;
         const o = ownOrder({
@@ -507,10 +526,10 @@ export const MAKERS = {
       const o = ownOrder({
         key: 'cables:3', story: `${story} The top ones run from 12 m up the mast to an anchor 5 m out.`, ask: 'How long is a top cable?',
         right: M_(13),
-        slips: [{ ...M_(17), slip: 'added', why: '12 + 5 goes down the mast and along the roof. The cable goes straight across.' }, { ...M_(12), slip: 'side', why: '12 m is the mast. The cable is the long side, longer than both.' }, { ...M_(14), slip: 'off', why: '14 × 14 = 196, but 5 × 5 + 12 × 12 = 169.' }],
+        slips: [{ ...M_(17), slip: 'added', why: '12 + 5 goes down the mast and out along the arm. The cable goes straight across.' }, { ...M_(12), slip: 'side', why: '12 m is the mast. The cable is the long side, longer than both.' }, { ...M_(14), slip: 'off', why: '14 × 14 = 196, but 5 × 5 + 12 × 12 = 169.' }],
         rightWhy: '5 × 5 + 12 × 12 = 169, and 13 × 13 = 169: 13 m',
-        sum: [{ op: 'mul', a: 5, b: 5, say: 'Out along the roof, squared' }, { op: 'mul', a: 12, b: 12, say: 'Up the mast, squared' }, { op: 'add', a: 25, b: 144, say: 'Add them: the cable squared' }],
-        help: { title: 'Squares on the sides', svg: cablesPicture({ mode: 'tri', ask: false }), line: 'The mast stands square to the roof, so the cable is the long side of a right triangle: the two short sides squared add up to it squared.', steps: ['5 × 5 and 12 × 12', 'Add them', 'Which number times itself makes that?'] },
+        sum: [{ op: 'mul', a: 5, b: 5, say: 'Out to the anchor, squared' }, { op: 'mul', a: 12, b: 12, say: 'Up the mast, squared' }, { op: 'add', a: 25, b: 144, say: 'Add them: the cable squared' }],
+        help: { title: 'Squares on the sides', svg: cablesPicture({ mode: 'tri', ask: false }), line: 'The mast stands square to the roof and its arms, so the cable is the long side of a right triangle: the two short sides squared add up to it squared.', steps: ['5 × 5 and 12 × 12', 'Add them', 'Which number times itself makes that?'] },
         own: { strand: 'geo', at: 86 }, credit: [{ strand: 'mul', at: 43, weight: 0.3 }], facts: { step: 'cables', tier, ans: 13 }, size: 2,
       }, rand);
       o.lead = cablesPicture({ mode: 'tri' });
@@ -600,7 +619,7 @@ const mix = (tier) => STEPS.map((s) => M(s.id, tier));
 export const PLACE = {
   id: 'antenna', name: 'The radio tower', short: 'Radio', math: 'Building the antenna',
   pic: 'antenna', job: null,
-  line: 'Build the station\'s new antenna a part at a time from the radio desk: the footing, the legs, the braces, the sections, the cables and the dish; then listen.',
+  line: 'Build the station\'s new antenna on top of the control tower, a part at a time from the radio desk: the footing, the legs, the braces, the sections, the cables and the dish; then listen.',
   levels: [
     { id: 'count', title: 'Count and shapes', line: 'Count the legs, the sections, the cables; find the square', grade: 4, strand: 'number', gen: { mix: mix(1) } },
     { id: 'groups', title: 'Halves, adding and groups', line: 'Half of a 3 m strut; 3 cables at each of 2 heights; 90° and 45°', grade: 22, strand: 'add', gen: { mix: mix(2) } },
@@ -622,7 +641,8 @@ export const JOB = {
   spot: { piece: 'console', variant: 'radio', room: 'tower', local: [0, 0, 1.15], face: [0, -1] },
   sign: 'Radio tower', signSub: 'Radio desk', hint: 'Build the new antenna, then listen',
   place: PLACE, setting: null, makers: MAKERS, pickAsk, card: 'radio',
-  // the antenna on the roof, the camera on it, the faces to tap, the call: src/jobs/antennalink.js (index.js makes it)
+  // the antenna on the control tower's roof, the camera on it, the faces to tap, the call: src/jobs/antennalink.js
+  // (index.js makes it)
   link: 'antenna',
 };
 export { T as TIERS, tallPicture, footingPicture, legsPicture, facePicture, stackPicture, cablesPicture, dishPicture, callPicture };
