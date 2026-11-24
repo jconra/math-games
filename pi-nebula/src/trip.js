@@ -1052,7 +1052,10 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         crew, save: () => save(crew), recipe: ctx.lib && crew.look ? recipeOf(crew.look, ctx.lib) : null,
         // (a pod's lock up: their walking rests meanwhile)
         onLock: (up) => { T.lockUp = up; el.classList.toggle('has-lock', up); if (ctx.walk) ctx.walk(!up && T.ground); },
-        busy: crewBusy, crewAt: () => crewOut().map((o) => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z, walking: o.walking })), paramedic: lendMedic,
+        // (the crew aboard on their feet, for the rescued and her paramedic to walk round: one sitting or lying is in
+        // their seat or bed, beside the way, and is walked up to (the crew room's stools are 0.5 m apart: her paramedic,
+        // sent back to the stool beside the captain's, stood off it for good, the Medic never lifting)
+        busy: crewBusy, crewAt: () => (crewA && site ? crewA.list.filter((w) => !w.out && (w.doing === 'walk' || w.doing === 'stand')).map((w) => { const v = site.toPlanet(w.posW.clone()); return { x: v.x, y: v.y, z: v.z, walking: w.doing === 'walk' }; }) : []), paramedic: lendMedic,
         walking: () => !!T.ground, outside: () => !!T.ground && !!site && !site.footIn,
         // (anyone on foot in the rooms as the ship is parked, where they are there: the crew aboard walking, the crew member
         // not out on the planet)
@@ -1133,7 +1136,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
           const foot = pp.ward.foot(), ramps = (S.ways || []).filter((D) => /ramp/i.test(D.piece || '')), at = (D) => (S.moved ? D.sense.clone().applyMatrix4(S.D) : D.sense);
           const ramp = foot && ramps.length ? ramps.reduce((a, b) => (at(b).distanceTo(foot) < at(a).distanceTo(foot) ? b : a)) : null;
           R.home({ M: S.M, walls, foot: ramp ? foot : null, inside: (v) => String(boarding.where(v) || '').startsWith(M.ship + '/'), open: () => !!ramp && ramp.t >= MEDIC.wayOpen,
-            crew: () => (A ? A.list.filter((w) => !w.out).map((w) => ({ x: w.posW.x, y: w.posW.y, z: w.posW.z, walking: w.doing === 'walk' })) : []) });
+            crew: () => (A ? A.list.filter((w) => !w.out && (w.doing === 'walk' || w.doing === 'stand')).map((w) => ({ x: w.posW.x, y: w.posW.y, z: w.posW.z, walking: w.doing === 'walk' })) : []) });
         }
         const r = pp.ward.admit(who.map((w, i) => ({ look: w.look || SLEEPERS[i % SLEEPERS.length], position: w.position, rider: R && R.list[i] ? R.list[i].i : null })), R);
         resting = r.beds;

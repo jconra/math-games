@@ -19,7 +19,7 @@ import { hisMask } from '../shipparts/cabin/gasmask.js';
 import { shallowLocker } from '../shipparts/cabin/lockers.js';
 import { printed, FLAT } from '../shipparts/cabin/bits.js';
 import { prism, add } from '../bevel.js';
-import { washLight } from '../shipparts/cabin/lights.js';
+import { washLight, stripLight } from '../shipparts/cabin/lights.js';
 import { stowedStretcher } from '../shipparts/cabin/stretcher.js';
 import * as ML from '../shipparts/cabin/medlab.js';
 import * as MC from '../shipparts/cabin/medcrew.js';
@@ -52,6 +52,18 @@ export const CLINIC = {
   disc: { i: 1.5, pool: 1.0, poolReach: 3.2, r: 0.1 }, lamp: { i: 1.8, pool: 1.2, reach: 2.8, poolReach: 2.2, beam: 1.5 }, beam: 1.7,
   strip: 2.4, stripPool: 0.16, extra: true,
 };
+// THE LAB'S WORKING LIGHT (the game's maker, 2026-11-23, of the lab: "it is pretty dark for a laboratory"): bright and
+// even over the worktop and over the island, from strips set in the ceiling along each (lights.js stripLight: a light
+// with its source in sight), where the downlights alone gave a pool here and there and dark between. The downlights and
+// their beams stay, and the rest of the Medic keeps its moody light.
+//   i, reach     each strip's light in the bake, for every half metre of it, and how far it reaches
+//   pool, poolReach, drop   its real-time pool (for a metre of strip), that pool's reach, how far under the ceiling it is
+//   wid          the strip's width;  gap: kept clear of a downlight in its line;  end: short of the worktop's ends
+export const LAB_LIGHT = { i: 1.0, reach: 3.0, pool: 0.7, poolReach: 2.6, drop: 1.1, wid: 0.034, gap: 0.22, end: 0.15 };
+// (a strip set in the ceiling, shining straight down: on the ceiling at y 0 of its own frame, its length along x)
+function workLight(p, o) {
+  return stripLight(p, o.len, [0, -0.004, 0], [PI / 2, 0, 0], { wid: LAB_LIGHT.wid, glow: CLINIC.glow, color: CLINIC.color, i: LAB_LIGHT.i, reach: LAB_LIGHT.reach, pool: LAB_LIGHT.pool, poolReach: LAB_LIGHT.poolReach, poolAt: [0, -LAB_LIGHT.drop, 0] });
+}
 // (a downlight's options in the two rooms; null: the kit's own)
 const clinicDisc = (beam = true) => (CLINIC.on ? { i: CLINIC.disc.i, pool: CLINIC.disc.pool, poolReach: CLINIC.disc.poolReach, r: CLINIC.disc.r, color: CLINIC.color, beam: beam ? CLINIC.beam : 0 } : undefined);
 const clinicStrip = (base) => (CLINIC.on ? { light: r3(base * CLINIC.strip), glow: CLINIC.glow, color: CLINIC.color, pool: CLINIC.stripPool } : {});
@@ -248,6 +260,8 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
       ctx.put('lab: on the island', part(LB.vialRack, { seed: 5 }), { at: T(0.16, len * 0.08), rot: [0, ry + PI / 2, 0] });
       ctx.put('lab: on the island', part(ML.standScreen, { live: 'rest', seed: 0.35 }), { at: T(0.16, len * 0.36), rot: [0, ry + PI / 2 + 0.4, 0] });
       if (ctx.disc) ctx.disc(room, r3(cx), r3(cz), clinicDisc());
+      // (its working light: a strip along it on either side of that downlight)
+      for (const sd of [-1, 1]) { const d = sd * Math.min(LAB_LIGHT.gap, w / 2 - 0.1), sl = r3(len - 0.16); ctx.put('lab: working light', part(workLight, { len: sl }), { at: alongZ ? [r3(cx + d), f + ROOM, r3(cz)] : [r3(cx), f + ROOM, r3(cz + d)], rot: [0, alongZ ? PI / 2 : 0, 0] }); }
       // (and one over the hall's half of the room, between the island and the airlock's and washroom's doors)
       if (ctx.disc && room.rect[2] - x1 > 1.0) ctx.disc(room, r3((x1 + room.rect[2]) / 2 + 0.1), r3(cz), clinicDisc());
       done.add(it.id);
@@ -275,7 +289,14 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
   }
   // (a downlight over the bench, clear of the hull's slope)
   const bench = items.find((it) => it.kind === 'counter' && wallOf(it, room));
-  if (ctx.disc && bench) { const W = wallOf(bench, room); if (W.axis === 'x') { const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.45); ctx.disc(room, r3(x), r3(z), clinicDisc()); } }
+  if (ctx.disc && bench) {
+    const W = wallOf(bench, room);
+    if (W.axis === 'x') {
+      const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.45); ctx.disc(room, r3(x), r3(z), clinicDisc());
+      // (the worktop's working light: a strip along it in line with that downlight, on either side of it)
+      for (const [a, b] of [[W.lo + LAB_LIGHT.end, z - LAB_LIGHT.gap], [z + LAB_LIGHT.gap, W.hi - LAB_LIGHT.end]]) if (b - a > 0.3) ctx.put('lab: working light', part(workLight, { len: r3(b - a) }), { at: [r3(x), f + ROOM, r3((a + b) / 2)], rot: [0, PI / 2, 0] });
+    }
+  }
   // (the Medic's own light, CLINIC: one more, its beam off, over the way in from the med bay, by the supplies rack)
   const rack = items.find((it) => it.kind === 'rack');
   if (ctx.disc && CLINIC.on && CLINIC.extra && rack) ctx.disc(room, r3((rack.rect[0] + rack.rect[2]) / 2), r3((rack.rect[1] + rack.rect[3]) / 2 + (rack.rect[1] - room.rect[1] < 0.3 ? 0.55 : -0.55)), clinicDisc(false));

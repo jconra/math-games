@@ -6,7 +6,7 @@
 //   people.list    [{ id, name, c, pos, heading, walking, away, ... }]    people.missing  the spots the station has no name for
 //   people.eyes()  where the people on the move are (the station's doors open for them; the crane stops for them)
 //   people.onWays(out)  pushes anyone standing on a parked ship's way in (it waits for them; people never call a ship's
-//                  way down: they do not board yet; but the rescued, home in the Medic, do, to come out: THE WARD)
+//                  way down: they do not board yet)
 //   people.noGo(x, z)   a patch of floor no person goes onto (job spots, ships' ways in, under the crane, the scanner)
 //   people.flee(x, z, r)  anyone within r of a point hurries off (the crane by hand, a load low over them); with
 //                  { inside(pos) }: anyone on a patch of any shape (under a ship coming down by hand: src/flying.js)
@@ -467,16 +467,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const _v = new THREE.Vector3();
   async function body(def, pos, heading) {
     const recipe = recipeOf(def.look || def.recipe, def); if (!recipe) { missing.push(def.id + ': no recipe'); return null; }
-    return bodyOf(def, await makeCrew(lib, recipe, { far: true }), null, pos, heading, recipe);
-  }
-  // (own: a figure made already and its small moves, taken over as it is: one of the rescued, the very figure that came
-  // home in the Medic (THE WARD); its clip and its moment of it left as they are)
-  function bodyOf(def, c, own, pos, heading, recipe) {
+    const c = await makeCrew(lib, recipe, { far: true });
     const P = { id: def.id, name: def.name, def, c, pos: pos.clone(), drawnY: pos.y, heading, zone: null, shown: false, walking: false, clip: '', anim: 0, animDt: 0, sitY: 0, away: false, voice: def.voice || null, rate: def.rate || 1 };
     c.root.position.copy(P.pos); c.root.rotation.set(0, heading, 0);
     shadeUnder(c.root); shine(c, W.envAt(P.pos));
-    if (!own) { c.play(firstClip(c, STAND), { fade: 0 }); P.clip = STAND; c.update(0); c.update(Math.random() * 3); }   // (each at its own moment of the clip)
-    P.moves = own || addMoves(c);
+    c.play(firstClip(c, STAND), { fade: 0 }); P.clip = STAND; c.update(0); c.update(Math.random() * 3);   // (each at its own moment of the clip)
+    P.moves = addMoves(c);
     P.smile = c.faceSliders.includes('smile') ? { now: (recipe.face && recipe.face.smile) ?? 0.67, base: (recipe.face && recipe.face.smile) ?? 0.67 } : null;
     // (a captain: the marker over the head, the captain's own lines)
     if (def.captain && CAPTAINS[def.id]) {
@@ -1438,7 +1434,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // ramp comes down for them, onWays); at its foot on the hangar's floor their very figure is taken over as a station
   // person (wardAdopt: nobody made anew, nobody seen to appear) and walks on as before. Nobody along their way: taken over
   // where they lie and in bed, or about the station, at once.
-  const ward = { list: [], queue: [], riders: null, making: false, last: -99, for: undefined, n: 0, ms: 0, foot: null, footSeen: 0, counts: { came: 0, walkedIn: 0, put: 0, late: 0, home: 0, left: 0, gone: 0, about: 0, scanned: 0, off: 0, rose: 0 } };
+  const ward = { list: [], queue: [], riders: null, making: false, last: -99, for: undefined, n: 0, ms: 0, foot: null, footSeen: 0, counts: { came: 0, walkedIn: 0, put: 0, late: 0, home: 0, left: 0, gone: 0, about: 0, scanned: 0, off: 0, rose: 0, riding: 0, riderPut: 0, riderHeld: 0 } };
   // (the Medic's ramp foot: where it comes down nearest the ward, on the hangar's floor just past its patch, where the
   // ship stands now)
   function wardFoot() {
@@ -1652,7 +1648,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function wardAdopt(r) {
     const g = ward.riders ? ward.riders.take(r.rider) : null; r.rider = null;
     if (!g) return false;
-    const P = bodyOf({ id: 'rescued-' + (++ward.n), name: '' }, g.c, g.moves, g.pos, g.heading, {}), about = r.state === 'about';
+    // (as body() makes a person, but of the figure that is there: its clip, its moment of it and its small moves kept)
+    const c = g.c, def = { id: 'rescued-' + (++ward.n), name: '' }, about = r.state === 'about';
+    const P = { id: def.id, name: def.name, def, c, pos: g.pos.clone(), drawnY: g.pos.y, heading: g.heading, zone: null, shown: false, walking: false, clip: '', anim: 0, animDt: 0, sitY: 0, away: false, voice: null, rate: 1 };
+    c.root.position.copy(P.pos); c.root.rotation.set(0, P.heading, 0);
+    shadeUnder(c.root); shine(c, W.envAt(P.pos));
+    P.moves = g.moves; P.smile = c.faceSliders.includes('smile') ? { now: 0.67, base: 0.67 } : null;
+    c.root.visible = false;
     Object.assign(P, { order: 2e6 + ward.n, day: about ? ABOUT_DAY : [{ do: 'ward' }], k: about ? startOf(r.k ?? ward.n) - 1 : 0, speed: rnd(...LIFE.speed), act: null, way: null, wi: 0, req: null, held: 0, still: 0, gain: 0, lastGain: P.pos.clone(), side: 0, sat: 0, by: null, away: false, rescued: r });
     r.P = P; r.at = { pos: g.pos, heading: g.heading };
     return true;
@@ -1687,7 +1689,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (and those of them about the station, bed -1, about it again, their turn at the scanner still to come if it was)
     if (id !== ward.for) { wardClear(); ward.for = id; if (c && c.ward) for (const r of kept(c.ward)) if (r.bed < 0 || (wardBeds[r.bed] && wardBeds[r.bed].side)) ward.queue.push({ ...r, scan: !!r.scan, leaveAt: clock + (r.until - Date.now()) / 1000, placed: true, state: r.bed < 0 ? 'about' : 'lying' }); }
     // (the riders still in the Medic: their own moves, round the crew member; all taken over: done with)
-    if (ward.riders) { ward.riders.update(dt, { player, camera }); ward.riderAlarms = { ...ward.riders.alarms }; if (!ward.riders.list.length) { ward.riders.dispose(); ward.riders = null; } }
+    if (ward.riders) { ward.riders.update(dt, { player, camera }); Object.assign(ward.counts, { riding: ward.riders.list.length, riderPut: ward.riders.alarms.putThere, riderHeld: ward.riders.alarms.stalled }); if (!ward.riders.list.length) { ward.riders.dispose(); ward.riders = null; } }
     if (!ward.queue.length && !ward.list.length) return;
     wardMake();
     const watch = !!player && watching(roomNow(player.pos)) || !!(player && boarding && /^medic\//.test(boarding.where(player.pos) || ''));
@@ -2317,7 +2319,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     get list() { return ward.list; },
     foot: () => (ward.foot || wardFoot()),
     stay(s) { for (const P of ward.list) P.rescued.leaveAt = clock + s; for (const r of ward.queue) r.leaveAt = clock + s; },
-    state: () => ({ watch: !!ward.watch, riderAlarms: ward.riderAlarms || null, riders: ward.riders ? ward.riders.riders.map((q) => ({ i: q.i, state: q.state, phase: q.phase, pos: q.pos.toArray().map((v) => +v.toFixed(2)) })) : null, queue: ward.queue.length, making: ward.making, ms: Math.round(ward.ms), foot: ward.foot ? ward.foot.toArray().map((v) => +v.toFixed(2)) : null, counts: { ...ward.counts }, late: alarms.wardLate || 0,
+    state: () => ({ watch: !!ward.watch, queue: ward.queue.length, making: ward.making, ms: Math.round(ward.ms), foot: ward.foot ? ward.foot.toArray().map((v) => +v.toFixed(2)) : null, counts: { ...ward.counts }, late: alarms.wardLate || 0,
       list: ward.list.map((P) => ({ id: P.id, look: P.rescued.look, bed: P.rescued.bed >= 0 && wardBeds[P.rescued.bed] ? wardBeds[P.rescued.bed].n : null, state: P.rescued.state, act: P.act ? P.act.kind + ':' + (P.act.phase || '') : null, walking: !!P.walking, planning: !!P.req, shown: !!P.shown, far: !!P.c.far, pos: P.pos.toArray().map((v) => +v.toFixed(2)), left: +(P.rescued.leaveAt - clock).toFixed(1),
         // (the others: their turn at the scanner still to come, out of the way just now, what they are at, the room)
         scan: !!P.rescued.scan, away: !!P.away, at: (P.act && P.act.spot && P.act.spot.name) || null, room: roomNow(P.pos) })) }),

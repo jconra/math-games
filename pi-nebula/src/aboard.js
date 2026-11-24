@@ -186,8 +186,10 @@ export async function makeAboard({ people, ship: s, crew = [], cockpitFloor = nu
     const ok = (p) => p.kind === 'sit' && (users.get(p.id) === W.id || free(p, W));
     const at = W.place || W.target || null, here = W.doing === 'walk' ? null : at;
     const home = (here && ok(here) && !here.cockpit ? here : null) || places.find((p) => ok(p) && !p.cockpit) || (here && ok(here) ? here : null) || places.find((p) => ok(p)) || here || at;
-    // (on their feet where one stands by the place they were in; walking, where they are)
-    const pos = here ? new THREE.Vector3(here.stand[0], s.space.deck, here.stand[1]) : new THREE.Vector3(W.pos.x, s.space.deck, W.pos.z);
+    // (on their feet where one stands by the place they were in, on its own floor (a seat's is its room's: the flight
+    // deck's seats stand higher than the cabin's deck, and stood under that floor no way out was found); walking, where
+    // they are)
+    const pos = here ? new THREE.Vector3(here.stand[0], here.kind === 'sit' ? here.y : s.space.deck, here.stand[1]) : new THREE.Vector3(W.pos.x, s.space.deck, W.pos.z);
     take(home, W.id);
     Object.assign(W, { out: true, doing: 'out', way: null, place: null, target: home, from: null, side: 0, sideAim: 0, wait: 0, clip: '' });
     W.c.root.matrixAutoUpdate = true; W.c.setEyes('blink');

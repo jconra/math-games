@@ -96,7 +96,7 @@ export function patientBeds(bp, deck) {
 // joints' middle to the head's bone): their hips as far from the head's wall as puts their head on the pillow, the back
 // lying on the raised back section (its raise shortens the trunk's reach along the bed). Any other bed: as it is
 export function bedFor(B, who) {
-  if (!B || !B.back || B.lie || B.perch || !(who && who.t > 0)) return B ? B.bed : null;
+  if (!B || !B.back || B.lie || !(who && who.t > 0)) return B ? B.bed : null;
   const z = r3(Math.min(PATIENT.most, Math.max(PATIENT.hips, PATIENT.head + who.t * Math.cos(B.back))));
   return { ...B.bed, z, stand: [B.bed.stand[0], z] };
 }
@@ -151,62 +151,18 @@ export function crewBeds(bp, deck) {
   // (the bunk first, then the bed: his words' order)
   return out.sort((a, b) => (a.side === 'bunk' ? 0 : 1) - (b.side === 'bunk' ? 0 : 1));
 }
-// THE LAB'S LONG BENCH (the game's maker, 2026-11-22: "They should be able to sit on the bench in the lab area too. If I
-// remember right there is a long bench there."): the lab's bench along the hull (its counter on a wall, named a bench:
-// kit/ships/medic-furnish.js furnishLab; a worktop at table height, 0.9 m, with its drawers, its fridge and its sink),
-// sat up on along its front edge, facing out from the hull, as on the scanner's high bed (onbed.js: backed up to it, the
-// hop up onto its edge, and there, perched, the feet off the floor). Its places: one each BENCH.gap along its clear
-// stretch (nothing hung over it (the shelves over its aft end), clear of its sink (the column at its end away from the
-// stool's knee space)). As onbed beds: the frame's origin on the deck at the wall, on the place; x out from the wall
-// (the side got onto from), z along the bench; its edge its depth. -> [{ id, name, frame, mirror, bed, back, perch }]
-export const BENCH = { gap: 0.5, end: 0.05, stand: 0.26 };
-export function benchPerches(bp, deck) {
-  return benchSeats(bp, deck).map((p) => {
-    const it = (bp.items || []).find((o) => o.id === p.item), alongZ = it.rect[3] - it.rect[1] >= it.rect[2] - it.rect[0];
-    const s = p.out, x = alongZ ? [s, 0, 0] : [0, 0, s], z = [x[1] * 0 - x[2], 0, x[0]];
-    const o = alongZ ? [p.wall, p.y - p.perch, p.z] : [p.x, p.y - p.perch, p.wall], depth = alongZ ? it.rect[2] - it.rect[0] : it.rect[3] - it.rect[1];
-    const bed = { top: p.perch, edge: depth, pad: depth / 2, z: 0, stand: [depth + BENCH.stand, 0], hipUp: CREW_BED.hipUp, rest: [depth / 2, 0] };
-    return { id: p.id, name: p.name, side: 'bench', frame: { o, x, z }, mirror: false, bed, back: 0, perch: true };
-  });
-}
-// (the bench's places, as seats on its front edge: where, its height over the deck, and the wall behind)
-export function benchSeats(bp, deck) {
-  const out = [], items = bp.items || [];
-  for (const r of (bp.rooms || []).filter((q) => q.kind === 'lab')) {
-    const it = items.find((o) => o.room === r.id && o.kind === 'counter' && /bench/i.test(o.name || '')); if (!it) continue;
-    const [x0, z0, x1, z1] = it.rect, [rx0, rz0, rx1, rz1] = r.rect, alongZ = z1 - z0 >= x1 - x0, h = +it.h || 0.9;
-    // (the way out from the wall it stands on)
-    const out1 = alongZ ? (x0 - rx0 <= rx1 - x1 ? 1 : -1) : (z0 - rz0 <= rz1 - z1 ? 1 : -1);
-    const lo = alongZ ? z0 : x0, hi = alongZ ? z1 : x1, len = hi - lo, n = Math.max(1, Math.round(len / 0.5)), cw = len / n;
-    // (the stool's knee space, and the sink in the column at the far end from it: medic-furnish.js's own rule)
-    const stool = items.find((o) => o.room === r.id && o.kind === 'bench'), sc = stool ? (alongZ ? (stool.rect[1] + stool.rect[3]) / 2 : (stool.rect[0] + stool.rect[2]) / 2) : null;
-    const knee = sc == null ? (n >= 3 ? Math.floor(n / 2) : -1) : Math.max(0, Math.min(n - 1, Math.floor((sc - lo) / cw)));
-    const sinkLow = knee >= n / 2;
-    let a = lo + BENCH.end, b = hi - BENCH.end;
-    if (sinkLow) a = Math.max(a, lo + cw); else b = Math.min(b, hi - cw);
-    for (const o of items.filter((q) => q.room === r.id && q.kind === 'overhead')) {
-      const oa = alongZ ? o.rect[1] : o.rect[0], ob = alongZ ? o.rect[3] : o.rect[2], over = alongZ ? o.rect[0] < x1 && o.rect[2] > x0 : o.rect[1] < z1 && o.rect[3] > z0;
-      if (!over || ob <= a || oa >= b) continue;
-      if (oa - a < b - ob) a = Math.max(a, ob); else b = Math.min(b, oa);
-    }
-    const k = Math.max(0, Math.floor((b - a) / BENCH.gap + 1e-6)); if (!k) continue;
-    const front = alongZ ? (out1 > 0 ? x1 : x0) : (out1 > 0 ? z1 : z0), wall = alongZ ? (out1 > 0 ? x0 : x1) : (out1 > 0 ? z0 : z1), at = front - out1 * 0.13;
-    const heading = alongZ ? (out1 > 0 ? Math.PI / 2 : -Math.PI / 2) : (out1 > 0 ? 0 : Math.PI);
-    for (let i = 0; i < k; i++) {
-      const v = a + (b - a) * (i + 0.5) / k, x = alongZ ? at : v, z = alongZ ? v : at;
-      const sx = alongZ ? front + out1 * BENCH.stand : v, sz = alongZ ? v : front + out1 * BENCH.stand;
-      out.push({ id: it.id + '.' + i, item: it.id, name: 'Lab bench', kind: 'sit', perch: h, out: out1, wall, room: r.id, x: +x.toFixed(3), y: +(deck + (r.floor || 0) + h).toFixed(3), z: +z.toFixed(3), heading, job: null, cockpit: false, stand: [+sx.toFixed(3), +sz.toFixed(3)] });
-    }
-  }
-  return out;
-}
-// THE PLACES THE RESCUED TAKE, IN THE GAME'S MAKER'S ORDER (2026-11-22, RESC4-1 B, and the lab's bench): the med bay's
-// two patient beds, the crew room's bunk and its bed, the lab's long bench, then the stools (the lab's, the crew room's),
-// then a cockpit seat no job has. -> [{ kind: 'bed' (lain on, onbed's moves) | 'perch' (sat up on, onbed's hop) | 'seat',
-// place }]
+// THE PLACES THE RESCUED TAKE, IN THE GAME'S MAKER'S ORDER (2026-11-22, RESC4-1 B: "after the patient beds, the crew
+// room's bunk and bed, then stools"). He had thought the lab had a seat bench ("They should be able to sit on the bench in
+// the lab area too. If I remember right there is a long bench there"); it is a worktop one sits AT, on a stool, and
+// seeing two of them sat up on it (2026-11-23): "That look up kind of high ... I thought the blueprint showed a sitting
+// bench there. If not, we can do stools instead." SO, STOOLS: the med bay's two patient beds, the crew room's bunk and
+// its bed, then the stools in the blueprint's own order (the lab's stool at the worktop, the crew room's three), then a
+// cockpit seat no job has. Nobody sits up on the worktop. Six rescued: two beds, the bunk, the bed, the lab's stool and
+// the crew room's first stool (four stools for two of them: none is added; the crew aboard keep the other two).
+// -> [{ kind: 'bed' (lain on, onbed's moves) | 'seat', place }]
 export function restOrder(bp, deck, places) {
   return [...patientBeds(bp, deck).map((p) => ({ kind: 'bed', place: p })), ...crewBeds(bp, deck).map((p) => ({ kind: 'bed', place: p })),
-    ...benchPerches(bp, deck).map((p) => ({ kind: 'perch', place: p })), ...seatsFor(places).map((p) => ({ kind: 'seat', place: p }))];
+    ...seatsFor(places).map((p) => ({ kind: 'seat', place: p }))];
 }
 // THE NEXT ONE'S PLACE: the first of the order not taken (taken: a Set of place ids, the rescued's own and any the crew
 // aboard are in). (Given beds and seats apart, as before: a patient bed while one is free, else a seat)

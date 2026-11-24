@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, benchPerches, bedFor, nextShut, BENCH, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
+import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, bedFor, nextShut, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
 import { placesOf } from '../src/aboardplan.js';
 import { pose, SECS } from '../src/onbed.js';
 import { bedFrame, POD, podScale } from '../kit/stasispod-plan.js';
@@ -62,22 +62,26 @@ test('the two patient beds: heads at the hull, got onto from the bay floor towar
   }
 });
 
-test('the rescued take their places in the game\'s maker\'s order: the patient beds, the crew room\'s bunk and bed, the lab\'s bench, then the stools', () => {
-  // (RESC4-1 B: "after the patient beds, the crew room's bunk and bed, then stools"; "They should be able to sit on the
-  // bench in the lab area too. If I remember right there is a long bench there.")
+test('the rescued take their places in the game\'s maker\'s order: the patient beds, the crew room\'s bunk and bed, then the stools (the lab\'s first); nobody up on the lab\'s worktop', () => {
+  // (RESC4-1 B: "after the patient beds, the crew room's bunk and bed, then stools"; and of two sat up on the lab's
+  // worktop, 2026-11-23: "That look up kind of high ... we can do stools instead.")
   const places = placesOf(BP, { deck: DECK, cockpitFloor: COCKPIT ? COCKPIT.floor : 0.8, jobs: ['pilot', 'medic'] });
   const seats = seatsFor(places), order = restOrder(BP, DECK, places);
   assert.ok(seats.every((p) => p.kind === 'sit' && p.job !== 'pilot'));
   const firstCockpit = seats.findIndex((p) => p.cockpit);
   assert.ok(firstCockpit < 0 || seats.slice(firstCockpit).every((p) => p.cockpit), 'off the flight deck first');
-  assert.deepEqual(order.slice(0, 6).map((c) => c.kind + ':' + c.place.id), ['bed:bed-p', 'bed:bed-s', 'bed:bunk', 'bed:bed', 'perch:bench.0', 'perch:bench.1']);
-  assert.deepEqual(order.slice(6, 10).map((c) => c.place.id), ['lab-stool', 'stool-1', 'stool-2', 'stool-3']);
+  // (six rescued: two beds, the bunk, the bed, the lab's stool and the crew room's first: four stools for two of them)
+  assert.deepEqual(order.slice(0, 6).map((c) => c.kind + ':' + c.place.id), ['bed:bed-p', 'bed:bed-s', 'bed:bunk', 'bed:bed', 'seat:lab-stool', 'seat:stool-1']);
+  assert.deepEqual(order.slice(6, 8).map((c) => c.place.id), ['stool-2', 'stool-3']);
+  assert.ok(order.every((c) => c.kind === 'bed' || c.kind === 'seat') && !order.some((c) => /^bench/.test(c.place.id)), 'nobody on the worktop');
+  // (every stool is a seat of the blueprint's own: none added)
+  for (const c of order.filter((q) => q.kind === 'seat' && !q.place.cockpit)) assert.ok(BP.items.some((it) => it.id === c.place.id && it.kind === 'bench'), c.place.id);
   const taken = new Set(), got = [];
   for (let k = 0; k < 6; k++) { const c = choose(order, taken); assert.ok(c, `person ${k + 1} has a place`); taken.add(c.place.id); got.push(c.place.id); }
   assert.equal(taken.size, 6, 'no place twice');
   // (a place the crew aboard are in is passed over: the next in the order)
   const busy = new Set(['bunk']), next = []; for (let k = 0; k < 6; k++) { const c = choose(order, new Set([...busy, ...next])); next.push(c.place.id); }
-  assert.deepEqual(next, ['bed-p', 'bed-s', 'bed', 'bench.0', 'bench.1', 'lab-stool']);
+  assert.deepEqual(next, ['bed-p', 'bed-s', 'bed', 'lab-stool', 'stool-1', 'stool-2']);
   // (beds and seats given apart, as before: a bed while one is free, then a seat)
   const old = choose(patientBeds(BP, DECK), new Set(['bed-p', 'bed-s']), seats); assert.equal(old.kind, 'seat');
 });
@@ -101,26 +105,6 @@ test('the crew room\'s bunk and bed: lain along, heads at the pillows\' ends, go
     // (lying there: the hips on the pad, the feet on it)
     for (const who of WHO) { const p = pose('lying', 0, b.bed, who); assert.ok(p.hips[1] > b.bed.top && p.hips[1] < b.bed.top + 0.2); for (const f of p.feet) assert.ok(f[2] < 2.0 && Math.abs(f[0]) < b.bed.pad + 1e-6, `${b.id} feet at ${f}`); }
   }
-});
-
-test('the lab\'s long bench: sat up on along its clear stretch, off its sink and out from under its shelves, the hop up from the aisle', () => {
-  const P = benchPerches(BP, DECK), it = BP.items.find((x) => x.id === 'bench'), shelf = BP.items.find((x) => x.id === 'labshelf'), island = BP.items.find((x) => x.id === 'island');
-  assert.ok(P.length >= 2, 'two on it');
-  for (const p of P) {
-    const z = bedToShip(p, [p.bed.edge - 0.13, 0, 0])[2];
-    assert.ok(z > shelf.rect[3] + 0.2 && z < it.rect[3] - 0.5 + 0.01, `${p.id} at ${z}: clear of the shelves and the sink's column`);
-    assert.equal(p.bed.top, +it.h); assert.ok(p.perch);
-    // (facing out from the hull, the hop up from the aisle between the bench and the island)
-    const st = bedToShip(p, [p.bed.stand[0], 0, 0]); assert.ok(st[0] > it.rect[2] && st[0] < island.rect[0], `${p.id} stood at ${st[0]}`);
-    for (const who of WHO) {
-      for (let t = 0; t <= SECS.hop + 1e-9; t += 1 / 30) { const q = pose('hop', t, p.bed, who); for (const f of q.feet) assert.ok(f[1] > -0.06, `hop ${t.toFixed(2)}: a foot under the floor`); }
-      // (perched: the hips on its top, near its front edge; the feet off the floor)
-      const end = pose('hop', SECS.hop, p.bed, who);
-      assert.ok(end.hips[1] > p.bed.top && end.hips[1] < p.bed.top + 0.2 && end.hips[0] > p.bed.edge - 0.3 && end.hips[0] < p.bed.edge, JSON.stringify(end.hips));
-      for (const f of end.feet) assert.ok(f[1] > 0.02, 'the feet off the floor ' + f);
-    }
-  }
-  assert.ok(Math.abs(P[1].frame.o[2] - P[0].frame.o[2]) >= BENCH.gap - 1e-9, 'a body\'s width apart');
 });
 
 test('out of a pod: onbed\'s own moves end standing at its front, clear of the pod, feet never under the floor', () => {
@@ -181,7 +165,7 @@ test('on a patient bed each one\'s hips are placed by their own trunk, so their 
   for (const who of WHO) for (const t of [0.55, 0.7, 0.8]) { const own = bedFor(b, { ...who, t }), p = pose('lying', 0, own, who); for (const f of p.feet) assert.ok(f[2] < 1.99, `feet at ${f[2]}`); }
   // (nobody's measures, or another kind of bed: the bed's own numbers)
   assert.equal(bedFor(b, null), b.bed);
-  for (const c of [...crewBeds(BP, DECK), ...benchPerches(BP, DECK)]) assert.equal(bedFor(c, { t: 0.7 }), c.bed);
+  for (const c of crewBeds(BP, DECK)) assert.equal(bedFor(c, { t: 0.7 }), c.bed);
 });
 
 test('her paramedic goes to the nearest pod still shut, and aboard again when none is', () => {
