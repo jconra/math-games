@@ -51,7 +51,7 @@ const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the e
 // the arms' ends to the light at the very top; `end` the whole antenna on the tower's top (the control room's windows
 // are under the card there).
 export const VIEW = {
-  low: { look: [0, 0.8, 0], from: [-3.2, 4.4, 6.4], fov: 50 },
+  low: { look: [0, 0.8, 0], from: [-3.2, 4.4, 6.4], fov: 50, tall: { look: [0, 1.0, 0], far: 1.6 } },
   whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52, tall: { look: [0, 6.8, 0], far: 2.5 } },
   top: { look: [0, 12.6, 0], from: [-2.6, 1.6, 6.4], fov: 52, tall: { look: [0, 13.2, 0], far: 1.5 } },
   sky: { look: [0, 12.9, 0], from: [-3.8, -1.2, 7.8], fov: 54, tall: { look: [0, 13.3, 0], far: 1.4 } },
@@ -425,7 +425,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
   // ── the camera: out of the window and up to the tower's top ─────────────────────────────────────────────────────
   const want = new THREE.Vector3(), lookAt = new THREE.Vector3(), probe = new THREE.PerspectiveCamera();
   const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion(), from0 = new THREE.Vector3(), q0 = new THREE.Quaternion();
-  let fresh = true, forced = null, intro = TIMES.intro, introT = 0, fov0 = 60, viewNow = 'whole';
+  let fresh = true, forced = null, intro = TIMES.intro, introT = 0, fov0 = 60, fovNow = 60, viewNow = 'whole';
   // (the probe turned to look at the view's point from a place, that point at the screen point `on`)
   function lookFrom(at, V, tall, aspect) {
     const on = VIEW.on[tall ? 'tall' : 'wide'], tv = Math.tan(V.fov * Math.PI / 360), th = tv * aspect;
@@ -448,8 +448,8 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
     if (fresh) {
       // (the glide out: from the player's own view at the desk, out through the corner window, out past the control
       // room's roof and up the tower's side to its top; the lens eased from the walking camera's to the view's)
-      from0.copy(camera.position); q0.copy(camera.quaternion); fov0 = camera.fov; fresh = false; introT = 0;
-      if (intro <= 0) { camPos.copy(want); camQ.copy(probe.quaternion); }
+      from0.copy(camera.position); q0.copy(camera.quaternion); fov0 = fovNow = camera.fov; fresh = false; introT = 0;
+      if (intro <= 0) { camPos.copy(want); camQ.copy(probe.quaternion); fovNow = V.fov; }
     }
     if (intro > 0) {
       introT += dt; const t = clamp01(introT / intro), e = ease(t);
@@ -462,15 +462,18 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
       // top, which is in sight the whole way up; it arrives turned as the view is)
       lookFrom(camPos, V, tall, camera.aspect || innerWidth / innerHeight);
       camQ.copy(q0).slerp(probe.quaternion, ease(clamp01((t - 0.19) / 0.36)));
-      camera.fov = fov0 + (V.fov - fov0) * e; camera.updateProjectionMatrix();
+      fovNow = fov0 + (V.fov - fov0) * e;
       // (the station's rooms drawn as ever while the camera is still in the control room)
       const z = W.room('tower'); out = !(z && z.box.containsPoint(camPos));
       if (t >= 1) intro = 0;
     } else {
       const k = 1 - Math.exp(-2.2 * dt);
       camPos.lerp(want, k); camQ.slerp(probe.quaternion, k);
-      if (Math.abs(camera.fov - V.fov) > 0.01) { camera.fov += (V.fov - camera.fov) * k; camera.updateProjectionMatrix(); }
+      fovNow += (V.fov - fovNow) * k;
     }
+    // (the view's own lens, kept here and set every frame: the game sets its walking lens back before each frame's aim,
+    // src/main.js, so a lens only eased toward on the camera itself never got there, and jumped back as the glide ended)
+    if (camera.fov !== fovNow) { camera.fov = fovNow; camera.updateProjectionMatrix(); }
     camera.position.copy(camPos); camera.quaternion.copy(camQ);
     if (W.dust && out) W.dust.visible = false;
   }
