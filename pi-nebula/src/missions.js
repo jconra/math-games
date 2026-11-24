@@ -252,12 +252,12 @@ export const MISSIONS = {
   supply: {
     id: 'supply', captain: HAULER_CAPTAIN.id, desk: 'cargo', ship: 'hauler', name: 'Supply run', roles: ['pilot', 'engineer', 'cargo'], payAt: 'cargo', place: 'oldstation',
     offered: (crew) => stationFound(crew),
-    about: 'The old station called for help: fuel cells, food and spare parts. The supplies are worked out and loaded down in Cargo. Then the Hauler flies them out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
+    about: 'Tangent Station called for help: fuel cells, food and spare parts. The supplies are worked out and loaded down in Cargo. Then the Hauler flies them out, docks at Tangent Station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
     paid: 'You are paid your share of the run, at the shipping computer in Cargo, when you are back.',
     // (after the first run, the old station saved: the same run as a plain hauling run)
-    aboutAgain: 'The old station trades with us now. A load for it is worked out and packed down in Cargo. Then the Hauler flies it out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
+    aboutAgain: 'Tangent Station trades with us now. A load for it is worked out and packed down in Cargo. Then the Hauler flies it out, docks at Tangent Station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
     jobs: {
-      pilot: { does: 'piloting to the old station and home', crew: 'Pilot Remy', she: false, look: { suit: 'atlantis1', head: 't1', hair: 'shortFull', colours: { job: 'hauler', uniform: '#3f8fe8', skin: '#e0b08f', hair: '#5a3a22' } } },
+      pilot: { does: 'piloting to Tangent Station and home', crew: 'Pilot Remy', she: false, look: { suit: 'atlantis1', head: 't1', hair: 'shortFull', colours: { job: 'hauler', uniform: '#3f8fe8', skin: '#e0b08f', hair: '#5a3a22' } } },
       engineer: { crew: 'Engineer Sol', she: true, look: { suit: 'atlantis2', head: 't7', hair: 'afro', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } } },
       cargo: { crew: 'Loadmaster Hob', she: false },
     },
@@ -638,7 +638,7 @@ function cansOf(P) {
 const PEOPLE = ['person', 'people'], PLACES = ['place', 'places'], PALLETS = ['pallet', 'pallets'];
 const PER_WORDS = {
   rescue: { n: (P) => P.people, unit: PEOPLE, pic: 'people', key: 'people', perKey: 'perPerson', home: (n) => `Your crew is home with ${n} people from the pods.`, pays: 'The rescue pays', paid: 'the rescue', ask: 'How many people did your crew bring home?', each: 'person', one: 'for one person', many: 'people', title: 'Person by person', brought: 'Each person brought home is', count: 'Touch each person once as you count: 1, 2, 3 ...' },
-  supply: { n: (P) => P.pallets, unit: PALLETS, pic: 'pallets', key: 'pallets', perKey: 'perPallet', home: (n) => `Your crew is home. It took ${n === 1 ? 'one pallet' : `${n} pallets`} of supplies to the old station.`, pays: 'The run pays', paid: 'the run', ask: 'How many pallets did your crew deliver?', each: 'pallet', one: 'for one pallet', many: 'pallets', title: 'Pallet by pallet', brought: 'Each pallet delivered is', count: 'Touch each pallet once as you count: 1, 2, 3 ...' },
+  supply: { n: (P) => P.pallets, unit: PALLETS, pic: 'pallets', key: 'pallets', perKey: 'perPallet', home: (n) => `Your crew is home. It took ${n === 1 ? 'one pallet' : `${n} pallets`} of supplies to Tangent Station.`, pays: 'The run pays', paid: 'the run', ask: 'How many pallets did your crew deliver?', each: 'pallet', one: 'for one pallet', many: 'pallets', title: 'Pallet by pallet', brought: 'Each pallet delivered is', count: 'Touch each pallet once as you count: 1, 2, 3 ...' },
   explore: { n: (P) => P.places, unit: PLACES, pic: 'places', key: 'places', perKey: 'perPlace', home: (n) => `Your crew is home from ${n === 1 ? 'one place' : `${n} places`} nobody had explored.`, pays: 'The run pays', paid: 'the run', ask: 'How many places did your crew explore?', each: 'place', one: 'for one place', many: 'places', title: 'Place by place', brought: 'Each place explored is', count: 'Touch each place once as you count: 1, 2, 3 ...' },
 };
 function rescueOrder(m, grade, rand, paid) {

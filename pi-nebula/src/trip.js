@@ -289,7 +289,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   const keeper = ctx.keeper || crane;
   // (where the run goes: the rocks, or a planet (a rescue run: src/rescue.js); and the captain's own pilot, by name)
   // (SUPPLY: the Hauler's supply run, to the old station: src/oldstationsite.js)
-  const PLANET = M.place === 'planet', SUPPLY = M.place === 'oldstation', TO = PLANET ? 'the planet' : SUPPLY ? 'the old station' : 'the rocks', flier = roleOf(M, 'pilot').crew, flierShort = String(flier).split(' ').pop();
+  const PLANET = M.place === 'planet', SUPPLY = M.place === 'oldstation', TO = PLANET ? 'the planet' : SUPPLY ? 'Tangent Station' : 'the rocks', flier = roleOf(M, 'pilot').crew, flierShort = String(flier).split(' ').pop();
   // (an exploring run: its places, one after another (src/explore.js), and its plan; the jump to a place is to the lead
   // it follows. FIELD: the mining run's rocks)
   // (FREE: just flying, in a ship that is theirs: no far place at all)
@@ -636,10 +636,10 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (an exploring run: what it found kept with the crew member, and the station's news of it: src/exploreplan.js findNews)
         if (EXPLORE) { try { keepFind(crew, plan); save(crew); const N = findNews(plan); if (N && own && N.text) N.text = N.text.replace(/Captain Vega's crew has/, `${name}'s Explorer has`); if (N) news.add(N);
           // (the old station found: where its supply run begins, said once over the speakers: src/missions.js 'supply')
-          if (plan && plan.scenario === 'distress') news.add({ kind: 'call', ship: 'Hauler', text: `A word from Cargo. Gus at the shipping desk is getting supplies together for the old station. ${HAULER_CAPTAIN.name} of the Hauler needs a crew.` }); } catch (e) { console.error(e); } }
+          if (plan && plan.scenario === 'distress') news.add({ kind: 'call', ship: 'Hauler', text: `A word from Cargo. Gus at the shipping desk is getting supplies together for Tangent Station. ${HAULER_CAPTAIN.name} of the Hauler needs a crew.` }); } catch (e) { console.error(e); } }
         else if (PLANET) rescuedHome();
         // (the supply run that saved the old station: the station's news of it, a text line over the speakers)
-        else if (SUPPLY) { try { if (T.payout && T.payout.first) news.add({ kind: 'supply', ship: SHIP.name, text: 'News from the Hauler. Its supplies have reached the old station. The old station has power again.' }); } catch (e) { /* no news */ } }
+        else if (SUPPLY) { try { if (T.payout && T.payout.first) news.add({ kind: 'supply', ship: SHIP.name, text: 'News from the Hauler. Its supplies have reached Tangent Station. Tangent Station has power again.' }); } catch (e) { /* no news */ } }
         else try { news.add({ kind: 'haul', ship: 'Miner', ore: T.payout.lots.length > 1 ? 'mixed ore' : T.payout.lots[0].metal, tons: Number.isInteger(T.payout.tonnes) ? ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][T.payout.tonnes] || String(T.payout.tonnes) : inEighths(T.payout.lots) ? eighthsText(T.payout.tonnes) : String(T.payout.tonnes) }); } catch (e) { /* no news */ }
         words('Home'); say(iPilot ? 'landed' : 'landedCrew');
         next();

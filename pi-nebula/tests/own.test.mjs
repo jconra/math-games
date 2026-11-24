@@ -230,7 +230,7 @@ test('the Loadmaster on a run of your own: 8 questions, the five that work out t
       const o = CARGO.makers.load.make(step, { rand: () => 0.4, live });
       keys.push(o.facts.key);
       assert.equal(o.coins.filter((q) => q.good).length, 1);
-      assert.match(L.head(o), new RegExp(`question ${k + 1} of 8`)); assert.match(L.head(o), k < 5 ? /To the old station/ : /The next load/);
+      assert.match(L.head(o), new RegExp(`question ${k + 1} of 8`)); assert.match(L.head(o), k < 5 ? /To Tangent Station/ : /The next load/);
       assert.equal(L.over(), null);
       // (the people at the old station are as many in the next load's cards as in this one's, where a card says)
       const said = /(\d+) people/.exec(o.story); if (said) people.add(said[1]);

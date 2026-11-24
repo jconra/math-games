@@ -232,9 +232,9 @@ export function makeSite(ctx, opts = {}) {
     if (outside.lit) outside.lit.group.visible = lit; if (outside.dark) outside.dark.group.visible = !lit;
   }
   const WORDS = {
-    above: () => '', fly: () => (iPilot ? (fl && fl.auto ? 'The autopilot docks at the old station\'s bridge' : 'Dock at the old station\'s bridge: line up with the blue ship') : `${opts.flier} flies in to the old station's bridge`),
-    seal: () => 'Docking', docked: () => (st.done && st.unloaded >= of ? 'The old station has its supplies: back aboard' : st.visited ? (st.unloaded >= of ? 'With the old station\'s people' : 'The supplies are coming off') : 'Docked: across the bridge to meet its people'),
-    unseal: () => 'Letting go of their bridge', away: () => (iPilot ? (fl && fl.auto ? 'The autopilot flies clear' : 'Undock and fly clear of the old station') : `${opts.flier} flies clear`), up: () => '',
+    above: () => '', fly: () => (iPilot ? (fl && fl.auto ? 'The autopilot docks at Tangent Station\'s bridge' : 'Dock at Tangent Station\'s bridge: line up with the blue ship') : `${opts.flier} flies in to Tangent Station's bridge`),
+    seal: () => 'Docking', docked: () => (st.done && st.unloaded >= of ? 'Tangent Station has its supplies: back aboard' : st.visited ? (st.unloaded >= of ? 'With Tangent Station\'s people' : 'The supplies are coming off') : 'Docked: across the bridge to meet its people'),
+    unseal: () => 'Letting go of their bridge', away: () => (iPilot ? (fl && fl.auto ? 'The autopilot flies clear' : 'Undock and fly clear of Tangent Station') : `${opts.flier} flies clear`), up: () => '',
   };
   const _f = new THREE.Vector3(), _c = new THREE.Vector3(), inRooms = (p) => p.x > -15.1 && p.x < -0.9 && p.z > 27 && p.z < 35.2 && p.y < 4;
   const footIn = () => !!(F && F.shown && boarding.inside(F.player.pos) === S);
@@ -319,7 +319,7 @@ export function makeSite(ctx, opts = {}) {
           const L = again ? OLD_STATION.again : OLD_STATION.first;
           st.sayT -= dt;
           if (st.said < L.length && st.sayT <= 0 && !(L[st.said].lights && st.unloaded < 1)) {
-            const l = L[st.said++]; say('Old station', l.w); st.sayT = Math.min(7, 2.6 + l.w.length * 0.06);
+            const l = L[st.said++]; say('Tangent Station', l.w); st.sayT = Math.min(7, 2.6 + l.w.length * 0.06);
             if (l.lights && !st.lit) { lightsUp(); st.lightsT = 0; }
           }
         }

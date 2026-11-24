@@ -47,7 +47,7 @@ export function cargoLink({ crew, save = () => {}, supply = null, contract = fal
   const cardAt = (step, k) => (k < CARDS ? chain(step).cards[k] : next(step).cards[Math.min(CARDS - 2, 1 + (k - CARDS))]);
   const dots = () => Array.from({ length: total }, (_, i) => `<i class="${i < run.k ? 'is-done' : i === run.k ? 'is-now' : ''}"></i>`).join('');
   function head(o, end = false) {
-    const sub = end ? 'Worked out' : `${run.k >= CARDS ? 'The next load' : `To ${'the old station'}`} · question ${Math.min(total, run.k + 1)} of ${total}`;
+    const sub = end ? 'Worked out' : `${run.k >= CARDS ? 'The next load' : `To ${'Tangent Station'}`} · question ${Math.min(total, run.k + 1)} of ${total}`;
     return `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Supply run</b><small>${esc(sub)}</small></header>
       <div class="pcc-steps" role="img" aria-label="${Math.min(run.k, total)} of ${total} worked out">${dots()}</div>`;
   }
@@ -67,9 +67,9 @@ export function cargoLink({ crew, save = () => {}, supply = null, contract = fal
       // (Cargo's crew's run, the supply contract signed without the Loadmaster's job: nothing here is the crew member's)
       if (run.byCrew && !done) return { html: `${head(null, true)}
         <p class="pnj-story pcc-end"><b>Cargo's crew loads this run.</b></p>
-        <p class="pnj-story pcc-end2">${u(N, 'pallet', 'pallets')} for the old station, in ${where}. The Hauler will be ready for takeoff: up the lift to the main deck, out across the bridge and aboard.</p>`, buttons: [{ label: 'Done' }] };
+        <p class="pnj-story pcc-end2">${u(N, 'pallet', 'pallets')} for Tangent Station, in ${where}. The Hauler will be ready for takeoff: up the lift to the main deck, out across the bridge and aboard.</p>`, buttons: [{ label: 'Done' }] };
       const html = `${head(null, true)}
-        <p class="pnj-story pcc-end"><b>${done ? 'Loaded!' : `Pack ${u(N, 'pallet', 'pallets')} for the old station.`}</b></p>
+        <p class="pnj-story pcc-end"><b>${done ? 'Loaded!' : `Pack ${u(N, 'pallet', 'pallets')} for Tangent Station.`}</b></p>
         <p class="pnj-story pcc-end2">${done ? 'The Hauler is loaded and ready for takeoff.'
     : `${K === 1 ? 'They go' : `${PER_BOX} to a container, they go`} in ${where}: ${K === 1 ? 'its doors are' : 'their doors are'} open now. Take the forklift, parked in its bay beside this desk, and load the pallets waiting on the loading floor.${loaded ? ` ${loaded} of ${N} loaded so far.` : ''}`}</p>`;
       return { html, buttons: [{ label: 'Done' }] };

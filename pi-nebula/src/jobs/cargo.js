@@ -24,7 +24,7 @@ import { cargoPic } from './cargopics.js';
 
 export const CARDS = 5;                       // the questions a run asks ("Maybe 5 questions")
 export const PER_BOX = 2;                     // pallets to a container (kit/places-plan.js LOAD.each)
-export const STATION = 'the old station';    // (its name is not picked yet: the plan's piece 1)
+export const STATION = 'Tangent Station';    // (its name: the game's maker's, 2026-11-24: "I like Tangent Station")
 const u = (n, unit) => `${n.toLocaleString('en-US')} ${n === 1 ? unit[0] : unit[1]}`;
 const face = (n, unit) => ({ v: n, big: n.toLocaleString('en-US'), small: n === 1 ? unit[0] : unit[1], label: u(n, unit) });
 const U = { people: ['person', 'people'], packs: ['meal pack', 'meal packs'], crates: ['crate', 'crates'], drums: ['drum', 'drums'], pallets: ['pallet', 'pallets'], containers: ['container', 'containers'], litres: ['litre', 'litres'] };
@@ -266,7 +266,7 @@ export { seeded };
 
 export const PLACE = {
   id: 'cargo', name: 'The shipping computer', short: 'Cargo', math: 'Packing the supply run: people, days, crates, pallets', pic: 'cargo', job: null,
-  line: 'Work out the supplies to pack for the old station: meal packs and water for its people, then crates, pallets and containers.',
+  line: 'Work out the supplies to pack for Tangent Station: meal packs and water for its people, then crates, pallets and containers.',
   levels: STEPS.map((s, i) => ({ id: s.id, title: s.title, line: s.line, grade: s.grade, strand: 'words', gen: { mix: [{ maker: 'load', step: i + 1, w: 1 }] } })),
 };
 

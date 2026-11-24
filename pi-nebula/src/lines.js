@@ -40,9 +40,9 @@ export const CAPTAINS = {
   //         offer in place of the run's, with its own question and answers; the card is the sale's line alone
   //   signed / signedLoad: the contract signed (they will be by the docking port); with the Loadmaster's job theirs,
   //         where its work is: said by them alone, as the other captains say theirs (a word at the top lay over it)
-  [HAULER_CAPTAIN.id]: { ship: 'Hauler', mission: 'supply', what: 'Join the Hauler\'s crew for a supply run to the old station?',
-    offer: `Hello! I'm ${HC} of the Hauler. The old station needs supplies, and I need a crew. Interested?`,
-    again: 'I still need a crew for the run to the old station. Interested?', no: 'No trouble. You will find me by the docking port.', waiting: 'The Hauler is nearly ready. Soon!',
+  [HAULER_CAPTAIN.id]: { ship: 'Hauler', mission: 'supply', what: 'Join the Hauler\'s crew for a supply run to Tangent Station?',
+    offer: `Hello! I'm ${HC} of the Hauler. Tangent Station needs supplies, and I need a crew. Interested?`,
+    again: 'I still need a crew for the run to Tangent Station. Interested?', no: 'No trouble. You will find me by the docking port.', waiting: 'The Hauler is nearly ready. Soon!',
     contract: 'Good. Here is my contract. Have a look.',
     signed: 'Glad to have you. Cargo\'s crew is loading the Hauler. I\'ll meet you by the docking port.',
     signedLoad: 'Glad to have you. The load is yours to work out: the shipping computer in Cargo, down the lift.',
@@ -83,8 +83,8 @@ export const CAPTAINS = {
 };
 
 // THE OLD STATION'S OWN PEOPLE, in its hall, to the Hauler's crew (src/oldstationsite.js; bubbles, no recorded clips; who:
-// which of the three says it, 0 to 2). They have no names yet (the game's maker's to pick), nor has their station: each
-// bubble is headed "Old station". first: the run that saves it (they thank the crew by name of what was brought: the
+// which of the three says it, 0 to 2). They have no names yet (the game's maker's to pick); their station has (his, 2026-11-24:
+// "I like Tangent Station"): each bubble is headed "Tangent Station". first: the run that saves it (they thank the crew by name of what was brought: the
 // call the Explorer heard asked for fuel cells, food and spare parts); `lights`: said as its lights come back up;
 // again: a hauling run after that. {player}: the crew member's name
 export const OLD_STATION = {
@@ -186,8 +186,8 @@ export const RUN_TALK = {
     letGo: ['Everything is loaded. Letting go of the bridge.', 'The supplies are aboard. Letting go of the bridge.'],
     out: ['We\'re clear of the station. Work out the jump, pilot.', 'Clear of the station. The jump computer is yours, {player}.'],
     crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
-    there: ['There it is: the old station. Hardly a light on.', 'That\'s the jump. There\'s the old station, nearly dark.'],
-    thereAgain: ['There\'s the old station. Look at all those lights now.', 'That\'s the jump. The old station, all lit up.'],
+    there: ['There it is: Tangent Station. Hardly a light on.', 'That\'s the jump. There\'s Tangent Station, nearly dark.'],
+    thereAgain: ['There\'s Tangent Station. Look at all those lights now.', 'That\'s the jump. Tangent Station, all lit up.'],
     // (out of the wormhole: who takes the Hauler in to their old bridge)
     dock: ['Their old bridge still stands, on the far side. Take us in to it, {player}: line up with the blue ship.', 'Round to their bridge, {player}, and dock us: the blue ship shows where.'],
     dockCrew: ['Their old bridge still stands. Take us in to it, {pilot}.', 'Round to their bridge, {pilot}, and dock us.'],
@@ -198,8 +198,8 @@ export const RUN_TALK = {
     done: ['Every pallet is off. Come back aboard, {player}: we\'re going home.'],
     away: ['Everyone is aboard. Take us clear of their bridge, {player}.'],
     awayCrew: ['Everyone is aboard. Take us clear, {pilot}.'],
-    clear: ['Clear of the old station. Work out the jump home, pilot.'],
-    clearCrew: ['Clear of the old station. {pilot} has the jump home.'],
+    clear: ['Clear of Tangent Station. Work out the jump home, pilot.'],
+    clearCrew: ['Clear of Tangent Station. {pilot} has the jump home.'],
     home: ['There\'s our station. Round to the bridge, {player}, and dock us.', 'Home. Take us in to our bridge, {player}.'],
     homeCrew: ['There\'s our station. {pilot} has the docking.', 'Home. {pilot} takes her in to the bridge.'],
     landed: ['We\'re home, {player}. Your share is at the shipping computer in Cargo.'],
@@ -283,7 +283,7 @@ export const TALKS = [
   // (a finding of Captain Vega's exploring run: news.js 'find', its {what} the run's own words)
   // (the supply run that saved the old station: src/trip.js, news.js 'supply')
   // (never said by the Hauler's own captain, who was there: now and then a captain is asked over to talk, as anyone is)
-  { id: 'supply-1', news: 'supply', about: [HAULER_CAPTAIN.id], lines: ['The Hauler got through to the old station!', 'With the fuel cells?', 'Its lights are back on, they say.'] },
+  { id: 'supply-1', news: 'supply', about: [HAULER_CAPTAIN.id], lines: ['The Hauler got through to Tangent Station!', 'With the fuel cells?', 'Its lights are back on, they say.'] },
   { id: 'find-1', news: 'find', about: ['vega'], lines: ["Captain Vega's crew found {what}!", "Way out past the charts?", "That's what I heard. Who knows what they'll find next."] },
   { id: 'planet-1', news: 'planet', lines: ["They found a new planet people could live on!", "Really? What's it called?", "{planet}. It has oceans, I heard.", "Oceans! I'd go just to swim."] },
   { id: 'planet-2', news: 'planet', lines: ["Would you live on {planet}?", "Only if they have a galley as good as ours."] },

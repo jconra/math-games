@@ -263,7 +263,7 @@ test('the words: its captain\'s for every moment of the run; the old station\'s 
   assert.match(read('../src/announce.js'), /n\.kind !== 'find' && n\.kind !== 'supply' && n\.kind !== 'call'/);
   // (and where the run begins is said once, as the Explorer comes home with the find: a text line, nobody's talk)
   // (it names the Hauler's captain, who has the contract, from the name's one place)
-  assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: `A word from Cargo\. Gus at the shipping desk is getting supplies together for the old station\. \$\{HAULER_CAPTAIN\.name\} of the Hauler needs a crew\.` \}\)/);
+  assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: `A word from Cargo\. Gus at the shipping desk is getting supplies together for Tangent Station\. \$\{HAULER_CAPTAIN\.name\} of the Hauler needs a crew\.` \}\)/);
   assert.ok(!TALKS.some((t) => t.news === 'call'));
   // (both are said by the station's own text line, each once)
   const found = lineOf('found'), told = new Set();
@@ -337,7 +337,7 @@ test('the Hauler\'s captain: one of the station\'s captains, by the docking port
 test('the Hauler\'s captain\'s words: the offer, the contract signed, the share; until the old station is found no run to ask about; words alone, no recorded clip', () => {
   const K = CAPTAINS[HAULER_CAPTAIN.id]; assert.ok(K); assert.equal(K.ship, 'Hauler');
   for (const k of ['what', 'offer', 'again', 'no', 'contract', 'signed', 'signedLoad', 'payout']) assert.ok(typeof K[k] === 'string' && K[k].length > 8 && K[k].length <= 110, k);
-  assert.ok(K.offer.includes(HAULER_CAPTAIN.name)); assert.match(K.offer, /old station/); assert.match(K.offer, /Interested\?$/); assert.match(K.again, /Interested\?$/);
+  assert.ok(K.offer.includes(HAULER_CAPTAIN.name)); assert.match(K.offer, /Tangent Station/); assert.match(K.offer, /Interested\?$/); assert.match(K.again, /Interested\?$/);
   // (signed: where they will be; with the Loadmaster's job the crew member's, where its work is; home, where the share is)
   assert.match(K.signed, /docking port/); assert.match(K.signedLoad, /shipping computer in Cargo/); assert.match(K.payout, /shipping computer in Cargo/);
   // (before the old station is found: who they are, and no question)

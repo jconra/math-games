@@ -84,7 +84,7 @@ const LINE = { ship: '#ffd560', payout: '#ff8a3a' };
 // panel's `card` hook), asked at the crew member's own level of that job
 const PAY_AT = { smelter, medical, survey, cargo };
 // (where each run goes, as the seat's prompt says it)
-const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts', oldstation: 'the old station' };
+const PLACE_WORDS = { field: 'the rocks', planet: 'the planet', explore: 'the edge of the charts', oldstation: 'Tangent Station' };
 const nameOfShip = (id) => (shipFacts(id) || {}).name || 'ship';
 const shipName = (M) => nameOfShip(M.ship);
 // (the run each ship flies: its captain's, and the owner's own)
@@ -306,7 +306,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         if (own) toastUp(roles.includes('cargo') ? 'Your run is on. The supplies are yours to work out: start at this computer.' : 'Your run is on. Cargo\'s crew loads the Hauler: up the lift, across the bridge and aboard.');
       };
       const K = CAPTAINS[captain.id] || {};
-      card = openContract(document.body, { mission: desk ? { ...Mc, saleAbout: 'The Hauler waits at the dock, across the bridge. Bought, it is yours to fly round the station whenever you like. Hauling runs of your own start once the old station is found.' } : Mc,
+      card = openContract(document.body, { mission: desk ? { ...Mc, saleAbout: 'The Hauler waits at the dock, across the bridge. Bought, it is yours to fly round the station whenever you like. Hauling runs of your own start once Tangent Station is found.' } : Mc,
         captain: captain.name || nameOf(captain.id), mode,
         // THE SHIP'S SALE: bought, its captain says so; "Take your Miner out": the line to it, and its seat offers it; at
         // the Hauler's own desk: this card turns to the owner's, where its own run is begun (its load is worked out there)
@@ -315,7 +315,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           () => { const pp = people(); if (pp && !atDesk) pp.captain.say(captain.id, `The ${shipName(M)} is yours. Take it out whenever you like.`); }),
         own: atDesk ? {
           get run() { return stationFound(c) && !contractOf(c); },
-          get why() { const on = contractOf(c); return !stationFound(c) ? 'Hauling runs of your own start once the old station is found. Until then the Hauler is yours to fly round the station.' : on && on.state === 'payout' ? 'Your pay from the last run is still waiting: a run of your own can start once you have collected it.' : 'You have a contract on. A run of your own can start once it is done and paid.'; },
+          get why() { const on = contractOf(c); return !stationFound(c) ? 'Hauling runs of your own start once Tangent Station is found. Until then the Hauler is yours to fly round the station.' : on && on.state === 'payout' ? 'Your pay from the last run is still waiting: a run of your own can start once you have collected it.' : 'You have a contract on. A run of your own can start once it is done and paid.'; },
           fly: false, note: 'Just flying, for no pay: from the Hauler\'s pilot\'s seat, any time.',
           onRun: (roles) => { done(); const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (m) begunAtDesk(m, roles, true); },
           onFly: () => {},
@@ -358,7 +358,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       card = openContract(document.body, { mission: M, captain: `Your ${nameOfShip(ship)}`, mode: 'own',
         sale: { now: () => saleOf(c, ship, { bridge: bridgeUp() }) },
         own: { run, fly: true,
-          why: run ? '' : desk ? (stationFound(c) ? 'The Hauler is yours to fly round the station. A supply run of your own starts at the shipping computer in Cargo, where its load is worked out.' : 'The Hauler is yours to fly round the station. Hauling runs of your own start once the old station is found.')
+          why: run ? '' : desk ? (stationFound(c) ? 'The Hauler is yours to fly round the station. A supply run of your own starts at the shipping computer in Cargo, where its load is worked out.' : 'The Hauler is yours to fly round the station. Hauling runs of your own start once Tangent Station is found.')
             : on && on.state === 'payout' ? `The ${nameOfShip(ship)} is yours to fly round the station. Your pay from the last run is still waiting: a run of your own can start once you have collected it.`
               : `The ${nameOfShip(ship)} is yours to fly round the station. You have a contract on: a run of your own can start once it is done and paid.`,
           note: 'Just flying: out, round the station and back. Nothing is asked and nothing is paid.',
@@ -437,7 +437,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     let paid = null; const own = !!m.own;
     return { card: () => (paid ? null : payoutCard(at)), head: (o) => payoutHead(o),
       right: (q) => { if (q && q.order && q.order.payout != null) { paid = { pay: q.order.payout, first: !!(m.payout && m.payout.first) }; if (!own) seekCaptain(deskOf(at).captain); } },
-      over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'The old station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to the old station.'} ${own ? 'Another run of your own whenever you like: Your Hauler, at this computer.' : `${nameOf(deskOf(at).captain)} has another run whenever you want one: up the lift, by the docking port.`}</p>`, buttons: [{ label: 'Done' }] } : null),
+      over: () => (paid ? { html: `<header class="pnj-cardtop is-slip"><span class="pnj-icon is-bar" aria-hidden="true"></span><b>Pay slip</b><small>Paid</small></header><p class="pnj-story pcc-end"><b>${paid.pay.toLocaleString('en-US')} credits paid.</b></p><p class="pnj-story pcc-end2">${paid.first ? 'Tangent Station has its fuel cells, its food and its spare parts. Its lights are on again.' : 'Another load delivered to Tangent Station.'} ${own ? 'Another run of your own whenever you like: Your Hauler, at this computer.' : `${nameOf(deskOf(at).captain)} has another run whenever you want one: up the lift, by the docking port.`}</p>`, buttons: [{ label: 'Done' }] } : null),
       close() {} };
   }
 
@@ -616,7 +616,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         // aboard; and whenever its captain has something for them as they come aboard, that run or, until the old
         // station is found, the Hauler for sale, the captain is kept about to be found: seekCaptain, above; another
         // crew member's captain is looked for no more)
-        if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp(`${nameOf(MISSIONS.supply.captain)} has a contract: supplies for the old station. Find the captain by the docking port, in the terminal.`);
+        if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp(`${nameOf(MISSIONS.supply.captain)} has a contract: supplies for Tangent Station. Find the captain by the docking port, in the terminal.`);
         { const id = MISSIONS.supply.captain; if (first && playing && !trip) seekCaptain(!m && (missions.open(id, c) || missions.state(id, c) === 'sale') ? id : false); }
       }
       if (wantSeek != null && people() && people().captain.seek) { const cap = people().captain; if (wantSeek) cap.seek(wantSeek); else if (cap.seeking === MISSIONS.supply.captain) cap.seek(null); wantSeek = null; }
