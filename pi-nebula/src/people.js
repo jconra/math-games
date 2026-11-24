@@ -1810,11 +1810,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (seated and waiting out of the way while the medic is about: not there to be seen (PRESENCE: nobody comes about in
   // the camera's view), so passed over until they are, and not counted as the one waiting: the next one is called)
   const unseenWaiting = (P) => { if (!P.away || !waitsSeated(P)) return false; const M = list.find((q) => /medic/.test(q.id) && !q.hidden && !q.home && !q.rescued); return !!M && !M.away; };
+  // (when they sat down; one of the rescued seated again after a reload, wardplan.js kept, came before anyone the
+  // station seats as it loads)
+  const cameAt = (P, rec) => { if (rec.came == null) rec.came = P.rescued && P.rescued.placed ? -1 : clock; };
   // FIRST COME, FIRST SCANNED: of those seated and waiting, whoever sat down first (worked out once a frame)
   function scanHead() {
     if (checks.headAt === clock) return checks.head;
     const L = list.filter((P) => waitsSeated(P) && !unseenWaiting(P));
-    for (const P of L) { const r = recOf(P); if (r.came == null) r.came = clock; }
+    for (const P of L) cameAt(P, recOf(P));
     const first = firstCome(L.map(recOf));
     checks.headAt = clock; return (checks.head = first ? L.find((P) => recOf(P) === first) : null);
   }
@@ -1825,7 +1828,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function scanWaitStep(P, rec) {
     if (!waitsSeated(P)) return;
     const a = P.act;
-    if (rec.came == null) rec.came = clock;
+    cameAt(P, rec);
     if (scanMedicFor(P) && scanHead() === P && turnFree(P)) {
       checks.turn = P; checks.turnAt = clock;
       // (one of the station's own: up as soon as it is their turn, once they have sat a moment)
