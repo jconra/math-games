@@ -1181,6 +1181,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // below): their lines are words alone, no recorded clip. And until their run is offered (src/missions.js `offered`:
     // the old station found) there is none to ask about: 'wait', a word and no question; or 'sale', their ship for sale
     // to this crew member meanwhile: that offer in place of the run's (K.sale's words; K.now: whose words answer() uses)
+    // (ONE QUESTION AT A TIME: two captains turned to the player at once, one by the docking port and one at the window
+    // near it, and the second's question took the first one's place under the player's thumb: with a question up, this
+    // captain says nothing now and may ask a little later)
+    if (bubbles.asking) { endOffer(P); K.cool = 4; return; }
     if (st === 'wait') { const w = K.wait[K.waited ? 1 : 0]; K.waited = true; bubbles.say(P, w, { kind: 'captain', secs: Math.max(4.5, READ(w) + 1) }); P.talkUntil = clock + Math.min(3, READ(w)); K.state = 'answered'; K.t = 0; K.hold = READ(w) + 0.5; K.cool = FRIENDLY.answered; return; }
     const V = K.now = st === 'sale' ? { ...K.sale, pitch: 'sale' } : K;
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the

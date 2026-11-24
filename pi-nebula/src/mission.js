@@ -597,7 +597,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       if (c && synced !== c.id + ':' + (m ? m.state : '')) {
         const first = synced == null || !String(synced).startsWith(c.id + ':'); synced = c.id + ':' + (m ? m.state : '');
         crane.awayHeld = !!(m && m.state === 'signed' && minerRun(m));
-        if (first && playing && m && !trip) lead(m.state === 'signed' ? 'ship' : 'payout');
+        // (never to a ship whose load is not worked out yet: the supply run's Loadmaster's work comes first, in Cargo)
+        if (first && playing && m && !trip && !(m.state === 'signed' && loadWait(m))) lead(m.state === 'signed' ? 'ship' : 'payout');
         // (the old station found and no supply run made yet: who has its contract and where, said once as they come aboard)
         if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp(`${nameOf(MISSIONS.supply.captain)} has a contract: supplies for the old station. Find the captain by the docking port, in the terminal.`);
       }

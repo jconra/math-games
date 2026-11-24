@@ -91,9 +91,12 @@ export const SPOTS = {
   terminalFloor: [{ room: 'terminal', at: [0.17, 0.12], face: [0.3, -1] }, { room: 'terminal', at: [0.25, 0.33], face: [1, 0.2] }, { room: 'terminal', at: [0.16, 0.45], face: [1, -0.3] }],
   // BY THE DOCKING PORT, the Hauler's captain's own place (the Hauler lies at the dock, out across the bridge, as the
   // other captains' ships stand in their hangars): in the terminal under the DOCK sign, on the south side of the port's
-  // doorway (its north side is the foot of the stairs): reading the dock's screen there, beside the doorway looking out
-  // over the terminal, and a step out on the floor, turned to the port
-  dockPort: [{ room: 'terminal', at: [0.061, 0.725], face: [1, -0.25] }, { piece: 'screen', variant: 'terminal', room: 'terminal', local: [0, -1.3, 0.75], face: [0, -1] }, { room: 'terminal', at: [0.135, 0.79], face: [-1, -1] }],
+  // doorway (its north side is the foot of the stairs): beside the doorway looking out over the terminal, and reading
+  // the dock's screen there. Both against the west wall, well over 4 m from the nearest of the windows' places, where
+  // another captain may stand: whoever walks up to the Hauler's captain is nearer to them than to anyone at a window,
+  // so it is they who speak up (a place a step out on the floor, 2.9 m from that window, was tried: a captain at the
+  // window asked across the Hauler's captain's own question)
+  dockPort: [{ room: 'terminal', at: [0.061, 0.725], face: [1, -0.25] }, { piece: 'screen', variant: 'terminal', room: 'terminal', local: [0, -1.3, 0.75], face: [0, -1] }],
   // reading the terminal's screens, on its walls (standing in the open with nothing to look at reads as someone waiting)
   terminal: [{ piece: 'screen', variant: 'status', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }, { piece: 'screen', variant: 'radar', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }, { piece: 'screen', variant: 'terminal', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }],
   lockers: [{ piece: 'wall', variant: 'locker', room: 'c1', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-n', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-s', all: true, local: [0, 0, 0.6], face: [0, -1] }],
