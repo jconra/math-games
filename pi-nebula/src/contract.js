@@ -84,6 +84,8 @@ button.pmc-role:hover { box-shadow: inset 0 0 0 2px rgba(232, 243, 252, 0.9); }
 `;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const say = (n) => Number(n).toLocaleString('en-US');
+// ("Bo takes 10%", "Bo takes 10% and Ana 20%", "Bo takes 10%, Ana 20% and Tess 20%")
+const listOf = (L) => (L.length <= 1 ? L.join('') : `${L.slice(0, -1).join(', ')} and ${L[L.length - 1]}`);
 // (what a run brings, as each kind of run says it; and its example: an ordinary load of the Miner's eight tonnes, the
 // game's maker's own sum: 4 × 2,000 + 2 × 3,000 + 2 × 5,000; a rescue's: so much for each person brought home, four of
 // them; an exploring run's: so much for each place explored, two of them; a supply run's: so much for each pallet of
@@ -184,7 +186,7 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
       ${mates.length ? `<div class="pmc-along"><b>Along for the ride</b><span>${rest.length ? rest.map((p) => { const on = along.includes(p.id), off = !on && aboardN() >= seats; return `<button type="button" class="pmc-mate${on ? ' is-on' : ''}" data-mate="${esc(p.id)}" aria-pressed="${on}"${off ? ' disabled' : ''}>${esc(p.name)}</button>`; }).join('') : '<small>Everyone on your crew has a job.</small>'}</span>${rest.length ? `<small>${aboardN()} of ${seats} seats</small>` : ''}</div>` : ''}
       <p class="pmc-note">${mates.length ? `Tap a job to give it to someone on your crew, or to take it back.${mine.size ? ' The jobs you do yourself ask about half as many questions again as on a captain\'s contract.' : ' Your crew does every job: you ride along, and the pay slip is yours to work out.'}` : 'Nobody is on your crew yet, so all three jobs are yours. To ask someone to join it, tap them on the station. The jobs ask about half as many questions again as on a captain\'s contract.'}</p>
       <div class="pmc-pay"><b>You keep ${keep}% of what ${brings(M)}</b>
-        <p>Operating costs take ${OPS.pct}%: fuel, maintenance and insurance.${jobs.length ? ` ${esc(jobs.map((c) => `${c.name} takes ${c.share}%`).join(', and '))}.` : ''} ${esc(String(M.paid).replace(/You are paid your share of [^,]+,/, 'You are paid'))}</p>
+        <p>Operating costs take ${OPS.pct}%: fuel, maintenance and insurance.${jobs.length ? ` ${esc(listOf(jobs.map((c, i) => (i ? `${c.name} ${c.share}%` : `${c.name} takes ${c.share}%`))))}.` : ''} ${esc(String(M.paid).replace(/You are paid your share of [^,]+,/, 'You are paid'))}</p>
         <p>${exampleOf(M, keep)}</p></div>`
     : `<p class="pmc-what">${esc((own && own.why) || '')}</p>`}
       ${own && own.note ? `<p class="pmc-note">${esc(own.note)}</p>` : ''}
