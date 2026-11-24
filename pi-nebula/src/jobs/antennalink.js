@@ -49,13 +49,14 @@ const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the e
 // ON A PHONE the band over the card is a third of the screen, so a view's `tall` says where it looks and how much
 // further back it stands there, for the whole of what the step builds to be in that band: `whole` from the roof and
 // the arms' ends to the light at the very top; `end` the whole antenna on the tower's top (the control room's windows
-// are under the card there).
+// are under the card there). (Looking down from over the roof, the top edge of a phone's screen is just under level:
+// far enough back, the light at the very top is under that edge and the roof still over the card's.)
 export const VIEW = {
   low: { look: [0, 0.8, 0], from: [-3.2, 4.4, 6.4], fov: 50, tall: { look: [0, 1.0, 0], far: 1.6 } },
-  whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52, tall: { look: [0, 6.8, 0], far: 2.5 } },
+  whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52, tall: { look: [0, 7.8, 0], far: 3 } },
   top: { look: [0, 12.6, 0], from: [-2.6, 1.6, 6.4], fov: 52, tall: { look: [0, 13.2, 0], far: 1.5 } },
   sky: { look: [0, 12.9, 0], from: [-3.8, -1.2, 7.8], fov: 54, tall: { look: [0, 13.3, 0], far: 1.4 } },
-  end: { look: [0, -2, 0], from: [-13, 6, 37], fov: 55, tall: { look: [0, 5.3, 0], far: 1.5 } },
+  end: { look: [0, -2, 0], from: [-13, 6, 37], fov: 55, tall: { look: [0, 6.4, 0], far: 1.9 } },
   on: { wide: [-0.36, 0], tall: [0, 0.66] }, far: 1.4,
 };
 // which view each step is asked from (the step being asked: 0 the old antenna ... 7 the call)
