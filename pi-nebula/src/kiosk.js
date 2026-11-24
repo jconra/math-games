@@ -70,7 +70,7 @@ const CSS = `
 .psk-sale button { flex: none; min-height: 46px; padding: 6px 16px; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; clip-path: var(--oct); --cut: 8px; }
 .psk-buy, .psk-take { color: var(--accent-ink) !important; background: var(--accent) !important; }
 .psk-no { background: rgba(40, 47, 56, 0.92) !important; box-shadow: inset 0 0 0 1.5px var(--line); }
-body:has(.psk:not([hidden])) .pnj-prompt, body:has(.psk:not([hidden])) .pnj-wallet small { visibility: hidden; }
+body:has(.psk:not([hidden])) .pnj-prompt { visibility: hidden; }
 @media (hover: none) and (pointer: coarse) { .psk kbd { display: none; } }
 @media (max-width: 640px) { .psk { padding: 10px 10px 12px; } .psk-top small { display: none; } .psk-ship b { font-size: 13px; letter-spacing: 0.02em; } .psk-ship small { font-size: 12px; }
   .psk-paints { grid-template-columns: repeat(5, minmax(0, 1fr)); } .psk-paint { height: 42px; } .psk-sale { flex-wrap: wrap; } .psk-sale button { flex: 1 1 auto; } }
