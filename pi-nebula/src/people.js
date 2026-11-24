@@ -1177,26 +1177,33 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (st === 'signed') { const w = lineOf(K.signed); if (w) { bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; } K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'payout') { const w = K.payout || K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4.5 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'interested' && !missions.ready(K.id)) { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
+    // THE HAULER'S CAPTAIN (src/lines.js CAPTAINS; the one part of this file that is theirs, here and `V` in answer()
+    // below): their lines are words alone, no recorded clip. And until their run is offered (src/missions.js `offered`:
+    // the old station found) there is none to ask about: 'wait', a word and no question; or 'sale', their ship for sale
+    // to this crew member meanwhile: that offer in place of the run's (K.sale's words; K.now: whose words answer() uses)
+    if (st === 'wait') { const w = K.wait[K.waited ? 1 : 0]; K.waited = true; bubbles.say(P, w, { kind: 'captain', secs: Math.max(4.5, READ(w) + 1) }); P.talkUntil = clock + Math.min(3, READ(w)); K.state = 'answered'; K.t = 0; K.hold = READ(w) + 0.5; K.cool = FRIENDLY.answered; return; }
+    const V = K.now = st === 'sale' ? { ...K.sale, pitch: 'sale' } : K;
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
     // question at the bottom of the screen)
-    let words = K.again;
-    if (!K.offered) { K.voice = speak(P, K.offer.clip, 0.8); if (K.voice) { K.offered = true; words = VOICE_CLIPS[K.offer.clip].words; } else if (st === 'new') words = VOICE_CLIPS[K.offer.clip].words; }
+    let words = V.again;
+    if (typeof V.offer === 'string') { if (K.pitched !== (V.pitch || 'run')) { K.pitched = V.pitch || 'run'; words = V.offer; } }
+    else if (!K.offered) { K.voice = speak(P, K.offer.clip, 0.8); if (K.voice) { K.offered = true; words = VOICE_CLIPS[K.offer.clip].words; } else if (st === 'new') words = VOICE_CLIPS[K.offer.clip].words; }
     else K.voice = speak(P, K.hello.clip);
     const secs = Math.max(6, READ(words) + 2);
     bubbles.say(P, words, { kind: 'captain', secs }); P.talkUntil = clock + Math.min(secs - 1, READ(words));
-    missions.asked(K.id);
+    if (st !== 'sale') missions.asked(K.id);
     // (a captain whose ship is down for now, Captain Adair: no question; they stay facing the player till they have said
     // it, then go on with their day)
     if (K.down) { K.state = 'answered'; K.t = 0; K.hold = Math.min(secs - 1, READ(words) + 0.5); K.cool = FRIENDLY.answered; return; }
-    K.ask = bubbles.ask({ who: K.name, what: K.what, yes: 'Interested', no: 'Not now',
+    K.ask = bubbles.ask({ who: K.name, what: V.what, yes: 'Interested', no: 'Not now',
       onYes: () => answer(P, true), onNo: () => answer(P, false) });
   }
   function answer(P, yes) {
-    const K = P.cap; counts.answers++;
+    const K = P.cap, V = K.now || K; counts.answers++;
     if (K.voice) { K.voice.stop(); K.voice = null; lastVoice = -99; }
     // (a mission that is made: yes brings up the contract's card, src/mission.js; they stay with the player meanwhile)
-    const made = yes && missions.ready(K.id) && K.contract;
-    const words = made ? K.contract : yes ? VOICE_CLIPS[K.yes.clip].words : K.no;
+    const made = yes && missions.ready(K.id) && V.contract;
+    const words = made ? V.contract : yes ? VOICE_CLIPS[K.yes.clip].words : V.no;
     if (yes && !made) speak(P, K.yes.clip, 0.8);
     bubbles.say(P, words, { kind: 'captain', secs: Math.max(3.5, READ(words)) }); P.talkUntil = clock + Math.min(3, READ(words));
     K.ask = null; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; P.smileUntil = clock + 5;

@@ -13,6 +13,9 @@
 //   who       (optional) only between these people, by roster id (both speakers among them)
 //   sitting   (optional) true: only at a table; false: only standing
 // Keep each line short (a bubble holds about 90 letters), friendly, and good for a child to read.
+import { HAULER_CAPTAIN } from './life.js';
+// (the Hauler's captain as they are called: the working name's one place is src/life.js HAULER_CAPTAIN)
+const HC = HAULER_CAPTAIN.name;
 
 // a hello as someone passes (said in a bubble; a person's very first hello to the player is spoken in their voice,
 // from voices.js); and again, later, when they have greeted the player before
@@ -28,6 +31,24 @@ export const AGAIN = ['Hello again!', 'Hi again!', 'Hey!', 'Back again?', 'Oh, h
 export const NUDGES = ['So, what do you say?', 'Take your time!', 'No rush. Think it over!', 'It will be fun, I promise!'];
 
 export const CAPTAINS = {
+  // THE HAULER'S CAPTAIN (the game's maker, HAUL1-1 C: "a captain of its own, who walks the station like Ruiz, Hale and
+  // Vega and comes along on the run"): the supply run to the old station, src/missions.js 'supply'. No recorded clips
+  // yet: every line is words in a bubble (offer, again: plain words where the others have a clip).
+  //   wait: until the old station is found there is no run to offer: what they say then if spoken to (the first time,
+  //         and after), and no question
+  //   sale: until then, with the Hauler for sale to this crew member (their bridge out to it built: src/own.js): that
+  //         offer in place of the run's, with its own question and answers; the card is the sale's line alone
+  //   signed / signedLoad: the contract signed; with the Loadmaster's job theirs, where its work is
+  [HAULER_CAPTAIN.id]: { ship: 'Hauler', mission: 'supply', what: 'Join the Hauler\'s crew for a supply run to the old station?',
+    offer: `Hello! I'm ${HC} of the Hauler. The old station needs supplies, and I need a crew. Interested?`,
+    again: 'I still need a crew for the run to the old station. Interested?', no: 'No trouble. You will find me by the docking port.', waiting: 'The Hauler is nearly ready. Soon!',
+    contract: 'Good. Here is my contract. Have a look.',
+    signed: 'Glad to have you. Cargo\'s crew is loading. I\'ll meet you by the docking port.',
+    signedLoad: 'Glad to have you. Work out the load at the shipping computer in Cargo. I\'ll be by the docking port.',
+    payout: 'Good work out there. Your share is waiting at the shipping computer in Cargo.',
+    wait: [`Hello! I'm ${HC} of the Hauler. No run to crew just now. Come and find me later!`, 'Hello again! Nothing to haul yet. The Hauler waits at the dock.'],
+    sale: { what: 'Have a look at the Hauler, for sale?', offer: `Hello! I'm ${HC} of the Hauler. No run to crew yet, but the Hauler is for sale. Interested?`,
+      again: 'No run to crew yet. The Hauler is still for sale, though. Interested?', contract: 'Here is what it costs. Have a look.', no: 'No trouble. You will find me by the docking port.' } },
   vega: { ship: 'Explorer', mission: 'exploring', what: 'Join his crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
     no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!',
@@ -150,8 +171,9 @@ export const RUN_TALK = {
     landed: ['We\'re home, {player}. Your share is at the triage desk.'],
     landedCrew: ['Good work, {player}. Your share is at the triage desk.'],
   },
-  // THE HAULER'S SUPPLY RUN (src/missions.js 'supply'; src/oldstationsite.js): what its first mate says, as a captain does
-  // on their run (bubbles; no recorded clips). The old station's own people's words in its hall are OLD_STATION below.
+  // THE HAULER'S SUPPLY RUN (src/missions.js 'supply'; src/oldstationsite.js): what its captain says from the other seat,
+  // as every captain does on their run (bubbles; no recorded clips; they were its first mate's lines until the Hauler had
+  // a captain of its own). The old station's own people's words in its hall are OLD_STATION above.
   supply: {
     tune: ['The core needs adjusting, {player}. Head back to Engineering.'],
     tuned: ['The core is steady. Back to your seat, {player}.'],

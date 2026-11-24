@@ -15,7 +15,7 @@
 // hired crew member's (the tag says who, and what the hired one takes), what they keep, and its buttons: Start the run,
 // Just fly (no pay), Not now. Where a run of their own cannot start (`own.run` false: the Hauler before the old station
 // is found, a contract still on) it says why and offers the flying alone. A card with nothing to sign (`mode: 'sale'`:
-// the shipping computer before the old station is found) is the sale's line alone.
+// the Hauler's captain before the old station is found, with no run to offer yet) is the sale's line alone.
 // THE PAINT OF ITS HULL (`own.paint`: src/shippaint.js, src/paintcard.js; the game's maker: "Its colour: pick the paint
 // of its hull"): the owner's card has a Paint button, which turns the card (`mode: 'paint'`) to a row of swatches along
 // the bottom of the screen with the ship shown above it; a swatch tapped repaints the ship at once; Done, back.

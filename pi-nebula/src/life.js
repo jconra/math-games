@@ -36,6 +36,18 @@ import { POSITIONS, crewRecipe } from '../kit/positions.js';
 
 export const NEAR = { low: 4, medium: 6, high: 8 };
 
+// THE HAULER'S CAPTAIN (the game's maker, 2026-11-23, HAUL1-1 C: "The Hauler gets a captain of its own, who walks the
+// station like Ruiz, Hale and Vega and comes along on the run."). THE NAME IS NOT PICKED YET (he is choosing it): this
+// working name is written HERE AND NOWHERE ELSE, so it changes in this one line (name; she: how the jump computer's
+// cards speak of the captain). Everything that says it reads it from here (the roster below, src/missions.js, src/lines.js,
+// src/mission.js, src/trip.js, the tests); the id is no name, so nothing kept with a crew member changes with it.
+// THE BODY (asked, one picture of three: the notes): one nobody else in the station wears, the kit's "Crew 1" (its
+// suit, head and hair: assets/crew/crew.json's recipe crew1, as made), with the marks in the Hauler's crew's orange as
+// its crew's are (colours.job); their own clothes, as all the Hauler's crew wear theirs (no entry in kit/positions.js
+// CREWS: only the Medic's crew has a uniform).
+export const HAULER_CAPTAIN = { id: 'hauler-captain', name: 'Captain Tully', she: false,
+  look: { suit: 'crew1', head: 'crew1', hair: 'crew1hair', colours: { job: 'hauler' } } };
+
 // a person's look as a crew kit recipe: a look by name (assets/crew/crew.json's recipes) or its own, as their crew
 // wears it (kit/positions.js crewRecipe). who: the person's roster entry, or { crew, position, captain } (left out: the
 // recipe's own crew and position); a captain's crew is their own ship's. lib: the crew kit's (loadCrew)
@@ -77,6 +89,11 @@ export const SPOTS = {
   windows: [{ room: 'terminal', at: [0.259, 0.87], face: [0, 1] }, { room: 'terminal', at: [0.645, 0.87], face: [-0.1, 1] }, { room: 'terminal', at: [0.915, 0.87], face: [0.1, 1] }],
   // the terminal's open west side, where the captains' booths stood: by the crew screen, and out on the floor
   terminalFloor: [{ room: 'terminal', at: [0.17, 0.12], face: [0.3, -1] }, { room: 'terminal', at: [0.25, 0.33], face: [1, 0.2] }, { room: 'terminal', at: [0.16, 0.45], face: [1, -0.3] }],
+  // BY THE DOCKING PORT, the Hauler's captain's own place (the Hauler lies at the dock, out across the bridge, as the
+  // other captains' ships stand in their hangars): in the terminal under the DOCK sign, on the south side of the port's
+  // doorway (its north side is the foot of the stairs): reading the dock's screen there, beside the doorway looking out
+  // over the terminal, and a step out on the floor, turned to the port
+  dockPort: [{ room: 'terminal', at: [0.061, 0.725], face: [1, -0.25] }, { piece: 'screen', variant: 'terminal', room: 'terminal', local: [0, -1.3, 0.75], face: [0, -1] }, { room: 'terminal', at: [0.135, 0.79], face: [-1, -1] }],
   // reading the terminal's screens, on its walls (standing in the open with nothing to look at reads as someone waiting)
   terminal: [{ piece: 'screen', variant: 'status', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }, { piece: 'screen', variant: 'radar', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }, { piece: 'screen', variant: 'terminal', room: 'terminal', all: true, local: [0, -1.3, 0.75], face: [0, -1] }],
   lockers: [{ piece: 'wall', variant: 'locker', room: 'c1', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-n', all: true, local: [0, 0, 0.6], face: [0, -1] }, { piece: 'wall', variant: 'locker', room: 'spine-s', all: true, local: [0, 0, 0.6], face: [0, -1] }],
@@ -236,6 +253,14 @@ export const ROSTER = [
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:hangar', for: T(30, 60), clip: 'reach' }, { do: 'talk:hangar', for: T(20, 40) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }, { do: 'sit:cafe', for: T(120, 240) }] },
   { id: 'diner-uma', name: 'Uma', look: { suit: 'dockWorker', head: 't7', hair: 'afro', colours: { job: 'staff', skin: '#47291a', hair: '#17110d' } }, voice: 'yw', rate: 1.06,
     day: [{ do: 'sit:cafe', for: T(180, 320) }, { do: 'stand:drinks', for: T(6, 12) }, { do: 'sit:window', for: T(40, 90) }, { do: 'talk:terminal', for: T(25, 50) }] },
+  // ── THE HAULER'S CAPTAIN (HAULER_CAPTAIN, the top of this file: the working name's one place), a captain as Ruiz, Hale
+  // and Vega are (the yellow marker; the supply run's contract, src/lines.js CAPTAINS, src/missions.js 'supply'). Their own
+  // place is BY THE DOCKING PORT ('dockPort': the Hauler lies at the dock, out across the bridge), where they are most
+  // of the time; now and then a walk to the terminal's windows, out on its floor, or over to the drinks. Last in the
+  // roster, so nobody else's first place or turn changes; no recorded voice (words in bubbles alone). Not on the
+  // terminal's seats nor at the captains' board: with one more on them the terminal jams (Captain Adair's note above) ──
+  { id: HAULER_CAPTAIN.id, name: HAULER_CAPTAIN.name, look: HAULER_CAPTAIN.look, voice: null, captain: { ship: 'hauler' },
+    day: [{ do: 'stand:dockPort', for: T(40, 80) }, { do: 'stand:windows', for: T(25, 45), p: 0.5 }, { do: 'stand:dockPort', for: T(40, 80) }, { do: 'stand:terminalFloor', for: T(20, 40), p: 0.5 }, { do: 'stand:dockPort', for: T(30, 60) }, { do: 'stand:drinks', for: T(6, 12), p: 0.4 }] },
 ];
 
 // THE PEOPLE AT WORK IN THE CONTROL ROOM AND IN CARGO, the two places only the lift goes to (2026-11-20, the game's

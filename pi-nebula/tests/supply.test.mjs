@@ -7,12 +7,15 @@
 //   node --test pi-nebula/tests/supply.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as F from '../src/fleet.js';
 import * as M from '../src/flymodel.js';
-import { MISSIONS, ROLES, SUPPLY, rolesOf, openRoles, shareOf, sign, contractOf, stepsFor, tuneWhen, aboardOf, crewFor, land, collect, payoutOrder, payoutLines, payoutForm, stationFound, supplyRuns, missionOf } from '../src/missions.js';
+import { MISSIONS, ROLES, SUPPLY, rolesOf, openRoles, shareOf, sign, signOwn, contractOf, stepsFor, tuneWhen, aboardOf, crewFor, land, collect, payoutOrder, payoutLines, payoutForm, stationFound, supplyRuns, missionOf, missions, rolesWords, hiredOf, roleOf } from '../src/missions.js';
+import { owns } from '../src/own.js';
 import { makeSupplyRun, runOf, lastRun, RUN } from '../src/supplyrun.js';
-import { RUN_TALK, OLD_STATION, TALKS } from '../src/lines.js';
+import { RUN_TALK, OLD_STATION, TALKS, CAPTAINS } from '../src/lines.js';
+import { HAULER_CAPTAIN, ROSTER, ROOM_CREW, SPOTS, lookRecipe } from '../src/life.js';
+import { CREWS } from '../kit/positions.js';
 import { keepFind, foundOf } from '../src/exploreplan.js';
 import { lineOf } from '../src/announce.js';
 import { oldStationPlans, oldStationGear, LIT, LIT_SAVED, BRIDGE } from '../kit/oldstation-plan.js';
@@ -24,19 +27,22 @@ const DT = 1 / 60, S = MISSIONS.supply;
 const found = (more = {}) => ({ id: 'p1', name: 'Maya', credits: 500, explored: { runs: 1, worlds: [], distress: true, finds: [] }, ...more });
 const sets = [['pilot'], ['engineer'], ['cargo'], ['pilot', 'engineer'], ['pilot', 'cargo'], ['engineer', 'cargo'], ['pilot', 'engineer', 'cargo']];
 
-test('the contract: the Hauler\'s supply run, the shipping clerk\'s, with three jobs: Pilot, Engineer and Loader', () => {
-  assert.equal(S.ship, 'hauler'); assert.equal(S.desk, 'cargo'); assert.equal(S.payAt, 'cargo'); assert.equal(S.by, 'Gus'); assert.equal(S.place, 'oldstation');
+test('the contract: the Hauler\'s supply run, its own captain\'s, with three jobs: Pilot, Engineer and Loadmaster', () => {
+  assert.equal(S.ship, 'hauler'); assert.equal(S.desk, 'cargo'); assert.equal(S.payAt, 'cargo'); assert.equal(S.place, 'oldstation');
+  // (its own captain's, as the other three runs are their captains': nobody's at a desk, no first mate to lead it)
+  assert.equal(S.captain, HAULER_CAPTAIN.id); assert.equal(S.by, undefined); assert.equal(S.lead, undefined);
   assert.deepEqual(S.roles, ['pilot', 'engineer', 'cargo']);
   const R = rolesOf(S);
-  assert.deepEqual(R.map((r) => [r.name, r.share, r.open]), [['Pilot', 10, true], ['Engineer', 20, true], ['Loader', 20, true]]);
+  assert.deepEqual(R.map((r) => [r.name, r.share, r.open]), [['Pilot', 10, true], ['Engineer', 20, true], ['Loadmaster', 20, true]]);
   assert.match(R[2].does, /working out and loading the supplies/);
   assert.equal(shareOf(S.roles), 50);
   // (every job has a crew member of the Hauler's own for when it is left to them; nobody of another ship's crew)
-  for (const r of R) assert.match(r.crew, /^(Pilot Remy|Engineer Sol|Loader Hob)$/);
-  // (nobody walks the station with it: it is no captain's)
-  assert.equal(missionOf('gus'), S); for (const id of ['ruiz', 'hale', 'vega']) assert.notEqual(missionOf(id), S);
-  // (its words say what the old station asked for, and where it is paid)
-  assert.match(S.about, /fuel cells, food and spare parts/); assert.match(S.paid, /shipping computer/);
+  for (const r of R) assert.match(r.crew, /^(Pilot Remy|Engineer Sol|Loadmaster Hob)$/);
+  assert.equal(missionOf(HAULER_CAPTAIN.id), S); assert.equal(missionOf('gus'), null); for (const id of ['ruiz', 'hale', 'vega']) assert.notEqual(missionOf(id), S);
+  // (its words say what the old station asked for, and where it is paid; read on the main deck, by the captain: Cargo
+  // is "down" there, never "here")
+  assert.match(S.about, /fuel cells, food and spare parts/); assert.match(S.paid, /shipping computer in Cargo/);
+  assert.ok(!/\bhere\b/i.test(S.about + S.paid + S.aboutAgain));
   assert.ok(!/hangar/i.test(S.about + S.paid));
 });
 
@@ -67,31 +73,39 @@ test('any one job alone, any two, or all three can be signed for; the run is kep
   assert.deepEqual(stepsFor(S, ['engineer'], tuneWhen(c)).map((s) => s.id), ['out', 'jumpOut', 'site', 'core', 'jumpHome', 'home']);
 });
 
-test('aboard: the Hauler\'s first mate, who leads the run, and one of its crew for the first job left', () => {
-  const lead = { id: S.lead.id, name: S.lead.name, look: S.lead.look };
+test('aboard: the Hauler\'s captain, in the captain\'s place as on every captain\'s run, and one of its crew for the first job left', () => {
+  const cap = { id: S.captain, name: HAULER_CAPTAIN.name };
   for (const mine of sets) {
-    const A = aboardOf(S, mine, lead), left = S.roles.filter((r) => !mine.includes(r));
-    assert.equal(A.length, 2); assert.equal(A[0].name, 'First mate Tully'); assert.equal(A[0].captain, true);
-    // (she walks no station: aboard by her own look, not a station person's id)
-    assert.equal(typeof A[0].look, 'object'); assert.ok(A[0].look.suit);
+    const A = aboardOf(S, mine, cap), left = S.roles.filter((r) => !mine.includes(r));
+    assert.equal(A.length, 2); assert.equal(A[0].name, HAULER_CAPTAIN.name); assert.equal(A[0].captain, true); assert.equal(A[0].id, HAULER_CAPTAIN.id);
+    // (one of the station's own people, aboard as the other captains are: by their roster id, taken out of the station
+    // meanwhile; no look of a first mate's)
+    assert.equal(A[0].look, HAULER_CAPTAIN.id); assert.ok(ROSTER.some((d) => d.id === A[0].look && d.captain));
     assert.deepEqual([...A[0].jobs, ...A[1].jobs].sort(), [...left].sort());
     if (left.length) assert.deepEqual(A[1].jobs, [left[0]]);
-    const who = crewFor(S, mine, 'Maya', lead.name);
+    const who = crewFor(S, mine, 'Maya', cap.name);
     assert.deepEqual(who.filter((w) => w.you).map((w) => w.role), S.roles.filter((r) => mine.includes(r)));
+    // (a job left to the crew is the captain's or the crew member's of theirs who came: never a first mate's)
+    for (const w of who) assert.ok(w.you || w.name === HAULER_CAPTAIN.name || /^(Pilot Remy|Engineer Sol|Loadmaster Hob)$/.test(w.name), w.name);
+    // (a run of the crew member's own: the captain is not aboard, as no captain is; the hired crew for the jobs left)
+    const own = aboardOf(S, mine, null, { own: true });
+    assert.equal(own.length, left.length); assert.ok(own.every((a) => !a.captain && a.hired && a.id !== HAULER_CAPTAIN.id));
   }
-  assert.ok(S.folk.some((f) => /Tully/.test(f.name)) && S.folk.length === 4);
+  // (the jump computer's cards speak of the captain and the crew by name: the captain's from its one place)
+  assert.equal(S.folk.length, 4); assert.deepEqual(S.folk[0], { name: HAULER_CAPTAIN.name, she: !!HAULER_CAPTAIN.she });
+  assert.ok(!S.folk.some((f) => /First mate/.test(f.name)));
 });
 
-test('the cargo run begins with the contract: the Loader\'s own, or Cargo\'s crew\'s, worked out and loading', () => {
+test('the cargo run begins with the contract: the Loadmaster\'s own, or Cargo\'s crew\'s, worked out and loading', () => {
   const mk = () => { const c = found(), saved = []; return { c, R: makeSupplyRun({ crew: () => c, save: () => saved.push(1), forklift: { stock: null, doors: null } }), saved }; };
-  // signed as the Loader: a run, its questions and its pallets theirs
+  // signed as the Loadmaster: a run, its questions and its pallets theirs
   { const { c, R } = mk(), r = R.contract(true);
     assert.ok(RUN.pallets.includes(r.pallets)); assert.equal(r.worked, false); assert.ok(!r.byCrew); assert.equal(runOf(c), r); assert.equal(R.contractRun(r.n), r);
     assert.equal(R.contractRun(r.n + 1), null);
     // (worked out at the computer, it loads itself once they have left Cargo; boarded, whatever is not in goes in)
     R.worked(); assert.equal(R.depart(r.n), true); assert.equal(r.done, true); assert.equal(r.loaded, r.pallets); assert.equal(r.flown, true);
     assert.equal(runOf(c), null); assert.equal(lastRun(c), r); }
-  // not the Loader: Cargo's crew's run, worked out already, the crew member told so
+  // not the Loadmaster: Cargo's crew's run, worked out already, the crew member told so
   { const { c, R } = mk(), r = R.contract(false);
     assert.equal(r.worked, true); assert.equal(r.byCrew, true); assert.equal(R.handed, true); assert.match(R.line().title, /Cargo's crew/);
     assert.equal(runOf(c), r); }
@@ -229,7 +243,7 @@ test('a far dock, the old station\'s own bridge: the same docking with the dock 
   assert.ok(M.dockOff(S1).dist > 150, 'clear of their bridge: ' + M.dockOff(S1).dist.toFixed(0) + ' m');
 });
 
-test('the words: its first mate\'s for every moment of the run; the old station\'s people name what was brought', () => {
+test('the words: its captain\'s for every moment of the run; the old station\'s people name what was brought', () => {
   const T = RUN_TALK.supply;
   for (const k of ['tune', 'tuned', 'tunedFree', 'backJump', 'backDock', 'backAway', 'letGo', 'out', 'crewOut', 'there', 'thereAgain', 'dock', 'dockCrew', 'docked', 'dockedAgain', 'done', 'away', 'awayCrew', 'clear', 'clearCrew', 'home', 'homeCrew', 'landed', 'landedCrew']) {
     assert.ok(Array.isArray(T[k]) && T[k].length && T[k].every((w) => typeof w === 'string' && w.length > 8 && w.length <= 110), k);
@@ -248,7 +262,8 @@ test('the words: its first mate\'s for every moment of the run; the old station\
   assert.ok(TALKS.some((t) => t.news === 'supply'));
   assert.match(read('../src/announce.js'), /n\.kind !== 'find' && n\.kind !== 'supply' && n\.kind !== 'call'/);
   // (and where the run begins is said once, as the Explorer comes home with the find: a text line, nobody's talk)
-  assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: 'A word from Cargo\. Gus at the shipping desk/);
+  // (it names the Hauler's captain, who has the contract, from the name's one place)
+  assert.match(read('../src/trip.js'), /plan\.scenario === 'distress'\) news\.add\(\{ kind: 'call', ship: 'Hauler', text: `A word from Cargo\. Gus at the shipping desk is getting supplies together for the old station\. \$\{HAULER_CAPTAIN\.name\} of the Hauler needs a crew\.` \}\)/);
   assert.ok(!TALKS.some((t) => t.news === 'call'));
   // (both are said by the station's own text line, each once)
   const found = lineOf('found'), told = new Set();
@@ -285,4 +300,116 @@ test('the old station\'s rooms: its dock airlock, the very port ours is, and a h
   assert.equal(dark[0].windows.lit, LIT.hull); assert.equal(lit[0].windows.lit, LIT_SAVED.hull); assert.ok(LIT_SAVED.hull > LIT.hull * 3 && LIT_SAVED.tower > LIT.tower * 2);
   assert.ok(oldStationGear({ inside: true }).lit.triangles < oldStationGear().lit.triangles);
   assert.equal(oldStationGear().lit.triangles, oldStationGear({ inside: false }).lit.triangles);
+});
+
+// ── THE HAULER'S CAPTAIN (the game's maker, 2026-11-23, HAUL1-1 C: "The Hauler gets a captain of its own, who walks the
+// station like Ruiz, Hale and Vega and comes along on the run."; HAUL1-2 B: the third job is the Loadmaster) ──
+test('the Hauler\'s captain: one of the station\'s captains, by the docking port; the working name written in one place; a body nobody else in the station wears', () => {
+  const C = ROSTER.find((d) => d.id === HAULER_CAPTAIN.id);
+  assert.ok(C && C.captain && C.captain.ship === 'hauler'); assert.equal(C.name, HAULER_CAPTAIN.name);
+  assert.equal(ROSTER[ROSTER.length - 1], C, 'last in the roster: nobody else\'s first place or turn changes');
+  assert.equal(ROSTER.filter((d) => d.captain && MISSIONS[Object.keys(MISSIONS).find((k) => MISSIONS[k].captain === d.id)]).length, 4, 'four captains with a run: Vega, Ruiz, Hale and the Hauler\'s');
+  // (walks the station as the other captains do: their own place first and most of the time, by the docking port in the
+  // terminal; every place of their day is on the main deck, where everyone walks: never one only the lift goes to)
+  assert.equal(C.day[0].do, 'stand:dockPort'); assert.ok(C.day.filter((s) => s.do === 'stand:dockPort').length >= 2);
+  assert.ok(SPOTS.dockPort.length >= 2 && SPOTS.dockPort.every((s) => s.room === 'terminal'));
+  for (const s of C.day) { const g = s.do.split(':')[1]; assert.ok(SPOTS[g], s.do + ': a group of spots the station has'); assert.ok(SPOTS[g].every((q) => q.room !== 'store' && q.room !== 'tower'), s.do); }
+  // THE NAME IS NOT PICKED YET: the working name is written once, in src/life.js; every other file reads it from there
+  const bare = HAULER_CAPTAIN.name.replace(/^Captain /, ''), hits = [];
+  const walk = (dir) => { for (const f of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) { if (f.isDirectory()) walk(dir + f.name + '/'); else if (/\.(js|mjs|html|css)$/.test(f.name)) { const n = read(dir + f.name).split(bare).length - 1; if (n) hits.push([dir + f.name, n]); } } };
+  walk('../src/'); walk('../kit/'); walk('../labs/'); walk('../tests/');
+  assert.deepEqual(hits, [['../src/life.js', 1]], 'the working name, in one line of one file');
+  assert.equal(HAULER_CAPTAIN.id.includes(bare.toLowerCase()), false, 'their id is no name: nothing kept with a crew member changes with it');
+  // THE BODY: a suit, a head and hair nobody else in the station wears (its people, the two places only the lift goes
+  // to, every ship's crew, the old station's people); the crew kit has them
+  const kit = JSON.parse(read('../assets/crew/crew.json')), L = C.look, recipe = (look) => (typeof look === 'string' ? kit.recipes[look] : look);
+  for (const part of ['suit', 'head', 'hair']) assert.ok(kit.parts[part].some((x) => x.id === L[part]), part + ': ' + L[part]);
+  const others = [...ROSTER.filter((d) => d !== C), ...ROOM_CREW].map((d) => recipe(d.look));
+  for (const Mn of Object.values(MISSIONS)) for (const id of Mn.roles) { const r = roleOf(Mn, id); if (r.look) others.push(r.look); }
+  const old = [...read('../src/oldstationsite.js').matchAll(/\{ suit: '(\w+)', head: '(\w+)', hair: '(\w+)'/g)].map((x) => ({ suit: x[1], head: x[2], hair: x[3] }));
+  assert.equal(old.length, 3); others.push(...old);
+  assert.ok(others.length >= 36 && others.every((o) => o && o.suit), String(others.length));
+  for (const o of others) { assert.notEqual(o.suit, L.suit); assert.notEqual(o.head, L.head); assert.notEqual(o.hair, L.hair); }
+  // (in their own clothes, as all the Hauler's crew: only the Medic's crew has a uniform)
+  assert.equal(CREWS.hauler, undefined); assert.deepEqual(lookRecipe(C.look, C, null), C.look); assert.equal(L.colours.job, 'hauler');
+});
+
+test('the Hauler\'s captain\'s words: the offer, the contract signed, the share; until the old station is found no run to ask about; words alone, no recorded clip', () => {
+  const K = CAPTAINS[HAULER_CAPTAIN.id]; assert.ok(K); assert.equal(K.ship, 'Hauler');
+  for (const k of ['what', 'offer', 'again', 'no', 'contract', 'signed', 'signedLoad', 'payout']) assert.ok(typeof K[k] === 'string' && K[k].length > 8 && K[k].length <= 110, k);
+  assert.ok(K.offer.includes(HAULER_CAPTAIN.name)); assert.match(K.offer, /old station/); assert.match(K.offer, /Interested\?$/); assert.match(K.again, /Interested\?$/);
+  // (signed: where they will be; with the Loadmaster's job the crew member's, where its work is; home, where the share is)
+  assert.match(K.signed, /docking port/); assert.match(K.signedLoad, /shipping computer in Cargo/); assert.match(K.payout, /shipping computer in Cargo/);
+  // (before the old station is found: who they are, and no question)
+  assert.equal(K.wait.length, 2); assert.ok(K.wait[0].includes(HAULER_CAPTAIN.name));
+  for (const w of K.wait) assert.ok(typeof w === 'string' && w.length > 8 && w.length <= 110 && !w.includes('?'), w);
+  // (then, with the Hauler for sale to this crew member: that offer, its own question and answers)
+  for (const k of ['what', 'offer', 'again', 'contract', 'no']) assert.ok(typeof K.sale[k] === 'string' && K.sale[k].length > 8 && K.sale[k].length <= 110, 'sale.' + k);
+  assert.match(K.sale.offer, /for sale/); assert.match(K.sale.offer, /Interested\?$/); assert.ok(K.sale.offer.includes(HAULER_CAPTAIN.name)); assert.ok(!/contract/i.test(K.sale.contract));
+  // (no clip of theirs is fetched, and nothing is spoken by the browser: bubbles alone; the other three as they were)
+  assert.ok(!JSON.stringify(K).includes('"clip"'));
+  for (const id of ['vega', 'ruiz', 'hale']) assert.ok(CAPTAINS[id].offer.clip && typeof CAPTAINS[id].contract === 'string');
+  for (const f of ['../src/people.js', '../src/lines.js', '../src/bubbles.js']) assert.ok(!/speechSynthesis|SpeechSynthesisUtterance/.test(read(f)), f);
+  // (on the run they speak from the captain's seat: the lines the first mate had)
+  assert.ok(RUN_TALK.supply.letGo.length && RUN_TALK.supply.landed.length); assert.ok(!/first mate/i.test(JSON.stringify(RUN_TALK.supply)));
+});
+
+test('when the captain offers it: nothing to ask until the old station is found (the Hauler for sale meanwhile, where it is); then the contract, as the others offer theirs', () => {
+  const id = HAULER_CAPTAIN.id, fresh = { id: 'n1', name: 'Noor', credits: 0 };
+  assert.equal(S.offered(fresh), false); assert.equal(missions.open(id, fresh), false); assert.equal(missions.state(id, fresh), 'wait');
+  // (the other captains offer from the start, whoever asks; a captain with no run at all is asked nothing here)
+  for (const k of ['ruiz', 'hale', 'vega']) { assert.equal(MISSIONS[Object.keys(MISSIONS).find((q) => MISSIONS[q].captain === k)].offered, undefined); assert.equal(missions.open(k, fresh), true); assert.equal(missions.state(k, fresh), 'new'); }
+  assert.equal(missions.state('adair', fresh), 'new');
+  // (their ship for sale to this crew member meanwhile: src/mission.js says whether, by their bridge)
+  missions.sells((cap, c) => cap === id && c.bridge === true);
+  assert.equal(missions.state(id, { ...fresh, bridge: true }), 'sale'); assert.equal(missions.state(id, fresh), 'wait');
+  // (found: the offer, new, then asked; signed with them, and home with the share waiting, by the contract)
+  const c = found({ bridge: true }); assert.equal(S.offered(c), true); assert.equal(missions.open(id, c), true); assert.equal(missions.state(id, c), 'new');
+  missions.asked(id); assert.equal(missions.state(id, c), 'asked'); assert.equal(missions.state(id, fresh), 'wait', 'still nothing for a crew member who has not found it');
+  sign(c, 'supply', ['pilot']); assert.equal(missions.state(id, c), 'signed');
+  land(c, { pallets: 3 }); assert.equal(missions.state(id, c), 'payout'); collect(c); assert.equal(missions.state(id, c), 'asked');
+  // (a run of their own, in a Hauler they bought, is no contract of the captain's: the captain asks as ever, and is not aboard)
+  const o = found({ ships: ['hauler'] }); assert.ok(signOwn(o, 'supply', ['pilot'])); assert.equal(contractOf(o).own, true); assert.equal(missions.state(id, o), 'asked');
+  missions.sells(null); assert.equal(missions.state(id, { ...fresh, bridge: true }), 'wait');
+});
+
+test('saves made before the Hauler had a captain still load: a contract signed at the shipping desk, a run half done, a share waiting, a run of their own, a Hauler bought there', () => {
+  const id = HAULER_CAPTAIN.id;
+  // (signed at the desk when the contract was the shipping clerk's, the third job among them; its cargo run half loaded)
+  const c = found({ mission: { id: 'supply', captain: 'gus', roles: ['pilot', 'cargo'], state: 'signed', signed: 5, run: 1, tune: 'arrive' }, jobs: { cargo: { runs: 1, run: { n: 1, pallets: 4, worked: true, loaded: 2, done: false, k: 5 } } } });
+  const m = contractOf(c); assert.ok(m); assert.equal(m.state, 'signed'); assert.deepEqual(m.roles, ['pilot', 'cargo']); assert.equal(m.run, 1);
+  assert.equal(m.captain, id, 'the Hauler\'s captain\'s from here on'); assert.equal(missions.state(id, c), 'signed');
+  assert.equal(runOf(c).loaded, 2); assert.equal(runOf(c).pallets, 4);
+  assert.deepEqual(stepsFor(S, m.roles, tuneWhen(c)).map((s) => s.id + (s.mine ? '*' : '')), ['out', 'jumpOut*', 'site*', 'jumpHome*', 'home']);
+  // (flown: the share as it was, and the job is the Loadmaster's in every word)
+  const P = land(c, { pallets: 4 }); assert.equal(P.share, 30); assert.equal(P.pay, Math.round(4 * SUPPLY.perPallet * 0.3)); assert.equal(rolesWords(m.roles), 'Pilot and loadmaster');
+  // (home already, the share waiting at the shipping computer: paid there as ever)
+  const d = found({ mission: { id: 'supply', captain: 'gus', roles: ['engineer'], state: 'payout', payout: { kind: 'supply', pallets: 3, per: 7000, sold: 21000, share: 20, pay: 4200, at: 1, first: true } } });
+  assert.equal(missions.state(id, d), 'payout'); assert.equal(MISSIONS[contractOf(d).id].payAt, 'cargo'); assert.equal(collect(d).pay, 4200); assert.equal(d.credits, 4700);
+  // (a run of their own begun at the computer, its load not flown yet: kept, its hired crew by their names now)
+  const o = found({ ships: ['hauler'], mission: { id: 'supply', captain: 'gus', roles: ['pilot'], state: 'signed', own: true, hired: ['engineer', 'cargo'], run: 2 } });
+  assert.ok(contractOf(o).own); assert.deepEqual(hiredOf(contractOf(o)).map((h) => h.name), ['Engineer Sol', 'Loadmaster Hob']); assert.notEqual(missions.state(id, o), 'signed');
+  // (a Hauler bought at the shipping computer is theirs as ever, wherever it is sold now)
+  assert.equal(owns({ ships: ['hauler'], bought: { hauler: { at: 1, price: 80000 } } }, 'hauler'), true);
+});
+
+test('Loadmaster, everywhere it shows: the contract, the hired crew, the pay slip, the game\'s own words; never Loader', () => {
+  assert.equal(ROLES.cargo.name, 'Loadmaster'); assert.equal(ROLES.cargo.id, 'cargo', 'its id as contracts already kept name it'); assert.equal(roleOf(S, 'cargo').crew, 'Loadmaster Hob');
+  assert.equal(rolesWords(['cargo']), 'Loadmaster'); assert.equal(rolesWords(['pilot', 'engineer', 'cargo']), 'Pilot, engineer and loadmaster');
+  assert.equal(crewFor(S, ['pilot'], 'Maya', HAULER_CAPTAIN.name).find((w) => w.role === 'cargo').name, HAULER_CAPTAIN.name, 'the captain does the job left over, as on every run');
+  assert.equal(crewFor(S, ['pilot', 'engineer'], 'Maya', HAULER_CAPTAIN.name).find((w) => w.role === 'cargo').name, 'Loadmaster Hob');
+  const o = found({ ships: ['hauler'] }), m = signOwn(o, 'supply', ['pilot']);
+  assert.deepEqual(hiredOf(m).map((h) => h.name), ['Engineer Sol', 'Loadmaster Hob']);
+  // (every word a pay slip can show, at every level, for every set of jobs)
+  for (const mine of sets) for (let grade = 0; grade <= 80; grade += 4) {
+    const c = found(); sign(c, 'supply', mine); land(c, { pallets: 4 });
+    const ord = payoutOrder(contractOf(c), grade, () => 0.4), words = JSON.stringify([ord.story, ord.ask, ord.rightWhy, ord.lines, ord.coins.map((k) => k.why)]);
+    assert.ok(!/\bloader\b/i.test(words), words);
+    if (ord.form === 'percent' && mine.includes('cargo')) assert.match(words, /loadmaster/i);
+  }
+  // (and in the words the game's own files show: no "Loader" left outside a comment)
+  for (const f of ['../src/missions.js', '../src/mission.js', '../src/contract.js', '../src/lines.js', '../src/trip.js', '../src/jobs/cargolink.js', '../src/jobs/cargo.js', '../src/jobs/index.js', '../src/supplyrun.js', '../src/own.js', '../src/people.js']) {
+    const code = read(f).split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/ .*$/, '')).join('\n');
+    assert.ok(!/\bLoader\b/.test(code), f);
+  }
 });

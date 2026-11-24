@@ -170,10 +170,10 @@ async function boot() {
   const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     // (and a rescue's share at the triage desk: src/missions.js payAt)
     live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null), head: (o) => (mission ? mission.payoutHead(o) : null) } },
-    // (and at the shipping computer the supply run: its contract offered there, its share waiting there: src/mission.js)
+    // (and at the shipping computer the supply run: who has its contract, its load's state, its share waiting there:
+    // src/mission.js; the contract itself is the Hauler's captain's, up on the main deck)
     hints: { smelter: () => (mission ? mission.hint('smelter') : null), medical: () => (mission ? mission.hint('medical') : null), cargo: () => (mission ? mission.deskHint('cargo') : null) }, crane, lib, people: () => people,
-    before: { cargo: () => (mission ? mission.deskStart('cargo') : false) },
-    // (and the Hauler's sale there, once the crew member's bridge out to it is built; then their own Hauler: src/mission.js)
+    // (and a Hauler that is the crew member's own there, where its own run is begun: src/mission.js)
     more: { cargo: () => (mission ? mission.deskMore('cargo') : null) },
     // (the shipping computer in Cargo: the supply run's five questions, src/jobs/cargolink.js; home from the run, its
     // share's pay slip first)

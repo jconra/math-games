@@ -85,7 +85,7 @@
 //       PARAMEDIC (Medic)         the pods' locks: 2 locks on pod 1, 1 on pod 2, 2 on pod 3 ... (a contract: 1 a pod).
 //       SENSOR OPERATOR (Explorer) the scan at each place: 5 cards at the first place, 4 at the second, 5 at the third
 //                                 (a contract: 3 each).
-//       LOADER (Hauler)           the shipping computer: 8 questions (a contract: 5): the five that work out the load,
+//       LOADMASTER (Hauler)       the shipping computer: 8 questions (a contract: 5): the five that work out the load,
 //                                 then the first three of the next load's (src/jobs/cargolink.js).
 //   - JUST FLYING (src/trip.js `free`, freeFlight below) is no run: nothing is signed, asked or paid.
 //
@@ -102,6 +102,7 @@ import { ownOrder, earn, jobTally } from './jobs/engine.js';
 import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighthsText, eighthsOf } from './jobs/smelter.js';
 import { EXPLORE } from './exploreplan.js';
 import { owns, moreCards, SHIP_NAMES } from './own.js';
+import { HAULER_CAPTAIN } from './life.js';
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
 // until then the captain's own crew member does it), and who that is ──
@@ -125,11 +126,12 @@ export const ROLES = {
   // to and discover the secrets (detect radio signals, scan asteroid fields, detect mysterious gravity)")
   sensor: { id: 'sensor', name: 'Sensor operator', does: 'scanning for where to go next', share: 20, ready: true, crew: 'Sensor operator Arlo',
     look: { suit: 'civilian', head: 't10', hair: 'crop', colours: { job: 'explorer', skin: '#e0b08f', hair: '#5a3a22' } } },
-  // (the supply run's own job: working out how much to pack at the shipping computer and loading the pallets with the
-  // forklift, in Cargo before the Hauler leaves: the cargo game, src/supplyrun.js, src/jobs/cargo.js; the game's maker,
-  // STA2-5: "you go to the computer, do the questions to calculate out how much of the supplies you need to pack ...
-  // Then you go get in the forklift and load some pallets onto the containers")
-  cargo: { id: 'cargo', name: 'Loader', does: 'working out and loading the supplies', share: 20, ready: true, crew: 'Loader Hob',
+  // (the supply run's own job, THE LOADMASTER'S (the game's maker, 2026-11-23, HAUL1-2 B: "Loadmaster"; its id stays
+  // 'cargo', as contracts already kept name it): working out how much to pack at the shipping computer and loading the
+  // pallets with the forklift, in Cargo before the Hauler leaves: the cargo game, src/supplyrun.js, src/jobs/cargo.js;
+  // the game's maker, STA2-5: "you go to the computer, do the questions to calculate out how much of the supplies you
+  // need to pack ... Then you go get in the forklift and load some pallets onto the containers")
+  cargo: { id: 'cargo', name: 'Loadmaster', does: 'working out and loading the supplies', share: 20, ready: true, crew: 'Loadmaster Hob',
     look: { suit: 'smelter', head: 't2', hair: 'coil', colours: { job: 'hauler', skin: '#86522f', hair: '#17110d' } } },
 };
 // A ROLE AS ONE MISSION HAS IT: its own crew member for it (who does it for that captain, and how they look) and its own
@@ -228,29 +230,36 @@ export const MISSIONS = {
   // game's maker, HAUL3-6: "you don't fly it until you discover the other station and need to bring supplies to it.
   // After that then you can go on hauling missions as much as you want to make money. It does have a dock, that is what
   // the bridge is for."; HAUL4-1: "You can go on the hauler, but not fly it unless you have a contract to fly it").
-  // Offered once the old station has been found (Captain Vega's run that follows the call for help: src/exploreplan.js
-  // foundOf `distress`), AT THE SHIPPING DESK'S COMPUTER IN CARGO (`desk`: the Hauler has no captain walking the station;
-  // the contract is the shipping clerk's, `by`), and again as often as wanted afterwards, as a plain hauling run for pay.
-  // Its three jobs (RESC3-1: "all the missions should have pilot and engineer"): the pilot, the engineer, and THE LOADER,
-  // whose work is the cargo game in Cargo before the Hauler leaves (src/supplyrun.js: signed for it, the crew member
-  // works out the load at the computer and drives the forklift; otherwise Cargo's crew loads). Then aboard across the
-  // bridge; the Hauler undocks and flies clear ('leave': the same flying, from a dock); the jump; out of the wormhole by
-  // the old station ('deliver': src/oldstationsite.js: flown to its old bridge and docked, by hand or on autopilot;
-  // across their bridge on foot into the old station, where its people take the supplies and its lights come back up;
-  // aboard again and away); the core's tuning out there; the jump home and the docking at our own bridge ('land').
-  // Paid so much for each pallet of supplies delivered (SUPPLY). Aboard: the Hauler's own first mate (`lead`: who
-  // speaks on the run, as a captain does on theirs) and one of its crew.
+  // IT IS THE HAULER'S OWN CAPTAIN'S CONTRACT (the game's maker, 2026-11-23, HAUL1-1 C: "The Hauler gets a captain of
+  // its own, who walks the station like Ruiz, Hale and Vega and comes along on the run."; who that is: src/life.js
+  // HAULER_CAPTAIN, by the docking port): offered as the other three offer theirs, on the same card; signed, the captain
+  // says so and waits by the docking port, and comes along in the captain's place aboard. (Before the Hauler had a
+  // captain the contract was the shipping clerk's, at his desk, and a first mate spoke on the run: the captain has that
+  // place now, and those lines; there is no first mate any more.)
+  // `offered`: only once the old station has been found (Captain Vega's run that follows the call for help:
+  // src/exploreplan.js foundOf `distress`); until then its captain has no run to offer (missions.state: 'wait'). And
+  // again as often as wanted afterwards, as a plain hauling run for pay.
+  // `desk`: THE SHIPPING DESK'S COMPUTER IN CARGO, where the run's load is worked out and where its share waits.
+  // Its three jobs (RESC3-1: "all the missions should have pilot and engineer"): the pilot, the engineer, and THE
+  // LOADMASTER (HAUL1-2 B), whose work is the cargo game in Cargo before the Hauler leaves (src/supplyrun.js: signed for
+  // it, the crew member works out the load at the computer and drives the forklift; otherwise Cargo's crew loads). Then
+  // aboard across the bridge; the Hauler undocks and flies clear ('leave': the same flying, from a dock); the jump; out
+  // of the wormhole by the old station ('deliver': src/oldstationsite.js: flown to its old bridge and docked, by hand or
+  // on autopilot; across their bridge on foot into the old station, where its people take the supplies and its lights
+  // come back up; aboard again and away); the core's tuning out there; the jump home and the docking at our own bridge
+  // ('land'). Paid so much for each pallet of supplies delivered (SUPPLY). Aboard: its captain and one of its crew, as
+  // on every captain's run (aboardOf).
   supply: {
-    id: 'supply', captain: 'gus', by: 'Gus', desk: 'cargo', ship: 'hauler', name: 'Supply run', roles: ['pilot', 'engineer', 'cargo'], payAt: 'cargo', place: 'oldstation',
-    about: 'The old station called for help: fuel cells, food and spare parts. The supplies are worked out and loaded here in Cargo. Then the Hauler flies them out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
-    paid: 'You are paid your share of the run, here at the shipping computer, when you are back.',
+    id: 'supply', captain: HAULER_CAPTAIN.id, desk: 'cargo', ship: 'hauler', name: 'Supply run', roles: ['pilot', 'engineer', 'cargo'], payAt: 'cargo', place: 'oldstation',
+    offered: (crew) => stationFound(crew),
+    about: 'The old station called for help: fuel cells, food and spare parts. The supplies are worked out and loaded down in Cargo. Then the Hauler flies them out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
+    paid: 'You are paid your share of the run, at the shipping computer in Cargo, when you are back.',
     // (after the first run, the old station saved: the same run as a plain hauling run)
-    aboutAgain: 'The old station trades with us now. A load for it is worked out and packed here in Cargo. Then the Hauler flies it out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
-    lead: { id: 'hauler-mate', name: 'First mate Tully', she: true, look: { suit: 'dockWorker', head: 't9', hair: 'wavy', colours: { job: 'hauler', skin: '#b5805a', hair: '#3b2a1e' } } },
+    aboutAgain: 'The old station trades with us now. A load for it is worked out and packed down in Cargo. Then the Hauler flies it out, docks at the old station\'s bridge, and comes home. Each job on the run earns a share of what the run pays.',
     jobs: {
       pilot: { does: 'piloting to the old station and home', crew: 'Pilot Remy', she: false, look: { suit: 'atlantis1', head: 't1', hair: 'shortFull', colours: { job: 'hauler', uniform: '#3f8fe8', skin: '#e0b08f', hair: '#5a3a22' } } },
       engineer: { crew: 'Engineer Sol', she: true, look: { suit: 'atlantis2', head: 't7', hair: 'afro', colours: { job: 'hauler', uniform: '#f0892e', skin: '#663b22', hair: '#17110d' } } },
-      cargo: { crew: 'Loader Hob', she: false },
+      cargo: { crew: 'Loadmaster Hob', she: false },
     },
     steps: [
       { id: 'out', kind: 'leave', secs: 4 },
@@ -268,7 +277,8 @@ export const MISSIONS = {
 // the helpers' notes, HAULRUN_1.md, have the sums).
 export const SUPPLY = { perPallet: 7000 };
 MISSIONS.supply.perPallet = SUPPLY.perPallet;
-MISSIONS.supply.folk = [{ name: MISSIONS.supply.lead.name, she: MISSIONS.supply.lead.she }, ...Object.values(MISSIONS.supply.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
+// (who the jump computer's cards speak of on the Hauler's run: its captain and crew; src/jobs/pilot.js folkFor)
+MISSIONS.supply.folk = [{ name: HAULER_CAPTAIN.name, she: !!HAULER_CAPTAIN.she }, ...Object.values(MISSIONS.supply.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
 // IS THE SUPPLY RUN OFFERED? Once the old station has been found (kept with the crew member by the exploring run that
 // found it: crew.explored.distress, src/exploreplan.js keepFind; read here as that file's foundOf reads it). And has
 // this crew member already made a run there (the station saved: crew.supply.runs, kept by land below)?
@@ -288,6 +298,9 @@ MISSIONS.rescue.perPerson = RESCUE.perPerson;
 // (who the jump computer's cards speak of on her run: her and her crew; src/jobs/pilot.js folkFor)
 MISSIONS.rescue.folk = [{ name: 'Captain Hale', she: true }, ...Object.values(MISSIONS.rescue.jobs).map((j) => ({ name: j.crew, she: !!j.she }))];
 export const missionOf = (captainId) => Object.values(MISSIONS).find((M) => M.captain === captainId) || null;
+// IS A CAPTAIN'S RUN OFFERED TO THIS CREW MEMBER NOW? Every run from the start, but one that says when (a mission's
+// `offered`: the supply run, once the old station is found)
+const offeredTo = (captainId, crew) => { const M = missionOf(captainId); return !M || !M.offered || !!M.offered(crew); };
 // JUST FLYING, IN A SHIP THAT IS YOURS (OWN RUNS, the top of this file): out of its hangar (or off its dock), round the
 // station and back. The trip's own two flown steps and nothing between them: no jump, no cards, no crew, no pay. It is
 // no mission of anyone's (not in MISSIONS) and nothing of it is kept with the crew member.
@@ -451,6 +464,9 @@ export function contractOf(crew) {
   if (!isObj(m) || !MISSIONS[m.id]) return null;
   const M = MISSIONS[m.id], roles = Array.isArray(m.roles) ? M.roles.filter((id) => m.roles.includes(id)) : [];
   if (!roles.length) return null;
+  // (a contract kept from before its run had the captain it has now: the supply run's, signed at the shipping desk when
+  // it was the shipping clerk's, is the Hauler's captain's from here on, wherever it had got to)
+  if (m.captain !== M.captain) m.captain = M.captain;
   if (m.state === 'payout' && isObj(m.payout) && Number.isFinite(+m.payout.pay) && +m.payout.pay >= 0) return m;
   return m.state === 'signed' ? m : null;
 }
@@ -828,9 +844,20 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
 function makeMissions() {
   const states = new Map(), fns = [];
   const tell = (list, captain, yes) => { for (const f of list) { try { f(captain, yes); } catch (e) { console.error(e); } } };
+  // (is that captain's ship for sale to this crew member just now: src/mission.js says, `sells`; nobody has: no)
+  let forSale = () => false;
   return {
     // (a run of the crew member's own, in the ship they bought from that captain, is no contract of his: he asks as ever)
-    state(id, crew = null) { const m = crew ? contractOf(crew) : null; return m && m.captain === id && !m.own ? m.state : states.get(id) || 'new'; },
+    // A CAPTAIN WHOSE RUN IS NOT OFFERED YET (a mission's `offered`: the Hauler's, until the old station is found) has
+    // nothing to ask: 'wait'; or, with their ship for sale to this crew member meanwhile, that alone: 'sale' (the card
+    // is the sale's line by itself, src/contract.js).
+    state(id, crew = null) {
+      const m = crew ? contractOf(crew) : null; if (m && m.captain === id && !m.own) return m.state;
+      if (crew && !offeredTo(id, crew)) return forSale(id, crew) ? 'sale' : 'wait';
+      return states.get(id) || 'new';
+    },
+    open: (id, crew) => offeredTo(id, crew),
+    sells(fn) { forSale = typeof fn === 'function' ? fn : () => false; },
     asked(id) { if (!states.has(id)) states.set(id, 'asked'); },
     answer(captain, yes) { states.set(captain.id, yes ? 'interested' : 'declined'); tell(fns, captain, yes); },
     // (the contract's card put away unsigned: the offer stays open, and the captain asks again another time)

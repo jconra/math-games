@@ -154,7 +154,7 @@ test('aboard on a run of your own: no captain; the crew you hired, one for each 
   assert.deepEqual(aboardOf(MISSIONS.mining, ['engineer'], null, { own: true }).map((a) => a.name), ['Pilot Juno', 'Miner Kestrel']);
 });
 
-test('half as many cards again: a turn of 3 asks 5 then 4 then 5; a turn of 1 asks 2 then 1; the Loader\'s 5 ask 8', () => {
+test('half as many cards again: a turn of 3 asks 5 then 4 then 5; a turn of 1 asks 2 then 1; the Loadmaster\'s 5 ask 8', () => {
   assert.equal(OWN.more, 1.5);
   assert.deepEqual([0, 1, 2, 3].map((k) => moreCards(3, k)), [5, 4, 5, 4]);
   assert.deepEqual([0, 1, 2, 3, 4, 5].map((k) => moreCards(1, k)), [2, 1, 2, 1, 2, 1]);
@@ -218,7 +218,7 @@ test('a jump of 4 or 5 cards still has its three lamps: the cards shared out, th
   for (const n of [3, 4, 5, 6, 7]) { assert.equal(lampPlan(n).reduce((a, b) => a + b, 0), n); assert.ok(lampPlan(n).every((k) => k >= 1)); }
 });
 
-test('the Loader on a run of your own: 8 questions, the five that work out the load and three of the next load\'s; a contract: 5', () => {
+test('the Loadmaster on a run of your own: 8 questions, the five that work out the load and three of the next load\'s; a contract: 5', () => {
   assert.equal(CARGO_CARDS, 5);
   for (const step of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     const c = maya({ ships: ['hauler'] }), run = startRun(c, { rand: () => 0.9 }); run.own = true;

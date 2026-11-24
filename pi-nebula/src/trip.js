@@ -153,7 +153,7 @@
 //     bridge and docked (the pilot's, by hand or the autopilot; or the crew's pilot's), across their bridge on foot to
 //     its people (on foot out at a far place, below), its supplies off and its lights back up, aboard again, let go and
 //     clear; the core's tuning out there; the jump home and the docking at our own bridge ('land'), where the bridge
-//     takes the Hauler again. Its first mate speaks where a captain does. Home, so much is paid for each pallet
+//     takes the Hauler again. Its captain speaks from the other seat, as every captain does. Home, so much is paid for each pallet
 //     delivered (src/missions.js SUPPLY), at the shipping computer in Cargo.
 //
 //   - A RUN OF THE CREW MEMBER'S OWN, IN A SHIP THEY BOUGHT (opts.own; src/own.js has the game's maker's words, and
@@ -192,6 +192,7 @@ import { CARRIES, sellsFor, lotsWords, inEighths, eighthsText } from './jobs/sme
 import { stepsFor, land, LAMPS, lampPlan, lampAt, rockCards, aboardOf, roleOf } from './missions.js';
 import { restOrder } from './rescueplan.js';
 import { RUN_TALK } from './lines.js';
+import { HAULER_CAPTAIN } from './life.js';
 import { news } from './news.js';
 import { kept, numberWord, fromWords } from './wardplan.js';
 import { SLEEPERS } from './sleeper.js';
@@ -337,9 +338,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // WHO IS ABOARD (src/missions.js aboardOf: the ship's crew of three, the captain and one of his crew with the crew
   // member) and which of them does each job left to the crew: the one who drills (their name as said), the one who
   // is the run's engineer, whom the captain speaks to (the crew member, signed for it, or his own; null: himself)
-  // (a run led by someone who walks no station, the supply run's first mate: aboard by their own look: M.lead)
   // (a run of their own: no captain, the crew they hired for the jobs they left; just flying: nobody)
-  const aboard = FREE ? [] : aboardOf(M, roles, M.lead ? { id: M.lead.id, name: M.lead.name, look: M.lead.look } : { id: M.captain, name: ctx.captainName || 'The captain' }, { own });
+  const aboard = FREE ? [] : aboardOf(M, roles, { id: M.captain, name: ctx.captainName || 'The captain' }, { own });
   const doer = (job) => aboard.find((a) => a.jobs.includes(job)) || null;
   const driller = doer('drill'), engineer = roles.includes('engineer') ? null : doer('engineer') && !doer('engineer').captain ? doer('engineer').short : '';
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
@@ -551,7 +551,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // taken out of the station meanwhile (he waited by the ship's lift)
         const pp = ctx.people ? ctx.people() : null;
         if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: SHIP.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random, walls })
-          .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard && !M.lead && !own && !FREE) pp.aboard(M.captain, true); T.log.push('aboard: ' + (A.list.map((w) => w.name).join(', ') || 'nobody else')); })
+          .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard && !own && !FREE) pp.aboard(M.captain, true); T.log.push('aboard: ' + (A.list.map((w) => w.name).join(', ') || 'nobody else')); })
           .catch((e) => { console.error(e); if (window.oops) window.oops(e); });
       }
       // (the Hauler letting go of its bridge: the dock's job's own docking, backward; then the flying is whoever's it is)
@@ -632,7 +632,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         // (an exploring run: what it found kept with the crew member, and the station's news of it: src/exploreplan.js findNews)
         if (EXPLORE) { try { keepFind(crew, plan); save(crew); const N = findNews(plan); if (N && own && N.text) N.text = N.text.replace(/Captain Vega's crew has/, `${name}'s Explorer has`); if (N) news.add(N);
           // (the old station found: where its supply run begins, said once over the speakers: src/missions.js 'supply')
-          if (plan && plan.scenario === 'distress') news.add({ kind: 'call', ship: 'Hauler', text: 'A word from Cargo. Gus at the shipping desk is getting supplies together for the old station. The Hauler needs a crew.' }); } catch (e) { console.error(e); } }
+          if (plan && plan.scenario === 'distress') news.add({ kind: 'call', ship: 'Hauler', text: `A word from Cargo. Gus at the shipping desk is getting supplies together for the old station. ${HAULER_CAPTAIN.name} of the Hauler needs a crew.` }); } catch (e) { console.error(e); } }
         else if (PLANET) rescuedHome();
         // (the supply run that saved the old station: the station's news of it, a text line over the speakers)
         else if (SUPPLY) { try { if (T.payout && T.payout.first) news.add({ kind: 'supply', ship: SHIP.name, text: 'News from the Hauler. Its supplies have reached the old station. The old station has power again.' }); } catch (e) { /* no news */ } }
@@ -1253,7 +1253,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // (just flying, got up with the ship still down where it started: put away as it stands, and the flight is over)
   function endFree() { if (fl) { fl.close(); fl = null; api.fly = null; } keeper.back(); T.i = steps.length; finish(); }
   // (a run of their own, or just flying: no captain was taken out of the station for it)
-  const tookCaptain = !M.lead && !own && !FREE && !!M.captain;
+  const tookCaptain = !own && !FREE && !!M.captain;
   function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; const A = crewA; crewA = null; api.crew = null; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock, aboard: A, captain: tookCaptain ? M.captain : null }); }
   function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); keeper.back(); el.remove(); if (crewA) { crewA.dispose(); crewA = null; api.crew = null; } const pp = ctx.people ? ctx.people() : null; if (pp && pp.aboard && tookCaptain) pp.aboard(M.captain, false); onEnd({ payout: null, aborted: true, secs: T.clock }); }
 
