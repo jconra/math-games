@@ -1903,6 +1903,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (P.checkup || P.rescued || P.home || P.hidden || !a || a.kind !== 'sit' || a.phase !== 'sat' || a.asked || !Array.isArray(P.day)) continue;
       const after = P.day[(P.k + 1) % P.day.length];
       if (!after || after.do !== 'scan' || a.step !== P.day[P.k]) continue;
+      // (never two of the station's own waiting: with another of them waiting or on the way, not now; they sit on)
+      if (list.some((X) => X.checkup && !atScanner(X))) continue;
       a.asked = true;
       if (!/^med/.test(roomNow(a.spot.seat) || '') || (after.p != null && Math.random() > after.p)) continue;
       P.checkup = { since: clock, came: clock - a.t, waited: true, own: true }; checks.counts.own++;

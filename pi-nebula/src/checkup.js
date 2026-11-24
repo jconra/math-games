@@ -24,7 +24,9 @@
 //   - THE MEDIC STAYS: at the scanner's screen between two scans while anyone is waiting or on the way, and nobody asks
 //     her away for a talk meanwhile (nor anyone else who is in the queue).
 //   - TODAY'S PATIENT (life.js: Tam's day has a scan each time round, Oso's now and then): seated on the medical
-//     centre's waiting seats with the scan next in their day, they are in the same queue from the moment they sat down.
+//     centre's waiting seats with the scan next in their day, they are in the same queue from the moment they sat down
+//     (unless another of the station's own is waiting or on the way already: never two of them behind the one at the
+//     scanner, so the rescued never wait for more than two).
 //   - THE MEDIC'S WORDS for a routine check-up are lines.js CHECKUP_TALK (nothing is wrong: a check-up); the speakers do
 //     not page her for one (paged): she is paged for a patient's scan and for the rescued, as before.
 //   - Nothing of it is saved: after a reload the queue begins again (one of the station's own already on the bed, the
