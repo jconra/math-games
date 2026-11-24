@@ -298,12 +298,12 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (the supply run's cargo run begun with the contract, the one call that starts it: src/supplyrun.js; the
       // Loadmaster's own at the computer, or Cargo's crew's, already worked out and loading. own: a run of the crew
       // member's own, begun at the computer itself, its Loadmaster's questions half as many again: src/jobs/cargolink.js)
+      // (what comes next: on the captain's contract the captain says it, as the other three do, and nothing else is put
+      // over their words; on a run of their own, begun at the computer where nobody speaks, a word at the top)
       const begunAtDesk = (m, roles, own) => {
         const S = supply(); if (S && S.contract) { const r = S.contract(roles.includes('cargo'), { own }); if (r) m.run = r.n; }
         save(c);
-        const mine = roles.includes('cargo');
-        toastUp(own ? (mine ? 'Your run is on. The supplies are yours to work out: start at this computer.' : 'Your run is on. Cargo\'s crew loads the Hauler: up the lift, across the bridge and aboard.')
-          : mine ? 'Signed. The supplies are yours to work out: the shipping computer in Cargo, down the lift.' : 'Signed. Cargo\'s crew loads the Hauler: out through the docking port, across the bridge and aboard.');
+        if (own) toastUp(roles.includes('cargo') ? 'Your run is on. The supplies are yours to work out: start at this computer.' : 'Your run is on. Cargo\'s crew loads the Hauler: up the lift, across the bridge and aboard.');
       };
       const K = CAPTAINS[captain.id] || {};
       card = openContract(document.body, { mission: desk ? { ...Mc, saleAbout: 'The Hauler waits at the dock, across the bridge. Bought, it is yours to fly round the station whenever you like. Hauling runs of your own start once the old station is found.' } : Mc,

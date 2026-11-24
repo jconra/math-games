@@ -38,13 +38,14 @@ export const CAPTAINS = {
   //         and after), and no question
   //   sale: until then, with the Hauler for sale to this crew member (their bridge out to it built: src/own.js): that
   //         offer in place of the run's, with its own question and answers; the card is the sale's line alone
-  //   signed / signedLoad: the contract signed; with the Loadmaster's job theirs, where its work is
+  //   signed / signedLoad: the contract signed (they will be by the docking port); with the Loadmaster's job theirs,
+  //         where its work is: said by them alone, as the other captains say theirs (a word at the top lay over it)
   [HAULER_CAPTAIN.id]: { ship: 'Hauler', mission: 'supply', what: 'Join the Hauler\'s crew for a supply run to the old station?',
     offer: `Hello! I'm ${HC} of the Hauler. The old station needs supplies, and I need a crew. Interested?`,
     again: 'I still need a crew for the run to the old station. Interested?', no: 'No trouble. You will find me by the docking port.', waiting: 'The Hauler is nearly ready. Soon!',
     contract: 'Good. Here is my contract. Have a look.',
-    signed: 'Glad to have you. Cargo\'s crew is loading. I\'ll meet you by the docking port.',
-    signedLoad: 'Glad to have you. Work out the load at the shipping computer in Cargo. I\'ll be by the docking port.',
+    signed: 'Glad to have you. Cargo\'s crew is loading the Hauler. I\'ll meet you by the docking port.',
+    signedLoad: 'Glad to have you. The load is yours to work out: the shipping computer in Cargo, down the lift.',
     payout: 'Good work out there. Your share is waiting at the shipping computer in Cargo.',
     wait: [`Hello! I'm ${HC} of the Hauler. No run to crew just now. Come and find me later!`, 'Hello again! Nothing to haul yet. The Hauler waits at the dock.'],
     sale: { what: 'Have a look at the Hauler, for sale?', offer: `Hello! I'm ${HC} of the Hauler. No run to crew yet, but the Hauler is for sale. Interested?`,
