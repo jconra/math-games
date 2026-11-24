@@ -233,8 +233,9 @@ test('Cargo\'s loader says it: one of Cargo\'s people who drives the forklift, t
   for (const k of ['beat', 'slower']) for (const s of LAP_TALK[k]) assert.ok(/\{time\}/.test(s) && /\{secs\}/.test(s), s);
   for (const s of LAP_TALK.missed) assert.ok(/corner/.test(s) && /not/.test(s), s);
   for (const s of [...LAP_TALK.offer.flat(), ...LAP_TALK.beat, ...LAP_TALK.slower, ...LAP_TALK.missed]) { const w = fillIn(s); assert.ok(w.length <= 90 && !/[{}]/.test(w), `a bubble holds it: ${w.length} letters: ${w}`); }
-  // (nothing is paid or kept: the lap's result carries no credits, and the rules keep nothing between laps but the last result)
+  // (nothing is paid: the lap's result carries no credits, and the rules keep nothing between laps but the last result
+  // and how long its countdown waited for the lane; a crew member's best is kept with them: src/lapbest.js, tests/cargo2.test.mjs)
   const L = makeLap();
-  assert.deepEqual(Object.keys(L.s).sort(), ['clock', 'hit', 'missed', 'n', 'next', 'on', 'phase', 'result']);
+  assert.deepEqual(Object.keys(L.s).sort(), ['clock', 'hit', 'missed', 'n', 'next', 'on', 'phase', 'result', 'waited']);
   assert.ok(!('credits' in resultOf(50, [true, true, true, true])) && !('best' in L.s));
 });

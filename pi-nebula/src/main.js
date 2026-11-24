@@ -196,12 +196,15 @@ async function boot() {
   // (and the player can drive it, parked: the supply run's pallets into the containers, src/cargodrive.js,
   // src/supplyrun.js; while a worked-out run waits for the player, Cargo's people leave it parked)
   let supply = null, lap = null;
-  const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!((supply && supply.hold()) || (lap && lap.hold())), open: () => (supply ? supply.open() : []) });
+  // (and Cargo's loader is called to it to load the rest of a run the player got off from: src/people.js send)
+  const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!((supply && supply.hold()) || (lap && lap.hold())), open: () => (supply ? supply.open() : []),
+    summon: (id) => { const O = people && people.list.find((q) => q.id === id); if (O) people.send(O, { do: 'drive:forklift', hurry: 1.4 }); }, dismiss: (O) => { if (people) people.send(O, null); } });
   supply = GAME.supply = makeSupplyRun({ crew: () => GAME.player, save: (p) => save.save(p), forklift, bridge: () => bridgeStands(GAME.player), people: () => people });
   const cargo = GAME.cargo = makeCargoDrive({ W, walls, input, forklift, run: supply, people: () => people });
   // (and a timed lap of Cargo on it: Cargo's loader says how fast they do one; the start box, the countdown, the four
   // waypoints, the clock: src/cargolap.js. Never while a supply run waits to be loaded)
-  lap = GAME.lap = makeCargoLap({ W, forklift, cargo, run: supply, people: () => people });
+  // (each crew member's best official lap kept with them; the best on this device on the board by the forklift's bay)
+  lap = GAME.lap = makeCargoLap({ W, forklift, cargo, run: supply, people: () => people, crew: () => GAME.player, save: (p) => save.save(p), crews: () => save.load() });
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
@@ -268,7 +271,7 @@ async function boot() {
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
     // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
-    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])], wants: () => supply.wants() });
+    forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])], wants: () => supply.wants(), player: GAME.mode === 'play' && P ? P.pos : null });
     // (the supply run: the doors, the pallets that load themselves, the Hauler loaded; in Cargo while the player stands
     // on its floor)
     supply.update(dt, { inCargo: GAME.mode === 'play' && !!P && Math.abs(P.pos.y - STORE.floor) < 1 && lift.crewAt === 'store', feet: [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])] });

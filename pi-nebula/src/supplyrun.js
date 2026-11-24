@@ -8,9 +8,12 @@
 //   2. THE CONTAINERS' DOORS OPEN (kit/containerdoors.js): containers 03 and 02 in the cargo slots (kit/places-plan.js
 //      LOAD).
 //   3. THE FORKLIFT: the player drives it (src/cargodrive.js) and loads N of the pallets waiting on the loading floor,
-//      each just inside a container's doors. GOT OFF before they are all in, the rest load themselves: a pallet at a time
-//      where nobody sees it go (as Cargo's pallets arrive back on the loading floor), and all of the rest at once when
-//      the player leaves Cargo.
+//      each just inside a container's doors. GOT OFF before they are all in (2026-11-23, the game's maker, CARGO1-1, B:
+//      "Cargo's loader walks over, gets on the forklift and drives the rest into the containers while you watch (when
+//      you leave Cargo, whatever is left is loaded at once)."): Cargo's loader is asked to (forklift.loader,
+//      src/cargoforklift.js), and all of the rest go in at once when the player leaves Cargo. Until the loader has
+//      climbed on, the player can get back on and go on loading (gotOn()). Should the loader not come or not manage
+//      it, the rest load themselves as they did before: a pallet at a time where nobody sees it go.
 //   4. LOADED: the doors shut (once the forklift is clear of them), and the line says the Hauler is ready: up the lift,
 //      across the bridge, aboard. The containers go out to the Hauler: what was loaded in them is gone from Cargo the
 //      next time nobody sees it.
@@ -28,8 +31,9 @@
 //   const R = makeSupplyRun({ crew, save, forklift, doors })    in the game
 //   R.update(dt, { inCargo, feet })   each frame; R.open() the slots whose doors are open; R.hold() Cargo's people leave
 //   the forklift parked (it waits for the player); R.wants() pallets still to load; R.status() for the forklift's words;
-//   R.worked() the computer's questions are done; R.gotOff() the player got off the forklift; R.line() the last line
-import { LOAD } from '../kit/places-plan.js';
+//   R.worked() the computer's questions are done; R.gotOff() the player got off the forklift (gotOn(): back on it);
+//   R.line() the last line
+import { LOAD, CARGO } from '../kit/places-plan.js';
 
 export const RUN = { pallets: [3, 4], every: 1.2 };   // (how many pallets a run loads; a pallet loading itself at most this often, s)
 const tally = (crew) => { if (!crew.jobs || typeof crew.jobs !== 'object') crew.jobs = {}; return (crew.jobs.cargo = crew.jobs.cargo && typeof crew.jobs.cargo === 'object' ? crew.jobs.cargo : {}); };
@@ -120,12 +124,14 @@ export function makeSupplyRun({ crew = () => null, save = () => {}, forklift, br
     },
     // the computer's five questions are done: the doors open
     worked() { const c = crew(), r = R.run(); if (!c || !r) return; r.worked = true; save(c); },
-    // got off the forklift before the run is loaded: the rest load themselves from now on (and the player is told so)
+    // got off the forklift before the run is loaded: Cargo's loader loads the rest from now on (and the player is told so)
     gotOff() {
       const r = R.run(); if (!(r && r.worked && r.loaded < r.pallets)) return;
-      handed = true; const left = r.pallets - r.loaded;
-      banner = { t: 0, title: 'Cargo\'s crew load the rest', words: `The other ${left === 1 ? 'pallet goes' : `${left} pallets go`} into the containers without you. Once ${left === 1 ? 'it is' : 'they are'} in, the Hauler is ready: up the lift, across the bridge, aboard.` };
+      handed = true; const left = r.pallets - r.loaded, pp = people(), O = pp && pp.list ? pp.list.find((q) => q.id === CARGO.loader) : null, who = (O && O.name) || 'Cargo\'s loader';
+      banner = { t: 0, title: `${who} loads the rest`, words: `${who} drives the other ${left === 1 ? 'pallet' : `${left} pallets`} into the containers. Watch, or go on up the lift: the Hauler will be ready, across the bridge.` };
     },
+    // back on the forklift before the loader has climbed on: the loading is the player's again
+    gotOn() { const r = R.run(); if (r && !r.byCrew && handed) { handed = false; banner = null; } },
     get handed() { return handed; },
     get kept() { return kept ? kept.length : 0; },
     line: () => banner,
@@ -142,6 +148,8 @@ export function makeSupplyRun({ crew = () => null, save = () => {}, forklift, br
         if (r.loaded < r.pallets && (handed || !inCargo) && !(forklift.hand && forklift.hand.on)) {
           wait -= dt;
           if (!inCargo) { while (forklift.stock.count() < r.pallets && forklift.stock.loadOne([], true)); }
+          // (CARGO'S LOADER drives them in, in sight: asked each frame the run wants it; not come, or given up: as before)
+          else if (forklift.loader && forklift.loader.ask(r.pallets - r.loaded)) wait = RUN.every;
           else if (wait <= 0) { wait = RUN.every; forklift.stock.loadOne(feet); }
           const m = forklift.stock.count(); if (m !== r.loaded) { r.loaded = Math.min(r.pallets, m); save(c); }
         }

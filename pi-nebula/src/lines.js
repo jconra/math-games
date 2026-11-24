@@ -263,6 +263,12 @@ export const LAP_TALK = {
   beat: ['{time} seconds! You beat my {secs}. Nice driving!', '{time}? That beats my {secs} seconds. Well driven!'],
   slower: ['{time} seconds. Not bad! My {secs} still stands.', '{time} seconds. Close! My {secs} is still the time to beat.'],
   missed: ['You missed a corner, so that lap does not count. Try again!', 'All four corners, or it is not official. Go again!'],
+  // (one of the people watching at the finish line, as the forklift comes over it: src/cargowatch.js)
+  cheer: {
+    beat: ['Woohoo! What a lap!', 'Yes! That was fast!', 'You beat Otto! Amazing!'],
+    slower: ['Nice driving!', 'Good lap! Go again!', 'So close! One more?'],
+    missed: ['Oh no, you missed a corner!', 'All four corners next time!'],
+  },
 };
 
 export const TALKS = [

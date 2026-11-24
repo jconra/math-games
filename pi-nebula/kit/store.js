@@ -8,8 +8,9 @@
 //              cargo slots in the west wall (three with a container's end come in through its socket, the fourth empty
 //              with a shield across it, as a hangar door has), two cold store doors in the east wall (doors only:
 //              nothing is behind them), the ceiling and its long lamps over the aisles and the lane, the
-//              forklift's painted place (his forklift parks in it: kit/places-plan.js FORKLIFT), and the forklift
-//              lap's paint: its start box and line, a numbered square at each of its four corners (LAP)
+//              forklift's painted place (his forklift parks in it: kit/places-plan.js FORKLIFT), the forklift
+//              lap's paint: its start box and line, a numbered square at each of its four corners (LAP), and the best
+//              lap's board on the south wall behind the forklift's bay (LAP.board)
 //   rack       a FREE piece: 'bays <n>', a row of shelving n bays long from x = 0 along +x, its middle on z = 0: two
 //              shelves over the floor, orange beams on dark uprights
 //   pallet     a FREE piece, a pallet and its load, 1.2 m by 1 m: 'crates', 'boxes', 'drums', 'wrapped', 'totes'
@@ -221,6 +222,27 @@ export function lapPaint(p) {
   });
 }
 
+// THE BEST LAP'S BOARD (kit/places-plan.js LAP.board has the game's maker's words): a dark panel on the south wall behind
+// the forklift's bay, between two of the wall's uprights, over the wall's dark band; a steel edge round it; BEST LAP
+// across its top in lit letters, a patch of the start line's chequers at each end of it; a rule under them. The lap
+// itself (the time, whose it is) is written on a panel just in front of its face (kit/lapboard.js), which the game and
+// the Kit Lab's Cargo put there.
+export function lapBoard(p) {
+  const B = LAP.board, z1 = STORE.z1 - WF - 0.02, z0 = z1 - B.out, x0 = B.x - B.w / 2, x1 = B.x + B.w / 2, y0 = B.y, y1 = B.y + B.h, e = 0.03;
+  p.slab('black', x0, x1, y0, y1, z0, z1, { r: 0.012, cell: 1.5 });
+  for (const [a, b, c, d] of [[x0 - e, x1 + e, y1, y1 + e], [x0 - e, x1 + e, y0 - e, y0], [x0 - e, x0, y0, y1], [x1, x1 + e, y0, y1]]) p.slab('gun', a, b, c, d, z0 - 0.012, z1, { r: 0.006, cell: 1.5 });
+  const ty = y1 - 0.17, th = 0.115, tw = textWidth('BEST LAP', { h: th });
+  segText(p, 'BEST LAP', { h: th, t: 0.02, at: [B.x, ty, z0 - 0.003], rot: [0, PI, 0], look: 'white', mat: 'glow' });
+  // (the chequers: two rows of squares each side of the words)
+  const C = 0.05, n = Math.max(2, Math.floor(((B.w - tw) / 2 - 0.2) / C));
+  for (const sd of [-1, 1]) for (let r = 0; r < 2; r++) for (let k = 0; k < n; k++) {
+    if ((r + k) % 2) continue;
+    const a = B.x + sd * (tw / 2 + 0.1 + k * C), b = a + sd * C;
+    p.slab(WHITE_PAINT, Math.min(a, b), Math.max(a, b), ty - C + r * C, ty + r * C, z0 - 0.002, z0, { r: 0, cell: 9 });
+  }
+  p.slab('gun', x0 + 0.06, x1 - 0.06, ty - 0.13, ty - 0.122, z0 - 0.003, z0, { r: 0, cell: 9 });
+}
+
 export function storeHall(p) {
   // the floor (the lift's box has its own)
   const S = STOPS.find((s) => s.id === 'store'), lx = S.at[0], lz = S.at[2], lh = LIFT.half + LIFT.wall - 0.04;
@@ -273,8 +295,10 @@ export function storeHall(p) {
   for (let t = 0; t < 4; t++) line(p, PAINT, [fx0 + 0.3 + t * 1.05, fz1 - 0.3], [fx0 + 0.9 + t * 1.05, fz1 - 0.95], 0.08);
   segText(p, 'FORKLIFT', { h: 0.42, t: 0.07, at: [(fx0 + fx1) / 2, 0.006, fz0 + 0.75], rot: [-PI / 2, 0, 0], look: PAINT });
   line(p, WHITE_PAINT, [20.6, -7.6], [20.6, 34.5], 0.08);
-  // the forklift lap: its start box and line, a numbered square at each of its four corners
+  // the forklift lap: its start box and line, a numbered square at each of its four corners; the best lap's board on
+  // the wall behind the forklift's bay
   lapPaint(p);
+  lapBoard(p);
 }
 
 // ── the shelving ─────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -16,12 +16,22 @@
 //   THE FINISH           back over the line: the card, the time official or not (and which waypoints were missed), set
 //                        against the loader's, and what the loader says of it (on the card, and in a bubble if they are
 //                        in sight).
-// IT PAYS NOTHING (it is not math; the game's maker, of free flight: "it's not math so you don't get money"), nothing
-// is kept of it, and it is never in the supply run's way: while a worked-out run waits to be loaded (src/supplyrun.js
-// hold()), the box starts nothing. The forklift stops for people as it always does (kit/forkliftdrive.js): someone
-// walking across can cost a lap its time.
+// IT PAYS NOTHING (it is not math; the game's maker, of free flight: "it's not math so you don't get money"), and it is
+// never in the supply run's way: while a worked-out run waits to be loaded (src/supplyrun.js hold()), the box starts
+// nothing.
+// THE BEST TIMES (2026-11-23, the game's maker: "Each crew member's own best official lap is kept and shown on the clock
+// and on the card ('Your best: 56.8 s')", and "a small board by the forklift's bay with the best lap on it and whose it
+// is"): src/lapbest.js has the rules. A crew member's best is kept with them (saved at once) and shown under the
+// loader's time on the clock and on every card; the board on the wall behind the forklift's bay (kit/store.js lapBoard,
+// kit/lapboard.js) is written afresh whenever Cargo comes into view, a lap is kept or another crew member plays.
+// THE PEOPLE WATCH (the game's maker: "anyone in the area should get out of the way and watch... near the finish line"):
+// src/cargowatch.js. Stopped on the start box, everyone is called to the finish line; the countdown waits (the forklift
+// held still, "Wait: the lane is being cleared.") while anyone is in the lane in its way, RULES.wait seconds at most;
+// one of them cheers at the finish.
 //
-//   const lap = makeCargoLap({ W, forklift, cargo, run, people })
+//   const lap = makeCargoLap({ W, forklift, cargo, run, people, crew, save, crews })
+//                                crew(): the crew member playing; save(crew): keeps them; crews(): every crew member
+//                                saved on this device (the board's best)
 //   lap.update(dt, P, playing)   each frame, after the forklift's own (src/cargodrive.js update)
 //   lap.hold()                   Cargo's people leave the forklift parked (the loader has just told the player of it)
 //   lap.stop()                   off at once (the crew screen)
@@ -29,6 +39,9 @@
 import * as THREE from 'three';
 import { LAP, STORE } from '../kit/places-plan.js';
 import { makeLap, GATES, LINE, BOX } from '../kit/forkliftlap.js';
+import { makeLapBoard } from '../kit/lapboard.js';
+import { makeCargoWatch } from './cargowatch.js';
+import { bestOf, keepLap, boardOf, seconds } from './lapbest.js';
 import { LAP_TALK } from './lines.js';
 import { BEACON_VERT, BEACON_FRAG, beaconGeometry } from './guide.js';
 
@@ -62,9 +75,9 @@ const MARK_FRAG = `
     gl_FragColor = vec4(uColour, a);
   }`;
 
-export function makeCargoLap({ W, forklift, cargo, run = null, people = () => null }) {
+export function makeCargoLap({ W, forklift, cargo, run = null, people = () => null, crew = () => null, save = () => {}, crews = () => [] }) {
   ensureCss();
-  const L = makeLap();
+  const L = makeLap(), crowd = makeCargoWatch({ people, forklift });
   // a lap may be started: no supply run waiting to be loaded
   const can = () => !(run && run.hold && run.hold());
 
@@ -73,9 +86,9 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
   el.className = 'pcl'; el.hidden = true;
   el.innerHTML = `
     <div class="pcl-clock" hidden><span class="pcl-time"><b>0.0</b><small>s</small></span>
-      <span class="pcl-side"><span class="pcl-pips" role="img">${GATES.map((g) => `<i>${g.n}</i>`).join('')}</span><span class="pcl-beat"></span></span></div>
+      <span class="pcl-side"><span class="pcl-pips" role="img">${GATES.map((g) => `<i>${g.n}</i>`).join('')}</span><span class="pcl-beat"></span><span class="pcl-mine" hidden></span></span></div>
     <div class="pcl-count" hidden></div>
-    <div class="pcl-card" role="status" hidden><span class="pcl-tag"></span><span class="pcl-big"><b></b><small>s</small></span><span class="pcl-vs"></span><span class="pcl-miss"></span><span class="pcl-say"></span><span class="pcl-who"></span></div>`;
+    <div class="pcl-card" role="status" hidden><span class="pcl-tag"></span><span class="pcl-big"><b></b><small>s</small></span><span class="pcl-vs"></span><span class="pcl-miss"></span><span class="pcl-best" hidden></span><span class="pcl-say"></span><span class="pcl-who"></span></div>`;
   document.body.appendChild(el);
   const $ = (s) => el.querySelector(s), clockEl = $('.pcl-clock'), countEl = $('.pcl-count'), cardEl = $('.pcl-card'), pips = [...el.querySelectorAll('.pcl-pips i')];
   let goT = 0, cardT = 0, shownTime = '', shownPips = '';
@@ -96,8 +109,22 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
   }
   // THE CARD, and what the loader says of the lap
   const list = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
+  // THE BEST TIMES: the crew member's own (kept with them, only an official lap), and the board's
+  const mineWords = (b, isNew = false) => (b == null ? '' : `Your best: ${seconds(b)} s` + (isNew ? ' (new!)' : ''));
+  let board = null, boardFor = null;
+  function writeBoard() {
+    if (!board) return;
+    const c = crew(), all = (crews() || []).filter((x) => !c || x.id !== c.id);
+    board.set(boardOf(c ? [...all, c] : all, { name: loaderName(), time: LAP.time }));
+    S.board = board.shown;
+  }
   function card(r) {
     const who = loaderName(), kind = !r.official ? 'missed' : r.beat ? 'beat' : 'slower';
+    // (kept before the card is written: an official lap that is their best so far is their best from now on)
+    const c = crew(), kept = keepLap(c, r);
+    if (c && r.official) { save(c); writeBoard(); }
+    $('.pcl-best').textContent = mineWords(kept.best, kept.isNew); $('.pcl-best').hidden = kept.best == null; $('.pcl-best').classList.toggle('is-new', kept.isNew);
+    S.best = kept;
     const words = fill(pick(LAP_TALK[kind]), { time: secs(r.time), secs: secs(r.loader) });
     cardEl.className = 'pcl-card ' + (!r.official ? 'is-not' : r.beat ? 'is-beat is-official' : 'is-official');
     $('.pcl-tag').textContent = r.official ? 'Official lap' : 'Not official';
@@ -107,10 +134,11 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     $('.pcl-miss').hidden = r.official;
     $('.pcl-say').textContent = '“' + words + '”'; $('.pcl-who').textContent = who;
     cardEl.hidden = false; pop(cardEl); cardT = SHOW.card; clockEl.hidden = true; showing();
-    S.card = { tag: $('.pcl-tag').textContent, time: r.time, vs: $('.pcl-vs').textContent, miss: $('.pcl-miss').textContent, say: words };
-    // (and in a bubble over them, where they are in sight)
+    S.card = { tag: $('.pcl-tag').textContent, time: r.time, vs: $('.pcl-vs').textContent, miss: $('.pcl-miss').textContent, best: $('.pcl-best').textContent, say: words };
+    // (and in a bubble over them, where they are in sight; and a cheer from one of the others watching at the line)
     const pp = people(), O = loader();
     if (pp && O && !O.hidden && !O.away && O.shown) pp.say(O, words, { kind: 'talk' });
+    S.cheer = crowd.cheer(kind);
   }
 
   // ── on the floor: the marks lit over their paint, and the column of light over the one to drive to ─────────────
@@ -162,7 +190,7 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
   }
 
   // ── the loader's word to a player who comes near ───────────────────────────────────────────────────────────────
-  const S = { offers: 0, laps: 0, official: 0, beat: 0, off: 0, last: null, card: null };
+  const S = { offers: 0, laps: 0, official: 0, beat: 0, off: 0, last: null, card: null, best: null, board: null, cheer: null, waits: 0, waited: 0 };
   let now = 0, said = -1e9, nearT = 0, seq = null, held = -1;
   function offer(dt, P, playing) {
     const pp = people(), O = loader();
@@ -191,9 +219,14 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     now += dt;
     const D = playing && forklift.hand.on ? forklift.hand.drive() : null, driving = !!D && cargo.on;
     if (driving) {
-      const s = D.s, ev = L.step(s, s.v, dt, { can: can(), carrying: s.carry != null });
-      if (ev.count) count(ev.count);
-      if (ev.go) { count(0); clockEl.hidden = false; shownTime = shownPips = ''; $('.pcl-beat').textContent = `${loaderName()}: ${secs(LAP.time)} s`; showing(); }
+      // (is anyone in the lane in its way: asked only while it matters, stopped on the box or waiting there)
+      const s = D.s, ask = L.s.phase === 'wait' || (L.s.phase === 'idle' && L.s.on && L.s.on.on), clear = !ask || crowd.clear().clear;
+      const ev = L.step(s, s.v, dt, { can: can(), carrying: s.carry != null, clear });
+      // (stopped on the start box: everyone to the finish line to watch; the countdown waits while one is in the lane)
+      if (ev.called) crowd.call();
+      if (ev.wait) S.waits++;
+      if (ev.count) { if (ev.count === 3) S.waited = +L.s.waited.toFixed(2); count(ev.count); }
+      if (ev.go) { count(0); clockEl.hidden = false; shownTime = shownPips = ''; $('.pcl-beat').textContent = `${loaderName()}: ${secs(LAP.time)} s`; const b = bestOf(crew()); $('.pcl-mine').textContent = mineWords(b); $('.pcl-mine').hidden = b == null; showing(); }
       if (ev.finish) { S.laps++; if (ev.finish.official) S.official++; if (ev.finish.beat) S.beat++; S.last = ev.finish; card(ev.finish); }
       if (ev.off) { S.off++; clockEl.hidden = true; countEl.hidden = true; showing(); }
       if (L.s.phase === 'run') clock();
@@ -202,11 +235,19 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     if (cardT > 0 && (cardT -= dt) <= 0) { cardEl.hidden = true; showing(); }
     offer(dt, P, playing);
     light(dt, driving);
+    crowd.update(dt, { driving, s: D ? D.s : null, phase: L.s.phase });
+    // THE BOARD: made the first time Cargo is in view, written afresh as it comes into view and when another crew member plays
+    if (zone && zone.group.visible) {
+      const c = crew(), key = c ? c.id : '';
+      if (!board) { board = makeLapBoard(); zone.group.add(board.mesh); boardFor = null; }
+      if (boardFor !== key) { boardFor = key; writeBoard(); }
+    } else boardFor = null;
   }
   // THE FORKLIFT'S OWN WORDS along the bottom, while the lap has something to say (src/cargodrive.js hint)
   const WHY = { face: 'Turn it to face the line.', back: 'Back up: its forks behind the line.', forward: 'A little further, up to the line.', side: 'Into the middle of the box.' };
   function hint() {
     const s = L.s;
+    if (s.phase === 'wait') return 'Wait: the lane is being cleared.';
     if (s.phase === 'count') return 'Get ready…';
     if (s.phase === 'run') return s.next < GATES.length ? `Round the racks: corner ${GATES[s.next].n} is next.` : 'Back over the start line!';
     // (a lap just done, its card still up, the forklift rolling on over the line: how to go again)
@@ -215,9 +256,9 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     return null;
   }
   cargo.hint = hint; cargo.brake = () => L.held;
-  function stop() { L.cancel(); clockEl.hidden = countEl.hidden = cardEl.hidden = true; goT = cardT = 0; seq = null; showing(); }
-  return { update, stop, hold: () => now < held, lap: L,
-    state: () => ({ ...S, phase: L.s.phase, n: L.s.n, clock: +L.s.clock.toFixed(2), hit: [...L.s.hit], missed: [...L.s.missed], next: L.s.next, on: L.s.on, result: L.s.result, can: can(), hold: now < held, saying: !!seq,
-      shown: { clock: !clockEl.hidden, count: countEl.hidden ? null : countEl.textContent, card: !cardEl.hidden, time: $('.pcl-time b').textContent, beat: $('.pcl-beat').textContent, pips: shownPips },
+  function stop() { L.cancel(); crowd.release(); clockEl.hidden = countEl.hidden = cardEl.hidden = true; goT = cardT = 0; seq = null; boardFor = null; showing(); }
+  return { update, stop, hold: () => now < held, lap: L, crowd,
+    state: () => ({ ...S, crowd: crowd.state(), mine: bestOf(crew()), phase: L.s.phase, n: L.s.n, clock: +L.s.clock.toFixed(2), hit: [...L.s.hit], missed: [...L.s.missed], next: L.s.next, on: L.s.on, result: L.s.result, can: can(), hold: now < held, saying: !!seq,
+      shown: { clock: !clockEl.hidden, count: countEl.hidden ? null : countEl.textContent, card: !cardEl.hidden, time: $('.pcl-time b').textContent, beat: $('.pcl-beat').textContent, mine: $('.pcl-mine').hidden ? null : $('.pcl-mine').textContent, pips: shownPips },
       marks: marks ? { box: +marks.box.u.uOpacity.value.toFixed(2), line: +marks.line.u.uOpacity.value.toFixed(2), gates: marks.gates.map((G) => +G.u.uOpacity.value.toFixed(2)), beacon: beacon.visible ? beacon.position.toArray().map((v) => +v.toFixed(2)) : null } : null }) };
 }

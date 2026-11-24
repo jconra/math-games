@@ -119,7 +119,11 @@ export const PALLET = { long: 1.2, wide: 1, deck: 0.1, top: 1.04 };
 //   pallets  each pallet's load and where it is at the start: 'w<n>' a waiting place, 's<n>' a place on the racks'
 //            floor level, 'u<n>' a place on the first shelf
 // (A pallet carried to the shelves comes back to the loading floor now and then, as one arriving: src/cargoforklift.js.)
+//   loader   the one of Cargo's people (src/life.js ROOM_CREW) who loads the rest of a supply run when the player gets
+//            off the forklift before it is all in (2026-11-23, the game's maker, CARGO1-1, B: "Cargo's loader walks
+//            over, gets on the forklift and drives the rest into the containers while you watch")
 export const CARGO = {
+  loader: 'loader-otto',
   waiting: FLOOR.waiting,
   shelf: [[13.61, 19.55], [15.11, 19.55], [16.33, 19.55], [17.83, 19.55]],
   up: [[16.33, 19.55], [17.83, 19.55]], upY: RACKS.levels[1] + RACKS.beam,
@@ -176,8 +180,26 @@ export const doorTurn = (s, k) => { const t = Math.max(0, Math.min(1, k)); retur
 //   time     how long Cargo's loader takes (s): the lap driven by a careful hand at the forklift's own speeds
 //            (kit/forkliftdrive.js HAND), measured (tests/forklap.test.mjs; ~/pw/space-math/FORKLAP_1.md)
 //   who      the one of Cargo's people who says so (src/life.js ROOM_CREW: the loader, who drives it most)
+// THE PEOPLE WATCH (2026-11-23, the game's maker, LAP1-3, of Cargo's people in a lap's way: "I think anyone in the area
+// should get out of the way and watch. It would be good entertainment to watch some races. Id suggest getting anyone in
+// the area to watch near the finish line."):
+//   wide     how far the lane reaches either side of the lap's own line (the start, the corners, the line again) along
+//            each of its five stretches (m): the south lane, the racks' west ends, the first aisle, the east lane, the
+//            south lane again. Anyone nearer the line than this is in the lane, in the forklift's way
+//   watch    where they stand to watch, [x, z]: in a row along the lift's north wall, at the south end of the finish
+//            line, on the outside of the lap's last stretch (the forklift comes down the lane's middle, or cuts in by
+//            the racks on its other side), clear of the way from the forklift's bay up the lift's west side; they face
+//            the lane (`look`, a person's heading: north)
+// THE BEST LAP'S BOARD (2026-11-23, the game's maker, LAP1-2, B: "Something to show for it in Cargo: a small board by the
+// forklift's bay with the best lap on it and whose it is."):
+//   board    on the south wall, behind the forklift's bay: x (its middle, between two of the wall's uprights), w, h (its
+//            size, m), y (its foot over the floor: over the wall's dark band), out (how far it stands off the wall
+//            panels' face, m); face: the part the game writes the lap on, [w, h] and its middle's height over the
+//            board's foot (kit/lapboard.js; the rest is the board itself, kit/store.js)
 export const LAP = { box: [11.5, 15.7, 21.7, 24.1], face: Math.PI, lane: [20.6, 26.2],
-  corners: [[5.15, 22.9], [5.15, -3.05], [22.45, -3.05], [22.45, 22.9]], gate: 3.4, time: 65, who: 'loader-otto' };
+  corners: [[5.15, 22.9], [5.15, -3.05], [22.45, -3.05], [22.45, 22.9]], gate: 3.4, time: 65, who: 'loader-otto',
+  wide: [2.8, 2.0, 1.9, 2.6, 2.8], watch: [[11.1, 26.25], [11.85, 26.25], [12.6, 26.25], [13.35, 26.25]], look: Math.PI,
+  board: { x: 7.225, w: 1.72, h: 1.02, y: 1.62, out: 0.05, face: [1.56, 0.6, 0.37] } };
 // THE FORKLIFT (2026-11-20, the game's maker: "I like making models anyway. I'll get a forklift"): his own model, made
 // in Tripo (assets/cargo/forklift.glb: his file with its picture made smaller, his shape untouched; kit/forklift.js
 // draws it), parked in its painted place. In his file it is one unit long, its forks along +x, its foot on y = 0:

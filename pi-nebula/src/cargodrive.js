@@ -99,6 +99,7 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
   const C = { get on() { return !!phase; }, get clip() { return phase ? (phase === 'on' && t < ON.on * 0.35) || (phase === 'off' && t > ON.off * 0.6) ? 'Stand_Listen' : SIT : null; }, pilot: null, brake: null, hint: null };
   function getOn() {
     if (phase || !P0 || !forklift.hand.take()) return false;
+    if (run && run.gotOn) run.gotOn();      // (back on before Cargo's loader had climbed on: the loading is theirs again)
     phase = 'on'; t = 0; from = { pos: P0.pos.clone(), heading: P0.heading };
     prompt.hidden = true; el.hidden = false; requestAnimationFrame(() => el.classList.add('is-on'));
     document.body.classList.add('pcf-driving');

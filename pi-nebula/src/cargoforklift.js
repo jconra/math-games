@@ -39,6 +39,19 @@
 // their doors are open, just inside the containers'), give() (got off: it stands where it was left, and goes back to its
 // bay where nobody sees, a pallet left on its forks set down first), seat() (where the player sits), board() (where they
 // stand to get on and off). While the supply run waits for the player (hold()), Cargo's people leave it parked.
+// CARGO'S LOADER LOADS THE REST (2026-11-23, the game's maker, CARGO1-1, B, of a player who gets off before the run is
+// loaded: "Cargo's loader walks over, gets on the forklift and drives the rest into the containers while you watch
+// (when you leave Cargo, whatever is left is loaded at once)."): asked by the supply run (forklift.loader.ask(n), each
+// frame it wants it), the loader (CARGO.loader) is called over (`summon`), walks to its seat where the player left it,
+// climbs on, and drives each pallet still wanted from the loading floor into the open containers, one after another:
+// the same forklift, driven by the same stick, wheel and forks' buttons as the player's (kit/forkliftloader.js gives
+// them; kit/forkliftway.js finds its way), so a pallet goes on and off its forks exactly as it does for the player, in
+// sight. A pallet the player left on its forks goes in first. Then it is driven to its bay, backed in and parked, and
+// the loader gets off and goes on with their day. UNTIL THE LOADER HAS CLIMBED ON, the player can get back on (the
+// prompt beside its seat) and the loader turns back to their day; once the loader is driving, it is theirs till it is
+// parked. The player gone from Cargo (the loader taken away with Cargo's people): finished at once, as a round is.
+// Should the loader not come, or not find a way (forklift.loader.state().gaveUp), the run loads the rest as it did
+// before, where nobody sees.
 import * as THREE from 'three';
 import { loadForklift, standForklift } from '../kit/forklift.js';
 import { STORE, forkliftBox, CARGO, PALLET, palletBox } from '../kit/places-plan.js';
@@ -47,6 +60,7 @@ import { makePallets, warmLoad } from '../kit/cargopallets.js';
 import { makeDoors } from '../kit/containerdoors.js';
 import { makeDrive, worldOf, BOX_PLACES, boxPlace, HAND } from '../kit/forkliftdrive.js';
 import { SLOT, LOAD } from '../kit/places-plan.js';
+import { makeLoader } from '../kit/forkliftloader.js';
 
 const KEY = 'cargo:forklift';
 // its shine: the room's own picture of itself, this much (the kit's painted parts have 1.25: kit/materials.js, as the
@@ -60,10 +74,12 @@ const CARE = { near: 0.5, ahead: 1.1, clear: 0.8 };
 // on its seat as on a chair, lifted by the difference
 // NOW AND THEN: after a round, this long before another (s); how often a pallet may arrive (s), and nobody nearer the
 // place it comes to than `clear` (m)
-export const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6 };
+// THE LOADER CALLED to load the rest: called again every `call` seconds till they come; not come in `come` seconds, or
+// their loading given up: not asked again for `again` seconds (the run loads the rest where nobody sees meanwhile)
+export const RIDE = { on: 1.8, off: 1.5, turn: 0.35, out: 0.42, chair: 0.53, rest: 25, arrive: 3, clear: 1.6, call: 2, come: 75, again: 40 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-export function makeCargoForklift({ W, walls, hold = () => false, open = () => [] }) {
+export function makeCargoForklift({ W, walls, hold = () => false, open = () => [], summon = null, dismiss = null }) {
   const zone = W.room('store');
   const [x0, x1, z0, z1] = forkliftBox();
   const box = new THREE.Box3(new THREE.Vector3(x0, STORE.floor, z0), new THREE.Vector3(x1, STORE.floor + 2.3, z1));
@@ -285,6 +301,13 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
   let clock = 0;
   const ride = {
     claim(P) {
+      // (Cargo's loader, called to load the rest of a supply run: to its seat where it stands)
+      if (load.asked() && P.id === CARGO.loader && made && pallets && !driver && (state === 'parked' || state === 'left') && load.can()) {
+        const b = (playerBy(-1) ? null : besideAt(-1)) || (playerBy(1) ? null : besideAt(1)); if (!b) return null;
+        driver = P; load.from = state; state = 'loadcall'; load.calls++;
+        spot = { name: 'forklift', pos: b.pos, heading: pose.h, who: null };
+        return spot;
+      }
       if (!made || !pallets || state !== 'parked' || rest > 0 || driver || P.home !== 'store' || hold()) return null;
       const J = pickJob(); if (!J) return null;
       job = J; driver = P; state = 'called'; S.claims++;
@@ -293,6 +316,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       return spot;
     },
     step(P, a, dt, H) {
+      if (driver === P && load.states.includes(state)) { load.step(P, a, dt, H); return; }
       if (driver !== P || !job) { H.next(P); return; }
       if (a.phase === 'do') {
         // (beside its seat: on)
@@ -323,6 +347,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     },
     release(P) {
       if (driver !== P) return;
+      if (load.states.includes(state)) { load.release(P); return; }
       finishNow(); driver = null; spot = null; rest = RIDE.rest * 0.5;
       if (P.pose) P.pose = null; P.scripted = false;
     },
@@ -392,32 +417,42 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     hand = null; Object.assign(pose, PARKED); parts.lift = FORKS.rest; parts.steer = 0; show();
     state = 'parked'; rest = Math.max(rest, RIDE.rest * 0.5); S.leftBack = (S.leftBack || 0) + 1;
   }
+  // A FRAME OF A HAND ON IT, the player's or the loader's: cmd { go, turn, forks }; feet: everyone else on Cargo's floor
+  // -> what happened
+  function stepHand(cmd, dt, feet = [], W2 = null) {
+    const s = hand.D.s, x0 = s.x, z0 = s.z;
+    const ev = hand.D.step(cmd, dt, W2 || worldNow(feet));
+    if (ev.took) { here.delete(ev.took.place); hand.from = ev.took.place; hand.fromH = ev.took.h; hand.shade = null; S.took = (S.took || 0) + 1; }
+    if (ev.set) { here.set(ev.set, ev.placed.i); since.set(ev.set, clock); pallets.at(ev.placed.i, ev.set, ev.placed.h); hand.from = null; S.put = (S.put || 0) + 1; }
+    // its wheels rolling with the ground covered (the back ones further round a turn), the back ones steered
+    const f = fwdOf(s.h), ds = (s.x - x0) * f[0] + (s.z - z0) * f[1];
+    pose.x = s.x; pose.z = s.z; pose.h = s.h; parts.lift = s.lift;
+    parts.front -= ds / TRUCK.front.r;
+    parts.back -= ds * Math.sqrt(1 + (TRUCK.base * s.curv) ** 2) / TRUCK.back.r;
+    parts.steer = -Math.atan(TRUCK.base * s.curv);
+    show();
+    hand.last = ev;
+    return ev;
+  }
   const handApi = {
     // (the player may take it: in Cargo, parked, nobody on it)
-    can: () => !!(made && pallets && state === 'parked' && !driver),
-    get on() { return !!(hand && !hand.left); },
+    // (and, while a supply run's rest is the loader's to load, where the player left it, until the loader has climbed on)
+    can: () => !!(made && pallets && ((state === 'parked' && !driver) || (load.asked() && (state === 'left' || state === 'loadcall')))),
+    get on() { return !!(hand && !hand.left && !hand.by); },
     take() {
       if (!handApi.can()) return false;
+      // (the loader on their way to it: back to their day)
+      if (state === 'loadcall') { const P = driver; driver = null; spot = null; if (dismiss && P) dismiss(P); }
       state = 'hand'; S.hands = (S.hands || 0) + 1;
-      hand = { D: makeDrive({ x: pose.x, z: pose.z, h: pose.h, lift: parts.lift }), from: null, fromH: null, shade: null, left: false, last: null };
+      // (left where the player got off: as it was, a pallet on its forks still on them)
+      if (hand && hand.left) { hand.left = false; hand.by = null; hand.last = null; hand.D.s.v = 0; }
+      else hand = { D: makeDrive({ x: pose.x, z: pose.z, h: pose.h, lift: parts.lift }), from: null, fromH: null, shade: null, left: false, last: null };
       return true;
     },
     // a frame of the player's driving: cmd { go, turn, forks }; feet: everyone else on Cargo's floor -> what happened
     step(cmd, dt, feet = []) {
-      if (!hand || hand.left) return null;
-      const s = hand.D.s, x0 = s.x, z0 = s.z;
-      const ev = hand.D.step(cmd, dt, worldNow(feet));
-      if (ev.took) { here.delete(ev.took.place); hand.from = ev.took.place; hand.fromH = ev.took.h; hand.shade = null; S.took = (S.took || 0) + 1; }
-      if (ev.set) { here.set(ev.set, ev.placed.i); since.set(ev.set, clock); pallets.at(ev.placed.i, ev.set, ev.placed.h); hand.from = null; S.put = (S.put || 0) + 1; }
-      // its wheels rolling with the ground covered (the back ones further round a turn), the back ones steered
-      const f = fwdOf(s.h), ds = (s.x - x0) * f[0] + (s.z - z0) * f[1];
-      pose.x = s.x; pose.z = s.z; pose.h = s.h; parts.lift = s.lift;
-      parts.front -= ds / TRUCK.front.r;
-      parts.back -= ds * Math.sqrt(1 + (TRUCK.base * s.curv) ** 2) / TRUCK.back.r;
-      parts.steer = -Math.atan(TRUCK.base * s.curv);
-      show();
-      hand.last = ev;
-      return ev;
+      if (!hand || hand.left || hand.by) return null;
+      return stepHand(cmd, dt, feet);
     },
     // got off: it stands where it was left (in its bay with nothing on its forks: parked exactly as it parks)
     give() {
@@ -440,6 +475,107 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       return { carry: s.carry, under: s.under, underAt, lift: s.lift, v: s.v, front: F ? { i: F.q.i, along: F.L.along, place: F.q.place } : null,
         place: P ? { id: P.q.id, d: P.d, side: P.side, ahead: P.ahead, box: !!P.q.box } : null, blocked: hand.last && hand.last.blocked, why: hand.last && hand.last.why };
     },
+  };
+
+  // ── CARGO'S LOADER LOADS THE REST (the top of this file; kit/forkliftloader.js) ────────────────────────────────────
+  // load: asked() the run wants it just now; can() there is something to do (a pallet on its forks, or one waiting on
+  // the loading floor, and a place free in an open container); states: the forklift's states while it is the loader's
+  // ('loadcall' called and on their way, 'loadon' getting on, 'load' driving, 'loadoff' getting off)
+  let playerAt = null;
+  const playerBy = (side) => { const b = besideAt(side); return !!(b && playerAt && Math.hypot(playerAt.x - b.pos.x, playerAt.z - b.pos.z) < 0.9); };
+  const load = {
+    states: ['loadcall', 'loadon', 'load', 'loadoff'], want: 0, at: -9, since: null, next: 0, failed: -1e9, why: null, from: 'parked', L: null, calls: 0, done: 0, loaded: 0, gaveUp: 0, ms: null,
+    asked: () => clock - load.at < 0.6 && load.want > 0 && clock - load.failed > RIDE.again,
+    can() {
+      if (hand && hand.left && hand.D.s.carry != null) return true;
+      return PLACES.some((q) => !q.shelf && here.has(q.id)) && BOX_PLACES.some((q) => open().includes(q.slot) && !here.has(q.id));
+    },
+    fail(why) { load.failed = clock; load.why = why; load.gaveUp++; console.info('cargo: the loader does not load the rest (' + why + '): it loads where nobody sees'); },
+    // THEIR PART at the forklift (src/people.js RIDES): on, the drive, off
+    step(P, a, dt, H) {
+      if (a.phase === 'do') {
+        if (state !== 'loadcall') { H.next(P); return; }
+        // (beside its seat: on; its hand theirs, as the player left it, a pallet on its forks still on them)
+        state = 'loadon'; a.phase = 'on'; a.t = 0; P.scripted = true;
+        if (hand && hand.left) { hand.left = false; hand.by = P; hand.last = null; hand.D.s.v = 0; }
+        else hand = { D: makeDrive({ x: pose.x, z: pose.z, h: pose.h, lift: parts.lift }), from: null, fromH: null, shade: null, left: false, last: null, by: P };
+        return;
+      }
+      if (a.phase === 'on') {
+        const k = Math.min(1, a.t / RIDE.on); seatPose(P, k);
+        H.play(P, k > RIDE.turn + 0.05 ? H.clips.sit : H.clips.stand, { fade: 0.45 });
+        if (k >= 1) { a.phase = 'ride'; a.t = 0; state = 'load'; load.L = makeLoader(); load.ms = { n: 0, sum: 0, most: 0 }; }
+        return;
+      }
+      if (a.phase === 'ride') {
+        H.play(P, H.clips.sit); seatPose(P, 1);
+        const L = load.L;
+        if (!L || !(L.done || L.failed)) return;
+        // parked in its bay (exactly as it parks), or given up where it stands: off
+        if (L.done) { hand = null; Object.assign(pose, PARKED); parts.lift = FORKS.rest; parts.steer = 0; show(); load.done++; }
+        else { hand.D.s.v = 0; load.fail(String(L.failed)); }
+        const b = besideAt(-1) || besideAt(1), p = b ? b.pos : walls.snap(pose.x, STORE.floor + 0.35, pose.z + 1.2, 1.5) || new THREE.Vector3(pose.x, STORE.floor, pose.z + 1.2);
+        spot = { name: 'forklift', pos: p, heading: pose.h, who: null };
+        a.phase = 'off'; a.t = 0; state = 'loadoff';
+        return;
+      }
+      if (a.phase === 'off') {
+        const k = Math.min(1, a.t / RIDE.off); seatPose(P, 1 - k);
+        H.play(P, k < 0.6 ? H.clips.sit : H.clips.stand, { fade: 0.4 });
+        if (k >= 1) {
+          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading;
+          driver = null; spot = null; load.L = null;
+          // (given up where it stands: left there, as a player leaves it, and back to its bay where nobody sees)
+          if (hand) { hand.left = true; hand.by = null; state = 'left'; } else { state = 'parked'; rest = RIDE.rest; }
+          H.next(P);
+        }
+      }
+    },
+    // A FRAME OF THEIR DRIVING: the loader's hand on the stick, the wheel and the forks' buttons
+    drive(dt, feet) {
+      const L = load.L; if (!L || !hand || L.done || L.failed) return;
+      const t1 = performance.now(), W2 = worldNow(feet);
+      const cmd = L.cmd(hand.D, W2, dt, { want: load.asked() ? load.want : 0 });
+      const ev = stepHand(cmd, dt, feet, W2); L.after(ev);
+      if (ev.set && /^b/.test(ev.set)) load.loaded++;
+      const u = performance.now() - t1; load.ms.n++; load.ms.sum += u; load.ms.most = Math.max(load.ms.most, u);
+    },
+    // TAKEN AWAY (the player has left Cargo, or the crew screen): on their way to it, it stays as it was; on it,
+    // finished at once where nobody sees: a pallet on its forks set down (in a container while the run wants it), the
+    // forklift parked
+    release(P) {
+      if (state === 'loadcall') { driver = null; spot = null; state = load.from; if (P.pose) P.pose = null; P.scripted = false; return; }
+      if (hand && hand.D.s.carry != null) {
+        const i = hand.D.s.carry, to = (load.want > 0 ? BOX_PLACES.filter((q) => open().includes(q.slot) && !here.has(q.id)) : [])[0] || PLACES.filter((q) => !q.shelf && !here.has(q.id))[0] || PLACES.filter((q) => q.shelf && !here.has(q.id))[0];
+        if (to) { here.set(to.id, i); since.set(to.id, clock); pallets.at(i, to.id); }
+      }
+      hand = null; load.L = null; Object.assign(pose, PARKED); parts.lift = FORKS.rest; parts.steer = 0; if (made) show();
+      driver = null; spot = null; state = 'parked'; rest = RIDE.rest * 0.5;
+      if (P.pose) P.pose = null; P.scripted = false;
+      S.snapped++; if (zone.group.visible && seenBox(box)) S.snappedSeen++;
+    },
+  };
+  const loaderApi = {
+    // THE SUPPLY RUN WANTS THE REST LOADED (src/supplyrun.js, each frame it does: n more) -> true while the loader has
+    // it in hand, or is being called to it; false: the run loads the rest as before (where nobody sees)
+    ask(n) {
+      if (!made || !pallets) return false;
+      load.want = n; load.at = clock;
+      if (clock - load.failed <= RIDE.again) return false;
+      if (state === 'loadon' || state === 'load' || state === 'loadoff') { load.since = null; return true; }
+      if (!(state === 'parked' || state === 'left' || state === 'loadcall') || (driver && state !== 'loadcall') || (state !== 'loadcall' && !load.can())) { load.since = null; return false; }
+      // (called, and again every little while till they are on their way; not on it in all this time: given up for now)
+      if (load.since == null) load.since = clock;
+      if (clock - load.since > RIDE.come) { load.since = null; load.fail('the loader did not come'); if (state === 'loadcall') { const P = driver; driver = null; spot = null; state = load.from; if (dismiss && P) dismiss(P); } return false; }
+      if (state !== 'loadcall' && clock >= load.next) { load.next = clock + RIDE.call; if (summon) summon(CARGO.loader); }
+      return true;
+    },
+    get on() { return state === 'load' || state === 'loadon' || state === 'loadoff'; },
+    get coming() { return state === 'loadcall'; },
+    state: () => ({ now: state, asked: load.asked(), want: load.want, calls: load.calls, done: load.done, loaded: load.loaded, gaveUp: load.gaveUp, why: load.why, failedAgo: +(clock - load.failed).toFixed(1),
+      phase: load.L ? load.L.phase : null, goal: load.L ? load.L.goal : null, fails: load.L ? load.L.fails : 0, log: load.L ? load.L.log.slice(-4) : [], plans: load.L ? load.L.plans : 0, planMs: load.L ? load.L.planMs : 0, waits: load.L ? load.L.waits : 0,
+      way: load.L && load.L.way ? { length: +load.L.way.length.toFixed(1), cusps: load.L.way.cusps, tried: load.L.way.tried } : null,
+      ms: load.ms && load.ms.n ? { frames: load.ms.n, avg: +(load.ms.sum / load.ms.n).toFixed(3), most: +load.ms.most.toFixed(2) } : null }),
   };
 
   // ── THE SUPPLY RUN'S PALLETS (src/supplyrun.js): loaded by the player's hand, or by themselves where nobody sees ──
@@ -508,10 +644,10 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
   }
 
   return {
-    ride, hand: handApi, stock, get doors() { return doors; },
-    update(soon, { camera = null, feet = () => [], dt = 1 / 60, wants = () => false } = {}) {
+    ride, hand: handApi, stock, loader: loaderApi, get doors() { return doors; },
+    update(soon, { camera = null, feet = () => [], dt = 1 / 60, wants = () => false, player = null } = {}) {
       if (!zone) return;
-      clock += dt; cam = camera; if (camera) frustum(camera);
+      clock += dt; cam = camera; if (camera) frustum(camera); playerAt = player;
       if (soon || pallets || building) buildPallets();
       if (doors) doors.update(dt);
       if (made) {
@@ -524,7 +660,9 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
           S.ms.drive = S.ms.drive || { n: 0, sum: 0, most: 0 }; S.ms.drive.n++; S.ms.drive.sum += u; S.ms.drive.most = Math.max(S.ms.drive.most, u);
         }
         else if (state === 'home' && !driver) state = 'parked';
-        else if (state === 'left') leftBack(all, wants);
+        else if (state === 'load') load.drive(dt, all);
+        // (left by the player: back to its bay where nobody sees; not while Cargo's loader is asked to come and load with it)
+        else if (state === 'left' && !load.asked()) leftBack(all, wants);
         if ((arriveClock -= dt) <= 0) { arriveClock = RIDE.arrive; arrive(all); }
         return;
       }
@@ -536,7 +674,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       if (F && !seen(camera) && !inTheWay(feet())) put();
     },
     state: () => ({ ...S, ms: { ...S.ms, drive: S.ms.drive ? { frames: S.ms.drive.n, avg: +(S.ms.drive.sum / S.ms.drive.n).toFixed(3), most: +S.ms.drive.most.toFixed(2) } : null }, now: state, pose: { x: +pose.x.toFixed(2), z: +pose.z.toFixed(2), h: +pose.h.toFixed(3) }, lift: +parts.lift.toFixed(3), steer: +parts.steer.toFixed(3),
-      leg: job ? job.li : null, legs: job ? job.R.legs.length : null, waiting: !!(job && job.waiting), carrying: !!(job && job.carrying), driver: driver ? driver.id : null, rest: +rest.toFixed(1),
+      leg: job ? job.li : null, legs: job ? job.R.legs.length : null, waiting: !!(job && job.waiting), carrying: !!(job && job.carrying), driver: driver ? driver.id : null, onForks: hand ? hand.D.s.carry : null, rest: +rest.toFixed(1),
       places: Object.fromEntries(PLACES.map((q) => [q.id, here.has(q.id) ? here.get(q.id) : null])) }),
     // (for the rigs: the round's ways, and a round started now with whoever of Cargo's people is asked)
     plan: () => (job ? job.R : null),

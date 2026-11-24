@@ -27,6 +27,8 @@ import { makeBeams, beamsOf } from '../../kit/beams.js';
 import { loadForklift, standForklift } from '../../kit/forklift.js';
 import { makePallets } from '../../kit/cargopallets.js';
 import { makeDoors } from '../../kit/containerdoors.js';
+import { makeLapBoard } from '../../kit/lapboard.js';
+import { LAP } from '../../kit/places-plan.js';
 import { loadPod, podMaterials, makePod } from '../../kit/stasispod.js';
 import { POD, POD_PIECES, POSITION_IDS } from '../../kit/stasispod-plan.js';
 import { openPodLock, labMedic } from '../../src/podlock.js';
@@ -297,6 +299,9 @@ async function parkForklift() {
   // (and the doors of the two containers the supply run loads, shut, drawn apart from the room as they swing in the
   // game: kit/containerdoors.js)
   const D = makeDoors({ zone, lights: built.lights || [], sky: room && room.sky }); zone.group.add(D.group); shown.doors = D.facts;
+  // (and the best lap's board behind the forklift's bay, written as it is before anyone has beaten Cargo's loader: in the
+  // game the best official lap of the crew members on the device, kit/lapboard.js)
+  const B = makeLapBoard(); B.set({ name: 'Otto', time: LAP.time }); zone.group.add(B.mesh);
   const mine = shownFor, F = await loadForklift().catch((e) => { console.error('kit lab: the forklift did not come', e); return null; });
   if (!F || mine !== shownFor) return;
   const f = standForklift(F); zone.group.add(f.group); f.light(zoneSets.get('store')?.env || null, 1.25); shown.model = F.facts; readout();

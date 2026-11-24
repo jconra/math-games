@@ -601,6 +601,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (the rescued: their one errand, to their bed or home, again: THE WARD; those of them about the station, their
     // day's next thing as anyone's, below)
     if (P.rescued && wardNext(P)) return;
+    // (SENT, at the foot of this file: a thing to do given from elsewhere in the game comes before their day's next)
+    if (P.sent) { const a = sentAct(P); if (a) { begin(P, a); return; } }
     // (one of the station's own in the scanner's queue: a waiting seat, their turn, THE SCANNER'S QUEUE)
     if (P.checkup && checkNext(P)) return;
     for (let tries = 0; tries < P.day.length; tries++) {
@@ -661,6 +663,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     return (x, z) => {
       if (!P.home && noGo(x, z)) return true;
       if (Math.hypot(x - to.x, z - to.z) < 0.7) return false;
+      if (P.act && P.act.avoid && P.act.avoid(x, z)) return true;      // (SENT: floor the sender wants kept off on the way)
       if (nearTruck(P, x, z)) return true;      // (Cargo's forklift, where it is as the way is worked out)
       if (P.away) return false;       // (someone away keeps off the patches, and nobody else is there for them)
       const M = stillMap(), i = Math.floor(x), k = Math.floor(z);
@@ -869,6 +872,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // foot, on the medic)
       else if (scanning && P.act.kind === 'scanMedic') look = P.act.work > 0 ? near.copy(SCAN.panel) : scanning.patient && scanning.patient.inScene ? headAt(scanning.patient, near) : null;
       else if (scanning && (P.act.phase === 'ready' || P.act.phase === 'bye') && scanning.medic && scanning.medic.inScene) look = headAt(scanning.medic, near);
+      else if (P.act && P.act.watch && P.act.watch(near)) look = near;      // (SENT to watch something: their eyes and head on it)
       else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.busy || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
       else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
       // (anyone else standing or sitting about, or at work: now and then a glance at someone going by, or round the room
@@ -2502,7 +2506,32 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         // (the others: their turn at the scanner still to come, out of the way just now, what they are at, the room)
         scan: !!P.rescued.scan, away: !!P.away, at: (P.act && P.act.spot && P.act.spot.name) || null, room: roomNow(P.pos) })) }),
   };
-  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, ward: wardApi, checkups: checkApi, inView: (P) => inView(P, W.camera),
+  // SENT (Cargo: src/cargowatch.js, everyone called to the finish line to watch a forklift lap; src/cargoforklift.js,
+  // Cargo's loader called to the forklift to load the rest of a supply run): one of a place's own people given a thing to
+  // do now, in place of their day's next. send(P, what): what is a step of a day ({ do: 'drive:forklift' }: claimed as
+  // their day's own steps are) or a place to go and stand ({ spot: { pos, heading }, watch(out) -> true with the point
+  // their eyes follow, avoid(x, z) floor their way there keeps off, hurry: times their pace }); someone seated gets up
+  // first. send(P, null): no longer, on with their day. The four small places it touches: this, sentAct() just below,
+  // next() (it comes first), avoidFor() (its avoid) and the look in update() (its watch).
+  function sentAct(P) {
+    const w = P.sent; P.sent = null;
+    const a = w.do ? claimFor(P, w) : { kind: 'stand', sent: true, step: { do: 'stand', for: [1e9, 1e9] }, spot: w.spot, watch: w.watch || null, avoid: w.avoid || null };
+    if (a) a.sent = true;
+    if (a && w.hurry) { P.fleeing = { was: P.speed }; P.speed = Math.max(P.speed, 1.2) * w.hurry; }
+    return a;
+  }
+  function send(P, what) {
+    if (!P || P.hidden) return false;
+    P.sent = what || null;
+    const a = P.act;
+    if (!what) { if (a && a.sent) next(P); return true; }
+    // (seated: up first, and their getting up ends in next(); on a machine or a bed: when that is done)
+    if (a && ['sat', 'sitting', 'rising'].includes(a.phase)) { a.len = 0; return true; }
+    if (P.scripted) return true;
+    if (P.req) { P.req.dropped = true; P.req = null; }
+    next(P); return true;
+  }
+  const api = { captain: captainApi, list, missing, update, add, remove, eyes, onWays, noGo, alarms, plan, stats, groups, seats, talks, patches, LIFE, flee, runAbout, push, bubbles, SCAN, counts, stage, send, ward: wardApi, checkups: checkApi, inView: (P) => inView(P, W.camera),
     // (said to the player from elsewhere in the game, src/cargolap.js: their mouth moves as they say it, and no hello
     // of theirs comes on top of it)
     say: (P, words, o) => { P.talkUntil = clock + Math.min(3, READ(words)); P.greeted = clock; return bubbles.say(P, words, o); },
