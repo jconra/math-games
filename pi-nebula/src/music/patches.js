@@ -238,7 +238,7 @@ export const TECHNO_PATCHES = {
     { id: 'f-e', type: 'env', name: 'pluck', peak: 1, attack: 0.002, decay: 0.25, sustain: 0.55, release: 0.08 },
     { id: 'f-v', type: 'gain', name: 'F level', gain: 0 },
     { id: 'hp', type: 'filter', name: 'no rumble', ftype: 'highpass', freq: 20, Q: 0.7071 },
-    { id: 'out', type: 'out', gain: 0.5 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.36 },
   ], cables: [
     { from: 'c', to: 'c-v' }, { from: 'c-e', to: 'c-v', port: 'gain' }, { from: 'c-v', to: 'c-d' }, { from: 'c-d', to: 'd', port: 'freq' },
     { from: 'd', to: 'd-v' }, { from: 'd-e', to: 'd-v', port: 'gain' }, { from: 'd-v', to: 'd-d' }, { from: 'd-d', to: 'e', port: 'freq' },
