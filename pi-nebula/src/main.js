@@ -38,6 +38,8 @@ import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
 import { makeChallenges } from './mathball/challenge.js';
+import { makeFriends } from './friends.js';
+import { makeFriendCard } from './friendcard.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
 import { startJobs } from './jobs/index.js';
@@ -148,6 +150,10 @@ async function boot() {
   input.enabled = false;
   const chase = makeChase(W.camera, walls);
   let player = null, building = null, people = null;
+  // (FRIENDSHIP: everyone's meter, kept with the crew member's save, src/friends.js; a tap on a person, src/friendcard.js)
+  const friends = GAME.friends = makeFriends({ crew: () => GAME.player, save: (p) => save.save(p) });
+  const friendCard = GAME.friendCard = makeFriendCard({ input, camera: W.camera, people: () => people, friends, crew: () => GAME.player, game: GAME });
+  let walkFree = false;      // (on their feet and free to talk to someone: no job, run, lift or forklift)
   const auto = { way: null, i: 0 };       // (a rig walking the player somewhere: GAME.walkTo)
   const lib = await libP;
   progress(0.92, 'Waking the crew');
@@ -250,6 +256,7 @@ async function boot() {
       const driving = cargo.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding, { inLift: !!lift.here });
       lap.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding);
       const move = ctl ? ctl.move : atJob || onTrip || riding || driving ? null : auto.way ? autoMove() : input.move;
+      walkFree = GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here && !cargo.on && !mission.seated && !visit.focus;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
       const aboardOthers = mission.others;
       P.update(dt, { move, run: ctl ? ctl.run : auto.way ? auto.run : input.run, yaw: ctl ? ctl.yaw : chase.yaw, others: ctl ? ctl.others : people ? (aboardOthers ? people.list.concat(aboardOthers) : people.list) : [], clip: ctl ? ctl.clip : driving ? cargo.clip : mission.clip, clipSpeed: ctl && ctl.clipSpeed, keepOff: offForklift });
@@ -276,6 +283,7 @@ async function boot() {
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
     GAME.mathball.update(dt);   // (someone challenged to a game of Mathball: their walk to the arena, their wait)
+    friendCard.update(dt, GAME.mode === 'play' && P && walkFree && people ? P : null);
     // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
     forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])], wants: () => supply.wants(), player: GAME.mode === 'play' && P ? P.pos : null });
     // (the supply run: the doors, the pallets that load themselves, the Hauler loaded; in Cargo while the player stands
@@ -317,7 +325,7 @@ async function boot() {
   // the people come aboard after the station is ready (the player wakes in their quarters, behind a shut door)
   if (!q.has('nopeople')) {
     GAME.peopleReady = false;
-    makePeople({ W, walls, lib, jobs, boarding, crane, crew: () => GAME.player, rides: { forklift: forklift.ride } }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
+    makePeople({ W, walls, lib, jobs, boarding, crane, crew: () => GAME.player, rides: { forklift: forklift.ride }, friends }).then((p) => { people = p; GAME.people = p; GAME.missing = p.missing; GAME.peopleReady = true; if (p.missing.length) console.info('people left out (the station has no such place): ' + p.missing.join(', ')); }).catch(fail);
   }
 
   // ── the start button: the chosen crew member, in their quarters ───────────────────────────────────────────────

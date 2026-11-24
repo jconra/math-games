@@ -1140,7 +1140,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         }
         const r = pp.ward.admit(who.map((w, i) => ({ look: w.look || SLEEPERS[i % SLEEPERS.length], position: w.position, rider: R && R.list[i] ? R.list[i].i : null })), R);
         resting = r.beds;
-        crew.ward = [...kept(crew.ward), ...r.saved]; save(crew);
+        // (those already home kept by the friends' rule, src/friends.js: people.js ward.keep)
+        crew.ward = [...(pp.ward.keep ? pp.ward.keep(crew.ward) : kept(crew.ward)), ...r.saved]; save(crew);
       }
     } catch (e) { console.error('trip: the rescued did not come to the ward', e); }
     if (riders) { riders.dispose(); riders = null; api.riders = null; }

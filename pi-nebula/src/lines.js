@@ -331,3 +331,45 @@ export const TALKS = [
   { id: 'captains-1', who: ['vega', 'ruiz', 'hale', 'rook'], lines: ["Found any crew yet?", "One or two. Everyone wants to fly!"] },
   { id: 'captains-2', who: ['vega', 'ruiz', 'hale', 'rook'], lines: ["Your ship's looking shiny today.", "Jon polished the engines. Twice."] },
 ];
+
+// A TALK WITH THE PLAYER (src/friendcard.js: a tap on someone, then Talk): a short exchange in bubbles, the person
+// first, then the player (a line beginning "P: "), then the person again; {player} is the player's name, {name} the
+// person's own. YOURS: the station's people; RESCUED: a rescued survivor's own, about being rescued and how they are
+// finding the station (the first time they talk with the player, the one marked `first`). SOON: a talk come again
+// before they have more to say (it fills nothing: src/friends.js).
+export const FRIEND_TALK = {
+  yours: [
+    { id: 'ft-shift', lines: ["Busy day, {player}?", "P: Pretty busy. You?", "Same. The galley ran out of spoons again."] },
+    { id: 'ft-window', lines: ["Have you seen the nebula from the terminal windows today?", "P: Not yet!", "It's extra purple. Go look before it changes."] },
+    { id: 'ft-mathball', lines: ["Do you play Mathball?", "P: A little.", "I'm working on my throws. Mostly I hit the wall."] },
+    { id: 'ft-soup', lines: ["Bo made his famous soup again.", "P: Is it good?", "It's very... crunchy. I had two bowls."] },
+    { id: 'ft-sleep', lines: ["I slept eleven hours last night.", "P: Eleven? Wow.", "The hum of the station is like a lullaby."] },
+    { id: 'ft-plants', lines: ["My tomato plant has three tomatoes now!", "P: Nice! Can I try one?", "When there are six. Then we can share by halves."] },
+    { id: 'ft-stars', lines: ["Do you ever count the stars out there?", "P: There are too many!", "I got to 400 and lost my place."] },
+    { id: 'ft-boots', lines: ["These new boots squeak on every step.", "P: I heard you coming!", "Everyone does. I can't sneak up on anybody."] },
+    { id: 'ft-crew', lines: ["You're getting good at your jobs, {player}.", "P: Thanks! I'm still learning.", "Everyone is. That's what makes it fun."] },
+    { id: 'ft-robot', lines: ["Somebody put a hat on the cleaning robot.", "P: Was it you?", "I'm not saying it wasn't me."] },
+    { id: 'ft-lift', lines: ["The lift plays the same song every ride.", "P: I kind of like it.", "Me too. Don't tell anyone."] },
+    { id: 'ft-good', lines: ["It's nice to have a chat.", "P: It is!", "Come find me again sometime, {player}."] },
+  ],
+  rescued: [
+    { id: 'fr-thanks', first: true, lines: ["You were on the ship that found us, weren't you?", "P: That's right!", "Thank you. I'm {name}. I owe you one."] },
+    { id: 'fr-sleep', lines: ["I slept in that pod so long, I forgot what pancakes taste like.", "P: The galley makes great ones.", "Then that's where I'm going next."] },
+    { id: 'fr-station', lines: ["This station is bigger than I thought.", "P: You'll learn your way around.", "I got lost twice looking for the windows."] },
+    { id: 'fr-people', lines: ["Everyone here says hello. Every single person!", "P: That's the station for you.", "I could get used to that."] },
+    { id: 'fr-wreck', lines: ["Our ship's engine gave out over that planet.", "P: I'm glad you're safe now.", "Me too. Safe, warm and fed."] },
+    { id: 'fr-stay', lines: ["I keep wondering where I'll go next.", "P: You could stay here.", "Maybe. It does feel friendly."] },
+    { id: 'fr-medic', lines: ["The medics checked me from head to toe.", "P: How are you feeling?", "Much better. A little stiff from that pod."] },
+  ],
+  soon: ["Nice to see you again!", "Hi again! I'll have more to tell you later.", "Back so soon? Come find me in a bit.", "Hey, {player}! Talk later?"],
+};
+// (the talk for someone: a rescued survivor's own (their first, the first time), else the station's; never the one
+// they told last. -> { id, lines: [{ who: 'them' | 'you', words }] })
+export function friendTalk({ rescued = false, first = false, last = null, player = '', name = '' } = {}, rand = Math.random) {
+  const bank = rescued ? FRIEND_TALK.rescued : FRIEND_TALK.yours;
+  let L = rescued && first ? bank.filter((t) => t.first) : bank.filter((t) => !t.first && t.id !== last);
+  if (!L.length) L = bank;
+  const t = L[Math.floor(rand() * L.length) % L.length];
+  const fill = (s) => s.replace(/\{player\}/g, player || 'friend').replace(/\{name\}/g, name || 'glad to meet you');
+  return { id: t.id, lines: t.lines.map((s) => (s.startsWith('P: ') ? { who: 'you', words: fill(s.slice(3)) } : { who: 'them', words: fill(s) })) };
+}

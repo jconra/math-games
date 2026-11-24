@@ -61,6 +61,7 @@
 // THE NUMBERS: the rooms the crew member watches from (the station file's room ids; a ship's own room counts as its
 // hangar); how long each stays (s, the least and the most); between one coming down the ramp and the next (s); a way to
 // the bed not walked by then (s): put in it (a loud alarm, counted); unseen this long, someone leaving is gone (s)
+import { nameOf } from './friends.js';
 export const WARD = {
   rooms: ['hangar-medic', 'ship-medic', 'stub-medic', 'medical', 'med-ward', 'med-scanner', 'med-pharmacy', 'med-lab', 'med-booth', 'med-equip'],
   stay: [480, 720],
@@ -159,20 +160,32 @@ export function outcome({ people = 0, from = '', resting = 0 } = {}) {
   if (resting > 0) s += resting >= n ? (n === 1 ? ' They are resting in the ward.' : ' They are resting in the ward.') : ` ${cap(numberWord(resting))} of them ${resting === 1 ? 'is' : 'are'} resting in the ward.`;
   return s;
 }
-// THE SAVED WARD (crew.ward: [{ look, position, bed, until, scan }], `until` on the wall clock, ms): those still within
-// their stay at `now`: in bed (bed: which), one to a bed, at most WARD.most; about the station (bed: -1; scan: 1 while
-// their turn at the scanner is still to come), at most ABOUT.most
-export function kept(list, now = Date.now()) {
+// THE SAVED WARD (crew.ward: [{ look, position, bed, until, scan, id, name, came }], `until` on the wall clock, ms):
+// those still within their stay at `now`: in bed (bed: which), one to a bed, at most WARD.most; about the station (bed:
+// -1; scan: 1 while their turn at the scanner is still to come), at most ABOUT.most. Each with an id (their friendship
+// meter's, src/friends.js), a name and when they came (an old record with none: made from its own numbers).
+// leaves(r) -> ms (src/friends.js leavesAt; Infinity: they stay for good): THE FRIENDS' RULE (src/friends.js). Given, a
+// record is kept while that is still to come, not `until`: past `until` (their while in the ward's bed over) they are
+// about the station (bed -1); those staying for good are not counted among ABOUT.most (its room is for those just home)
+export function kept(list, now = Date.now(), leaves = null) {
   const out = [], beds = new Set();
   let about = 0;
-  for (const r of Array.isArray(list) ? list : []) {
-    if (!r || typeof r.look !== 'string' || !(r.until > now) || !Number.isInteger(r.bed)) continue;
-    if (r.bed >= 0) {
-      if (beds.has(r.bed) || beds.size >= WARD.most) continue;
-      beds.add(r.bed); out.push({ look: r.look, position: r.position || null, bed: r.bed, until: r.until });
-    } else if (r.bed === -1 && about < ABOUT.most) {
-      about++; out.push({ look: r.look, position: r.position || null, bed: -1, until: r.until, ...(r.scan ? { scan: 1 } : {}) });
+  (Array.isArray(list) ? list : []).forEach((r, i) => {
+    if (!r || typeof r.look !== 'string' || !Number.isInteger(r.bed)) return;
+    const id = typeof r.id === 'string' && r.id ? r.id : 'rescued-' + Math.round(+r.until || 0).toString(36) + '-' + i;
+    const came = +r.came || Math.round((+r.until || 0) - WARD.stay[1] * 1000);
+    const who = { id, name: typeof r.name === 'string' && r.name ? r.name : nameOf(id), came };
+    const end = leaves ? leaves({ ...r, ...who }) : r.until;
+    if (!(end > now)) return;
+    let bed = r.bed;
+    if (leaves && bed >= 0 && !(r.until > now)) bed = -1;
+    if (bed >= 0) {
+      if (beds.has(bed) || beds.size >= WARD.most) return;
+      beds.add(bed); out.push({ look: r.look, position: r.position || null, bed, until: r.until, ...who });
+    } else if (bed === -1 && (about < ABOUT.most || end === Infinity)) {
+      if (end !== Infinity) about++;
+      out.push({ look: r.look, position: r.position || null, bed: -1, until: r.until, ...who, ...(r.scan ? { scan: 1 } : {}) });
     }
-  }
+  });
   return out;
 }
