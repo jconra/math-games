@@ -441,3 +441,13 @@ test('just flying: the two flown steps and nothing between, no cards, no crew, n
     assert.equal(MISSIONS[F.id], undefined);
   }
 });
+
+test('the page parts, by their source: Join my crew on a person\'s card only with a ship of your own; the owner\'s card\'s jobs and its ride line; the Hauler\'s captain\'s sale gone', () => {
+  const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
+  const F = src('friendcard.js'), C = src('contract.js'), P = src('people.js');
+  assert.match(F, />Join my crew</); assert.match(F, /askCrew\(/); assert.match(F, /crewRow\.hidden = !\(c && shipsOf\(c\)\.length && id && \(!onCrew\(c, id\) \|\| S\.saying === id\)\)/);
+  assert.match(F, /'On your crew'/); assert.match(F, /Digit3/);
+  assert.match(C, /Along for the ride/); assert.match(C, /aboardN\(\) < seats/); assert.match(C, /own\.onRun\(ids, \{ jobs: \{ \.\.\.who \}, along: \[\.\.\.along\] \}\)/);
+  assert.doesNotMatch(C, /Hired: /);
+  assert.doesNotMatch(P, /'sale'|K\.sale/);
+});

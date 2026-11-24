@@ -105,7 +105,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     S.wait = Math.ceil(wait / 60e3);
     // (Join my crew: once the crew member owns a ship, for anyone not on their crew yet)
     const c = crew();
-    crewRow.hidden = !(c && shipsOf(c).length && id && !onCrew(c, id));
+    crewRow.hidden = !(c && shipsOf(c).length && id && (!onCrew(c, id) || S.saying === id));
     crewB.disabled = !!S.seq;
     const M = game.mathball;
     const can = !!(M && typeof M.challenge === 'function');
@@ -119,7 +119,8 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     const Q = S.Q; if (!Q) return;
     const P = pp();
     nameEl.textContent = (P && P.nameOf ? P.nameOf(Q) : Q.name) || 'Someone';
-    const mate = onCrew(crew(), Q.id);
+    // (asked just now and said yes: their card says so as they say it, not before)
+    const mate = onCrew(crew(), Q.id) && S.saying !== Q.id;
     whoEl.textContent = mate ? (Q.rescued ? 'Rescued, and on your crew' : 'On your crew') : Q.rescued ? (friends.staysForGood(Q.id) ? 'Rescued, staying on the station' : 'Rescued from a wreck') : '';
     el.classList.toggle('is-touch', !!(input && input.touch));
     drawMeter(pop); drawRows();
@@ -135,7 +136,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     return true;
   }
   function close() { if (S.seq) endSeq(); S.Q = null; el.hidden = true; }
-  function endSeq() { S.seq = null; }
+  function endSeq() { S.seq = null; if (S.saying) { S.saying = null; if (S.Q) draw(); } }
 
   // ── a talk: they stop and turn to the player; the lines in turn, the person's and the player's ──
   function talk() {
@@ -166,7 +167,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     if (q.i >= q.lines.length) { endSeq(); drawRows(); return; }
     const L = q.lines[q.i++], secs = READ(L.words);
     if (L.who === 'you') P.bubbles.say(meBubble(P), L.words, { kind: 'you', secs });
-    else P.say(q.Q, L.words, { kind: 'talk', secs });
+    else { P.say(q.Q, L.words, { kind: 'talk', secs }); if (S.saying === q.Q.id) { S.saying = null; draw(true); } }
     q.next = q.t + secs;
   }
 
@@ -185,14 +186,14 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     const name = P.nameOf ? P.nameOf(Q) : Q.name, player = c.name || '';
     // (who they are aboard: a station person by their own id, a rescued survivor by their own look)
     const r = askCrew(c, { id: Q.id, name: name || 'Someone', look: Q.rescued && Q.def ? Q.def.look : Q.id, captain: !!Q.cap }, friends.pips(Q.id), { need: FRIENDS.crew, now: friends.now() });
-    if (r.why === 'joined') { save(c); S.joined++; }
+    if (r.why === 'joined') { save(c); S.joined++; S.saying = Q.id; }
     S.asks++; S.lastAsk = r.why;
     const fill = (w) => String(w).replace(/\{player\}/g, player || 'friend').replace(/\{name\}/g, name || 'friend');
     const answer = r.why === 'captain' ? (CREW_ASK.captains[Q.cap && Q.cap.id] || CREW_ASK.no[0]) : r.why === 'joined' ? pick(CREW_ASK.yes) : r.why === 'already' ? pick(CREW_ASK.already) : pick(CREW_ASK.no);
     const lines = [{ who: 'you', words: fill(pick(CREW_ASK.ask)) }, { who: 'them', words: fill(answer) }];
     P.hold(Q, lines.reduce((a, l) => a + READ(l.words), 0) + 0.8);
     S.seq = { Q, lines, i: 0, next: 0.25, t: 0, id: 'crew:' + r.why, counted: false };
-    draw(r.why === 'joined');
+    draw();
     return r.why;
   }
   // (a finished game against someone: one and a half pips, won or lost)
