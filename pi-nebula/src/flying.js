@@ -652,8 +652,9 @@ export function startFlying(ctx, opts = {}) {
     const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(HOLO.fov, 1, 0.05, 20);
     cam.position.set(...HOLO.eye); cam.lookAt(...HOLO.look);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4658, 1.5)); const sun = new THREE.DirectionalLight(0xffffff, 1.9); sun.position.set(-1.4, 2.4, 1.5); scene.add(sun);
-    // the small model: the pilot's own ship, solid, its nose marked
-    const model = new THREE.Mesh(shape({ body: HOLO.model, nose: HOLO.mark, glass: 0x2b3642, pod: 0xb9c0c8, engine: 0x6a727c, leg: 0x8a929c }), new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, fog: false }));
+    // the small model: the pilot's own ship, solid, its nose marked (its body in the paint of a ship that is the crew
+    // member's own, kept light enough to read here: src/shippaint.js)
+    const model = new THREE.Mesh(shape({ body: W.shipPaint ? W.shipPaint.modelColour(cfg.id, HOLO.model) : HOLO.model, nose: HOLO.mark, glass: 0x2b3642, pod: 0xb9c0c8, engine: 0x6a727c, leg: 0x8a929c }), new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, fog: false }));
     // the hologram: the goal, see-through, with its edges drawn
     const ghost = shape({ body: 0xffffff }), goal = new THREE.Group(); goal.matrixAutoUpdate = false;
     const glass = new THREE.Mesh(ghost, new THREE.MeshBasicMaterial({ color: HOLO.goal, transparent: true, opacity: 0.26, depthWrite: false, toneMapped: false, fog: false }));

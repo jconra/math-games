@@ -16,13 +16,18 @@
 // Just fly (no pay), Not now. Where a run of their own cannot start (`own.run` false: the Hauler before the old station
 // is found, a contract still on) it says why and offers the flying alone. A card with nothing to sign (`mode: 'sale'`:
 // the shipping computer before the old station is found) is the sale's line alone.
+// THE PAINT OF ITS HULL (`own.paint`: src/shippaint.js, src/paintcard.js; the game's maker: "Its colour: pick the paint
+// of its hull"): the owner's card has a Paint button, which turns the card (`mode: 'paint'`) to a row of swatches along
+// the bottom of the screen with the ship shown above it; a swatch tapped repaints the ship at once; Done, back.
 //
 //   const C = openContract(root, { mission, captain, onSign(roleIds), onLater(), sale, own, mode })   C.close(), C.el, C.state()
 //     sale: { now() -> the ship's sale for this crew member (src/own.js saleOf), buy() -> true once bought,
 //             take() -> 'own' (this card turns to the owner's) or anything else (the caller has seen to it) }
 //     own:  { run (a run of their own can start here), why (it cannot: the words), fly (just flying can start here),
-//             note (where else the other of the two starts), onRun(roleIds), onFly() }
+//             note (where else the other of the two starts), onRun(roleIds), onFly(),
+//             paint (its hull's paint can be picked here: src/paintcard.js has its shape; none: no Paint button) }
 import { rolesOf, shareOf, payOf, crewFor, ownShare } from './missions.js';
+import { paintCss, paintHtml, paintButton } from './paintcard.js';
 
 const CSS = `
 .pmc { position: fixed; inset: 0; z-index: 26; display: grid; place-items: center; padding: 12px; background: rgba(4, 6, 10, 0.45); opacity: 0; transition: opacity 0.2s ease;
@@ -119,6 +124,8 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
 
   function draw() {
     el.setAttribute('aria-label', mode === 'contract' ? `${captain}'s contract` : `Your ${shipName()}`);
+    el.classList.toggle('is-paint', mode === 'paint');
+    if (mode === 'paint') return drawPaint();
     if (mode === 'sale') return drawSale();
     if (mode === 'own') return drawOwn();
     const share = shareOf([...mine]);
@@ -176,15 +183,26 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
         <p>${exampleOf(M, keep)}</p></div>`
     : `<p class="pmc-what">${esc((own && own.why) || '')}</p>`}
       ${own && own.note ? `<p class="pmc-note">${esc(own.note)}</p>` : ''}
-      <div class="pmc-btns is-own">${run ? '<button type="button" class="pmc-sign">Start the run<kbd>E</kbd></button>' : ''}${fly ? `<button type="button" class="${run ? 'pmc-later pmc-fly' : 'pmc-sign pmc-fly'}">Just fly${run ? '' : '<kbd>E</kbd>'}</button>` : ''}<button type="button" class="pmc-later pmc-notnow">Not now<kbd>Esc</kbd></button></div>
+      <div class="pmc-btns is-own">${run ? '<button type="button" class="pmc-sign">Start the run<kbd>E</kbd></button>' : ''}${fly ? `<button type="button" class="${run ? 'pmc-later pmc-fly' : 'pmc-sign pmc-fly'}">Just fly${run ? '' : '<kbd>E</kbd>'}</button>` : ''}${paint ? paintButton(paint.list()) : ''}<button type="button" class="pmc-later pmc-notnow">Not now<kbd>Esc</kbd></button></div>
     </section>`;
-    const go = el.querySelector('.pmc-sign:not(.pmc-fly)'), fl = el.querySelector('.pmc-fly');
+    const go = el.querySelector('.pmc-sign:not(.pmc-fly)'), fl = el.querySelector('.pmc-fly'), pt = el.querySelector('.pmc-topaint');
     if (go) go.addEventListener('click', sign);
     if (fl) fl.addEventListener('click', flyOut);
+    if (pt) pt.addEventListener('click', toPaint);
     el.querySelector('.pmc-notnow').addEventListener('click', later);
     wireRoles();
   }
-  function close() { if (closed) return; closed = true; removeEventListener('keydown', onKey, true); el.classList.remove('is-on'); setTimeout(() => el.remove(), 220); }
+  // ── THE PAINT CARD (src/paintcard.js): the ship shown from outside, a swatch for each paint; one tapped is on at once ──
+  const paint = own && own.paint ? own.paint : null;
+  if (paint) paintCss();
+  function toPaint() { if (closed || mode !== 'own' || !paint) return; mode = 'paint'; paint.view(true); draw(); }
+  function fromPaint() { if (closed || mode !== 'paint') return; paint.view(false); mode = 'own'; draw(); }
+  function drawPaint() {
+    el.innerHTML = paintHtml(shipName(), paint.list());
+    for (const b of el.querySelectorAll('.pmc-paint')) b.addEventListener('click', () => { if (closed) return; paint.pick(b.dataset.paint); draw(); });
+    el.querySelector('.pmc-paintdone').addEventListener('click', fromPaint);
+  }
+  function close() { if (closed) return; if (mode === 'paint') paint.view(false); closed = true; removeEventListener('keydown', onKey, true); el.classList.remove('is-on'); setTimeout(() => el.remove(), 220); }
   function sign() {
     if (closed || mode === 'sale') return;
     const ids = M.roles.filter((id) => mine.has(id));
@@ -195,9 +213,10 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   function later() { if (closed) return; close(); onLater(); }
   function onKey(e) {
     if (closed) return;
-    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (sure) { sure = false; draw(); } else later(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (mode === 'paint') fromPaint(); else if (sure) { sure = false; draw(); } else later(); }
     else if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
       e.preventDefault(); e.stopImmediatePropagation();
+      if (mode === 'paint') { fromPaint(); return; }
       // (never the buying: that is only ever its own button, pressed twice)
       if (mode === 'contract') sign(); else if (mode === 'own') { if (own && own.run) sign(); else flyOut(); }
     }
@@ -205,12 +224,13 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   addEventListener('keydown', onKey, true);
   draw();
   requestAnimationFrame(() => el.classList.add('is-on'));
-  return { el, close, sign, later, takeOut, flyOut,
-    // (the rigs: the buy button pressed, a job tapped)
+  return { el, close, sign, later, takeOut, flyOut, toPaint, fromPaint,
+    // (the rigs: the buy button pressed, a job tapped, a swatch tapped)
+    paint: (id) => { const b = el.querySelector(`.pmc-paint[data-paint="${id}"]`); if (b) b.click(); return !!b; },
     buy: () => { const b = el.querySelector('.pmc-buy'); if (b) b.click(); return !!b; },
     tap: (id) => { const b = el.querySelector(`button.pmc-role[data-role="${id}"]`); if (b) b.click(); return !!b; },
     state: () => ({ mode, mine: [...mine], share: mode === 'own' ? ownShare(M, [...mine]) : shareOf([...mine]), sure,
       sale: sale && sale.now ? (() => { const S = sale.now(), d = el.querySelector('.pmc-sale'); return S ? { ...S, shown: d ? d.dataset.sale : null, words: d ? d.querySelector('span').textContent : '' } : null; })() : null,
-      own: own ? { run: !!own.run, fly: !!own.fly } : null,
+      own: own ? { run: !!own.run, fly: !!own.fly, paint: paint ? (paint.list().find((p) => p.on) || {}).id : null } : null,
       roles: roles.map((r) => ({ id: r.id, share: r.share, open: r.open, who: mine.has(r.id) ? 'You' : mode === 'own' ? 'Hired: ' + r.crew : r.by || r.crew })) }) };
 }

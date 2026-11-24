@@ -48,6 +48,7 @@ import { makeGuide } from './guide.js';
 import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
 import { makeMission } from './mission.js';
+import { makeShipPaint } from './shippaint.js';
 import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
 import { makeLift } from './lift.js';
@@ -120,6 +121,9 @@ async function boot() {
   // parked ship shoved and put back: src/visit.js. The crane is the Miner's keeper, should another ship ever be flown
   // into its hangar here: in the game only the Miner flies yet, so it is never shoved)
   const visit = GAME.visit = makeVisit({ W, boarding, outside, people: () => people, crane });
+  // (each ship in the paint the crew member playing picked for it, if it is theirs; the ship shown from outside while
+  // its paint is picked on the owner's card: src/shippaint.js)
+  const shipPaint = W.shipPaint = GAME.shipPaint = makeShipPaint({ W, crew: () => GAME.player, save: (p) => save.save(p), boarding, hauler: () => outside.hauler });
   // (the station's announcements over the speakers, a chime first, about once a minute: src/announce.js)
   const announce = GAME.announce = makeAnnounce({ sound, W, visit, people: () => people, crew: () => GAME.player });
 
@@ -257,6 +261,7 @@ async function boot() {
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }
+    shipPaint.aim(W.camera);      // (a ship's paint being picked: the ship shown from outside, src/shippaint.js)
     if (GAME.cam) GAME.cam(W.camera, now, dt);      // (a rig's own camera, for films: GAME.cam = (camera, now, dt) => {...})
     // (the nearest people are counted from a ship flown about the station, while one is: src/visit.js)
     // (and the control room's and Cargo's people about only while the player is there: the lift says where, src/lift.js

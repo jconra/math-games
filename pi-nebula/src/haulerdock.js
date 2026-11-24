@@ -51,6 +51,8 @@
 //                      station's frame: { solid: [geometry], up: [geometry] } (its hull, cockpit and door section, not
 //                      its containers, frames or pods; the stair as it lies)
 //   H.tunnel           TUNNEL; H.stats { tris, draws, ms, bakeMs } once built (and `inside` once that is)
+//   H.builds()         the ship as built so far (kit/layout.js buildRoom's): the plain one, and the one with the rooms
+//                      inside once that is made: for whoever lays its paint (src/shippaint.js)
 import * as THREE from 'three';
 import { loadRoom, buildRoom, forgetPiece, setDoors } from '../kit/layout.js';
 import { makeMaterials } from '../kit/materials.js';
@@ -110,6 +112,7 @@ export function makeHaulerAtDock(W, { light = () => {} } = {}) {
   };
   let timer = null, room = null, mats = null, lensMat = null, lens = null, posed = POSE.waiting;
   const builds = { plain: null, cabin: null }, lit = new Set();
+  api.builds = () => [builds.plain, builds.cabin].filter(Boolean);
   // the ship built from its room file: every moving part held where it waits (legs up (1), the rest shut, on and at rest
   // (0)), but the crew door and its stair, which move; the docking lights' housings (their lenses are drawn below);
   // swap: the pieces that change with the rooms inside (the kit's LAB.cabin.swap)

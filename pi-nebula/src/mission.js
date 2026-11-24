@@ -331,6 +331,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
             : on && on.state === 'payout' ? `The ${nameOfShip(ship)} is yours to fly round the station. Your pay from the last run is still waiting: a run of your own can start once you have collected it.`
               : `The ${nameOfShip(ship)} is yours to fly round the station. You have a contract on: a run of your own can start once it is done and paid.`,
           note: 'Just flying: out, round the station and back. Nothing is asked and nothing is paid.',
+          // (the paint of its hull, picked here: the card's Paint button, src/shippaint.js)
+          paint: W.shipPaint ? W.shipPaint.card(ship) : null,
           onRun: (roles) => {
             done();
             const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (!m) return;

@@ -21,13 +21,17 @@
 //     crew doors' airstairs), Gear. The Hauler ("Hauler (built)"): Thrusters (its four corner pods), Containers on /
 //     off (the shared Canisters control, named by its LAB.cargo), and its own chips (its LAB.menu): one container
 //     unloaded or loaded at a time, the clamps' jaws open or shut, the containers' look; Door (the crew door lifts,
-//     then its stair swings down), Gear. All: Dirt sets the grime over the clean paint; Throttle runs the
+//     then its stair swings down), Gear. All: Dirt sets the grime over the clean paint; Paint lays one of the game's
+//     paints on the hull's skin (kit/ships/paints.js: the same set a crew member picks from for a ship that is theirs,
+//     so each can be looked at on each ship here without buying one); Throttle runs the
 //     engines up (plume.js, the jet: Off nothing, the nozzles dark; Idle a dull orange, up through bright orange and
 //     white-yellow to blue at Afterburn), easing to the new setting.
 //   ?ship=built|miner|medic|hauler|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   ?look=light|warm  ?level=asnow|darker|darkest (the Light look's light level; the menu's Light chips)
+//   ?paint=factory|graphite|olive|... (the hull's paint: kit/ships/paints.js PAINTS)
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
+//     paint(id) (the hull's paint; paint() says which is on and how many corners it changed),
 //     thrusters(on), canisters(on), ramps(down), rampCount('one' | 'both'), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own),
 //     bloom(on) (the light strips' glow: ?bloom=1 or 0; off by default on a phone), pools(on) (their pools of real-time
 //     light in the room the eye is in: ?pools=1 or 0, else as the glow), fps(), draw() (one frame, as the loop draws it) }
@@ -53,6 +57,7 @@ import { CORE_TAG } from '../../kit/shipparts/cabin/reactor.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
 import { makeBeams } from '../../kit/beams.js';
+import { PAINTS, paintBuilt, tidyPaint, hullColour } from '../../kit/ships/paints.js';
 import * as EB from '../../kit/ships/explorer-built.js';
 import * as MB from '../../kit/ships/miner-built.js';
 import * as MD from '../../kit/ships/medic-built.js';
@@ -66,10 +71,10 @@ const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], M
 const HAULER_BPS = ['hauler-his-plan'];   // (his own deck plan: the game's maker's pick, HAUL-1 2026-11-20; the Hauler's one plan)
 const MEDIC_BPS = ['medic-open-bench', 'medic-open', 'medic-open-daybed', 'medic-bunks-across', 'medic-side-by-side', 'medic-one-ramp'];   // (the first three: one airlock, drawn from the marks of the game's maker, the first of them the plan he chose, so the lab opens on it; the rest: the earlier two-airlock plans)
 const SHIPS = [
-  { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
-  { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
-  { id: 'medic', name: 'Medic (built)', layout: 'ship-medic-built', shell: 'medic-built', lab: MD.LAB, bps: MEDIC_BPS, note: 'The Medic built from the 3k smart mesh with its own ring engines and the 8k\'s legs: a ramp in each side opening into the med bay (or one, the other sealed), one crew door (an airstair, on the port side), legs that rise into the belly' },
-  { id: 'hauler', name: 'Hauler (built)', layout: 'ship-hauler-built', shell: 'hauler-built', lab: HB.LAB, bps: HAULER_BPS, note: 'The Hauler built from the 3k smart mesh\'s nose and cab and the 8k\'s engines, its middle in code: a spine with eight separate containers in yellow clamp frames (each unloads on its own), a crew door that lifts with a stair that swings down, six thruster pods that turn, the front legs folding into the cab\'s belly' },
+  { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', skin: 'explorer', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
+  { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', skin: 'miner', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
+  { id: 'medic', name: 'Medic (built)', layout: 'ship-medic-built', shell: 'medic-built', skin: 'medic', lab: MD.LAB, bps: MEDIC_BPS, note: 'The Medic built from the 3k smart mesh with its own ring engines and the 8k\'s legs: a ramp in each side opening into the med bay (or one, the other sealed), one crew door (an airstair, on the port side), legs that rise into the belly' },
+  { id: 'hauler', name: 'Hauler (built)', layout: 'ship-hauler-built', shell: 'hauler-built', skin: 'hauler', lab: HB.LAB, bps: HAULER_BPS, note: 'The Hauler built from the 3k smart mesh\'s nose and cab and the 8k\'s engines, its middle in code: a spine with eight separate containers in yellow clamp frames (each unloads on its own), a crew door that lifts with a stair that swings down, six thruster pods that turn, the front legs folding into the cab\'s belly' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
@@ -86,7 +91,7 @@ const WIREFILL = new THREE.MeshBasicMaterial({ color: 0x14202c, wireframe: true,
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
-  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true, ramps: 'up', rampCount: 'both',
+  gear: 'down', door: 'shut', dirt: 'Some', paint: tidyPaint(q.get('paint')), throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true, ramps: 'up', rampCount: 'both',
   // (the cabin built inside from the blueprint: shown, its look, its ceilings, its doors (auto: they open as the eye or
   // the person comes near), a pose holding them part open)
   inside: q.get('inside') !== '0', look: LOOKS[q.get('look')] ? q.get('look') : 'light', roof: true, beams: q.get('beams') !== '0', cabinDoors: 'auto', doorsAt: null,
@@ -252,12 +257,18 @@ function setHull(mode) {
     if (o.userData.wire) o.userData.wire.visible = mode === 'wire';
   });
 }
+// THE HULL'S PAINT (kit/ships/paints.js): laid on the built ship shown, whichever of its versions that is (with the
+// rooms inside or without: each is painted as it is shown); a ship that is only a shell has no paint to change
+let painted = null;
+function layPaint() { painted = st.ship?.skin && st.shell?.built ? { paint: st.paint, ...paintBuilt(st.shell.built, st.ship.skin, st.paint) } : null; return painted; }
+function setPaint(id) { st.paint = tidyPaint(id); layPaint(); url(); menu(); return painted; }
 async function showShip(S) {
   loading.hidden = false; loading.classList.add('soft');
   const key = shellKey(S, hasCabin(S) && st.inside), rec = await loadShell(S);
   st.shellKey = key;
   if (st.shell) scene.remove(st.shell.holder);
   st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
+  layPaint();
   const d = st.space.doors?.port, bd = st.space.doors?.belly;
   person.position.set(bd ? bd.x[1] + 0.9 : d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, bd ? (bd.z[0] + bd.z[1]) / 2 + 1.6 : d ? (d.z[0] + d.z[1]) / 2 - (S.layout ? 2.4 : 1.6) : 1);
   if (!S.lab?.overlay && st.show.meshy) { st.show.meshy = false; }
@@ -460,7 +471,7 @@ function setCam(name) {
   controls.target.set(0, name === 'Above' || name === 'Top' ? deckUp() + 1 : s.y * 0.42, 0);
   camera.position.copy(controls.target).addScaledVector(d, fit); controls.update();
 }
-function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` + (st.level && LOOKS[st.look].levels?.[st.level] && st.level !== LOOKS[st.look].level ? `&level=${st.level}` : '') : '&inside=0') : '')); }
+function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` + (st.level && LOOKS[st.look].levels?.[st.level] && st.level !== LOOKS[st.look].level ? `&level=${st.level}` : '') : '&inside=0') : '') + (st.paint !== 'factory' ? `&paint=${st.paint}` : '')); }
 
 // ── the checks panel ─────────────────────────────────────────────────────────────────────────────────────────────
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -522,6 +533,8 @@ function menu() {
     ...(has('gear') ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, L.gearTip || 'Fold the landing legs into their wells, or let them down')] : []),
     ...(has('door') ? [sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, L.doorTip || 'Swing the airstair door down to the ground, or up shut')] : []),
     ...(has('dirt') ? [sep(), lab('Dirt'), ...Object.keys(dirtOf()).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; L.setDirt(dirtOf()[k]); menu(); }, true))] : []),
+    // (the hull's paint: the game's set, each chip with its colour; the first is the ship's own)
+    ...(st.ship?.skin && L ? [sep(), lab('Paint'), ...PAINTS.map((p) => { const b = chip(p.name, p.id === st.paint, () => setPaint(p.id), true, p.c ? `The hull's skin in ${p.name.toLowerCase()}` : 'The ship\'s own paint, as it was built'); const d = document.createElement('span'); d.style.cssText = `display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.4);background:${hullColour(st.ship.skin, p.id)}`; b.prepend(d); return b; })] : []),
     ...(has('throttle') ? [sep(), lab('Throttle'), ...Object.keys(THROTTLE).map((k) => chip(k, k === st.throttle, () => { st.throttle = k; st.throttleT = THROTTLE[k]; menu(); }, true, k === 'Off' ? 'Engines off: no jet, the nozzles dark' : 'Run the engines up or down to ' + k))] : []));
   const add = document.createElement('select'); add.className = 'sl-add'; add.setAttribute('aria-label', 'Add');
   add.append(new Option('Add…', ''));
@@ -663,6 +676,7 @@ window.SHIPLAB = {
   panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },
   gear: (up) => { st.gear = up ? 'up' : 'down'; menu(); }, door: (open) => { st.door = open ? 'open' : 'shut'; menu(); },
   dirt: (k) => { st.dirt = k; st.ship?.lab?.setDirt(dirtOf()[k]); menu(); },
+  paint: (id) => (id === undefined ? painted : setPaint(id)), paints: PAINTS.map((p) => p.id),
   throttle: (v, now) => { const t = typeof v === 'string' ? THROTTLE[v] : Math.max(0, Math.min(1, +v)); st.throttleT = t; st.throttle = Object.keys(THROTTLE).find((k) => THROTTLE[k] === t) || null; if (now) { setThrottle(t); for (const J of st.shell?.jets || []) if (J.role === 'main') J.set.setThrust(t, true); } menu(); return t; },
   arms: (reach) => { st.arms = reach ? 'reaching' : 'stowed'; menu(); }, thrusters: (on) => { st.thrusters = !!on; menu(); }, canisters: (on) => { st.canisters = !!on; menu(); },
   ramps: (down) => { st.ramps = down ? 'down' : 'up'; menu(); }, rampCount: (k) => { st.rampCount = k === 'one' ? 'one' : 'both'; menu(); },
