@@ -389,8 +389,10 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // THAT RUN'S CAPTAIN, LOOKED FOR. The station has only its nearest few people about at once, and nobody comes back
   // where the player is looking or right beside them (src/people.js PRESENCE): a captain the game has just told the
   // player to go and find "by the docking port" was as often as not out of the way when they got there, and stayed so
-  // for as long as they stood and waited. So whenever this crew member is told where the supply run is to be had (as
-  // they come aboard, on the shipping computer's line, on the pay slip's last card) the people are told too, as when a
+  // for as long as they stood and waited (3 of 7 comings aboard on a phone's picture: the helpers' notes, HAULRUN_1.md,
+  // Round 2). So whenever this crew member is told where the supply run is to be had (as they come aboard, on the
+  // shipping computer's line, on the pay slip's last card), and whenever the captain has the run or the Hauler's sale
+  // to offer them as they come aboard, the people are told too, as when a
   // captain's line is picked on a jobs board (people.captain.seek: that captain is kept about however many are
   // nearer, and is the one who speaks up when walked up to); done with as their offer begins. (Asked for before the
   // station's people are aboard, it is done once they are: update, below. false: nobody is looked for any more.)
@@ -611,10 +613,11 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
         // (never to a ship whose load is not worked out yet: the supply run's Loadmaster's work comes first, in Cargo)
         if (first && playing && m && !trip && !(m.state === 'signed' && loadWait(m))) lead(m.state === 'signed' ? 'ship' : 'payout');
         // (the old station found and no supply run made yet: who has its contract and where, said once as they come
-        // aboard; and whenever that run is on offer to them as they come aboard its captain is kept about to be found:
-        // seekCaptain, above; another crew member's captain is looked for no more)
+        // aboard; and whenever its captain has something for them as they come aboard, that run or, until the old
+        // station is found, the Hauler for sale, the captain is kept about to be found: seekCaptain, above; another
+        // crew member's captain is looked for no more)
         if (first && playing && !m && !trip && stationFound(c) && supplyRuns(c) === 0) toastUp(`${nameOf(MISSIONS.supply.captain)} has a contract: supplies for the old station. Find the captain by the docking port, in the terminal.`);
-        if (first && playing && !trip) seekCaptain(!m && missions.open(MISSIONS.supply.captain, c) ? MISSIONS.supply.captain : false);
+        { const id = MISSIONS.supply.captain; if (first && playing && !trip) seekCaptain(!m && (missions.open(id, c) || missions.state(id, c) === 'sale') ? id : false); }
       }
       if (wantSeek != null && people() && people().captain.seek) { const cap = people().captain; if (wantSeek) cap.seek(wantSeek); else if (cap.seeking === MISSIONS.supply.captain) cap.seek(null); wantSeek = null; }
       // (a contract signed, whenever it was signed: its captain is on his way to the ship, or waiting by it, once the
