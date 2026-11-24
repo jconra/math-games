@@ -408,7 +408,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       return null;
     }
     if (deskOpen(at)) { const pp = people(); if (!pp || pp.captain.seeking !== M.captain) seekCaptain(M.captain); }
-    if (deskOpen(at)) return supplyRuns(c) > 0 ? `${nameOf(M.captain)} has a hauling run for the Hauler: up the lift, by the docking port` : `${nameOf(M.captain)} has a contract, supplies for the old station: up the lift, by the docking port`;
+    if (deskOpen(at)) return supplyRuns(c) > 0 ? `${nameOf(M.captain)} has a hauling run: up the lift, by the docking port` : `${nameOf(M.captain)} has the supply contract: up the lift, by the docking port`;
     return null;
   }
   // (a word at the top for a moment: the supply run's own, where to go next; a ship that is theirs)
