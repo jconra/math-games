@@ -105,7 +105,8 @@ export const TRACK = (() => {
   return { pts, at, length: at[at.length - 1], wide: LAP.wide };
 })();
 // a point in the lane: how far round the lap it is (m from the start), how far off the lap's line -> or null (not in
-// the lane: in an aisle, on the loading floor, by the lift)
+// the lane: in an aisle, on the loading floor, by the lift). The lane is LAP.wide either side of the lap's line, and
+// LAP.swing round each corner
 export function lapAt(x, z) {
   let best = null;
   for (let i = 0; i < TRACK.pts.length - 1; i++) {
@@ -113,6 +114,8 @@ export function lapAt(x, z) {
     const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)), off = Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
     if (off <= TRACK.wide[i] && (!best || off < best.off)) best = { s: TRACK.at[i] + Math.sqrt(L2) * t, off, leg: i };
   }
+  // (round a corner, wide of both lanes that meet there: the forklift's back end swings out as it turns)
+  if (!best) LAP.corners.forEach((c, i) => { const off = Math.hypot(x - c[0], z - c[1]); if (off <= LAP.swing && (!best || off < best.off)) best = { s: TRACK.at[i + 1], off, leg: i, corner: i + 1 }; });
   return best;
 }
 // THE FLOOR THE PEOPLE'S WAYS TO THE FINISH LINE KEEP OFF: the lap's first RULES.first stretches (the south lane ahead of

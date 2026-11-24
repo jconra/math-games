@@ -328,9 +328,12 @@ test('the lane: where the forklift comes round; the places to watch from are by 
   for (const [x, z] of [[12, -3.05], [22.45, 8], [18, 22.9], [16, 25], ...LAP.watch]) assert.ok(!keepOff(x, z), `may be walked: ${x}, ${z}`);
   // (and there is floor to walk that is in neither: from the benches' end along south of the lane to the row, and from
   // the last stretch round the start box's south side to the row)
-  for (let x = 3.2; x <= 11; x += 0.2) assert.ok(!keepOff(x, 26.25) && !lapAt(x, 26.25), 'south of the lane, the benches to the lift: ' + x.toFixed(1));
+  for (let x = -5.5; x <= 10.2; x += 0.2) assert.ok(!keepOff(x, 28.7) && !lapAt(x, 28.7), 'behind the benches, across to the lift\'s west side: ' + x.toFixed(1));
+  for (let z = 26.4; z <= 28.7; z += 0.1) assert.ok(!keepOff(10.2, z), 'up the lift\'s west side to the row: ' + z.toFixed(1));
   for (let x = 13.4; x <= 17; x += 0.2) assert.ok(!keepOff(x, 25.9), 'from the last stretch to the row: ' + x.toFixed(1));
-  for (let z = 2; z <= 24; z += 0.5) assert.ok(!keepOff(2.2, z), 'down the loading floor, beside the racks\' west ends lane: ' + z);
+  for (let z = 2; z <= 28; z += 0.5) assert.ok(!keepOff(-2, z), 'down the loading floor, west of the pallets waiting: ' + z);
+  // (the first corner taken wide, the forklift's back end swung out: the floor it sweeps is in the lane, and kept off)
+  for (const [x, z] of [[6.4, 25.9], [3.0, 25.75], [2.2, 22.9], [6.9, 26.0]]) assert.ok(lapAt(x, z) && keepOff(x, z), `round the first corner: ${x}, ${z}`);
   for (const k of ['beat', 'slower', 'missed']) { assert.ok(LAP_TALK.cheer[k].length >= 2); for (const s of LAP_TALK.cheer[k]) assert.ok(s.length <= 40 && !/[{}]/.test(s), 'a short cheer: ' + s); }
 });
 
