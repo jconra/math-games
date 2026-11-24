@@ -49,7 +49,7 @@ export const VIEW = {
 };
 // how light the landing guide's small model is kept (the brightest of its red, green and blue, 0 to 1, as shown), and
 // how much white is mixed into the paint first
-const MODEL = { mix: 0.3, light: 0.88 };
+const MODEL = { mix: 0.15, light: 0.88 };
 
 export function makeShipPaint({ W, crew, save = () => {}, boarding = null, hauler = () => null }) {
   const laid = Object.fromEntries(PARKED.map((id) => [id, FACTORY])), onBuild = new WeakMap();

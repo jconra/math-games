@@ -112,7 +112,8 @@ export function makeHaulerAtDock(W, { light = () => {} } = {}) {
   };
   let timer = null, room = null, mats = null, lensMat = null, lens = null, posed = POSE.waiting;
   const builds = { plain: null, cabin: null }, lit = new Set();
-  api.builds = () => [builds.plain, builds.cabin].filter(Boolean);
+  // (each one as it is made, in one list that is never made again: asked for every frame, src/shippaint.js)
+  const made = []; api.builds = () => made;
   // the ship built from its room file: every moving part held where it waits (legs up (1), the rest shut, on and at rest
   // (0)), but the crew door and its stair, which move; the docking lights' housings (their lenses are drawn below);
   // swap: the pieces that change with the rooms inside (the kit's LAB.cabin.swap)
@@ -122,7 +123,7 @@ export function makeHaulerAtDock(W, { light = () => {} } = {}) {
       if (pl.piece === 'hbCrewDoor' || pl.piece === 'hbStair') return { ...pl, variant };
       return { ...pl, variant, hold: pl.piece === 'hbGear' ? 1 : 0 };
     }) };
-    const B = buildRoom(r, mats, { bake: { voxel: 0.1, rays: 12 } });
+    const B = buildRoom(r, mats, { bake: { voxel: 0.1, rays: 12 } }); made.push(B);
     B.group.traverse((o) => { if (o.isMesh && o.material && !lit.has(o.material)) { lit.add(o.material); o.material.fog = false; light(o.material); } });
     setPose(B, posed);
     return B;
