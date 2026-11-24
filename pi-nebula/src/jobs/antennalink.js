@@ -35,24 +35,28 @@ function ensureCss() {
 if (typeof document !== 'undefined') ensureCss();
 
 // how long things take (seconds)
-export const TIMES = { intro: 3.2, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, arm: 0.4, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
+export const TIMES = { intro: 3.8, ghost: 0.9, pad: 0.32, legs: 0.8, brace: 0.16, pop: 0.3, lock: 0.6, section: 0.34, arm: 0.4, anchor: 0.22, cable: 0.32, lift: 1.4, tilt: 0.7, turn: 1.1, oldDown: 1.0, test: 3.6, last: 0.8, jolt: 0.6 };
 export const WOBBLE = { amp: 0.07, hz: 1.2, jolt: 0.08 };
 const LINE_GAP = 0.55;   // (seconds between the call's lines coming in on the end card)
 // THE VIEWS (metres, in the antenna's frame: x east, y up from the tower's roof, z south): the camera stands `from` the
 // point it looks at, `look`, and turns so that point lands at the screen point `on` (-1..1 across, -1..1 up): left of
-// the panel on a wide screen, in the band above it on a phone, whatever the screen's shape; `far` on a phone (the band
-// is short, so it stands further back). All from out in the open beside the tower's top, to the south-west of it and
-// over the roof's own height (the dish turns round to face that way, and nothing of the tower is ever between): `low`
-// looks down onto the roof for the footing, the legs and the braces; `whole` stands back for the stacking, the arms
-// and the cables; `top` and `sky` are up at the dish; `end` is the whole of it on the tower, the control room's windows
-// below.
+// the panel on a wide screen, in the middle of the band above it on a phone, whatever the screen's shape; `far` on a
+// phone (the band is short, so it stands further back). All from out in the open beside the tower's top, to the
+// south-west of it and over the roof's own height (the dish turns round to face that way, and nothing of the tower is
+// ever between): `low` looks down onto the roof for the footing, the legs and the braces; `whole` stands back for the
+// stacking, the arms and the cables; `top` and `sky` are up at the dish; `end` is the whole of it on the tower, the
+// control room's windows below.
+// ON A PHONE the band over the card is a third of the screen, so a view's `tall` says where it looks and how much
+// further back it stands there, for the whole of what the step builds to be in that band: `whole` from the roof and
+// the arms' ends to the light at the very top; `end` the whole antenna on the tower's top (the control room's windows
+// are under the card there).
 export const VIEW = {
   low: { look: [0, 0.8, 0], from: [-3.2, 4.4, 6.4], fov: 50 },
-  whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52 },
-  top: { look: [0, 12.6, 0], from: [-2.6, 1.6, 6.4], fov: 52 },
-  sky: { look: [0, 12.9, 0], from: [-3.8, -1.2, 7.8], fov: 54 },
-  end: { look: [0, -2, 0], from: [-13, 6, 37], fov: 55 },
-  on: { wide: [-0.36, 0], tall: [0, 0.6] }, far: 1.4,
+  whole: { look: [0, 5.6, 0], from: [-7, 3.4, 20], fov: 52, tall: { look: [0, 6.8, 0], far: 2.5 } },
+  top: { look: [0, 12.6, 0], from: [-2.6, 1.6, 6.4], fov: 52, tall: { look: [0, 13.2, 0], far: 1.5 } },
+  sky: { look: [0, 12.9, 0], from: [-3.8, -1.2, 7.8], fov: 54, tall: { look: [0, 13.3, 0], far: 1.4 } },
+  end: { look: [0, -2, 0], from: [-13, 6, 37], fov: 55, tall: { look: [0, 5.3, 0], far: 1.5 } },
+  on: { wide: [-0.36, 0], tall: [0, 0.66] }, far: 1.4,
 };
 // which view each step is asked from (the step being asked: 0 the old antenna ... 7 the call)
 const VIEW_OF = ['whole', 'low', 'low', 'low', 'whole', 'whole', 'top', 'sky'];
@@ -429,9 +433,9 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
     probe.rotateY(Math.atan(on[0] * th)); probe.rotateX(-Math.atan(on[1] * tv));
   }
   function poseFor(V, tall, aspect) {
-    const k = tall ? VIEW.far : 1;
-    toWorld(lookAt.set(...V.look));
-    toWorld(want.set(V.look[0] + V.from[0] * k, V.look[1] + V.from[1] * k, V.look[2] + V.from[2] * k));
+    const T = tall ? V.tall || {} : null, k = tall ? T.far || VIEW.far : 1, L = (T && T.look) || V.look;
+    toWorld(lookAt.set(...L));
+    toWorld(want.set(L[0] + V.from[0] * k, L[1] + V.from[1] * k, L[2] + V.from[2] * k));
     lookFrom(want, V, tall, aspect);
   }
   function aim(camera, dt = 1 / 60) {
@@ -453,10 +457,11 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
       // pane and one outside it), out clear of the roof over it, and up to the view, at an even speed along it)
       const curve = new THREE.CatmullRomCurve3([from0.clone(), GLIDE.inside.clone(), GLIDE.outside.clone(), GLIDE.clear.clone(), want.clone()], false, 'centripetal');
       curve.getPointAt(e, camPos);
-      // (turned toward the work from wherever it is on the way: out of the window it looks up the tower's side at its
-      // top, so the place it is going to is in sight the whole way up, and it arrives turned as the view is)
+      // (turned toward the work from wherever it is on the way: it goes out of the window looking out, as the player
+      // was, swings round in the open beside the control room's roof, and from there looks up the tower's side at its
+      // top, which is in sight the whole way up; it arrives turned as the view is)
       lookFrom(camPos, V, tall, camera.aspect || innerWidth / innerHeight);
-      camQ.copy(q0).slerp(probe.quaternion, ease(clamp01((t - 0.08) / 0.6)));
+      camQ.copy(q0).slerp(probe.quaternion, ease(clamp01((t - 0.19) / 0.36)));
       camera.fov = fov0 + (V.fov - fov0) * e; camera.updateProjectionMatrix();
       // (the station's rooms drawn as ever while the camera is still in the control room)
       const z = W.room('tower'); out = !(z && z.box.containsPoint(camPos));
@@ -490,7 +495,7 @@ export function antennaLink({ W, job, crew = null, save = () => {}, standing = n
   return {
     now, ready, right, wrong, head, play, over, update, aim, close,
     // (for the rigs: where the build is, the faces to tap on screen, a tap on one, a view to look from)
-    state: () => ({ cur, finished, tested, heard, view: viewNow, queue: queue.length, braced: [...braced].sort(), loose: +loose.toFixed(2), built: crew ? antennaOf(crew).built : cur, repaired: crew ? antennaOf(crew).repaired : false, out, intro: +Math.max(0, intro - introT).toFixed(2), made: M.ms }),
+    state: () => ({ cur, finished, tested, heard, view: viewNow, look: lookAt.toArray().map((v) => +v.toFixed(2)), queue: queue.length, braced: [...braced].sort(), loose: +loose.toFixed(2), built: crew ? antennaOf(crew).built : cur, repaired: crew ? antennaOf(crew).repaired : false, out, intro: +Math.max(0, intro - introT).toFixed(2), made: M.ms }),
     look: (name = null) => { forced = name && VIEW[name] ? name : null; },
     facesOnScreen: () => {
       const r = W.renderer.domElement.getBoundingClientRect(), list = [], v = new THREE.Vector3();

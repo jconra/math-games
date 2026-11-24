@@ -251,8 +251,8 @@ function cablesPicture({ mode = 'count', ask = true } = {}) {
     o += seg([x + (ax < x ? -10 : 10), hi], [ax, base], col, 2) + seg([x + (ax < x ? -10 : 10), lo], [ax, base], col, 2) + dot([ax, base], 5, AMBER);
   });
   // (the two heights named out at the side, clear of the cables, a faint line from each to the mast)
-  o += dash([x + 14, hi], [x + 122, hi], 'rgba(143,163,182,.45)', 1) + dash([x + 14, lo], [x + 122, lo], 'rgba(143,163,182,.45)', 1);
-  o += text(x + 126, hi + 4, 'here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 }) + text(x + 126, lo + 4, 'and here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 });
+  o += dash([x + 14, hi], [x + 106, hi], 'rgba(143,163,182,.45)', 1) + dash([x + 14, lo], [x + 106, lo], 'rgba(143,163,182,.45)', 1);
+  o += text(x + 110, hi + 4, 'here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 }) + text(x + 110, lo + 4, 'and here', { size: 12, fill: SOFT, anchor: 'start', weight: 600 });
   if (!ask) o += text(W / 2, 22, mode === 'groups' ? '3 and 3: 6 cables' : '6 cables', { size: 15, fill: GREEN });
   return svg(240, o);
 }
