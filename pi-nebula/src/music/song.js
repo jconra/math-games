@@ -25,7 +25,7 @@ export const PARTS = [
   { id: 'beat', label: 'Beat', choices: [
     { id: 'lofi', label: 'Lo-fi' }, { id: 'four', label: 'Four floor' }, { id: 'broken', label: 'Broken' }, { id: 'half', label: 'Half-time' }] },
   { id: 'bass', label: 'Bass', choices: [
-    { id: 'warm', label: 'Warm' }, { id: 'pulse', label: 'Pulse' }, { id: 'rolling', label: 'Rolling' }, { id: 'wobble', label: 'Wobble' }] },
+    { id: 'warm', label: 'Warm' }, { id: 'pulse', label: 'Pulse' }, { id: 'rolling', label: 'Rolling' }, { id: 'wobble', label: 'Wobble' }, { id: 'ladder', label: 'FM ladder' }] },
   { id: 'pads', label: 'Pads', choices: [
     { id: 'warm', label: 'Warm' }, { id: 'airy', label: 'Airy' }, { id: 'dark', label: 'Dark' }] },
   { id: 'lead', label: 'Lead', choices: [

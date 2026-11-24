@@ -166,6 +166,11 @@ function bassOf(song, S, bar, choice, chord) {
     // fifth or the note under it
     const t = pick(r, [[[0, 3, 1], [3, 3, 2], [6, 2, 4], [8, 6, 1.5], [14, 2, 4]], [[0, 6, 2], [6, 2, 4], [8, 4, 1], [12, 4, 3]], [[0, 4, 1], [4, 4, 2], [8, 3, 3], [11, 5, 1.5]]]);
     t.forEach(([s, l, w], i) => note(s, l, i === 2 && r() < 0.5 ? fifth - 12 : root, 0.85, { wob: w }));
+  } else if (choice === 'ladder') {
+    // short plucked notes round the beat, some an octave up (each is [step, length, octave up]); the last now and then
+    // the fifth
+    const t = pick(r, [[[0, 2, 0], [3, 2, 0], [6, 2, 1], [8, 2, 0], [11, 2, 0], [14, 2, 1]], [[0, 3, 0], [4, 2, 1], [6, 2, 0], [10, 2, 0], [12, 2, 1], [14, 2, 0]], [[2, 2, 0], [4, 2, 0], [7, 2, 1], [10, 2, 0], [12, 2, 0], [15, 1, 1]]]);
+    t.forEach(([s, l, up], i) => note(s, l, (i === t.length - 1 && r() < 0.35 ? fifth : root) + 12 * up, up ? 0.7 : 0.85));
   }
   return out;
 }

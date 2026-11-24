@@ -212,6 +212,39 @@ export const TECHNO_PATCHES = {
     { from: 'w-sub', to: 'w-sg' }, { from: 'w-e', to: 'w-sg', port: 'gain' }, { from: 'w-sg', to: 'out' },
   ] },
 
+  // FM LADDER: the plucked bass of slap house, made the way an FM synth makes it: four sine operators in a chain, each
+  // bending the next one's phase (C, eight times the note, into D into E into F; only F is heard), every bend fading as
+  // the note rings, so it starts bright and hollow and settles to a round tone. (The game's maker, 2026-11-24, of a
+  // bass he likes: "some FM ladder thing where there is a chain of FM".) The engine's oscillators take a cable on their
+  // pitch, not their phase; a phase bend is a pitch bend by the bender's rate of change, and a bandpass filter far below
+  // its own pitch gives exactly that. So between two operators: the bender, its fade, that filter ("to phase"), then
+  // the next one's pitch plug. HOW HARD each bends (the FM index, radians) = the next operator's freqMod / 3669: 4401
+  // is 1.2. Measured against the same ladder worked out by plain arithmetic: every harmonic within 1.1 dB, on pitch to
+  // a cent from C1 to C3 (~/pw/space-math/rigs/fmbass-1). The three freqMods and the four fades are the knobs to tune.
+  'TECHNO — FM LADDER BASS': { group: 'MUSIC', project: 'pi-nebula', name: 'FM ladder bass', kind: 'bass', dur: 0.45, nodes: [
+    { id: 'c', type: 'osc', name: 'C x8', wave: 'sine', freq: 523.248, level: 1 },
+    { id: 'c-e', type: 'env', name: 'C fade', peak: 1, attack: 0.002, decay: 0.07, sustain: 0.15, release: 0.08 },
+    { id: 'c-v', type: 'gain', name: 'C amount', gain: 0 },
+    { id: 'c-d', type: 'filter', name: 'C to phase', ftype: 'bandpass', freq: 5000, Q: 0.7071 },
+    { id: 'd', type: 'osc', name: 'D', wave: 'sine', freq: 65.406, freqMod: 4401, level: 1 },
+    { id: 'd-e', type: 'env', name: 'D fade', peak: 1, attack: 0.002, decay: 0.14, sustain: 0.35, release: 0.08 },
+    { id: 'd-v', type: 'gain', name: 'D amount', gain: 0 },
+    { id: 'd-d', type: 'filter', name: 'D to phase', ftype: 'bandpass', freq: 5000, Q: 0.7071 },
+    { id: 'e', type: 'osc', name: 'E', wave: 'sine', freq: 65.406, freqMod: 4401, level: 1 },
+    { id: 'e-e', type: 'env', name: 'E fade', peak: 1, attack: 0.002, decay: 0.18, sustain: 0.45, release: 0.08 },
+    { id: 'e-v', type: 'gain', name: 'E amount', gain: 0 },
+    { id: 'e-d', type: 'filter', name: 'E to phase', ftype: 'bandpass', freq: 5000, Q: 0.7071 },
+    { id: 'f', type: 'osc', name: 'F (heard)', wave: 'sine', freq: 65.406, freqMod: 4401, level: 1 },
+    { id: 'f-e', type: 'env', name: 'pluck', peak: 1, attack: 0.002, decay: 0.25, sustain: 0.55, release: 0.08 },
+    { id: 'f-v', type: 'gain', name: 'F level', gain: 0 },
+    { id: 'hp', type: 'filter', name: 'no rumble', ftype: 'highpass', freq: 20, Q: 0.7071 },
+    { id: 'out', type: 'out', gain: 0.5 },
+  ], cables: [
+    { from: 'c', to: 'c-v' }, { from: 'c-e', to: 'c-v', port: 'gain' }, { from: 'c-v', to: 'c-d' }, { from: 'c-d', to: 'd', port: 'freq' },
+    { from: 'd', to: 'd-v' }, { from: 'd-e', to: 'd-v', port: 'gain' }, { from: 'd-v', to: 'd-d' }, { from: 'd-d', to: 'e', port: 'freq' },
+    { from: 'e', to: 'e-v' }, { from: 'e-e', to: 'e-v', port: 'gain' }, { from: 'e-v', to: 'e-d' }, { from: 'e-d', to: 'f', port: 'freq' },
+    { from: 'f', to: 'f-v' }, { from: 'f-e', to: 'f-v', port: 'gain' }, { from: 'f-v', to: 'hp' }, { from: 'hp', to: 'out' },
+  ] },
   // ── pads (one note of the chord each) ──────────────────────────────────────────────────────────────────────────
   'TECHNO — WARM PAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Warm pad', kind: 'instrument', dur: 4, nodes: [
     { id: 'p-osc', type: 'osc', name: 'saws', wave: 'sawtooth', voices: 2, detune: 7, freq: 261.63, level: 1 },
@@ -331,6 +364,7 @@ export const ROOT = {
   'TECHNO — PULSE BASS': 36,
   'TECHNO — ROLLING BASS': 36,
   'TECHNO — WOBBLE BASS': 36,
+  'TECHNO — FM LADDER BASS': 36,
   'TECHNO — WARM PAD': 60,
   'TECHNO — AIRY PAD': 60,
   'TECHNO — DARK PAD': 60,
@@ -350,7 +384,7 @@ export const DRUMS = {
   half: { kick: 'TECHNO — HEAVY KICK', snare: 'TECHNO — HEAVY SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
 };
 export const INSTRUMENTS = {
-  bass: { warm: 'TECHNO — WARM BASS', pulse: 'TECHNO — PULSE BASS', rolling: 'TECHNO — ROLLING BASS', wobble: 'TECHNO — WOBBLE BASS' },
+  bass: { warm: 'TECHNO — WARM BASS', pulse: 'TECHNO — PULSE BASS', rolling: 'TECHNO — ROLLING BASS', wobble: 'TECHNO — WOBBLE BASS', ladder: 'TECHNO — FM LADDER BASS' },
   pads: { warm: 'TECHNO — WARM PAD', airy: 'TECHNO — AIRY PAD', dark: 'TECHNO — DARK PAD' },
   lead: { keys: 'TECHNO — KEYS', saw: 'TECHNO — SOFT SAW', square: 'TECHNO — SQUARE LEAD' },
   melody: { arp: 'TECHNO — ARP', bells: 'TECHNO — BELLS', echo: 'TECHNO — ECHO PLUCK' },
