@@ -19,7 +19,7 @@
 //
 // THE SHIP SHOWN WHILE ITS PAINT IS PICKED (view): the owner's card is brought up at the pilot's seat, where nothing of
 // the hull is seen, so while the paint card is up the camera stands outside the ship, off its bow, looking back at it:
-// in its hangar (kept inside the hangar's walls, wherever the ship was set down), or out past the Hauler at the dock.
+// in its hangar (kept inside the hangar's walls, wherever the ship was set down), or out off the Hauler's bow at the dock.
 // The crew member has not moved: Done, and they are at the seat again.
 //
 //   const S = makeShipPaint({ W, crew, save, boarding, hauler })
@@ -44,7 +44,9 @@ export const VIEW = {
   miner: { eye: [-11.5, 3.4, 12], look: [0, 0.6, 0.6], fov: 48, tall: { eye: [-9, 5.5, 15], look: [0, -0.8, 2], fov: 70 } },
   explorer: { eye: [-12, 3.6, 12.5], look: [0, 0.8, -0.4], fov: 48, tall: { eye: [-9, 5.5, 15.5], look: [0, -0.8, 1], fov: 70 } },
   medic: { eye: [-12, 3.6, 12.5], look: [0, 0.8, -0.2], fov: 48, tall: { eye: [-9, 5.5, 15.5], look: [0, -0.8, 1], fov: 70 } },
-  hauler: { eye: [-13, 6.2, 15.5], look: [0, 1.6, 0.8], fov: 46, tall: { eye: [-10, 7.5, 20], look: [0, -1.6, 1.5], fov: 70 } },
+  // (the Hauler from off its port bow, the station's side: out in space that is its lit side, the bridge beside it;
+  // its far side is in shadow, where no paint can be told from another)
+  hauler: { eye: [8, 4.6, 15.5], look: [0.4, 1.6, 2.5], fov: 46, tall: { eye: [6.5, 6.5, 18], look: [0, -0.6, 3], fov: 70 } },
   keep: { wall: 2.6, top: 7.5, floor: 1.2 },
 };
 // how light the landing guide's small model is kept (the brightest of its red, green and blue, 0 to 1, as shown), and

@@ -258,10 +258,11 @@ function setHull(mode) {
   });
 }
 // THE HULL'S PAINT (kit/ships/paints.js): laid on the built ship shown, whichever of its versions that is (with the
-// rooms inside or without: each is painted as it is shown); a ship that is only a shell has no paint to change
+// rooms inside or without: each is painted as it is shown); a ship that is only a shell has no paint to change. A paint
+// picked while the hull is see-through or hidden shows the hull solid, so the paint is seen.
 let painted = null;
 function layPaint() { painted = st.ship?.skin && st.shell?.built ? { paint: st.paint, ...paintBuilt(st.shell.built, st.ship.skin, st.paint) } : null; return painted; }
-function setPaint(id) { st.paint = tidyPaint(id); layPaint(); url(); menu(); return painted; }
+function setPaint(id) { st.paint = tidyPaint(id); layPaint(); if (painted && (st.hull === 'xray' || st.hull === 'hidden')) setHull('solid'); url(); menu(); return painted; }
 async function showShip(S) {
   loading.hidden = false; loading.classList.add('soft');
   const key = shellKey(S, hasCabin(S) && st.inside), rec = await loadShell(S);
