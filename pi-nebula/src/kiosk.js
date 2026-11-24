@@ -28,7 +28,7 @@
 //   K.open() / K.close() / K.pick(ship) / K.paint(id) / K.buy() / K.state()   (the rigs: GAME.kiosk); K.at: where to stand
 import * as THREE from 'three';
 import { piecesOf } from './people.js';
-import { STORE, saleOf } from './own.js';
+import { STORE, saleOf, saleWords } from './own.js';
 import { paintOf } from './paint.js';
 import { PAINTS, FACTORY, hullColour, paintById } from '../kit/ships/paints.js';
 import { KIOSK } from '../kit/furniture.js';
@@ -77,18 +77,9 @@ body:has(.psk:not([hidden])) .pnj-prompt, body:has(.psk:not([hidden])) .pnj-wall
 `;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const say = (n) => Number(n).toLocaleString('en-US');
-const credit = (n) => (n === 1 ? 'credit' : 'credits');
-
-// THE SALE'S LINE for a ship, in the words the captains' cards had (S: src/own.js saleOf; sure: Buy pressed once)
-// -> { kind: 'owned' | 'closed' | 'short' | 'sure' | 'can', head, sub, buttons: [[class, words]] }
-export function saleLine(S, { sure = false } = {}) {
-  const ship = S.name;
-  if (S.owned) return { kind: 'owned', head: `The ${ship} is yours`, sub: 'Take it out any time, from its pilot\'s seat.', buttons: [['psk-take', `Take your ${ship} out`]] };
-  if (!S.open) return { kind: 'closed', head: `The ${ship}: ${say(S.price)} credits`, sub: `For sale ${S.why}.`, buttons: [] };
-  if (S.short > 0) return { kind: 'short', head: `Buy the ${ship}: ${say(S.price)} credits`, sub: `You have ${say(S.credits)}. You need ${say(S.short)} more ${credit(S.short)}.`, buttons: [] };
-  if (sure) return { kind: 'sure', head: `Buy the ${ship} for ${say(S.price)} credits?`, sub: `You will have ${say(S.credits - S.price)} ${credit(S.credits - S.price)} left.`, buttons: [['psk-buy', 'Yes, buy it'], ['psk-no', 'No']] };
-  return { kind: 'can', head: `Buy the ${ship}: ${say(S.price)} credits`, sub: `You have ${say(S.credits)} ${credit(S.credits)}.`, buttons: [['psk-buy', 'Buy']] };
-}
+// (the sale's line: src/own.js saleWords; its buttons here)
+const BUTTONS = { owned: (S) => [['psk-take', `Take your ${S.name} out`]], closed: () => [], short: () => [], sure: () => [['psk-buy', 'Yes, buy it'], ['psk-no', 'No']], can: () => [['psk-buy', 'Buy']] };
+const saleLine = (S, o) => { const L = saleWords(S, o); return { ...L, buttons: BUTTONS[L.kind](S) }; };
 
 export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = null, crew = () => null, bridge = () => false, quiet = () => false }) {
   if (!document.getElementById('psk-css')) { const st = document.createElement('style'); st.id = 'psk-css'; st.textContent = CSS; document.head.appendChild(st); }

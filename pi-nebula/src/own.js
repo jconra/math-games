@@ -67,6 +67,17 @@ export function saleOf(crew, ship, { bridge = true } = {}) {
   const owned = owns(crew, ship), open = ship !== 'hauler' || !!bridge, credits = whole(crew && crew.credits), short = Math.max(0, price - credits);
   return { ship, name: SHIP_NAMES[ship], price, owned, open, why: open ? '' : 'once the bridge out to it is built', credits, short, can: !owned && open && short === 0 };
 }
+// THE SALE'S LINE, as the kiosk says it (S: saleOf; sure: Buy pressed once, so it asks once more before it spends), in
+// the words the captains' cards had -> { kind: 'owned' | 'closed' | 'short' | 'sure' | 'can', head, sub }
+const say = (n) => Number(n).toLocaleString('en-US'), credit = (n) => (n === 1 ? 'credit' : 'credits');
+export function saleWords(S, { sure = false } = {}) {
+  const ship = S.name;
+  if (S.owned) return { kind: 'owned', head: `The ${ship} is yours`, sub: 'Take it out any time, from its pilot\'s seat.' };
+  if (!S.open) return { kind: 'closed', head: `The ${ship}: ${say(S.price)} credits`, sub: `For sale ${S.why}.` };
+  if (S.short > 0) return { kind: 'short', head: `Buy the ${ship}: ${say(S.price)} credits`, sub: `You have ${say(S.credits)}. You need ${say(S.short)} more ${credit(S.short)}.` };
+  if (sure) return { kind: 'sure', head: `Buy the ${ship} for ${say(S.price)} credits?`, sub: `You will have ${say(S.credits - S.price)} ${credit(S.credits - S.price)} left.` };
+  return { kind: 'can', head: `Buy the ${ship}: ${say(S.price)} credits`, sub: `You have ${say(S.credits)} ${credit(S.credits)}.` };
+}
 // BOUGHT: the price spent from the crew member's credits and the ship kept with them (crew.ships; what was paid and
 // when, crew.bought[ship]) -> { ok: true, price, credits (left), ships }, or { ok: false, why: 'unknown' | 'owned' |
 // 'closed' | 'short', short }: nothing changed
