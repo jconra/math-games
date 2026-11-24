@@ -158,12 +158,13 @@
 //
 //   - A RUN OF THE CREW MEMBER'S OWN, IN A SHIP THEY BOUGHT (opts.own; src/own.js has the game's maker's words, and
 //     src/missions.js OWN RUNS where each job's extra cards come): these same steps, with NO CAPTAIN ABOARD (he stays in
-//     the station): aboard are the crew member and the crew they hired, one for each job they left (none, one or two),
-//     each doing that job as the captain's own would. The few words that guide a run are the ship's own (ctx.captainName:
+//     the station): aboard are the crew member and their own crew who came (opts.crew: src/missions.js signOwn), each
+//     in their own look, doing the job they were given as the captain's own would, or along for the ride; each is taken
+//     out of the station while aboard (people.aboard). The few words that guide a run are the ship's own (ctx.captainName:
 //     "The Miner"). Their own jobs ask half as many cards again: the steps come with their cards already so (stepsFor
 //     `own`), a jump of 4 or 5 cards still lighting its three lamps (lampPlan), and the drill operator's rock scans and
-//     the paramedic's locks are told how many (rockCards). Home, the pay is all the run brought but the hired crew's
-//     shares (src/missions.js land).
+//     the paramedic's locks are told how many (rockCards). With every job their crew's they ride along and are asked
+//     nothing. Home, the pay is all the run brought but the operating costs and their crew's shares (src/missions.js land).
 //   - JUST FLYING, IN A SHIP THAT IS THEIRS (opts.free; src/missions.js freeFlight): the first and the last of these
 //     steps and nothing between: out of its hangar or off its dock, by hand or on autopilot, and home again. Nobody else
 //     is aboard, nothing is said, asked or paid, and no jump is offered: once the ship has been clear of the station (or
@@ -282,14 +283,16 @@ const CSS = `
 .pmt.has-lock .pmt-chip, .pmt.has-lock .pmt-say, .pmt.has-lock .pmt-count, .pmt.has-lock .pmt-acts { display: none; }
 `;
 
-export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {}, own = false, free = false }) {
+export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {}, own = false, free = false, crew: mates = null }) {
   const { W, walls, boarding, crane, jobs, guide, crew, save } = ctx;
   // (who keeps the run's ship's hull where it is flown and stands: the Miner's crane, or the ship's own shared hull:
   // src/mission.js keeperOf)
   const keeper = ctx.keeper || crane;
   // (where the run goes: the rocks, or a planet (a rescue run: src/rescue.js); and the captain's own pilot, by name)
   // (SUPPLY: the Hauler's supply run, to the old station: src/oldstationsite.js)
-  const PLANET = M.place === 'planet', SUPPLY = M.place === 'oldstation', TO = PLANET ? 'the planet' : SUPPLY ? 'Tangent Station' : 'the rocks', flier = roleOf(M, 'pilot').crew, flierShort = String(flier).split(' ').pop();
+  // (a run of your own: whoever of your crew has the pilot's seat, by their own name)
+  const ownPilot = own && Array.isArray(mates) ? mates.find((p) => (p.jobs || []).includes('pilot')) : null;
+  const PLANET = M.place === 'planet', SUPPLY = M.place === 'oldstation', TO = PLANET ? 'the planet' : SUPPLY ? 'Tangent Station' : 'the rocks', flier = ownPilot ? ownPilot.name : roleOf(M, 'pilot').crew, flierShort = ownPilot ? ownPilot.name : String(flier).split(' ').pop();
   // (an exploring run: its places, one after another (src/explore.js), and its plan; the jump to a place is to the lead
   // it follows. FIELD: the mining run's rocks)
   // (FREE: just flying, in a ship that is theirs: no far place at all)
@@ -340,8 +343,9 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // WHO IS ABOARD (src/missions.js aboardOf: the ship's crew of three, the captain and one of his crew with the crew
   // member) and which of them does each job left to the crew: the one who drills (their name as said), the one who
   // is the run's engineer, whom the captain speaks to (the crew member, signed for it, or his own; null: himself)
-  // (a run of their own: no captain, the crew they hired for the jobs they left; just flying: nobody)
-  const aboard = FREE ? [] : aboardOf(M, roles, { id: M.captain, name: ctx.captainName || 'The captain' }, { own });
+  // (a run of their own: no captain, their own crew who came, each doing their job or along for the ride; just flying:
+  // nobody)
+  const aboard = FREE ? [] : aboardOf(M, roles, { id: M.captain, name: ctx.captainName || 'The captain' }, { own, crew: mates || [] });
   const doer = (job) => aboard.find((a) => a.jobs.includes(job)) || null;
   const driller = doer('drill'), engineer = roles.includes('engineer') ? null : doer('engineer') && !doer('engineer').captain ? doer('engineer').short : '';
   let drill = null, drillKit = null, drillErr = null, drillOn = false;
@@ -552,10 +556,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         if (startAfoot) { T.afoot = true; T.out = false; T.outK = 0; goAfoot(); }
         // THE CREW ABOARD (src/aboard.js; the game's maker: "it is fine to just have them pop into existence on the
         // ship once you click the pilots seat"): the captain and one of his crew, here from now on. The captain is
-        // taken out of the station meanwhile (he waited by the ship's lift)
+        // taken out of the station meanwhile (he waited by the ship's lift); on a run of your own, your crew who came
+        // (hideIds)
         const pp = ctx.people ? ctx.people() : null;
         if (pp && pp.figure && S.bpData) makeAboard({ people: pp, ship: S, crew: aboard.map((a) => ({ id: a.id, name: a.name, look: a.look, jobs: a.jobs })), cockpitFloor: SHIP.seat.eye[1] - SIT_EYE - S.space.deck, mine: seatOf(), rand: ctx.rand || Math.random, walls })
-          .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard && !own && !FREE) pp.aboard(M.captain, true); T.log.push('aboard: ' + (A.list.map((w) => w.name).join(', ') || 'nobody else')); })
+          .then((A) => { if (T.done) { A.dispose(); return; } crewA = A; api.crew = A; if (pp.aboard) for (const id of hideIds) pp.aboard(id, true); T.log.push('aboard: ' + (A.list.map((w) => w.name).join(', ') || 'nobody else')); })
           .catch((e) => { console.error(e); if (window.oops) window.oops(e); });
       }
       // (the Hauler letting go of its bridge: the dock's job's own docking, backward; then the flying is whoever's it is)
@@ -1308,10 +1313,11 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // given up, they are gone at once and the captain is back in the station)
   // (just flying, got up with the ship still down where it started: put away as it stands, and the flight is over)
   function endFree() { if (fl) { fl.close(); fl = null; api.fly = null; } keeper.back(); T.i = steps.length; finish(); }
-  // (a run of their own, or just flying: no captain was taken out of the station for it)
-  const tookCaptain = !own && !FREE && !!M.captain;
-  function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; const A = crewA; crewA = null; api.crew = null; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock, aboard: A, captain: tookCaptain ? M.captain : null }); }
-  function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); keeper.back(); el.remove(); if (crewA) { crewA.dispose(); crewA = null; api.crew = null; } const pp = ctx.people ? ctx.people() : null; if (pp && pp.aboard && tookCaptain) pp.aboard(M.captain, false); onEnd({ payout: null, aborted: true, secs: T.clock }); }
+  // (who is taken out of the station for the run while they are aboard: the captain on his contract; on a run of
+  // their own, their own crew who came (station people and the rescued alike); just flying: nobody)
+  const hideIds = FREE ? [] : own ? aboard.map((a) => a.id) : M.captain ? [M.captain] : [];
+  function finish() { if (T.done) return; T.done = true; cleanUp(); T.endT = 0; const A = crewA; crewA = null; api.crew = null; onEnd({ payout: T.payout || null, aborted: false, secs: T.clock, aboard: A, hide: A ? hideIds : [] }); }
+  function abort() { if (T.done) return; T.done = true; T.aborted = true; cleanUp(); keeper.back(); el.remove(); if (crewA) { crewA.dispose(); crewA = null; api.crew = null; } const pp = ctx.people ? ctx.people() : null; if (pp && pp.aboard) for (const id of hideIds) pp.aboard(id, false); onEnd({ payout: null, aborted: true, secs: T.clock }); }
 
   const _eye = new THREE.Vector3(), _look = new THREE.Vector3(), camLook = new THREE.Vector3(); let camFresh = true;
   const api = {

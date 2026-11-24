@@ -123,18 +123,18 @@ export const RUN_TALK = {
     fieldFly: ['{driller} has marked one for you, {player}. Fly us over.', 'See {driller}\'s mark? Take us to it, {player}.'],
     full: ['Eight canisters full. Take us home, pilot.', 'That\'s the load. Home, {player}.'],
     home: ['There\'s the station. Take us in, {player}.', 'Home. In through the bay door, {player}, and down in our hangar.'],
-    homeCrew: ['There\'s the station. Juno has the landing.', 'Home. Juno takes her in.'],
+    homeCrew: ['There\'s the station. {pilot} has the landing.', 'Home. {pilot} takes her in.'],
     // (as the crew member gets up; nothing in it weighs up the landing: nose in or crooked, it is down)
     landed: ['We\'re home, {player}. Your share is at the smelter\'s controls.'],
     // (the crew member at the drill, src/drillview.js; and the lines for a run whose pilot is the captain's own)
-    crewOut: ['We\'re clear of the station. Juno has the jump.', 'Clear of the station. Juno is working out the jump.'],
-    crewJump: ['Juno has us at the rocks. The drill is yours, {player}.', 'Here we are. Find us a good rock, {player}.'],
+    crewOut: ['We\'re clear of the station. {pilot} has the jump.', 'Clear of the station. {pilot} is working out the jump.'],
+    crewJump: ['{pilot} has us at the rocks. The drill is yours, {player}.', 'Here we are. Find us a good rock, {player}.'],
     drillField: ['Look for the glow, {player}. More glow, more ore.', 'The scan is up. Find us a good one.'],
     pick: ['Going in for that one.', 'That one it is.'],
     broke: ['That one\'s done. Find us another.', 'She\'s all in pieces. Next rock!'],
-    fullCrew: ['Eight canisters full. Juno, take us home.', 'That\'s the load. Home, Juno.'],
+    fullCrew: ['Eight canisters full. {pilot}, take us home.', 'That\'s the load. Home, {pilot}.'],
     // (the crew member at the drill headed home before all eight were full)
-    early: ['That\'s the load. Home, {player}.'], earlyCrew: ['That\'s the load. Home, Juno.'],
+    early: ['That\'s the load. Home, {player}.'], earlyCrew: ['That\'s the load. Home, {pilot}.'],
     landedCrew: ['Good work, {player}. Your share is at the smelter\'s controls.'],
   },
   // CAPTAIN HALE'S RESCUE RUN (src/missions.js 'rescue'; at the planet src/rescue.js). {pilot}, {medic}: who of her
@@ -359,6 +359,24 @@ export const FRIEND_TALK = {
   ],
   soon: ["Nice to see you again!", "Hi again! I'll have more to tell you later.", "Back so soon? Come find me in a bit.", "Hey, {player}! Talk later?"],
 };
+// ASKED TO JOIN THE CREW (src/friendcard.js, "Join my crew", once the player owns a ship; src/own.js askCrew): the
+// player's question, then the answer: yes (5 pips or more), a kind no (under 5: nothing changes, they may be asked
+// again), already on it; and each of the five captains' own no (each has a ship of their own to run). {player}: the
+// player's name; {name}: theirs
+export const CREW_ASK = {
+  ask: ['Would you like to join my crew, {name}?', 'Will you be on my crew, {name}?'],
+  yes: ['I\'d love to! Count me in, {player}.', 'Yes! I\'ll be on your crew.', 'Your crew? I\'m in, {player}!'],
+  no: ['Thanks for asking, {player}. Maybe once we know each other a bit better.', 'That\'s kind of you. Let\'s get to know each other first.', 'Not just yet, {player}. Ask me again another time!'],
+  already: ['I\'m already on your crew, {player}!'],
+  captains: {
+    ruiz: 'Ha! I\'ve got the Miner to run, {player}, and a crew counting on me. Thanks for asking, though.',
+    hale: 'That\'s kind of you, {player}, but the Medic needs her captain. Someone has to answer the distress calls.',
+    vega: 'Tempting! But the Explorer and I have charts to finish. Thank you, though.',
+    adair: 'I\'d like that, {player}, but my place is with my own ship, repairs or not.',
+    [HAULER_CAPTAIN.id]: 'Thank you, {player}, but the Hauler is mine to run. Tangent Station counts on her.',
+  },
+};
+
 // (the talk for someone: a rescued survivor's own (their first, the first time), else the station's; never the one
 // they told last. -> { id, lines: [{ who: 'them' | 'you', words }] })
 export function friendTalk({ rescued = false, first = false, last = null, player = '', name = '' } = {}, rand = Math.random) {

@@ -1210,16 +1210,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (st === 'signed') { const w = lineOf(K.signed); if (w) { bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; } K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'payout') { const w = K.payout || K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4.5 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
     if (st === 'interested' && !missions.ready(K.id)) { const w = K.waiting; bubbles.say(P, w, { kind: 'captain', secs: 4 }); P.talkUntil = clock + 2.5; K.state = 'answered'; K.t = 0; K.cool = FRIENDLY.answered; return; }
-    // THE HAULER'S CAPTAIN (src/lines.js CAPTAINS; the one part of this file that is theirs, here and `V` in answer()
-    // below): their lines are words alone, no recorded clip. And until their run is offered (src/missions.js `offered`:
-    // the old station found) there is none to ask about: 'wait', a word and no question; or 'sale', their ship for sale
-    // to this crew member meanwhile: that offer in place of the run's (K.sale's words; K.now: whose words answer() uses)
+    // THE HAULER'S CAPTAIN (src/lines.js CAPTAINS; the one part of this file that is theirs): their lines are words
+    // alone, no recorded clip. And until their run is offered (src/missions.js `offered`: the old station found) there
+    // is none to ask about: 'wait', a word and no question
     // (ONE QUESTION AT A TIME: two captains turned to the player at once, one by the docking port and one at the window
     // near it, and the second's question took the first one's place under the player's thumb: with a question up, this
     // captain says nothing now and may ask a little later)
     if (bubbles.asking) { endOffer(P); K.cool = 4; return; }
     if (st === 'wait') { const w = K.wait[K.waited ? 1 : 0]; K.waited = true; bubbles.say(P, w, { kind: 'captain', secs: Math.max(4.5, READ(w) + 1) }); P.talkUntil = clock + Math.min(3, READ(w)); K.state = 'answered'; K.t = 0; K.hold = READ(w) + 0.5; K.cool = FRIENDLY.answered; return; }
-    const V = K.now = st === 'sale' ? { ...K.sale, pitch: 'sale' } : K;
+    const V = K;
     // (the offer: spoken the first time it can be heard, in a bubble always, the hands moving as they say it; the
     // question at the bottom of the screen)
     let words = V.again;
@@ -1228,7 +1227,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     else K.voice = speak(P, K.hello.clip);
     const secs = Math.max(6, READ(words) + 2);
     bubbles.say(P, words, { kind: 'captain', secs }); P.talkUntil = clock + Math.min(secs - 1, READ(words));
-    if (st !== 'sale') missions.asked(K.id);
+    missions.asked(K.id);
     // (a captain whose ship is down for now, Captain Adair: no question; they stay facing the player till they have said
     // it, then go on with their day)
     if (K.down) { K.state = 'answered'; K.t = 0; K.hold = Math.min(secs - 1, READ(words) + 0.5); K.cool = FRIENDLY.answered; return; }
@@ -1236,7 +1235,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       onYes: () => answer(P, true), onNo: () => answer(P, false) });
   }
   function answer(P, yes) {
-    const K = P.cap, V = K.now || K; counts.answers++;
+    const K = P.cap, V = K; counts.answers++;
     if (K.voice) { K.voice.stop(); K.voice = null; lastVoice = -99; }
     // (a mission that is made: yes brings up the contract's card, src/mission.js; they stay with the player meanwhile)
     const made = yes && missions.ready(K.id) && V.contract;
@@ -2351,6 +2350,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // OUT the moment their place is left (the doors shut on it): out of the scene, their day stopped, nothing of them
   // worked out. They are not counted among the nearest about the player (presence): in their place nobody else is drawn.
   const HOMES = {};
+  // (who is aboard a ship just now, taken out of the station: people.aboard)
+  const aboardIds = new Set();
   for (const def of ROOM_CREW) (HOMES[def.place] || (HOMES[def.place] = { id: def.place, defs: [], people: [], making: null, made: false, ms: 0, tries: 0 })).defs.push(def);
   const stopAt = (id) => { const S = STOPS.find((s) => s.id === id); return S ? new THREE.Vector3(...S.at) : new THREE.Vector3(); };
   function makeHome(H) {
@@ -2371,6 +2372,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (would someone standing there be in view: their room drawn, near enough and in front of the camera, as inView)
   const seenAt = (pos, zone, camera) => { _s.center.set(pos.x, pos.y + 0.95, pos.z); return !!(zone && zone.group.visible) && camera.position.distanceTo(pos) < SEEN && _f.intersectsSphere(_s); };
   function putIn(P, camera, drawn) {
+    if (aboardIds.has(P.id)) return false;      // (aboard a ship just now: people.aboard)
     // (a moment of their day picked at random: the first step that can be had, from a step picked at random; never a
     // walk, which would start them where another walker of the same round may be put)
     const n = P.day.length, k0 = Math.floor(Math.random() * n);
@@ -2606,9 +2608,23 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (for the rigs: the control room's and Cargo's people, made or not, and what each is doing)
     homes: () => Object.fromEntries(Object.values(HOMES).map((H) => [H.id, { made: H.made, ms: Math.round(H.ms), tries: H.tries, people: H.people.map((P) => ({ id: P.id, name: P.name, in: !P.hidden, shown: !!P.shown, act: P.act ? P.act.kind + ':' + (P.act.phase || '') + ':' + (P.act.spot?.name || '') : null, walking: !!P.walking, pos: P.pos.toArray().map((v) => +v.toFixed(2)), far: !!P.c.far })) }])),
     // (A SHIP'S CREW ABOARD, src/aboard.js: a figure built from a look as the station's people are (a roster id, a
-    // recipe's name, or a recipe), standing; and one of the station's own people taken out of the station while they
-    // are aboard a ship (on: they are; off: back where they were))
-    figure: async (look) => { const def = ROSTER.find((d) => d.id === look); const recipe = def ? recipeOf(def.look, def) : recipeOf(look); if (!recipe) return null; const c = await makeCrew(lib, recipe, { far: true }); shadeUnder(c.root); c.play(firstClip(c, STAND), { fade: 0 }); c.update(0); return c; },
-    aboard: (id, on) => { const P = list.find((q) => q.id === id); if (!P) return false; P.hidden = !!on; return true; } };
+    // recipe's name, or a recipe; or the id of someone on the station now, a rescued survivor: their own look),
+    // standing; and one of the station's own people taken out of the station while they are aboard a ship (on: they
+    // are; off: back where they were). Kept by id (aboardIds), so one of a place's own people not put in yet (THE
+    // PLACES' PEOPLE, putIn) stays out too, and a captain's or a crew member's own crew taken aboard is never seen in
+    // the station meanwhile)
+    figure: async (look) => {
+      const def = ROSTER.find((d) => d.id === look), Q = !def && typeof look === 'string' ? list.find((q) => q.id === look) : null;
+      const recipe = def ? recipeOf(def.look, def) : Q ? recipeOf(Q.def.look || Q.def.recipe, Q.def) : recipeOf(look); if (!recipe) return null;
+      const c = await makeCrew(lib, recipe, { far: true }); shadeUnder(c.root); c.play(firstClip(c, STAND), { fade: 0 }); c.update(0); return c;
+    },
+    aboard: (id, on) => {
+      if (on) aboardIds.add(id); else aboardIds.delete(id);
+      const P = list.find((q) => q.id === id); if (!P) return false;
+      // (one of a place's own: taken out as their place is left; back, they are put in again when it is next theirs)
+      if (P.home) { if (on && !P.hidden) takeOut(P); return true; }
+      P.hidden = !!on; return true;
+    },
+    get aboardIds() { return [...aboardIds]; } };
   return api;
 }

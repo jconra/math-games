@@ -10,9 +10,11 @@
 // hallway (src/kiosk.js), never on a captain's card. With the ship theirs, the captain's card has one more line under
 // his offer (`sale`, its owned state): "The Miner is yours" and "Take your Miner out"; the offer above it is exactly as
 // it was, owned or not. THE OWNER'S CARD (`mode: 'own'`: at the pilot's seat of a ship that is
-// theirs, or from that button) is the same card turned to a run of their own: each of the three jobs is theirs or a
-// hired crew member's (the tag says who, and what the hired one takes), what they keep, and its buttons: Start the run,
-// Just fly (no pay), Not now. Where a run of their own cannot start (`own.run` false: the Hauler before the old station
+// theirs, or from that button) is the same card turned to a run of their own: each of the three jobs is theirs or one
+// of their own crew's (src/own.js crewOf: those who agreed to join it; a tap on a job goes through You and each of them
+// not already on another job; with no crew all three are theirs), one line "Along for the ride" with the rest of their
+// crew to tap on or off, as many as the ship has seats for (src/own.js SEATS), what they keep (the operating costs, 25%,
+// always taken out, and the share of each job their crew does), and its buttons: Start the run, Just fly (no pay), Not now. Where a run of their own cannot start (`own.run` false: the Hauler before the old station
 // is found, a contract still on) it says why and offers the flying alone.
 // THE PAINT OF ITS HULL (`own.paint`: src/shippaint.js, src/paintcard.js; the game's maker: "Its colour: pick the paint
 // of its hull"): the owner's card has a Paint button, which turns the card (`mode: 'paint'`) to a row of swatches along
@@ -22,9 +24,10 @@
 //     sale: { now() -> the ship's sale for this crew member (src/own.js saleOf: is it theirs, its name),
 //             take() -> 'own' (this card turns to the owner's) or anything else (the caller has seen to it) }
 //     own:  { run (a run of their own can start here), why (it cannot: the words), fly (just flying can start here),
-//             note (where else the other of the two starts), onRun(roleIds), onFly(),
+//             note (where else the other of the two starts), crew ([{ id, name }]: their own crew), seats (how many of
+//             them the ship takes), onRun(roleIds, { jobs: { [role]: id }, along: [ids] }), onFly(),
 //             paint (its hull's paint can be picked here: src/paintcard.js has its shape; none: no Paint button) }
-import { rolesOf, shareOf, payOf, crewFor, ownShare } from './missions.js';
+import { rolesOf, shareOf, payOf, crewFor, ownShare, OPS } from './missions.js';
 import { paintCss, paintHtml, paintButton } from './paintcard.js';
 
 const CSS = `
@@ -68,6 +71,13 @@ button.pmc-role:hover { box-shadow: inset 0 0 0 2px rgba(232, 243, 252, 0.9); }
 .pmc-sale button { flex: none; min-height: 44px; padding: 6px 14px; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; clip-path: var(--oct); --cut: 8px; }
 .pmc-take { color: var(--accent-ink) !important; background: var(--accent) !important; }
 .pmc-btns.is-own { flex-wrap: wrap; }
+.pmc-along { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 6px; padding: 8px 12px; background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px rgba(196, 220, 240, 0.16); clip-path: var(--oct); --cut: 8px; }
+.pmc-along > b { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+.pmc-along > span { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pmc-along small { font-size: 13px; color: var(--faint); }
+.pmc-mate { min-height: 36px; padding: 4px 12px; font-size: 14px !important; font-weight: 700; color: var(--ink); background: rgba(40, 47, 56, 0.92) !important; box-shadow: inset 0 0 0 1.5px var(--line); clip-path: var(--oct); --cut: 6px; }
+.pmc-mate.is-on { color: var(--accent-ink) !important; background: var(--accent) !important; box-shadow: none; }
+.pmc-mate:disabled { opacity: 0.45; cursor: default; }
 .pmc-btns.is-own .pmc-sign { flex: 1 1 100%; }
 @media (hover: none) and (pointer: coarse) { .pmc kbd { display: none; } }
 @media (max-width: 640px) { .pmc { place-items: end center; padding: 8px; } .pmc-card { padding: 12px 12px 12px; } .pmc-top b { font-size: 17px; } .pmc-role { grid-template-columns: 1fr auto; row-gap: 4px; } .pmc-role i { grid-column: 1 / -1; min-width: 0; } .pmc-what { font-size: 14px; } .pmc-sale { flex-wrap: wrap; } .pmc-sale button { flex: 1 1 auto; } }
@@ -138,23 +148,43 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
     el.querySelector('.pmc-later').addEventListener('click', later);
     wireRoles(); wireSale();
   }
-  function wireRoles() { for (const b of el.querySelectorAll('button.pmc-role')) b.addEventListener('click', () => { const id = b.dataset.role; if (mine.has(id)) { if (mine.size > 1) mine.delete(id); } else mine.add(id); draw(); }); }
-  // ── THE OWNER'S CARD: a run of their own (each job theirs, or a hired crew member's), or just flying ──
+  function wireRoles() { for (const b of el.querySelectorAll('button.pmc-role')) b.addEventListener('click', () => { const id = b.dataset.role; if (mode === 'own') { nextWho(id); draw(); return; } if (mine.has(id)) { if (mine.size > 1) mine.delete(id); } else mine.add(id); draw(); }); }
+  // ── THE OWNER'S CARD: a run of their own (each job theirs, or one of their own crew's; the rest of their crew along
+  // for the ride, as many as the ship has room for), or just flying ──
+  // (who does each job: { [role]: a crew member's id }, none: theirs; who rides along: their ids. own.crew: the crew
+  // member's own crew, [{ id, name }]; own.seats: how many of them the ship takes)
+  const mates = (own && Array.isArray(own.crew) ? own.crew : []), seats = own && Number.isFinite(own.seats) ? own.seats : 0;
+  const who = {}, along = [];
+  const nameOf = (id) => (mates.find((p) => p.id === id) || {}).name || 'Someone';
+  const aboardN = () => Object.keys(who).length + along.length;
+  // (a job tapped: the next of You and each of the crew not already on another job, in the order they joined)
+  function nextWho(role) {
+    const now = who[role] || null, free = [null, ...mates.map((p) => p.id).filter((id) => id === now || !Object.entries(who).some(([r, w]) => r !== role && w === id))];
+    const next = free[(free.indexOf(now) + 1) % free.length];
+    if (next) { who[role] = next; mine.delete(role); const k = along.indexOf(next); if (k >= 0) along.splice(k, 1); } else { delete who[role]; mine.add(role); }
+    while (aboardN() > seats && along.length) along.pop();
+  }
+  // (one of the rest of the crew tapped on the ride's line: along, or not; on only with a seat free)
+  function toggleAlong(id) {
+    const k = along.indexOf(id);
+    if (k >= 0) along.splice(k, 1); else if (!Object.values(who).includes(id) && mates.some((p) => p.id === id) && aboardN() < seats) along.push(id);
+  }
   function drawOwn() {
     const ship = esc(shipName()), run = !!(own && own.run), fly = !!(own && own.fly);
-    const keep = ownShare(M, [...mine]), hired = crewFor(M, [...mine], 'You', null, { own: true }).filter((c) => !c.you);
-    const by = Object.fromEntries(hired.map((c) => [c.role, c.name]));
+    const keep = ownShare(M, [...mine]), jobs = M.roles.filter((id) => who[id]).map((id) => ({ role: id, name: nameOf(who[id]), share: roles.find((r) => r.id === id).share }));
     const about = String(M.about).replace(/ Each job on the run earns a share of [^.]+\.$/, '');
+    const rest = mates.filter((p) => !Object.values(who).includes(p.id));
     el.innerHTML = `<section class="pmc-card">
       <header class="pmc-top"><b>Your ${ship}</b><small>${run ? 'A run of your own' : 'Yours to fly'}</small></header>
-      ${run ? `<p class="pmc-what">${esc(about)} What ${brings(M)} is yours, less the share of anyone you hire.</p>
+      ${run ? `<p class="pmc-what">${esc(about)} What ${brings(M)} is yours, less the operating costs and the share of anyone on your crew who does a job.</p>
       <div class="pmc-roles">${roles.map((r) => {
-    const on = mine.has(r.id), inner = `<span><b>${esc(r.name)}</b><small>${esc(r.does)}</small></span><em>${on ? '' : r.share + '%'}</em><i>${on ? 'You' : 'Hired: ' + esc(String(by[r.id] || r.crew).split(' ').pop())}</i>`;
-    return r.open ? `<button type="button" class="pmc-role${on ? ' is-mine' : ''}" data-role="${r.id}" aria-pressed="${on}">${inner}</button>` : `<div class="pmc-role is-crew" data-role="${r.id}">${inner}</div>`;
+    const on = mine.has(r.id), inner = `<span><b>${esc(r.name)}</b><small>${esc(r.does)}</small></span><em>${on ? '' : r.share + '%'}</em><i>${on ? 'You' : esc(nameOf(who[r.id]))}</i>`;
+    return r.open && mates.length ? `<button type="button" class="pmc-role${on ? ' is-mine' : ''}" data-role="${r.id}" aria-pressed="${on}">${inner}</button>` : `<div class="pmc-role${on ? ' is-mine' : ' is-crew'}" data-role="${r.id}">${inner}</div>`;
   }).join('')}</div>
-      <p class="pmc-note">Tap a job to do it yourself or to hire for it. The jobs you do yourself ask about half as many questions again as on a captain's contract.</p>
-      <div class="pmc-pay"><b>You keep ${keep >= 100 ? 'all' : keep + '%'} of what ${brings(M)}</b>
-        <p>${hired.length ? `${esc(hired.map((c) => `${c.name} takes ${roles.find((r) => r.id === c.role).share}%`).join(', and '))}. ` : 'Nobody hired: you do all three jobs. '}${esc(String(M.paid).replace(/You are paid your share of [^,]+,/, 'You are paid'))}</p>
+      ${mates.length ? `<div class="pmc-along"><b>Along for the ride</b><span>${rest.length ? rest.map((p) => { const on = along.includes(p.id), off = !on && aboardN() >= seats; return `<button type="button" class="pmc-mate${on ? ' is-on' : ''}" data-mate="${esc(p.id)}" aria-pressed="${on}"${off ? ' disabled' : ''}>${esc(p.name)}</button>`; }).join('') : '<small>Everyone on your crew has a job.</small>'}</span>${rest.length ? `<small>${aboardN()} of ${seats} seats</small>` : ''}</div>` : ''}
+      <p class="pmc-note">${mates.length ? `Tap a job to give it to someone on your crew, or to take it back.${mine.size ? ' The jobs you do yourself ask about half as many questions again as on a captain\'s contract.' : ' Your crew does every job: you ride along, and the pay slip is yours to work out.'}` : 'Nobody is on your crew yet, so all three jobs are yours. To ask someone to join it, tap them on the station. The jobs ask about half as many questions again as on a captain\'s contract.'}</p>
+      <div class="pmc-pay"><b>You keep ${keep}% of what ${brings(M)}</b>
+        <p>Operating costs take ${OPS.pct}%: fuel, maintenance and insurance.${jobs.length ? ` ${esc(jobs.map((c) => `${c.name} takes ${c.share}%`).join(', and '))}.` : ''} ${esc(String(M.paid).replace(/You are paid your share of [^,]+,/, 'You are paid'))}</p>
         <p>${exampleOf(M, keep)}</p></div>`
     : `<p class="pmc-what">${esc((own && own.why) || '')}</p>`}
       ${own && own.note ? `<p class="pmc-note">${esc(own.note)}</p>` : ''}
@@ -165,6 +195,7 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
     if (fl) fl.addEventListener('click', flyOut);
     if (pt) pt.addEventListener('click', toPaint);
     el.querySelector('.pmc-notnow').addEventListener('click', later);
+    for (const b of el.querySelectorAll('.pmc-mate')) b.addEventListener('click', () => { toggleAlong(b.dataset.mate); draw(); });
     wireRoles();
   }
   // ── THE PAINT CARD (src/paintcard.js): the ship shown from outside, a swatch for each paint; one tapped is on at once ──
@@ -181,7 +212,7 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   function sign() {
     if (closed) return;
     const ids = M.roles.filter((id) => mine.has(id));
-    if (mode === 'own') { if (!own || !own.run) return; close(); own.onRun(ids); return; }
+    if (mode === 'own') { if (!own || !own.run) return; close(); own.onRun(ids, { jobs: { ...who }, along: [...along] }); return; }
     close(); onSign(ids);
   }
   function flyOut() { if (closed || mode !== 'own' || !own || !own.fly) return; close(); own.onFly(); }
@@ -205,5 +236,8 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
     state: () => ({ mode, mine: [...mine], share: mode === 'own' ? ownShare(M, [...mine]) : shareOf([...mine]),
       sale: sale && sale.now ? (() => { const S = sale.now(), d = el.querySelector('.pmc-sale'); return S ? { ...S, shown: d ? d.dataset.sale : null, words: d ? d.querySelector('span').textContent : '' } : null; })() : null,
       own: own ? { run: !!own.run, fly: !!own.fly, paint: paint ? (paint.list().find((p) => p.on) || {}).id : null } : null,
-      roles: roles.map((r) => ({ id: r.id, share: r.share, open: r.open, who: mine.has(r.id) ? 'You' : mode === 'own' ? 'Hired: ' + r.crew : r.by || r.crew })) }) };
+      roles: roles.map((r) => ({ id: r.id, share: r.share, open: r.open, who: mine.has(r.id) ? 'You' : mode === 'own' ? nameOf(who[r.id]) : r.by || r.crew })),
+      along: along.map(nameOf), seats, crew: mates.map((p) => p.name) }),
+    // (the rigs: one of the crew tapped on the ride's line)
+    ride: (id) => { const b = el.querySelector(`.pmc-mate[data-mate="${id}"]`), ok = !!b && !b.disabled; if (ok) b.click(); return ok; } };
 }

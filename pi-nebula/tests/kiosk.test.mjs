@@ -70,7 +70,7 @@ test('whose paint the ship wears: the captain\'s own from signing his contract u
   land(c, { n: 1, store: { iron: 4 } }); assert.equal(contractOf(c).state, 'payout'); assert.equal(wornOf(c, 'miner'), FACTORY);
   collect(c); assert.equal(contractOf(c), null); assert.equal(wornOf(c, 'miner'), 'olive');
   // (a run of their own is theirs: in their paint)
-  assert.ok(signOwn(c, 'mining', ['pilot'])); assert.equal(contractOf(c).own, true); assert.equal(wornOf(c, 'miner'), 'olive');
+  assert.ok(signOwn(c, 'mining', ['pilot', 'drill', 'engineer'])); assert.equal(contractOf(c).own, true); assert.equal(wornOf(c, 'miner'), 'olive');
   // (a crew member who does not own it: in its own paint, as ever, contract or not)
   const leo = { id: 'p2', name: 'Leo', credits: 0, paints: { miner: 'olive' } };
   assert.equal(wornOf(leo, 'miner'), FACTORY); sign(leo, 'mining', ['pilot']); assert.equal(wornOf(leo, 'miner'), FACTORY);

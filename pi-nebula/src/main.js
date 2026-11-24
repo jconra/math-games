@@ -153,7 +153,7 @@ async function boot() {
   let player = null, building = null, people = null;
   // (FRIENDSHIP: everyone's meter, kept with the crew member's save, src/friends.js; a tap on a person, src/friendcard.js)
   const friends = GAME.friends = makeFriends({ crew: () => GAME.player, save: (p) => save.save(p) });
-  const friendCard = GAME.friendCard = makeFriendCard({ input, camera: W.camera, people: () => people, friends, crew: () => GAME.player, game: GAME });
+  const friendCard = GAME.friendCard = makeFriendCard({ input, camera: W.camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save: (p) => save.save(p) });
   let walkFree = false;      // (on their feet and free to talk to someone: no job, run, lift or forklift)
   const auto = { way: null, i: 0 };       // (a rig walking the player somewhere: GAME.walkTo)
   const lib = await libP;

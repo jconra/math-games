@@ -8,16 +8,22 @@
 // say), and PLAY MATHBALL (only while the game has GAME.mathball: their skill, and the challenge; a finished game
 // against them, won or lost, one and a half pips, GAME.mathball.onEnd). On a keyboard: F opens it for the nearest
 // person in front of the player (F again closes it), 1 talks, 2 plays; each key shown beside its button, never in it.
+// JOIN MY CREW (src/own.js askCrew; the game's maker: "Once you own a ship I think you should be able to ask people if
+// they want to be part of your crew, and the friendship meter should determine if they say yes"): once the crew member
+// owns a ship, one more row (key 3). The player asks in a bubble and the person answers in theirs: at 5 pips or more
+// yes (kept with the crew member, and their card says "On your crew" from then on, the row gone); under 5 a kind no
+// (src/lines.js CREW_ASK); a captain no in their own words, whatever their meter.
 // It closes as the player walks off, at a job, on a run, in the lift, or when a captain's question comes up; it never
 // opens over those. A tap is picked only as it lands (nothing is worked out on other frames): the people near the
 // player, drawn, each tested as a line from their feet to their head on the screen, the nearest that is under it.
 //
-//   const F = makeFriendCard({ input, camera, people: () => people, friends, crew: () => GAME.player, game: GAME })
+//   const F = makeFriendCard({ input, camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save })
 //   F.update(dt, P)      each frame: P the player on their feet and free to talk (null: at a job, on a run...)
-//   F.open(id) / F.close() / F.talk() / F.play()   (and the rigs) F.state()  F.at(x, y) -> the person under a point
+//   F.open(id) / F.close() / F.talk() / F.play() / F.join()   (and the rigs) F.state()  F.at(x, y) -> the person under a point
 import * as THREE from 'three';
 import { FRIENDS, waitWords } from './friends.js';
-import { friendTalk, FRIEND_TALK } from './lines.js';
+import { friendTalk, FRIEND_TALK, CREW_ASK } from './lines.js';
+import { shipsOf, askCrew, onCrew } from './own.js';
 
 // how near someone is to be talked to (m, across the floor), and how far the player goes before the card closes;
 // how far beside a person's outline a click or a tap still picks them (px); a body's half width (m)
@@ -57,22 +63,24 @@ const CSS = `
 @media (max-width: 640px) { .pnf { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 86px); } .pnf-row button { min-width: 118px; } }
 `;
 
-export function makeFriendCard({ input, camera, people = () => null, friends, crew = () => null, game = {}, root = document.body }) {
+export function makeFriendCard({ input, camera, people = () => null, friends, crew = () => null, game = {}, save = () => {}, root = document.body }) {
   if (!document.getElementById('pnf-css')) { const st = document.createElement('style'); st.id = 'pnf-css'; st.textContent = CSS; document.head.appendChild(st); }
   const el = document.createElement('div'); el.className = 'pnf'; el.hidden = true;
   el.innerHTML = '<div class="pnf-top"><div class="pnf-w"><b></b><small></small></div><kbd>F</kbd><button type="button" class="pnf-x" aria-label="Close">&times;</button></div>' +
     '<div class="pnf-meter" role="img"></div>' +
     '<div class="pnf-row pnf-talk"><kbd>1</kbd><button type="button">Talk</button><small></small></div>' +
-    '<div class="pnf-row pnf-play" hidden><kbd>2</kbd><button type="button">Play Mathball</button><small></small></div>';
+    '<div class="pnf-row pnf-play" hidden><kbd>2</kbd><button type="button">Play Mathball</button><small></small></div>' +
+    '<div class="pnf-row pnf-crew" hidden><kbd>3</kbd><button type="button">Join my crew</button><small></small></div>';
   root.appendChild(el);
   const nameEl = el.querySelector('.pnf-w b'), whoEl = el.querySelector('.pnf-w small'), meterEl = el.querySelector('.pnf-meter');
   const talkRow = el.querySelector('.pnf-talk'), talkB = talkRow.querySelector('button'), talkNote = talkRow.querySelector('small');
   const playRow = el.querySelector('.pnf-play'), playB = playRow.querySelector('button'), playNote = playRow.querySelector('small');
+  const crewRow = el.querySelector('.pnf-crew'), crewB = crewRow.querySelector('button');
   for (let i = 0; i < FRIENDS.pips; i++) meterEl.appendChild(Object.assign(document.createElement('i'), { className: 'pnf-pip' }));
   meterEl.appendChild(document.createElement('span'));
   const pips = [...meterEl.querySelectorAll('.pnf-pip')], countEl = meterEl.querySelector('span');
 
-  const S = { Q: null, me: null, seq: null, shown: -1, wait: -1, playOk: null, refused: 0, opened: 0, talks: 0, counted: 0, games: 0, picks: 0, pickMs: 0, last: {} };
+  const S = { Q: null, me: null, seq: null, shown: -1, wait: -1, playOk: null, refused: 0, opened: 0, talks: 0, counted: 0, games: 0, asks: 0, joined: 0, lastAsk: null, picks: 0, pickMs: 0, last: {} };
   let playerNow = null;
   const pp = () => people();
   const idOf = (Q) => (Q ? Q.id : null);
@@ -95,6 +103,10 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     talkB.disabled = !!S.seq;
     talkNote.textContent = S.seq ? '' : wait > 0 ? 'More to say in ' + waitWords(wait) : '';
     S.wait = Math.ceil(wait / 60e3);
+    // (Join my crew: once the crew member owns a ship, for anyone not on their crew yet)
+    const c = crew();
+    crewRow.hidden = !(c && shipsOf(c).length && id && !onCrew(c, id));
+    crewB.disabled = !!S.seq;
     const M = game.mathball;
     const can = !!(M && typeof M.challenge === 'function');
     playRow.hidden = !can;
@@ -107,7 +119,8 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     const Q = S.Q; if (!Q) return;
     const P = pp();
     nameEl.textContent = (P && P.nameOf ? P.nameOf(Q) : Q.name) || 'Someone';
-    whoEl.textContent = Q.rescued ? (friends.staysForGood(Q.id) ? 'Rescued, staying on the station' : 'Rescued from a wreck') : '';
+    const mate = onCrew(crew(), Q.id);
+    whoEl.textContent = mate ? (Q.rescued ? 'Rescued, and on your crew' : 'On your crew') : Q.rescued ? (friends.staysForGood(Q.id) ? 'Rescued, staying on the station' : 'Rescued from a wreck') : '';
     el.classList.toggle('is-touch', !!(input && input.touch));
     drawMeter(pop); drawRows();
   }
@@ -164,6 +177,23 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     let ok = false; try { ok = !!M.challenge(Q.id); } catch (e) { console.warn('friends: the challenge failed', e); ok = false; }
     if (ok) { S.games++; close(); } else { S.refused = performance.now(); drawRows(); }
     return ok;
+  }
+  // ── asked to join the crew (src/own.js askCrew): the player's question, then their answer, in bubbles ──
+  function join() {
+    const Q = S.Q, P = pp(), c = crew(); if (!Q || !P || !c || S.seq || !playerNow || !shipsOf(c).length) return false;
+    friends.tap(Q.id);
+    const name = P.nameOf ? P.nameOf(Q) : Q.name, player = c.name || '';
+    // (who they are aboard: a station person by their own id, a rescued survivor by their own look)
+    const r = askCrew(c, { id: Q.id, name: name || 'Someone', look: Q.rescued && Q.def ? Q.def.look : Q.id, captain: !!Q.cap }, friends.pips(Q.id), { need: FRIENDS.crew, now: friends.now() });
+    if (r.why === 'joined') { save(c); S.joined++; }
+    S.asks++; S.lastAsk = r.why;
+    const fill = (w) => String(w).replace(/\{player\}/g, player || 'friend').replace(/\{name\}/g, name || 'friend');
+    const answer = r.why === 'captain' ? (CREW_ASK.captains[Q.cap && Q.cap.id] || CREW_ASK.no[0]) : r.why === 'joined' ? pick(CREW_ASK.yes) : r.why === 'already' ? pick(CREW_ASK.already) : pick(CREW_ASK.no);
+    const lines = [{ who: 'you', words: fill(pick(CREW_ASK.ask)) }, { who: 'them', words: fill(answer) }];
+    P.hold(Q, lines.reduce((a, l) => a + READ(l.words), 0) + 0.8);
+    S.seq = { Q, lines, i: 0, next: 0.25, t: 0, id: 'crew:' + r.why, counted: false };
+    draw(r.why === 'joined');
+    return r.why;
   }
   // (a finished game against someone: one and a half pips, won or lost)
   const onEnd = (r) => { if (!r || !r.opponent) return; friends.add(r.opponent, FRIENDS.game, r.won ? 'mathball, won' : 'mathball'); friends.tap(r.opponent); S.ended = (S.ended || 0) + 1; if (S.Q && S.Q.id === r.opponent) draw(true); };
@@ -222,6 +252,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
   });
   talkB.addEventListener('click', () => talk());
   playB.addEventListener('click', () => play());
+  crewB.addEventListener('click', () => join());
   el.querySelector('.pnf-x').addEventListener('click', () => close());
   addEventListener('keydown', (e) => {
     if (!playerNow || e.repeat || e.ctrlKey || e.metaKey || e.altKey || (input && input.enabled === false)) return;
@@ -230,6 +261,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     if (!S.Q) return;
     if (e.code === 'Digit1' || e.code === 'Numpad1') { e.preventDefault(); talk(); }
     else if (e.code === 'Digit2' || e.code === 'Numpad2') { if (!playRow.hidden) { e.preventDefault(); play(); } }
+    else if (e.code === 'Digit3' || e.code === 'Numpad3') { if (!crewRow.hidden) { e.preventDefault(); join(); } }
   });
 
   let clock = 0;
@@ -246,10 +278,10 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     // (the wait for more to say, counted down on the card; the Mathball line as it comes and goes)
     if ((clock * 2 | 0) !== ((clock - dt) * 2 | 0)) { drawRows(); if (friends.pips(Q.id) !== S.shown) drawMeter(true); }
   }
-  const api = { update, open: (id) => { const P = pp(); const Q = P && P.list.find((q) => q.id === id); return open(Q); }, close, talk, play, at, nearest, el,
+  const api = { update, open: (id) => { const P = pp(); const Q = P && P.list.find((q) => q.id === id); return open(Q); }, close, talk, play, join, at, nearest, el,
     get open_() { return !!S.Q; },
     state: () => ({ free: !!playerNow, input: input ? input.enabled : null, open: !!S.Q, id: idOf(S.Q), name: nameEl.textContent, who: whoEl.textContent, pips: S.Q ? friends.pips(S.Q.id) : null, count: countEl.textContent, talkNote: talkNote.textContent, talkOff: talkB.disabled,
-      play: !playRow.hidden, playNote: playNote.textContent, talking: S.seq ? { id: S.seq.id, i: S.seq.i, of: S.seq.lines.length, counted: S.seq.counted } : null,
-      counts: { opened: S.opened, talks: S.talks, counted: S.counted, games: S.games, ended: S.ended || 0, picks: S.picks, pickMs: +S.pickMs.toFixed(2) } }) };
+      play: !playRow.hidden, playNote: playNote.textContent, join: !crewRow.hidden, lastAsk: S.lastAsk, talking: S.seq ? { id: S.seq.id, i: S.seq.i, of: S.seq.lines.length, counted: S.seq.counted } : null,
+      counts: { opened: S.opened, talks: S.talks, counted: S.counted, games: S.games, asks: S.asks, joined: S.joined, ended: S.ended || 0, picks: S.picks, pickMs: +S.pickMs.toFixed(2) } }) };
   return api;
 }

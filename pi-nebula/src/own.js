@@ -34,8 +34,8 @@
 //     member on a device owns their own. The ship stays in its hangar as it is, and its captain goes on offering his
 //     contracts on it exactly as before.
 //   - YOURS, IT IS TAKEN OUT ANY TIME from its pilot's seat: a run of your own (the same run as the captain's; the whole
-//     of what it brings is yours but for the share of each job you hire for: src/missions.js signOwn, shareFor), or just
-//     flying, round the station and back, for no pay (src/trip.js `free`).
+//     of what it brings is yours but for the operating costs, 25%, and the share of each job one of your own crew does:
+//     src/missions.js signOwn, shareFor), or just flying, round the station and back, for no pay (src/trip.js `free`).
 //   - ON A RUN OF YOUR OWN, THE JOBS YOU DO ASK ABOUT HALF AS MANY CARDS AGAIN (moreCards): more cards, not harder ones.
 //     A job's turns are counted in the order they come on the run, and the odd half card goes to the first, the third
 //     ... of them: a turn of 3 cards asks 5, the next 4, the next 5; a turn of 1 card asks 2, the next 1, the next 2; the
@@ -91,6 +91,46 @@ export function buy(crew, ship, { bridge = true, now = Date.now() } = {}) {
   crew.ships = [...shipsOf(crew), ship];
   crew.bought = { ...(crew.bought && typeof crew.bought === 'object' && !Array.isArray(crew.bought) ? crew.bought : {}), [ship]: { at: now, price: S.price } };
   return { ok: true, price: S.price, credits: crew.credits, ships: shipsOf(crew) };
+}
+
+// YOUR OWN CREW (the game's maker, 2026-11-24: "Once you own a ship I think you should be able to ask people if they
+// want to be part of your crew, and the friendship meter should determine if they say yes"; and of the hired hands
+// there were before, "I feel like just the friend mechanic will be fine"):
+//   - ONCE THIS CREW MEMBER OWNS A SHIP, a tap on a person (src/friendcard.js) has one more choice, "Join my crew". They
+//     say yes at FRIENDS.crew (5) pips or more (src/friends.js agreesToCrew), and no, kindly, under it; nothing changes
+//     on a no, and they may be asked again whenever the player likes.
+//   - THE FIVE CAPTAINS SAY NO, in their own words, whatever their meter: each has a ship of their own and stands in the
+//     station offering its contracts, so none can be aboard yours as well (a helper's call, not his: the one line
+//     in askCrew that says so is the one place it is made).
+//   - WHO AGREED IS KEPT with the crew member's own progress (crew.myCrew: [{ id, name, look, at }], in the order they
+//     agreed; look: what src/aboard.js builds them from aboard, a station person's roster id or a rescued survivor's own
+//     look). No limit on how many, and nobody is let go: he asked for neither.
+//   - ON A RUN OF YOUR OWN each of its three jobs is yours or one of them's, and any others ride along, as many as the
+//     ship has room for (SEATS); src/missions.js signOwn, src/contract.js the owner's card.
+// HOW MANY OF YOUR CREW A SHIP TAKES ON A RUN, besides you: every place to sit or lie in its rooms (src/aboardplan.js
+// placesOf, from its blueprint: the Miner 6, the Medic 8, the Explorer 7, the Hauler 7) less your own; the Medic keeps
+// four more for the people it brings home (6 pods at most: its two patient beds and four of those places;
+// src/rescueplan.js restOrder). tests/own.test.mjs holds these to the blueprints.
+export const SEATS = { explorer: 6, medic: 3, miner: 5, hauler: 6 };
+const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+// the crew member's own crew, as kept (tidied: each person once, with an id)
+export function crewOf(crew) {
+  const L = crew && Array.isArray(crew.myCrew) ? crew.myCrew : [], seen = new Set(), out = [];
+  for (const p of L) { if (!isObj(p) || !p.id || seen.has(p.id)) continue; seen.add(p.id); out.push({ id: String(p.id), name: String(p.name || 'Someone'), look: p.look ?? p.id, at: +p.at || 0 }); }
+  return out;
+}
+export const onCrew = (crew, id) => crewOf(crew).some((p) => p.id === id);
+// ASKED TO JOIN THE CREW: who = { id, name, look, captain (a captain of the station's) }; pips: their meter now ->
+//   { yes, why: 'joined' | 'already' | 'ship' (no ship of the crew member's yet) | 'captain' | 'friends' (under 5) }
+//   (yes: kept with the crew member: crew.myCrew)
+export function askCrew(crew, who, pips, { need = 5, now = Date.now() } = {}) {
+  if (!crew || !who || !who.id) return { yes: false, why: 'unknown' };
+  if (!shipsOf(crew).length) return { yes: false, why: 'ship' };
+  if (onCrew(crew, who.id)) return { yes: true, why: 'already' };
+  if (who.captain) return { yes: false, why: 'captain' };
+  if (!(+pips >= need)) return { yes: false, why: 'friends' };
+  crew.myCrew = [...crewOf(crew), { id: String(who.id), name: String(who.name || 'Someone'), look: who.look ?? who.id, at: now }];
+  return { yes: true, why: 'joined' };
 }
 
 // HOW MANY CARDS A TURN OF A JOB ASKS ON A RUN OF YOUR OWN: half as many again as the captain's contract asks (n), the

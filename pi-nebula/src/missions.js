@@ -64,16 +64,32 @@
 //
 // A RUN OF YOUR OWN, IN A SHIP YOU BOUGHT (src/own.js has the game's maker's words and the prices). It is the same run,
 // started from the ship's own pilot's seat (the Hauler's at the shipping computer, where its load is worked out), and
-// kept the same way: crew.mission with `own: true` and `hired` (the jobs left to a hired crew member):
-//   - YOU CHOOSE WHICH OF ITS THREE JOBS YOU DO (signOwn: at least one: flying about for no math pays nothing, his rule
-//     of 2026-11-19). Each job you leave is done by a hired crew member, the same one the captain would have had do it,
-//     who takes that job's own share (ROLES: 10% or 20%).
-//   - THE WHOLE OF WHAT THE RUN BRINGS IS YOURS BUT FOR THOSE SHARES (shareFor): all three jobs yourself, 100%; one
-//     hired, 90% or 80%; two hired, 70% or 60%. (A captain's contract pays the same three jobs 50% together.)
+// kept the same way: crew.mission with `own: true` and `crew` (who of your own crew is aboard, and the jobs they do):
+//   - EACH OF ITS THREE JOBS IS YOURS OR ONE OF YOUR CREW'S (signOwn; your crew: those who agreed to join it, src/own.js
+//     crewOf). The game's maker, 2026-11-24: "If you want to go on a mission and you have people who have agreed to be
+//     your crew then you should be able to ask them if they want to be a Pilot, Engineer, or Mission Work. I suspect
+//     most players will just want to do everything themselves, and the crew will just be along for the ride, which is
+//     completely fine. If you ask your crew to do all the jobs then I think you should only be able to make 20-30% of
+//     the profit." With no crew all three are yours. All three may be your crew's: you ride along and are asked nothing
+//     until the pay. Your other crew may come along for the ride, as many as the ship has room for (src/own.js SEATS),
+//     and take no share. (There are no hired hands any more: "just the friend mechanic will be fine".)
+//   - WHAT THE RUN BRINGS (shareFor, ownPart): THE OPERATING COSTS, OPS.pct (25%), always ("I think operating costs
+//     should always be taken out ... So as a captain yourself, if you do all the work now you can make 75%"; he named
+//     them "fuel, maintenance, insurance": one row); each job one of your crew does, that job's own share (ROLES: 10% or
+//     20%, as a contract pays it); the rest yours: 75% doing all three, down to 25% with your crew doing all three. Every
+//     part in whole credits, yours what is left, so the parts add up to what the run brought to the credit.
+//   - HOME, THE PAY SLIP (ownPayOrder) shows the operating costs, your crew's pay and yours, and its question is about
+//     paying your crew ("you still have to do a math question about paying the crew at the end"), or, with none of
+//     them paid, about the operating costs; at the crew member's level, as every slip's question is.
 //   - THE CAPTAIN IS NOT ABOARD (aboardOf `own`): he stays in the station, offering his contracts as ever. Aboard are
-//     you and whoever you hired. The few words that guide the run are the ship's own.
+//     you and your crew who came, each seen in their own look, doing their job or along for the ride, and none of them
+//     seen in the station meanwhile. The few words that guide the run are the ship's own.
+//   - A RUN MADE AND PAID RAISES FRIENDSHIP (collect): everyone who was aboard goes up one pip ("if you work for a
+//     captain than everyone on that mission goes up a point (or if you are the captain too)"): on a captain's contract
+//     the captain and the crew member of his who came; on a run of your own your crew who came. A run given up adds
+//     nothing.
 //   - YOUR OWN JOBS ASK ABOUT HALF AS MANY CARDS AGAIN (stepsFor `own`, src/own.js moreCards; more cards, never harder
-//     ones; a hired crew member's job asks you nothing, as on a contract). Exactly where, for each job of each run:
+//     ones; a job your crew does asks you nothing, as on a contract). Exactly where, for each job of each run:
 //       PILOT (all four runs)     each jump's cards: 5 for the first jump of the run, 4 for the next, 5, 4 ... (a
 //                                 contract: 3 each). The Miner's, the Medic's and the Hauler's two jumps: 5 out, 4 home,
 //                                 9 for 6. The Explorer's: 5, 4, 5 ... through its 1 to 3 jumps out and the jump home.
@@ -101,7 +117,8 @@
 import { ownOrder, earn, jobTally } from './jobs/engine.js';
 import { haulOf, flownHaul, sellsFor, lotsWords, tonnesWords, inEighths, eighthsText, eighthsOf } from './jobs/smelter.js';
 import { EXPLORE } from './exploreplan.js';
-import { owns, moreCards, SHIP_NAMES } from './own.js';
+import { owns, moreCards, SHIP_NAMES, crewOf, SEATS } from './own.js';
+import { add as addPips } from './friends.js';
 import { HAULER_CAPTAIN } from './life.js';
 
 // ── the roles: what each does, its share of what the haul sells for (percent), whether its game is made yet (one flag:
@@ -328,8 +345,8 @@ export function rolesWords(roleIds) {
 }
 // who does each role on a trip: the crew member (their name) for the roles they signed for, the captain's own crew for
 // the rest (aboardOf: the crew member of his who comes along, and the captain himself)
-export const crewFor = (M, mine, name = 'You', captain = null, { own = false } = {}) => {
-  const A = aboardOf(M, mine, captain ? { id: 'captain', name: captain } : null, { own });
+export const crewFor = (M, mine, name = 'You', captain = null, { own = false, crew = [] } = {}) => {
+  const A = aboardOf(M, mine, captain ? { id: 'captain', name: captain } : null, { own, crew });
   return M.roles.map((id) => { const who = A.find((a) => a.jobs.includes(id)); return { role: id, name: mine.includes(id) ? name : who ? who.name : roleOf(M, id).crew, you: mine.includes(id) }; });
 };
 
@@ -343,21 +360,25 @@ export const crewFor = (M, mine, name = 'You', captain = null, { own = false } =
 // all three signed for: his pilot, along for the ride). That one does that job; the captain does any other left.
 // -> [{ id, name, short (the name said: 'Juno', 'Ruiz'), captain, jobs: [role ids] }]: the captain first. (Hired crew
 // would be more of these, each with their own jobs or none.)
-// (ON A RUN OF YOUR OWN, `own`: no captain. Aboard are the crew you hired, one for each job you left, each doing that
-// job: none, one or two of them, the same people the captain has for those jobs)
-export function aboardOf(M, mine, captain = null, { own = false } = {}) {
+// (ON A RUN OF YOUR OWN, `own`: no captain. Aboard are your own crew who came (`crew`: the run's own, signOwn: [{ id,
+// name, look, jobs }]), each doing their job or along for the ride, in their own look; nobody else)
+// (friend: the id their friendship meter is kept by: a station person's own; the captain's crew member, who walks no
+// station, by their name: friendOf)
+export function aboardOf(M, mine, captain = null, { own = false, crew = [] } = {}) {
   // (the roles as this mission has them: its captain's own crew member for each)
   const ROLES = rolesFor(M);
   const left = M.roles.filter((id) => !mine.includes(id)), first = left[0] || M.roles[0];
-  if (own) return left.map((id) => ({ id: 'crew-' + id, name: ROLES[id].crew, short: String(ROLES[id].crew).split(' ').pop(), captain: false, hired: true, jobs: [id], look: ROLES[id].look ? { ...ROLES[id].look, position: id, crew: M.ship } : null }));
+  if (own) return (crew || []).map((p) => ({ id: p.id, name: p.name, short: p.name, captain: false, mate: true, friend: p.id, jobs: M.roles.filter((r) => (p.jobs || []).includes(r)), look: p.look ?? p.id }));
   const crewName = ROLES[first].crew, cap = captain || { id: M.captain, name: 'The captain' };
   const short = (n) => String(n).split(' ').pop();
   return [
     // (look: a captain of the station's own, by their id; a run's lead who walks no station, by their own look)
-    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, jobs: left.slice(1), look: cap.look || cap.id },
-    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, jobs: left.length ? [first] : [], look: ROLES[first].look ? { ...ROLES[first].look, position: first, crew: M.ship } : null },
+    { id: cap.id, name: cap.name, short: short(cap.name), captain: true, friend: M.captain, jobs: left.slice(1), look: cap.look || cap.id },
+    { id: 'crew-' + first, name: crewName, short: short(crewName), captain: false, friend: friendOf(crewName), jobs: left.length ? [first] : [], look: ROLES[first].look ? { ...ROLES[first].look, position: first, crew: M.ship } : null },
   ];
 }
+// (a captain's crew member's meter, by their name: 'Pilot Juno' -> 'crew-pilot-juno')
+export const friendOf = (name) => 'crew-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // the trip's steps for a crew member with these roles: each step, and whether it is theirs to do (`mine`: their role,
 // its game made) or the crew's. `when`: this run's moment for the core's tuning ('arrive' | 'leave': tuneWhen), if the
@@ -463,7 +484,10 @@ export function contractOf(crew) {
   const m = crew && crew.mission;
   if (!isObj(m) || !MISSIONS[m.id]) return null;
   const M = MISSIONS[m.id], roles = Array.isArray(m.roles) ? M.roles.filter((id) => m.roles.includes(id)) : [];
-  if (!roles.length) return null;
+  // (a run of your own may have no job of yours: your crew does all three. One begun before there was a crew of your
+  // own, with hired hands, and not flown yet, is gone (its pay, if it was home, is paid as it was))
+  if (!roles.length && !m.own) return null;
+  if (m.own && m.state === 'signed' && !Array.isArray(m.crew)) return null;
   // (a contract kept from before its run had the captain it has now: the supply run's, signed at the shipping desk when
   // it was the shipping clerk's, is the Hauler's captain's from here on, wherever it had got to)
   if (m.captain !== M.captain) m.captain = M.captain;
@@ -486,26 +510,65 @@ export function sign(crew, missionId, roleIds, now = Date.now(), rand = Math.ran
   return crew.mission;
 }
 // A RUN OF YOUR OWN, BEGUN (OWN RUNS, the top of this file): in a ship the crew member owns, for the jobs they do
-// themselves (roleIds: at least one, only jobs whose game is made); every other job of the run is a hired crew member's
-// (`hired`). Kept as a contract is (the same seed, the same moment picked for the core's tuning), with `own: true`. The
-// Hauler's own run exists only once the old station has been found (the game's maker, BUY1-4).
-// -> the mission as kept, or null (not their ship, another mission still on, or no job of theirs)
-export function signOwn(crew, missionId, roleIds, now = Date.now(), rand = Math.random, seedRand = Math.random) {
+// themselves (roleIds: any of them, none at all too; only jobs whose game is made); every other job of the run one of
+// their own crew's (pick.jobs: { [role]: person id }, each a different one of src/own.js crewOf), and pick.along: the
+// others of their crew who come along for the ride (no job, no share), as many as the ship has room for, with those
+// doing jobs (src/own.js SEATS). Kept as a contract is (the same seed, the same moment picked for the core's tuning),
+// with `own: true` and `crew`: [{ id, name, look, jobs: [role] }], those with a job first, in the run's own order of
+// jobs. The Hauler's own run exists only once the old station has been found (the game's maker, BUY1-4).
+// -> the mission as kept, or null (not their ship, another mission still on, a job nobody does, someone not on their
+// crew or on two jobs, more of them than the ship has room for)
+export function signOwn(crew, missionId, roleIds, now = Date.now(), rand = Math.random, seedRand = Math.random, pick = {}) {
   const M = MISSIONS[missionId];
   if (!M || !crew || !owns(crew, M.ship) || contractOf(crew) || (M.desk && !stationFound(crew))) return null;
-  const m = sign(crew, missionId, roleIds, now, rand, seedRand); if (!m) return null;
-  m.own = true; m.hired = M.roles.filter((id) => !m.roles.includes(id));
-  return m;
+  const mine = openRoles(M, roleIds || []), mates = crewOf(crew), byId = new Map(mates.map((p) => [p.id, p]));
+  const jobs = isObj(pick && pick.jobs) ? pick.jobs : {}, along = Array.isArray(pick && pick.along) ? pick.along : [];
+  const aboard = [], used = new Set();
+  for (const role of M.roles) {
+    if (mine.includes(role)) continue;
+    const p = byId.get(jobs[role]); if (!p || used.has(p.id)) return null;
+    used.add(p.id); aboard.push({ id: p.id, name: p.name, look: p.look, jobs: [role] });
+  }
+  for (const id of along) { const p = byId.get(id); if (!p || used.has(p.id)) return null; used.add(p.id); aboard.push({ id: p.id, name: p.name, look: p.look, jobs: [] }); }
+  if (aboard.length > (SEATS[M.ship] ?? 0)) return null;
+  const tune = pickTune(M, mine, rand);
+  const seed = M.place === 'planet' || M.legs ? 1 + Math.floor(seedRand() * 999999) : null;
+  crew.mission = { id: M.id, captain: M.captain, roles: mine, state: 'signed', signed: now, own: true, crew: aboard, ...(tune ? { tune } : {}), ...(seed ? { seed } : {}) };
+  return crew.mission;
 }
-// who is hired on a run of your own, each with the share they take: [{ role, name, share }] (a contract: nobody)
-export function hiredOf(m) { const M = m && MISSIONS[m.id]; return M && m.own ? M.roles.filter((id) => !m.roles.includes(id)).map((id) => ({ role: id, name: roleOf(M, id).crew, share: ROLES[id].share })) : []; }
+// the operating costs of a run of your own, in percent of what it brings (the game's maker: "operating costs" (fuel,
+// maintenance, insurance), "always taken out")
+export const OPS = { pct: 25 };
+// your crew on a run of your own who do its jobs, each with the share they take: [{ role, id, name, share }], in the
+// run's own order of jobs (a contract: nobody; along for the ride: nobody's share)
+export function crewJobsOf(m) {
+  const M = m && MISSIONS[m.id]; if (!M || !m.own || !Array.isArray(m.crew)) return [];
+  const out = [];
+  for (const role of M.roles) { const p = m.crew.find((q) => q && Array.isArray(q.jobs) && q.jobs.includes(role)); if (p) out.push({ role, id: p.id, name: p.name, share: ROLES[role].share }); }
+  return out;
+}
 // THE CREW MEMBER'S SHARE OF WHAT A RUN BRINGS, in percent: a contract's, their jobs' shares added up; a run of their own,
-// all of it but the hired crew's shares
-export const shareFor = (m) => (m && m.own ? 100 - hiredOf(m).reduce((a, h) => a + h.share, 0) : shareOf(m ? m.roles : []));
-// (what the owner keeps for a set of jobs done themselves, before anything is signed: the owner's card, src/contract.js)
-export const ownShare = (M, mine) => 100 - shareOf(M.roles.filter((id) => !mine.includes(id)));
-// (a payout of a run of your own says so, and who was hired: the pay slip's words)
-const ownPart = (m) => (m.own ? { own: true, hired: hiredOf(m) } : {});
+// what is left once the operating costs and their crew's jobs' shares are taken
+export const shareFor = (m) => (m && m.own ? 100 - OPS.pct - crewJobsOf(m).reduce((a, h) => a + h.share, 0) : shareOf(m ? m.roles : []));
+// (what the owner keeps when their crew does these jobs (the jobs not theirs), before anything is signed: the owner's
+// card, src/contract.js)
+export const ownShare = (M, mine) => 100 - OPS.pct - shareOf(M.roles.filter((id) => !mine.includes(id)));
+// A PAYOUT OF A RUN OF YOUR OWN (sold: what the run brought): the operating costs, each of the crew's pay for their job,
+// and what is left, yours; all in whole credits, and adding up to what it brought, to the credit:
+//   { own: true, ops, opsPct, crew: [{ role, id, name, share, pay }], along: [names], share (yours, percent), pay (yours) }
+const ownPart = (m, sold) => {
+  if (!m.own) return {};
+  const ops = payOf(sold, OPS.pct), jobs = crewJobsOf(m).map((h) => ({ ...h, pay: payOf(sold, h.share) }));
+  const along = (Array.isArray(m.crew) ? m.crew : []).filter((p) => !(p.jobs || []).length).map((p) => p.name);
+  return { own: true, ops, opsPct: OPS.pct, crew: jobs, along, share: shareFor(m), pay: sold - ops - jobs.reduce((a, h) => a + h.pay, 0) };
+};
+// (the friendship meters of everyone who was aboard a run: a run of your own, your crew who came; a captain's contract,
+// the captain and the crew member of his who came)
+export function aboardIds(m) {
+  const M = m && MISSIONS[m.id]; if (!M) return [];
+  if (m.own) return (Array.isArray(m.crew) ? m.crew : []).map((p) => p.id).filter(Boolean);
+  return aboardOf(M, m.roles || [], { id: M.captain, name: 'The captain' }).map((a) => a.friend).filter(Boolean);
+}
 // the planet a contract's run goes to (its seed), or null (a run that goes to no planet, or no contract)
 export function seedOf(crew) { const m = contractOf(crew); return m && (MISSIONS[m.id].place === 'planet' || MISSIONS[m.id].legs) ? (Number.isFinite(+m.seed) && +m.seed > 0 ? Math.floor(+m.seed) : 1) : null; }
 // WHEN THE CORE'S TUNING COMES ON THIS CREW MEMBER'S RUN: 'arrive' or 'leave' (the top of this file), or null (not
@@ -538,7 +601,7 @@ export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = n
   if (M.perPlace) {
     const k = Math.max(1, Math.floor(+places || 1)), base = M.findPays || 0, sold = base + k * M.perPlace, share = shareFor(m);
     m.state = 'payout';
-    m.payout = { kind: 'explore', places: k, per: M.perPlace, base, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}), ...ownPart(m) };
+    m.payout = { kind: 'explore', places: k, per: M.perPlace, base, sold, share, pay: payOf(sold, share), at: now, ...(find ? { find: String(find) } : {}), ...ownPart(m, sold) };
     return m.payout;
   }
   // (A SUPPLY RUN, a mission with `perPallet`: pallets, how many it delivered; so much for each (SUPPLY): { kind:
@@ -548,29 +611,32 @@ export function land(crew, { n = 0, store = {}, people = 0, places = 0, find = n
     const k = Math.max(1, Math.floor(+pallets || 1)), sold = k * M.perPallet, share = shareFor(m), first = supplyRuns(crew) === 0;
     crew.supply = { ...(crew.supply && typeof crew.supply === 'object' ? crew.supply : {}), runs: supplyRuns(crew) + 1 };
     m.state = 'payout';
-    m.payout = { kind: 'supply', pallets: k, per: M.perPallet, sold, share, pay: payOf(sold, share), at: now, ...(first ? { first: true } : {}), ...ownPart(m) };
+    m.payout = { kind: 'supply', pallets: k, per: M.perPallet, sold, share, pay: payOf(sold, share), at: now, ...(first ? { first: true } : {}), ...ownPart(m, sold) };
     return m.payout;
   }
   if (M.perPerson) {
     const k = Math.max(0, Math.floor(+people || 0)), sold = k * M.perPerson, share = shareFor(m);
     m.state = 'payout';
-    m.payout = { kind: 'rescue', people: k, per: M.perPerson, sold, share, pay: payOf(sold, share), at: now, ...ownPart(m) };
+    m.payout = { kind: 'rescue', people: k, per: M.perPerson, sold, share, pay: payOf(sold, share), at: now, ...ownPart(m, sold) };
     return m.payout;
   }
   flownHaul(n, { store });
   const H = haulOf(n), share = shareFor(m);
   m.state = 'payout';
-  m.payout = { n: H.n, canisters: H.canisters, tonnes: H.tonnes, lots: H.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: H.pay, share, pay: payOf(H.pay, share), at: now, ...ownPart(m) };
+  m.payout = { n: H.n, canisters: H.canisters, tonnes: H.tonnes, lots: H.lots.map((L) => ({ metal: L.metal.name, tonnes: L.tonnes, price: L.price, pay: L.pay })), sold: H.pay, share, pay: payOf(H.pay, share), at: now, ...ownPart(m, H.pay) };
   return m.payout;
 }
 // the share collected: the credits arrive as a job's pay does (the crew member's credits, a tally of its own), and the
-// mission is done. -> { pay, credits } or null (nothing waiting)
-export function collect(crew) {
+// mission is done; and everyone who was aboard goes up one pip (aboardIds: OWN RUNS, the top of this file; kept with
+// the crew member, src/friends.js; who they were: aboardIds). -> { pay, credits } or null (nothing waiting)
+export const RUN_PIP = 1;
+export function collect(crew, now = Date.now()) {
   const m = contractOf(crew);
   if (!m || m.state !== 'payout') return null;
   const pay = Math.max(0, Math.floor(+m.payout.pay || 0));
   const credits = earn(crew, m.id, pay);
   jobTally(crew, m.id).n++;      // (the runs flown and paid)
+  for (const id of aboardIds(m)) addPips(crew, id, RUN_PIP, 'run', now);
   delete crew.mission;
   return { pay, credits };
 }
@@ -599,12 +665,18 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 export const payoutForm = (grade) => (grade < 20 ? 'count' : grade < 44 ? 'add' : grade < 58 ? 'part' : 'percent');
 // a payout's lots (one kept from before a haul was a store of several metals: its one metal's ore, sold by the tonne)
 const lotsOf = (P) => (Array.isArray(P.lots) && P.lots.length ? P.lots : [{ metal: P.metal || 'iron', tonnes: P.oreTonnes || 6, price: Math.round((P.sold || 0) / (P.oreTonnes || 6)), pay: P.sold || 0 }]);
-// A RUN OF YOUR OWN, ON THE PAY SLIP (P.own, P.hired: OWN RUNS, the top of this file). Nothing on it is anyone's
+// A RUN OF YOUR OWN FROM BEFORE YOUR CREW WAS YOUR OWN, ON THE PAY SLIP (P.own, P.hired, no P.ops: one home in a save
+// from then, its pay still waiting; every run of your own now has ownPayOrder's slip). Nothing on it is anyone's
 // "share" but the hired crew's, and what is left is the owner's: the slip's last rows (shareRows), the right answer's
 // line (paidWords), the slip's own words turned (ownWords: "your crew" is "your ship", who may be aboard it alone), and
 // which form is asked (formFor: with nobody hired all of it is theirs, so there is no part or percent of it to work
 // out, and the card asks what the run brought instead)
-const shareRows = (P, ask) => [...(P.own ? [...(P.hired && P.hired.length ? [['Hired crew', `${100 - P.share}%`]] : []), ['Yours', P.share >= 100 ? 'All of it' : `${P.share}%`]] : [['Your share', `${P.share}%`]]), ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+// (A RUN OF YOUR OWN WITH A CREW OF YOUR OWN (P.ops: ownPart): its last rows are the operating costs, each of the crew
+// who did a job and their pay, and yours (crewRows); a payout from before, with hired hands (P.hired), as it was)
+const crewRows = (P, ask) => [['Operating costs', `${P.opsPct}%: ${ask === 'ops' ? '?' : `${say(P.ops)} credits`}`],
+  ...(P.crew || []).map((h) => [`${ROLES[h.role] ? ROLES[h.role].name : h.role}: ${h.name}`, ask === 'crew' ? `${h.share}%` : `${h.share}%: ${say(h.pay)} credits`]),
+  ...(ask === 'crew' ? [['Your crew\'s pay', '?']] : []), ['Yours', `${P.share}%`], ['Your pay', ask ? '?' : `${say(P.pay)} credits`]];
+const shareRows = (P, ask) => (P.own && P.ops != null ? crewRows(P, ask) : [...(P.own ? [...(P.hired && P.hired.length ? [['Hired crew', `${100 - P.share}%`]] : []), ['Yours', P.share >= 100 ? 'All of it' : `${P.share}%`]] : [['Your share', `${P.share}%`]]), ['Your pay', ask ? '?' : `${say(P.pay)} credits`]]);
 const paidWords = (P, even = true) => { const to = even ? '' : ', to the nearest credit'; return P.own ? (P.share >= 100 ? `All of it is yours: ${say(P.pay)} credits${to}.` : `What is left, ${P.share}%, is yours: ${say(P.pay)} credits${to}.`) : `Your share, ${P.share}%, is ${say(P.pay)} credits${to}.`; };
 const ownWords = (P, w) => (P.own ? String(w).replace(/\b([Yy])our crew\b/g, '$1our ship').replace(/\bYour share is\b/g, 'Your pay is') : w);
 const formFor = (P, grade) => { const f = payoutForm(grade); return P.own && P.share >= 100 && (f === 'part' || f === 'percent') ? 'add' : f; };
@@ -710,7 +782,174 @@ function rescueOrder(m, grade, rand, paid) {
   }
   return null;
 }
+// A RUN OF YOUR OWN'S PAY SLIP (OWN RUNS, the top of this file; P.ops: ownPart). Its rows: what the run brought, as
+// every slip's; the operating costs; each of your crew who did a job, their share and pay; yours. Its question is
+// about PAYING YOUR CREW when any of them did a job, and about THE OPERATING COSTS when none did, at the crew member's
+// level by the same four forms as every slip (payoutForm):
+//   COUNT    the crew who did a job, to be paid (a figure each); none: what the run paid cut into four parts, one the
+//            operating costs', and the parts that are yours counted
+//   ADD      two or three of the crew: their pay added up; one: the operating costs and their pay, what is paid out in
+//            all; none: what is left once the operating costs are paid (a take-away)
+//   A PART   your crew's pay, as tenths of what the run brought (their jobs' shares: 1/10 a pilot, 2/10 the others; all
+//            three 5/10, a half); none: the operating costs, a quarter of it
+//   PERCENT  the same in percent: your crew's 10% to 50%; none: the operating costs' 25%
+// (a part or a percent that does not come to whole credits, a haul home early: ADD, as a contract's slip does)
+// The pay that arrives with the right answer is yours, always.
+const listWords = (L) => (L.length <= 1 ? L.join('') : `${L.slice(0, -1).join(', ')} and ${L[L.length - 1]}`);
+const PEOPLE_N = ['person', 'people'], PARTS = ['part', 'parts'];
+const COSTS = 'The operating costs (fuel, maintenance and insurance)';
+function ownPayOrder(m, grade, rand) {
+  const P = m.payout, jobs = P.crew || [], n = jobs.length, crewPay = jobs.reduce((a, h) => a + h.pay, 0), crewPct = jobs.reduce((a, h) => a + h.share, 0);
+  const SOLD = P.kind === 'rescue' ? 'The rescue paid' : P.kind ? 'The run paid' : 'The haul sold for', top = { from: 'Your own run' };
+  const whole = (pct) => Number.isInteger(P.sold * pct / 100);
+  let form = payoutForm(grade);
+  if ((form === 'part' || form === 'percent') && !(n ? whole(10) : whole(OPS.pct))) form = 'add';
+  const done = (o) => Object.assign(o, { payout: P.pay, form });
+  const yours = `Your pay is the rest: ${say(P.pay)} credits.`, names = listWords(jobs.map((h) => h.name));
+  const head = `You are home. ${SOLD} ${say(P.sold)} credits.`;
+  if (form === 'count' && n) {
+    return done(ownOrder({
+      key: 'payout:own:crew',
+      story: `${head} Each of your crew who did a job is paid for it.`,
+      ask: 'How many of your crew do you pay?',
+      right: N(n, PEOPLE_N),
+      slips: [
+        { ...N(n + 1, PEOPLE_N), slip: 'off', why: 'One too many. Count again, touching each one once.' },
+        ...(n > 1 ? [{ ...N(n - 1, PEOPLE_N), slip: 'off', why: 'One short. Count again, touching each one once.' }] : []),
+        { ...N(n + 2, PEOPLE_N), slip: 'off', why: 'Too many. Count again, touching each one once.' },
+        ...(n > 1 ? [] : [{ ...N(n + 3, PEOPLE_N), slip: 'off', why: 'Too many. Count again, touching each one once.' }]),
+      ],
+      rightWhy: `${n === 1 ? `One: ${names}` : `${n}: ${names}`}. ${yours}`,
+      lines: payoutLines(P),
+      picFirst: true, help: { title: 'Count them', pic: { kind: 'people', n }, line: 'Touch each one once as you count: 1, 2, 3 ...' },
+      own: { strand: 'number', at: 6 }, facts: { ...top, form, n, pay: P.pay },
+    }, rand, 3));
+  }
+  if (form === 'count') {
+    return done(ownOrder({
+      key: 'payout:own:parts',
+      story: `${head} It is cut into 4 equal parts. One part pays the operating costs: fuel, maintenance and insurance. The rest is yours.`,
+      ask: 'How many parts are yours?',
+      right: N(3, PARTS),
+      slips: [
+        { ...N(4, PARTS), slip: 'all', why: 'That counts the costs\' part too. Count only the parts that say yours.' },
+        { ...N(1, PARTS), slip: 'costs', why: 'That is the costs\' part. Count the parts that say yours.' },
+        { ...N(2, PARTS), slip: 'off', why: 'One short. Count again, touching each one once.' },
+      ],
+      rightWhy: `3 parts. ${yours}`,
+      lines: payoutLines(P),
+      picFirst: true, help: { title: 'Count them', pic: { kind: 'parts', whole: P.sold, d: 4, costs: 1 }, line: 'Touch each part that says yours once as you count: 1, 2, 3 ...' },
+      own: { strand: 'number', at: 6 }, facts: { ...top, form, n: 3, pay: P.pay },
+    }, rand, 3));
+  }
+  if (form === 'add' && n > 1) {
+    const pays = jobs.map((h) => h.pay), chain = pays.slice(1).map((p, i) => ({ op: 'add', a: pays.slice(0, i + 1).reduce((x, y) => x + y, 0), b: p, say: i ? 'Then the next' : 'First two of them' }));
+    return done(ownOrder({
+      key: 'payout:own:crewAdd',
+      story: `${head} ${listWords(jobs.map((h) => `${h.name} is paid ${say(h.pay)} credits`))}.`,
+      ask: 'How many credits do you pay your crew?',
+      right: N(crewPay, CREDIT),
+      slips: [
+        { ...N(pays[0], CREDIT), slip: 'part', why: `That is only what ${jobs[0].name} is paid. Add ${n === 2 ? `${jobs[1].name}'s` : 'the others\''} too.` },
+        { ...N(crewPay + P.ops, CREDIT), slip: 'costs', why: 'That adds the operating costs as well. Only your crew\'s pay.' },
+        { ...N(crewPay + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Add them again, the thousands first.' },
+        ...(crewPay > 1000 ? [{ ...N(crewPay - 1000, CREDIT), slip: 'off', why: 'A thousand short. Add them again, the thousands first.' }] : []),
+      ],
+      rightWhy: `${pays.map(say).join(' + ')} = ${say(crewPay)} credits. ${yours}`, sum: chain.length === 1 ? chain[0] : chain,
+      lines: payoutLines(P, 'crew'),
+      help: { title: 'Pay each one', line: `Your crew's pay is what each of them is paid, added up: ${names}.`, steps: [pays.map(say).join(' + ')] },
+      own: { strand: 'add', at: 30 }, facts: { ...top, form, n, pay: P.pay }, size: Math.min(3, n - 1),
+    }, rand));
+  }
+  if (form === 'add' && n === 1) {
+    const h = jobs[0], out = P.ops + h.pay;
+    return done(ownOrder({
+      key: 'payout:own:paidOut',
+      story: `${head} ${COSTS} are ${say(P.ops)} credits, and ${h.name} is paid ${say(h.pay)} credits.`,
+      ask: `How many credits do you pay out, for the operating costs and ${h.name}?`,
+      right: N(out, CREDIT),
+      slips: [
+        { ...N(h.pay, CREDIT), slip: 'part', why: `That is only ${h.name}'s pay. Add the operating costs too.` },
+        { ...N(P.ops, CREDIT), slip: 'part', why: `That is only the operating costs. Add ${h.name}'s pay too.` },
+        { ...N(out + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Add them again, the thousands first.' },
+        { ...N(P.pay, CREDIT), slip: 'rest', why: 'That is what is left for you. Add up what is paid out.' },
+      ],
+      rightWhy: `${say(P.ops)} + ${say(h.pay)} = ${say(out)} credits. ${yours}`, sum: { op: 'add', a: P.ops, b: h.pay },
+      lines: payoutLines(P, 'pay'),
+      help: { title: 'All that is paid out', line: `The operating costs, and ${h.name}'s pay: add them.`, steps: [`${say(P.ops)} + ${say(h.pay)}`] },
+      own: { strand: 'add', at: 30 }, facts: { ...top, form, n, pay: P.pay },
+    }, rand));
+  }
+  if (form === 'add') {
+    return done(ownOrder({
+      key: 'payout:own:afterCosts',
+      story: `${head} ${COSTS} are ${say(P.ops)} credits. The rest is yours.`,
+      ask: 'How many credits are yours?',
+      right: N(P.pay, CREDIT),
+      slips: [
+        { ...N(P.ops, CREDIT), slip: 'costs', why: 'That is the operating costs. Take them away from what the run brought.' },
+        { ...N(P.sold + P.ops, CREDIT), slip: 'added', why: 'That adds the costs on. Take them away instead.' },
+        { ...N(P.pay + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Take it away again, the thousands first.' },
+        ...(P.pay > 1000 ? [{ ...N(P.pay - 1000, CREDIT), slip: 'off', why: 'A thousand short. Take it away again, the thousands first.' }] : []),
+      ],
+      rightWhy: `${say(P.sold)} − ${say(P.ops)} = ${say(P.pay)} credits.`, sum: { op: 'sub', a: P.sold, b: P.ops },
+      lines: payoutLines(P, 'pay'),
+      help: { title: 'Take the costs away', line: `What the run brought, less the operating costs: ${say(P.sold)} − ${say(P.ops)}.`, steps: [`${say(P.sold)} − ${say(P.ops)}`] },
+      own: { strand: 'words', at: 30 }, facts: { ...top, form, n: 0, pay: P.pay },
+    }, rand));
+  }
+  const one = P.sold / 10, pct = form === 'percent';
+  if (n) {
+    // (your crew's pay: so many tenths of what the run brought, or that many tens of percent)
+    const t = crewPct / 10, half = t === 5 && !pct, frac = half ? '1/2' : `${t}/10`, part = pct ? `${crewPct}%` : frac;
+    const each = jobs.map((h) => `${h.name} ${pct ? `${h.share}%` : `${h.share / 10}/10`}`).join(', ');
+    return done(ownOrder({
+      key: pct ? 'payout:own:crewPct' : 'payout:own:crewPart',
+      story: `${SOLD} ${say(P.sold)} credits. Your crew's ${n === 1 ? 'job takes' : 'jobs take'} ${part} of it (${each}).`,
+      ask: 'How many credits do you pay your crew?',
+      right: N(crewPay, CREDIT),
+      slips: [
+        { ...N(P.pay, CREDIT), slip: 'rest', why: `That is your own pay. Your crew's is ${part} of the ${say(P.sold)} credits.` },
+        ...(pct ? [{ ...N(crewPct, CREDIT), slip: 'percentCount', why: `${crewPct}% isn't ${crewPct} credits. It means ${crewPct} out of every 100: 10% of ${say(P.sold)} is ${say(one)}.` }] : []),
+        ...(t > 1 && !half ? [{ ...N(one, CREDIT), slip: 'onePart', why: `${say(one)} credits is ${pct ? '10%' : 'one tenth'}. Your crew's is ${part}.` }] : [{ ...N(P.sold / 100, CREDIT), slip: 'tooSmall', why: `That cuts the ${say(P.sold)} credits into 100 parts. ${half ? 'A half is 2 equal parts.' : 'Tenths are 10 equal parts.'}` }]),
+        { ...N(half ? P.sold / 4 : crewPay + one, CREDIT), slip: 'partOff', why: half ? 'That is a quarter. A half is one of 2 equal parts.' : `That is ${pct ? `${crewPct + 10}%` : `${t + 1}/10`}. Your crew's is ${part}.` },
+        { ...N(crewPay + P.ops, CREDIT), slip: 'costs', why: 'That adds the operating costs as well. Only your crew\'s pay.' },
+        { ...N(crewPay + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Work it out again.' },
+      ].filter((s) => Number.isInteger(s.v)),
+      rightWhy: half ? `${say(P.sold)} ÷ 2 = ${say(crewPay)} credits. ${yours}` : t === 1 ? `${pct ? '10%' : '1/10'} of ${say(P.sold)} is ${say(P.sold)} ÷ 10 = ${say(crewPay)} credits. ${yours}` : `${pct ? '10%' : 'One tenth'} is ${say(P.sold)} ÷ 10 = ${say(one)}; ${part} is ${t} × ${say(one)} = ${say(crewPay)} credits. ${yours}`,
+      sum: half ? { op: 'div', a: P.sold, b: 2 } : t === 1 ? { op: 'div', a: P.sold, b: 10 } : [{ op: 'div', a: P.sold, b: 10, say: pct ? 'First 10%: a tenth of it' : 'First one tenth of it' }, { op: 'mul', a: one, b: t, say: `Then ${part}` }],
+      lines: payoutLines(P, 'crew'),
+      help: { title: pct ? 'Ten percent first' : 'Cut into equal parts', pic: { kind: 'sharebar', whole: P.sold, n: half ? 1 : t, d: half ? 2 : 10, pct, top: `${SOLD.toLowerCase()} ${say(P.sold)} credits`, foot: 'your crew\'s pay' },
+        line: pct ? `10% is one part in ten. Find 10% of the ${say(P.sold)} credits${t === 1 ? '' : `, then take ${t} lots of it`}.` : half ? `A half means the ${say(P.sold)} credits cut into 2 equal parts, and one of them your crew's.` : `${frac} means the ${say(P.sold)} credits cut into 10 equal parts, and ${t === 1 ? 'one of them' : `${t} of them`} your crew's.`,
+        steps: half ? [`One of the 2 equal parts: ${say(P.sold)} ÷ 2`] : t === 1 ? [`${say(P.sold)} ÷ 10`] : [`First ${pct ? '10%' : 'one tenth'}: ${say(P.sold)} ÷ 10`, `Then ${part}: that × ${t}`] },
+      own: pct ? { strand: 'pct', at: 58 } : { strand: 'frac', at: 40 }, facts: { ...top, form, sold: P.sold, share: crewPct, pay: P.pay }, size: t > 1 && !half ? 2 : 1,
+    }, rand));
+  }
+  // (none of your crew did a job: the operating costs, a quarter of it, or 25%)
+  const part = pct ? `${OPS.pct}%` : '1/4';
+  return done(ownOrder({
+    key: pct ? 'payout:own:costsPct' : 'payout:own:costsPart',
+    story: `${SOLD} ${say(P.sold)} credits. ${COSTS} take ${part} of it.`,
+    ask: 'How many credits are the operating costs?',
+    right: N(P.ops, CREDIT),
+    slips: [
+      { ...N(P.pay, CREDIT), slip: 'rest', why: `That is the other ${pct ? '75%' : '3/4'}: yours. The costs are ${part} of it.` },
+      ...(pct ? [{ ...N(OPS.pct, CREDIT), slip: 'percentCount', why: `25% isn't 25 credits. It means 25 out of every 100: a quarter of it.` }] : []),
+      { ...N(one, CREDIT), slip: 'tenth', why: `That is ${pct ? '10%' : 'a tenth'}. ${pct ? '25% is a quarter' : 'A quarter is one of 4 equal parts'}.` },
+      { ...N(P.sold / 2, CREDIT), slip: 'half', why: `That is a half. ${pct ? '25% is a quarter' : 'A quarter is one of 4 equal parts'}.` },
+      { ...N(P.sold - 4, CREDIT), slip: 'subtracted', why: `That takes 4 away. Cut the ${say(P.sold)} credits into 4 equal parts instead.` },
+      { ...N(P.ops + 1000, CREDIT), slip: 'off', why: 'A thousand too many. Work it out again.' },
+    ].filter((s) => Number.isInteger(s.v)),
+    rightWhy: `${pct ? '25% is a quarter: ' : ''}${say(P.sold)} ÷ 4 = ${say(P.ops)} credits. ${yours}`,
+    sum: { op: 'div', a: P.sold, b: 4, say: pct ? '25% is a quarter of it' : 'One of 4 equal parts' },
+    lines: payoutLines(P, 'ops'),
+    help: { title: pct ? '25% is a quarter' : 'Cut into equal parts', pic: { kind: 'sharebar', whole: P.sold, n: 1, d: 4, top: `${SOLD.toLowerCase()} ${say(P.sold)} credits`, foot: 'the operating costs' },
+      line: `${pct ? '25% is 25 out of every 100: a quarter. ' : ''}A quarter means the ${say(P.sold)} credits cut into 4 equal parts, and one of them the operating costs.`, steps: [`One of the 4 equal parts: ${say(P.sold)} ÷ 4`] },
+    own: pct ? { strand: 'pct', at: 58 } : { strand: 'frac', at: 40 }, facts: { ...top, form, sold: P.sold, share: OPS.pct, pay: P.pay },
+  }, rand));
+}
 export function payoutOrder(m, grade = 0, rand = Math.random) {
+  if (m.payout && m.payout.own && m.payout.ops != null) return ownPayOrder(m, grade, rand);
   const P = m.payout, per = P.kind === 'rescue' || P.kind === 'explore' || P.kind === 'supply', who = rolesWords(m.roles), tenths = P.share / 10, lots = per ? [] : lotsOf(P);
   // (what the whole came to, in its own words: a haul sold, a rescue paid, an exploring run paid)
   const SOLD = P.kind === 'rescue' ? 'The rescue paid' : P.kind === 'explore' || P.kind === 'supply' ? 'The run paid' : 'The haul sold for';

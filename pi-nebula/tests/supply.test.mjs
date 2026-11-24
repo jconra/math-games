@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import * as F from '../src/fleet.js';
 import * as M from '../src/flymodel.js';
-import { MISSIONS, ROLES, SUPPLY, rolesOf, openRoles, shareOf, sign, signOwn, contractOf, stepsFor, tuneWhen, aboardOf, crewFor, land, collect, payoutOrder, payoutLines, payoutForm, stationFound, supplyRuns, missionOf, missions, rolesWords, hiredOf, roleOf } from '../src/missions.js';
+import { MISSIONS, ROLES, SUPPLY, rolesOf, openRoles, shareOf, sign, signOwn, contractOf, stepsFor, tuneWhen, aboardOf, crewFor, land, collect, payoutOrder, payoutLines, payoutForm, stationFound, supplyRuns, missionOf, missions, rolesWords, crewJobsOf, roleOf } from '../src/missions.js';
 import { owns } from '../src/own.js';
 import { makeSupplyRun, runOf, lastRun, RUN } from '../src/supplyrun.js';
 import { RUN_TALK, OLD_STATION, TALKS, CAPTAINS } from '../src/lines.js';
@@ -87,9 +87,12 @@ test('aboard: the Hauler\'s captain, in the captain\'s place as on every captain
     assert.deepEqual(who.filter((w) => w.you).map((w) => w.role), S.roles.filter((r) => mine.includes(r)));
     // (a job left to the crew is the captain's or the crew member's of theirs who came: never a first mate's)
     for (const w of who) assert.ok(w.you || w.name === HAULER_CAPTAIN.name || /^(Pilot Remy|Engineer Sol|Loadmaster Hob)$/.test(w.name), w.name);
-    // (a run of the crew member's own: the captain is not aboard, as no captain is; the hired crew for the jobs left)
-    const own = aboardOf(S, mine, null, { own: true });
-    assert.equal(own.length, left.length); assert.ok(own.every((a) => !a.captain && a.hired && a.id !== HAULER_CAPTAIN.id));
+    // (a run of the crew member's own: the captain is not aboard, as no captain is; their own crew who came, one on each
+    // job left, each in their own look)
+    const mates = left.map((r, i) => ({ id: 'mate' + i, name: 'Mate' + i, look: 'cook', jobs: [r] }));
+    const own = aboardOf(S, mine, null, { own: true, crew: mates });
+    assert.equal(own.length, left.length); assert.ok(own.every((a) => !a.captain && a.mate && a.id !== HAULER_CAPTAIN.id && a.look === 'cook'));
+    assert.deepEqual(aboardOf(S, mine, null, { own: true }), []);
   }
   // (the jump computer's cards speak of the captain and the crew by name: the captain's from its one place)
   assert.equal(S.folk.length, 4); assert.deepEqual(S.folk[0], { name: HAULER_CAPTAIN.name, she: !!HAULER_CAPTAIN.she });
@@ -369,7 +372,7 @@ test('when the captain offers it: nothing to ask until the old station is found 
   sign(c, 'supply', ['pilot']); assert.equal(missions.state(id, c), 'signed');
   land(c, { pallets: 3 }); assert.equal(missions.state(id, c), 'payout'); collect(c); assert.equal(missions.state(id, c), 'asked');
   // (a run of their own, in a Hauler they bought, is no contract of the captain's: the captain asks as ever, and is not aboard)
-  const o = found({ ships: ['hauler'] }); assert.ok(signOwn(o, 'supply', ['pilot'])); assert.equal(contractOf(o).own, true); assert.equal(missions.state(id, o), 'asked');});
+  const o = found({ ships: ['hauler'] }); assert.ok(signOwn(o, 'supply', ['pilot', 'engineer', 'cargo'])); assert.equal(contractOf(o).own, true); assert.equal(missions.state(id, o), 'asked');});
 
 test('saves made before the Hauler had a captain still load: a contract signed at the shipping desk, a run half done, a share waiting, a run of their own, a Hauler bought there', () => {
   const id = HAULER_CAPTAIN.id;
@@ -384,9 +387,10 @@ test('saves made before the Hauler had a captain still load: a contract signed a
   // (home already, the share waiting at the shipping computer: paid there as ever)
   const d = found({ mission: { id: 'supply', captain: 'gus', roles: ['engineer'], state: 'payout', payout: { kind: 'supply', pallets: 3, per: 7000, sold: 21000, share: 20, pay: 4200, at: 1, first: true } } });
   assert.equal(missions.state(id, d), 'payout'); assert.equal(MISSIONS[contractOf(d).id].payAt, 'cargo'); assert.equal(collect(d).pay, 4200); assert.equal(d.credits, 4700);
-  // (a run of their own begun at the computer, its load not flown yet: kept, its hired crew by their names now)
+  // (a run of their own begun at the computer with hired hands, before a crew was their own, its load not flown yet:
+  // gone, as a run of your own given up is; the captain asks as ever)
   const o = found({ ships: ['hauler'], mission: { id: 'supply', captain: 'gus', roles: ['pilot'], state: 'signed', own: true, hired: ['engineer', 'cargo'], run: 2 } });
-  assert.ok(contractOf(o).own); assert.deepEqual(hiredOf(contractOf(o)).map((h) => h.name), ['Engineer Sol', 'Loadmaster Hob']); assert.notEqual(missions.state(id, o), 'signed');
+  assert.equal(contractOf(o), null); assert.notEqual(missions.state(id, o), 'signed');
   // (a Hauler bought at the shipping computer is theirs as ever, wherever it is sold now)
   assert.equal(owns({ ships: ['hauler'], bought: { hauler: { at: 1, price: 80000 } } }, 'hauler'), true);
 });
@@ -396,8 +400,8 @@ test('Loadmaster, everywhere it shows: the contract, the hired crew, the pay sli
   assert.equal(rolesWords(['cargo']), 'Loadmaster'); assert.equal(rolesWords(['pilot', 'engineer', 'cargo']), 'Pilot, engineer and loadmaster');
   assert.equal(crewFor(S, ['pilot'], 'Maya', HAULER_CAPTAIN.name).find((w) => w.role === 'cargo').name, HAULER_CAPTAIN.name, 'the captain does the job left over, as on every run');
   assert.equal(crewFor(S, ['pilot', 'engineer'], 'Maya', HAULER_CAPTAIN.name).find((w) => w.role === 'cargo').name, 'Loadmaster Hob');
-  const o = found({ ships: ['hauler'] }), m = signOwn(o, 'supply', ['pilot']);
-  assert.deepEqual(hiredOf(m).map((h) => h.name), ['Engineer Sol', 'Loadmaster Hob']);
+  const o = found({ ships: ['hauler'], myCrew: [{ id: 'cook', name: 'Bo' }, { id: 'medic', name: 'Ana' }] }), m = signOwn(o, 'supply', ['pilot'], 1, Math.random, Math.random, { jobs: { engineer: 'cook', cargo: 'medic' } });
+  assert.deepEqual(crewJobsOf(m).map((h) => [h.role, h.name]), [['engineer', 'Bo'], ['cargo', 'Ana']]);
   // (every word a pay slip can show, at every level, for every set of jobs)
   for (const mine of sets) for (let grade = 0; grade <= 80; grade += 4) {
     const c = found(); sign(c, 'supply', mine); land(c, { pallets: 4 });

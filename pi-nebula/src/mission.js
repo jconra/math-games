@@ -46,7 +46,7 @@
 //     prompt (deskMore), where its own run is begun. IN THE COCKPIT OF A SHIP
 //     THAT IS THEIRS, with no contract on it, the seat's prompt reads "Your Miner: take it out" (Take it out, E) and
 //     brings up the owner's card (ownCard): a run of their own, which starts at once from the seat they are standing by
-//     (the same trip, `own`: no captain aboard, the hired crew for the jobs left to them, more cards for their own jobs),
+//     (the same trip, `own`: no captain aboard, their own crew who came, more cards for their own jobs),
 //     or just flying (startFree: out, round the station and back, nothing asked and nothing paid). An own run is never
 //     left signed in a hangar's ship: given up, or the page loaded again in the middle of it, it is gone and the seat
 //     offers again. The Hauler's own run is begun at the shipping computer, where its load is worked out, and is kept as
@@ -62,7 +62,7 @@
 //   mission.offer(id), mission.start(), mission.state(), mission.trip   (the rigs)
 import * as THREE from 'three';
 import { missions, missionOf, contractOf, sign, signOwn, tearUp, freeFlight, collect, payoutOrder, tuneWhen, seedOf, MISSIONS, stationFound, supplyRuns } from './missions.js';
-import { saleOf, buy, owns } from './own.js';
+import { saleOf, buy, owns, crewOf, SEATS } from './own.js';
 import { setPaint } from './paint.js';
 import { bridgeStands } from './jobs/dock.js';
 import { CAPTAINS } from './lines.js';
@@ -310,7 +310,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           get run() { return stationFound(c) && !contractOf(c); },
           get why() { const on = contractOf(c); return !stationFound(c) ? 'Hauling runs of your own start once Tangent Station is found. Until then the Hauler is yours to fly round the station.' : on && on.state === 'payout' ? 'Your pay from the last run is still waiting: a run of your own can start once you have collected it.' : 'You have a contract on. A run of your own can start once it is done and paid.'; },
           fly: false, note: 'Just flying, for no pay: from the Hauler\'s pilot\'s seat, any time.',
-          onRun: (roles) => { done(); const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (m) begunAtDesk(m, roles, true); },
+          crew: crewOf(c).map((p) => ({ id: p.id, name: p.name })), seats: SEATS[M.ship] ?? 0,
+          onRun: (roles, pick) => { done(); const m = signOwn(c, M.id, roles, Date.now(), tuneRand(), Math.random, pick); if (m) begunAtDesk(m, roles, true); },
           onFly: () => {},
         } : null,
         onSign: (roles) => {
@@ -356,9 +357,11 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
           note: 'Just flying: out, round the station and back. Nothing is asked and nothing is paid.',
           // (the paint of its hull, picked here: the card's Paint button, src/shippaint.js)
           paint: W.shipPaint ? W.shipPaint.card(ship) : null,
-          onRun: (roles) => {
+          // (their own crew, for the jobs and the ride: src/own.js crewOf, SEATS)
+          crew: crewOf(c).map((p) => ({ id: p.id, name: p.name })), seats: SEATS[ship] ?? 0,
+          onRun: (roles, pick) => {
             done();
-            const m = signOwn(c, M.id, roles, Date.now(), tuneRand()); if (!m) return;
+            const m = signOwn(c, M.id, roles, Date.now(), tuneRand(), Math.random, pick); if (!m) return;
             save(c);
             if (M.ship === 'miner') crane.awayHeld = true;
             if (!start()) { tearUp(c); save(c); }
@@ -459,14 +462,14 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: m.own ? `The ${shipName(Mn)}` : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
         dock, pallets: cr ? cr.pallets : 0, again: supplyRuns(c) > 0,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
-        // (a run of the crew member's own, in a ship they bought: no captain aboard, the hired crew, more cards: src/trip.js)
-        own: !!m.own,
+        // (a run of the crew member's own, in a ship they bought: no captain aboard, their own crew who came, more cards: src/trip.js)
+        own: !!m.own, crew: m.own ? m.crew : null,
         onEnd: (r) => {
           const mine = MISSIONS[m.id].ship === 'miner', v = visits.get(MISSIONS[m.id].ship);
           if (v) { for (const w of v.views) if (w.O.moved) v.reset(w.cfg.id); v.dispose(); visits.delete(MISSIONS[m.id].ship); }
           lastRun = { ...r, aboard: undefined }; if (mine) crane.awayHeld = false;
           // (home: the crew stay aboard where they are until the crew member has left the ship)
-          if (r.aboard) kept = { A: r.aboard, captain: r.captain, ship: MISSIONS[m.id].ship };
+          if (r.aboard) kept = { A: r.aboard, hide: r.hide || [], ship: MISSIONS[m.id].ship };
           if (input) input.enabled = playing;
           // (home: the share waits; the captain, who waited by the ship, goes on with his day from where he is)
           if (r.payout) { lead('payout'); const pp = people(); if (pp && pp.captain.meet && walksTo(m)) pp.captain.meet(m.captain, null); meeting = null; }
@@ -584,7 +587,8 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   // THE CREW ABOARD AFTER A RUN (src/aboard.js, handed over by the trip as it ends): drawn where the ship stands, going
   // about as they do, until the crew member is off the ship; then gone, and the captain back in the station
   let kept = null;
-  const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard && kept.captain) pp.aboard(kept.captain, false); kept = null; };
+  // (who was taken out of the station for the run, the captain or the crew member's own crew: back in it)
+  const letGo = () => { if (!kept) return; kept.A.dispose(); const pp = people(); if (pp && pp.aboard) for (const id of kept.hide) pp.aboard(id, false); kept = null; };
   const api = {
     trip: null, offer: (id) => offer({ id, name: nameOf(id) }), start, payoutCard, payoutHead, hint, meetSpot, keeperOf, deskOpen, deskHint, deskLive, deskSigned, deskMore,
     // (a ship that is theirs: the owner's card at its seat, just flying; its sale as the kiosk has it; a ship bought at

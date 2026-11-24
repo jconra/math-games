@@ -317,9 +317,11 @@ Object.assign(DRAW, {
     return { svg: svg(104, s), line: '' };
   },
   // ... what the haul sold for, cut into d equal parts, n of them the crew member's share: each a "?"
-  sharebar({ whole, n, d, pct = false }) {
+  // (top, foot: its words over it and under it, where it is not a share of a haul: a run of your own's pay slip, the
+  // operating costs or the crew's pay)
+  sharebar({ whole, n, d, pct = false, top = null, foot = null }) {
     const x0 = 10, x1 = W - 10, pw = (x1 - x0) / d;
-    let s = `<path d="M${x0} 26v-6H${x1}v6" fill="none" stroke="${K.SOFT}" stroke-width="1.3"/>` + text(W / 2, 14, `the haul sold for ${say(whole)} credits`, { size: 13 });
+    let s = `<path d="M${x0} 26v-6H${x1}v6" fill="none" stroke="${K.SOFT}" stroke-width="1.3"/>` + text(W / 2, 14, top || `the haul sold for ${say(whole)} credits`, { size: 13 });
     for (let i = 0; i < d; i++) {
       const on = i < n;
       s += `<rect x="${(x0 + i * pw).toFixed(1)}" y="32" width="${(pw - 2).toFixed(1)}" height="30" rx="3" fill="${on ? K.FILL2 : K.PAPER}" stroke="${on ? K.ASK : K.INK}" stroke-width="1.3"/>`;
@@ -327,8 +329,21 @@ Object.assign(DRAW, {
       else if (pct && pw > 30) s += text(x0 + i * pw + (pw - 2) / 2, 52, '10%', { size: 10, fill: K.SOFT });
     }
     s += text(W / 2, 84, pct ? `10% is one part in 10: ${say(whole)} ÷ 10` : `${d} equal parts: each is ${say(whole)} ÷ ${d}`, { size: 12.5, fill: K.SOFT });
-    s += text(W / 2, 104, `your share: the ${n === 1 ? 'shaded part' : `${n} shaded parts`} = ? credits`, { size: 14, fill: K.ASK, weight: 800 });
+    s += text(W / 2, 104, `${foot || 'your share'}: the ${n === 1 ? 'shaded part' : `${n} shaded parts`} = ? credits`, { size: 14, fill: K.ASK, weight: 800 });
     return { svg: svg(114, s), line: '' };
+  },
+  // A RUN OF YOUR OWN'S PAY, to count (src/missions.js ownPayOrder, the youngest's card with none of the crew paid):
+  // what the run paid cut into d equal parts, the first `costs` of them the operating costs', the rest yours
+  parts({ whole, d = 4, costs = 1 }) {
+    const x0 = 10, x1 = W - 10, pw = (x1 - x0) / d;
+    let s = `<path d="M${x0} 26v-6H${x1}v6" fill="none" stroke="${K.SOFT}" stroke-width="1.3"/>` + text(W / 2, 14, `the run paid ${say(whole)} credits`, { size: 13 });
+    for (let i = 0; i < d; i++) {
+      const mine = i >= costs, cx = x0 + i * pw + (pw - 2) / 2;
+      s += `<rect x="${(x0 + i * pw).toFixed(1)}" y="32" width="${(pw - 2).toFixed(1)}" height="34" rx="3" fill="${mine ? K.FILL2 : K.PAPER}" stroke="${mine ? K.ASK : K.INK}" stroke-width="1.3"/>`;
+      s += text(cx, 54, mine ? 'yours' : 'costs', { size: 12, fill: mine ? K.ASK : K.SOFT, weight: mine ? 800 : 400 });
+    }
+    s += text(W / 2, 88, 'costs: fuel, maintenance, insurance', { size: 12.5, fill: K.SOFT });
+    return { svg: svg(98, s), line: '' };
   },
 });
 
