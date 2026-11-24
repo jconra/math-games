@@ -562,6 +562,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     // it in hand, or is being called to it; false: the run loads the rest as before (where nobody sees)
     ask(n) {
       if (!made || !pallets) return false;
+      // (asked afresh after a while not asked, the player back on it meanwhile: its moment and its waiting begin again)
+      if (clock - load.at > 1) load.since = null;
       load.want = n; load.at = clock;
       if (clock - load.failed <= RIDE.again) return false;
       if (state === 'loadon' || state === 'load' || state === 'loadoff') { load.since = null; return true; }
