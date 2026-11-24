@@ -36,8 +36,6 @@ export const CAPTAINS = {
   // yet: every line is words in a bubble (offer, again: plain words where the others have a clip).
   //   wait: until the old station is found there is no run to offer: what they say then if spoken to (the first time,
   //         and after), and no question
-  //   sale: until then, with the Hauler for sale to this crew member (their bridge out to it built: src/own.js): that
-  //         offer in place of the run's, with its own question and answers; the card is the sale's line alone
   //   signed / signedLoad: the contract signed (they will be by the docking port); with the Loadmaster's job theirs,
   //         where its work is: said by them alone, as the other captains say theirs (a word at the top lay over it)
   [HAULER_CAPTAIN.id]: { ship: 'Hauler', mission: 'supply', what: 'Join the Hauler\'s crew for a supply run to Tangent Station?',
@@ -47,9 +45,7 @@ export const CAPTAINS = {
     signed: 'Glad to have you. Cargo\'s crew is loading the Hauler. I\'ll meet you by the docking port.',
     signedLoad: 'Glad to have you. The load is yours to work out: the shipping computer in Cargo, down the lift.',
     payout: 'Good work out there. Your share is waiting at the shipping computer in Cargo.',
-    wait: [`Hello! I'm ${HC} of the Hauler. No run to crew just now. Come and find me later!`, 'Hello again! Nothing to haul yet. The Hauler waits at the dock.'],
-    sale: { what: 'Have a look at the Hauler, for sale?', offer: `Hello! I'm ${HC} of the Hauler. No run to crew yet, but the Hauler is for sale. Interested?`,
-      again: 'No run to crew yet. The Hauler is still for sale, though. Interested?', contract: 'Here is what it costs. Have a look.', no: 'No trouble. You will find me by the docking port.' } },
+    wait: [`Hello! I'm ${HC} of the Hauler. No run to crew just now. Come and find me later!`, 'Hello again! Nothing to haul yet. The Hauler waits at the dock.'] },
   vega: { ship: 'Explorer', mission: 'exploring', what: 'Join his crew for a trip to new worlds?',
     offer: { clip: 'vega-pitch' }, yes: { clip: 'vega-ready' }, hello: { clip: 'vega-hello' },
     no: 'No problem. I\'ll be around!', again: 'Still looking for explorers. Interested?', waiting: 'Almost ready to fly. I\'ll find you!',

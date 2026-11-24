@@ -343,9 +343,8 @@ test('the Hauler\'s captain\'s words: the offer, the contract signed, the share;
   // (before the old station is found: who they are, and no question)
   assert.equal(K.wait.length, 2); assert.ok(K.wait[0].includes(HAULER_CAPTAIN.name));
   for (const w of K.wait) assert.ok(typeof w === 'string' && w.length > 8 && w.length <= 110 && !w.includes('?'), w);
-  // (then, with the Hauler for sale to this crew member: that offer, its own question and answers)
-  for (const k of ['what', 'offer', 'again', 'contract', 'no']) assert.ok(typeof K.sale[k] === 'string' && K.sale[k].length > 8 && K.sale[k].length <= 110, 'sale.' + k);
-  assert.match(K.sale.offer, /for sale/); assert.match(K.sale.offer, /Interested\?$/); assert.ok(K.sale.offer.includes(HAULER_CAPTAIN.name)); assert.ok(!/contract/i.test(K.sale.contract));
+  // (no captain sells a ship: the ship store's kiosk does, src/kiosk.js; the captain has no words for a sale)
+  assert.equal(K.sale, undefined); assert.ok(!/for sale/i.test(JSON.stringify(K)));
   // (no clip of theirs is fetched, and nothing is spoken by the browser: bubbles alone; the other three as they were)
   assert.ok(!JSON.stringify(K).includes('"clip"'));
   for (const id of ['vega', 'ruiz', 'hale']) assert.ok(CAPTAINS[id].offer.clip && typeof CAPTAINS[id].contract === 'string');
@@ -356,24 +355,21 @@ test('the Hauler\'s captain\'s words: the offer, the contract signed, the share;
   assert.ok(RUN_TALK.supply.letGo.length && RUN_TALK.supply.landed.length); assert.ok(!/first mate/i.test(JSON.stringify(RUN_TALK.supply)));
 });
 
-test('when the captain offers it: nothing to ask until the old station is found (the Hauler for sale meanwhile, where it is); then the contract, as the others offer theirs', () => {
+test('when the captain offers it: nothing to ask until the old station is found (bridge or no bridge: the Hauler is sold at the kiosk); then the contract, as the others offer theirs', () => {
   const id = HAULER_CAPTAIN.id, fresh = { id: 'n1', name: 'Noor', credits: 0 };
   assert.equal(S.offered(fresh), false); assert.equal(missions.open(id, fresh), false); assert.equal(missions.state(id, fresh), 'wait');
   // (the other captains offer from the start, whoever asks; a captain with no run at all is asked nothing here)
   for (const k of ['ruiz', 'hale', 'vega']) { assert.equal(MISSIONS[Object.keys(MISSIONS).find((q) => MISSIONS[q].captain === k)].offered, undefined); assert.equal(missions.open(k, fresh), true); assert.equal(missions.state(k, fresh), 'new'); }
   assert.equal(missions.state('adair', fresh), 'new');
-  // (their ship for sale to this crew member meanwhile: src/mission.js says whether, by their bridge)
-  missions.sells((cap, c) => cap === id && c.bridge === true);
-  assert.equal(missions.state(id, { ...fresh, bridge: true }), 'sale'); assert.equal(missions.state(id, fresh), 'wait');
+  // (their bridge built, still nothing to ask: no captain sells a ship any more)
+  assert.equal(missions.state(id, { ...fresh, jobs: { dock: { bridge: { rings: 9, docked: true } } } }), 'wait'); assert.equal(missions.sells, undefined);
   // (found: the offer, new, then asked; signed with them, and home with the share waiting, by the contract)
   const c = found({ bridge: true }); assert.equal(S.offered(c), true); assert.equal(missions.open(id, c), true); assert.equal(missions.state(id, c), 'new');
   missions.asked(id); assert.equal(missions.state(id, c), 'asked'); assert.equal(missions.state(id, fresh), 'wait', 'still nothing for a crew member who has not found it');
   sign(c, 'supply', ['pilot']); assert.equal(missions.state(id, c), 'signed');
   land(c, { pallets: 3 }); assert.equal(missions.state(id, c), 'payout'); collect(c); assert.equal(missions.state(id, c), 'asked');
   // (a run of their own, in a Hauler they bought, is no contract of the captain's: the captain asks as ever, and is not aboard)
-  const o = found({ ships: ['hauler'] }); assert.ok(signOwn(o, 'supply', ['pilot'])); assert.equal(contractOf(o).own, true); assert.equal(missions.state(id, o), 'asked');
-  missions.sells(null); assert.equal(missions.state(id, { ...fresh, bridge: true }), 'wait');
-});
+  const o = found({ ships: ['hauler'] }); assert.ok(signOwn(o, 'supply', ['pilot'])); assert.equal(contractOf(o).own, true); assert.equal(missions.state(id, o), 'asked');});
 
 test('saves made before the Hauler had a captain still load: a contract signed at the shipping desk, a run half done, a share waiting, a run of their own, a Hauler bought there', () => {
   const id = HAULER_CAPTAIN.id;

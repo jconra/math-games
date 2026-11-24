@@ -13,9 +13,14 @@
 //     kept as nothing at all). Each crew member on a device has their own: one's olive Miner is another's Miner as it
 //     was built.
 //   - IT COSTS NOTHING (COST: no word of his says it should; one number to change).
-//   - THE SHIP IS THE SAME SHIP WHOEVER FLIES IT: on a captain's contract in a ship that is theirs, it is in their paint.
+//   - ON ITS CAPTAIN'S CONTRACT THE SHIP IS THE CAPTAIN'S (the game's maker, 2026-11-24: "if you go to the captain you
+//     can still work for them and their ship will be in the hanger in that case"): from the contract's signing until
+//     that run is over and its pay collected, a ship that is theirs wears its own paint, in its hangar and on the run
+//     (wornOf). At every other time (a run of their own among them) it is in their paint. The paint they picked is
+//     kept all the while: it is back once the contract is done.
 import { PAINTS, FACTORY, SHIP_IDS, paintById, tidyPaint, hullColour } from '../kit/ships/paints.js';
 import { owns } from './own.js';
+import { contractOf, MISSIONS } from './missions.js';
 
 export { PAINTS, FACTORY };
 // what a paint costs, credits
@@ -31,6 +36,10 @@ export function paintsOf(crew) {
 export const mayPaint = (crew, ship) => SHIP_IDS.includes(ship) && owns(crew, ship);
 // the paint this ship is in for this crew member: theirs if the ship is theirs, else its own
 export const paintOf = (crew, ship) => (mayPaint(crew, ship) ? paintsOf(crew)[ship] || FACTORY : FACTORY);
+// is this ship on a captain's contract of this crew member's just now (signed, flown, or its pay still waiting)?
+export const captainsNow = (crew, ship) => { const m = contractOf(crew); return !!(m && !m.own && MISSIONS[m.id] && MISSIONS[m.id].ship === ship); };
+// THE PAINT THE SHIP WEARS for this crew member now: its own on its captain's contract, else theirs (paintOf)
+export const wornOf = (crew, ship) => (captainsNow(crew, ship) ? FACTORY : paintOf(crew, ship));
 // PICKED: the paint kept with the crew member for that ship -> { ok: true, paint }, or { ok: false, why: 'unknown'
 // (no such ship or paint) | 'notyours' }: nothing changed. (The caller saves the crew member.)
 export function setPaint(crew, ship, id) {

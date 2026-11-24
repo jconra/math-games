@@ -9,7 +9,7 @@ import { LABELS, SIGNS } from './tex.js';
 import { pane, filler } from './windows.js';
 import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTile } from './bigroom.js';
 import { bayDoor, mark, airlock, crate, fuel, gangway } from './hangar.js';
-import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter, divider, pot } from './furniture.js';
+import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, kiosk, sign, planter, divider, pot } from './furniture.js';
 import { WARD_PIECES } from './ward.js';         // (the ward: bed wall panels, curtains, bedside tables, drip stands, carts)
 import { ship } from './ship.js';
 import { OUTSIDE } from './shipparts/outside.cat.js';
@@ -84,6 +84,7 @@ export const PIECES = {
   booth: { name: "Captain's booth", group: 'Furniture', at: 'free', variants: ['medic', 'mining', 'explore', 'security'], foot: [2, 1.8, 2], build: booth },
   planter: { name: 'Planter', group: 'Furniture', at: 'free', variants: ['long', 'tall'], foot: [1.7, 2.2, 0.7], build: planter },
   jobs: { name: 'Jobs board', group: 'Furniture', at: 'free', variants: ['hang', 'wall', 'menu', 'station', 'pair'], foot: [4.5, 2, 0.3], build: jobs },
+  kiosk: { name: 'Ship store kiosk', group: 'Furniture', at: 'free', variants: ['ships'], foot: [0.8, 2, 0.4], build: kiosk },
   divider: { name: 'Bed divider', group: 'Medical', at: 'free', variants: ['plain'], foot: [2, 1.8, 0.45], build: divider },
   ...WARD_PIECES,
   // the hangar

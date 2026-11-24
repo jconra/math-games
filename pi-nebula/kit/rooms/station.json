@@ -1146,6 +1146,7 @@
         {"piece":"wall","cell":[8.5,6],"turn":3,"variant":"plain"},
         {"piece":"trim","cell":[8.5,6],"turn":3,"variant":"base"},
         {"piece":"trim","cell":[8.5,6],"turn":3,"variant":"cornice"},
+        {"piece":"kiosk","cell":[8.5,6],"turn":3,"variant":"ships","off":[0,0,0.22]},
         {"piece":"wall","cell":[6.5,6],"turn":1,"variant":"plain"},
         {"piece":"trim","cell":[6.5,6],"turn":1,"variant":"base"},
         {"piece":"trim","cell":[6.5,6],"turn":1,"variant":"cornice"},

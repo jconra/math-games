@@ -91,7 +91,7 @@ function sideMarks(s) {
 // before: { [job id]: fn -> true if it took the Start itself } (a contract offered at the job's desk, shown in place of
 // the job: the supply run's at the shipping computer, src/mission.js deskStart)
 // more: { [job id]: fn -> { words, small, on() } or null }: a second button on a job's prompt for something else that is
-// done at its desk (the Hauler's sale at the shipping computer, and then the owner's own Hauler: src/mission.js deskMore)
+// done at its desk (the owner's own Hauler at the shipping computer: src/mission.js deskMore)
 // THE WALLET, top right while walking: the crew member's credits, and under them the ships that are theirs (src/own.js)
 export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {}, more = {} } = {}) {
   ensureCss();

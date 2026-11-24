@@ -325,6 +325,32 @@ export function sign(p, v) {
 // middle).
 export const JOBS_SCREEN = { w: 4.2, h: 1.68, z: 0.123 };
 export const JOBS_PAIR = { w: 1.0, h: 0.4, z: 0.114, up: 0.23 };
+// THE SHIP STORE'S KIOSK (src/kiosk.js): a screen on the wall in a cash machine's cabinet (the game's maker, 2026-11-24:
+// "The kiosk can just be a screen on the wall somewhere. Or you can build a little something around it like an ATM
+// type thing."). Standing on the floor, its back on z = 0: an off-white cabinet, a lit head band SHIP STORE over a
+// small orange lamp (as the jobs boards' PICK ONE has, so it reads as a thing to use), the dark screen in its charcoal
+// bezel with SHIPS FOR SALE and the four ships' names lit on it, and under it a ledge with a blue line of light.
+// KIOSK: the screen's middle and size, the depth of the cabinet, its front.
+export const KIOSK = { w: 0.6, h: 0.46, y: 1.43, d: 0.26, half: 0.4, top: 1.95 };
+export function kiosk(p) {
+  const { w, h, y, d, half, top } = KIOSK, flat = { r: 0, loops: [] };
+  p.slab('dark', -half + 0.02, half - 0.02, 0, 0.08, 0.02, d + 0.03, { r: 0.008 });
+  p.slab('white', -half, half, 0.08, top, 0, d, { r: 0.02, cell: 0.6 });
+  // (the head band, lit words on it)
+  p.slab('black', -half + 0.02, half - 0.02, top - 0.17, top - 0.02, d, d + 0.012, { r: 0.006 });
+  segText(p, 'SHIP STORE', { h: 0.06, t: 0.009, at: [0.02, top - 0.095, d + 0.0125], look: [1.2, 3.2, 7.0], mat: 'glow' });
+  p.glowSlab('orange', -half + 0.05, -half + 0.08, top - 0.12, top - 0.07, d + 0.012, d + 0.016, flat);
+  // (the screen in its bezel)
+  p.slab('black', -w / 2 - 0.04, w / 2 + 0.04, y - h / 2 - 0.04, y + h / 2 + 0.04, d, d + 0.02, { r: 0.008 });
+  p.slab({ c: '#0f2a3d', r: 0.3, m: 0.1, w: 0.2 }, -w / 2, w / 2, y - h / 2, y + h / 2, d + 0.02, d + 0.024, { r: 0, cell: 9, loops: [], skip: ['-z'] });
+  segText(p, 'SHIPS', { h: 0.08, t: 0.012, at: [0, y + 0.11, d + 0.0245], look: [1.2, 3.2, 7.0], mat: 'glow' });
+  segText(p, 'FOR SALE', { h: 0.045, t: 0.008, at: [0, y - 0.01, d + 0.0245], look: [7.0, 2.6, 0.6], mat: 'glow' });
+  segText(p, 'EXPLORER MEDIC MINER HAULER', { h: 0.022, t: 0.004, at: [0, y - 0.13, d + 0.0245], look: [1.7, 1.75, 1.85], mat: 'glow' });
+  // (the ledge under it, a line of light along its edge)
+  p.slab('dark', -w / 2 - 0.02, w / 2 + 0.02, 1.0, 1.05, d, d + 0.14, { r: 0.01 });
+  p.glowSlab('blue', -w / 2, w / 2, 1.012, 1.028, d + 0.14, d + 0.144, flat);
+  p.light([0, y, d + 0.5], 0.5, [0.35, 0.65, 1], [0, -0.2, 1], 3.2);
+}
 export function jobs(p, v) {
   if (v === 'pair') {
     const { w, h, z, up } = JOBS_PAIR, fw = w + 0.13, fh = 2 * up + h + 0.13, head = 0.085, flat = (skip) => ({ r: 0, cell: 9, loops: [], skip });

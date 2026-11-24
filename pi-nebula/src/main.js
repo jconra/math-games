@@ -52,6 +52,7 @@ import { makeJobsBoard } from './jobsboard.js';
 import { news } from './news.js';
 import { makeMission } from './mission.js';
 import { makeShipPaint } from './shippaint.js';
+import { makeKiosk } from './kiosk.js';
 import { addOutside } from './outside.js';
 import { makeAnnounce } from './announce.js';
 import { makeLift } from './lift.js';
@@ -200,6 +201,9 @@ async function boot() {
     // (the supply run: its cargo run in Cargo, src/supplyrun.js; the Hauler's bridge, src/dockwalk.js; is the crew member
     // down in Cargo just now)
     supply: () => GAME.supply, dock: dockWalk, inCargo: () => !!(player && player.P && GAME.lift && Math.abs(player.P.pos.y - STORE.floor) < 1 && GAME.lift.crewAt === 'store') });
+  // the ship store's kiosk in the hallway, the one place a ship is bought (src/kiosk.js)
+  const kiosk = GAME.kiosk = makeKiosk({ W, walls, input, mission, shipPaint, crew: () => GAME.player, bridge: () => bridgeStands(GAME.player),
+    quiet: () => !!(jobs.near || jobs.panel || board.near || board.isOpen || (people && people.bubbles.asking)) });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
   // the game's maker's forklift, parked in Cargo: fetched the first time the player steps into the lift; now and then
@@ -255,6 +259,7 @@ async function boot() {
       // (on Cargo's forklift: seated, the forklift driven by the keys and the stick: src/cargodrive.js)
       const driving = cargo.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding, { inLift: !!lift.here });
       lap.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding);
+      kiosk.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here);
       const move = ctl ? ctl.move : atJob || onTrip || riding || driving ? null : auto.way ? autoMove() : input.move;
       walkFree = GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here && !cargo.on && !mission.seated && !visit.focus;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
@@ -354,7 +359,7 @@ async function boot() {
   function toTitle() {
     if (GAME.mode !== 'play') return;
     GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); cargo.stop(); lap.stop(); jobs.update(0, null, false); jobs.close();
-    board.update(0, null, false); board.stop();
+    board.update(0, null, false); board.stop(); kiosk.update(0, null, false);
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
   }

@@ -6,22 +6,20 @@
 // (the offer stays open). The job panel's glass; along the bottom on a phone. Loaded only when a captain's offer is
 // taken up (src/mission.js).
 //
-// BUYING THE SHIP, AND A SHIP THAT IS YOURS (src/own.js has the game's maker's words). Under the captain's offer the card
-// has ONE MORE LINE, the ship's sale (`sale`): "Buy the Miner: 60,000 credits" with its button (pressed once it asks
-// "Buy the Miner for 60,000 credits?", Yes or No, so nothing that dear is spent by a slip of the thumb); short of
-// credits, how many more are needed and no button; bought, "The Miner is yours" and "Take your Miner out". The offer
-// above it is exactly as it was, owned or not. THE OWNER'S CARD (`mode: 'own'`: at the pilot's seat of a ship that is
+// A SHIP THAT IS YOURS (src/own.js has the game's maker's words). Ships are bought at the ship store's kiosk in the
+// hallway (src/kiosk.js), never on a captain's card. With the ship theirs, the captain's card has one more line under
+// his offer (`sale`, its owned state): "The Miner is yours" and "Take your Miner out"; the offer above it is exactly as
+// it was, owned or not. THE OWNER'S CARD (`mode: 'own'`: at the pilot's seat of a ship that is
 // theirs, or from that button) is the same card turned to a run of their own: each of the three jobs is theirs or a
 // hired crew member's (the tag says who, and what the hired one takes), what they keep, and its buttons: Start the run,
 // Just fly (no pay), Not now. Where a run of their own cannot start (`own.run` false: the Hauler before the old station
-// is found, a contract still on) it says why and offers the flying alone. A card with nothing to sign (`mode: 'sale'`:
-// the Hauler's captain before the old station is found, with no run to offer yet) is the sale's line alone.
+// is found, a contract still on) it says why and offers the flying alone.
 // THE PAINT OF ITS HULL (`own.paint`: src/shippaint.js, src/paintcard.js; the game's maker: "Its colour: pick the paint
 // of its hull"): the owner's card has a Paint button, which turns the card (`mode: 'paint'`) to a row of swatches along
 // the bottom of the screen with the ship shown above it; a swatch tapped repaints the ship at once; Done, back.
 //
 //   const C = openContract(root, { mission, captain, onSign(roleIds), onLater(), sale, own, mode })   C.close(), C.el, C.state()
-//     sale: { now() -> the ship's sale for this crew member (src/own.js saleOf), buy() -> true once bought,
+//     sale: { now() -> the ship's sale for this crew member (src/own.js saleOf: is it theirs, its name),
 //             take() -> 'own' (this card turns to the owner's) or anything else (the caller has seen to it) }
 //     own:  { run (a run of their own can start here), why (it cannot: the words), fly (just flying can start here),
 //             note (where else the other of the two starts), onRun(roleIds), onFly(),
@@ -68,9 +66,7 @@ button.pmc-role:hover { box-shadow: inset 0 0 0 2px rgba(232, 243, 252, 0.9); }
 .pmc-sale b { font-size: 15px; letter-spacing: 0.04em; color: #ffd560; }
 .pmc-sale small { font-size: 13px; color: var(--dim); }
 .pmc-sale button { flex: none; min-height: 44px; padding: 6px 14px; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; clip-path: var(--oct); --cut: 8px; }
-.pmc-buy, .pmc-take { color: var(--accent-ink) !important; background: var(--accent) !important; }
-.pmc-no { background: rgba(40, 47, 56, 0.92) !important; box-shadow: inset 0 0 0 1.5px var(--line); }
-.pmc-sale.is-only { margin-top: 0; padding-top: 0; border-top: 0; margin-bottom: 12px; }
+.pmc-take { color: var(--accent-ink) !important; background: var(--accent) !important; }
 .pmc-btns.is-own { flex-wrap: wrap; }
 .pmc-btns.is-own .pmc-sign { flex: 1 1 100%; }
 @media (hover: none) and (pointer: coarse) { .pmc kbd { display: none; } }
@@ -96,37 +92,27 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   if (!document.getElementById('pmc-css')) { const st = document.createElement('style'); st.id = 'pmc-css'; st.textContent = CSS; document.head.appendChild(st); }
   const roles = rolesOf(M), open = roles.filter((r) => r.open), pick = open.length > 1;
   const mine = new Set(open.map((r) => r.id));   // (every open role at first)
-  // (mode: the captain's offer, the owner's own card, or the sale's line alone; sure: the buy button pressed once)
-  let closed = false, mode = mode0, sure = false;
+  // (mode: the captain's offer, or the owner's own card)
+  let closed = false, mode = mode0;
   const el = document.createElement('div');
   el.className = 'pmc'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
   root.appendChild(el);
   // (the ship, as it is said: the sale's own name for it)
   const shipName = () => { const S = sale && sale.now ? sale.now() : null; return (S && S.name) || M.shipName || 'ship'; };
-  // ── THE SHIP'S SALE: one line, under the captain's offer (or alone) ──
-  function saleHtml(only = false) {
-    const S = sale && sale.now ? sale.now() : null; if (!S) return '';
-    const ship = esc(S.name), cls = `pmc-sale${only ? ' is-only' : ''}`;
-    if (S.owned) return `<div class="${cls}" data-sale="owned"><span><b>The ${ship} is yours</b><small>Take it out any time, from its pilot's seat.</small></span><button type="button" class="pmc-take">Take your ${ship} out</button></div>`;
-    if (!S.open) return `<div class="${cls}" data-sale="closed"><span><b>The ${ship}: ${say(S.price)} credits</b><small>For sale ${esc(S.why)}.</small></span></div>`;
-    if (S.short > 0) return `<div class="${cls}" data-sale="short"><span><b>Buy the ${ship}: ${say(S.price)} credits</b><small>You have ${say(S.credits)}. You need ${say(S.short)} more ${S.short === 1 ? 'credit' : 'credits'}.</small></span></div>`;
-    if (sure) return `<div class="${cls}" data-sale="sure"><span><b>Buy the ${ship} for ${say(S.price)} credits?</b><small>You will have ${say(S.credits - S.price)} ${S.credits - S.price === 1 ? 'credit' : 'credits'} left.</small></span><button type="button" class="pmc-buy">Yes, buy it</button><button type="button" class="pmc-no">No</button></div>`;
-    return `<div class="${cls}" data-sale="can"><span><b>Buy the ${ship}: ${say(S.price)} credits</b><small>You have ${say(S.credits)} credits.</small></span><button type="button" class="pmc-buy">Buy</button></div>`;
+  // ── A SHIP THAT IS THEIRS: one line, under the captain's offer (none for a ship that is not: it is sold at the kiosk) ──
+  function saleHtml() {
+    const S = sale && sale.now ? sale.now() : null; if (!S || !S.owned) return '';
+    const ship = esc(S.name);
+    return `<div class="pmc-sale" data-sale="owned"><span><b>The ${ship} is yours</b><small>Take it out any time, from its pilot's seat.</small></span><button type="button" class="pmc-take">Take your ${ship} out</button></div>`;
   }
-  function wireSale() {
-    const buy = el.querySelector('.pmc-buy'), no = el.querySelector('.pmc-no'), take = el.querySelector('.pmc-take');
-    if (buy) buy.addEventListener('click', () => { if (closed) return; if (!sure) { sure = true; draw(); return; } sure = false; if (sale.buy) sale.buy(); draw(); });
-    if (no) no.addEventListener('click', () => { sure = false; draw(); });
-    if (take) take.addEventListener('click', () => takeOut());
-  }
+  function wireSale() { const take = el.querySelector('.pmc-take'); if (take) take.addEventListener('click', () => takeOut()); }
   // (the owner's button: this card turns to their own, or the caller has seen to it and the card is put away)
-  function takeOut() { if (closed || !sale || !sale.take) return; const r = sale.take(); if (r === 'own' && own) { mode = 'own'; sure = false; draw(); } else close(); }
+  function takeOut() { if (closed || !sale || !sale.take) return; const r = sale.take(); if (r === 'own' && own) { mode = 'own'; draw(); } else close(); }
 
   function draw() {
     el.setAttribute('aria-label', mode === 'contract' ? `${captain}'s contract` : `Your ${shipName()}`);
     el.classList.toggle('is-paint', mode === 'paint');
     if (mode === 'paint') return drawPaint();
-    if (mode === 'sale') return drawSale();
     if (mode === 'own') return drawOwn();
     const share = shareOf([...mine]);
     // (who does each job left to the crew: the ship has a crew of three, the captain and one of his crew with the crew
@@ -153,17 +139,6 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
     wireRoles(); wireSale();
   }
   function wireRoles() { for (const b of el.querySelectorAll('button.pmc-role')) b.addEventListener('click', () => { const id = b.dataset.role; if (mine.has(id)) { if (mine.size > 1) mine.delete(id); } else mine.add(id); draw(); }); }
-  // ── THE SALE'S LINE ALONE: nothing to sign here (the shipping computer before the old station is found) ──
-  function drawSale() {
-    el.innerHTML = `<section class="pmc-card">
-      <header class="pmc-top"><b>The ${esc(shipName())}</b><small>${esc(captain)}</small></header>
-      <p class="pmc-what">${esc(M.saleAbout || '')}</p>
-      ${saleHtml(true)}
-      <div class="pmc-btns"><button type="button" class="pmc-later">Not now<kbd>Esc</kbd></button></div>
-    </section>`;
-    el.querySelector('.pmc-later').addEventListener('click', later);
-    wireSale();
-  }
   // ── THE OWNER'S CARD: a run of their own (each job theirs, or a hired crew member's), or just flying ──
   function drawOwn() {
     const ship = esc(shipName()), run = !!(own && own.run), fly = !!(own && own.fly);
@@ -204,7 +179,7 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   }
   function close() { if (closed) return; if (mode === 'paint') paint.view(false); closed = true; removeEventListener('keydown', onKey, true); el.classList.remove('is-on'); setTimeout(() => el.remove(), 220); }
   function sign() {
-    if (closed || mode === 'sale') return;
+    if (closed) return;
     const ids = M.roles.filter((id) => mine.has(id));
     if (mode === 'own') { if (!own || !own.run) return; close(); own.onRun(ids); return; }
     close(); onSign(ids);
@@ -213,11 +188,10 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   function later() { if (closed) return; close(); onLater(); }
   function onKey(e) {
     if (closed) return;
-    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (mode === 'paint') fromPaint(); else if (sure) { sure = false; draw(); } else later(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (mode === 'paint') fromPaint(); else later(); }
     else if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
       e.preventDefault(); e.stopImmediatePropagation();
       if (mode === 'paint') { fromPaint(); return; }
-      // (never the buying: that is only ever its own button, pressed twice)
       if (mode === 'contract') sign(); else if (mode === 'own') { if (own && own.run) sign(); else flyOut(); }
     }
   }
@@ -225,11 +199,10 @@ export function openContract(root, { mission: M, captain = 'The captain', onSign
   draw();
   requestAnimationFrame(() => el.classList.add('is-on'));
   return { el, close, sign, later, takeOut, flyOut, toPaint, fromPaint,
-    // (the rigs: the buy button pressed, a job tapped, a swatch tapped)
+    // (the rigs: a job tapped, a swatch tapped)
     paint: (id) => { const b = el.querySelector(`.pmc-paint[data-paint="${id}"]`); if (b) b.click(); return !!b; },
-    buy: () => { const b = el.querySelector('.pmc-buy'); if (b) b.click(); return !!b; },
     tap: (id) => { const b = el.querySelector(`button.pmc-role[data-role="${id}"]`); if (b) b.click(); return !!b; },
-    state: () => ({ mode, mine: [...mine], share: mode === 'own' ? ownShare(M, [...mine]) : shareOf([...mine]), sure,
+    state: () => ({ mode, mine: [...mine], share: mode === 'own' ? ownShare(M, [...mine]) : shareOf([...mine]),
       sale: sale && sale.now ? (() => { const S = sale.now(), d = el.querySelector('.pmc-sale'); return S ? { ...S, shown: d ? d.dataset.sale : null, words: d ? d.querySelector('span').textContent : '' } : null; })() : null,
       own: own ? { run: !!own.run, fly: !!own.fly, paint: paint ? (paint.list().find((p) => p.on) || {}).id : null } : null,
       roles: roles.map((r) => ({ id: r.id, share: r.share, open: r.open, who: mine.has(r.id) ? 'You' : mode === 'own' ? 'Hired: ' + r.crew : r.by || r.crew })) }) };

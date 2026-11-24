@@ -1,7 +1,7 @@
 // A SHIP OF YOUR OWN: buying one, and what owning it changes. The plain part, with no page and no three.js, so node can
 // test it (pi-nebula/tests/own.test.mjs): the prices, the crew member's own ships as kept, the price check and the
-// spend, and how many more cards a job asks on a run of your own. In the game: src/contract.js shows the buy line on a
-// captain's card and the owner's own card, src/mission.js joins them to the station (the captains' cards, the shipping
+// spend, and how many more cards a job asks on a run of your own. In the game: src/kiosk.js is the ship store, where
+// every ship is bought; src/contract.js shows the owner's own card, src/mission.js joins it to the station (the shipping
 // computer, the pilot's seat of a ship that is yours), src/missions.js has the owner's pay and the hired crew's shares,
 // src/trip.js flies the run and the flight.
 //
@@ -23,9 +23,13 @@
 //
 // SO:
 //   - EACH SHIP HAS ONE PRICE (PRICES: the plan he read, ~/pw/space-math/BUYING_1.md: "the Explorer cheapest; the Medic
-//     and the Miner 50,000 to 60,000; the Hauler about 80,000"). It is bought from its own captain's card (the Hauler
-//     at the shipping computer, once this crew member's bridge to it is built); short of credits the card says how many
-//     more are needed and nothing else changes.
+//     and the Miner 50,000 to 60,000; the Hauler about 80,000"). Every ship is bought at ONE PLACE, THE SHIP STORE'S
+//     KIOSK in the hallway (src/kiosk.js; the game's maker, 2026-11-24: "maybe we should have a ship sales screen
+//     somewhere, rather then adding that on the end of the captain's card. Maybe in a blank spot in the hallway we can
+//     have a ship store kiosk that lets you browse the ships and shows their prices and lets you pick the colors and
+//     stuff. Then if you buy one it will be in the hanger (or docked)."), its list in STORE's order; the Hauler once this
+//     crew member's bridge to it is built; short of credits the kiosk says how many more are needed and nothing else
+//     changes. No captain's card and no shipping computer sells a ship any more.
 //   - BOUGHT, the credits are spent and the ship is the crew member's: kept with them (crew.ships: its id), so each crew
 //     member on a device owns their own. The ship stays in its hangar as it is, and its captain goes on offering his
 //     contracts on it exactly as before.
@@ -39,6 +43,8 @@
 export const PRICES = { explorer: 50000, medic: 55000, miner: 60000, hauler: 80000 };
 // (the ships as they are said: the fleet's own names, src/fleet.js; kept here too so this file needs nothing else)
 export const SHIP_NAMES = { explorer: 'Explorer', medic: 'Medic', miner: 'Miner', hauler: 'Hauler' };
+// THE KIOSK'S LIST, in the order it shows them: the cheapest first, by PRICES
+export const STORE = Object.keys(PRICES).sort((a, b) => PRICES[a] - PRICES[b]);
 const whole = (v) => Math.max(0, Math.floor(+v || 0));
 
 // the crew member's own ships, as kept (tidied: ships this build knows, each once)
@@ -48,7 +54,9 @@ export function shipsOf(crew) {
 }
 export const owns = (crew, ship) => shipsOf(crew).includes(ship);
 
-// A SHIP'S SALE, for this crew member, as its captain's card says it:
+// THE KIOSK'S LIST for this crew member: each ship's sale (saleOf, below), in STORE's order
+export const storeOf = (crew, { bridge = true } = {}) => STORE.map((ship) => saleOf(crew, ship, { bridge }));
+// A SHIP'S SALE, for this crew member, as the kiosk says it:
 //   { ship, name, price, owned, open (for sale to them now), why (not open: what it waits for), credits (theirs),
 //     short (how many more they need; 0: enough), can (it can be bought now) }
 // bridge: has this crew member built the bridge to the Hauler (src/jobs/dock.js bridgeStands)? The Hauler is for sale

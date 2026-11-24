@@ -844,20 +844,16 @@ export function payoutOrder(m, grade = 0, rand = Math.random) {
 function makeMissions() {
   const states = new Map(), fns = [];
   const tell = (list, captain, yes) => { for (const f of list) { try { f(captain, yes); } catch (e) { console.error(e); } } };
-  // (is that captain's ship for sale to this crew member just now: src/mission.js says, `sells`; nobody has: no)
-  let forSale = () => false;
   return {
-    // (a run of the crew member's own, in the ship they bought from that captain, is no contract of his: he asks as ever)
+    // (a run of the crew member's own, in a ship of theirs, is no contract of the captain's: they ask as ever)
     // A CAPTAIN WHOSE RUN IS NOT OFFERED YET (a mission's `offered`: the Hauler's, until the old station is found) has
-    // nothing to ask: 'wait'; or, with their ship for sale to this crew member meanwhile, that alone: 'sale' (the card
-    // is the sale's line by itself, src/contract.js).
+    // nothing to ask: 'wait'. (No captain sells a ship: the ship store's kiosk does, src/kiosk.js.)
     state(id, crew = null) {
       const m = crew ? contractOf(crew) : null; if (m && m.captain === id && !m.own) return m.state;
-      if (crew && !offeredTo(id, crew)) return forSale(id, crew) ? 'sale' : 'wait';
+      if (crew && !offeredTo(id, crew)) return 'wait';
       return states.get(id) || 'new';
     },
     open: (id, crew) => offeredTo(id, crew),
-    sells(fn) { forSale = typeof fn === 'function' ? fn : () => false; },
     asked(id) { if (!states.has(id)) states.set(id, 'asked'); },
     answer(captain, yes) { states.set(captain.id, yes ? 'interested' : 'declined'); tell(fns, captain, yes); },
     // (the contract's card put away unsigned: the offer stays open, and the captain asks again another time)

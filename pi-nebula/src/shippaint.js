@@ -15,23 +15,30 @@
 //
 // WHAT IT COSTS: a repaint writes the new colour over the old in the lists the ship is already drawn from (about a
 // thousand corners) and sends those lists to the graphics card once. No picture, no material, no mesh and no draw is
-// added; a frame in which nothing changed costs four comparisons.
+// added; a frame in which nothing changed costs a few comparisons.
+//
+// ON ITS CAPTAIN'S CONTRACT a ship that is theirs wears its own paint, from the signing until the pay is collected
+// (src/paint.js wornOf): it is the captain's ship then. Its paint is shown while it is picked all the same.
 //
 // THE SHIP SHOWN WHILE ITS PAINT IS PICKED (view): the owner's card is brought up at the pilot's seat, where nothing of
 // the hull is seen, so while the paint card is up the camera stands outside the ship, off its bow, looking back at it:
 // in its hangar (kept inside the hangar's walls, wherever the ship was set down), or out off the Hauler's bow at the dock.
-// The crew member has not moved: Done, and they are at the seat again.
+// The crew member has not moved: Done, and they are at the seat again. THE SHIP STORE'S KIOSK (src/kiosk.js) shows each
+// ship the same way while it is looked at there, in the paint picked for it there (`preview`: a ship not theirs yet in
+// the paint they would buy it in; nothing is kept until it is bought).
 //
 //   const S = makeShipPaint({ W, crew, save, boarding, hauler })
 //   S.card(ship)      the owner's card's `own.paint` (src/contract.js, src/paintcard.js): { list(), pick(id), view(on) }
 //   S.pick(ship, id)  the crew member's paint for a ship that is theirs: laid and saved at once -> { ok, paint | why }
 //   S.aim(camera)     once a frame, last: the camera outside the ship while its paint card is up (true while it is)
+//   S.view(ship)      the ship shown from outside (null: none);   S.preview(ship, paint)  a ship shown in a paint for now
+//                     (null: as it is)
 //   S.on(ship)        the paint laid on a ship now;   S.viewing: the ship whose paint card is up, or null
 //   S.modelColour(ship, own)  the small model's colour in the landing guide (src/flying.js): the paint, kept light
 //                     enough to read on the guide's dark glass; `own` (the model's own colour) for a ship in its own paint
 import * as THREE from 'three';
 import { paintBuilt, FACTORY, hullColour, lin, hexOf } from '../kit/ships/paints.js';
-import { paintOf, setPaint, swatchesOf } from './paint.js';
+import { paintOf, wornOf, setPaint, swatchesOf } from './paint.js';
 
 // the ships parked in the station's hangars, each a room of the station file ('ship-' + id)
 const PARKED = ['miner', 'explorer', 'medic'];
@@ -55,15 +62,19 @@ const MODEL = { mix: 0.15, light: 0.88 };
 
 export function makeShipPaint({ W, crew, save = () => {}, boarding = null, hauler = () => null }) {
   const laid = Object.fromEntries(PARKED.map((id) => [id, FACTORY])), onBuild = new WeakMap();
-  let lastCrew, lastPaints, lastShips, lastBuilds = -1, viewing = null;
+  let lastCrew, lastPaints, lastShips, lastRun, lastState, lastShown, lastBuilds = -1, viewing = null, previews = {}, shownKey = '';
+  // (the paint a ship is shown in now: one picked at the kiosk for it; while its paint card is up, the crew member's
+  // own; else the paint it wears (its own on its captain's contract): src/paint.js wornOf)
+  const shownOf = (c, id) => previews[id] || (viewing === id ? paintOf(c, id) : wornOf(c, id));
+  const rekey = () => { shownKey = (viewing || '') + '|' + Object.entries(previews).join(','); };
   // EACH SHIP IN THE PAINT IT HAS FOR THE CREW MEMBER PLAYING: looked at once a frame, laid only when the crew member, their
-  // ships, their paints or the Hauler's builds have changed
+  // ships, their paints, their contract, the ship shown or the Hauler's builds have changed
   function lay(force = false) {
-    const c = crew() || null, H = hauler(), builds = H && H.builds ? H.builds() : [];
-    if (!force && c === lastCrew && (c && c.paints) === lastPaints && (c && c.ships) === lastShips && builds.length === lastBuilds) return;
-    lastCrew = c; lastPaints = c && c.paints; lastShips = c && c.ships; lastBuilds = builds.length;
-    for (const id of PARKED) { const want = paintOf(c, id); if (laid[id] !== want) { paintBuilt(W.built, id, want, { zones: ['ship-' + id] }); laid[id] = want; } }
-    const want = paintOf(c, 'hauler');
+    const c = crew() || null, H = hauler(), builds = H && H.builds ? H.builds() : [], m = c && c.mission;
+    if (!force && c === lastCrew && (c && c.paints) === lastPaints && (c && c.ships) === lastShips && m === lastRun && (m && m.state) === lastState && shownKey === lastShown && builds.length === lastBuilds) return;
+    lastCrew = c; lastPaints = c && c.paints; lastShips = c && c.ships; lastRun = m; lastState = m && m.state; lastShown = shownKey; lastBuilds = builds.length;
+    for (const id of PARKED) { const want = shownOf(c, id); if (laid[id] !== want) { paintBuilt(W.built, id, want, { zones: ['ship-' + id] }); laid[id] = want; } }
+    const want = shownOf(c, 'hauler');
     for (const B of builds) if ((onBuild.get(B) || FACTORY) !== want) { paintBuilt(B, 'hauler', want); onBuild.set(B, want); }
   }
   const after = () => lay(false);
@@ -108,16 +119,17 @@ export function makeShipPaint({ W, crew, save = () => {}, boarding = null, haule
   }
   // (the small model in the landing guide: the paint with a little white in it, brought up to the guide's brightness)
   function modelColour(ship, own) {
-    const id = laid[ship] || (ship === 'hauler' ? paintOf(crew(), 'hauler') : FACTORY);
+    const id = laid[ship] || (ship === 'hauler' ? shownOf(crew(), 'hauler') : FACTORY);
     if (!id || id === FACTORY) return own;
     const c = lin(hullColour(ship, id)).map((v) => v + (1 - v) * MODEL.mix), top = Math.max(...c), k = lin('#' + Math.round(MODEL.light * 255).toString(16).padStart(2, '0').repeat(3))[0] / Math.max(1e-3, top);
     return parseInt(hexOf(c.map((v) => v * k)).slice(1), 16);
   }
   return {
     pick, aim, lay, modelColour,
-    card: (ship) => ({ list: () => swatchesOf(crew(), ship), pick: (id) => pick(ship, id).ok, view: (on) => { viewing = on ? ship : viewing === ship ? null : viewing; } }),
-    on: (ship) => (ship === 'hauler' ? paintOf(lastCrew, 'hauler') : laid[ship] || FACTORY),
-    get viewing() { return viewing; }, view: (ship) => { viewing = ship || null; }, viewOf,
+    card: (ship) => ({ list: () => swatchesOf(crew(), ship), pick: (id) => pick(ship, id).ok, view: (on) => { viewing = on ? ship : viewing === ship ? null : viewing; rekey(); } }),
+    on: (ship) => (ship === 'hauler' ? shownOf(lastCrew, 'hauler') : laid[ship] || FACTORY),
+    get viewing() { return viewing; }, view: (ship) => { viewing = ship || null; rekey(); }, viewOf,
+    preview: (ship, id) => { if (id) previews = { ...previews, [ship]: id }; else { previews = { ...previews }; delete previews[ship]; } rekey(); },
     dispose() { W.after.delete(after); },
   };
 }
