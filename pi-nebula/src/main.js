@@ -202,7 +202,7 @@ async function boot() {
     // down in Cargo just now)
     supply: () => GAME.supply, dock: dockWalk, inCargo: () => !!(player && player.P && GAME.lift && Math.abs(player.P.pos.y - STORE.floor) < 1 && GAME.lift.crewAt === 'store') });
   // the ship store's kiosk in the hallway, the one place a ship is bought (src/kiosk.js)
-  const kiosk = GAME.kiosk = makeKiosk({ W, walls, input, mission, shipPaint, crew: () => GAME.player, bridge: () => bridgeStands(GAME.player),
+  const kiosk = GAME.kiosk = makeKiosk({ W, walls, input, mission, shipPaint, crane, crew: () => GAME.player, bridge: () => bridgeStands(GAME.player),
     quiet: () => !!(jobs.near || jobs.panel || board.near || board.isOpen || (people && people.bubbles.asking)) });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });

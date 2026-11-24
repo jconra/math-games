@@ -21,7 +21,8 @@
 //     it). Bought, the credits are spent and the ship is theirs in its hangar (the Hauler at the dock), in that paint
 //     (src/mission.js buyShip).
 //
-//   const K = makeKiosk({ W, walls, input, mission, shipPaint, crew, bridge, quiet })
+//   const K = makeKiosk({ W, walls, input, mission, shipPaint, crane, crew, bridge, quiet })
+//     crane: the smelter's crane (src/crane.js): the Miner, away on a haul of its own when it is looked at, is home at once
 //     quiet(): something else's prompt or question is up (the kiosk's waits)
 //   K.update(dt, P, playing)   each frame: the prompt near the kiosk
 //   K.open() / K.close() / K.pick(ship) / K.paint(id) / K.buy() / K.state()   (the rigs: GAME.kiosk); K.at: where to stand
@@ -89,7 +90,7 @@ export function saleLine(S, { sure = false } = {}) {
   return { kind: 'can', head: `Buy the ${ship}: ${say(S.price)} credits`, sub: `You have ${say(S.credits)} ${credit(S.credits)}.`, buttons: [['psk-buy', 'Buy']] };
 }
 
-export function makeKiosk({ W, walls, input = null, mission, shipPaint, crew = () => null, bridge = () => false, quiet = () => false }) {
+export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = null, crew = () => null, bridge = () => false, quiet = () => false }) {
   if (!document.getElementById('psk-css')) { const st = document.createElement('style'); st.id = 'psk-css'; st.textContent = CSS; document.head.appendChild(st); }
   const K = piecesOf(W.R).find((x) => x.piece === 'kiosk');
   const api = { at: null, isOpen: false, near: false, update() {}, open() {}, close() {}, state: () => null };
@@ -113,8 +114,12 @@ export function makeKiosk({ W, walls, input = null, mission, shipPaint, crew = (
   const picked = {};      // (the paint picked here for each ship not theirs yet, this visit)
   const saleNow = (id = ship) => saleOf(crew(), id, { bridge: !!bridge() });
   const paintNow = (id = ship) => (saleNow(id).owned ? paintOf(crew(), id) : picked[id] || FACTORY);
-  // (the ship picked shown from outside, in the paint picked for it)
-  function show() { for (const id of STORE) shipPaint.preview(id, null); shipPaint.preview(ship, paintNow()); shipPaint.view(ship); }
+  // (the ship picked shown from outside, in the paint picked for it; the Miner away on a haul of its own is home at once,
+  // as when its contract is signed)
+  function show() {
+    if (ship === 'miner' && crane && (crane.mode === 'away' || crane.mode === 'landing')) crane.arrive();
+    for (const id of STORE) shipPaint.preview(id, null); shipPaint.preview(ship, paintNow()); shipPaint.view(ship);
+  }
   function draw() {
     const S = saleNow(), L = saleLine(S, { sure }), on = paintNow(), P = paintById(on) || PAINTS[0];
     el.innerHTML = `<header class="psk-top"><b>Ship store</b><small></small><button type="button" class="psk-x" aria-label="Close (Esc)">&times;</button></header>
