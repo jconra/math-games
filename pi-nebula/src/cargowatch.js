@@ -73,8 +73,11 @@ export function makeCargoWatch({ people = () => null, forklift }) {
     },
     // NOBODY IN THE LANE IN ITS WAY (the lap's countdown waits for this)
     clear() {
-      const L = crew().map((P) => ({ at: [P.pos.x, P.pos.z], speed: P.speed, way: P.walking && P.way ? P.way.slice(P.wi || 0).map((p) => [p.x, p.z]) : null, id: P.id }));
-      const r = clearToGo(L);
+      const all = crew(), L = all.map((P) => ({ at: [P.pos.x, P.pos.z], speed: P.speed, way: P.walking && P.way ? P.way.slice(P.wi || 0).map((p) => [p.x, p.z]) : null, id: P.id }));
+      // (someone sent by any way there is, whose way is not worked out yet, may come by the lap's first stretches:
+      // waited for till it is known)
+      const k = all.findIndex((P) => { const m = mine.get(P); return !!(m && m.cross && (P.sent || P.req || !watching(P))); });
+      const r = k >= 0 ? { clear: false, who: k, at: null } : clearToGo(L);
       S.last = r.clear ? null : { who: L[r.who].id, at: r.at };
       return r;
     },

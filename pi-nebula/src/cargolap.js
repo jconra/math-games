@@ -219,8 +219,9 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     now += dt;
     const D = playing && forklift.hand.on ? forklift.hand.drive() : null, driving = !!D && cargo.on;
     if (driving) {
-      // (is anyone in the lane in its way: asked only while it matters, stopped on the box or waiting there)
-      const s = D.s, ask = L.s.phase === 'wait' || (L.s.phase === 'idle' && L.s.on && L.s.on.on), clear = !ask || crowd.clear().clear;
+      // (is anyone in the lane in its way: asked only while it matters, stopped on the box or waiting there. Before
+      // the people have been called nobody's way to the line is known yet: the countdown waits at least till they are)
+      const s = D.s, ask = L.s.phase === 'wait' || (L.s.phase === 'idle' && L.s.on && L.s.on.on), clear = !ask || (crowd.on && crowd.clear().clear);
       const ev = L.step(s, s.v, dt, { can: can(), carrying: s.carry != null, clear });
       // (stopped on the start box: everyone to the finish line to watch; the countdown waits while one is in the lane)
       if (ev.called) crowd.call();
@@ -247,7 +248,7 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
   const WHY = { face: 'Turn it to face the line.', back: 'Back up: its forks behind the line.', forward: 'A little further, up to the line.', side: 'Into the middle of the box.' };
   function hint() {
     const s = L.s;
-    if (s.phase === 'wait') return 'Wait: the lane is being cleared.';
+    if (s.phase === 'wait') return s.waited > 0.5 ? 'Wait: the lane is being cleared.' : 'Get ready…';
     if (s.phase === 'count') return 'Get ready…';
     if (s.phase === 'run') return s.next < GATES.length ? `Round the racks: corner ${GATES[s.next].n} is next.` : 'Back over the start line!';
     // (a lap just done, its card still up, the forklift rolling on over the line: how to go again)
