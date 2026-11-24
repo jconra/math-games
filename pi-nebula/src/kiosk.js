@@ -49,7 +49,7 @@ const CSS = `
 .psk-top { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
 .psk-top b { font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); }
 .psk-top small { flex: 1; font-size: 13px; color: var(--dim); letter-spacing: 0.04em; }
-.psk-x { flex: none; width: 40px; height: 40px; margin: -6px -6px -6px 0; font-size: 22px !important; line-height: 1; color: #cfeaff !important; background: rgba(255, 255, 255, 0.06) !important; clip-path: var(--oct); --cut: 8px; }
+.psk-x { flex: none; width: 40px; height: 40px; margin: -6px -6px -6px auto; font-size: 22px !important; line-height: 1; color: #cfeaff !important; background: rgba(255, 255, 255, 0.06) !important; clip-path: var(--oct); --cut: 8px; }
 .psk-ships { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
 .psk-ship { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 54px; padding: 4px 2px; background: rgba(150, 210, 250, 0.07) !important; box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.25); clip-path: var(--oct); --cut: 8px; }
 .psk-ship b { font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; }
@@ -110,14 +110,14 @@ export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = 
   const el = document.createElement('div');
   el.className = 'psk'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Ship store');
   document.body.appendChild(el);
-  let isOpen = false, ship = STORE[0], sure = false, wasInput = true, playing = false, near = false;
+  let isOpen = false, ship = STORE[0], sure = false, wasInput = true, playing = false, near = false, held = null;
   const picked = {};      // (the paint picked here for each ship not theirs yet, this visit)
   const saleNow = (id = ship) => saleOf(crew(), id, { bridge: !!bridge() });
   const paintNow = (id = ship) => (saleNow(id).owned ? paintOf(crew(), id) : picked[id] || FACTORY);
   // (the ship picked shown from outside, in the paint picked for it; the Miner away on a haul of its own is home at once,
   // as when its contract is signed)
   function show() {
-    if (ship === 'miner' && crane && (crane.mode === 'away' || crane.mode === 'landing')) crane.arrive();
+    if (ship === 'miner' && crane) { if (held == null) { held = !!crane.awayHeld; crane.awayHeld = true; } if (crane.mode === 'away' || crane.mode === 'landing') crane.arrive(); }
     for (const id of STORE) shipPaint.preview(id, null); shipPaint.preview(ship, paintNow()); shipPaint.view(ship);
   }
   function draw() {
@@ -168,6 +168,7 @@ export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = 
     removeEventListener('keydown', onKey, true);
     for (const id of STORE) shipPaint.preview(id, null);
     shipPaint.view(null);
+    if (crane && held != null) { crane.awayHeld = held; held = null; }
     if (input) input.enabled = wasInput;
   }
   addEventListener('keydown', (e) => {
