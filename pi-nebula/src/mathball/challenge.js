@@ -21,7 +21,8 @@ import { COURT, SPOTS } from './court.js';
 // the place they wait: on the court, a little to the side of the ring and up from it, turned to it (court metres:
 // court.js, x across, z down the court to the door); giveUp: s from yes to giving up when the player never comes
 // (the round against them, and the player at the arena's card, hold it off); look: m, they watch the player this near
-export const WAIT = { at: [2.2, SPOTS.ring[1] - 2.5], giveUp: 180, look: 14 };
+// (giveUp: the game's maker, 2026-11-24, RIV1-2 B: "Longer (say 10 minutes)"; it was 3)
+export const WAIT = { at: [2.2, SPOTS.ring[1] - 2.5], giveUp: 600, look: 14 };
 // WHAT THEY SAY (plain words)
 export const SAYS = {
   yes: 'Sure! I will meet you at the arena.',
