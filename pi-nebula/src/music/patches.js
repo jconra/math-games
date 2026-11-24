@@ -1,0 +1,357 @@
+// THE MUSIC'S INSTRUMENTS, AS SOUND LAB PATCHES. The game's maker, 2026-11-24: "I thought all my projects used the same
+// sound engine as the sound lab. That is how Id prefer it." So every drum, bass, pad and lead of the music is a patch:
+// plain data, nodes and cables, in exactly the form of the Sound Lab's PATCH_PRESETS entries (~/sound-lab/patch.js),
+// played by Pi Nebula's copy of its engine (src/audio/patch.js: playPatch, voicePatch). Each entry here can be pasted
+// into the Sound Lab's PATCH_PRESETS as it is, opened there and tuned by ear (they show in its MUSIC group; project: 'pi-nebula' is for
+// sorting its list by project later, and the engine passes over it).
+//
+// Pitched patches are written at a C, as the Sound Lab's sequencer instruments are (sound-lab/seq.js), so a note's
+// semitones from that C mean what they say: ROOT gives each one's note (MIDI). The bass at C2, the sub under the
+// wobble at C1, everything else at C4. Drums have no pitch (their noise is never transposed); the tom has one.
+//
+// Kept soft for a child doing math: the hats are band-passed (no bare hiss up top), the synths are low-passed below
+// their harsh highs, every note starts and ends on its envelope (no clicks).
+
+
+export const TECHNO_PATCHES = {
+  // ── drums ──────────────────────────────────────────────────────────────────────────────────────────────────────
+  // KICK: a sine with a fast pitch drop (the Sound Lab's SYNTH — KICK, a touch longer)
+  'TECHNO — KICK': { group: 'MUSIC', project: 'pi-nebula', name: 'Kick', kind: 'perc', dur: 0.6, nodes: [
+    { id: 'k-osc', type: 'osc', name: 'body', wave: 'sine', freq: 48, freqMod: 110 },
+    { id: 'k-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.07, sustain: 0 },
+    { id: 'k-amp', type: 'env', name: 'amp', peak: 1, attack: 0.002, decay: 0.36, sustain: 0 },
+    { id: 'k-g', type: 'gain', name: 'vca' },
+    { id: 'out', type: 'out', name: 'output', gain: 0.85 },
+  ], cables: [
+    { from: 'k-pit', to: 'k-osc', port: 'freq' }, { from: 'k-osc', to: 'k-g' }, { from: 'k-amp', to: 'k-g', port: 'gain' }, { from: 'k-g', to: 'out' },
+  ] },
+  // LOFI KICK: rounder and shorter, its click filtered off
+  'TECHNO — LOFI KICK': { group: 'MUSIC', project: 'pi-nebula', name: 'Lo-fi kick', kind: 'perc', dur: 0.5, nodes: [
+    { id: 'k-osc', type: 'osc', name: 'body', wave: 'sine', freq: 46, freqMod: 70 },
+    { id: 'k-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.08, sustain: 0 },
+    { id: 'k-amp', type: 'env', name: 'amp', peak: 1, attack: 0.003, decay: 0.3, sustain: 0 },
+    { id: 'k-g', type: 'gain', name: 'vca' },
+    { id: 'k-f', type: 'filter', name: 'soft', ftype: 'lowpass', freq: 900, Q: 0.7 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.8 },
+  ], cables: [
+    { from: 'k-pit', to: 'k-osc', port: 'freq' }, { from: 'k-osc', to: 'k-g' }, { from: 'k-amp', to: 'k-g', port: 'gain' }, { from: 'k-g', to: 'k-f' }, { from: 'k-f', to: 'out' },
+  ] },
+  // HEAVY KICK: a deeper drop and a longer boom, for the half-time beat
+  'TECHNO — HEAVY KICK': { group: 'MUSIC', project: 'pi-nebula', name: 'Heavy kick', kind: 'perc', dur: 0.8, nodes: [
+    { id: 'k-osc', type: 'osc', name: 'body', wave: 'sine', freq: 42, freqMod: 130 },
+    { id: 'k-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.09, sustain: 0 },
+    { id: 'k-amp', type: 'env', name: 'amp', peak: 1, attack: 0.002, decay: 0.5, sustain: 0 },
+    { id: 'k-g', type: 'gain', name: 'vca' },
+    { id: 'k-sh', type: 'shaper', name: 'warmth', grit: 0.12 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.85 },
+  ], cables: [
+    { from: 'k-pit', to: 'k-osc', port: 'freq' }, { from: 'k-osc', to: 'k-g' }, { from: 'k-amp', to: 'k-g', port: 'gain' }, { from: 'k-g', to: 'k-sh' }, { from: 'k-sh', to: 'out' },
+  ] },
+  // SNARE: a triangle body and band-passed noise (the Sound Lab's SYNTH — SNARE, its hiss band-passed, not high-passed)
+  'TECHNO — SNARE': { group: 'MUSIC', project: 'pi-nebula', name: 'Snare', kind: 'perc', dur: 0.4, nodes: [
+    { id: 's-osc', type: 'osc', name: 'body', wave: 'triangle', freq: 180, freqMod: 60 },
+    { id: 's-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.05, sustain: 0 },
+    { id: 's-tg', type: 'gain', name: 'body vca' },
+    { id: 's-te', type: 'env', name: 'body amp', peak: 0.5, attack: 0.001, decay: 0.1, sustain: 0 },
+    { id: 's-nz', type: 'noise', name: 'snap', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 's-nf', type: 'filter', name: 'snap tone', ftype: 'bandpass', freq: 1900, Q: 0.8 },
+    { id: 's-ng', type: 'gain', name: 'snap vca' },
+    { id: 's-ne', type: 'env', name: 'snap amp', peak: 0.8, attack: 0.001, decay: 0.14, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.12 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.8 },
+  ], cables: [
+    { from: 's-pit', to: 's-osc', port: 'freq' }, { from: 's-osc', to: 's-tg' }, { from: 's-te', to: 's-tg', port: 'gain' }, { from: 's-tg', to: 'out' },
+    { from: 's-nz', to: 's-nf' }, { from: 's-nf', to: 's-ng' }, { from: 's-ne', to: 's-ng', port: 'gain' }, { from: 's-ng', to: 'out' }, { from: 's-ng', to: 'send' },
+  ] },
+  // LOFI SNARE: duller and shorter, more room
+  'TECHNO — LOFI SNARE': { group: 'MUSIC', project: 'pi-nebula', name: 'Lo-fi snare', kind: 'perc', dur: 0.4, nodes: [
+    { id: 's-osc', type: 'osc', name: 'body', wave: 'triangle', freq: 170, freqMod: 40 },
+    { id: 's-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.05, sustain: 0 },
+    { id: 's-tg', type: 'gain', name: 'body vca' },
+    { id: 's-te', type: 'env', name: 'body amp', peak: 0.45, attack: 0.002, decay: 0.09, sustain: 0 },
+    { id: 's-nz', type: 'noise', name: 'snap', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 's-nf', type: 'filter', name: 'snap tone', ftype: 'bandpass', freq: 1500, Q: 0.7 },
+    { id: 's-nl', type: 'filter', name: 'dull', ftype: 'lowpass', freq: 3200, Q: 0.7 },
+    { id: 's-ng', type: 'gain', name: 'snap vca' },
+    { id: 's-ne', type: 'env', name: 'snap amp', peak: 0.75, attack: 0.002, decay: 0.11, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.2 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.9 },
+  ], cables: [
+    { from: 's-pit', to: 's-osc', port: 'freq' }, { from: 's-osc', to: 's-tg' }, { from: 's-te', to: 's-tg', port: 'gain' }, { from: 's-tg', to: 'out' },
+    { from: 's-nz', to: 's-nf' }, { from: 's-nf', to: 's-nl' }, { from: 's-nl', to: 's-ng' }, { from: 's-ne', to: 's-ng', port: 'gain' }, { from: 's-ng', to: 'out' }, { from: 's-ng', to: 'send' },
+  ] },
+  // HEAVY SNARE: a big body and a long tail, on the half-time beat's third beat
+  'TECHNO — HEAVY SNARE': { group: 'MUSIC', project: 'pi-nebula', name: 'Heavy snare', kind: 'perc', dur: 0.6, nodes: [
+    { id: 's-osc', type: 'osc', name: 'body', wave: 'triangle', freq: 190, freqMod: 90 },
+    { id: 's-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.06, sustain: 0 },
+    { id: 's-tg', type: 'gain', name: 'body vca' },
+    { id: 's-te', type: 'env', name: 'body amp', peak: 0.7, attack: 0.001, decay: 0.14, sustain: 0 },
+    { id: 's-nz', type: 'noise', name: 'snap', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 's-nf', type: 'filter', name: 'snap tone', ftype: 'bandpass', freq: 1700, Q: 0.7 },
+    { id: 's-ng', type: 'gain', name: 'snap vca' },
+    { id: 's-ne', type: 'env', name: 'snap amp', peak: 0.8, attack: 0.001, decay: 0.26, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.22 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.6 },
+  ], cables: [
+    { from: 's-pit', to: 's-osc', port: 'freq' }, { from: 's-osc', to: 's-tg' }, { from: 's-te', to: 's-tg', port: 'gain' }, { from: 's-tg', to: 'out' },
+    { from: 's-nz', to: 's-nf' }, { from: 's-nf', to: 's-ng' }, { from: 's-ne', to: 's-ng', port: 'gain' }, { from: 's-ng', to: 'out' }, { from: 's-ng', to: 'send' },
+  ] },
+  // CLAP: three quick bursts of band-passed noise and a short tail (three envelopes, each a little later)
+  'TECHNO — CLAP': { group: 'MUSIC', project: 'pi-nebula', name: 'Clap', kind: 'perc', dur: 0.4, nodes: [
+    { id: 'c-nz', type: 'noise', name: 'hands', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 'c-f', type: 'filter', name: 'tone', ftype: 'bandpass', freq: 1300, Q: 1.2 },
+    { id: 'c-g', type: 'gain', name: 'vca' },
+    { id: 'c-e1', type: 'env', name: 'burst 1', peak: 0.6, attack: 0.001, decay: 0.01, sustain: 0 },
+    { id: 'c-e2', type: 'env', name: 'burst 2', peak: 0.6, attack: 0.001, decay: 0.01, sustain: 0, delay: 0.011 },
+    { id: 'c-e3', type: 'env', name: 'tail', peak: 0.7, attack: 0.001, decay: 0.16, sustain: 0, delay: 0.022 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.2 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.55 },
+  ], cables: [
+    { from: 'c-nz', to: 'c-f' }, { from: 'c-f', to: 'c-g' }, { from: 'c-e1', to: 'c-g', port: 'gain' }, { from: 'c-e2', to: 'c-g', port: 'gain' }, { from: 'c-e3', to: 'c-g', port: 'gain' },
+    { from: 'c-g', to: 'out' }, { from: 'c-g', to: 'send' },
+  ] },
+  // HATS: band-passed noise, a very short envelope (closed) or a longer one (open)
+  'TECHNO — HAT': { group: 'MUSIC', project: 'pi-nebula', name: 'Hat', kind: 'perc', dur: 0.2, nodes: [
+    { id: 'h-nz', type: 'noise', name: 'hat', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 'h-f', type: 'filter', name: 'tone', ftype: 'bandpass', freq: 6800, Q: 0.9 },
+    { id: 'h-g', type: 'gain', name: 'vca' },
+    { id: 'h-e', type: 'env', name: 'amp', peak: 0.6, attack: 0.001, decay: 0.04, sustain: 0 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.9 },
+  ], cables: [
+    { from: 'h-nz', to: 'h-f' }, { from: 'h-f', to: 'h-g' }, { from: 'h-e', to: 'h-g', port: 'gain' }, { from: 'h-g', to: 'out' },
+  ] },
+  'TECHNO — OPEN HAT': { group: 'MUSIC', project: 'pi-nebula', name: 'Open hat', kind: 'perc', dur: 0.4, nodes: [
+    { id: 'h-nz', type: 'noise', name: 'hat', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 'h-f', type: 'filter', name: 'tone', ftype: 'bandpass', freq: 6400, Q: 0.9 },
+    { id: 'h-g', type: 'gain', name: 'vca' },
+    { id: 'h-e', type: 'env', name: 'amp', peak: 0.5, attack: 0.002, decay: 0.18, sustain: 0 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.75 },
+  ], cables: [
+    { from: 'h-nz', to: 'h-f' }, { from: 'h-f', to: 'h-g' }, { from: 'h-e', to: 'h-g', port: 'gain' }, { from: 'h-g', to: 'out' },
+  ] },
+  'TECHNO — LOFI HAT': { group: 'MUSIC', project: 'pi-nebula', name: 'Lo-fi hat', kind: 'perc', dur: 0.2, nodes: [
+    { id: 'h-nz', type: 'noise', name: 'hat', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.4 },
+    { id: 'h-f', type: 'filter', name: 'tone', ftype: 'bandpass', freq: 5000, Q: 0.8 },
+    { id: 'h-g', type: 'gain', name: 'vca' },
+    { id: 'h-e', type: 'env', name: 'amp', peak: 0.6, attack: 0.002, decay: 0.05, sustain: 0 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.8 },
+  ], cables: [
+    { from: 'h-nz', to: 'h-f' }, { from: 'h-f', to: 'h-g' }, { from: 'h-e', to: 'h-g', port: 'gain' }, { from: 'h-g', to: 'out' },
+  ] },
+  // TOM: a pitched sine drop, for the lo-fi fills
+  'TECHNO — TOM': { group: 'MUSIC', project: 'pi-nebula', name: 'Tom', kind: 'perc', dur: 0.5, nodes: [
+    { id: 't-osc', type: 'osc', name: 'body', wave: 'sine', freq: 130.81, freqMod: 60 },
+    { id: 't-pit', type: 'env', name: 'pitch', peak: 1, attack: 0.001, decay: 0.12, sustain: 0 },
+    { id: 't-amp', type: 'env', name: 'amp', peak: 1, attack: 0.003, decay: 0.26, sustain: 0 },
+    { id: 't-g', type: 'gain', name: 'vca' },
+    { id: 'send', type: 'send', name: 'room', gain: 0.15 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.5 },
+  ], cables: [
+    { from: 't-pit', to: 't-osc', port: 'freq' }, { from: 't-osc', to: 't-g' }, { from: 't-amp', to: 't-g', port: 'gain' }, { from: 't-g', to: 'out' }, { from: 't-g', to: 'send' },
+  ] },
+  // RISER: the build's hiss, noise through a band-pass that glides up across each note (the notes rise a bar at a
+  // time, so the band climbs through the build)
+  'TECHNO — RISER': { group: 'MUSIC', project: 'pi-nebula', name: 'Riser', kind: 'perc', dur: 2, nodes: [
+    { id: 'r-nz', type: 'noise', name: 'hiss', freq: 600, steps: 256, rate: 1, level: 1, loopLen: 0.6 },
+    { id: 'r-f', type: 'filter', name: 'band', ftype: 'bandpass', freq: 400, freqEnd: 650, glide: 1.6, Q: 1.4 },
+    { id: 'r-g', type: 'gain', name: 'vca' },
+    { id: 'r-e', type: 'env', name: 'amp', peak: 1, attack: 0.08, decay: 0.05, sustain: 0.95, release: 0.08 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.22 },
+  ], cables: [
+    { from: 'r-nz', to: 'r-f' }, { from: 'r-f', to: 'r-g' }, { from: 'r-e', to: 'r-g', port: 'gain' }, { from: 'r-g', to: 'out' },
+  ] },
+
+  // ── bass ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  // WARM: a sine with a soft triangle an octave up, low-passed (the lo-fi bass)
+  'TECHNO — WARM BASS': { group: 'MUSIC', project: 'pi-nebula', name: 'Warm bass', kind: 'bass', dur: 1.5, nodes: [
+    { id: 'b-osc', type: 'osc', name: 'body', wave: 'sine', freq: 65.406, level: 1 },
+    { id: 'b-oct', type: 'osc', name: 'octave', wave: 'triangle', freq: 130.81, level: 0.22 },
+    { id: 'b-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 700, Q: 0.7 },
+    { id: 'b-g', type: 'gain', name: 'vca' },
+    { id: 'b-e', type: 'env', name: 'amp', peak: 1, attack: 0.012, decay: 0.1, sustain: 0.85, release: 0.12 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.28 },
+  ], cables: [
+    { from: 'b-osc', to: 'b-f' }, { from: 'b-oct', to: 'b-f' }, { from: 'b-f', to: 'b-g' }, { from: 'b-e', to: 'b-g', port: 'gain' }, { from: 'b-g', to: 'out' },
+  ] },
+  // PULSE: a saw whose filter snaps shut on each note (the off-beat techno bass)
+  'TECHNO — PULSE BASS': { group: 'MUSIC', project: 'pi-nebula', name: 'Pulse bass', kind: 'bass', dur: 0.6, nodes: [
+    { id: 'b-osc', type: 'osc', name: 'saw', wave: 'sawtooth', freq: 65.406, level: 1 },
+    { id: 'b-f', type: 'filter', name: 'snap', ftype: 'lowpass', freq: 1100, freqEnd: 220, glide: 0.16, Q: 3 },
+    { id: 'b-g', type: 'gain', name: 'vca' },
+    { id: 'b-e', type: 'env', name: 'amp', peak: 1, attack: 0.004, decay: 0.1, sustain: 0.7, release: 0.05 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.58 },
+  ], cables: [
+    { from: 'b-osc', to: 'b-f' }, { from: 'b-f', to: 'b-g' }, { from: 'b-e', to: 'b-g', port: 'gain' }, { from: 'b-g', to: 'out' },
+  ] },
+  // ROLLING: shorter and darker, for sixteenths between the kicks
+  'TECHNO — ROLLING BASS': { group: 'MUSIC', project: 'pi-nebula', name: 'Rolling bass', kind: 'bass', dur: 0.4, nodes: [
+    { id: 'b-osc', type: 'osc', name: 'saw', wave: 'sawtooth', freq: 65.406, level: 1 },
+    { id: 'b-f', type: 'filter', name: 'snap', ftype: 'lowpass', freq: 800, freqEnd: 220, glide: 0.12, Q: 2 },
+    { id: 'b-g', type: 'gain', name: 'vca' },
+    { id: 'b-e', type: 'env', name: 'amp', peak: 1, attack: 0.004, decay: 0.06, sustain: 0.6, release: 0.04 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.52 },
+  ], cables: [
+    { from: 'b-osc', to: 'b-f' }, { from: 'b-f', to: 'b-g' }, { from: 'b-e', to: 'b-g', port: 'gain' }, { from: 'b-g', to: 'out' },
+  ] },
+  // WOBBLE: the growl. Two saws a little apart through a resonant low-pass whose cutoff a slow sine (the LFO, x520
+  // through a MULT) swings up and down: the wobble. A plain sine an octave down holds the floor. The player sets the
+  // LFO's speed for each note in time with the beat (its 'w-lfo' freq), so it is written here at 2 a second.
+  'TECHNO — WOBBLE BASS': { group: 'MUSIC', project: 'pi-nebula', name: 'Wobble bass', kind: 'bass', dur: 1.5, nodes: [
+    { id: 'w-osc', type: 'osc', name: 'growl', wave: 'sawtooth', voices: 2, detune: 9, freq: 65.406, level: 1 },
+    { id: 'w-lfo', type: 'osc', name: 'wobble', wave: 'sine', freq: 2, level: 1 },
+    { id: 'w-mul', type: 'math', name: 'x520', mul: 520 },
+    { id: 'w-f', type: 'filter', name: 'mouth', ftype: 'lowpass', freq: 650, Q: 5 },
+    { id: 'w-g', type: 'gain', name: 'growl vca' },
+    { id: 'w-sub', type: 'osc', name: 'sub', wave: 'sine', freq: 32.703, level: 1.3 },
+    { id: 'w-sg', type: 'gain', name: 'sub vca' },
+    { id: 'w-e', type: 'env', name: 'amp', peak: 1, attack: 0.01, decay: 0.05, sustain: 0.9, release: 0.06 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.17 },
+  ], cables: [
+    { from: 'w-lfo', to: 'w-mul' }, { from: 'w-mul', to: 'w-f', port: 'freq' },
+    { from: 'w-osc', to: 'w-f' }, { from: 'w-f', to: 'w-g' }, { from: 'w-e', to: 'w-g', port: 'gain' }, { from: 'w-g', to: 'out' },
+    { from: 'w-sub', to: 'w-sg' }, { from: 'w-e', to: 'w-sg', port: 'gain' }, { from: 'w-sg', to: 'out' },
+  ] },
+
+  // ── pads (one note of the chord each) ──────────────────────────────────────────────────────────────────────────
+  'TECHNO — WARM PAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Warm pad', kind: 'instrument', dur: 4, nodes: [
+    { id: 'p-osc', type: 'osc', name: 'saws', wave: 'sawtooth', voices: 2, detune: 7, freq: 261.63, level: 1 },
+    { id: 'p-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 900, Q: 0.6 },
+    { id: 'p-g', type: 'gain', name: 'vca' },
+    { id: 'p-e', type: 'env', name: 'amp', peak: 1, attack: 0.5, decay: 0.3, sustain: 0.85, release: 0.9 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.075 },
+  ], cables: [
+    { from: 'p-osc', to: 'p-f' }, { from: 'p-f', to: 'p-g' }, { from: 'p-e', to: 'p-g', port: 'gain' }, { from: 'p-g', to: 'out' }, { from: 'p-g', to: 'send' },
+  ] },
+  'TECHNO — AIRY PAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Airy pad', kind: 'instrument', dur: 4, nodes: [
+    { id: 'p-osc', type: 'osc', name: 'triangles', wave: 'triangle', voices: 2, detune: 9, freq: 261.63, level: 1 },
+    { id: 'p-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 2400, Q: 0.6 },
+    { id: 'p-g', type: 'gain', name: 'vca' },
+    { id: 'p-e', type: 'env', name: 'amp', peak: 1, attack: 0.7, decay: 0.3, sustain: 0.85, release: 1.1 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.4 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.09 },
+  ], cables: [
+    { from: 'p-osc', to: 'p-f' }, { from: 'p-f', to: 'p-g' }, { from: 'p-e', to: 'p-g', port: 'gain' }, { from: 'p-g', to: 'out' }, { from: 'p-g', to: 'send' },
+  ] },
+  'TECHNO — DARK PAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Dark pad', kind: 'instrument', dur: 4, nodes: [
+    { id: 'p-osc', type: 'osc', name: 'saws', wave: 'sawtooth', voices: 2, detune: 5, freq: 261.63, level: 1 },
+    { id: 'p-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 480, Q: 0.8 },
+    { id: 'p-g', type: 'gain', name: 'vca' },
+    { id: 'p-e', type: 'env', name: 'amp', peak: 1, attack: 0.6, decay: 0.3, sustain: 0.85, release: 1 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.3 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.11 },
+  ], cables: [
+    { from: 'p-osc', to: 'p-f' }, { from: 'p-f', to: 'p-g' }, { from: 'p-e', to: 'p-g', port: 'gain' }, { from: 'p-g', to: 'out' }, { from: 'p-g', to: 'send' },
+  ] },
+
+  // ── leads ──────────────────────────────────────────────────────────────────────────────────────────────────────
+  // KEYS: an electric piano: a sine ringing down, a quick soft octave on the strike
+  'TECHNO — KEYS': { group: 'MUSIC', project: 'pi-nebula', name: 'Keys', kind: 'instrument', dur: 1.6, nodes: [
+    { id: 'k-osc', type: 'osc', name: 'tine', wave: 'sine', freq: 261.63, level: 1 },
+    { id: 'k-g', type: 'gain', name: 'vca' },
+    { id: 'k-e', type: 'env', name: 'ring', peak: 1, attack: 0.006, decay: 1.3, sustain: 0 },
+    { id: 'k-o2', type: 'osc', name: 'strike', wave: 'sine', freq: 523.25, level: 1 },
+    { id: 'k-g2', type: 'gain', name: 'strike vca' },
+    { id: 'k-e2', type: 'env', name: 'strike', peak: 0.25, attack: 0.003, decay: 0.2, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.5 },
+  ], cables: [
+    { from: 'k-osc', to: 'k-g' }, { from: 'k-e', to: 'k-g', port: 'gain' }, { from: 'k-g', to: 'out' }, { from: 'k-g', to: 'send' },
+    { from: 'k-o2', to: 'k-g2' }, { from: 'k-e2', to: 'k-g2', port: 'gain' }, { from: 'k-g2', to: 'out' },
+  ] },
+  // SOFT SAW: two saws a little apart, the filter settling darker after the start
+  'TECHNO — SOFT SAW': { group: 'MUSIC', project: 'pi-nebula', name: 'Soft saw', kind: 'instrument', dur: 1.5, nodes: [
+    { id: 'l-osc', type: 'osc', name: 'saws', wave: 'sawtooth', voices: 2, detune: 6, freq: 261.63, level: 1 },
+    { id: 'l-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 2200, freqEnd: 1300, glide: 0.3, Q: 0.8 },
+    { id: 'l-g', type: 'gain', name: 'vca' },
+    { id: 'l-e', type: 'env', name: 'amp', peak: 1, attack: 0.02, decay: 0.2, sustain: 0.8, release: 0.15 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.14 },
+  ], cables: [
+    { from: 'l-osc', to: 'l-f' }, { from: 'l-f', to: 'l-g' }, { from: 'l-e', to: 'l-g', port: 'gain' }, { from: 'l-g', to: 'out' }, { from: 'l-g', to: 'send' },
+  ] },
+  // SQUARE: a mellow square, low-passed
+  'TECHNO — SQUARE LEAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Square lead', kind: 'instrument', dur: 1.5, nodes: [
+    { id: 'l-osc', type: 'osc', name: 'square', wave: 'square', freq: 261.63, level: 1 },
+    { id: 'l-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 1700, freqEnd: 1000, glide: 0.3, Q: 0.8 },
+    { id: 'l-g', type: 'gain', name: 'vca' },
+    { id: 'l-e', type: 'env', name: 'amp', peak: 1, attack: 0.02, decay: 0.2, sustain: 0.8, release: 0.15 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.12 },
+  ], cables: [
+    { from: 'l-osc', to: 'l-f' }, { from: 'l-f', to: 'l-g' }, { from: 'l-e', to: 'l-g', port: 'gain' }, { from: 'l-g', to: 'out' }, { from: 'l-g', to: 'send' },
+  ] },
+
+  // ── melodies ───────────────────────────────────────────────────────────────────────────────────────────────────
+  'TECHNO — ARP': { group: 'MUSIC', project: 'pi-nebula', name: 'Arp', kind: 'instrument', dur: 0.6, nodes: [
+    { id: 'a-osc', type: 'osc', name: 'pluck', wave: 'triangle', freq: 261.63, level: 1 },
+    { id: 'a-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 2600, Q: 0.7 },
+    { id: 'a-g', type: 'gain', name: 'vca' },
+    { id: 'a-e', type: 'env', name: 'amp', peak: 1, attack: 0.004, decay: 0.25, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.3 },
+  ], cables: [
+    { from: 'a-osc', to: 'a-f' }, { from: 'a-f', to: 'a-g' }, { from: 'a-e', to: 'a-g', port: 'gain' }, { from: 'a-g', to: 'out' }, { from: 'a-g', to: 'send' },
+  ] },
+  'TECHNO — BELLS': { group: 'MUSIC', project: 'pi-nebula', name: 'Bells', kind: 'instrument', dur: 1.6, nodes: [
+    { id: 'b-osc', type: 'osc', name: 'bell', wave: 'sine', freq: 261.63, level: 1 },
+    { id: 'b-g', type: 'gain', name: 'vca' },
+    { id: 'b-e', type: 'env', name: 'ring', peak: 1, attack: 0.004, decay: 1.2, sustain: 0 },
+    { id: 'b-o3', type: 'osc', name: 'shimmer', wave: 'sine', freq: 784.89, level: 1 },
+    { id: 'b-g3', type: 'gain', name: 'shimmer vca' },
+    { id: 'b-e3', type: 'env', name: 'shimmer', peak: 0.15, attack: 0.002, decay: 0.15, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.35 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.3 },
+  ], cables: [
+    { from: 'b-osc', to: 'b-g' }, { from: 'b-e', to: 'b-g', port: 'gain' }, { from: 'b-g', to: 'out' }, { from: 'b-g', to: 'send' },
+    { from: 'b-o3', to: 'b-g3' }, { from: 'b-e3', to: 'b-g3', port: 'gain' }, { from: 'b-g3', to: 'out' },
+  ] },
+  // ECHO PLUCK: a pluck into its own echo (a delay with no dry path); a long envelope on the echo's wet level lets
+  // the repeats fade and keeps the note alive until they have. The player sets the echo's time to the beat.
+  'TECHNO — ECHO PLUCK': { group: 'MUSIC', project: 'pi-nebula', name: 'Echo pluck', kind: 'instrument', dur: 2, nodes: [
+    { id: 'e-osc', type: 'osc', name: 'pluck', wave: 'triangle', freq: 261.63, level: 1 },
+    { id: 'e-f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 2000, Q: 0.7 },
+    { id: 'e-g', type: 'gain', name: 'vca' },
+    { id: 'e-e', type: 'env', name: 'amp', peak: 1, attack: 0.004, decay: 0.25, sustain: 0 },
+    { id: 'e-dl', type: 'delay', name: 'echo', time: 0.36, feedback: 0.4, tone: 1800, wet: 0, dry: 0 },
+    { id: 'e-we', type: 'env', name: 'echo fade', peak: 0.6, attack: 0.001, decay: 1.6, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.2 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.35 },
+  ], cables: [
+    { from: 'e-osc', to: 'e-f' }, { from: 'e-f', to: 'e-g' }, { from: 'e-e', to: 'e-g', port: 'gain' }, { from: 'e-g', to: 'out' }, { from: 'e-g', to: 'send' },
+    { from: 'e-g', to: 'e-dl' }, { from: 'e-we', to: 'e-dl', port: 'wet' }, { from: 'e-dl', to: 'out' },
+  ] },
+};
+
+// each pitched patch's note (MIDI): the C it is written at
+export const ROOT = {
+  'TECHNO — TOM': 48,
+  'TECHNO — RISER': 60,
+  'TECHNO — WARM BASS': 36,
+  'TECHNO — PULSE BASS': 36,
+  'TECHNO — ROLLING BASS': 36,
+  'TECHNO — WOBBLE BASS': 36,
+  'TECHNO — WARM PAD': 60,
+  'TECHNO — AIRY PAD': 60,
+  'TECHNO — DARK PAD': 60,
+  'TECHNO — KEYS': 60,
+  'TECHNO — SOFT SAW': 60,
+  'TECHNO — SQUARE LEAD': 60,
+  'TECHNO — ARP': 60,
+  'TECHNO — BELLS': 60,
+  'TECHNO — ECHO PLUCK': 60,
+};
+
+// which patch each choice plays (src/music/song.js PARTS); the beat's drums by the beat chosen
+export const DRUMS = {
+  lofi: { kick: 'TECHNO — LOFI KICK', snare: 'TECHNO — LOFI SNARE', hat: 'TECHNO — LOFI HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
+  four: { kick: 'TECHNO — KICK', snare: 'TECHNO — SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
+  broken: { kick: 'TECHNO — KICK', snare: 'TECHNO — SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
+  half: { kick: 'TECHNO — HEAVY KICK', snare: 'TECHNO — HEAVY SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
+};
+export const INSTRUMENTS = {
+  bass: { warm: 'TECHNO — WARM BASS', pulse: 'TECHNO — PULSE BASS', rolling: 'TECHNO — ROLLING BASS', wobble: 'TECHNO — WOBBLE BASS' },
+  pads: { warm: 'TECHNO — WARM PAD', airy: 'TECHNO — AIRY PAD', dark: 'TECHNO — DARK PAD' },
+  lead: { keys: 'TECHNO — KEYS', saw: 'TECHNO — SOFT SAW', square: 'TECHNO — SQUARE LEAD' },
+  melody: { arp: 'TECHNO — ARP', bells: 'TECHNO — BELLS', echo: 'TECHNO — ECHO PLUCK' },
+};
