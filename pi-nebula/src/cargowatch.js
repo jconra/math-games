@@ -14,8 +14,9 @@
 //              each is, the way they are walking and how fast (the lap's countdown waits for it, RULES.wait s at most).
 //   WATCHING   stood in their place facing the lane, each turns to follow the forklift round (their feet a little, their
 //              head and eyes the rest of the way: the people's own look, src/people.js `watch`).
-//   A CHEER    at the finish, one of them (not the loader, who has their own word on the card) says a line of it, in a
-//              bubble, words only (src/lines.js LAP_TALK.cheer).
+//   A CHEER    at the finish, one of them stood at the line (not the loader, who has their own word on the card) says a
+//              line of it, words only (src/lines.js LAP_TALK.cheer): in a bubble over them if they are in sight, and on
+//              the lap's card with their name (on an upright phone the row is outside the picture at the finish).
 //   BACK TO THEIR DAY  when the player gets off, or drives away from the lap (WATCH.away metres from the start box with
 //              no lap running, WATCH.idle seconds with none begun, or a lap left running WATCH.long seconds).
 // Should the forklift be driven at one of them all the same (on its way in or out), it waits for them, as it does for
@@ -83,12 +84,13 @@ export function makeCargoWatch({ people = () => null, forklift }) {
     },
     cheer(kind) {
       const pp = people(); if (!pp || !S.on) return null;
-      // (one of them stood in their place, in sight, who is not the loader: the nearest the finish line)
-      const L = crew().filter((P) => P.id !== LAP.who && watching(P) && P.act.phase === 'do' && P.shown).sort((a, b) => a.pos.x - b.pos.x);
+      // (one of them stood in their place who is not the loader: one in sight first, the nearest the finish line)
+      const L = crew().filter((P) => P.id !== LAP.who && watching(P) && P.act.phase === 'do').sort((a, b) => (b.shown ? 1 : 0) - (a.shown ? 1 : 0) || a.pos.x - b.pos.x);
       if (!L.length) return null;
       const P = L[0], words = pick(LAP_TALK.cheer[kind] || LAP_TALK.cheer.slower);
-      pp.say(P, words, { kind: 'talk' }); S.cheers++;
-      return { who: P.id, words };
+      if (P.shown) pp.say(P, words, { kind: 'talk' });
+      S.cheers++;
+      return { who: P.id, name: P.name || '', words, bubble: !!P.shown };
     },
     release() {
       if (!S.on) return;

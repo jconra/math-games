@@ -88,7 +88,7 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     <div class="pcl-clock" hidden><span class="pcl-time"><b>0.0</b><small>s</small></span>
       <span class="pcl-side"><span class="pcl-pips" role="img">${GATES.map((g) => `<i>${g.n}</i>`).join('')}</span><span class="pcl-beat"></span><span class="pcl-mine" hidden></span></span></div>
     <div class="pcl-count" hidden></div>
-    <div class="pcl-card" role="status" hidden><span class="pcl-tag"></span><span class="pcl-big"><b></b><small>s</small></span><span class="pcl-vs"></span><span class="pcl-miss"></span><span class="pcl-best" hidden></span><span class="pcl-say"></span><span class="pcl-who"></span></div>`;
+    <div class="pcl-card" role="status" hidden><span class="pcl-tag"></span><span class="pcl-big"><b></b><small>s</small></span><span class="pcl-vs"></span><span class="pcl-miss"></span><span class="pcl-best" hidden></span><span class="pcl-say"></span><span class="pcl-who"></span><span class="pcl-cheer" hidden></span></div>`;
   document.body.appendChild(el);
   const $ = (s) => el.querySelector(s), clockEl = $('.pcl-clock'), countEl = $('.pcl-count'), cardEl = $('.pcl-card'), pips = [...el.querySelectorAll('.pcl-pips i')];
   let goT = 0, cardT = 0, shownTime = '', shownPips = '';
@@ -139,6 +139,8 @@ export function makeCargoLap({ W, forklift, cargo, run = null, people = () => nu
     const pp = people(), O = loader();
     if (pp && O && !O.hidden && !O.away && O.shown) pp.say(O, words, { kind: 'talk' });
     S.cheer = crowd.cheer(kind);
+    $('.pcl-cheer').textContent = S.cheer ? `${S.cheer.name}: “${S.cheer.words}”` : ''; $('.pcl-cheer').hidden = !S.cheer;
+    S.card.cheer = S.cheer ? $('.pcl-cheer').textContent : null;
   }
 
   // ── on the floor: the marks lit over their paint, and the column of light over the one to drive to ─────────────

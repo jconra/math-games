@@ -51,6 +51,8 @@
 .pcl-say { margin-top: 4px; padding: 7px 12px 8px; font-size: 14px; font-weight: 600; line-height: 1.3; background: rgba(40, 47, 56, 0.92); box-shadow: inset 0 0 0 1.5px rgba(196, 220, 240, 0.4);
   --cut: 8px; clip-path: var(--oct); text-wrap: balance; }
 .pcl-who { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+/* the cheer of one of the people watching at the finish line */
+.pcl-cheer { margin-top: 3px; font-size: 13.5px; font-weight: 600; color: #d6e6f4; }
 .pcl-card.is-beat { box-shadow: inset 0 0 0 2px var(--good); background: rgba(8, 30, 18, 0.94); }
 .pcl-card.is-beat .pcl-tag, .pcl-card.is-official .pcl-tag { color: #8ff0b5; }
 .pcl-card.is-beat .pcl-big { color: #b8ffd6; }
