@@ -216,7 +216,7 @@ function skillHtml() {
     <div class="sk-pick" role="group" aria-label="Skill">${Array.from({ length: 10 }, (_, i) => `<button type="button" data-skill="${i + 1}" class="${i + 1 === skillNow ? 'is-on' : ''}" aria-pressed="${i + 1 === skillNow}">${i + 1}</button>`).join('')}</div>
     <p class="sk-facts"><b>Mathball skill ${skillNow}.</b> Aims to score ${Math.round(B.share * 100)} balls for every 100 you score (pulled back when ahead, pushed on when behind); right ${Math.round(B.acc * 100)} times in 100; runs at ${B.run.toFixed(1)} metres a second.
       ${who.length ? `On the station: ${who.map(esc).join(', ')}.` : 'Nobody on the station has this skill (a newcomer could).'}</p>
-    <div class="tools"><button type="button" id="sk-play">Play 10 rounds against each stand-in</button></div>
+    <div class="tools"><button type="button" id="sk-play">Play 10 rounds</button></div>
     <div class="sk-out" aria-live="polite">${played && played.skill === skillNow ? played.html : ''}</div>`;
 }
 const skillBox = document.getElementById('skill');
