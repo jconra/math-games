@@ -37,6 +37,7 @@ import { makeCrane } from './crane.js';
 import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
+import { makeChallenges } from './mathball/challenge.js';
 import { START } from './spots.js';
 import { makeInput } from '../../shared/input.js';
 import { startJobs } from './jobs/index.js';
@@ -183,6 +184,8 @@ async function boot() {
   // the station's own jobs board beside the captains', and the glowing line on the floor to the job (or the captain)
   // picked on either (jobsboard.js, guide.js)
   const guide = GAME.guide = makeGuide({ W, walls });
+  // (a game of Mathball against anyone: src/mathball/challenge.js; the menu on a tapped person asks it)
+  GAME.mathball = makeChallenges({ people: () => people, jobs, player: () => (player ? player.P : null) });
   const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
@@ -272,6 +275,7 @@ async function boot() {
     // (and the control room's and Cargo's people about only while the player is there: the lift says where, src/lift.js
     // crewAt; made the first time the player steps into the lift)
     if (people) people.update(dt, { player: GAME.mode === 'play' ? P : null, camera: W.camera, now, focus: visit.focus, place: GAME.mode === 'play' && P ? lift.crewAt : null, soon: GAME.mode === 'play' && !!lift.here });
+    GAME.mathball.update(dt);   // (someone challenged to a game of Mathball: their walk to the arena, their wait)
     // (and Cargo's forklift, fetched at the same moment as Cargo's people are made; never put in on anyone's feet)
     forklift.update(GAME.mode === 'play' && !!lift.here, { camera: W.camera, dt, feet: () => [P && P.pos, ...(people ? people.list.filter((x) => x.home === 'store' && !x.hidden).map((x) => x.pos) : [])], wants: () => supply.wants(), player: GAME.mode === 'play' && P ? P.pos : null });
     // (the supply run: the doors, the pallets that load themselves, the Hauler loaded; in Cargo while the player stands

@@ -12,6 +12,11 @@
 import { SETS, ORDER, rangeOf, levelsOf, startGoals } from '../../src/mathball/ladder.js';
 import { ruleOf, goalsFor, dealable, checkSet } from '../../src/mathball/rules.js';
 import { CORNERS, GOALS, GOAL_CSS, BALL_COLOURS, COURT } from '../../src/mathball/court.js';
+import { LADDER } from '../../src/mathball/ladder.js';
+import { makeRound, OTHER } from '../../src/mathball/game.js';
+import { simPlayer, playRound } from '../../src/mathball/sim.js';
+import { SKILLS } from '../../src/mathball/skill.js';
+import { ROSTER, ROOM_CREW } from '../../src/life.js';
 
 const KEEP = 'mathball-lab.order.2';   // (a new key with the levels' ranges and the fraction sets: an order kept before them would leave the new sets out)
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -193,4 +198,51 @@ document.getElementById('copy').addEventListener('click', async () => {
 document.getElementById('reset').addEventListener('click', () => { try { localStorage.removeItem(KEEP); } catch (e) { /* */ } S = load(); S.order = [...ORDER]; S.out = Object.keys(SETS).filter((k) => !ORDER.includes(k)); render(); note('Back to the order the game has now.'); });
 document.getElementById('deal').addEventListener('click', () => { seed++; render(); });
 render();
-window.MBLAB = { order: () => [...S.order], out: () => [...S.out], line, levels: () => levelsOf(S.order).map((L) => ({ key: L.key, sets: L.sets, range: L.range })) };
+
+// ── THE OTHER PLAYER'S SKILL (src/mathball/skill.js, game.js OTHER.atSkill): pick one, 1 to 10, see what it means and
+// who on the station has it, and play rounds against stand-in players (src/mathball/sim.js, as the tests do) ─────────
+const STAND_INS = [
+  { key: 'slow', name: 'A slow player', p: { think: [4, 8], aim: [3, 6], acc: 0.65 } },
+  { key: 'mid', name: 'A middling player', p: { think: [2, 4.5], aim: [1.2, 3], acc: 0.8 } },
+  { key: 'quick', name: 'A quick player', p: { think: [0.8, 2], aim: [0.5, 1.2], acc: 0.95 } },
+];
+const NAMES = Object.fromEntries([...ROSTER, ...ROOM_CREW].map((R) => [R.id, R.name]));
+Object.assign(NAMES, { 'visitor-ola': 'Ola', 'pilot-sol': 'Pilot Sol' });
+let skillNow = 6, played = null;
+function skillHtml() {
+  const B = OTHER.atSkill(skillNow), who = Object.keys(SKILLS).filter((id) => SKILLS[id] === skillNow).map((id) => NAMES[id] || id);
+  return `<h2 class="r-title">The other player's Mathball skill</h2>
+    <p class="r-lede">Everyone on the station has a Mathball skill from 1 to 10. The other player always keeps pace with you; a higher skill pushes harder within that: it aims to score faster against your own pace, is right more often and runs faster. Pick a skill, then play rounds against stand-in players to see how often they win.</p>
+    <div class="sk-pick" role="group" aria-label="Skill">${Array.from({ length: 10 }, (_, i) => `<button type="button" data-skill="${i + 1}" class="${i + 1 === skillNow ? 'is-on' : ''}" aria-pressed="${i + 1 === skillNow}">${i + 1}</button>`).join('')}</div>
+    <p class="sk-facts"><b>Mathball skill ${skillNow}.</b> Aims to score ${Math.round(B.share * 100)} balls for every 100 you score (pulled back when ahead, pushed on when behind); right ${Math.round(B.acc * 100)} times in 100; runs at ${B.run.toFixed(1)} metres a second.
+      ${who.length ? `On the station: ${who.map(esc).join(', ')}.` : 'Nobody on the station has this skill (a newcomer could).'}</p>
+    <div class="tools"><button type="button" id="sk-play">Play 10 rounds against each stand-in</button></div>
+    <div class="sk-out" aria-live="polite">${played && played.skill === skillNow ? played.html : ''}</div>`;
+}
+const skillBox = document.getElementById('skill');
+const drawSkill = () => { skillBox.innerHTML = skillHtml(); };
+function seededRand(s) { let x = s >>> 0 || 1; return () => { x = (x * 16807) % 2147483647; return x / 2147483647; }; }
+function playSkill() {
+  const sk = skillNow, rows = [];
+  skillBox.querySelector('.sk-out').textContent = 'Playing...';
+  setTimeout(() => {
+    for (const S of STAND_INS) {
+      const rand = seededRand(1000 + sk * 37 + S.key.length + seed * 101); let rate = OTHER.youRate; const R = [];
+      for (let r = 0; r < 12; r++) {
+        const G = makeRound({ set: LADDER[r % LADDER.length], rand, other: { skill: sk }, youRate: rate });
+        const res = playRound(G, simPlayer({ ...S.p, rand })); rate = G.rateAfter(); if (r >= 2) R.push(res);
+      }
+      const won = R.filter((r) => r.you > r.them).length, drew = R.filter((r) => r.you === r.them).length;
+      const you = R.reduce((a, r) => a + r.you, 0) / R.length, them = R.reduce((a, r) => a + r.them, 0) / R.length;
+      rows.push(`<tr><th>${S.name}</th><td>${won} won, ${drew} drawn, ${R.length - won - drew} lost</td><td>${you.toFixed(1)} to ${them.toFixed(1)}</td></tr>`);
+    }
+    played = { skill: sk, html: `<table class="sk-table"><thead><tr><th>You are</th><td>10 rounds against skill ${sk}</td><td>Right balls a round, you to them</td></tr></thead><tbody>${rows.join('')}</tbody></table>` };
+    drawSkill();
+  }, 30);
+}
+skillBox.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.skill) { skillNow = +b.dataset.skill; drawSkill(); } else if (b.id === 'sk-play') playSkill();
+});
+drawSkill();
+window.MBLAB = { order: () => [...S.order], out: () => [...S.out], line, levels: () => levelsOf(S.order).map((L) => ({ key: L.key, sets: L.sets, range: L.range })), skill: (k) => { if (k) { skillNow = k; drawSkill(); } return skillNow; }, playSkill };

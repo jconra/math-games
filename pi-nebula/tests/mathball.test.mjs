@@ -11,6 +11,8 @@ import { makeRound, OTHER, ROUND, holdPoint, throwFrom } from '../src/mathball/g
 import { simPlayer, playRound } from '../src/mathball/sim.js';
 import { COURT, GOALS, PORTS, STATIONS, TRACK, barAt, inside, WALLS, clampIn } from '../src/mathball/court.js';
 import { seeded } from '../../mathwood-valley/src/levels/kit.js';
+import { SKILLS as SKILL_OF, skillOf } from '../src/mathball/skill.js';
+import { ROSTER, ROOM_CREW } from '../src/life.js';
 
 const valid = (rules, ball) => { const n = goalsFor(rules, ball).length; return n >= 1 && n < rules.length; };
 const onCourt = (G) => G.balls.filter((b) => ['air', 'roll', 'rest', 'turn', 'held'].includes(b.mode) && !b.fading);
@@ -254,6 +256,74 @@ test('the other player is fair: at each level the score gap stays small on avera
     if (level === 2) assert.ok(m > -0.5, `${skill}: the harder one loses on average (${m.toFixed(2)})`);
     // and every player has a chance: it never wins or loses every round
     if (level === 1) assert.ok(gaps.some((g) => g <= 0) && gaps.some((g) => g >= 0), `${skill}: always the same winner`);
+  }
+  console.log('    ' + report.join('\n    '));
+});
+
+// ── MATHBALL SKILL (skill.js): everyone's own, 1 to 10; a higher skill scores faster, and nobody is stomped ─────────
+test('everyone has a Mathball skill, 1 to 10, the same every time; the start card\'s three keep their order', () => {
+  for (const R of [...ROSTER, ...ROOM_CREW]) {
+    const k = skillOf(R.id);
+    assert.ok(Number.isInteger(k) && k >= 1 && k <= 10, `${R.id}: ${k}`);
+    assert.equal(SKILL_OF[R.id], k, `${R.id} has a skill of their own in skill.js`);
+  }
+  assert.ok(skillOf('visitor-ola') < skillOf('pilot-sol') && skillOf('pilot-sol') < skillOf('vega'));
+  assert.equal(skillOf('vega'), 10);
+  // (someone new, a rescued survivor: worked out from who they are, the same every time, never above the Captain)
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const who = { id: 'rescued-' + i, def: { look: { suit: 'civilian', head: 't' + (i % 12), hair: ['buzz', 'wavy', 'afro'][i % 3], colours: { skin: '#' + (0x400000 + i * 7919).toString(16).slice(0, 6) } } } };
+    const k = skillOf(who.id, who); seen.add(k);
+    assert.ok(Number.isInteger(k) && k >= 1 && k <= 9, `${who.id}: ${k}`);
+    assert.equal(skillOf('rescued-' + (i + 500), { def: { look: JSON.parse(JSON.stringify(who.def.look)) } }), k, 'the same look, the same skill, whatever their number');
+  }
+  assert.ok(seen.size >= 7, 'the rescued are not all the same: ' + [...seen]);
+  assert.equal(skillOf('someone-new'), skillOf('someone-new'));
+});
+
+test('the old three levels are three points on the skill scale and play as they did', () => {
+  const old = [{ share: 0.76, acc: 0.74, run: 3.5 }, { share: 0.9, acc: 0.85, run: 3.9 }, { share: 1.06, acc: 0.93, run: 4.3 }];
+  [3, 6, 10].forEach((k, i) => { const B = OTHER.atSkill(k); assert.equal(B.share, old[i].share); assert.equal(B.acc, old[i].acc); assert.equal(B.run, old[i].run); assert.equal(B.key, OTHER.levels[i].key); });
+  // (a round at the old level and at its skill: the same round, ball for ball)
+  for (let i = 0; i < 3; i++) {
+    const a = playRound(makeRound({ set: LADDER[2], rand: seeded(40 + i), other: { level: i } }), simPlayer({ rand: seeded(70 + i) }));
+    const b = playRound(makeRound({ set: LADDER[2], rand: seeded(40 + i), other: { skill: [3, 6, 10][i] } }), simPlayer({ rand: seeded(70 + i) }));
+    assert.deepEqual(a, b);
+  }
+  // (up the scale, every part of it climbs)
+  for (let k = 2; k <= 10; k++) for (const f of ['share', 'acc', 'run']) assert.ok(OTHER.atSkill(k)[f] > OTHER.atSkill(k - 1)[f], `${f} at ${k}`);
+});
+
+function skillRounds(player, skill, n, seed) {
+  const rand = seeded(seed), out = [];
+  let rate = OTHER.youRate;
+  for (let r = 0; r < n; r++) {
+    const G = makeRound({ set: LADDER[r % LADDER.length], rand, other: { skill }, youRate: rate });
+    const res = playRound(G, simPlayer({ ...SKILLS_P[player], rand }));
+    rate = G.rateAfter();
+    if (r >= 2) out.push(res);
+  }
+  return out;
+}
+const SKILLS_P = { slow: { think: [4, 8], aim: [3, 6], acc: 0.65 }, mid: { think: [2, 4.5], aim: [1.2, 3], acc: 0.8 }, quick: { think: [0.8, 2], aim: [0.5, 1.2], acc: 0.95 } };
+test('at every skill nobody is stomped and nobody is handed the win; a higher skill scores more', () => {
+  const report = [];
+  for (const player of Object.keys(SKILLS_P)) {
+    const gapAt = {};
+    for (const skill of [1, 4, 7, 10]) {
+      const R = skillRounds(player, skill, 12, 300 + skill * 11 + player.length), gaps = R.map((r) => r.them - r.you);
+      const m = mean(gaps), abs = mean(gaps.map(Math.abs)), most = Math.max(...gaps.map(Math.abs));
+      gapAt[skill] = m;
+      report.push(`${player}/skill ${skill}: you ${mean(R.map((r) => r.you)).toFixed(1)}, them ${mean(R.map((r) => r.them)).toFixed(1)}, gap ${m.toFixed(2)}`);
+      assert.ok(abs <= 3, `${player}/${skill}: the gap averaged ${abs.toFixed(2)}`);
+      assert.ok(most <= 8, `${player}/${skill}: a round ended ${most} apart`);
+      // (a 1 still tries: it scores most of what the player does; a 10 can still be beaten or held to a draw)
+      assert.ok(mean(R.map((r) => r.them)) >= 0.6 * mean(R.map((r) => r.you)), `${player}/${skill}: it hardly scored`);
+      assert.ok(R.some((r) => r.you >= r.them), `${player}/${skill}: the player never won or drew`);
+      if (skill === 1) assert.ok(m < 0, `${player}: a 1 wins on average (${m.toFixed(2)})`);
+      if (skill === 10) assert.ok(m > -0.5, `${player}: a 10 loses on average (${m.toFixed(2)})`);
+    }
+    assert.ok(gapAt[10] > gapAt[1], `${player}: a 10 does no better than a 1`);
   }
   console.log('    ' + report.join('\n    '));
 });

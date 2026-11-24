@@ -64,3 +64,13 @@ table.ranges .r-words { width: auto; text-align: left; padding: 0 8px; color: va
   table.ranges th, table.ranges td { width: 24px; height: 24px; font-size: 12px; }
   table.ranges .r-words { font-size: 12px; padding: 0 4px; }
 }
+
+/* the other player's skill */
+.sk-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.sk-pick button { width: 40px; height: 40px; font-weight: 700; background: var(--card-hi); box-shadow: inset 0 0 0 1.5px var(--edge); border-radius: 8px; }
+.sk-pick button.is-on { background: var(--accent); color: #1c1205; box-shadow: none; }
+.sk-facts { margin: 0 0 10px; line-height: 1.4; }
+.sk-out { margin-top: 10px; overflow-x: auto; }
+.sk-table { border-collapse: collapse; font-size: 14px; }
+.sk-table th, .sk-table td { text-align: left; padding: 4px 10px 4px 0; border-bottom: 1px solid var(--edge); }
+.sk-table thead td { color: var(--dim); }

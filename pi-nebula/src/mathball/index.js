@@ -38,7 +38,9 @@ import { COURT, GOALS, GOAL_CSS, WALLS, clampIn, inside } from './court.js';
 import { LADDER } from './ladder.js';
 import { ruleOf, value as valueOf, wholeNote } from './rules.js';
 import { makeCrew } from '../../kit/crew.js';
-import { ROSTER } from '../life.js';
+import { ROSTER, lookRecipe } from '../life.js';
+import { skillOf } from './skill.js';
+import { challenger, challengePlayed, challengeLeft } from './challenge.js';
 import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
@@ -58,7 +60,10 @@ export const OPPONENTS = [
   { id: 'visitor-ola', name: 'Ola', line: 'Visiting the station, still learning the game', level: 0 },
   { id: 'pilot-sol', name: 'Pilot Sol', line: 'A fair match', level: 1 },
   { id: 'vega', name: 'Captain Vega', line: 'Hard to beat', level: 2 },
-];
+].map((o) => ({ ...o, skill: skillOf(o.id) }));   // (their Mathball skill: skill.js; 3, 6 and 10, the old three levels)
+// (someone who was challenged to a game and is waiting at the arena, src/mathball/challenge.js: the start card has them
+// as the one to play, in their own look, at their own skill; the three above stay for a player who just walks in)
+const skillWords = (o) => `Mathball skill ${o.skill}`;
 const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
 // THE CAMERA: behind the player and above, looking down the court (a phone held upright sees a narrow strip, so it
 // stands further back and higher, looking more steeply down)
@@ -105,7 +110,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   if (idle) { idle.busy = true; view = idle.V; G = idle.G; idle = null; }
   else { G = makeRound({ set: setFor(crew, job), rand: Math.random }); view = makeView({ W, G }); }
   let phase = 'pick', paused = false, closed = false, other = null, otherBody = null, lastBody = null, round = 0, earned = 0, level = null, set = null;
-  let choice = Math.max(0, Math.min(2, (crew.jobs && crew.jobs.arena && crew.jobs.arena.other) ?? 1));
+  // (a challenged person waiting here: first on the cards, the three after them on the end card's Against button)
+  const ch = challenger(), opps = ch ? [ch, ...OPPONENTS] : OPPONENTS;
+  let choice = ch ? 0 : Math.max(0, Math.min(2, (crew.jobs && crew.jobs.arena && crew.jobs.arena.other) ?? 1));
   const keepShut = W.built.doors.find((D) => D.sense && Math.hypot(D.sense.x - MID[0], D.sense.z - (MID[2] + COURT.hz)) < 1.2) || null;
   if (keepShut) W.keepShut.add(keepShut);
 
@@ -163,7 +170,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (b.classList.contains('mbl-arrow')) stepLevel(+b.dataset.dir);
     else if (b.dataset.who != null) { choice = +b.dataset.who; startRound(); }
     else if (b.classList.contains('mbl-again')) startRound();
-    else if (b.classList.contains('mbl-swap')) { choice = (choice + 1) % OPPONENTS.length; showEnd(lastEnd); }
+    else if (b.classList.contains('mbl-swap')) { choice = (choice + 1) % opps.length; showEnd(lastEnd); }
     else if (b.classList.contains('mbl-done') || b.classList.contains('mbl-leave')) close();
     else if (b.classList.contains('mbl-help')) toggleHelp();
     else if (b.classList.contains('mbl-hx')) toggleHelp(false);
@@ -173,11 +180,13 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function showPick() {
     const P = $('.mbl-pick');
     P.innerHTML = `<h2>Mathball</h2><p class="mbl-lede">Throw each number ball into a goal its number fits. The light bar going round the room changes one goal's rule every 30 seconds. Most right balls wins.</p>
-      <p class="mbl-ask">Who do you want to play?</p>
-      <div class="mbl-who">${OPPONENTS.map((o, i) => `<button type="button" data-who="${i}" class="${i === choice ? 'is-last' : ''}"><b>${esc(o.name)}</b><small>${esc(o.line)}</small></button>`).join('')}</div>
+      ${ch ? `<p class="mbl-ask">${esc(ch.name)} is here to play you</p>
+      <div class="mbl-who is-one"><button type="button" data-who="0" class="is-last"><b>${esc(ch.name)}</b><small>${esc(skillWords(ch))}</small></button></div>`
+      : `<p class="mbl-ask">Who do you want to play?</p>
+      <div class="mbl-who">${OPPONENTS.map((o, i) => `<button type="button" data-who="${i}" class="${i === choice ? 'is-last' : ''}"><b>${esc(o.name)}</b><small>${esc(o.line)}</small><small class="mbl-skill">${esc(skillWords(o))}</small></button>`).join('')}</div>`}
       ${levelHtml()}`;
     P.hidden = false;
-    bodyFor(OPPONENTS[choice]).catch(() => {});   // (the last one played, on the way already, so the start is quick)
+    bodyFor(opps[choice]).catch(() => {});   // (the last one played, on the way already, so the start is quick)
   }
 
   // ── the other player's body (the crew kit) ────────────────────────────────────────────────────────────────────
@@ -186,10 +195,17 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const R = ROSTER.find((r) => r.id === id), look = R ? R.look : FALLBACK_LOOK;
     return typeof look === 'string' ? (lib.list.recipes || {})[look] || FALLBACK_LOOK : look;
   }
+  // (a challenged person: the look they wear about the station, as the station's people are made: life.js lookRecipe)
+  function lookFor(opp) {
+    if (!opp.challenge || !opp.look) return lookOf(opp.id);
+    try { return lookRecipe(opp.look, opp.def, lib) || lookOf(opp.id); } catch (e) { return lookOf(opp.id); }
+  }
+  const keyOf = (opp) => (opp.challenge ? 'challenge:' : '') + opp.id;
   async function bodyFor(opp) {
-    if (looks.has(opp.id)) return looks.get(opp.id);
-    const p = makeCrew(lib, lookOf(opp.id)).then((c) => { c.root.visible = false; W.scene.add(c.root); return c; });
-    looks.set(opp.id, p); return p;
+    const k = keyOf(opp);
+    if (looks.has(k)) return looks.get(k);
+    const p = makeCrew(lib, lookFor(opp)).then((c) => { c.root.visible = false; W.scene.add(c.root); return c; });
+    looks.set(k, p); return p;
   }
   let hiddenPerson = null;
   function hideStationCopy(id) {
@@ -200,31 +216,32 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   // ── a round ───────────────────────────────────────────────────────────────────────────────────────────────────
   async function startRound() {
     if (closed) return;
-    const opp = OPPONENTS[choice];
+    const opp = opps[choice];
     // the level this round is played at: Mathwood's (a first time finds it: placement), and its rule set
     const dealt = E.deal(crew, job, { rand: Math.random });
     level = dealt.level; set = LADDER.find((s) => s.key === level.id) || LADDER[0];
     const tally = E.jobTally(crew, job.id);
-    tally.other = choice; onSave();
-    G = makeRound({ set, rand: Math.random, other: { level: opp.level }, youRate: tally.rate || OTHER.youRate });
+    if (!opp.challenge) tally.other = OPPONENTS.indexOf(opp);
+    onSave();
+    G = makeRound({ set, rand: Math.random, other: { skill: opp.skill }, youRate: tally.rate || OTHER.youRate });
     view.use(G); view.playing = true;
     dropWindow(true);
     other = opp; earned = 0; round++;
     $('.mbl-pick').hidden = true; $('.mbl-end').hidden = true; $('.mbl-top').hidden = false;
-    $('.mbl-them b').textContent = opp.name.replace(/^(Captain|Pilot) /, '');
+    $('.mbl-them b').textContent = opp.name.replace(/^(old )?(Captain|Pilot) /, '');
     $('.mbl-cr span').textContent = '0';
     say('Here come the balls, out of the walls', 2.5); askedBall = false;
     phase = 'play';
     hideStationCopy(opp.id);
     // the body: the one already made for this crew member, or made now (the round waits for nothing: until it comes,
     // the other player is only their ring)
-    if (otherBody && lastBody !== opp.id) { otherBody.root.visible = false; }
+    if (otherBody && lastBody !== keyOf(opp)) { otherBody.root.visible = false; }
     otherBody = null;
-    bodyFor(opp).then((c) => { if (closed || other !== opp) return; otherBody = c; lastBody = opp.id; c.root.visible = true; shine(c, W.envAt(new THREE.Vector3(MID[0], 1, MID[2]))); for (const o2 of [c.root]) o2.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) lifted.delete(m); }); lift(c); c.clipNow = ''; }).catch((e) => console.warn('Mathball: no body for ' + opp.name, e));
+    bodyFor(opp).then((c) => { if (closed || other !== opp) return; otherBody = c; lastBody = keyOf(opp); c.root.visible = true; shine(c, W.envAt(new THREE.Vector3(MID[0], 1, MID[2]))); for (const o2 of [c.root]) o2.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) lifted.delete(m); }); lift(c); c.clipNow = ''; }).catch((e) => console.warn('Mathball: no body for ' + opp.name, e));
   }
   let lastEnd = null;
   function showEnd(r) {
-    lastEnd = r; const opp = OPPONENTS[choice], was = other || opp;
+    lastEnd = r; const opp = opps[choice], was = other || opp;
     const words = r.you > r.them ? 'You win!' : r.you < r.them ? `${esc(was.name)} wins this one` : 'A draw!';
     const E2 = $('.mbl-end'), mine = bestWords(r.best);
     E2.innerHTML = `<h2>${words}</h2>
@@ -529,6 +546,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (best.beaten) happened('best');
     showGoals(false); say('', 0);
     // (the card says the best under the credits: "Your best: N", or "New best!" when this round beat it)
+    // (a round against someone who was challenged: the rest of the game is told, GAME.mathball.onEnd)
+    if (other && other.challenge) challengePlayed({ opponent: other.id, mine: e.you, theirs: e.them, won: e.you > e.them });
     showEnd({ you: e.you, them: e.them, played: Math.max(0, LADDER.findIndex((s) => s.key === set.key)), best });
     if (hiddenPerson) { /* (they stay out of the station's crowd while they are here on the court) */ }
   }
@@ -668,6 +687,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     removeEventListener('pointerup', onAimUp); removeEventListener('pointercancel', onAimUp);
     if (keepShut) W.keepShut.delete(keepShut);
     if (hiddenPerson) { hiddenPerson.hidden = false; hiddenPerson = null; }
+    if (ch) challengeLeft(ch.id);
     for (const [, p] of looks) p.then((c) => { W.scene.remove(c.root); c.dispose(); }).catch(() => {});
     view.dispose(); sound.dispose(); el.remove();
     onClose();
@@ -691,7 +711,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     aimAt: (x, y) => targetAt(x, y),
     get phase() { return phase; },
     state: () => ({
-      phase, paused, t: +G.t.toFixed(2), set: set && set.key, level: level && level.id, score: { ...G.score }, tries: { ...G.tries }, earned, other: other && other.name, otherMode: G.other.mode,
+      phase, paused, t: +G.t.toFixed(2), set: set && set.key, level: level && level.id, score: { ...G.score }, tries: { ...G.tries }, earned, other: other && other.name, otherSkill: other ? other.skill : null, challenge: ch ? ch.id : null, otherMode: G.other.mode,
       goals: G.goals.map((g, i) => ({ i, colour: GOALS[i].colour, rule: g.rule, say: ruleOf(g.rule).say, off: +(offFront(GOALS[i].aim) * 180 / Math.PI).toFixed(1), across: +across(GOALS[i].aim).toFixed(2) })),
       holding: G.you.holding ? { id: G.you.holding.id, num: G.you.holding.num } : null, target: G.you.target ? G.you.target.id : null,
       balls: G.balls.filter((b) => b.mode !== 'gone').map((b) => { const f = facing(b, [lastCam.x - MID[0], lastCam.y, lastCam.z - MID[2]]); return { id: b.id, num: b.num, mode: b.mode, p: b.p.map((v) => +v.toFixed(2)), fits: G.goals.map((g) => ruleOf(g.rule).test(valueOf(b.num))), seen: !!b.seen, passed: b.passed, angle: +f.angle.toFixed(1), tilt: +f.tilt.toFixed(1), rest: b.restAt ? +b.restAt.angle.toFixed(1) : null }; }),

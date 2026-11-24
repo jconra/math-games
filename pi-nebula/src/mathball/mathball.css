@@ -73,6 +73,11 @@
 .mbl-who button b { font-size: 16px; }
 .mbl-who button small { color: var(--dim); font-size: 13px; line-height: 1.25; }
 .mbl-who button.is-last { box-shadow: inset 0 0 0 2px var(--accent); }
+/* (each one's Mathball skill, a plain number under their line: src/mathball/skill.js) */
+.mbl-who button small.mbl-skill { color: var(--ink); margin-top: auto; }
+/* (someone challenged, waiting here: the one button, as wide as the card) */
+.mbl-who.is-one { grid-template-columns: 1fr; }
+.mbl-who.is-one button { min-height: 0; }
 .mbl-who button:hover { box-shadow: inset 0 0 0 2px var(--line-hi); background: rgba(60, 72, 86, 0.95) !important; }
 .mbl-level { display: grid; grid-template-columns: 38px 1fr 38px; gap: 8px; align-items: center; }
 .mbl-level span { text-align: center; font-size: 14px; color: var(--ink); line-height: 1.25; }

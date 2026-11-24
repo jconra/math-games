@@ -22,7 +22,7 @@
 //     goes for next;
 //   - waiting, it never stands still: it jogs, sidesteps and turns to watch the balls and the player.
 //
-//   const G = makeRound({ set, rand, other: { level }, youRate })
+//   const G = makeRound({ set, rand, other: { skill }, youRate })     skill: 1 to 10 (skill.js), or { level: 0..2 }
 //   G.step(dt, { eye, sees, you: { x, z, vx, vz, heading } })   eye/sees: physics.js's; you: the player's feet now
 //   G.pick(id) / G.throwAt(goal) / G.drop()                      the player's moves (a click on a ball, on a goal)
 //   G.tossAt([x, y, z])    a throw at a spot that is no goal (the floor, a wall): the ball lands there as a loose ball
@@ -52,19 +52,33 @@ export const ROUND = {
   hold: [0.36, 1.62, 0.55],
   fade: 0.8,                       // s a swapped-out ball takes to fade
 };
-// THE OTHER PLAYER'S LEVELS: easier, a match, harder (the player picks one to start a round)
+// THE OTHER PLAYER'S SKILL (skill.js: 1 to 10, everyone's own): how fast they aim to score against the player's own
+// pace (share), how often they are right (acc), how fast they run (m/s). The three old levels are three points on the
+// one scale and play as they did: skill 3 (easier: Ola), 6 (a match: Pilot Sol), 10 (harder: Captain Vega); between
+// them a straight line, and from 3 down to 1 a gentler one to OTHER.least (OTHER.atSkill).
 export const OTHER = {
   levels: [
-    { key: 'easy', share: 0.76, acc: 0.74, run: 3.5 },
-    { key: 'even', share: 0.9, acc: 0.85, run: 3.9 },
-    { key: 'hard', share: 1.06, acc: 0.93, run: 4.3 },
+    { key: 'easy', skill: 3, share: 0.76, acc: 0.74, run: 3.5 },
+    { key: 'even', skill: 6, share: 0.9, acc: 0.85, run: 3.9 },
+    { key: 'hard', skill: 10, share: 1.06, acc: 0.93, run: 4.3 },
   ],
+  // (the foot of the scale, skill 1: easy, but it still tries: a little under the easier level, not far below it)
+  least: { skill: 1, share: 0.7, acc: 0.7, run: 3.35 },
   band: { at: 2, ahead: 0.62, behind: 1.4, step: 0.12 },   // ahead by 2 or more: slower; behind by 2 or more: quicker
   passed: 3,                       // a ball passed over this many times is the one it goes for
   think: [0.35, 0.9],              // s it takes to choose a goal once it holds a ball
   roam: [0.8, 1.8],                // s between new spots while it waits
   keep: 1.1,                       // m it keeps off the player
   youRate: 5,                      // right balls a minute a player is guessed to score before any are seen
+};
+
+// the brain at a skill (1 to 10): { key, skill, share, acc, run }
+OTHER.atSkill = (skill) => {
+  const L = OTHER.levels, s = Math.max(1, Math.min(10, Math.round(+skill || 6)));
+  const at = L.find((l) => l.skill === s); if (at) return { ...at };
+  const [a, b] = s < L[0].skill ? [OTHER.least, L[0]] : s < L[1].skill ? [L[0], L[1]] : [L[1], L[2]], k = (s - a.skill) / (b.skill - a.skill);
+  const mix = (f) => +(a[f] + (b[f] - a[f]) * k).toFixed(3);
+  return { key: 'skill ' + s, skill: s, share: mix('share'), acc: mix('acc'), run: mix('run') };
 };
 
 const pick = (a, rand) => a[Math.floor(rand() * a.length)];
@@ -84,7 +98,8 @@ const COLOURS = 6;
 // drawn from them, startGoals) or a single rule set (SETS: its starts, or its first four rules); goals: four to start
 // with instead
 export function makeRound({ set, rand = Math.random, other = {}, youRate = OTHER.youRate, goals = null } = {}) {
-  const lv = OTHER.levels[Math.max(0, Math.min(2, other.level ?? 1))];
+  // (other: { skill } 1 to 10, or one of the old three levels { level: 0 | 1 | 2 })
+  const lv = OTHER.atSkill(other.skill ?? OTHER.levels[Math.max(0, Math.min(2, other.level ?? 1))].skill);
   const world = makeBalls({ rand });
   const level = set.sets ? set : null;
   const first = goals || (level ? startGoals(level, rand) : set.goals || set.starts || set.rules.slice(0, 4));
