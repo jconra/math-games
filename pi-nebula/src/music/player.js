@@ -31,9 +31,12 @@
 // kick in the techno and heavy songs, the room's echo, a tone filter (the chill songs warmer) and a limiter at the end.
 import { playPatch, voicePatch, makeImpulse, patchAutoStopTime } from '../audio/patch.js';
 import { TECHNO_PATCHES } from './patches.js';
-import { barBlock } from './patterns.js';
+import { barBlock, FORMS, SECTION } from './patterns.js';
 import { PRESETS, PART_IDS, formOf } from './song.js';
 import { volOf, volGain } from './song.js';   // (VISUALS 1: the parts' volumes, in the marked block at the end)
+// ── PRE-RENDERED NOTES (MUSICGAME 1) ──
+import { bakery } from './bake.js';
+// ── end PRE-RENDERED NOTES ──
 
 // the places to try it in (the lab's "Heard in" row): loudness, how much room, how big a room
 export const PLACES = [
@@ -72,20 +75,34 @@ export function notePatch(patch, { semi = 0, gain = 1, len = null, set = null } 
 }
 
 // the per-note settings a patch's note needs from the song: the wobble's speed, the echo's time, the riser's glide
-function setFor(inst, note, sd, len) {
+export function setFor(inst, note, sd, len) {
   if (inst === 'TECHNO — WOBBLE BASS') return { 'w-lfo': { freq: (note[4] && note[4].wob ? note[4].wob : 1) / (4 * sd) } };
   if (inst === 'TECHNO — ECHO PLUCK') return { 'e-dl': { time: Math.min(1.2, 3 * sd) } };
   if (inst === 'TECHNO — RISER') return { 'r-f': { glide: Math.max(0.1, len) } };
   return null;
 }
 
-export function createMusic({ sound = null, ctx = null, dest = null, timer = true } = {}) {
+// ── PRE-RENDERED NOTES, AND THE GAME'S OWN SWITCHES (MUSICGAME 1) ──
+//   notes   'baked': every note worth it (src/music/bake.js worth) pre-rendered in the background and played back as
+//           one buffer, the rest (and any not rendered yet) live; 'live': every note live, as before. M.notes / M.setNotes
+//   rests   true: no notes are made while the page is hidden (the game's); the bars go on counting from where they
+//           were when it comes back. false: (the lab's) it plays on, made 1.6 s ahead
+//   M.prepare(song)      ask for the notes of the song's first round of sections (spread over time, in the background)
+//   M.switchTo(song)     change the song on the next bar not yet made, playing it from its top (the game's arena)
+//   M.hush(v)            the music's level under talking (1 none, eased); M.bakery: the pre-rendering, once there is one
+//   M.hold(on)           no notes made while on (the game: not heard off the station and off any ship)
+// ── end ──
+export function createMusic({ sound = null, ctx = null, dest = null, timer = true, notes = 'live', rests = false } = {}) {
   let A = null;                 // the audio parts: { ctx, buses, ... } once there is a context
   let song = { ...PRESETS[0].song }, playing = false, anchor = null, next = null, iv = null;
   let room = { ...PLACES[1] }, place = PLACES[1].id;
   const keep = [], bars = [], fans = new Set();
   const stats = { voices: 0, notes: 0, lastBar: 0, bars: 0 };
   const M = { stats, log: null, PLACES };
+  // ── PRE-RENDERED NOTES (MUSICGAME 1) ──
+  let noteMode = notes === 'baked' ? 'baked' : 'live', B = null, pending = null, prepTimer = null, hushV = 1, holdOn = false;
+  const bakeryNow = () => { if (!B && A) B = bakery(A.ctx.sampleRate, { noteOf: notePatch, patches: TECHNO_PATCHES }); return B; };
+  // ── end PRE-RENDERED NOTES ──
   const tell = () => { for (const f of fans) try { f(M); } catch (e) { /* a screen's fault is its own */ } };
 
   function contextNow() {
@@ -112,7 +129,9 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     const lim = c.createDynamicsCompressor();
     lim.threshold.value = -10; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.25;
     const fade = G(0), level = G(room.level * MIX.out), trim = G(MIX.trim[formOf(song)]);
-    mix.connect(trim); trim.connect(tone); tone.connect(lim); lim.connect(fade); fade.connect(level); level.connect(d);
+    // (MUSICGAME 1: a hush after the room's level, for the game's talking)
+    const hush = G(hushV);
+    mix.connect(trim); trim.connect(tone); tone.connect(lim); lim.connect(fade); fade.connect(level); level.connect(hush); hush.connect(d);
     // the room: the engine's own impulse (makeImpulse) in two convolvers, a small room and a big one
     const roomIn = G(1), mixSend = G(0.5), wet = G(room.reverb);
     const small = c.createConvolver(), big = c.createConvolver();
@@ -120,11 +139,44 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     const sG = G(1 - room.size), bG = G(room.size * 0.8);
     trim.connect(mixSend); mixSend.connect(roomIn); roomIn.connect(wet);
     wet.connect(small); wet.connect(big); small.connect(sG); big.connect(bG); sG.connect(tone); bG.connect(tone);
-    return { ctx: c, buses, duck, mix, tone, trim, fade, level, wet, sG, bG, roomIn, hidden: () => typeof document !== 'undefined' && document.hidden };
+    return { ctx: c, buses, duck, mix, tone, trim, fade, level, hush, wet, sG, bG, roomIn, hidden: () => typeof document !== 'undefined' && document.hidden };
   }
 
   const stepDur = (s) => 60 / s.bpm / 4;
   const muted = () => !!(sound && (sound.muted || !sound.volume));
+
+  // one note, made (MUSICGAME 1: the body of the bar's loop, as it was, in a function of its own)
+  function playNote({ tr, patch, n, at, secs, sd, bar }) {
+    const c = A.ctx, [step, semi, , vel] = n;
+    const set = setFor(tr.inst, n, sd, secs), gain = vel * (tr.vol ?? 1);
+    try {
+      // ── PRE-RENDERED NOTES (MUSICGAME 1): the note as one buffer if it is rendered (null: live, as ever) ──
+      let h = null, end = 0;
+      if (noteMode === 'baked' && bakeryNow()) {
+        const pl = B.plan(patch, { semi, len: secs, set });
+        h = B.play(c, pl, at, gain, A.buses[tr.part], A.roomIn);
+        if (h) end = at + pl.secs + 0.05;
+      }
+      // ── end PRE-RENDERED NOTES ──
+      if (!h) {
+        const p = notePatch(patch, { semi, gain, len: secs, set });
+        h = playPatch(c, null, A.buses[tr.part], A.roomIn, p, null, { at });
+        end = at + (patchAutoStopTime(p) ?? secs + 1);
+      }
+      keep.push({ h, end });
+      stats.notes++;
+      if (M.log) M.log.push({ at, inst: tr.inst, part: tr.part, step, bar, vel });
+    } catch (e) { /* a bad note must never take the music down */ }
+  }
+  // (MUSICGAME 1: the notes of bars made, waiting for their times to come near; one whose time has gone by, as after
+  // the page was hidden, is let go unmade)
+  const waiting = [];
+  function due(now, ahead) {
+    if (!waiting.length) return;
+    let k = 0;
+    for (const j of waiting) { if (j.at < now) continue; if (j.at <= now + ahead + 0.1) { if (!muted()) playNote(j); } else waiting[k++] = j; }
+    waiting.length = k;
+  }
 
   function scheduleBar(bar, t) {
     const S = song, sd = stepDur(S), block = barBlock(S, bar), form = formOf(S);
@@ -135,21 +187,20 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     stats.bars++; stats.lastBar = 0;
     if (muted()) return;
     const kicks = [];
+    // ── MUSICGAME 1: a bar's notes are made as their times come near (each within the look-ahead), not all at once as
+    // the bar is due, so the main thread's work is spread over the bar's ticks instead of one tick a bar ──
+    const now = c.currentTime;
     for (const tr of block.tracks) {
       const patch = TECHNO_PATCHES[tr.inst]; if (!patch) continue;
       for (const n of tr.notes) {
-        const [step, semi, len, vel] = n;
-        const at = t + step * sd + (step % 2 ? S.swing * sd : 0), secs = Math.max(0.05, len * sd);
-        const p = notePatch(patch, { semi, gain: vel * (tr.vol ?? 1), len: secs, set: setFor(tr.inst, n, sd, secs) });
-        try {
-          const h = playPatch(c, null, A.buses[tr.part], A.roomIn, p, null, { at });
-          keep.push({ h, end: at + (patchAutoStopTime(p) ?? secs + 1) });
-          stats.notes++; stats.lastBar++;
-          if (M.log) M.log.push({ at, inst: tr.inst, part: tr.part, step, bar, vel });
-        } catch (e) { /* a bad note must never take the music down */ }
+        const step = n[0], at = t + step * sd + (step % 2 ? S.swing * sd : 0), secs = Math.max(0.05, n[2] * sd);
+        const job = { tr, patch, n, at, secs, sd, bar };
+        if (at > now + AHEAD + 0.1) waiting.push(job); else playNote(job);
+        stats.lastBar++;
         if (tr.part === 'beat' && /KICK/.test(tr.inst)) kicks.push(at);
       }
     }
+    // ── end ──
     // the duck: the other parts dip a little under each kick and come back (techno and heavy songs)
     if (form !== 'flow') for (const at of kicks.sort((a, b) => a - b)) { A.duck.gain.setTargetAtTime(MIX.duck, at, 0.004); A.duck.gain.setTargetAtTime(1, at + 0.03, 0.07); }
   }
@@ -161,8 +212,16 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     for (let i = keep.length - 1; i >= 0; i--) if (keep[i].end < now) { try { keep[i].h.stop(0.03); } catch (e) { /* */ } keep.splice(i, 1); }
     stats.voices = keep.length;
     if (!playing) return;
+    // ── THE GAME'S SWITCHES (MUSICGAME 1): hidden, no notes made (rests); back, the bars counted on from now ──
+    if ((rests && A.hidden()) || holdOn) { stats.resting = true; return; }
+    if (stats.resting) { stats.resting = false; if (next.t < now + 0.05) { const t = now + 0.1; anchor = { bar: next.bar, t, bpm: song.bpm }; next.t = t; } }
+    // ── end ──
     const ahead = A.hidden() ? AHEAD_HIDDEN : AHEAD;
+    due(now, ahead);   // (MUSICGAME 1)
     while (next.t < now + ahead) {
+      // ── THE GAME'S SWITCHES (MUSICGAME 1): a song switched to plays from its top, from this bar ──
+      if (pending) { song = pending; pending = null; anchor = { bar: 0, t: next.t, bpm: song.bpm }; next.bar = 0; tell(); }
+      // ── end ──
       // (a speed changed since the anchor: the bars from here on are counted from here)
       if (song.bpm !== anchor.bpm) anchor = { bar: next.bar, t: next.t, bpm: song.bpm };
       scheduleBar(next.bar, next.t);
@@ -178,6 +237,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     if (!a) { playing = true; startTimer(); tell(); return M; }   // (the game's sound not awake yet: it starts when it is)
     if (a.ctx.state === 'suspended' && typeof a.ctx.startRendering !== 'function') a.ctx.resume().catch(() => {});
     if (playing && next) { tell(); return M; }
+    if (noteMode === 'baked') M.prepare(song);   // (MUSICGAME 1)
     const t = a.ctx.currentTime + 0.1;
     a.fade.gain.cancelScheduledValues(a.ctx.currentTime); a.fade.gain.setTargetAtTime(1, a.ctx.currentTime, 0.02);
     playing = true; anchor = { bar: 0, t, bpm: song.bpm }; next = { bar: 0, t };
@@ -186,7 +246,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
   };
   M.stop = () => {
     if (!playing) return M;
-    playing = false; next = null; anchor = null;
+    playing = false; next = null; anchor = null; waiting.length = 0;   // (MUSICGAME 1: waiting notes)
     if (A) {
       const now = A.ctx.currentTime;
       A.fade.gain.cancelScheduledValues(now); A.fade.gain.setTargetAtTime(0, now, 0.08);
@@ -198,7 +258,41 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     bars.length = 0; tell();
     return M;
   };
-  M.set = (s) => { song = { ...s }; tell(); return M; };
+  M.set = (s) => { song = { ...s }; pending = null; tell(); return M; };
+  // ── PRE-RENDERED NOTES, AND THE GAME'S SWITCHES (MUSICGAME 1) ──
+  M.setNotes = (m) => { noteMode = m === 'baked' ? 'baked' : 'live'; if (noteMode === 'baked' && playing) M.prepare(pending || song); tell(); return M; };
+  M.switchTo = (s) => {
+    if (!playing || !next) { song = { ...s }; pending = null; } else pending = { ...s };
+    if (noteMode === 'baked') M.prepare(s);
+    tell(); return M;
+  };
+  M.hush = (v) => { hushV = clamp(v, 0, 1); if (A) A.hush.gain.setTargetAtTime(hushV, A.ctx.currentTime, 0.25); return M; };
+  // (the notes of a song's opening and its first round of sections, asked for a bar at a time, every 30 ms; songs
+  // asked for while one is going come after it, the newest first)
+  const prepQ = [];
+  M.prepare = (s = song) => {
+    if (!A || !bakeryNow()) return M;
+    const S = { ...s }, id = JSON.stringify(S);
+    if (prepQ.some((q) => q.id === id)) return M;
+    prepQ.splice(prepTimer ? 1 : 0, 0, { id, S, bar: 0, bars: SECTION * (1 + FORMS[formOf(S)].loop.length) });
+    const step = () => {
+      const q = prepQ[0]; if (!q) { prepTimer = null; return; }
+      const sd = stepDur(q.S);
+      try {
+        for (const tr of barBlock(q.S, q.bar).tracks) {
+          const patch = TECHNO_PATCHES[tr.inst]; if (!patch) continue;
+          for (const n of tr.notes) { const secs = Math.max(0.05, n[2] * sd); B.want(B.plan(patch, { semi: n[1], len: secs, set: setFor(tr.inst, n, sd, secs) })); }
+        }
+      } catch (e) { /* (the rest come as they are played) */ }
+      if (++q.bar >= q.bars) prepQ.shift();
+      prepTimer = prepQ.length ? setTimeout(step, 30) : null;
+    };
+    if (!prepTimer) step();
+    return M;
+  };
+  // (not heard just now, off the station and off any ship: no notes made until it is again)
+  M.hold = (on) => { holdOn = !!on; return M; };
+  // ── end ──
   M.room = (r) => {
     const P = typeof r === 'string' ? PLACES.find((p) => p.id === r) : null;
     const v = P || r || {};
@@ -226,6 +320,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
   Object.defineProperties(M, {
     song: { get: () => song }, playing: { get: () => playing }, place: { get: () => place },
     roomNow: { get: () => ({ ...room }) }, audio: { get: () => A },
+    notes: { get: () => noteMode }, bakery: { get: () => B }, hushed: { get: () => hushV },   // (MUSICGAME 1)
   });
 
   function startTimer() {

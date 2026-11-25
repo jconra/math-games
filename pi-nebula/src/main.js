@@ -20,6 +20,8 @@
 //                        src/missions.js pickTune)
 //   ?crowd=N             that many of the station's people about the player at once, whatever the quality (life.js NEAR:
 //                        the cost rigs); ?far=N: people drawn with their far copy from N metres (people.js LIFE.far)
+//   ?music=1|0           the station's music on or off, remembered in this browser (off at first: src/music/switch.js;
+//                        on, src/music/game.js is loaded); ?notes=live with it: every note made live, not pre-rendered
 import * as THREE from 'three';
 import { GAME_NAME } from './name.js';
 import * as save from './save.js';
@@ -63,6 +65,7 @@ import { makeCargoLap } from './cargolap.js';
 import { bridgeStands } from './jobs/dock.js';
 import { pointGap } from '../kit/forkliftround.js';
 import { STORE } from '../kit/places-plan.js';
+import { musicWanted } from './music/switch.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
@@ -130,6 +133,10 @@ async function boot() {
   const shipPaint = W.shipPaint = GAME.shipPaint = makeShipPaint({ W, crew: () => GAME.player, save: (p) => save.save(p), boarding, hauler: () => outside.hauler });
   // (the station's announcements over the speakers, a chime first, about once a minute: src/announce.js)
   const announce = GAME.announce = makeAnnounce({ sound, W, visit, people: () => people, crew: () => GAME.player });
+  // (the station's music, only when asked for: ?music=1; otherwise none of it is loaded, src/music/switch.js)
+  let music = null;
+  { let want = { on: false }; try { want = musicWanted(location.search, localStorage); } catch (e) { /* blocked: off */ }
+    if (want.on) import('./music/game.js').then((m) => { music = GAME.music = m.startGameMusic({ sound, notes: want.notes }); }).catch(fail); }
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -311,6 +318,9 @@ async function boot() {
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
     visit.update(dt, W.camera);      // (a ship flown into another hangar: the alarm there, the parked ship where it has been shoved)
     announce.update(dt, GAME.mode === 'play' && !!P);
+    // (the music: heard as the room the crew member is in, aboard a ship, or not at all off it out there; on the title,
+    // as the camera's room)
+    if (music) music.update(dt, () => (GAME.mode === 'play' && P ? { zone: (W.zoneAt(P.pos) || {}).id || null, ship: boarding.where(P.pos), ground: !!(mission.trip && mission.trip.ground) } : { zone: (W.zoneAt(W.camera.position) || {}).id || null }));
     outside.update(W.camera, dt);
     W.frame(dt, now, eyes);
     GAME.frames++;

@@ -1322,6 +1322,8 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   const _eye = new THREE.Vector3(), _look = new THREE.Vector3(), camLook = new THREE.Vector3(); let camFresh = true;
   const api = {
     get done() { return T.done; },
+    // (on foot off the ship out there, on a planet or in the old station: the music is not heard, src/music/game.js)
+    get ground() { return !T.done && !!T.ground; },
     // (in the seat, or at the core with its card up: seen through their own eyes, their body put away; and the trip
     // has them: no walking. On their feet out at the rocks neither is so)
     // (on foot out on a planet: their own figure out there is theirs, walked by the trip; their body as parked unseen)

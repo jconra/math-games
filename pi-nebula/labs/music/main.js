@@ -5,15 +5,28 @@
 // Beside it the same screen at a station wall screen's shape and about its size (the wall's own version: no "Heard
 // in"), on one link with the big one: both show the same face and picture, a touch on either works. Under them a
 // preview of the hallways' light bars (src/music/lights.js) from the same pulse numbers the game's bars will read.
+// The lab's "Notes" row on the big screen (lab only, as "Heard in" is; MUSICGAME 1): Live, every note made by the
+// engine as it plays; Pre-rendered, each different note rendered once in the background and played back
+// (src/music/bake.js), as the game plays it, so the two can be compared by ear. Kept in this browser
+// ('pi-nebula.music-lab.notes'); Pre-rendered at first. Under it a small line: how many notes are rendered.
 import { createMusic } from '../../src/music/player.js';
 import { mountMusicScreen, screenLink } from '../../src/music/screen.js';
 import { tapOf } from '../../src/music/tap.js';
 import { lightBars, LIGHT_STYLES, LIGHT_COLOURS } from '../../src/music/lights.js';
 
 const KEEP = 'pi-nebula.music-lab';
-const music = createMusic();
+let notes = 'baked';
+try { if (localStorage.getItem(KEEP + '.notes') === 'live') notes = 'live'; } catch (e) { /* blocked: pre-rendered */ }
+const music = createMusic({ notes });
 const link = screenLink();
-const screen = mountMusicScreen(document.getElementById('screen'), music, { heardIn: true, keep: KEEP, link });
+const screen = mountMusicScreen(document.getElementById('screen'), music, { heardIn: true, notes: true, keep: KEEP, link });
+// (what is rendered so far, once a second: MUSICGAME 1)
+setInterval(() => {
+  const said = document.querySelector('#screen [data-baked]'), B = music.bakery; if (!said) return;
+  if (music.notes !== 'baked' || !B) { said.textContent = music.notes === 'live' ? 'Every note made as it plays.' : ''; return; }
+  const s = B.stats();
+  said.textContent = `${s.baked} notes rendered (${s.MB} MB)${s.queued ? `, ${s.queued} to come` : ''}; played back ${s.played}, live ${s.live}`;
+}, 1000);
 const wall = mountMusicScreen(document.getElementById('wall'), music, { heardIn: false, keep: KEEP, link, fit: true });
 
 // ── the light bars ──────────────────────────────────────────────────────────────────────────────────────────────

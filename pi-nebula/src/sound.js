@@ -19,6 +19,8 @@
 //   sound.has(name), sound.length(name)   a sound fetched and made ready to play; how long it lasts (s; 0 if not)
 //   sound.ready                      true once the player has touched the page and sound can play
 //   sound.played                     how many sounds have played (the rigs read it)
+//   sound.playing(group)             how many sounds of a group are playing just now (the music drops back under
+//                                    'voices' and 'station': src/music/game.js)
 // The volume and the mute are kept in this browser (localStorage 'calc-station.sound'); ui/soundbutton.js is the HUD's
 // switch for them.
 const KEY = 'calc-station.sound';
@@ -33,6 +35,7 @@ function makeSound() {
     volume: Number.isFinite(+saved.volume) ? Math.max(0, Math.min(1, +saved.volume)) : 0.8,
     muted: !!saved.muted, ready: false, played: 0, groups,
   };
+  const sounding = {};   // (how many sounds of each group are playing just now: S.playing(group))
   const keep = () => { try { localStorage.setItem(KEY, JSON.stringify({ volume: S.volume, muted: S.muted })); } catch (e) { /* blocked: not kept */ } };
   const level = () => (S.muted ? 0 : S.volume * S.volume);   // (heard as louder in even steps)
   function decode(name) {
@@ -60,6 +63,7 @@ function makeSound() {
     return fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => { if (!b) { bytes.delete(name); return; } bytes.set(name, b); decode(name); }).catch(() => { bytes.delete(name); });
   };
   S.has = (name) => !!bufs.get(name);
+  S.playing = (group) => sounding[group] || 0;
   S.length = (name) => { const b = bufs.get(name); return b ? b.duration : 0; };
   S.play = (name, { at = null, volume = 1, rate = 1, group = 'voices', near = 1.5, far = 28, delay = 0 } = {}) => {
     if (!ctx || ctx.state !== 'running' || !level()) return null;
@@ -70,6 +74,8 @@ function makeSound() {
     placed(g, at, near, far).connect(groups[group] || groups.voices);
     src.start(delay > 0 ? ctx.currentTime + delay : 0);
     S.played++;
+    const gr = groups[group] ? group : 'voices';
+    sounding[gr] = (sounding[gr] || 0) + 1; src.onended = () => { sounding[gr]--; };
     return { stop() { try { src.stop(); } catch (e) { /* done already */ } }, volume(v) { g.gain.setTargetAtTime(Math.max(0, v), ctx.currentTime, 0.04); } };
   };
   // (a sound's last node, set at a point in the world if it has one: softer with distance)

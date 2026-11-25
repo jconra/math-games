@@ -16,6 +16,8 @@
 //   const S = mountMusicScreen(el, music, { heardIn, keep, link, fit, idle, fps })
 //       el       where it goes (it fills it); music: the one music player (src/music/player.js createMusic)
 //       heardIn  true: the "Heard in" row (the lab's places to try the music in; a station wall leaves it out)
+//       notes    true: the lab's "Notes: Live / Pre-rendered" row (MUSICGAME 1: every note made as it plays, or each
+//                different note rendered once and played back, src/music/bake.js; a station wall leaves it out)
 //       keep     the key the song, the place and the picture are kept under in this browser ('' or false: not kept)
 //       link     screenLink(): screens on one link show the same face and picture (the lab's big screen and its small
 //                wall one); left out, the screen has its own
@@ -131,7 +133,7 @@ export function screenLink({ face = 'picture', picture = VISUALS[0].id, idle = 3
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula.music', link = null, fit = false, idle = 30000, fps = 0 } = {}) {
+export function mountMusicScreen(el, music, { heardIn = false, notes = false, keep = 'pi-nebula.music', link = null, fit = false, idle = 30000, fps = 0 } = {}) {
   style();
   const L = link || screenLink({ idle });
   // what this browser kept: the song (and the place)
@@ -157,6 +159,7 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
     <div class="pnm-row">${head('Speed')}<div class="pnm-speed"><button type="button" class="pnm-b" data-bpm="-1" aria-label="Slower">&minus;</button><output data-bpm-out></output><button type="button" class="pnm-b" data-bpm="1" aria-label="Faster">+</button></div></div>
     <div class="pnm-row">${head('Picture')}<div class="pnm-ch" role="group" aria-label="Picture">${VISUALS.map((v) => `<button type="button" class="pnm-b" data-picture="${v.id}">${esc(v.label)}</button>`).join('')}</div></div>
     ${heardIn ? `<div class="pnm-row">${head('Heard in')}<div class="pnm-ch" role="group" aria-label="Heard in">${PLACES.map((p) => `<button type="button" class="pnm-b" data-place="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>` : ''}
+    ${notes ? `<div class="pnm-row">${head('Notes')}<div class="pnm-ch" role="group" aria-label="Notes"><button type="button" class="pnm-b" data-notes="live">Live</button><button type="button" class="pnm-b" data-notes="baked">Pre-rendered</button><small data-baked style="flex: 1 1 100%; font-size: 12px; color: var(--dim);"></small></div></div>` : ''}
     <div class="pnm-foot">
       <button type="button" class="pnm-go" data-go>Play</button>
       <div class="pnm-steps" aria-hidden="true">${Array.from({ length: 16 }, (_, i) => `<i class="${i % 4 ? '' : 'is-beat'}"></i>`).join('')}</div>
@@ -175,6 +178,7 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
     for (const b of $$('[data-preset]')) b.classList.toggle('is-on', !!P && b.dataset.preset === P.id);
     for (const b of $$('[data-part]')) b.classList.toggle('is-on', s[b.dataset.part] === b.dataset.choice);
     for (const b of $$('[data-place]')) b.classList.toggle('is-on', music.place === b.dataset.place);
+    for (const b of $$('[data-notes]')) b.classList.toggle('is-on', music.notes === b.dataset.notes);   // (MUSICGAME 1)
     $('[data-bpm-out]').innerHTML = `${s.bpm}<small>bpm</small>`;
     for (const o of $$('[data-vol-out]')) { const v = volOf(s, o.dataset.volOut); o.textContent = v; o.classList.toggle('is-moved', v !== VOL.usual); }
     for (const c of $$('[data-switch]')) c.checked = !!s[c.dataset.switch];
@@ -195,6 +199,7 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
     else if ('show' in b.dataset) L.show('picture');
     else if (b.dataset.bpm) change({ ...s, bpm: Math.max(BPM.min, Math.min(BPM.max, s.bpm + BPM.step * +b.dataset.bpm)) });
     else if (b.dataset.place) { music.room(b.dataset.place); save(); }
+    else if (b.dataset.notes) { music.setNotes(b.dataset.notes); try { if (keep) localStorage.setItem(keep + '.notes', music.notes); } catch (er) { /* not kept */ } }   // (MUSICGAME 1)
     else if ('go' in b.dataset) { if (music.playing) music.stop(); else music.play(); }
     else if ('copy' in b.dataset) copy();
   });
