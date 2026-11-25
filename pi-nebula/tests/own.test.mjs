@@ -86,7 +86,7 @@ test('the spend: bought, the price leaves their credits and the ship is kept wit
   assert.deepEqual(shipsOf({ ships: ['yacht', 'miner', 'miner'] }), ['miner']); assert.deepEqual(shipsOf({ ships: 'miner' }), []); assert.deepEqual(shipsOf(null), []);
 });
 
-// (a crew of your own, as agreed: three of the station's people and a rescued survivor; the five captains are never on it)
+// (a crew of your own, as agreed: three of the station's people and a rescued survivor)
 const MATES = [{ id: 'cook', name: 'Bo', look: 'cook' }, { id: 'medic', name: 'Ana', look: 'medic' }, { id: 'guard', name: 'Tess', look: 'guard' }, { id: 'w-1', name: 'Nora', look: { suit: 'civilian', head: 't3' } }];
 const crewed = (more = {}) => maya({ myCrew: MATES.map((p) => ({ ...p })), ...more });
 // (every way the three jobs of a run can be shared out: each yours or one of the first three of your crew, each person
@@ -100,7 +100,7 @@ function sharings(roles) {
   return out;
 }
 
-test('asked to join your crew: yes at 5 pips or more, kept with the crew member; no under 5; a captain no whatever the meter; nothing before a ship of your own', () => {
+test('asked to join your crew: yes at 5 pips or more, kept with the crew member; no under 5; a captain as anyone else; nothing before a ship of your own', () => {
   const c = maya({ friends: { cook: { p: 5 }, medic: { p: 4.5 }, ruiz: { p: 10 } } });
   // (no ship yet: nobody is asked)
   assert.deepEqual(askCrew(c, { id: 'cook', name: 'Bo' }, 5), { yes: false, why: 'ship' });
@@ -108,8 +108,13 @@ test('asked to join your crew: yes at 5 pips or more, kept with the crew member;
   assert.deepEqual(askCrew(c, { id: 'medic', name: 'Ana' }, 4.5), { yes: false, why: 'friends' });
   assert.deepEqual(askCrew(c, { id: 'cook', name: 'Bo', look: 'cook' }, 5, { now: 7 }), { yes: true, why: 'joined' });
   assert.deepEqual(askCrew(c, { id: 'cook', name: 'Bo' }, 9), { yes: true, why: 'already' });
-  // (the five captains: each has a ship of their own and stands in the station offering its contracts)
-  for (const id of ['ruiz', 'hale', 'vega', 'adair', HAULER_CAPTAIN.id]) assert.deepEqual(askCrew(c, { id, name: 'Captain', captain: true }, 10), { yes: false, why: 'captain' });
+  // (the five captains are asked like anyone else: no under 5, yes at 5: the game's maker, MYCREW1-1 B)
+  { const k = maya({ ships: ['miner'] });
+    for (const id of ['ruiz', 'hale', 'vega', 'adair', HAULER_CAPTAIN.id]) {
+      assert.deepEqual(askCrew(k, { id, name: 'Captain' }, 4.5), { yes: false, why: 'friends' });
+      assert.deepEqual(askCrew(k, { id, name: 'Captain' }, 5), { yes: true, why: 'joined' });
+    }
+    assert.equal(crewOf(k).length, 5); }
   // (the friends' own rule: src/friends.js agreesToCrew, at 5)
   assert.equal(FRIENDS.crew, 5); assert.equal(agreesToCrew(c, 'cook'), true); assert.equal(agreesToCrew(c, 'medic'), false);
   assert.deepEqual(crewOf(c), [{ id: 'cook', name: 'Bo', look: 'cook', at: 7 }]); assert.equal(onCrew(c, 'cook'), true); assert.equal(onCrew(c, 'medic'), false);
@@ -119,10 +124,9 @@ test('asked to join your crew: yes at 5 pips or more, kept with the crew member;
   assert.equal(crewOf(c).length, 14);
   // (kept tidy: each once, with an id)
   assert.deepEqual(crewOf({ myCrew: [{ id: 'a', name: 'A' }, { id: 'a', name: 'A2' }, null, { name: 'nobody' }] }).map((p) => p.name), ['A']);
-  // (each of the captains says so in their own words; everyone else's yes and no are kind)
-  for (const id of ['ruiz', 'hale', 'vega', 'adair', HAULER_CAPTAIN.id]) assert.ok(CREW_ASK.captains[id] && CREW_ASK.captains[id].length > 20, id);
+  // (nobody has words of their own for it: a captain's yes and no are the same kind ones)
+  assert.equal(CREW_ASK.captains, undefined);
   for (const k of ['ask', 'yes', 'no', 'already']) assert.ok(CREW_ASK[k].length >= 1);
-  assert.equal(new Set(Object.values(CREW_ASK.captains)).size, 5);
 });
 
 test('how many of your crew a ship takes: every place to sit or lie less your own (the Medic keeps four for the people it brings home)', () => {

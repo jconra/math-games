@@ -361,20 +361,13 @@ export const FRIEND_TALK = {
 };
 // ASKED TO JOIN THE CREW (src/friendcard.js, "Join my crew", once the player owns a ship; src/own.js askCrew): the
 // player's question, then the answer: yes (5 pips or more), a kind no (under 5: nothing changes, they may be asked
-// again), already on it; and each of the five captains' own no (each has a ship of their own to run). {player}: the
-// player's name; {name}: theirs
+// again), already on it. A captain answers as anyone does (the game's maker, MYCREW1-1 B). {player}: the player's
+// name; {name}: theirs
 export const CREW_ASK = {
   ask: ['Would you like to join my crew, {name}?', 'Will you be on my crew, {name}?'],
   yes: ['I\'d love to! Count me in, {player}.', 'Yes! I\'ll be on your crew.', 'Your crew? I\'m in, {player}!'],
   no: ['Thanks for asking, {player}. Maybe once we know each other a bit better.', 'That\'s kind of you. Let\'s get to know each other first.', 'Not just yet, {player}. Ask me again another time!'],
   already: ['I\'m already on your crew, {player}!'],
-  captains: {
-    ruiz: 'Ha! I\'ve got the Miner to run, {player}, and a crew counting on me. Thanks for asking, though.',
-    hale: 'That\'s kind of you, {player}, but the Medic needs her captain. Someone has to answer the distress calls.',
-    vega: 'Tempting! But the Explorer and I have charts to finish. Thank you, though.',
-    adair: 'I\'d like that, {player}, but my place is with my own ship, repairs or not.',
-    [HAULER_CAPTAIN.id]: 'Thank you, {player}, but the Hauler is mine to run. Tangent Station counts on her.',
-  },
 };
 
 // (the talk for someone: a rescued survivor's own (their first, the first time), else the station's; never the one

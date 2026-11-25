@@ -12,7 +12,7 @@
 // they want to be part of your crew, and the friendship meter should determine if they say yes"): once the crew member
 // owns a ship, one more row (key 3). The player asks in a bubble and the person answers in theirs: at 5 pips or more
 // yes (kept with the crew member, and their card says "On your crew" from then on, the row gone); under 5 a kind no
-// (src/lines.js CREW_ASK); a captain no in their own words, whatever their meter.
+// (src/lines.js CREW_ASK); a captain is asked and answers as anyone does (the game's maker, MYCREW1-1 B).
 // It closes as the player walks off, at a job, on a run, in the lift, or when a captain's question comes up; it never
 // opens over those. A tap is picked only as it lands (nothing is worked out on other frames): the people near the
 // player, drawn, each tested as a line from their feet to their head on the screen, the nearest that is under it.
@@ -185,11 +185,11 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
     friends.tap(Q.id);
     const name = P.nameOf ? P.nameOf(Q) : Q.name, player = c.name || '';
     // (who they are aboard: a station person by their own id, a rescued survivor by their own look)
-    const r = askCrew(c, { id: Q.id, name: name || 'Someone', look: Q.rescued && Q.def ? Q.def.look : Q.id, captain: !!Q.cap }, friends.pips(Q.id), { need: FRIENDS.crew, now: friends.now() });
+    const r = askCrew(c, { id: Q.id, name: name || 'Someone', look: Q.rescued && Q.def ? Q.def.look : Q.id }, friends.pips(Q.id), { need: FRIENDS.crew, now: friends.now() });
     if (r.why === 'joined') { save(c); S.joined++; S.saying = Q.id; }
     S.asks++; S.lastAsk = r.why;
     const fill = (w) => String(w).replace(/\{player\}/g, player || 'friend').replace(/\{name\}/g, name || 'friend');
-    const answer = r.why === 'captain' ? (CREW_ASK.captains[Q.cap && Q.cap.id] || CREW_ASK.no[0]) : r.why === 'joined' ? pick(CREW_ASK.yes) : r.why === 'already' ? pick(CREW_ASK.already) : pick(CREW_ASK.no);
+    const answer = r.why === 'joined' ? pick(CREW_ASK.yes) : r.why === 'already' ? pick(CREW_ASK.already) : pick(CREW_ASK.no);
     const lines = [{ who: 'you', words: fill(pick(CREW_ASK.ask)) }, { who: 'them', words: fill(answer) }];
     P.hold(Q, lines.reduce((a, l) => a + READ(l.words), 0) + 0.8);
     S.seq = { Q, lines, i: 0, next: 0.25, t: 0, id: 'crew:' + r.why, counted: false };

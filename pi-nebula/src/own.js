@@ -99,9 +99,10 @@ export function buy(crew, ship, { bridge = true, now = Date.now() } = {}) {
 //   - ONCE THIS CREW MEMBER OWNS A SHIP, a tap on a person (src/friendcard.js) has one more choice, "Join my crew". They
 //     say yes at FRIENDS.crew (5) pips or more (src/friends.js agreesToCrew), and no, kindly, under it; nothing changes
 //     on a no, and they may be asked again whenever the player likes.
-//   - THE FIVE CAPTAINS SAY NO, in their own words, whatever their meter: each has a ship of their own and stands in the
-//     station offering its contracts, so none can be aboard yours as well (a helper's call, not his: the one line
-//     in askCrew that says so is the one place it is made).
+//   - A CAPTAIN IS ASKED LIKE ANYONE ELSE (the game's maker, 2026-11-24, MYCREW1-1 B: "A captain says yes at 5 pips
+//     like anyone else, and is gone from the station (no contracts from them) while they are out on your ship." / "I
+//     feel like they can go with you because it's not going to matter that they aren't in the Terminal if you aren't
+//     there either."). Aboard your ship they are out of the station as anyone aboard is (src/people.js aboard).
 //   - WHO AGREED IS KEPT with the crew member's own progress (crew.myCrew: [{ id, name, look, at }], in the order they
 //     agreed; look: what src/aboard.js builds them from aboard, a station person's roster id or a rescued survivor's own
 //     look). No limit on how many, and nobody is let go: he asked for neither.
@@ -120,14 +121,13 @@ export function crewOf(crew) {
   return out;
 }
 export const onCrew = (crew, id) => crewOf(crew).some((p) => p.id === id);
-// ASKED TO JOIN THE CREW: who = { id, name, look, captain (a captain of the station's) }; pips: their meter now ->
-//   { yes, why: 'joined' | 'already' | 'ship' (no ship of the crew member's yet) | 'captain' | 'friends' (under 5) }
+// ASKED TO JOIN THE CREW: who = { id, name, look }; pips: their meter now ->
+//   { yes, why: 'joined' | 'already' | 'ship' (no ship of the crew member's yet) | 'friends' (under 5) }
 //   (yes: kept with the crew member: crew.myCrew)
 export function askCrew(crew, who, pips, { need = 5, now = Date.now() } = {}) {
   if (!crew || !who || !who.id) return { yes: false, why: 'unknown' };
   if (!shipsOf(crew).length) return { yes: false, why: 'ship' };
   if (onCrew(crew, who.id)) return { yes: true, why: 'already' };
-  if (who.captain) return { yes: false, why: 'captain' };
   if (!(+pips >= need)) return { yes: false, why: 'friends' };
   crew.myCrew = [...crewOf(crew), { id: String(who.id), name: String(who.name || 'Someone'), look: who.look ?? who.id, at: now }];
   return { yes: true, why: 'joined' };
