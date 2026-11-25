@@ -1,19 +1,19 @@
 // WHAT THE MUSIC'S PICTURES AND LIGHTS READ: the notes just played and about to play, where the music is, and a few
-// "pulse" numbers for lights, all from the music player (src/music/player.js, its tap: M.tapRaw, M.analyser). Read
+// "pulse" numbers for lights, all from the music player (src/music/player.js, its tap: M.tapRaw). Read
 // only: nothing here changes what is played. The game's maker, 2026-11-24: "It would be nice to have a visual that
 // demonstrates that all the note information is there, and not just a spectrum analyzer" and "some light bars or
 // something that respond the the music that are in the hallways".
 //
 //   const T = tapOf(music)       one tap a music player (every screen and light on it shares it)
-//   T.frame({ spectrum, back, ahead }) -> {
+//   T.frame({ back, ahead }) -> {
 //       now, playing, song, sd (a step, s), barDur, bar, step, barPhase (0..1 through the bar), beatPhase (0..1),
 //       section ({ kind, mask, number, barIn, ... }: src/music/patterns.js sectionAt), sections (SECTIONS around now),
 //       notes   the notes from `back` bars ago to `ahead` bars on (made ones as made; the bars not made yet as they
 //               will be unless the song is changed first): { part, sound, midi, at, dur, vel, bar, step, len }
 //               (a chord is one note a pitch; at and dur in seconds on the audio clock)
 //       pulse   PULSES (below): the numbers for lights, each 0..1
-//       spectrum   (spectrum: true) the sound's levels by frequency (a Uint8Array, 0..255, the analyser's own;
-//               made on the first ask) and sampleRate; null while there is no sound yet
+//   (The sound's levels by frequency, for the Spectrum picture, are no longer read: that picture is gone, ELECTRIC 1.
+//   The player's M.analyser is still there, made only when asked, and nothing asks.)
 //   }
 //   notesOfBar(entry), barsAround(raw, back, ahead), notesWindow(bars, from, to), pulses(notes, now, sd, playing),
 //   sectionsAround(song, bar)    the plain parts, for the tests and a rig
@@ -104,9 +104,8 @@ const taps = new WeakMap();
 export function tapOf(music) {
   let T = taps.get(music);
   if (T) return T;
-  let bins = null;
   T = {
-    frame({ spectrum = false, back = BACK, ahead = AHEAD } = {}) {
+    frame({ back = BACK, ahead = AHEAD } = {}) {
       const raw = music.tapRaw ? music.tapRaw() : null;
       const song = (raw && raw.song) || music.song, playing = !!(raw && raw.playing);
       const now = raw ? raw.now : 0;
@@ -121,14 +120,9 @@ export function tapOf(music) {
       const pulse = pulses(notes, now, sd, playing && !!cur);
       pulse.barPhase = barPhase; pulse.beat = cur ? (barPhase * 4) % 1 : 0;
       const bar = cur ? cur.bar : -1, section = cur ? sectionAt(cur.song, cur.bar) : sectionAt(song, 0);
-      let spec = null, sampleRate = 0;
-      if (spectrum && music.analyser) {
-        const an = music.analyser();
-        if (an) { if (!bins || bins.length !== an.frequencyBinCount) bins = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(bins); spec = bins; sampleRate = an.context.sampleRate; }
-      }
       return {
         now, playing, song, sd, barDur, bar, step, barPhase, beatPhase: pulse.beat, section,
-        sections: sectionsAround(cur ? cur.song : song, Math.max(0, bar)), notes, pulse, spectrum: spec, sampleRate,
+        sections: sectionsAround(cur ? cur.song : song, Math.max(0, bar)), notes, pulse,
       };
     },
   };

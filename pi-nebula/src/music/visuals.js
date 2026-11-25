@@ -10,16 +10,20 @@
 // screen's texture in the game ten or fifteen times a second. Dark with light lines, as the game's screens are; bold
 // shapes and no small print, for a wall screen 46 cm by 25 cm seen from a few metres.
 //
-//   VISUALS   [{ id, label, paint }]: the Picture row's choices, in order
+//   VISUALS   [{ id, label, paint, shader? }]: the Picture row's choices, in order
 //     notes     every note of every part as it plays: a lane a part in its own colour, how high it is, how long, where
 //               in the bar (the bar's lines and beats), the notes coming from the right before they sound
-//     spectrum  the classic bars from the sound itself (the analyser), low notes on the left
+//     electric  the music as electricity, a light effect a part (src/music/electric.js): drawn by a shader, so the
+//               screen draws it with WebGL (src/music/electricview.js); its paint here is the Notes picture, which a
+//               screen shows instead where there is no WebGL (or it is lost). (The Spectrum picture was here: the
+//               game's maker, 2026-11-25, "I want to avoid the histogram of the spectrum because I see it everywhere".)
 //     orbit     the bar as a clock: the sixteen steps round a ring, a ring a part, each note lit on its ring as the
 //               hand passes it, the ones about to play just ahead of the hand; the core flashes on each kick
 //     sections  the song's map: its 8-bar sections as blocks going by, a strip in a part's colour where that part plays
 //               there; the section now, the bar in it, and what comes next
 //   PART_COLOURS   each part's colour
-//   paintVisual(id, g, f)   paints the picture of that id (an unknown id: the first)
+//   paintVisual(id, g, f)   paints the picture of that id (an unknown id, as 'spectrum' now is: the first)
+//   RANGES    the notes each pitched part plays, lowest and highest (the pictures and the lights place notes by them)
 import { PART_IDS } from './song.js';
 
 export const PART_COLOURS = { beat: '#ffd27a', bass: '#ff7fae', pads: '#b9a2ff', lead: '#8fd3ff', melody: '#7dffc8' };
@@ -28,7 +32,7 @@ const BG = '#070b11', GRID = 'rgba(150, 210, 250, 0.16)', GRID2 = 'rgba(150, 210
 const DRUM_ROW = { kick: 0, snare: 1, clap: 1, tom: 2, hat: 3, open: 3, riser: 4 }, DRUM_ROWS = 5;
 const drumRow = (s) => DRUM_ROW[s] ?? 2;
 // each pitched part's lane covers the notes it plays (every preset, every key: rigs/visuals-1/ranges.mjs)
-const RANGES = { bass: [19, 64], pads: [45, 76], lead: [56, 84], melody: [58, 94] };
+export const RANGES = { bass: [19, 64], pads: [45, 76], lead: [56, 84], melody: [58, 94] };
 const WORDS = { a: 'Part A', b: 'Part B', c: 'Part C', rest: 'Rest', intro: 'Intro', groove: 'Groove', main: 'Main', peak: 'Peak',
   breakdown: 'Breakdown', build: 'Build', drop: 'Drop', break: 'Break', calm: 'Calm', riff: 'Riff', tune: 'Tune', low: 'Low', answer: 'Answer' };
 export const sectionWord = (kind) => WORDS[kind] || String(kind || '').replace(/^./, (c) => c.toUpperCase());
@@ -112,49 +116,6 @@ function paintNotes(g, f) {
   const k = f.pulse.kick;
   g.fillStyle = rgba('#8fd3ff', 0.18 + 0.3 * k); g.fillRect(nowX - 6 - 8 * k, top, 12 + 16 * k, bot - top);
   g.fillStyle = CYAN; g.fillRect(nowX - 1.5, top, 3, bot - top);
-  border(g, f);
-}
-
-// ── SPECTRUM: the sound's levels ──────────────────────────────────────────────────────────────────────────────────
-function paintSpectrum(g, f) {
-  clear(g, f);
-  const { w, h } = f, memo = f.memo || {}, N = w < 700 ? 20 : 28, lo = 35, hi = 14000;
-  const left = w * 0.05, right = w * 0.95, base = h * 0.8, tall = h * 0.68, bw = (right - left) / N;
-  // the floor line and its reflection
-  g.fillStyle = GRID; g.fillRect(left, base + 1, right - left, 2);
-  const s = f.spectrum, nyq = (f.sampleRate || 48000) / 2;
-  if (!memo.peaks || memo.peaks.length !== N) { memo.peaks = new Float32Array(N); memo.vals = new Float32Array(N); }
-  for (let i = 0; i < N; i++) {
-    let v = 0;
-    if (s && f.playing) {
-      const f0 = lo * Math.pow(hi / lo, i / N), f1 = lo * Math.pow(hi / lo, (i + 1) / N);
-      const a = Math.max(1, Math.floor((f0 / nyq) * s.length)), b = Math.max(a + 1, Math.ceil((f1 / nyq) * s.length));
-      for (let j = a; j < b && j < s.length; j++) v = Math.max(v, s[j]);
-      v = Math.max(0, (v / 255 - 0.12) / 0.88);
-    }
-    memo.vals[i] = v;
-    memo.peaks[i] = Math.max(v, memo.peaks[i] - 0.012);
-  }
-  for (let i = 0; i < N; i++) {
-    const v = memo.vals[i], x0 = left + i * bw + bw * 0.12, ww = bw * 0.76, hh = Math.max(2, v * tall);
-    const t = i / (N - 1), col = t < 0.2 ? PART_COLOURS.bass : t < 0.55 ? CYAN : t < 0.8 ? PART_COLOURS.melody : PART_COLOURS.beat;
-    // the bar in blocks, as a meter's lights
-    const blocks = 14, bh = tall / blocks, lit = Math.round(v * blocks);
-    for (let k = 0; k < blocks; k++) {
-      const yy = base - (k + 1) * bh;
-      g.fillStyle = k < lit ? col : 'rgba(150, 210, 250, 0.05)';
-      g.globalAlpha = k < lit ? 0.55 + 0.45 * (k / blocks) : 1;
-      g.fillRect(x0, yy + bh * 0.14, ww, bh * 0.72);
-    }
-    g.globalAlpha = 1;
-    // the reflection on the floor
-    g.fillStyle = rgba(col, 0.16); g.fillRect(x0, base + 4, ww, Math.min(h - base - 8, hh * 0.25));
-    // the peak's cap, falling slowly
-    const py = base - memo.peaks[i] * tall;
-    if (memo.peaks[i] > 0.02) { g.fillStyle = '#ffffff'; g.fillRect(x0, py - Math.max(2, h * 0.008), ww, Math.max(2, h * 0.008)); }
-  }
-  f.memo = memo;
-  if (!f.playing) stopped(g, f);
   border(g, f);
 }
 
@@ -266,7 +227,7 @@ function paintSections(g, f) {
 
 export const VISUALS = [
   { id: 'notes', label: 'Notes', paint: paintNotes },
-  { id: 'spectrum', label: 'Spectrum', paint: paintSpectrum },
+  { id: 'electric', label: 'Electric', paint: paintNotes, shader: 'electric' },
   { id: 'orbit', label: 'Orbit', paint: paintOrbit },
   { id: 'sections', label: 'Sections', paint: paintSections },
 ];

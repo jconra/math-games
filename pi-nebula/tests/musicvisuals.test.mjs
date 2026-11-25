@@ -70,19 +70,18 @@ function fakeCanvas() {
   return { g, calls, bad };
 }
 test('every picture paints from made-up notes without error, at the wall screen\'s size and the lab\'s, playing or not', () => {
-  assert.ok(VISUALS.length >= 3 && VISUALS.some((v) => v.id === 'notes') && VISUALS.some((v) => v.id === 'spectrum'));
+  assert.ok(VISUALS.length >= 3 && VISUALS.some((v) => v.id === 'notes') && VISUALS.some((v) => v.id === 'electric'));
   for (const p of PART_IDS) assert.match(PART_COLOURS[p], /^#[0-9a-f]{6}$/);
-  const music = { song, tapRaw: () => raw(10 + bar * 1.37), analyser: () => ({ frequencyBinCount: 512, context: { sampleRate: 48000 }, getByteFrequencyData: (a) => a.forEach((_, i) => { a[i] = (i * 37) % 256; }) }) };
+  const music = { song, tapRaw: () => raw(10 + bar * 1.37) };
   const quiet = { song, tapRaw: () => ({ now: 0, playing: false, song, anchor: null, next: null, bars: [] }) };
   for (const m of [music, quiet]) for (const V of VISUALS) for (const [w, h] of [[512, 278], [1960, 1066], [1, 1]]) {
-    const f = { ...tapOf(m).frame({ spectrum: V.id === 'spectrum' }), w, h, memo: {} }, c = fakeCanvas();
+    const f = { ...tapOf(m).frame(), w, h, memo: {} }, c = fakeCanvas();
     paintVisual(V.id, c.g, f); paintVisual(V.id, c.g, f);
     assert.ok(c.calls.n > 4, V.id + ' painted'); assert.deepEqual(c.bad, [], V.id);
   }
   // the frame really is the music's: the notes the Notes picture shows include every part playing in that bar
   const f = tapOf(music).frame();
   assert.ok(f.playing && f.bar === 21 && f.step >= 0 && f.notes.length > 10);
-  assert.ok(f.spectrum === null, 'no analyser asked for unless the picture needs it');
 });
 
 test('the light bars: one brightness a strip, 0..1, in every style; the beat style follows the kick', () => {

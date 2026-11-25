@@ -31,6 +31,10 @@
 //   each press picks that choice with a new number (the song's field[part]), shown small on the button ("Random 4821").
 //   screenLink({ face, picture, idle }) -> { face: 'picture' | 'controls', picture, show(face), pick(id), touch() }
 //   WALL       the wall screen's shape, cm
+// A picture with a shader (VISUALS' `shader`: the Electric one, src/music/electric.js) is drawn by WebGL on a second
+// canvas in the face (src/music/electricview.js, loaded the first time it is shown); with no WebGL, a shader that will
+// not build, or the context lost, the screen paints that picture's own paint instead (the Notes picture) and goes on.
+//   S.stats.gl   'off' (not asked for yet), 'loading', 'on', 'failed'; S.glView() the WebGL view (the rigs)
 // Nothing is painted while the page is hidden or the controls are showing.
 import { PARTS, PRESETS, BPM, VOL, volOf, volsOf, songText, cleanSong, checkSong, numberOf, numbersOf, freshNumber } from './song.js';
 import { PLACES } from './player.js';
@@ -97,6 +101,7 @@ const CSS = `
 .pnm-box { container-type: inline-size; width: 100%; }
 .pnm-face { display: none; position: relative; width: 100%; aspect-ratio: 46 / 25; cursor: pointer; }
 .pnm-face canvas { display: block; width: 100%; height: 100%; }
+.pnm-face canvas[hidden] { display: none; }
 .pnm.is-pic { padding: 0; }
 .pnm.is-pic .pnm-face { display: block; }
 .pnm.is-pic .pnm-ctl { display: none; }
@@ -155,7 +160,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
   const root = document.createElement('div'); root.className = 'pnm' + (fit ? ' pnm-fit' : '');
   const head = (label, part) => `<div class="pnm-head"><span class="pnm-name">${esc(label)}</span>${part ? `<span class="pnm-vol" role="group" aria-label="${esc(label)} volume"><button type="button" class="pnm-b" data-vol="-1" data-vpart="${part}" aria-label="${esc(label)} quieter">&minus;</button><output data-vol-out="${part}"></output><button type="button" class="pnm-b" data-vol="1" data-vpart="${part}" aria-label="${esc(label)} louder">+</button></span>` : ''}</div>`;
   root.innerHTML = `
-    <div class="pnm-face" data-face role="button" tabindex="0" aria-label="The music's picture: tap for the controls"><canvas></canvas></div>
+    <div class="pnm-face" data-face role="button" tabindex="0" aria-label="The music's picture: tap for the controls"><canvas></canvas><canvas class="pnm-gl" hidden></canvas></div>
     <div class="pnm-ctl">
     <div class="pnm-top"><b>Music</b><small data-name></small><button type="button" class="pnm-b pnm-show" data-show>Show the picture</button></div>
     <div class="pnm-presets" role="group" aria-label="Presets">${PRESETS.map((P) => `<button type="button" class="pnm-b pnm-preset" data-preset="${P.id}">${esc(P.name)}</button>`).join('')}</div>
@@ -224,7 +229,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     } catch (e) { shown(); }
   }
   // the faces: a tap on the picture shows the controls; any touch on the controls keeps them up a while longer
-  const face = $('[data-face]'), canvas = face.querySelector('canvas'), g = canvas.getContext('2d');
+  const face = $('[data-face]'), canvas = face.querySelector('canvas'), g = canvas.getContext('2d'), glCanvas = face.querySelector('.pnm-gl');
   face.addEventListener('click', () => L.show('controls'));
   face.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); L.show('controls'); } });
   const touched = () => L.touch();
@@ -234,10 +239,20 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
   L.fans.add(faces);
   // the picture's size in its own pixels (the page's pixels, at most 2 a CSS pixel)
   let cw = 0, ch = 0;
-  const sized = () => { const d = Math.min(2, window.devicePixelRatio || 1); cw = Math.round(canvas.clientWidth * d); ch = Math.round(canvas.clientHeight * d); };
+  // (measured on the face, which holds whichever canvas is showing)
+  const sized = () => { const d = Math.min(2, window.devicePixelRatio || 1); cw = Math.round(face.clientWidth * d); ch = Math.round(face.clientHeight * d); };
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sized) : null;
-  if (ro) ro.observe(canvas);
-  const tap = tapOf(music), memo = {}, stats = { paints: 0, ms: 0, errors: 0, error: '' };
+  if (ro) ro.observe(face);
+  const tap = tapOf(music), memo = {}, stats = { paints: 0, ms: 0, errors: 0, error: '', gl: 'off' };
+  // the shader pictures' WebGL view: made the first time one is shown; 'failed' for good once it cannot draw
+  let glView = null, glShown = false;
+  const showGL = (on) => { if (on === glShown) return; glShown = on; glCanvas.hidden = !on; canvas.hidden = on; };
+  function startGL() {
+    stats.gl = 'loading';
+    import('./electricview.js').then((m) => {
+      try { glView = m.electricView(glCanvas); stats.gl = 'on'; } catch (e) { stats.gl = 'failed'; stats.error = 'WebGL: ' + String(e && e.message || e); }
+    }, (e) => { stats.gl = 'failed'; stats.error = 'WebGL: ' + String(e && e.message || e); });
+  }
   let raf = 0, lit = -1, last = 0;
   function frame(t) {
     raf = requestAnimationFrame(frame);
@@ -255,7 +270,17 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
     const t0 = performance.now(), V = visualOf(L.picture);
     try {
-      const f = tap.frame({ spectrum: V.id === 'spectrum' });
+      const f = tap.frame();
+      if (V.shader && stats.gl !== 'failed') {
+        if (stats.gl === 'off') startGL();
+        if (glView && !glView.ok()) { stats.gl = 'failed'; stats.error = 'WebGL: lost'; }
+        else if (glView) {
+          showGL(true); glView.draw(f, cw, ch, (t / 1000) % 1000);
+          stats.ms = performance.now() - t0; stats.paints++;
+          return;
+        } else { showGL(false); g.fillStyle = '#070b11'; g.fillRect(0, 0, cw, ch); return; }   // (a moment, while it loads)
+      }
+      showGL(false);
       f.w = cw; f.h = ch; f.memo = memo[V.id] || (memo[V.id] = {});
       V.paint(g, f);
       stats.ms = performance.now() - t0; stats.paints++;
@@ -264,5 +289,5 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
   raf = requestAnimationFrame(frame);
   const off = music.on(show);
   faces();
-  return { el: root, link: L, stats, destroy() { cancelAnimationFrame(raf); off(); L.fans.delete(faces); if (ro) ro.disconnect(); box.remove(); } };
+  return { el: root, link: L, stats, glView: () => glView, destroy() { cancelAnimationFrame(raf); off(); L.fans.delete(faces); if (ro) ro.disconnect(); if (glView) glView.dispose(); box.remove(); } };
 }
