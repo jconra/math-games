@@ -31,6 +31,7 @@
 // kick in the techno and heavy songs, the room's echo, a tone filter (the chill songs warmer) and a limiter at the end.
 import { playPatch, voicePatch, makeImpulse, patchAutoStopTime } from '../audio/patch.js';
 import { TECHNO_PATCHES } from './patches.js';
+import { patchFor } from './patches.js';   // (RANDOM 1: a note's patch, a part on Random its song's wave: patches.js patchFor)
 import { barBlock, FORMS, SECTION } from './patterns.js';
 import { PRESETS, PART_IDS, formOf } from './song.js';
 import { volOf, volGain } from './song.js';   // (VISUALS 1: the parts' volumes, in the marked block at the end)
@@ -191,7 +192,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     // the bar is due, so the main thread's work is spread over the bar's ticks instead of one tick a bar ──
     const now = c.currentTime;
     for (const tr of block.tracks) {
-      const patch = TECHNO_PATCHES[tr.inst]; if (!patch) continue;
+      const patch = patchFor(tr.inst, tr.part, S); if (!patch) continue;   // (RANDOM 1)
       for (const n of tr.notes) {
         const step = n[0], at = t + step * sd + (step % 2 ? S.swing * sd : 0), secs = Math.max(0.05, n[2] * sd);
         const job = { tr, patch, n, at, secs, sd, bar };
@@ -280,7 +281,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
       const sd = stepDur(q.S);
       try {
         for (const tr of barBlock(q.S, q.bar).tracks) {
-          const patch = TECHNO_PATCHES[tr.inst]; if (!patch) continue;
+          const patch = patchFor(tr.inst, tr.part, q.S); if (!patch) continue;   // (RANDOM 1)
           for (const n of tr.notes) { const secs = Math.max(0.05, n[2] * sd); B.want(B.plan(patch, { semi: n[1], len: secs, set: setFor(tr.inst, n, sd, secs) })); }
         }
       } catch (e) { /* (the rest come as they are played) */ }

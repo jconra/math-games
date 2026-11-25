@@ -27,10 +27,12 @@
 //   S.destroy()  takes it away; S.stats { paints, ms (the last picture's painting time), errors, error (the last) }; S.link
 //   A part's switches (PARTS[part].switches: [{ id, label }]) are tick boxes after its choices, each the song's field
 //   of that id, true or false.
+//   A part's numbered choice (PARTS[part].numbered: { id, label, field }) is one more button at the end of its row:
+//   each press picks that choice with a new number (the song's field[part]), shown small on the button ("Random 4821").
 //   screenLink({ face, picture, idle }) -> { face: 'picture' | 'controls', picture, show(face), pick(id), touch() }
 //   WALL       the wall screen's shape, cm
 // Nothing is painted while the page is hidden or the controls are showing.
-import { PARTS, PRESETS, BPM, VOL, volOf, volsOf, songText, cleanSong, checkSong } from './song.js';
+import { PARTS, PRESETS, BPM, VOL, volOf, volsOf, songText, cleanSong, checkSong, numberOf, numbersOf, freshNumber } from './song.js';
 import { PLACES } from './player.js';
 import { tapOf } from './tap.js';
 import { VISUALS, visualOf } from './visuals.js';
@@ -74,6 +76,8 @@ const CSS = `
 .pnm-sw:has(input:checked) { box-shadow: inset 0 0 0 2px var(--cyan); }
 .pnm-ch { display: flex; flex-wrap: wrap; gap: 6px; }
 .pnm-ch .pnm-b { flex: 1 1 88px; max-width: 150px; }
+.pnm-num small { font-size: 11px; letter-spacing: 0.02em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.pnm-num.is-on small { color: var(--cyan); }
 .pnm-speed { display: flex; align-items: center; gap: 8px; }
 .pnm-speed .pnm-b { width: 46px; font-size: 22px; line-height: 1; font-weight: 700; }
 .pnm-speed output { min-width: 92px; text-align: center; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
@@ -117,7 +121,7 @@ function style() { if (styled || typeof document === 'undefined') return; styled
 
 const same = (a, b) => ['bpm', 'key', 'scale', 'swing', 'seed', 'tune', ...PARTS.map((p) => p.id)].every((k) => a[k] === b[k])
   && PARTS.every((p) => (p.switches || []).every((w) => !!a[w.id] === !!b[w.id]))
-  && JSON.stringify(volsOf(a)) === JSON.stringify(volsOf(b));
+  && JSON.stringify(volsOf(a)) === JSON.stringify(volsOf(b)) && JSON.stringify(numbersOf(a)) === JSON.stringify(numbersOf(b));
 
 // the faces' shared state: screens on one link show the same face and the same picture
 export function screenLink({ face = 'picture', picture = VISUALS[0].id, idle = 30000 } = {}) {
@@ -155,7 +159,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     <div class="pnm-ctl">
     <div class="pnm-top"><b>Music</b><small data-name></small><button type="button" class="pnm-b pnm-show" data-show>Show the picture</button></div>
     <div class="pnm-presets" role="group" aria-label="Presets">${PRESETS.map((P) => `<button type="button" class="pnm-b pnm-preset" data-preset="${P.id}">${esc(P.name)}</button>`).join('')}</div>
-    ${PARTS.map((P) => `<div class="pnm-row" data-row="${P.id}">${head(P.label, P.id)}<div class="pnm-ch" role="group" aria-label="${esc(P.label)}">${P.choices.map((c) => `<button type="button" class="pnm-b" data-part="${P.id}" data-choice="${c.id}">${esc(c.label)}</button>`).join('')}<button type="button" class="pnm-b is-off" data-part="${P.id}" data-choice="off">Off</button>${(P.switches || []).map((w) => `<label class="pnm-b pnm-sw"><input type="checkbox" data-switch="${esc(w.id)}"><i aria-hidden="true"></i><span>${esc(w.label)}</span></label>`).join('')}</div></div>`).join('')}
+    ${PARTS.map((P) => `<div class="pnm-row" data-row="${P.id}">${head(P.label, P.id)}<div class="pnm-ch" role="group" aria-label="${esc(P.label)}">${P.choices.map((c) => `<button type="button" class="pnm-b" data-part="${P.id}" data-choice="${c.id}">${esc(c.label)}</button>`).join('')}<button type="button" class="pnm-b is-off" data-part="${P.id}" data-choice="off">Off</button>${(P.switches || []).map((w) => `<label class="pnm-b pnm-sw"><input type="checkbox" data-switch="${esc(w.id)}"><i aria-hidden="true"></i><span>${esc(w.label)}</span></label>`).join('')}${P.numbered ? `<button type="button" class="pnm-b pnm-num" data-numbered="${P.id}">${esc(P.numbered.label)}<small data-number="${P.id}"></small></button>` : ''}</div></div>`).join('')}
     <div class="pnm-row">${head('Speed')}<div class="pnm-speed"><button type="button" class="pnm-b" data-bpm="-1" aria-label="Slower">&minus;</button><output data-bpm-out></output><button type="button" class="pnm-b" data-bpm="1" aria-label="Faster">+</button></div></div>
     <div class="pnm-row">${head('Picture')}<div class="pnm-ch" role="group" aria-label="Picture">${VISUALS.map((v) => `<button type="button" class="pnm-b" data-picture="${v.id}">${esc(v.label)}</button>`).join('')}</div></div>
     ${heardIn ? `<div class="pnm-row">${head('Heard in')}<div class="pnm-ch" role="group" aria-label="Heard in">${PLACES.map((p) => `<button type="button" class="pnm-b" data-place="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>` : ''}
@@ -182,6 +186,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     $('[data-bpm-out]').innerHTML = `${s.bpm}<small>bpm</small>`;
     for (const o of $$('[data-vol-out]')) { const v = volOf(s, o.dataset.volOut); o.textContent = v; o.classList.toggle('is-moved', v !== VOL.usual); }
     for (const c of $$('[data-switch]')) c.checked = !!s[c.dataset.switch];
+    for (const b of $$('[data-numbered]')) { const v = numberOf(s, b.dataset.numbered); b.classList.toggle('is-on', v != null); b.querySelector('small').textContent = v != null ? ' ' + v : ''; }
     for (const b of $$('[data-picture]')) b.classList.toggle('is-on', b.dataset.picture === L.picture);
     const go = $('[data-go]'); go.textContent = music.playing ? 'Stop' : 'Play'; go.classList.toggle('is-stop', music.playing);
   }
@@ -191,6 +196,11 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     const s = music.song;
     if (b.dataset.preset) { const P = PRESETS.find((p) => p.id === b.dataset.preset); change({ ...P.song }); if (!music.playing) music.play(); }
     else if (b.dataset.part) change({ ...s, [b.dataset.part]: b.dataset.choice });
+    else if (b.dataset.numbered) {
+      // a numbered choice: picked, with a new number each press
+      const p = b.dataset.numbered, N = PARTS.find((P) => P.id === p).numbered;
+      change({ ...s, [p]: N.id, [N.field]: { ...(numbersOf(s)[N.field] || {}), [p]: freshNumber(numberOf(s, p)) } });
+    }
     else if (b.dataset.vpart) {
       const p = b.dataset.vpart, v = Math.max(VOL.min, Math.min(VOL.max, volOf(s, p) + +b.dataset.vol));
       change({ ...s, vol: { ...(s.vol || {}), [p]: v } });

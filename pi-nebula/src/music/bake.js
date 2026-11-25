@@ -34,9 +34,14 @@
 //   B.play(ctx, plan, at, vel, dest, room) -> { stop(fade) } | null   null: not rendered yet (asked for now) or not
 //            worth it: play it live
 //   B.whenDone() -> promise                            every note asked for so far rendered (the rigs)
-//   B.stats() -> { wanted, baked, fromStore, bakeMs, buildMs, storeMs, MB, played, live, skipped, notes }
+//   B.stats() -> { wanted, baked, fromStore, bakeMs, buildMs, storeMs, MB, played, live, skipped, notes, forgotten }
+//   B.forget(patch)                                    (RANDOM 1) every note of that patch let go: in memory, asked
+//            for, and kept in the store; asked for again within BAKE.goneMs, it plays live. A random wave pushed out
+//            (src/music/patches.js waveGone, each part's last WAVE_KEEP waves kept) is forgotten so, by every bakery:
+//            pressing Random again and again never piles up notes in memory or in the browser's store
 //   hashText, patchHash, noteKey, worth, bakedSecs, bakedPatch, storeOpen, BAKE: the plain parts, for the tests
 import { playPatch, patchAutoStopTime } from '../audio/patch.js';
+import { waveGone } from './patches.js';   // (RANDOM 1)
 
 const VERSION = 2;                         // (a change in how notes are rendered: everything is rendered again)
 export const BAKE = {
@@ -65,6 +70,7 @@ export const BAKE = {
   buildPerStep: 3,       // notes of a batch set up between frames
   gap: 40,               // ms rested between steps
   storeMB: 64,           // the kept store's most; past it, notes not asked for on this visit are thrown off first
+  goneMs: 3000,          // (RANDOM 1) a forgotten patch's notes asked for this soon after: played live, not rendered
 };
 
 // ── THE PLAIN PARTS ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -155,8 +161,9 @@ export function bakery(sr, opts = {}) {
 
 function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
   const P = BAKE, plans = new WeakMap(), jobs = new Map(), queue = [], done = new Map(), turn = new Map();
-  const stats = { wanted: 0, baked: 0, fromStore: 0, bakeMs: 0, buildMs: 0, storeMs: 0, played: 0, live: 0, skipped: 0, notes: 0, pruned: 0 };
+  const stats = { wanted: 0, baked: 0, fromStore: 0, bakeMs: 0, buildMs: 0, storeMs: 0, played: 0, live: 0, skipped: 0, notes: 0, pruned: 0, forgotten: 0 };
   let dbP = null, running = false, waiters = [], pruned = false;
+  const gone = new Map();   // (RANDOM 1: a forgotten patch's hash -> when)
   const db = () => { if (!store) return Promise.resolve(null); if (!dbP) dbP = storeOpen(); return dbP; };
 
   function plan(patch, o = {}) {
@@ -174,6 +181,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
   }
   function want(p, urgent = false) {
     if (!p.worth) return;
+    if (gone.size && gone.has(p.id.split(':')[0])) { if (performance.now() - gone.get(p.id.split(':')[0]) < P.goneMs) return; gone.delete(p.id.split(':')[0]); }   // (RANDOM 1)
     for (const key of p.keys) {
       if (jobs.has(key)) {
         if (urgent && !done.has(key)) { const i = queue.findIndex((j) => j.key === key); if (i > 0) queue.unshift(...queue.splice(i, 1)); }
@@ -199,6 +207,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
         const rest = [], t0 = performance.now(), found = d ? await askedAll(d, batch.map((j) => j.key)) : [];
         for (let i = 0; i < batch.length; i++) {
           const j = batch[i], got = found[i];
+          if (!jobs.has(j.key)) continue;   // (RANDOM 1: forgotten meanwhile)
           if (Array.isArray(got) && got.length === j.p.ch && got.every((a) => a instanceof Float32Array && a.length === j.len)) {
             done.set(j.key, toBuffer(got)); stats.fromStore++; stats.baked++;
           } else rest.push(j);
@@ -235,6 +244,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     const f = Math.max(1, Math.round(P.fade * sr));
     for (let i = 0; i < list.length; i++) {
       const j = list[i], data = [];
+      if (!jobs.has(j.key)) continue;   // (RANDOM 1: forgotten while it was rendered)
       for (let c = 0; c < j.p.ch; c++) {
         const a = r.getChannelData(at[i] + c).slice(0, j.len);
         for (let k = 0; k < f && k < a.length; k++) a[a.length - 1 - k] *= k / f;
@@ -250,6 +260,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
   // rendering; then, over the most (BAKE.storeMB), the notes not asked for on this visit)
   async function prune(d) {
     const now = new Set(Object.values(patches || {}).map(patchHash));
+    for (const k of jobs.keys()) now.add(k.split(':')[0]);   // (RANDOM 1: and whatever was asked for on this visit, as a song's random waves)
     const keys = await asked(d, 'readonly', (s) => s.getAllKeys());
     if (!keys) return;
     let bytes = 0; const spare = [];
@@ -261,8 +272,19 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     for (const k of spare) { if (bytes <= P.storeMB * 1048576) break; bytes -= bytesOf(k); asked(d, 'readwrite', (s) => s.delete(k)); stats.pruned++; }
   }
 
+  // (RANDOM 1) every note of a patch let go
+  function forget(patch) {
+    const h = patchHash(patch), mine = (k) => String(k).startsWith(h + ':');
+    gone.set(h, performance.now()); stats.forgotten++;
+    for (const k of [...done.keys()]) if (mine(k)) done.delete(k);
+    for (const k of [...jobs.keys()]) if (mine(k)) jobs.delete(k);
+    for (let i = queue.length - 1; i >= 0; i--) if (mine(queue[i].key)) queue.splice(i, 1);
+    for (const k of [...turn.keys()]) if (mine(k)) turn.delete(k);
+    if (store) db().then((d) => { if (d) asked(d, 'readwrite', (s) => s.delete(IDBKeyRange.bound(h + ':', h + ':\uffff'))); });
+  }
+  waveGone(forget);
   const B = {
-    plan, want,
+    plan, want, forget,
     get busy() { return running || queue.length > 0; },
     whenDone() { if (!running && !queue.length) return Promise.resolve(); return new Promise((r) => waiters.push(r)); },
     play(ctx, p, at, vel, dest, room) {

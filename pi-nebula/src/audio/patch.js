@@ -1,4 +1,4 @@
-// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit 28e152e. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
+// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit b210fad. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
 // engine.js — the Sound Lab's modular patch engine, and only the engine: no sounds are written here. The sounds
 // are plain data in sounds/, one file per project; patch.js puts the two together for the lab's pages, and
 // tools/sync.mjs makes each game's copy from them (README: "Using the engine in a game").
@@ -74,17 +74,21 @@ function distortionCurve(amount) {
 // drawn in the editor. The table travels inside the patch, so a patch that uses one plays
 // anywhere patch.js does - the game included - with no wave library to ship alongside.
 // PeriodicWaves are cached per context and table, since every voice of every note would
-// otherwise build one.
-const _pwCache = new WeakMap();
+// otherwise build one. At most PW_KEEP tables a context, the least lately used let go first: the
+// browser keeps about 0.6 MB for each one (its band-limited copies), so a game that makes new
+// tables as it goes (Pi Nebula's Random button: a new table each press) would otherwise pile up
+// memory without end (measured: 400 new tables, +229 MB in Chrome). A voice still playing a wave
+// that was let go keeps it until it ends.
+const _pwCache = new WeakMap(), PW_KEEP = 32;
 function periodicWaveFor(ctx, harm) {
   let byKey = _pwCache.get(ctx); if (!byKey) { byKey = new Map(); _pwCache.set(ctx, byKey); }
   const key = harm.real.join(',') + '|' + harm.imag.join(',');
   let pw = byKey.get(key);
-  if (!pw) {
-    const n = Math.max(2, Math.min(harm.real.length, harm.imag.length));
-    pw = ctx.createPeriodicWave(Float32Array.from(harm.real.slice(0, n)), Float32Array.from(harm.imag.slice(0, n)), { disableNormalization: false });
-    byKey.set(key, pw);
-  }
+  if (pw) { byKey.delete(key); byKey.set(key, pw); return pw; }   // (the newest last)
+  const n = Math.max(2, Math.min(harm.real.length, harm.imag.length));
+  pw = ctx.createPeriodicWave(Float32Array.from(harm.real.slice(0, n)), Float32Array.from(harm.imag.slice(0, n)), { disableNormalization: false });
+  byKey.set(key, pw);
+  while (byKey.size > PW_KEEP) byKey.delete(byKey.keys().next().value);
   return pw;
 }
 // output depth, so a slow osc into a param modulates it; this absorbs the old lfo node.
@@ -971,6 +975,45 @@ export const PATCH_PRESETS = {
   ], cables: [
     { from: 'b-osc', to: 'b-f' }, { from: 'b-rnd', to: 'b-sm' }, { from: 'b-sm', to: 'b-mul' }, { from: 'b-mul', to: 'b-f', port: 'freq' },
     { from: 'b-f', to: 'b-g' }, { from: 'b-e', to: 'b-g', port: 'gain' }, { from: 'b-g', to: 'out' }, { from: 'b-g', to: 'send' },
+  ] },
+  // ── random waves (the game's Random button on the Pads, Lead and Melody rows) ───────────────────────────────────
+  // The game's maker, 2026-11-24: "I wonder if there could be a random button for the leads, pads, and melody that
+  // give you some variation ... I always liked hearing random custom periodic waves". Each of these is a lean patch
+  // round one custom-wave oscillator; here it carries an ordinary table of its own (so it plays as it is), and in the
+  // game each press of Random puts a new table of overtones in its place (pi-nebula/src/music/patches.js waveTable),
+  // its level trimmed to this one's. So tune the shape here (the swell, the hold, the pluck, the level), not the wave.
+  // RANDOM PAD: two voices of the wave a little apart, swelling in and holding: the pad's shape (a note is 2
+  // oscillators and 1 envelope; a chord is three or four notes). Its table: a soft saw, the first 12 overtones.
+  'TECHNO — RANDOM PAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Random pad', kind: 'instrument', dur: 4, nodes: [
+    { id: 'r-osc', type: 'osc', name: 'wave', wave: 'custom', waveName: 'Soft saw (12)', harm: { real: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], imag: [0, 1, 0.5, 0.33333, 0.25, 0.2, 0.16667, 0.13578, 0.10147, 0.06792, 0.03887, 0.01711, 0.00413] }, voices: 2, detune: 7, freq: 261.63, level: 1 },
+    { id: 'r-g', type: 'gain', name: 'vca' },
+    { id: 'r-e', type: 'env', name: 'amp', peak: 1, attack: 0.6, decay: 0.3, sustain: 0.85, release: 1 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.3 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.09 },
+  ], cables: [
+    { from: 'r-osc', to: 'r-g' }, { from: 'r-e', to: 'r-g', port: 'gain' }, { from: 'r-g', to: 'out' }, { from: 'r-g', to: 'send' },
+  ] },
+  // RANDOM LEAD: two voices of the wave a little apart, held as long as the note: the lead's shape. Its table: a soft
+  // saw, the first 6 overtones.
+  'TECHNO — RANDOM LEAD': { group: 'MUSIC', project: 'pi-nebula', name: 'Random lead', kind: 'instrument', dur: 1.5, nodes: [
+    { id: 'r-osc', type: 'osc', name: 'wave', wave: 'custom', waveName: 'Soft saw (6)', harm: { real: [0, 0, 0, 0, 0, 0, 0], imag: [0, 1, 0.5, 0.33333, 0.21339, 0.1, 0.02441] }, voices: 2, detune: 6, freq: 261.63, level: 1 },
+    { id: 'r-g', type: 'gain', name: 'vca' },
+    { id: 'r-e', type: 'env', name: 'amp', peak: 1, attack: 0.02, decay: 0.2, sustain: 0.8, release: 0.15 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.135 },
+  ], cables: [
+    { from: 'r-osc', to: 'r-g' }, { from: 'r-e', to: 'r-g', port: 'gain' }, { from: 'r-g', to: 'out' }, { from: 'r-g', to: 'send' },
+  ] },
+  // RANDOM MELODY: one voice of the wave, plucked (a quick start and a short fall, nothing held): the melody's shape.
+  // Its table: a soft square (the odd overtones), the first 6.
+  'TECHNO — RANDOM MELODY': { group: 'MUSIC', project: 'pi-nebula', name: 'Random melody', kind: 'instrument', dur: 0.6, nodes: [
+    { id: 'r-osc', type: 'osc', name: 'wave', wave: 'custom', waveName: 'Soft square (6)', harm: { real: [0, 0, 0, 0, 0, 0, 0], imag: [0, 1, 0, 0.33333, 0, 0.1, 0] }, freq: 261.63, level: 1 },
+    { id: 'r-g', type: 'gain', name: 'vca' },
+    { id: 'r-e', type: 'env', name: 'amp', peak: 1, attack: 0.004, decay: 0.28, sustain: 0 },
+    { id: 'send', type: 'send', name: 'room', gain: 0.25 },
+    { id: 'out', type: 'out', name: 'output', gain: 0.2 },
+  ], cables: [
+    { from: 'r-osc', to: 'r-g' }, { from: 'r-e', to: 'r-g', port: 'gain' }, { from: 'r-g', to: 'out' }, { from: 'r-g', to: 'send' },
   ] },
   // ── end of PI NEBULA ──
 };

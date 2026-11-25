@@ -26,7 +26,7 @@
 //   inKey(song, midi) -> true if the note is in the song's key and scale
 // Ideas from the Sound Lab's sequencer (sound-lab/seq.js: songs in sections, a lookahead scheduler) and the Mathwood
 // band's seeded songs (mathwood-valley/src/stage.js): written afresh here, nothing imported.
-import { SCALES, KEYS, formOf } from './song.js';
+import { SCALES, KEYS, formOf, playsAs } from './song.js';
 import { DRUMS, INSTRUMENTS, ROOT } from './patches.js';
 import { tuneBars } from './tunes.js';
 
@@ -206,8 +206,10 @@ function bassOf(song, S, bar, choice, chord) {
   return out;
 }
 
+// (a part on its numbered choice, Random, plays its first choice's notes: song.js playsAs; its sound stays its own)
+const padsLo = (T, choice) => { const like = playsAs('pads', choice); return like === 'airy' ? T + 7 : like === 'dark' ? T - 3 : T + 2; };
 function padsOf(song, S, choice, chord) {
-  const T = tonicOf(song), lo = choice === 'airy' ? T + 7 : choice === 'dark' ? T - 3 : T + 2;
+  const T = tonicOf(song), lo = padsLo(T, choice);
   return [{ part: 'pads', sound: choice, step: 0, len: 16, vel: 0.7, midi: chord.tones.map((d) => into(degMidi(song, T, d), lo)).sort((a, b) => a - b) }];
 }
 
@@ -234,8 +236,9 @@ function lineOf(song, S, chord, part, choice, lo, rhythms) {
 // higher, too high for its bright strike), the blips the arp's
 const MELODY_WAY = { crystal: 'echo', blips: 'arp' };
 function melodyOf(song, S, choice, chord) {
-  const T = tonicOf(song), out = [], form = formOf(song), way = MELODY_WAY[choice] || choice;
-  const r = dice(song.seed, 'mel', choice, S.kind, S.cycle, S.barIn % 4 === 3 ? S.barIn : S.barIn % 2);
+  const like = playsAs('melody', choice);
+  const T = tonicOf(song), out = [], form = formOf(song), way = MELODY_WAY[like] || like;
+  const r = dice(song.seed, 'mel', like, S.kind, S.cycle, S.barIn % 4 === 3 ? S.barIn : S.barIn % 2);
   const tones = chord.tones.slice(0, 3).concat(chord.root + 7);
   if (way === 'arp') {
     const order = pick(r, [[0, 1, 2, 3], [0, 2, 1, 3, 2, 1], [3, 2, 1, 0], [0, 1, 2, 3, 2, 1], [0, 2, 3, 1]]);
@@ -313,7 +316,7 @@ function tuneOf(song, S) {
     } else if (L === 'tune' || (L === 'halves' && b % 2 === 1)) put('bass', sound, tb.notes, T - 12, 0.7, more);
   }
   if (on('pads')) {
-    const lo = song.pads === 'airy' ? T + 7 : song.pads === 'dark' ? T - 3 : T + 2;
+    const lo = padsLo(T, song.pads);
     chords.forEach(([s, d], i) => {
       const end = i + 1 < chords.length ? chords[i + 1][0] : 16;
       notes.push({ part: 'pads', sound: song.pads, step: s, len: end - s, vel: 0.7, midi: [d, d + 2, d + 4].map((x) => into(at(T, x), lo)).sort((a, b) => a - b) });
