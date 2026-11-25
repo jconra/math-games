@@ -123,12 +123,19 @@ test('"Copy this song" brings the remix back, the tune named in it; a song witho
 
 // the seven presets as they were before the tune came (the frozen main, 741f17d): the first 32 bars of each (their
 // notes, their bars in the sequencer's form) and their copy text, fingerprinted there
-const BEFORE = { nightshift: '2466293856087367', quietorbit: 'c93ddb1298158b61', windowseat: '2ca9ad7f0c3058aa', stationdrive: '0086945980f1f904', deephangar: 'b53218ca7db1e867', mathballdrop: '6973b0cc2826c9a7', overtime: 'c4234dc0075e4f11' };
-test('the seven presets that were there play the very same notes, bar for bar', () => {
+// (and the remix, fingerprinted on the frozen main d477978 before the bass's Rolling switch and the new sounds). Deep
+// Hangar's bass was the Rolling sound, now the Pulse sound with the Rolling switch on: the same notes at the same times,
+// only its sound's name differs, so its text and notes are read back to the old names before they are fingerprinted.
+const BEFORE = { nightshift: '2466293856087367', quietorbit: 'c93ddb1298158b61', windowseat: '2ca9ad7f0c3058aa', stationdrive: '0086945980f1f904', deephangar: 'b53218ca7db1e867', mathballdrop: '6973b0cc2826c9a7', overtime: 'c4234dc0075e4f11', joeclarkremix: '12e0439037485419' };
+const asBefore = (id, t) => (id !== 'deephangar' ? t : t.replace("bass: 'pulse', ", "bass: 'rolling', ").replace(', roll: true', '')
+  .replace(/"part":"bass","sound":"pulse"/g, '"part":"bass","sound":"rolling"').replace(/TECHNO — PULSE BASS/g, 'TECHNO — ROLLING BASS'));
+test('the eight presets play the very same notes, bar for bar (Deep Hangar: only its bass sound\'s name differs)', () => {
   for (const [id, want] of Object.entries(BEFORE)) {
     const P = PRESETS.find((p) => p.id === id), h = createHash('sha256');
-    h.update(songText(P.song));
-    for (let b = 0; b < 32; b++) h.update(JSON.stringify(barNotes(P.song, b)) + JSON.stringify(barBlock(P.song, b)));
+    h.update(asBefore(id, songText(P.song)));
+    for (let b = 0; b < 32; b++) h.update(asBefore(id, JSON.stringify(barNotes(P.song, b)) + JSON.stringify(barBlock(P.song, b))));
     assert.equal(h.digest('hex').slice(0, 16), want, P.name);
   }
+  const D = PRESETS.find((p) => p.id === 'deephangar').song;
+  assert.equal(D.bass, 'pulse'); assert.equal(D.roll, true);
 });

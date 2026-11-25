@@ -157,6 +157,14 @@ function beatOf(song, S, bar, choice) {
     if (full) { hit('snare', 8, 4, 0.85); hit('clap', 8, 2, 0.4); }
     for (let s = 0; s < upto; s += 2) hit('hat', s, 1, s % 4 ? 0.3 : 0.2);
     if (full && !fill && S.barIn % 4 === 3) { hit('hat', 13, 1, 0.22); hit('hat', 15, 1, 0.28); }
+  } else if (choice === 'twostep') {
+    // two-step: the kick skips (the one, then late in the bar, never four in a row), the snare on two and four with a
+    // soft clap under the second, the hats on the off-beats and a shuffle of quiet ones just after them
+    const ks = pick(dice(song.seed, 'two', S.kind, S.cycle), [[0, 10], [0, 7, 10], [0, 9], [0, 3, 10], [0, 10, 13]]);
+    for (const s of ks) if (s < upto && (full || s === 0)) hit('kick', s, 3, s ? 0.72 : 0.88);
+    if (full) { hit('snare', 4, 2, 0.6); if (12 < upto) { hit('snare', 12, 2, 0.64); hit('clap', 12, 2, 0.28); } }
+    for (let s = 2; s < upto; s += 4) hit(full && s === 14 && r() < 0.5 ? 'open' : 'hat', s, 1, 0.34 * (0.85 + 0.3 * r()));
+    if (full) for (let s = 3; s < upto; s += 4) if (r() < 0.6) hit('hat', s, 1, 0.16 + 0.06 * r());
   }
   if (fill) {
     if (choice === 'lofi') { const T = tonicOf(song) - 12; [[12, 0], [13, -3], [14, -5], [15, -7]].forEach(([s, d], i) => hit('tom', s, 1, 0.45 + 0.08 * i, { midi: T + d })); }
@@ -165,25 +173,31 @@ function beatOf(song, S, bar, choice) {
   return out;
 }
 
+// THE BASS'S ROLLING SWITCH (song.roll): on, whichever bass sound is chosen plays the rolling rhythm, short sixteenths
+// between the kicks (the wobble a quick wobble on each); off, each sound its own way. An old song's bass 'rolling' was
+// the Pulse sound rolling. A sound with no way of its own plays another's: the acid bass the FM ladder's.
+const BASS_WAY = { acid: 'ladder' };
 function bassOf(song, S, bar, choice, chord) {
   const out = [], T = tonicOf(song), lo = T - 17;   // (G1 .. F#2 for the key's note)
   const root = into(degMidi(song, T, chord.root), lo), fifth = into(degMidi(song, T, chord.root + 4), lo);
-  const note = (step, len, midi, vel, more) => out.push({ part: 'bass', sound: choice, step, len, midi, vel, ...more });
+  const sound = choice === 'rolling' ? 'pulse' : choice, way = song.roll || choice === 'rolling' ? 'rolling' : BASS_WAY[sound] || sound;
+  const note = (step, len, midi, vel, more) => out.push({ part: 'bass', sound, step, len, midi, vel, ...more });
   const r = dice(song.seed, 'bass', S.kind, S.cycle, S.barIn % 4);
-  if (choice === 'warm') {
+  if (way === 'warm') {
     const t = pick(r, [[[0, 7], [10, 5]], [[0, 6], [6, 2], [8, 7]], [[0, 10], [11, 4]], [[0, 3], [3, 4], [10, 5]]]);
     t.forEach(([s, l], i) => note(s, l, i === t.length - 1 && r() < 0.4 ? fifth : root, 0.8));
-  } else if (choice === 'pulse') {
+  } else if (way === 'pulse') {
     for (let s = 2; s < 16; s += 4) note(s, 1.6, root, 0.8);
     if (r() < 0.5) note(15, 1, fifth, 0.5);
-  } else if (choice === 'rolling') {
-    for (let s = 0; s < 16; s++) if (s % 4) note(s, 0.8, s % 4 === 3 && r() < 0.3 ? root + 12 : root, s % 4 === 2 ? 0.8 : 0.6);
-  } else if (choice === 'wobble') {
+  } else if (way === 'rolling') {
+    const more = sound === 'wobble' ? { wob: 4 } : undefined;
+    for (let s = 0; s < 16; s++) if (s % 4) note(s, 0.8, s % 4 === 3 && r() < 0.3 ? root + 12 : root, s % 4 === 2 ? 0.8 : 0.6, more);
+  } else if (way === 'wobble') {
     // long growling notes, each wobbling at its own speed (wobbles a beat); the key's note mostly, now and then the
     // fifth or the note under it
     const t = pick(r, [[[0, 3, 1], [3, 3, 2], [6, 2, 4], [8, 6, 1.5], [14, 2, 4]], [[0, 6, 2], [6, 2, 4], [8, 4, 1], [12, 4, 3]], [[0, 4, 1], [4, 4, 2], [8, 3, 3], [11, 5, 1.5]]]);
     t.forEach(([s, l, w], i) => note(s, l, i === 2 && r() < 0.5 ? fifth - 12 : root, 0.85, { wob: w }));
-  } else if (choice === 'ladder') {
+  } else if (way === 'ladder') {
     // short plucked notes round the beat, some an octave up (each is [step, length, octave up]); the last now and then
     // the fifth
     const t = pick(r, [[[0, 2, 0], [3, 2, 0], [6, 2, 1], [8, 2, 0], [11, 2, 0], [14, 2, 1]], [[0, 3, 0], [4, 2, 1], [6, 2, 0], [10, 2, 0], [12, 2, 1], [14, 2, 0]], [[2, 2, 0], [4, 2, 0], [7, 2, 1], [10, 2, 0], [12, 2, 0], [15, 1, 1]]]);
@@ -216,18 +230,21 @@ function lineOf(song, S, chord, part, choice, lo, rhythms) {
   return out;
 }
 
+// a melody sound with no way of its own plays another's: the crystal bell the echo's few notes (the bells' are a fifth
+// higher, too high for its bright strike), the blips the arp's
+const MELODY_WAY = { crystal: 'echo', blips: 'arp' };
 function melodyOf(song, S, choice, chord) {
-  const T = tonicOf(song), out = [], form = formOf(song);
+  const T = tonicOf(song), out = [], form = formOf(song), way = MELODY_WAY[choice] || choice;
   const r = dice(song.seed, 'mel', choice, S.kind, S.cycle, S.barIn % 4 === 3 ? S.barIn : S.barIn % 2);
   const tones = chord.tones.slice(0, 3).concat(chord.root + 7);
-  if (choice === 'arp') {
+  if (way === 'arp') {
     const order = pick(r, [[0, 1, 2, 3], [0, 2, 1, 3, 2, 1], [3, 2, 1, 0], [0, 1, 2, 3, 2, 1], [0, 2, 3, 1]]);
     const every = form === 'drive' ? 1 : 2, gaps = pick(r, [[], [7], [3, 11], [6, 14]]);
     for (let s = 0, i = 0; s < 16; s += every, i++) if (!gaps.includes(s)) out.push({ part: 'melody', sound: choice, step: s, len: every, vel: s % 4 ? 0.5 : 0.65, midi: into(degMidi(song, T, tones[order[i % order.length]]), T + 12) });
-  } else if (choice === 'bells') {
+  } else if (way === 'bells') {
     const at = pick(r, [[0, 6, 10], [2, 8, 12, 14], [0, 3, 8], [4, 10, 14]]);
     for (const s of at) out.push({ part: 'melody', sound: choice, step: s, len: Math.min(4, 16 - s), vel: 0.6, midi: into(degMidi(song, T, pick(r, tones)), T + 19) });
-  } else if (choice === 'echo') {
+  } else if (way === 'echo') {
     const at = pick(r, [[0, 3], [2, 6, 10], [0, 7, 12], [4, 11]]);
     for (const s of at) out.push({ part: 'melody', sound: choice, step: s, len: Math.min(2, 16 - s), vel: 0.6, midi: into(degMidi(song, T, pick(r, tones)), T + 12) });
   }

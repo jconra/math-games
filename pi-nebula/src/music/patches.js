@@ -22,18 +22,24 @@ export const ROOT = {
   'TECHNO — RISER': 60,
   'TECHNO — WARM BASS': 36,
   'TECHNO — PULSE BASS': 36,
-  'TECHNO — ROLLING BASS': 36,
   'TECHNO — WOBBLE BASS': 36,
   'TECHNO — FM LADDER BASS': 36,
+  'TECHNO — ACID BASS': 36,
   'TECHNO — WARM PAD': 60,
   'TECHNO — AIRY PAD': 60,
   'TECHNO — DARK PAD': 60,
+  'TECHNO — GLASS PAD': 60,
+  'TECHNO — DRIFT PAD': 60,
   'TECHNO — KEYS': 60,
   'TECHNO — SOFT SAW': 60,
   'TECHNO — SQUARE LEAD': 60,
+  'TECHNO — FM HORN': 60,
+  'TECHNO — RING LEAD': 60,
   'TECHNO — ARP': 60,
   'TECHNO — BELLS': 60,
   'TECHNO — ECHO PLUCK': 60,
+  'TECHNO — CRYSTAL': 60,
+  'TECHNO — BLIPS': 60,
 };
 
 // which patch each choice plays (src/music/song.js PARTS); the beat's drums by the beat chosen
@@ -42,10 +48,11 @@ export const DRUMS = {
   four: { kick: 'TECHNO — KICK', snare: 'TECHNO — SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
   broken: { kick: 'TECHNO — KICK', snare: 'TECHNO — SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
   half: { kick: 'TECHNO — HEAVY KICK', snare: 'TECHNO — HEAVY SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
+  twostep: { kick: 'TECHNO — KICK', snare: 'TECHNO — LOFI SNARE', hat: 'TECHNO — HAT', open: 'TECHNO — OPEN HAT', clap: 'TECHNO — CLAP', tom: 'TECHNO — TOM', riser: 'TECHNO — RISER' },
 };
 export const INSTRUMENTS = {
-  bass: { warm: 'TECHNO — WARM BASS', pulse: 'TECHNO — PULSE BASS', rolling: 'TECHNO — ROLLING BASS', wobble: 'TECHNO — WOBBLE BASS', ladder: 'TECHNO — FM LADDER BASS' },
-  pads: { warm: 'TECHNO — WARM PAD', airy: 'TECHNO — AIRY PAD', dark: 'TECHNO — DARK PAD' },
-  lead: { keys: 'TECHNO — KEYS', saw: 'TECHNO — SOFT SAW', square: 'TECHNO — SQUARE LEAD' },
-  melody: { arp: 'TECHNO — ARP', bells: 'TECHNO — BELLS', echo: 'TECHNO — ECHO PLUCK' },
+  bass: { warm: 'TECHNO — WARM BASS', pulse: 'TECHNO — PULSE BASS', wobble: 'TECHNO — WOBBLE BASS', ladder: 'TECHNO — FM LADDER BASS', acid: 'TECHNO — ACID BASS' },
+  pads: { warm: 'TECHNO — WARM PAD', airy: 'TECHNO — AIRY PAD', dark: 'TECHNO — DARK PAD', glass: 'TECHNO — GLASS PAD', drift: 'TECHNO — DRIFT PAD' },
+  lead: { keys: 'TECHNO — KEYS', saw: 'TECHNO — SOFT SAW', square: 'TECHNO — SQUARE LEAD', horn: 'TECHNO — FM HORN', ring: 'TECHNO — RING LEAD' },
+  melody: { arp: 'TECHNO — ARP', bells: 'TECHNO — BELLS', echo: 'TECHNO — ECHO PLUCK', crystal: 'TECHNO — CRYSTAL', blips: 'TECHNO — BLIPS' },
 };

@@ -15,7 +15,12 @@
 //     tune     (most songs leave it out) a written tune (src/music/tunes.js TUNES): the lead, melody and bass then play
 //              its notes, the pads its chords, as the tune's arrangement in patterns.js says, section by section; every
 //              part's choice still picks its sound, and Off still silences it
-//   PARTS                 the parts, in the screen's order, each { id, label, choices: [{ id, label }] }
+//     roll     (left out: off) the bass's Rolling switch: on, the bass plays short sixteenths between the kicks with
+//              whichever bass sound is chosen (patterns.js); a song with a written tune keeps the tune's bass line.
+//              The game's maker, 2026-11-24: "I wonder if that could just be a checkbox that could apply to any of
+//              them". An old song's bass 'rolling' is read as bass 'pulse' with roll on.
+//   PARTS                 the parts, in the screen's order, each { id, label, choices: [{ id, label }], switches? }
+//                         (switches: [{ id, label }], on/off fields of the song the part's row has, as the bass's roll)
 //   PRESETS               the presets: [{ id, name, song }]
 //   checkSong(s) -> []    what is wrong with a song (empty: it is a good song)
 //   cleanSong(s) -> song  a song with anything missing or wrong put right (a kept or pasted one)
@@ -30,15 +35,21 @@ export const SCALES = { minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9
 
 export const PARTS = [
   { id: 'beat', label: 'Beat', choices: [
-    { id: 'lofi', label: 'Lo-fi' }, { id: 'four', label: 'Four floor' }, { id: 'broken', label: 'Broken' }, { id: 'half', label: 'Half-time' }] },
+    { id: 'lofi', label: 'Lo-fi' }, { id: 'four', label: 'Four floor' }, { id: 'broken', label: 'Broken' }, { id: 'half', label: 'Half-time' },
+    { id: 'twostep', label: 'Two-step' }] },
   { id: 'bass', label: 'Bass', choices: [
-    { id: 'warm', label: 'Warm' }, { id: 'pulse', label: 'Pulse' }, { id: 'rolling', label: 'Rolling' }, { id: 'wobble', label: 'Wobble' }, { id: 'ladder', label: 'FM ladder' }] },
+    { id: 'warm', label: 'Warm' }, { id: 'pulse', label: 'Pulse' }, { id: 'wobble', label: 'Wobble' }, { id: 'ladder', label: 'FM ladder' },
+    { id: 'acid', label: 'Acid' }],
+    switches: [{ id: 'roll', label: 'Rolling' }] },
   { id: 'pads', label: 'Pads', choices: [
-    { id: 'warm', label: 'Warm' }, { id: 'airy', label: 'Airy' }, { id: 'dark', label: 'Dark' }] },
+    { id: 'warm', label: 'Warm' }, { id: 'airy', label: 'Airy' }, { id: 'dark', label: 'Dark' },
+    { id: 'glass', label: 'Glass' }, { id: 'drift', label: 'Drift' }] },
   { id: 'lead', label: 'Lead', choices: [
-    { id: 'keys', label: 'Keys' }, { id: 'saw', label: 'Soft saw' }, { id: 'square', label: 'Square' }] },
+    { id: 'keys', label: 'Keys' }, { id: 'saw', label: 'Soft saw' }, { id: 'square', label: 'Square' },
+    { id: 'horn', label: 'FM horn' }, { id: 'ring', label: 'Ring' }] },
   { id: 'melody', label: 'Melody', choices: [
-    { id: 'arp', label: 'Arp' }, { id: 'bells', label: 'Bells' }, { id: 'echo', label: 'Echo' }] },
+    { id: 'arp', label: 'Arp' }, { id: 'bells', label: 'Bells' }, { id: 'echo', label: 'Echo' },
+    { id: 'crystal', label: 'Crystal' }, { id: 'blips', label: 'Blips' }] },
 ];
 export const PART_IDS = PARTS.map((p) => p.id);
 
@@ -50,7 +61,7 @@ export const PRESETS = [
   { id: 'quietorbit', name: 'Quiet Orbit', song: { bpm: 80, key: 'F', scale: 'minor', swing: 0.14, seed: 23, beat: 'lofi', bass: 'warm', pads: 'airy', lead: 'off', melody: 'echo' } },
   { id: 'windowseat', name: 'Window Seat', song: { bpm: 66, key: 'A', scale: 'dorian', swing: 0.2, seed: 5, beat: 'lofi', bass: 'warm', pads: 'dark', lead: 'square', melody: 'echo' } },
   { id: 'stationdrive', name: 'Station Drive', song: { bpm: 124, key: 'A', scale: 'minor', swing: 0, seed: 7, beat: 'four', bass: 'pulse', pads: 'airy', lead: 'saw', melody: 'arp' } },
-  { id: 'deephangar', name: 'Deep Hangar', song: { bpm: 128, key: 'E', scale: 'minor', swing: 0, seed: 31, beat: 'broken', bass: 'rolling', pads: 'dark', lead: 'off', melody: 'arp' } },
+  { id: 'deephangar', name: 'Deep Hangar', song: { bpm: 128, key: 'E', scale: 'minor', swing: 0, seed: 31, beat: 'broken', bass: 'pulse', roll: true, pads: 'dark', lead: 'off', melody: 'arp' } },
   { id: 'mathballdrop', name: 'Mathball Drop', song: { bpm: 140, key: 'F', scale: 'minor', swing: 0, seed: 3, beat: 'half', bass: 'wobble', pads: 'dark', lead: 'saw', melody: 'bells' } },
   { id: 'overtime', name: 'Overtime', song: { bpm: 150, key: 'G', scale: 'minor', swing: 0, seed: 19, beat: 'half', bass: 'wobble', pads: 'warm', lead: 'square', melody: 'arp' } },
   // the game's maker, 2026-11-24: "Would you be able to make an "Old Joe Clark Remix"? Using the notes in a techno and
@@ -72,6 +83,7 @@ export function checkSong(s) {
   if (!Number.isInteger(s.seed)) bad.push('seed ' + s.seed);
   for (const P of PARTS) if (s[P.id] !== 'off' && !P.choices.some((c) => c.id === s[P.id])) bad.push(P.id + ' ' + s[P.id]);
   if (s.tune != null && !tuneOk(s.tune)) bad.push('tune ' + s.tune);
+  if (s.roll != null && typeof s.roll !== 'boolean') bad.push('roll ' + s.roll);
   return bad;
 }
 
@@ -85,6 +97,10 @@ export function cleanSong(s, base = PRESETS[0].song) {
   if (Number.isFinite(+s.swing)) o.swing = Math.max(0, Math.min(0.3, +s.swing));
   if (Number.isInteger(+s.seed)) o.seed = +s.seed;
   for (const P of PARTS) if (s[P.id] === 'off' || P.choices.some((c) => c.id === s[P.id])) o[P.id] = s[P.id];
+  // the bass's Rolling switch: on only when the song says so; an old song's bass 'rolling' is the Pulse sound rolling
+  delete o.roll;
+  if (s.roll === true || s.bass === 'rolling') o.roll = true;
+  if (s.bass === 'rolling') o.bass = 'pulse';
   // a tune only when the song names one (a song written without one has none, whatever the base had)
   delete o.tune;
   if (tuneOk(s.tune)) o.tune = s.tune;
@@ -94,5 +110,5 @@ export function cleanSong(s, base = PRESETS[0].song) {
 export function songText(s) {
   const q = (v) => "'" + String(v).replace(/'/g, '') + "'";
   return `{ name: ${q(s.name || 'My song')}, bpm: ${s.bpm}, key: ${q(s.key)}, scale: ${q(s.scale)}, swing: ${s.swing}, seed: ${s.seed}, `
-    + PART_IDS.map((p) => `${p}: ${q(s[p])}`).join(', ') + (s.tune ? `, tune: ${q(s.tune)}` : '') + ' }';
+    + PART_IDS.map((p) => `${p}: ${q(s[p])}`).join(', ') + (s.roll ? ', roll: true' : '') + (s.tune ? `, tune: ${q(s.tune)}` : '') + ' }';
 }
