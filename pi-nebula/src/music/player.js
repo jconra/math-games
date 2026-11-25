@@ -33,6 +33,7 @@ import { playPatch, voicePatch, makeImpulse, patchAutoStopTime } from '../audio/
 import { TECHNO_PATCHES } from './patches.js';
 import { barBlock } from './patterns.js';
 import { PRESETS, PART_IDS, formOf } from './song.js';
+import { volOf, volGain } from './song.js';   // (VISUALS 1: the parts' volumes, in the marked block at the end)
 
 // the places to try it in (the lab's "Heard in" row): loudness, how much room, how big a room
 export const PLACES = [
@@ -231,6 +232,47 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
     if (!timer || iv) return;
     iv = setInterval(() => { if (!A) { if (playing && contextNow()) { playing = false; M.play(); } return; } M.tick(); if (!playing && !keep.length) { clearInterval(iv); iv = null; } }, TICK_MS);
   }
+
+  // ── VISUALS 1's BLOCK: the visuals' tap (src/music/tap.js reads it) and the parts' volumes ──────────────────────
+  // THE PARTS' VOLUMES (song.vol, src/music/song.js VOL): each part's bus at its usual level (MIX.parts) times the
+  // song's volume for it, eased over ~50 ms the moment the song changes (no click; the notes are not touched)
+  let volsSet = '';
+  const vols = () => {
+    if (!A) return;
+    const key = PART_IDS.map((p) => volOf(song, p)).join(',');
+    if (key === volsSet) return;
+    volsSet = key;
+    for (const p of PART_IDS) A.buses[p].gain.setTargetAtTime(MIX.parts[p] * volGain(volOf(song, p)), A.ctx.currentTime, 0.015);
+  };
+  const set0 = M.set;
+  M.set = (s) => { set0(s); vols(); return M; };
+  // THE TAP, read only: nothing in it changes what is played
+  //   M.tapRaw() -> { now, playing, song, anchor, next, bars: [{ bar, t, sd, song, section }] }   the bars made lately
+  //               (each with the song it was made from), where the next bar will start, the audio clock now
+  //   M.analyser() -> AnalyserNode | null   the sound's levels, made on the first ask (after the limiter and the
+  //               stop's fade, before the place's loudness); null until there is a context
+  const tapBars = [];
+  let analyser = null;
+  const tick0 = M.tick, seen = new WeakSet();
+  M.tick = () => {
+    vols();
+    tick0();
+    // every bar made in this tick was made from the song as it is now (a tick is all at once); a fresh start (bar 0)
+    // or a stop forgets the old ones
+    for (const b of bars) if (!seen.has(b)) { seen.add(b); if (b.bar === 0) tapBars.length = 0; tapBars.push({ ...b, song }); }
+    if (!playing) tapBars.length = 0;
+    while (tapBars.length > 6) tapBars.shift();
+  };
+  M.tapRaw = () => {
+    const now = A ? A.ctx.currentTime - (A.ctx.outputLatency || 0) : 0;
+    return { now, playing, song, anchor: anchor && { ...anchor }, next: next && { ...next }, bars: tapBars };
+  };
+  M.analyser = () => {
+    if (analyser || !A) return analyser;
+    try { analyser = A.ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.7; analyser.minDecibels = -90; analyser.maxDecibels = -12; A.fade.connect(analyser); } catch (e) { analyser = null; }
+    return analyser;
+  };
+  // ── (end of VISUALS 1's block) ──────────────────────────────────────────────────────────────────────────────────────
   return M;
 }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, +v || 0));

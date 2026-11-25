@@ -5,7 +5,7 @@
 // Skrillix sounding stuff for Mathball".
 //
 // A song is a small plain object:
-//   { name, bpm, key, scale, swing, seed, beat, bass, pads, lead, melody, tune? }
+//   { name, bpm, key, scale, swing, seed, beat, bass, pads, lead, melody, roll?, tune?, vol? }
 //     bpm      its speed, beats a minute (BPM.min .. BPM.max)
 //     key      the note it is in ('C' .. 'B', sharps as 'C#'); scale: 'minor', 'dorian' (a softer minor) or
 //              'mixolydian' (major with the seventh a half step down: the old fiddle tunes')
@@ -19,6 +19,10 @@
 //              whichever bass sound is chosen (patterns.js); a song with a written tune keeps the tune's bass line.
 //              The game's maker, 2026-11-24: "I wonder if that could just be a checkbox that could apply to any of
 //              them". An old song's bass 'rolling' is read as bass 'pulse' with roll on.
+//     vol      (most songs leave it out) each part's volume, only those not at the usual: { pads: 6 } (VOL: 0 silent ..
+//              10, VOL.usual the part's usual level; each step 2 dB). The game's maker, 2026-11-24: "Also in the final
+//              controls it might be good idea to have a volume adjustment for each instrument. The pads seem a bit loud."
+//              Only the parts' loudness: the notes are the same at any volume.
 //   PARTS                 the parts, in the screen's order, each { id, label, choices: [{ id, label }], switches? }
 //                         (switches: [{ id, label }], on/off fields of the song the part's row has, as the bass's roll)
 //   PRESETS               the presets: [{ id, name, song }]
@@ -30,6 +34,11 @@
 import { tuneOk } from './tunes.js';
 
 export const BPM = { min: 60, max: 180, step: 2 };
+// each part's volume on the screen: 0 (silent) .. 10, the usual 8; a step is 2 dB (the usual is the part's own level,
+// src/music/player.js MIX.parts, as it was before there were volumes)
+export const VOL = { min: 0, max: 10, usual: 8, db: 2 };
+export const volOf = (s, part) => (s && s.vol && Number.isInteger(s.vol[part]) ? s.vol[part] : VOL.usual);
+export const volGain = (level) => (level <= 0 ? 0 : Math.pow(10, ((level - VOL.usual) * VOL.db) / 20));
 export const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 export const SCALES = { minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10], mixolydian: [0, 2, 4, 5, 7, 9, 10] };
 
@@ -84,6 +93,10 @@ export function checkSong(s) {
   for (const P of PARTS) if (s[P.id] !== 'off' && !P.choices.some((c) => c.id === s[P.id])) bad.push(P.id + ' ' + s[P.id]);
   if (s.tune != null && !tuneOk(s.tune)) bad.push('tune ' + s.tune);
   if (s.roll != null && typeof s.roll !== 'boolean') bad.push('roll ' + s.roll);
+  if (s.vol != null) {
+    if (typeof s.vol !== 'object') bad.push('vol ' + s.vol);
+    else for (const [k, v] of Object.entries(s.vol)) if (!PART_IDS.includes(k) || !Number.isInteger(v) || v < VOL.min || v > VOL.max) bad.push('vol ' + k + ' ' + v);
+  }
   return bad;
 }
 
@@ -104,11 +117,24 @@ export function cleanSong(s, base = PRESETS[0].song) {
   // a tune only when the song names one (a song written without one has none, whatever the base had)
   delete o.tune;
   if (tuneOk(s.tune)) o.tune = s.tune;
+  // the volumes only when the song names them, and only those away from the usual
+  delete o.vol;
+  const v = volsOf(s);
+  if (v) o.vol = v;
   return o;
+}
+
+// a song's volumes away from the usual, in the parts' order ({ pads: 6 }), or null (all usual)
+export function volsOf(s) {
+  if (!s || !s.vol || typeof s.vol !== 'object') return null;
+  const o = {};
+  for (const p of PART_IDS) { const v = Math.round(+s.vol[p]); if (Number.isFinite(v) && v !== VOL.usual) o[p] = Math.max(VOL.min, Math.min(VOL.max, v)); }
+  return Object.keys(o).length ? o : null;
 }
 
 export function songText(s) {
   const q = (v) => "'" + String(v).replace(/'/g, '') + "'";
   return `{ name: ${q(s.name || 'My song')}, bpm: ${s.bpm}, key: ${q(s.key)}, scale: ${q(s.scale)}, swing: ${s.swing}, seed: ${s.seed}, `
-    + PART_IDS.map((p) => `${p}: ${q(s[p])}`).join(', ') + (s.roll ? ', roll: true' : '') + (s.tune ? `, tune: ${q(s.tune)}` : '') + ' }';
+    + PART_IDS.map((p) => `${p}: ${q(s[p])}`).join(', ') + (s.roll ? ', roll: true' : '') + (s.tune ? `, tune: ${q(s.tune)}` : '')
+    + (volsOf(s) ? `, vol: { ${Object.entries(volsOf(s)).map(([p, v]) => `${p}: ${v}`).join(', ')} }` : '') + ' }';
 }

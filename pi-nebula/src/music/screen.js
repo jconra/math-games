@@ -6,13 +6,34 @@
 // The lab shows it full page now; the station's screens can show the same module later, as many copies as there are
 // screens, all showing and changing the one song (each follows the music through M.on).
 //
-//   const S = mountMusicScreen(el, music, { heardIn, keep })
+// TWO FACES. The game's maker, 2026-11-24: "So the screens can show visualizations and then if you interact with it
+// then it shows the controls." Left alone it shows a picture of the music (src/music/visuals.js); a tap or a click
+// anywhere on it shows the controls; left alone again for a while (idle) it goes back to the picture, and the
+// controls' "Show the picture" button goes back at once. Which picture is one more row on the controls, Picture.
+// Each part's row has its own volume, a minus and a plus by its name (the game's maker: "it might be good idea to have a
+// volume adjustment for each instrument. The pads seem a bit loud"): kept with the song (src/music/song.js vol).
+//
+//   const S = mountMusicScreen(el, music, { heardIn, keep, link, fit, idle, fps })
 //       el       where it goes (it fills it); music: the one music player (src/music/player.js createMusic)
 //       heardIn  true: the "Heard in" row (the lab's places to try the music in; a station wall leaves it out)
-//       keep     the key the song (and the place) are kept under in this browser ('' or false: not kept)
-//   S.destroy()  takes it away
-import { PARTS, PRESETS, BPM, songText, cleanSong, checkSong } from './song.js';
+//       keep     the key the song, the place and the picture are kept under in this browser ('' or false: not kept)
+//       link     screenLink(): screens on one link show the same face and picture (the lab's big screen and its small
+//                wall one); left out, the screen has its own
+//       fit      true: the screen is the wall screen's shape (46 by 25) whichever face (the controls scroll inside)
+//       idle     ms without a touch before the controls go back to the picture (30 s; a link's own when given)
+//       fps      at most this many pictures a second (0: every frame the page draws)
+//   S.destroy()  takes it away; S.stats { paints, ms (the last picture's painting time), errors, error (the last) }; S.link
+//   A part's switches (PARTS[part].switches: [{ id, label }]) are tick boxes after its choices, each the song's field
+//   of that id, true or false.
+//   screenLink({ face, picture, idle }) -> { face: 'picture' | 'controls', picture, show(face), pick(id), touch() }
+//   WALL       the wall screen's shape, cm
+// Nothing is painted while the page is hidden or the controls are showing.
+import { PARTS, PRESETS, BPM, VOL, volOf, volsOf, songText, cleanSong, checkSong } from './song.js';
 import { PLACES } from './player.js';
+import { tapOf } from './tap.js';
+import { VISUALS, visualOf } from './visuals.js';
+
+export const WALL = { w: 46, h: 25 };
 
 const CSS = `
 .pnm { --ink: #eef1f4; --dim: #a7b0ba; --cyan: #8fd3ff; --line: rgba(150, 210, 250, 0.36); --on: rgba(150, 210, 250, 0.2);
@@ -26,8 +47,9 @@ const CSS = `
 .pnm button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .pnm-top { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
 .pnm-top b { font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); }
+.pnm-top .pnm-show { margin-left: auto; flex: none; }
 .pnm-top small { flex: 1; font-size: 13px; color: var(--dim); letter-spacing: 0.04em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pnm-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 6px; margin-bottom: 12px; }
+.pnm-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; margin-bottom: 12px; }
 .pnm-b { min-height: 42px; padding: 4px 8px; font-size: 14px; letter-spacing: 0.03em; background: rgba(150, 210, 250, 0.07) !important;
   box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.25); clip-path: var(--oct); --cut: 8px; }
 .pnm-b:hover { box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.6); }
@@ -35,9 +57,19 @@ const CSS = `
 .pnm-b.is-off { color: var(--dim); }
 .pnm-b.is-off.is-on { color: #ffffff; background: rgba(255, 255, 255, 0.1) !important; box-shadow: inset 0 0 0 2px rgba(220, 230, 240, 0.7); }
 .pnm-preset { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
-.pnm-row { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; align-items: center; padding: 6px 0; border-top: 1px solid rgba(150, 210, 250, 0.12); }
-.pnm-row > span { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
-.pnm-row.is-resting > span { opacity: 0.5; }
+.pnm-row { display: grid; grid-template-columns: 178px 1fr; gap: 6px 10px; align-items: center; padding: 6px 0; border-top: 1px solid rgba(150, 210, 250, 0.12); }
+.pnm-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pnm-head > .pnm-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.pnm-vol { display: flex; align-items: center; gap: 4px; flex: none; }
+.pnm-vol .pnm-b { width: 40px; min-height: 40px; padding: 0; font-size: 20px; line-height: 1; font-weight: 700; }
+.pnm-vol output { min-width: 26px; text-align: center; font-size: 16px; font-weight: 700; }
+.pnm-vol output.is-moved { color: var(--cyan); }
+.pnm-ch .pnm-sw { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.pnm-sw input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.pnm-sw i { flex: none; width: 22px; height: 22px; box-shadow: inset 0 0 0 2px rgba(150, 210, 250, 0.6); }
+.pnm-sw input:checked + i { background: var(--cyan); box-shadow: inset 0 0 0 2px var(--cyan), inset 0 0 0 5px #0c1016; }
+.pnm-sw:has(input:focus-visible) { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.pnm-sw:has(input:checked) { box-shadow: inset 0 0 0 2px var(--cyan); }
 .pnm-ch { display: flex; flex-wrap: wrap; gap: 6px; }
 .pnm-ch .pnm-b { flex: 1 1 88px; max-width: 150px; }
 .pnm-speed { display: flex; align-items: center; gap: 8px; }
@@ -56,11 +88,22 @@ const CSS = `
 .pnm-note { min-height: 1.3em; margin: 8px 0 0; font-size: 13px; color: var(--dim); }
 .pnm-out { display: block; width: 100%; margin-top: 6px; font: 12px/1.4 ui-monospace, "DejaVu Sans Mono", monospace; color: var(--ink); background: #0b1119; border: 1px solid var(--line); padding: 6px; resize: vertical; user-select: text; -webkit-user-select: text; }
 .pnm-out[hidden] { display: none; }
-@media (max-width: 560px) {
+.pnm-box { container-type: inline-size; width: 100%; }
+.pnm-face { display: none; position: relative; width: 100%; aspect-ratio: 46 / 25; cursor: pointer; }
+.pnm-face canvas { display: block; width: 100%; height: 100%; }
+.pnm.is-pic { padding: 0; }
+.pnm.is-pic .pnm-face { display: block; }
+.pnm.is-pic .pnm-ctl { display: none; }
+.pnm-fit { aspect-ratio: 46 / 25; max-width: none; }
+.pnm-fit .pnm-face { aspect-ratio: auto; height: 100%; }
+.pnm-fit .pnm-ctl { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+.pnm-fit:not(.is-pic) { padding: 10px 12px; }
+@container (max-width: 560px) {
   .pnm { padding: 10px 10px 12px; --cut: 10px; }
   .pnm-top small { display: none; }
   .pnm-presets { grid-template-columns: repeat(2, 1fr); }
   .pnm-row { grid-template-columns: 1fr; gap: 4px; }
+  .pnm-head > .pnm-name { flex: 0 1 auto; margin-right: auto; }
   .pnm-ch .pnm-b { flex: 1 1 64px; font-size: 13px; padding: 4px; }
   .pnm-foot { grid-template-columns: auto 1fr; }
   .pnm-steps { grid-column: 1 / -1; grid-row: 1; }
@@ -70,36 +113,59 @@ const CSS = `
 let styled = false;
 function style() { if (styled || typeof document === 'undefined') return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); }
 
-const same = (a, b) => ['bpm', 'key', 'scale', 'swing', 'seed', 'tune', ...PARTS.map((p) => p.id)].every((k) => a[k] === b[k]);
+const same = (a, b) => ['bpm', 'key', 'scale', 'swing', 'seed', 'tune', ...PARTS.map((p) => p.id)].every((k) => a[k] === b[k])
+  && PARTS.every((p) => (p.switches || []).every((w) => !!a[w.id] === !!b[w.id]))
+  && JSON.stringify(volsOf(a)) === JSON.stringify(volsOf(b));
+
+// the faces' shared state: screens on one link show the same face and the same picture
+export function screenLink({ face = 'picture', picture = VISUALS[0].id, idle = 30000 } = {}) {
+  const fans = new Set();
+  let timer = 0;
+  const L = { face, picture, idle, fans };
+  const tell = () => { for (const f of fans) f(L); };
+  L.show = (f) => { L.face = f === 'controls' ? 'controls' : 'picture'; clearTimeout(timer); if (L.face === 'controls') L.touch(); tell(); };
+  L.pick = (id) => { L.picture = visualOf(id).id; tell(); };
+  // a touch on the controls: the picture comes back only once they have been left alone for `idle`
+  L.touch = () => { clearTimeout(timer); if (L.face === 'controls' && L.idle > 0) timer = setTimeout(() => L.show('picture'), L.idle); };
+  return L;
+}
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula.music' } = {}) {
+export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula.music', link = null, fit = false, idle = 30000, fps = 0 } = {}) {
   style();
+  const L = link || screenLink({ idle });
   // what this browser kept: the song (and the place)
   if (keep) {
     try {
       const v = JSON.parse(localStorage.getItem(keep) || 'null');
       if (v && v.song && !checkSong(cleanSong(v.song)).length) music.set(cleanSong(v.song));
       if (heardIn && v && v.place && PLACES.some((p) => p.id === v.place)) music.room(v.place);
+      if (v && v.picture && VISUALS.some((x) => x.id === v.picture)) L.picture = v.picture;
     } catch (e) { /* blocked: the music's own */ }
   }
-  const save = () => { if (!keep) return; try { localStorage.setItem(keep, JSON.stringify({ song: music.song, place: music.place })); } catch (e) { /* not kept */ } };
+  const save = () => { if (!keep) return; try { localStorage.setItem(keep, JSON.stringify({ song: music.song, place: music.place, picture: L.picture })); } catch (e) { /* not kept */ } };
 
-  const root = document.createElement('div'); root.className = 'pnm';
+  const box = document.createElement('div'); box.className = 'pnm-box';
+  const root = document.createElement('div'); root.className = 'pnm' + (fit ? ' pnm-fit' : '');
+  const head = (label, part) => `<div class="pnm-head"><span class="pnm-name">${esc(label)}</span>${part ? `<span class="pnm-vol" role="group" aria-label="${esc(label)} volume"><button type="button" class="pnm-b" data-vol="-1" data-vpart="${part}" aria-label="${esc(label)} quieter">&minus;</button><output data-vol-out="${part}"></output><button type="button" class="pnm-b" data-vol="1" data-vpart="${part}" aria-label="${esc(label)} louder">+</button></span>` : ''}</div>`;
   root.innerHTML = `
-    <div class="pnm-top"><b>Music</b><small data-name></small></div>
+    <div class="pnm-face" data-face role="button" tabindex="0" aria-label="The music's picture: tap for the controls"><canvas></canvas></div>
+    <div class="pnm-ctl">
+    <div class="pnm-top"><b>Music</b><small data-name></small><button type="button" class="pnm-b pnm-show" data-show>Show the picture</button></div>
     <div class="pnm-presets" role="group" aria-label="Presets">${PRESETS.map((P) => `<button type="button" class="pnm-b pnm-preset" data-preset="${P.id}">${esc(P.name)}</button>`).join('')}</div>
-    ${PARTS.map((P) => `<div class="pnm-row" data-row="${P.id}"><span>${esc(P.label)}</span><div class="pnm-ch" role="group" aria-label="${esc(P.label)}">${P.choices.map((c) => `<button type="button" class="pnm-b" data-part="${P.id}" data-choice="${c.id}">${esc(c.label)}</button>`).join('')}<button type="button" class="pnm-b is-off" data-part="${P.id}" data-choice="off">Off</button></div></div>`).join('')}
-    <div class="pnm-row"><span>Speed</span><div class="pnm-speed"><button type="button" class="pnm-b" data-bpm="-1" aria-label="Slower">&minus;</button><output data-bpm-out></output><button type="button" class="pnm-b" data-bpm="1" aria-label="Faster">+</button></div></div>
-    ${heardIn ? `<div class="pnm-row"><span>Heard in</span><div class="pnm-ch" role="group" aria-label="Heard in">${PLACES.map((p) => `<button type="button" class="pnm-b" data-place="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>` : ''}
+    ${PARTS.map((P) => `<div class="pnm-row" data-row="${P.id}">${head(P.label, P.id)}<div class="pnm-ch" role="group" aria-label="${esc(P.label)}">${P.choices.map((c) => `<button type="button" class="pnm-b" data-part="${P.id}" data-choice="${c.id}">${esc(c.label)}</button>`).join('')}<button type="button" class="pnm-b is-off" data-part="${P.id}" data-choice="off">Off</button>${(P.switches || []).map((w) => `<label class="pnm-b pnm-sw"><input type="checkbox" data-switch="${esc(w.id)}"><i aria-hidden="true"></i><span>${esc(w.label)}</span></label>`).join('')}</div></div>`).join('')}
+    <div class="pnm-row">${head('Speed')}<div class="pnm-speed"><button type="button" class="pnm-b" data-bpm="-1" aria-label="Slower">&minus;</button><output data-bpm-out></output><button type="button" class="pnm-b" data-bpm="1" aria-label="Faster">+</button></div></div>
+    <div class="pnm-row">${head('Picture')}<div class="pnm-ch" role="group" aria-label="Picture">${VISUALS.map((v) => `<button type="button" class="pnm-b" data-picture="${v.id}">${esc(v.label)}</button>`).join('')}</div></div>
+    ${heardIn ? `<div class="pnm-row">${head('Heard in')}<div class="pnm-ch" role="group" aria-label="Heard in">${PLACES.map((p) => `<button type="button" class="pnm-b" data-place="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>` : ''}
     <div class="pnm-foot">
       <button type="button" class="pnm-go" data-go>Play</button>
       <div class="pnm-steps" aria-hidden="true">${Array.from({ length: 16 }, (_, i) => `<i class="${i % 4 ? '' : 'is-beat'}"></i>`).join('')}</div>
       <button type="button" class="pnm-b pnm-copy" data-copy>Copy this song</button>
     </div>
     <p class="pnm-note" data-note aria-live="polite"></p>
-    <textarea class="pnm-out" rows="3" readonly spellcheck="false" hidden aria-label="This song, as text"></textarea>`;
-  el.appendChild(root);
+    <textarea class="pnm-out" rows="3" readonly spellcheck="false" hidden aria-label="This song, as text"></textarea>
+    </div>`;
+  box.appendChild(root); el.appendChild(box);
   const $ = (q) => root.querySelector(q), $$ = (q) => [...root.querySelectorAll(q)];
   const steps = $$('.pnm-steps i'), note = $('[data-note]'), out = $('.pnm-out');
 
@@ -110,6 +176,9 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
     for (const b of $$('[data-part]')) b.classList.toggle('is-on', s[b.dataset.part] === b.dataset.choice);
     for (const b of $$('[data-place]')) b.classList.toggle('is-on', music.place === b.dataset.place);
     $('[data-bpm-out]').innerHTML = `${s.bpm}<small>bpm</small>`;
+    for (const o of $$('[data-vol-out]')) { const v = volOf(s, o.dataset.volOut); o.textContent = v; o.classList.toggle('is-moved', v !== VOL.usual); }
+    for (const c of $$('[data-switch]')) c.checked = !!s[c.dataset.switch];
+    for (const b of $$('[data-picture]')) b.classList.toggle('is-on', b.dataset.picture === L.picture);
     const go = $('[data-go]'); go.textContent = music.playing ? 'Stop' : 'Play'; go.classList.toggle('is-stop', music.playing);
   }
   const change = (s) => { music.set(s); save(); };
@@ -118,11 +187,19 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
     const s = music.song;
     if (b.dataset.preset) { const P = PRESETS.find((p) => p.id === b.dataset.preset); change({ ...P.song }); if (!music.playing) music.play(); }
     else if (b.dataset.part) change({ ...s, [b.dataset.part]: b.dataset.choice });
+    else if (b.dataset.vpart) {
+      const p = b.dataset.vpart, v = Math.max(VOL.min, Math.min(VOL.max, volOf(s, p) + +b.dataset.vol));
+      change({ ...s, vol: { ...(s.vol || {}), [p]: v } });
+    }
+    else if (b.dataset.picture) { L.pick(b.dataset.picture); save(); }
+    else if ('show' in b.dataset) L.show('picture');
     else if (b.dataset.bpm) change({ ...s, bpm: Math.max(BPM.min, Math.min(BPM.max, s.bpm + BPM.step * +b.dataset.bpm)) });
     else if (b.dataset.place) { music.room(b.dataset.place); save(); }
     else if ('go' in b.dataset) { if (music.playing) music.stop(); else music.play(); }
     else if ('copy' in b.dataset) copy();
   });
+  // a part's switch (PARTS[part].switches): the song's field of that name, true or false
+  root.addEventListener('change', (e) => { const c = e.target.closest('[data-switch]'); if (c) change({ ...music.song, [c.dataset.switch]: c.checked }); });
   function copy() {
     const text = songText(music.song);
     out.value = text;
@@ -131,15 +208,46 @@ export function mountMusicScreen(el, music, { heardIn = false, keep = 'pi-nebula
       navigator.clipboard.writeText(text).then(() => { note.textContent = 'Copied: paste it to Claude.'; out.hidden = false; }, shown);
     } catch (e) { shown(); }
   }
-  // the steps lighting with the music
-  let raf = 0, lit = -1;
-  function frame() {
-    const p = music.position(), i = p ? p.step : -1;
-    if (i !== lit) { if (lit >= 0) steps[lit].classList.remove('is-now'); if (i >= 0) steps[i].classList.add('is-now'); lit = i; }
+  // the faces: a tap on the picture shows the controls; any touch on the controls keeps them up a while longer
+  const face = $('[data-face]'), canvas = face.querySelector('canvas'), g = canvas.getContext('2d');
+  face.addEventListener('click', () => L.show('controls'));
+  face.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); L.show('controls'); } });
+  const touched = () => L.touch();
+  root.addEventListener('pointerdown', touched); root.addEventListener('keydown', touched); root.addEventListener('wheel', touched, { passive: true });
+  $('.pnm-ctl').addEventListener('scroll', touched, { passive: true });
+  function faces() { root.classList.toggle('is-pic', L.face === 'picture'); show(); }
+  L.fans.add(faces);
+  // the picture's size in its own pixels (the page's pixels, at most 2 a CSS pixel)
+  let cw = 0, ch = 0;
+  const sized = () => { const d = Math.min(2, window.devicePixelRatio || 1); cw = Math.round(canvas.clientWidth * d); ch = Math.round(canvas.clientHeight * d); };
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sized) : null;
+  if (ro) ro.observe(canvas);
+  const tap = tapOf(music), memo = {}, stats = { paints: 0, ms: 0, errors: 0, error: '' };
+  let raf = 0, lit = -1, last = 0;
+  function frame(t) {
     raf = requestAnimationFrame(frame);
+    if (typeof document !== 'undefined' && document.hidden) return;   // (nothing painted while hidden)
+    if (L.face === 'controls') {
+      // the steps lighting with the music
+      const p = music.position(), i = p ? p.step : -1;
+      if (i !== lit) { if (lit >= 0) steps[lit].classList.remove('is-now'); if (i >= 0) steps[i].classList.add('is-now'); lit = i; }
+      return;
+    }
+    if (fps > 0 && t - last < 1000 / fps - 2) return;
+    last = t;
+    if (!ro) sized();
+    if (!cw || !ch) return;
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    const t0 = performance.now(), V = visualOf(L.picture);
+    try {
+      const f = tap.frame({ spectrum: V.id === 'spectrum' });
+      f.w = cw; f.h = ch; f.memo = memo[V.id] || (memo[V.id] = {});
+      V.paint(g, f);
+      stats.ms = performance.now() - t0; stats.paints++;
+    } catch (e) { stats.errors++; stats.error = String(e && e.message || e); }   // (a picture's fault must not stop the screen)
   }
   raf = requestAnimationFrame(frame);
   const off = music.on(show);
-  show();
-  return { el: root, destroy() { cancelAnimationFrame(raf); off(); root.remove(); } };
+  faces();
+  return { el: root, link: L, stats, destroy() { cancelAnimationFrame(raf); off(); L.fans.delete(faces); if (ro) ro.disconnect(); box.remove(); } };
 }
