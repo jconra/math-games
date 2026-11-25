@@ -38,7 +38,7 @@
 //   hashText, patchHash, noteKey, worth, bakedSecs, bakedPatch, storeOpen, BAKE: the plain parts, for the tests
 import { playPatch, patchAutoStopTime } from '../audio/patch.js';
 
-const VERSION = 1;                         // (a change in how notes are rendered: everything is rendered again)
+const VERSION = 2;                         // (a change in how notes are rendered: everything is rendered again)
 export const BAKE = {
   takes: 3,              // a note with noise in it: this many takes, played in turn (the noise differs hit to hit)
   // WHICH NOTES (by length and cost, never by name): a note is worth rendering when playing it live costs the sound
@@ -53,6 +53,12 @@ export const BAKE = {
   perSec: 0.5,           // longer: rendered when it has at least this many nodes for each second it lasts (a long
                          // note with next to nothing in it is cheaper live than kept)
   fade: 0.01,            // s faded at a rendered note's end
+  // WHERE IN THE ENGINE'S 128-SAMPLE BLOCK A NOTE IS RENDERED FROM (samples of quiet before it, skipped at play time):
+  // a live note's sound differs a little with where in a block its time falls (its envelopes and sweeps are worked
+  // out a block at a time: the wobble and the FM ladder bass by 0.3-0.5 dB, the rest by under 0.05;
+  // rigs/musicgame-1/offsets.cjs); rendered from the block's start, each note was at one end of that spread, from its
+  // middle it sits in it. Each take of a noisy note from another place (Mathwood's bake.js `lead`, the same idea).
+  lead: (take) => (64 + 43 * take) % 128,
   batch: 12,             // notes rendered at once (one context, a channel each)
   buildPerStep: 3,       // notes of a batch set up between frames
   gap: 40,               // ms rested between steps
@@ -157,7 +163,8 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     const note = noteOf(patch, { ...o, gain: 1 }), b = bakedPatch(note), secs = bakedSecs(note);
     const takes = noisy(note) ? P.takes : 1, ch = b.apart ? 2 : 1, n = secs ? Math.round(secs * sr) : 0;
     p = { id, worth: worth(note), secs, n, ch, takes, out: b.out, send: b.send, apart: b.apart, patch: b.patch,
-      keys: Array.from({ length: takes }, (_, k) => `${noteKey(patch, o, sr, k)}|n${n}c${ch}`) };
+      leads: Array.from({ length: takes }, (_, k) => P.lead(k)),
+      keys: Array.from({ length: takes }, (_, k) => `${noteKey(patch, o, sr, k)}|n${n + P.lead(k)}c${ch}`) };
     byNote.set(id, p); stats.notes++;
     return p;
   }
@@ -168,7 +175,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
         if (urgent && !done.has(key)) { const i = queue.findIndex((j) => j.key === key); if (i > 0) queue.unshift(...queue.splice(i, 1)); }
         continue;
       }
-      const j = { key, p };
+      const j = { key, p, lead: p.leads[p.keys.indexOf(key)], len: p.n + p.leads[p.keys.indexOf(key)] };
       jobs.set(key, j); stats.wanted++;
       if (urgent) queue.unshift(j); else queue.push(j);
     }
@@ -183,12 +190,12 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
       while (queue.length) {
         // (a batch: the first and those no longer than it, one context as long as the first)
         const first = queue[0], batch = [];
-        for (let i = 0; i < queue.length && batch.length < P.batch; i++) if (queue[i].p.n <= first.p.n) batch.push(queue[i]);
+        for (let i = 0; i < queue.length && batch.length < P.batch; i++) if (queue[i].len <= first.len) batch.push(queue[i]);
         for (const j of batch) queue.splice(queue.indexOf(j), 1);
         const rest = [], t0 = performance.now(), found = d ? await askedAll(d, batch.map((j) => j.key)) : [];
         for (let i = 0; i < batch.length; i++) {
           const j = batch[i], got = found[i];
-          if (Array.isArray(got) && got.length === j.p.ch && got.every((a) => a instanceof Float32Array && a.length === j.p.n)) {
+          if (Array.isArray(got) && got.length === j.p.ch && got.every((a) => a instanceof Float32Array && a.length === j.len)) {
             done.set(j.key, toBuffer(got)); stats.fromStore++; stats.baked++;
           } else rest.push(j);
         }
@@ -208,7 +215,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     return buf;
   }
   async function bakeBatch(list, d) {
-    const n = list[0].p.n, t0 = performance.now();
+    const n = list[0].len, t0 = performance.now();
     let chans = 0; const at = list.map((j) => { const c = chans; chans += j.p.ch; return c; });
     let spent = 0, mark = performance.now();
     const oc = new OfflineAudioContext(chans, n, sr), merge = oc.createChannelMerger(chans);
@@ -216,7 +223,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     for (let i = 0; i < list.length; i++) {
       const g = oc.createGain(); g.connect(merge, 0, at[i]);
       let w = null; if (list[i].p.ch > 1) { w = oc.createGain(); w.connect(merge, 0, at[i] + 1); }
-      playPatch(oc, null, g, w, list[i].p.patch, null, { at: 0 });
+      playPatch(oc, null, g, w, list[i].p.patch, null, { at: list[i].lead / sr });
       if ((i + 1) % P.buildPerStep === 0) { spent += performance.now() - mark; await later(P.gap); mark = performance.now(); }
     }
     spent += performance.now() - mark;
@@ -225,7 +232,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     for (let i = 0; i < list.length; i++) {
       const j = list[i], data = [];
       for (let c = 0; c < j.p.ch; c++) {
-        const a = r.getChannelData(at[i] + c).slice(0, j.p.n);
+        const a = r.getChannelData(at[i] + c).slice(0, j.len);
         for (let k = 0; k < f && k < a.length; k++) a[a.length - 1 - k] *= k / f;
         data.push(a);
       }
@@ -271,7 +278,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
         const s = ctx.createGain(); s.gain.value = p.send * vel; nodes.push(s); s.connect(room);
         if (sp) sp.connect(s, 1); else head.connect(s);
       }
-      src.start(at);
+      src.start(at, p.leads[k] / sr);
       src.onended = () => { for (const x of nodes) try { x.disconnect(); } catch (e) { /* gone */ } };
       stats.played++;
       return { stop(fade = 0.02) {
