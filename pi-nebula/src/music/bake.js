@@ -41,6 +41,8 @@ import { playPatch, patchAutoStopTime } from '../audio/patch.js';
 const VERSION = 2;                         // (a change in how notes are rendered: everything is rendered again)
 export const BAKE = {
   takes: 3,              // a note with noise in it: this many takes, played in turn (the noise differs hit to hit)
+  shortTakes: 1,         // a short note (BAKE.short or less) without noise: this many takes, each from another place in
+                         // the block (see lead), played in turn
   // WHICH NOTES (by length and cost, never by name): a note is worth rendering when playing it live costs the sound
   // thread more than keeping it costs memory. Its cost live: the nodes the engine makes for it; its memory: its length
   // times its takes. Measured on the eight presets (~/pw/space-math/rigs/musicgame-1/count.mjs, three rounds of each
@@ -93,10 +95,12 @@ export function noteKey(patch, { semi = 0, len = null, set = null } = {}, sr, ta
 export const bakedSecs = (note) => { const t = patchAutoStopTime(note); return t == null ? null : +((t - 0.2 + 0.05).toFixed(3)); };
 // what the engine builds for a note (every node but its out and its send)
 export const costOf = (note) => note.nodes.filter((n) => n.type !== 'out' && n.type !== 'send').length;
+// how many takes of a note: a few where its noise differs hit to hit; for a short note, BAKE.shortTakes
+export const takesOf = (note) => { const secs = bakedSecs(note); return noisy(note) ? BAKE.takes : secs != null && secs <= BAKE.short ? BAKE.shortTakes : 1; };
 // THE RULE: worth rendering? (a drone, with no envelope, never: it has no end)
 export function worth(note) {
   const secs = bakedSecs(note);
-  if (secs == null || secs * (noisy(note) ? BAKE.takes : 1) > BAKE.most) return false;
+  if (secs == null || secs * takesOf(note) > BAKE.most) return false;
   return secs <= BAKE.short || costOf(note) >= BAKE.perSec * secs;
 }
 const feeds = (p, id) => p.cables.filter((c) => c.to === id && (!c.port || c.port === 'in')).map((c) => c.from).sort().join(',');
@@ -161,7 +165,7 @@ function makeBakery(sr, { noteOf, store = true, patches = null } = {}) {
     let p = byNote.get(id);
     if (p) return p;
     const note = noteOf(patch, { ...o, gain: 1 }), b = bakedPatch(note), secs = bakedSecs(note);
-    const takes = noisy(note) ? P.takes : 1, ch = b.apart ? 2 : 1, n = secs ? Math.round(secs * sr) : 0;
+    const takes = takesOf(note), ch = b.apart ? 2 : 1, n = secs ? Math.round(secs * sr) : 0;
     p = { id, worth: worth(note), secs, n, ch, takes, out: b.out, send: b.send, apart: b.apart, patch: b.patch,
       leads: Array.from({ length: takes }, (_, k) => P.lead(k)),
       keys: Array.from({ length: takes }, (_, k) => `${noteKey(patch, o, sr, k)}|n${n + P.lead(k)}c${ch}`) };
