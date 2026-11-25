@@ -1,4 +1,4 @@
-// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit b210fad. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
+// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit fa640b1. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
 // engine.js — the Sound Lab's modular patch engine, and only the engine: no sounds are written here. The sounds
 // are plain data in sounds/, one file per project; patch.js puts the two together for the lab's pages, and
 // tools/sync.mjs makes each game's copy from them (README: "Using the engine in a game").
