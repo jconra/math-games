@@ -137,9 +137,9 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // SPLIT.at metres out to the far limit, then, over it, whatever is nearer than that (the cockpit, its own hull) with the
   // eye's own near limit. Each part has the whole depth buffer to itself: at 700 m things are told apart to under a
   // centimetre. The second pass draws only what reaches that close (most of the station is not in its view at all).
-  const box = OUTSIDE_BOX, SPLIT = { at: 6, margin: 4 };
+  const box = OUTSIDE_BOX, SPLIT = { at: 6, margin: 4, on: true };
   const split = () => {
-    if (W0.alone || camera.near >= SPLIT.at) return false;
+    if (!SPLIT.on || W0.alone || camera.near >= SPLIT.at) return false;
     const p = camera.position, m = SPLIT.margin;
     return p.x < box.min[0] - m || p.x > box.max[0] + m || p.y < box.min[1] - m || p.y > box.max[1] + m || p.z < box.min[2] - m || p.z > box.max[2] + m;
   };
@@ -298,6 +298,8 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
 
   return { target: () => (composer ? composer.readBuffer : null), renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
     get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; },
+    // (the picture in two depths from outside: on by itself out there; false keeps it off, for the cost rigs' before and after)
+    get twoDepths() { return SPLIT.on; }, set twoDepths(v) { SPLIT.on = !!v; },
     get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); },
     get rooms() { return W0.rooms; }, set rooms(fn) { W0.rooms = fn || null; }, after: W0.after, sees: SEES, pmrem };
 }
