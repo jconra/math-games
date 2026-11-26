@@ -146,9 +146,22 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // (the second pass leaves out what cannot reach that close: every room whose box is further off than the split, where
   // it stands now (a flown ship's room is moved by its group's matrix), and the station's outside hull, which is never
   // that near once the camera is outside its box)
-  // (a room holding a moved part, a flown ship's pods drawn with its hangar, is kept: the part may be near)
-  const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _off = [];
-  let stationParts = null;
+  // (a far room holding a moved part, a flown ship's pods drawn with its hangar: its other parts left out, the moved one
+  // tested where it is now, as the station's own parts below)
+  const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _off = [], _s = new THREE.Sphere();
+  const reach = new Map();
+  // (how far a part reaches, in its own frame: worked out once; every copy of a part drawn many times at once)
+  const reachOf = (o) => {
+    let s = reach.get(o);
+    if (s === undefined) {
+      if (o.isInstancedMesh && o.computeBoundingSphere) o.computeBoundingSphere();
+      const g = o.geometry; if (g && !g.boundingSphere) g.computeBoundingSphere();
+      s = (o.boundingSphere || (g && g.boundingSphere) || null); s = s && s.clone(); reach.set(o, s);
+    }
+    return s;
+  };
+  const farOff = (o) => { const s = reachOf(o); return !!s && _s.copy(s).applyMatrix4(o.matrixWorld).distanceToPoint(camera.position) > SPLIT.at; };
+  const leaveOut = (o) => { o.visible = false; _off.push(o); };
   function twoDepths(once) {
     const n0 = camera.near, f0 = camera.far, skyOn = sky.object.visible, bg = scene.background;
     camera.near = SPLIT.at; camera.updateProjectionMatrix();
@@ -159,21 +172,12 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     for (const z of built.zones) {
       if (!z.group.visible) continue;
       _eye.copy(camera.position).applyMatrix4(_inv.copy(z.group.matrixWorld).invert());
-      if (z.box.distanceToPoint(_eye) > SPLIT.at && !z.group.children.some((c) => c.matrixAutoUpdate === false)) { z.group.visible = false; _off.push(z.group); }
+      if (z.box.distanceToPoint(_eye) <= SPLIT.at) continue;
+      if (!z.group.children.some((c) => c.matrixAutoUpdate === false)) { leaveOut(z.group); continue; }
+      for (const c of z.group.children) if (c.visible && (c.matrixAutoUpdate !== false || farOff(c))) leaveOut(c);
     }
-    // (what hangs on the station itself rather than a room, the moving parts of all the doors and the still ones: each
-    // left out when the whole of it, every copy of it, is further off than the split; its reach worked out once, as
-    // these stand still; one moved by a flown ship (its own matrix) is kept)
-    if (!stationParts) {
-      stationParts = [];
-      for (const o of built.group.children) {
-        if (!(o.isMesh || o.isPoints || o.isLine)) continue;
-        if (o.isInstancedMesh && o.computeBoundingSphere) o.computeBoundingSphere();
-        const s = (o.boundingSphere || (o.geometry.boundingSphere || (o.geometry.computeBoundingSphere(), o.geometry.boundingSphere)));
-        if (s) { o.updateMatrixWorld(); stationParts.push([o, s.clone().applyMatrix4(o.matrixWorld)]); }
-      }
-    }
-    for (const [o, s] of stationParts) if (o.visible && o.matrixAutoUpdate !== false && s.center.distanceTo(camera.position) - s.radius > SPLIT.at) { o.visible = false; _off.push(o); }
+    // (what hangs on the station itself rather than a room: the moving parts of all the doors, the still ones)
+    for (const o of built.group.children) if (o.visible && (o.isMesh || o.isPoints || o.isLine) && farOff(o)) leaveOut(o);
     for (const o of scene.children) if (o.name === 'outside' && o.visible) { o.visible = false; _off.push(o); }
     once(false);
     for (const o of _off) o.visible = true;
