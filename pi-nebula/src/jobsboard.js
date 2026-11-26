@@ -240,6 +240,8 @@ export function makeJobsBoard({ W, walls, input = null, usable = null, jobs, gui
     const i = rowAt(F, pk.hit.point), on = F.kind === 'captains' ? caps : rows;
     // (a captain with no mission to pick: their line is to read, and a click on it does nothing)
     if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openFromTap(); else if (i != null && on[i].pick !== false) pick(on[i].id);
+    // (with a mouse, at the board, a click on a part of a screen with no row in it opens the list, as E does: src/usable.js)
+    else if (i == null && near && !pk.touch && !prompt.hidden) openFromTap();
   });
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
