@@ -131,11 +131,14 @@ const asBefore = (id, t) => (id !== 'deephangar' ? t : t.replace("bass: 'pulse',
   .replace(/"part":"bass","sound":"pulse"/g, '"part":"bass","sound":"rolling"').replace(/TECHNO — PULSE BASS/g, 'TECHNO — ROLLING BASS'));
 test('the eight presets play the very same notes, bar for bar (Deep Hangar: only its bass sound\'s name differs)', () => {
   for (const [id, want] of Object.entries(BEFORE)) {
-    const P = PRESETS.find((p) => p.id === id), h = createHash('sha256');
-    h.update(asBefore(id, songText(P.song)));
-    for (let b = 0; b < 32; b++) h.update(asBefore(id, JSON.stringify(barNotes(P.song, b)) + JSON.stringify(barBlock(P.song, b))));
+    // (Station Drive with the bass and lead it had: the game's maker changed those two, 2026-11-26; the rest is pinned)
+    const P = PRESETS.find((p) => p.id === id), h = createHash('sha256'), S = id === 'stationdrive' ? { ...P.song, bass: 'pulse', lead: 'saw' } : P.song;
+    h.update(asBefore(id, songText(S)));
+    for (let b = 0; b < 32; b++) h.update(asBefore(id, JSON.stringify(barNotes(S, b)) + JSON.stringify(barBlock(S, b))));
     assert.equal(h.digest('hex').slice(0, 16), want, P.name);
   }
+  const SD = PRESETS.find((p) => p.id === 'stationdrive').song;
+  assert.equal(SD.bass, 'ladder', 'Station Drive: the FM ladder bass'); assert.equal(SD.lead, 'keys', 'and the Keys lead');
   const D = PRESETS.find((p) => p.id === 'deephangar').song;
   assert.equal(D.bass, 'pulse'); assert.equal(D.roll, true);
 });

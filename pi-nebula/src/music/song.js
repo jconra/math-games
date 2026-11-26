@@ -106,7 +106,9 @@ export const PRESETS = [
   { id: 'nightshift', name: 'Night Shift', song: { bpm: 72, key: 'D', scale: 'dorian', swing: 0.18, seed: 11, beat: 'lofi', bass: 'warm', pads: 'warm', lead: 'keys', melody: 'bells' } },
   { id: 'quietorbit', name: 'Quiet Orbit', song: { bpm: 80, key: 'F', scale: 'minor', swing: 0.14, seed: 23, beat: 'lofi', bass: 'warm', pads: 'airy', lead: 'off', melody: 'echo' } },
   { id: 'windowseat', name: 'Window Seat', song: { bpm: 66, key: 'A', scale: 'dorian', swing: 0.2, seed: 5, beat: 'lofi', bass: 'warm', pads: 'dark', lead: 'square', melody: 'echo' } },
-  { id: 'stationdrive', name: 'Station Drive', song: { bpm: 124, key: 'A', scale: 'minor', swing: 0, seed: 7, beat: 'four', bass: 'pulse', pads: 'airy', lead: 'saw', melody: 'arp' } },
+  // (the game's maker, 2026-11-26: "I like Station Drive a lot, but can we switch the bass to FM Ladder, and switch the
+  // lead to Keys (You can just make that the default for Station Drive)": its bass was the Pulse, its lead the Soft saw)
+  { id: 'stationdrive', name: 'Station Drive', song: { bpm: 124, key: 'A', scale: 'minor', swing: 0, seed: 7, beat: 'four', bass: 'ladder', pads: 'airy', lead: 'keys', melody: 'arp' } },
   { id: 'deephangar', name: 'Deep Hangar', song: { bpm: 128, key: 'E', scale: 'minor', swing: 0, seed: 31, beat: 'broken', bass: 'pulse', roll: true, pads: 'dark', lead: 'off', melody: 'arp' } },
   { id: 'mathballdrop', name: 'Mathball Drop', song: { bpm: 140, key: 'F', scale: 'minor', swing: 0, seed: 3, beat: 'half', bass: 'wobble', pads: 'dark', lead: 'saw', melody: 'bells' } },
   { id: 'overtime', name: 'Overtime', song: { bpm: 150, key: 'G', scale: 'minor', swing: 0, seed: 19, beat: 'half', bass: 'wobble', pads: 'warm', lead: 'square', melody: 'arp' } },
