@@ -35,6 +35,11 @@
 //                                 [place + seed, age (s since it started), length (s), loudness]; o.time: the
 //                                 picture's own clock (s) for the flowing; o.aspect, o.px as above
 //   SLOTS                         how many notes of each part the picture shows at once
+//   pictureMaterial(THREE, fragment, name, o?)   a material of any fragment shader made of the pieces below, its
+//                                 uniforms reading electricState()'s arrays (the Hex picture, src/music/hex.js, is one)
+//   FRAG_HEAD, FRAG_OPEN, FRAG_BEAT, FRAG_MEL, FRAG_END   the shared pieces: the uniforms and small sums, main's start,
+//                                 the beat's hexagon field, the melody's laser harp, main's end (stopped, the frame).
+//                                 Electric is these with its own pads, bass and lead between, exactly as first made.
 // Every loop in the shader has a fixed small count (SLOTS); nothing is read back. A slot's loudness 0 is empty.
 import { PART_IDS } from './song.js';
 import { PART_COLOURS, RANGES } from './visuals.js';
@@ -95,7 +100,8 @@ const VERT = `varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`;
 
 const span = (p) => (RANGES[p][1] - RANGES[p][0]).toFixed(1);
-const FRAG = `precision highp float;
+// the shader's start: its uniforms and the small sums every picture uses (the hexagons among them)
+export const FRAG_HEAD = `precision highp float;
 uniform float uTime, uPlay, uAspect, uPx;
 uniform float uOn[5];
 uniform vec3 uCol[5];
@@ -127,7 +133,9 @@ vec4 hexOf( vec2 p ) {
   return dot( h.xy, h.xy ) < dot( h.zw, h.zw ) ? vec4( c.xy * s * HEX, h.xy ) : vec4( ( c.zw + 0.5 ) * s * HEX, h.zw );
 }
 float hexEdge( vec2 h ) { h = abs( h ); return max( dot( h, vec2( 0.5, 0.8660254 ) ), h.x ); }
-void main() {
+`;
+// main's start: picture space, the dark, each part's colours
+export const FRAG_OPEN = `void main() {
   float A = uAspect, t = uTime, px = max( uPx, 1e-4 );
   vec2 p = vec2( vUv.x * A, vUv.y ), mid = vec2( A * 0.5, 0.5 );
   vec3 col = vec3( 0.012, 0.018, 0.03 );
@@ -135,7 +143,9 @@ void main() {
   vec3 cBeat = uCol[0], cBass = uCol[1], cPad = uCol[2], cLead = uCol[3], cMel = uCol[4];
   vec3 dBeat = cBeat * cBeat, dBass = cBass * cBass, dPad = cPad * cPad * cPad, dLead = cLead * cLead, dMel = cMel * cMel;
 
-  // ── BEAT: the hexagon field ──
+`;
+// the beat: the hexagon field, lit by the drums (Electric and Hex both)
+export const FRAG_BEAT = `  // ── BEAT: the hexagon field ──
   vec4 hx = hexOf( p - mid );
   vec2 hc = hx.xy + mid;                             // this hexagon's middle, in picture space
   float he = hexEdge( hx.zw ), lw = 0.035 + px / HEX * 0.9;
@@ -183,7 +193,9 @@ void main() {
   col += mix( dBeat, cBeat, 0.5 ) * ( line * min( outl, 2.5 ) * 0.6 + halo * max( outl - 0.08, 0.0 ) * 0.25 + fill * min( inner, 1.5 ) * 0.22 );
   white += line * max( outl - 0.7, 0.0 ) * 0.22;      // (a well-lit outline goes white-hot along its middle)
 
-  // ── PADS: slow streams of plasma across the picture ──
+`;
+// Electric's pads: streams of plasma
+export const FRAG_PADS = `  // ── PADS: slow streams of plasma across the picture ──
   for ( int i = 0; i < ${SLOTS.pads}; i++ ) {
     vec4 d = uPad[i]; if ( d.w <= 0.0 ) continue;
     float idx = floor( d.x ), sd = fract( d.x ), age = d.y, v = d.w;
@@ -198,7 +210,9 @@ void main() {
     col += dPad * a * 1.35 + cPad * ridge * band * life * swept * v * 0.2; white += a * a * 0.04;
   }
 
-  // ── BASS: tongues of plasma rising from the floor ──
+`;
+// Electric's bass: tongues of plasma
+export const FRAG_BASS = `  // ── BASS: tongues of plasma rising from the floor ──
   // (the brightest tongue at each place, not their sum: a note played again over its own dying light does not jump)
   float floorGlow = 0.0, bassA = 0.0;
   for ( int i = 0; i < ${SLOTS.bass}; i++ ) {
@@ -221,7 +235,9 @@ void main() {
   col += cBass * floorGlow * 0.5 * exp( -p.y / 0.03 ) * uOn[1];
   col += cBass * 0.06 * uOn[1] * exp( -p.y / 0.02 );
 
-  // ── MELODY: the laser harp ──
+`;
+// the melody: the laser harp (Electric and Hex both)
+export const FRAG_MEL = `  // ── MELODY: the laser harp ──
   vec2 base = vec2( A * 0.5, -0.95 );
   float lo = 0.1, wid = A - 0.2;
   float slope = ( p.x - base.x ) / ( p.y - base.y ), u = ( base.x + slope * ( 1.0 - base.y ) - lo ) / wid * SPAN_MEL;
@@ -249,7 +265,9 @@ void main() {
     col += mix( dMel, cMel, 0.6 ) * a + cMel * spot * 0.8; white += core * life * v * top * ( 0.25 + 0.7 * pluck ) + runs * core * 0.8 + spot * 0.3;
   }
 
-  // ── LEAD: the plasma ball and its bolts ──
+`;
+// Electric's lead: the plasma ball and its bolts
+export const FRAG_LEAD = `  // ── LEAD: the plasma ball and its bolts ──
   vec2 C = vec2( A * 0.5, 0.57 );
   float R = 0.37, r = length( p - C );
   float leadLife = 0.0;
@@ -292,7 +310,9 @@ void main() {
     col += dLead * ball * ( 0.45 + 0.75 * leadLife ); white += exp( -rr * rr * 5.0 ) * ( 0.15 + 0.6 * leadLife );
   }
 
-  // ── stopped: two calm bars in the middle ──
+`;
+// main's end: stopped, the frame, the light eased toward white
+export const FRAG_END = `  // ── stopped: two calm bars in the middle ──
   if ( uPlay < 0.5 ) {
     vec2 q = abs( p - mid - vec2( 0.0, 0.0 ) );
     float bars = step( abs( q.x - 0.05 ), 0.03 ) * step( q.y, 0.08 );
@@ -309,16 +329,21 @@ void main() {
   col += vec3( 1.0 ) * min( white, 1.5 ) * 0.6;
   col = 1.0 - exp( -col * 1.15 );
   gl_FragColor = vec4( col, 1.0 );
-}`;
+}
+`;
+// (the pieces joined: exactly the picture as it was made, ELECTRIC 1)
+const FRAG = FRAG_HEAD + FRAG_OPEN + FRAG_BEAT + FRAG_PADS + FRAG_BASS + FRAG_MEL + FRAG_LEAD + FRAG_END.slice(0, -1);
 
-export function electricMaterial(THREE, o = {}) {
+// a picture's material from its fragment shader (Electric's here, Hex's in src/music/hex.js): the uniforms read U
+export function pictureMaterial(THREE, fragment, name, o = {}) {
   const U = electricState(o), uniforms = {};
   // (each uniform reads its value from U, so electricUniforms(f, U) is all a frame needs)
   for (const k of Object.keys(U)) uniforms[k] = { get value() { return U[k]; }, set value(v) { U[k] = v; } };
   // three takes a vec3 array as one flat array of numbers
-  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, depthWrite: false, depthTest: false });
-  m.name = 'music-electric';
+  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: fragment, depthWrite: false, depthTest: false });
+  m.name = name;
   m.userData.state = U;   // electricUniforms(f, m.userData.state) each frame: nothing else to do
   return m;
 }
+export const electricMaterial = (THREE, o = {}) => pictureMaterial(THREE, FRAG, 'music-electric', o);
 export const ELECTRIC_SHADER = { vertex: VERT, fragment: FRAG };

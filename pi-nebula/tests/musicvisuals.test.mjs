@@ -65,7 +65,8 @@ test('the song\'s sections around now: the one playing, and the ones to come', (
 // a 2D canvas that only counts: every call a picture makes must exist and take plain numbers
 function fakeCanvas() {
   const calls = { n: 0 }, bad = [];
-  const fn = (name) => (...a) => { calls.n++; for (const v of a) if (typeof v === 'number' && !Number.isFinite(v)) bad.push(name + ' ' + a.join(',')); };
+  // (a gradient made is a thing with colour stops)
+  const fn = (name) => (...a) => { calls.n++; for (const v of a) if (typeof v === 'number' && !Number.isFinite(v)) bad.push(name + ' ' + a.join(',')); return /^create.*Gradient$/.test(name) ? { addColorStop: fn('addColorStop') } : undefined; };
   const g = new Proxy({}, { get: (o, k) => (k in o ? o[k] : (o[k] = fn(String(k)))), set: (o, k, v) => { o[k] = v; return true; } });
   return { g, calls, bad };
 }

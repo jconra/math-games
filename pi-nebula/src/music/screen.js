@@ -31,7 +31,7 @@
 //   each press picks that choice with a new number (the song's field[part]), shown small on the button ("Random 4821").
 //   screenLink({ face, picture, idle }) -> { face: 'picture' | 'controls', picture, show(face), pick(id), touch() }
 //   WALL       the wall screen's shape, cm
-// A picture with a shader (VISUALS' `shader`: the Electric one, src/music/electric.js) is drawn by WebGL on a second
+// A picture with a shader (VISUALS' `shader`: Electric, src/music/electric.js, and Hex, hex.js) is drawn by WebGL on a second
 // canvas in the face (src/music/electricview.js, loaded the first time it is shown); with no WebGL, a shader that will
 // not build, or the context lost, the screen paints that picture's own paint instead (the Notes picture) and goes on.
 //   S.stats.gl   'off' (not asked for yet), 'loading', 'on', 'failed'; S.glView() the WebGL view (the rigs)
@@ -275,7 +275,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
         if (stats.gl === 'off') startGL();
         if (glView && !glView.ok()) { stats.gl = 'failed'; stats.error = 'WebGL: lost'; }
         else if (glView) {
-          showGL(true); glView.draw(f, cw, ch, (t / 1000) % 1000);
+          showGL(true); glView.draw(f, cw, ch, (t / 1000) % 1000, V.shader);
           stats.ms = performance.now() - t0; stats.paints++;
           return;
         } else { showGL(false); g.fillStyle = '#070b11'; g.fillRect(0, 0, cw, ch); return; }   // (a moment, while it loads)

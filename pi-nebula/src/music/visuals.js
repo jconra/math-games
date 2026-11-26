@@ -17,8 +17,13 @@
 //               screen draws it with WebGL (src/music/electricview.js); its paint here is the Notes picture, which a
 //               screen shows instead where there is no WebGL (or it is lost). (The Spectrum picture was here: the
 //               game's maker, 2026-11-25, "I want to avoid the histogram of the spectrum because I see it everywhere".)
+//     hex       a second, calmer electric picture (src/music/hex.js; the game's maker, 2026-11-26, found Electric "might
+//               be too busy"): a hexagon wall behind (the beat's outlines, the bass filling the hexagons' insides, the
+//               lead's lightning running down the outlines) and light beams in front (the melody's laser harp, the
+//               pads' wide soft spotlights); drawn by a shader as Electric is, Notes where there is no WebGL
 //     orbit     the bar as a clock: the sixteen steps round a ring, a ring a part, each note lit on its ring as the
-//               hand passes it, the ones about to play just ahead of the hand; the core flashes on each kick
+//               hand passes it, the ones about to play just ahead of the hand; the core flashes on each kick; a soft
+//               glow behind it all swells on each beat
 //     sections  the song's map: its 8-bar sections as blocks going by, a strip in a part's colour where that part plays
 //               there; the section now, the bar in it, and what comes next
 //   PART_COLOURS   each part's colour
@@ -125,6 +130,19 @@ function paintOrbit(g, f) {
   clear(g, f);
   const { w, h } = f, cx = w / 2, cy = h / 2, R = h * 0.46, r0 = R * 0.3, ring = (R - r0) / RINGS.length;
   const ang = (ph) => -Math.PI / 2 + ph * Math.PI * 2;
+  // a soft glow behind the rings, swelling on each beat and easing off between (the game's maker, 2026-11-26: "The
+  // orbit is cool, but I feel like it could use a glow behind it that pulses"); gentle, as every picture's light is
+  // (the comfort limit: no patch going dark to bright more than about 3 times a second), softer with the beat off
+  const M = f.memo || {};
+  if (!M.glow || M.glowAt !== w + 'x' + h) {
+    const G = g.createRadialGradient(cx, cy, r0 * 0.4, cx, cy, R * 1.3);
+    G.addColorStop(0, rgba(CYAN, 0.5)); G.addColorStop(0.6, rgba(PART_COLOURS.pads, 0.4)); G.addColorStop(0.8, rgba(PART_COLOURS.pads, 0.2)); G.addColorStop(1, rgba(PART_COLOURS.pads, 0));
+    M.glow = G; M.glowAt = w + 'x' + h;
+  }
+  const swell = f.playing ? (0.5 + 0.5 * Math.cos((f.beatPhase || 0) * Math.PI * 2)) ** 3 : 0;
+  g.globalAlpha = f.playing ? 0.3 + 0.3 * swell * (partOn(f, 'beat') ? 1 : 0.5) : 0.3;
+  g.fillStyle = M.glow; g.fillRect(cx - R * 1.3, cy - R * 1.3, R * 2.6, R * 2.6);
+  g.globalAlpha = 1;
   // the sixteen steps round the outside, the beats bolder
   for (let i = 0; i < 16; i++) {
     const a = ang(i / 16), b = i % 4 === 0, lit = f.playing && i === f.step;
@@ -228,6 +246,7 @@ function paintSections(g, f) {
 export const VISUALS = [
   { id: 'notes', label: 'Notes', paint: paintNotes },
   { id: 'electric', label: 'Electric', paint: paintNotes, shader: 'electric' },
+  { id: 'hex', label: 'Hex', paint: paintNotes, shader: 'hex' },
   { id: 'orbit', label: 'Orbit', paint: paintOrbit },
   { id: 'sections', label: 'Sections', paint: paintSections },
 ];

@@ -4,12 +4,17 @@
 // page that never shows it never loads three for it.
 //
 //   const V = electricView(canvas)   throws if there is no WebGL (the screen then shows the Notes picture)
-//   V.draw(f, w, h, time)            one picture from the tap frame f at w x h of the canvas's own pixels
+//   V.draw(f, w, h, time, shader?)   one picture from the tap frame f at w x h of the canvas's own pixels; shader: which
+//                                    picture, 'electric' (the first) or 'hex' (src/music/hex.js), each material made the
+//                                    first time it is drawn
 //   V.ok()                           false once the context is lost (the screen goes to the Notes picture)
 //   V.cost(n)                        the rigs: the mean ms of n pictures, each read back so the drawing is really done
 //   V.dispose()
 import * as THREE from 'three';
 import { electricMaterial, electricUniforms } from './electric.js';
+import { hexMaterial } from './hex.js';
+
+const MAKERS = { electric: electricMaterial, hex: hexMaterial };
 
 export function electricView(canvas) {
   // (asked first on a spare canvas, so a browser with no WebGL is told plainly and three never complains on the screen)
@@ -23,15 +28,19 @@ export function electricView(canvas) {
   // (a shader that will not build on this device: as lost, the screen shows the Notes picture)
   renderer.debug.onShaderError = (gl, prog, vs, fs) => { lost = true; console.warn('music: the electric picture\'s shader did not build:', gl.getShaderInfoLog(fs)); };
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const mat = electricMaterial(THREE), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  const mats = {}, matOf = (k) => mats[k] || (mats[k] = (MAKERS[k] || MAKERS.electric)(THREE));
+  const mat = matOf('electric'), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
   quad.frustumCulled = false; scene.add(quad);
-  const U = mat.userData.state;
-  let W = 0, H = 0, last = null;
+  let U = mat.userData.state;
+  let W = 0, H = 0, last = null, lastShader = 'electric';
   const V = {
-    renderer, material: mat,
+    renderer, get material() { return quad.material; },
     ok: () => !lost,
-    draw(f, w, h, time) {
+    draw(f, w, h, time, shader = 'electric') {
       if (lost) return;
+      const m = matOf(MAKERS[shader] ? shader : 'electric');
+      if (quad.material !== m) { quad.material = m; U = m.userData.state; }
+      lastShader = shader;
       if (w !== W || h !== H) { renderer.setSize(w, h, false); W = w; H = h; }
       electricUniforms(f, U, { time, aspect: w / h, px: 1 / h });
       last = f;
@@ -40,12 +49,12 @@ export function electricView(canvas) {
     cost(n = 60) {
       const gl = renderer.getContext(), px = new Uint8Array(4);
       if (!last) return null;
-      V.draw(last, W, H, U.uTime); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      V.draw(last, W, H, U.uTime, lastShader); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       const t0 = performance.now();
-      for (let i = 0; i < n; i++) { V.draw(last, W, H, U.uTime + i / 60); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+      for (let i = 0; i < n; i++) { V.draw(last, W, H, U.uTime + i / 60, lastShader); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
       return { ms: (performance.now() - t0) / n, w: W, h: H };
     },
-    dispose() { quad.geometry.dispose(); mat.dispose(); renderer.dispose(); },
+    dispose() { quad.geometry.dispose(); for (const k in mats) mats[k].dispose(); renderer.dispose(); },
   };
   return V;
 }

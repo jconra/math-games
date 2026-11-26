@@ -13,6 +13,10 @@ import { VISUALS, visualOf, RANGES } from '../src/music/visuals.js';
 import { electricState, electricUniforms, electricMaterial, SLOTS, DRUM_KIND, placeOf, ELECTRIC_SHADER } from '../src/music/electric.js';
 import { lightLines, lightBars, LIGHT_STYLES, DRUM_PLACE } from '../src/music/lights.js';
 import { screenLink } from '../src/music/screen.js';
+import { paintVisual } from '../src/music/visuals.js';
+import { hexMaterial, hexUniforms, hexState, HEX_SHADER, BASS_READING } from '../src/music/hex.js';
+import { FRAG_HEAD, FRAG_BEAT, FRAG_MEL, FRAG_END } from '../src/music/electric.js';
+import { createHash } from 'node:crypto';
 
 const song = PRESETS.find((p) => p.id === 'stationdrive').song;
 const UNI = { beat: 'uDrum', bass: 'uBass', pads: 'uPad', lead: 'uLead', melody: 'uMel' };
@@ -112,11 +116,65 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
 });
 
 test('Spectrum is gone from the pictures; a kept or asked-for "spectrum" is the first picture', () => {
-  assert.deepEqual(VISUALS.map((v) => v.id), ['notes', 'electric', 'orbit', 'sections']);
+  assert.deepEqual(VISUALS.map((v) => v.id), ['notes', 'electric', 'hex', 'orbit', 'sections']);
   assert.ok(!VISUALS.some((v) => /spectrum/i.test(v.id + v.label)));
   assert.equal(visualOf('spectrum').id, VISUALS[0].id);
   const L = screenLink({ picture: 'electric' }); L.pick('spectrum'); assert.equal(L.picture, 'notes');
   const E = visualOf('electric');
   assert.equal(E.shader, 'electric'); assert.equal(E.paint, visualOf('notes').paint, 'with no WebGL the Electric picture paints as Notes');
   assert.ok(E.label.split(' ').length <= 2);
+});
+
+// ── ELECTRIC 2: the Hex picture, and Orbit's glow. The game's maker, 2026-11-26: "Eletric is interesting, but it might
+// be too busy ... Maybe you can keep that one to compare" and "The orbit is cool, but I feel like it could use a glow
+// behind it that pulses."
+test('Hex: its own material on the same uniforms as Electric, sharing the hexagon field and the harp; Electric unchanged', () => {
+  class ShaderMaterial { constructor(o) { Object.assign(this, o); this.userData = {}; } }
+  const m = hexMaterial({ ShaderMaterial }), U = m.userData.state;
+  assert.equal(m.name, 'music-hex'); assert.equal(hexUniforms, electricUniforms); assert.equal(hexState, electricState);
+  hexUniforms(frame([N('lead', { midi: 70 }), N('bass', { midi: 40 })]), U, { time: 4 });
+  assert.equal(m.uniforms.uTime.value, 4); assert.equal(m.uniforms.uLead.value, U.uLead);
+  const F = HEX_SHADER.fragment;
+  for (const k of Object.keys(U)) assert.ok(F.includes(k), k + ' declared');
+  // the beat's hexagon outlines and the melody's harp are Electric's own pieces, not copies
+  for (const piece of [FRAG_HEAD, FRAG_BEAT, FRAG_MEL, FRAG_END]) { assert.ok(F.includes(piece)); assert.ok(ELECTRIC_SHADER.fragment.includes(piece.trimEnd())); }
+  // none of Electric's busier effects: no plasma ball or ring, no tongues, no streams
+  for (const gone of ['plasma ball', 'tongues', 'streams of plasma', 'ringl']) assert.ok(!F.includes(gone), gone);
+  for (const m2 of F.matchAll(/for \( int \w+ = \d; \w+ <=? (\w+);/g)) assert.match(m2[1], /^\d+$/);
+  assert.doesNotMatch(F, /\bpow\(/);
+  assert.equal(BASS_READING, 'insides', 'the bass fills the insides of hexagons placed by the note (as built)');
+  // Electric's shader text exactly as ELECTRIC 1 made it ("keep that one to compare")
+  assert.equal(createHash('sha256').update(ELECTRIC_SHADER.fragment).digest('hex'), 'e5b35f35820cf3f077b8864f287a04d755b58d06c4d44f1256d7517b8ebbe14e');
+});
+
+test('Hex on the Picture row right after Electric, with Notes as its fallback; an unknown name is still Notes', () => {
+  const H = visualOf('hex');
+  assert.equal(H.label, 'Hex'); assert.equal(H.shader, 'hex'); assert.equal(H.paint, visualOf('notes').paint);
+  assert.equal(VISUALS.findIndex((v) => v.id === 'hex'), VISUALS.findIndex((v) => v.id === 'electric') + 1);
+  assert.equal(visualOf('nonesuch').id, 'notes');
+  const L = screenLink(); L.pick('hex'); assert.equal(L.picture, 'hex');
+});
+
+test('Orbit\'s glow: painted first, behind the rings, swelling on the beat and easing off between, steady when stopped', () => {
+  // a 2D canvas that notes how strongly the glow (the one gradient) is painted, and what was painted before it
+  const glow = (f) => {
+    let G = null, at = null, before = 0;
+    const o = { globalAlpha: 1 };
+    const g = new Proxy(o, { get: (t, k) => {
+      if (k in t) return t[k];
+      if (k === 'createRadialGradient') return () => (G = { addColorStop() {} });
+      if (k === 'fillRect') return () => { if (t.fillStyle === G && at == null) at = t.globalAlpha; else if (at == null) before++; };
+      return () => {};
+    } });
+    paintVisual('orbit', g, { ...f, w: 736, h: 400, memo: {} });
+    return { at, before };
+  };
+  const f = { ...frame([]), section: { kind: 'peak', barIn: 0 }, step: 0, barPhase: 0 }, on = glow({ ...f, beatPhase: 0 }), mid = glow({ ...f, beatPhase: 0.5 }), near = glow({ ...f, beatPhase: 0.15 });
+  assert.equal(on.before, 1, 'only the dark behind it is painted first');
+  assert.ok(on.at > mid.at + 0.25 && near.at < on.at && near.at > mid.at, `on the beat ${on.at}, easing ${near.at}, between ${mid.at}`);
+  assert.ok(mid.at >= 0.25, 'never gone: a glow that swells, not a flash');
+  const offBeat = glow({ ...f, beatPhase: 0, song: { ...song, beat: 'off' } });
+  assert.ok(offBeat.at < on.at && offBeat.at > mid.at, 'softer with the beat off');
+  const a = glow({ ...f, playing: false, beatPhase: 0 }), b = glow({ ...f, playing: false, beatPhase: 0.5 });
+  assert.equal(a.at, b.at, 'stopped: steady');
 });
