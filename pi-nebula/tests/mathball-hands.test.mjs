@@ -94,6 +94,10 @@ test('a tap picks the nearest ball within a finger\'s reach of its edge, where i
   const rolling = [{ id: 7, x: 260, y: 300, r: 10, x0: 190, y0: 300 }];
   assert.equal(nearestBall(190, 300, rolling, HANDS.reach.touch).id, 7);
   assert.equal(nearestBall(190, 300, [{ id: 7, x: 260, y: 300, r: 10 }], HANDS.reach.touch), null, '(without where it was: missed)');
+  // a near ball rolling fast, tapped where the person saw it a moment before the finger came down
+  const fast = [{ id: 8, x: 330, y: 500, r: 40, x0: 300, y0: 500, past: [[150, 500], [200, 500], [250, 500]] }, { id: 9, x: 90, y: 300, r: 12 }];
+  assert.equal(nearestBall(150, 505, fast, HANDS.reach.touch).id, 8);
+  assert.ok(HANDS.past >= 0.25 && HANDS.past <= 0.5, 'a moment: a third of a second or so');
   // the mouse is narrower
   assert.equal(nearestBall(100, 340, balls, HANDS.reach.mouse), null);
 });

@@ -20,6 +20,7 @@ export const HANDS = {
   tapMs: { touch: 800, mouse: 1500 },   // ms: a press held longer than this is no tap
   reach: { touch: 44, mouse: 22 },      // px beyond a ball's edge on the screen that a tap still picks it
   hold: 280,                            // ms a finger rests still on the court, a ball in hand, before it aims
+  past: 0.35,                           // s of where each ball was on the screen that a tap still counts
   stick: 0.42,                          // the left part of a phone's screen, where a thumb makes the walking stick
   turn: 0.0052, lift: 0.006,            // radians of the view's turn (and its tilt) for each pixel dragged
 };
@@ -85,12 +86,14 @@ export function makeHands(H = HANDS) {
 }
 
 // the ball a tap picks: the nearest on the screen, measured from its edge (r: its radius there, px), now or where it
-// was as the press began (x0, y0), within reach. balls: [{ id, x, y, r, x0?, y0? }] (only balls free to pick)
+// was as the press began (x0, y0) or a moment before (past: [[x, y], ...], the last HANDS.past seconds: a person taps
+// where they saw it), within reach. balls: [{ id, x, y, r, x0?, y0?, past? }] (only balls free to pick)
 export function nearestBall(x, y, balls, reach) {
   let best = null;
   for (const b of balls) {
     let d = Math.hypot(x - b.x, y - b.y);
     if (b.x0 != null) d = Math.min(d, Math.hypot(x - b.x0, y - b.y0));
+    if (b.past) for (const p of b.past) d = Math.min(d, Math.hypot(x - p[0], y - p[1]));
     d -= b.r || 0;
     if (d <= reach && (!best || d < best.d)) best = { id: b.id, d: Math.max(0, d) };
   }

@@ -338,8 +338,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const held = G.you.holding, hit = input.pickAt(p.x, p.y, p.touch), d = hit && !hit.near ? hit.data : {};
     if (d.ball != null && (!held || d.ball !== held.id) && pickBall(d.ball)) return true;
     if (d.goal != null && held) { throwAt(d.goal, 'court'); return true; }
-    const was = new Map((from || []).map((b) => [b.id, b]));
-    const n = nearestBall(p.x, p.y, ballsOnScreen().map((b) => (was.has(b.id) ? { ...b, x0: was.get(b.id).x, y0: was.get(b.id).y } : b)), p.touch ? HANDS.reach.touch : HANDS.reach.mouse);
+    const was = new Map((from || []).map((b) => [b.id, b])), past = new Map();
+    for (const S of seenOnScreen) for (const b of S.list) { if (!past.has(b.id)) past.set(b.id, []); past.get(b.id).push([b.x, b.y]); }
+    const n = nearestBall(p.x, p.y, ballsOnScreen().map((b) => ({ ...b, past: past.get(b.id), ...(was.has(b.id) ? { x0: was.get(b.id).x, y0: was.get(b.id).y } : {}) })), p.touch ? HANDS.reach.touch : HANDS.reach.mouse);
     if (n && pickBall(n.id)) return true;
     if (held) {
       const T = targetAt(p.x, p.y);
@@ -490,6 +491,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   const seen = (gi) => offFront(GOALS[gi].aim) <= FRONT.arc && across(GOALS[gi].aim) <= 1;
   // (pending: a goal button's throw waiting for its turn; oneTurn: the goal that turn faces, until it does or a drag)
   let pending = null, pendingAt = 0, oneTurn = null;
+  const seenOnScreen = []; let clock = 0;   // (each ball on the screen this last moment, HANDS.past s: tapAt)
 
   // ── each frame ─────────────────────────────────────────────────────────────────────────────────────────────────
   // (yaw: the view's turn, which only a drag changes (hands.js viewTurn) and a goal button's one turn (turnToward);
@@ -532,6 +534,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (pending != null && inFront(pending)) throwAt(pending, 'ready');
     aimT = aimNow(); view.aim(pathFor(aimT));
     syncTargets();
+    // (where each ball has been on the screen this last moment: a tap where a person saw one still picks it)
+    clock += dt;
+    if (phase === 'play') { seenOnScreen.push({ t: clock, list: ballsOnScreen() }); while (seenOnScreen.length && clock - seenOnScreen[0].t > HANDS.past) seenOnScreen.shift(); }
+    else seenOnScreen.length = 0;
     view.update(dt, W.camera);
     otherBodyStep(dt);
     hud(dt);
