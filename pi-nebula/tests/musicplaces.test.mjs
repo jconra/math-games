@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SCREEN_ROOMS, songOf, KEEP, keptPicture, keepPicture, hallwayOn, keepHallway, HALLWAYS, alongOf } from '../src/music/placesplan.js';
-import { LINE_LOOK } from '../src/music/lights.js';
+import { MUSIC_LINES } from '../kit/musiclines.js';
 import { VISUALS } from '../src/music/visuals.js';
 import { musicWanted } from '../src/music/switch.js';
 import { CABIN_MUSIC, MUSIC_SCREEN } from '../kit/ships/musicscreen.js';
@@ -41,28 +41,36 @@ test('a music screen aboard each of the four ships, on a room the crew sit in (n
   assert.deepEqual([MUSIC_SCREEN.w, MUSIC_SCREEN.h], [0.46, 0.25]);
 });
 
-test('the hallway lines: on one wall of each hallway, in the wall\'s band, clear of what hangs there, low notes at the north or west end', () => {
-  const ext = { screen: [0.28, 0, 0.4], label: [0.225, -0.06, 0.06], breaker: [0.215, 0, 0.565], extinguisher: [0.1, 0, 0.66], jobs: [0.56, -0.45, 0.45], kiosk: [0.42, 0, 2], board: [0.5, 0, 0.6] };
+test('the hallway lines: a rail along one wall of each hallway, proud of its posts and ribs, stopping only at doorways and round what stands out as far', () => {
+  // (what hangs on a wall: half its width, its height from its foot, how far it stands out)
+  const ext = { screen: [0.28, 0, 0.4, 0.07], breaker: [0.215, 0, 0.565, 0.13], extinguisher: [0.1, 0, 0.66, 0.21], jobs: [0.56, -0.45, 0.45, 0.3], kiosk: [0.42, 0, 2, 0.6], board: [0.5, 0, 0.6, 0.2] };
+  const R = MUSIC_LINES;
+  // the rail stands clear of the panels' posts (9 cm) and the ribs' fins (18 cm), at hand height, under the wall screens
+  assert.ok(R.out > 0.18 && R.y > 0.85 && R.y + R.h < 1.25);
+  // five lines filling most of its face, small gaps between them, each several times the band's first lines (1.2 cm)
+  assert.ok(5 * R.pitch - (R.pitch - R.line) <= R.h && 5 * R.line > 0.65 * R.h && R.line >= 2.5 * 0.012);
   for (const id of HALLWAYS) {
     const r = roomOf(id), lines = r.pieces.filter((p) => p.piece === 'lines');
-    assert.ok(lines.length >= 4, id);
-    // one wall: the same turn and wall line for every stretch
+    assert.ok(lines.length >= 5, id);
     const sides = new Set(lines.map((p) => p.turn + ':' + (p.turn % 2 ? p.cell[0] : p.cell[1])));
     assert.equal(sides.size, 1, id + ' one wall');
     let total = 0;
     for (const L of lines) {
       const w = r.pieces.find((p) => p.piece === 'wall' && p.cell[0] === L.cell[0] && p.cell[1] === L.cell[1] && p.turn === L.turn && !p.deck);
-      assert.ok(w && ['plain', 'dark', 'locker'].includes(w.variant), id + ' on a panel with a band');
+      assert.ok(w && !['door', 'locked'].includes(w.variant), id + ' on a wall panel, never a doorway');
+      assert.ok(R.lens.includes(L.variant) && L.off[1] === R.y, id);
       const len = +L.variant, a = L.off[0] - len / 2, b = L.off[0] + len / 2;
-      assert.ok(a >= -0.91 && b <= 0.91, id + ' clear of the ribs');
-      assert.ok(L.off[1] - 2 * LINE_LOOK.gap - LINE_LOOK.glow / 2 > 1.22 && L.off[1] + 2 * LINE_LOOK.gap + LINE_LOOK.glow / 2 < 1.52, id + ' in the band');
+      assert.ok(a >= -1.001 && b <= 1.001, id + ' on its panel');
       for (const f of r.pieces.filter((p) => ext[p.piece] && p.cell[0] === L.cell[0] && p.cell[1] === L.cell[1] && p.turn === L.turn)) {
-        const [hw, y0, y1] = ext[f.piece], fy0 = f.off[1] + y0, fy1 = f.off[1] + y1;
-        if (fy0 < 1.52 && fy1 > 1.22) assert.ok(b <= f.off[0] - hw || a >= f.off[0] + hw, `${id}: clear of the ${f.piece}`);
+        const [hw, y0, y1, z] = ext[f.piece], fy0 = f.off[1] + y0, fy1 = f.off[1] + y1;
+        if (fy0 < R.y + R.h && fy1 > R.y && z + (f.off[2] || 0) >= 0.18) assert.ok(b <= f.off[0] - hw || a >= f.off[0] + hw, `${id}: clear of the ${f.piece}`);
       }
       total += len;
     }
-    assert.ok(total > 6, id + ' long');
+    // (most of the hallway's wall: the doorways and the ends aside)
+    const line0 = lines[0].turn % 2 ? lines[0].cell[0] : lines[0].cell[1];
+    const panels = r.pieces.filter((p) => p.piece === 'wall' && !p.deck && p.turn === lines[0].turn && (p.turn % 2 ? p.cell[0] : p.cell[1]) === line0).length;
+    assert.ok(total > 0.75 * 2 * panels - 1, `${id}: ${total} m of rail along ${panels} panels`);
   }
   // along a hallway: low notes at the smaller z (north) or the smaller x (west), whichever way it runs
   const ns = alongOf([[2, 14], [2, 30], [2.3, 22]]);

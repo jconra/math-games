@@ -11,7 +11,7 @@ import { PRESETS, PART_IDS } from '../src/music/song.js';
 import { tapOf, pulses } from '../src/music/tap.js';
 import { VISUALS, visualOf, RANGES } from '../src/music/visuals.js';
 import { electricState, electricUniforms, electricMaterial, SLOTS, DRUM_KIND, placeOf, ELECTRIC_SHADER } from '../src/music/electric.js';
-import { lightLines, DRUM_PLACE, LINE_LOOK } from '../src/music/lights.js';
+import { lightLines, DRUM_PLACE, LINE_LOOK, lineColour } from '../src/music/lights.js';
 import { screenLink } from '../src/music/screen.js';
 import { paintVisual } from '../src/music/visuals.js';
 import { hexMaterial, hexUniforms, hexState, HEX_SHADER, BASS_READING } from '../src/music/hex.js';
@@ -96,7 +96,7 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
   const b = lightLines(f, cols);
   assert.equal(b.length, 5 * cols);
   for (const v of b) assert.ok(v >= 0 && v <= 1);
-  assert.ok(at(b, row('bass'), 0.25) > 0.5 && at(b, row('bass'), 0.75) < 0.3 && at(b, row('bass'), 0.75) > 0.1, 'the bass note lights its place; the whole line glows with the bass');
+  assert.ok(at(b, row('bass'), 0.25) > 0.5 && at(b, row('bass'), 0.75) < 0.2 && at(b, row('bass'), 0.75) > 0.03, 'the bass note lights its place; the whole line rests dimly, lifting with the bass');
   assert.ok(at(b, row('pads'), 0) > 0.5 && at(b, row('pads'), 1) > 0.5 && at(b, row('pads'), 0.5) < 0.3, 'a chord: several places');
   assert.ok(at(b, row('beat'), DRUM_PLACE.kick) > 0.5 && at(b, row('beat'), DRUM_PLACE.hat) > 0.3 && at(b, row('beat'), DRUM_PLACE.snare) < 0.4, 'each drum its place');
   assert.ok(at(b, row('melody'), 0.5) < 0.1, 'a part with no note: its line low');
@@ -105,9 +105,15 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
   assert.ok(at(later, row('bass'), 0.25) < at(b, row('bass'), 0.25) * 0.3);
   // stopped: all low
   for (const v of lightLines({ playing: false }, cols)) assert.ok(v < 0.1);
-  // the one style left (the game's maker chose it), its lines a little thicker than the lab first drew them (a core a
-  // sixth of the gap between lines, a glow about half of it)
-  assert.ok(LINE_LOOK.core / LINE_LOOK.gap > 1 / 6 * 1.3 && LINE_LOOK.glow / LINE_LOOK.gap > 0.55);
+  // the one style left (the game's maker chose it): a resting line clearly dimmer than a note's stretch, which is a
+  // metre or more in a 20 m hallway; the colour at full strength, not washed out to white
+  const one = frame([N('lead', { midi: (RANGES.lead[0] + RANGES.lead[1]) / 2 })]), t1 = lightLines(one, cols), lead = row('lead');
+  assert.ok(at(t1, lead, 0.5) > 6 * at(t1, lead, 0.1), 'the note\'s place against the resting line');
+  let wide = 0; for (let i = 0; i < cols; i++) if (t1[lead * cols + i] > at(t1, lead, 0.5) / 2) wide++;
+  assert.ok(wide / cols * 20 >= 1, 'a metre or more of 20 m lit');
+  const full = lineColour('#8fd3ff', 1), rest = lineColour('#8fd3ff', 0);
+  assert.ok(Math.max(...full) > 0.99 && Math.min(...full) < 0.7, 'full strength, still its colour');
+  assert.ok(Math.max(...rest) <= LINE_LOOK.rest + 1e-9);
 });
 
 test('Spectrum is gone from the pictures; a kept or asked-for "spectrum" is the first picture', () => {

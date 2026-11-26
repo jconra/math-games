@@ -20,7 +20,8 @@
 // the arena's screen changes the arena's song, every other screen (aboard a ship too) the station's.
 // THE LINES. In each hallway (placesplan.js HALLWAYS) the 'lines' pieces on one wall, end to end, are five long lines,
 // low notes at the hallway's north or west end (placesplan.js alongOf); one small table (src/music/lights.js lightLines,
-// LINE_COLS places x 5 lines) is a data texture on one glowing material for every hallway, worked out each frame a
+// LINE_COLS places x 5 lines) is a data texture on one glowing material for every hallway, on the face of the lines'
+// rail (kit/wallkit.js musicLines: standing proud of the wall at hand height, seen down the whole hallway), worked out each frame a
 // hallway with lines is drawn. No real light. Hallway lights Off: the lines are not drawn (their tubes stay, dark).
 //
 //   const MP = startMusicPlaces({ W, walls, input, game, boarding, mission, quiet })
@@ -29,7 +30,7 @@
 //   MP.open(i) / MP.close() / MP.state()     (the rigs: GAME.musicPlaces); MP.screens: [{ id, room, song, at, facing }]
 import * as THREE from 'three';
 import { piecesOf } from '../people.js';
-import { MUSIC_FACE, MUSIC_LINES } from '../../kit/wallkit.js';
+import { MUSIC_FACE, MUSIC_LINES, lineY } from '../../kit/wallkit.js';
 import { CABIN_MUSIC, MUSIC_SCREEN } from '../../kit/ships/musicscreen.js';
 import { mountMusicScreen, screenLink, WALL } from './screen.js';
 import { tapOf } from './tap.js';
@@ -62,7 +63,8 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
   const cv = document.createElement('canvas'); cv.width = PAINT.w; cv.height = PAINT.h;
   const g = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   g.fillStyle = '#070b11'; g.fillRect(0, 0, PAINT.w, PAINT.h);
-  const flat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  // (a little over 1: lit from within, as the station's other screens read after its tone mapping)
+  const flat = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.3, 1.3, 1.3), toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   flat.name = 'music screens';
   const shaders = {}, memo = {};
   let shaderFailed = false;
@@ -75,6 +77,9 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
     const maker = V.shader === 'hex' ? import('./hex.js').then((m) => m.hexMaterial) : import('./electric.js').then((m) => m.electricMaterial);
     maker.then((make) => {
       const m = make(THREE, { aspect: WALL.w / WALL.h, px: 1 / PAINT.h });
+      // (the picture's own colours are the page's (display) colours; the station draws in linear light, tone-mapped
+      // after: made linear here, the canvas pictures' way, so the two kinds of picture look alike on a wall)
+      m.fragmentShader = m.fragmentShader.replace(/\}\s*$/, '  gl_FragColor.rgb = gl_FragColor.rgb * gl_FragColor.rgb * 1.3;\n}\n');
       m.depthTest = true; m.depthWrite = true; m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -1; m.toneMapped = false;
       shaders[id] = { loading: false, m };
       apply();
@@ -130,24 +135,26 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
   const table = new Float32Array(5 * LINE_COLS), bytes = new Uint8Array(LINE_COLS * 5 * 4);
   const lineTex = new THREE.DataTexture(bytes, LINE_COLS, 5, THREE.RGBAFormat, THREE.UnsignedByteType);
   lineTex.magFilter = THREE.LinearFilter; lineTex.minFilter = THREE.LinearFilter; lineTex.needsUpdate = true;
-  const hex = (h) => new THREE.Vector3(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
   const lineMat = new THREE.ShaderMaterial({
-    uniforms: { uTable: { value: lineTex }, uCol: { value: PART_IDS.map((p) => hex(PART_COLOURS[p])) }, uCore: { value: LINE_LOOK.core / LINE_LOOK.glow },
-      uBase: { value: LINE_LOOK.base }, uWhite: { value: LINE_LOOK.white }, uHalo: { value: LINE_LOOK.halo } },
+    uniforms: { uTable: { value: lineTex }, uCol: { value: PART_IDS.map((p) => { const n = parseInt(PART_COLOURS[p].slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255], m = Math.max(...c); return new THREE.Vector3(c[0] / m, c[1] / m, c[2] / m); }) },
+      uRest: { value: LINE_LOOK.rest }, uWhite: { value: LINE_LOOK.white } },
     vertexShader: `attribute vec3 line; varying vec3 vL;
 void main() { vL = line; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    // (the part's colour as the Music Lab paints it: the core toward white where it is brightest, the glow round it)
+    // (src/music/lights.js lineColour: the colour at full strength times the light, a hint toward white at the very top;
+    // the line's long edges a little softer)
     fragmentShader: `precision mediump float;
-uniform sampler2D uTable; uniform vec3 uCol[5]; uniform float uCore, uBase, uWhite, uHalo; varying vec3 vL;
+uniform sampler2D uTable; uniform vec3 uCol[5]; uniform float uRest, uWhite; varying vec3 vL;
 void main() {
   float r = floor(vL.y + 0.5);
   vec3 c = r < 0.5 ? uCol[0] : r < 1.5 ? uCol[1] : r < 2.5 ? uCol[2] : r < 3.5 ? uCol[3] : uCol[4];
-  float v = texture2D(uTable, vec2(vL.x, (r + 0.5) / 5.0)).r, a = abs(vL.z);
-  float core = 1.0 - smoothstep(uCore * 0.7, uCore, a), halo = 1.0 - smoothstep(uCore, 1.0, a);
-  vec3 lit = mix(c, vec3(1.0), v * v * uWhite) * min(1.0, uBase + v);
-  gl_FragColor = vec4(core * lit + (1.0 - core) * c * uHalo * v * halo, 1.0);
+  float v = texture2D(uTable, vec2(vL.x, (r + 0.5) / 5.0)).r, w = uWhite * v * v;
+  float lit = (v > 0.003 ? uRest + (1.0 - uRest) * v : 0.0) * (1.0 - 0.45 * smoothstep(0.6, 1.0, abs(vL.z)));
+  // (the station draws in linear light, tone-mapped and bloomed after (src/station.js): the colour the lab shows, made
+  // linear, and lifted where the note is so it glows past the bloom's threshold as the white strips do)
+  vec3 shown = (c * (1.0 - w) + w) * lit;
+  gl_FragColor = vec4(shown * shown * (1.4 + 6.0 * v * v), 1.0);
 }`,
-    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
   lineMat.name = 'music lines';
   const halls = [];
@@ -157,18 +164,18 @@ void main() {
     const _a = new THREE.Vector3(), _b = new THREE.Vector3();
     for (const [room, list] of byRoom) {
       // (the hallway's line: its stretches' ends, along it from the low end)
-      const ends = list.map((B) => { const L = parseFloat(B.variant) || 1.8; return [_a.set(-L / 2, 0, 0).applyMatrix4(B.M).clone(), _b.set(L / 2, 0, 0).applyMatrix4(B.M).clone()]; });
+      const ends = list.map((B) => { const L = parseFloat(B.variant) || 2; return [_a.set(-L / 2, 0, 0).applyMatrix4(B.M).clone(), _b.set(L / 2, 0, 0).applyMatrix4(B.M).clone()]; });
       const A = alongOf(ends.flat().map((v) => [v.x, v.z]));
       const zone = (W.room && W.room(room)) || W.zoneAt(ends[0][0]), holder = zone ? zone.group : W.scene;
       holder.updateMatrixWorld(true);
       const toHolder = new THREE.Matrix4().copy(holder.matrixWorld).invert(), pos = [], line = [], ix = [], v = new THREE.Vector3(), m = new THREE.Matrix4();
       list.forEach((B, i) => {
-        const L = parseFloat(B.variant) || 1.8, [e0, e1] = ends[i], u0 = A.u(e0.x, e0.z), u1 = A.u(e1.x, e1.z);
+        const L = parseFloat(B.variant) || 2, [e0, e1] = ends[i], u0 = A.u(e0.x, e0.z), u1 = A.u(e1.x, e1.z);
         m.multiplyMatrices(toHolder, B.M);
         for (let r = 0; r < 5; r++) {
-          const y = (2 - r) * MUSIC_LINES.gap, k = pos.length / 3, hh = LINE_LOOK.glow / 2;
+          const y = lineY(r), k = pos.length / 3, hh = MUSIC_LINES.line / 2;
           for (const [x, s] of [[-L / 2, -1], [L / 2, -1], [L / 2, 1], [-L / 2, 1]]) {
-            v.set(x, y + s * hh, MUSIC_LINES.z + 0.0015).applyMatrix4(m); pos.push(v.x, v.y, v.z);
+            v.set(x + (x < 0 ? 0.01 : -0.01), y + s * hh, MUSIC_LINES.out + MUSIC_LINES.depth + 0.0025).applyMatrix4(m); pos.push(v.x, v.y, v.z);
             line.push(x < 0 ? u0 : u1, r, s);
           }
           ix.push(k, k + 1, k + 2, k, k + 2, k + 3);

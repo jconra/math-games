@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { rrect, circle, line, bend } from './geo.js';
 import { SCREEN_RECT } from './tex.js';
+import { MUSIC_LINES, lineY } from './musiclines.js';
 
 const PI = Math.PI;
 
@@ -101,15 +102,18 @@ export function wallScreen(p, v) {
   if (!music) p.light([0, 0.24, 0.22], 0.45, [0.35, 0.65, 1], [0, 0, 1], 3);
 }
 
-// THE MUSIC'S HALLWAY LINES (src/music/places.js, src/music/lights.js): five thin dark tubes laid in a wall panel's dark
-// band, one for each part, a stretch of them `variant` metres long (centred on the piece). A hallway's stretches, end
-// to end along one wall, are its five long lines; the game makes them glow while the music is on. The piece's middle
-// is the band's middle (placed at MUSIC_LINES.band); the tubes stand in the band's channel, 3 to 2 cm behind the
-// panels' face.
-export const MUSIC_LINES = { gap: 0.05, tube: 0.012, band: 1.371, z: -0.02, lens: Array.from({ length: 16 }, (_, i) => (1.8 - i * 0.1).toFixed(1)) };
+// THE MUSIC'S HALLWAY LINES (src/music/places.js, src/music/lights.js): a slim dark rail standing proud of the wall at
+// hand height, clear of the panels' posts and the ribs' fins (so the length of the hallway is seen along it), with five
+// dark inlays along its face, one for each part; a stretch of it `variant` metres long, centred on the piece, held off
+// the wall by a bracket at its middle. A hallway's stretches, end to end along one wall, are its five long lines; the
+// game makes them glow while the music is on. Placed with its foot at MUSIC_LINES.y (off y), its back `out` from the
+// wall's face (its numbers: kit/musiclines.js).
+export { MUSIC_LINES, lineY };
 export function musicLines(p, v) {
-  const len = parseFloat(v) || 1.8, h = MUSIC_LINES.tube / 2;
-  for (let k = 0; k < 5; k++) { const y = (2 - k) * MUSIC_LINES.gap; p.slab('black', -len / 2, len / 2, y - h, y + h, MUSIC_LINES.z - 0.01, MUSIC_LINES.z, { r: 0.004, seg: 1 }); }
+  const L = parseFloat(v) || 2, R = MUSIC_LINES, z0 = R.out, z1 = R.out + R.depth;
+  p.slab('black', -L / 2, L / 2, 0, R.h, z0, z1, { r: 0.008 });
+  for (let k = 0; k < 5; k++) { const y = lineY(k); p.slab('dark', -L / 2 + 0.01, L / 2 - 0.01, y - R.line / 2, y + R.line / 2, z1 - 0.001, z1 + 0.0015, { r: 0.002, seg: 1 }); }
+  if (L >= 0.8) p.slab('black', -0.03, 0.03, R.h / 2 - 0.06, R.h / 2 + 0.06, 0, z0 + 0.005, { r: 0.006 });   // (the bracket)
 }
 
 // a stencilled sector name, painted on: pale paint for dark panels, or ' dark' paint for the off-white ones

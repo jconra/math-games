@@ -22,9 +22,18 @@
 import { PART_IDS } from './song.js';
 import { RANGES } from './visuals.js';
 
-// (the Music Lab's preview drew a core a sixth of the gap between lines and a glow about half of it; "a little thicker
-// so the effect is overall brighter": both half as thick again)
-export const LINE_LOOK = { gap: 0.05, core: 0.012, glow: 0.04, base: 0.15, white: 0.45, halo: 0.22 };
+// (the lines themselves are on the rail, kit/wallkit.js MUSIC_LINES: 3.2 cm each, five filling the rail's face with
+// small gaps, "a little thicker so the effect is overall brighter". How a place's brightness v becomes light: a resting
+// line is `rest` of its part's colour, the colour at its full strength (no washing out to white) where v is 1, a hint
+// toward white only at the very top (white * v * v))
+export const LINE_LOOK = { rest: 0.08, white: 0.12 };
+// a part's colour at brightness v (0..1), as display numbers 0..1: the colour made as bright as it goes (its strongest
+// channel 1), times the light
+export function lineColour(hex, v) {
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map((x) => x / 255), m = Math.max(...c);
+  const lit = v > 0 ? LINE_LOOK.rest + (1 - LINE_LOOK.rest) * v : 0, w = LINE_LOOK.white * v * v;   // (a part switched off: dark)
+  return c.map((x) => (x / m * (1 - w) + w) * lit);
+}
 
 // where each drum sits along the beat's line (0 the start, 1 the end)
 export const DRUM_PLACE = { kick: 0.1, snare: 0.3, clap: 0.3, tom: 0.5, hat: 0.7, open: 0.7, riser: 0.9 };
@@ -55,12 +64,13 @@ export function lightLines(f, cols = 64, out = null) {
   b.fill(0);
   if (!f || !f.playing) { b.fill(0.04); return b; }
   const now = f.now, P = f.pulse, on = (p) => f.song && f.song[p] && f.song[p] !== 'off';
-  // each line pulsing with its own part, brightest at the notes' places
-  const pulse = { beat: 0.3 * P.kick, bass: 0.25 * P.bass, pads: 0.12 * P.on.pads, lead: 0.16 * P.on.lead, melody: 0.16 * P.on.melody };
-  PART_IDS.forEach((p, r) => { const v = on(p) ? 0.05 + pulse[p] : 0.02; for (let i = 0; i < cols; i++) b[r * cols + i] = v; });
+  // each line resting dim, lifting a little with its own part, and bright along a stretch at each note's place (a stretch
+  // a twentieth of the line or so: a metre or more in a hallway, soft at its ends)
+  const pulse = { beat: 0.06 * P.kick, bass: 0.05 * P.bass, pads: 0.03 * P.on.pads, lead: 0.04 * P.on.lead, melody: 0.04 * P.on.melody };
+  PART_IDS.forEach((p, r) => { const v = on(p) ? 0.02 + pulse[p] : 0; for (let i = 0; i < cols; i++) b[r * cols + i] = v; });
   for (const n of f.notes) {
     const r = ROW[n.part]; if (r == null) continue;
-    bump(b, r, cols, placeOf(n), n.part === 'beat' ? (n.sound === 'riser' ? 0.06 : 0.035) : 0.03, noteLight(n, now));
+    bump(b, r, cols, placeOf(n), n.part === 'beat' ? (n.sound === 'riser' ? 0.08 : 0.04) : 0.045, noteLight(n, now));
   }
   for (let k = 0; k < b.length; k++) b[k] = b[k] > 1 ? 1 : b[k];
   return b;
