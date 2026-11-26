@@ -52,7 +52,7 @@ export const VIEW = { dist: 4.4, up: 3.1, side: 0.62, ahead: 2.2, look: 0.45, fo
 export const ON = { near: 1.9, on: 1.2, off: 1.0 };
 export const SIT = 'Sit_Listen';
 
-export function makeCargoDrive({ W, walls, input, forklift, run = null, people = () => null }) {
+export function makeCargoDrive({ W, walls, input, usable = null, forklift, run = null, people = () => null }) {
   ensureCss();
   // ── the prompt (the jobs' own look) ──────────────────────────────────────────────────────────────────────────
   const prompt = document.createElement('div');
@@ -125,6 +125,8 @@ export function makeCargoDrive({ W, walls, input, forklift, run = null, people =
     if (run && run.gotOff) run.gotOff();
   }
   const say = (s) => { note = s; noteT = performance.now(); };
+  // (a mouse: over the forklift, while its prompt is up, the hand, and a click gets on as E does: src/usable.js)
+  if (usable) usable.add({ name: 'forklift', ready: () => !phase && near && playing && !prompt.hidden, use: () => getOn(), shape: () => forklift.group });
   addEventListener('keydown', (e) => {
     if (!playing || e.repeat) return;
     if (!phase && near && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); getOn(); return; }

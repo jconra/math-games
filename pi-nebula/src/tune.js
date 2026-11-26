@@ -66,7 +66,7 @@ const clipOf = (M) => (SHIP_CLIPS[M.ship] || {}).reactor || null;
 export function readyTune(M) { const clip = clipOf(M); if (clip) sound.load(clip.id, clipUrl(clip.id)); }
 
 export function startTune(ctx, { mission: M, step, say = () => {}, strip = () => {}, onPanel = () => {}, onDone = () => {}, about = null }) {
-  const { boarding, crew, save = () => {} } = ctx;
+  const { boarding, crew, save = () => {}, usable = null } = ctx;
   ensureCss();
   const K = WORK[step.kind] || WORK.tune;
   const clip = K.voice ? clipOf(M) : null, cards = Math.max(1, step.cards || 1);
@@ -102,6 +102,10 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
   function shut() { const v = link.view ? link.view() : null; if (v) v.stop(); panel = null; onPanel(false); if (!T.done) words(); }
   function onKey(e) { if (!prompt.hidden && !panel && !closed && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); open(); } }
   addEventListener('keydown', onKey);
+  // (a mouse: over the core (or the survey table), while its prompt is up, the hand, and a click starts it as E does:
+  // src/usable.js; taken away again as this part of the run ends)
+  const offMouse = usable ? usable.add({ name: K.which === 'survey' ? 'survey table' : 'reactor core', ready: () => !prompt.hidden && !panel && !closed, use: () => open(),
+    shape: () => boarding.coreShape(M.ship, K.which) }) : () => {};
   words();
 
   const want = new THREE.Vector3(), wantLook = new THREE.Vector3(), camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), _d = new THREE.Vector3(); let camFresh = true;
@@ -144,7 +148,7 @@ export function startTune(ctx, { mission: M, step, say = () => {}, strip = () =>
     open,
     // (its prompt is up: the core is within reach; nothing else aboard is offered meanwhile, src/trip.js)
     get prompting() { return !closed && !prompt.hidden; },
-    close() { if (closed) return; closed = true; if (panel) { const was = panel; shut(); was.close(true); } removeEventListener('keydown', onKey); prompt.remove(); },
+    close() { if (closed) return; closed = true; if (panel) { const was = panel; shut(); was.close(true); } removeEventListener('keydown', onKey); offMouse(); prompt.remove(); },
     state: () => ({ work: step.kind, done: T.done, lit: T.lit, cards, prompt: !prompt.hidden, strip: shown, said: T.said, heard: T.heard, told: T.told,
       core: coreAt ? { room: coreAt.room, pos: coreAt.pos.toArray().map((v) => +v.toFixed(2)), look: coreAt.look.toArray().map((v) => +v.toFixed(2)) } : null, panel: panel ? panel.state() : null, view: link.view && link.view() ? link.view().state() : null, log: T.log.slice(-10) }),
   };

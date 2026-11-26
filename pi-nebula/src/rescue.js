@@ -311,6 +311,8 @@ export function makeSite(ctx, opts = {}) {
       pods: () => (pods ? pods.pods.map((p, i) => ({ group: p.group, name: `Stasis pod ${i + 1}`, open: (p.want ?? pods.want) === 1, i })) : []) });
     const head = new THREE.Vector3(); reach.eye = () => head.copy(F.player.pos).setY(F.player.pos.y + 1.6);
     reach.busy(true);
+    // (a mouse: over the pod whose lock is offered, the hand (src/usable.js); the click on a pod is the reach's own)
+    if (ctx.usable) { const R = reach, off = ctx.usable.add({ name: 'pod lock', ready: () => !!R.now, shape: () => (R.now ? R.now.group : null) }), was = R.dispose; R.dispose = () => { off(); was(); }; }
   }
   // (A POD WITH TWO LOCKS, on a run of the crew member's own in a Medic they bought: opts.locksFor(i), how many pod i has
   // (src/missions.js rockCards: two on the first pod, one on the second, two on the third ...). Each is one of the lock

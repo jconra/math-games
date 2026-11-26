@@ -42,7 +42,16 @@ import { JOB as antenna } from './antenna.js';
 import { antennaLink, standingAntenna } from './antennalink.js';
 
 export const JOBS = [galley, medical, smelter, crane, arena, dock, cargo, antenna];
-export const NEAR = 1.7;     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
+export const NEAR = 1.7;
+// THE DESK A JOB IS WORKED AT, for the mouse (src/usable.js): a box in the spot's own frame (x across, z the way it faces,
+// y up from the floor, m): at a counter, a desk or a console, the piece in front of the spot; in a seat (the crane's
+// operator), the seat round the spot. None for a job worked at something far off (the dock's bridge, the arena)
+export const DESK = { front: [-0.75, 0, 0.2, 0.75, 1.25, 1.1], seat: [-0.5, 0, -0.5, 0.5, 1.4, 0.5], none: ['dock', 'arena'] };
+function shapesOf(s) {
+  const list = [s.ring, s.sign];
+  if (!DESK.none.includes(s.job.id)) list.push({ box: s.job.seated ? DESK.seat : DESK.front, matrix: new THREE.Matrix4().makeRotationY(s.heading).setPosition(s.pos) });
+  return list;
+}     // metres from a job spot that bring up its prompt (a job's own `near` if it has one)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 
@@ -93,7 +102,7 @@ function sideMarks(s) {
 // more: { [job id]: fn -> { words, small, on() } or null }: a second button on a job's prompt for something else that is
 // done at its desk (the owner's own Hauler at the shipping computer: src/mission.js deskMore)
 // THE WALLET, top right while walking: the crew member's credits, and under them the ships that are theirs (src/own.js)
-export function startJobs({ W, walls, input = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {}, more = {} } = {}) {
+export function startJobs({ W, walls, input = null, usable = null, crew = () => null, save = () => {}, live = {}, hints = {}, crane = null, lib = null, people = () => null, links = {}, before = {}, more = {} } = {}) {
   ensureCss();
   const group = new THREE.Group(); group.name = 'job spots'; W.scene.add(group);
   const spots = [], missing = [];
@@ -214,6 +223,10 @@ export function startJobs({ W, walls, input = null, crew = () => null, save = ()
   }
   function close() { if (panel) panel.close(); }
 
+  // (a mouse: while a job's prompt is up, over its ring, its sign or the desk it is worked at (a box: DESK), the hand, and
+  // a click starts it as E does: src/usable.js. At the crane's operator area, the side looked at, as E)
+  if (usable) usable.add({ name: 'job', ready: () => !!(near && near.job.open && !panel && playing && !prompt.hidden), use: () => { if (near && near.job.open) start(near.job.id); },
+    shape: () => (near ? near.shapes || (near.shapes = shapesOf(near)) : null) });
   addEventListener('keydown', (e) => {
     if (panel || !playing || !near || !near.job.open) return;
     if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') { e.preventDefault(); start(near.job.id); }

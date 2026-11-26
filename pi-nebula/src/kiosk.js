@@ -81,7 +81,7 @@ const say = (n) => Number(n).toLocaleString('en-US');
 const BUTTONS = { owned: (S) => [['psk-take', `Take your ${S.name} out`]], closed: () => [], short: () => [], sure: () => [['psk-buy', 'Yes, buy it'], ['psk-no', 'No']], can: () => [['psk-buy', 'Buy']] };
 const saleLine = (S, o) => { const L = saleWords(S, o); return { ...L, buttons: BUTTONS[L.kind](S) }; };
 
-export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = null, crew = () => null, bridge = () => false, quiet = () => false }) {
+export function makeKiosk({ W, walls, input = null, usable = null, mission, shipPaint, crane = null, crew = () => null, bridge = () => false, quiet = () => false }) {
   if (!document.getElementById('psk-css')) { const st = document.createElement('style'); st.id = 'psk-css'; st.textContent = CSS; document.head.appendChild(st); }
   const K = piecesOf(W.R).find((x) => x.piece === 'kiosk');
   const api = { at: null, isOpen: false, near: false, update() {}, open() {}, close() {}, state: () => null };
@@ -166,6 +166,10 @@ export function makeKiosk({ W, walls, input = null, mission, shipPaint, crane = 
     if (!playing || isOpen) return;
     if (near && !prompt.hidden && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); e.stopImmediatePropagation(); open(); }
   }, true);
+  // (a mouse: over the kiosk's cabinet, while its prompt is up, the hand, and a click opens the store as E does:
+  // src/usable.js; its cabinet as kit/furniture.js kiosk builds it, from the wall out)
+  if (usable) usable.add({ name: 'kiosk', ready: () => near && !prompt.hidden && !isOpen, use: () => open(),
+    shape: { box: [-KIOSK.half, 0, 0, KIOSK.half, KIOSK.top, KIOSK.d], matrix: K.M } });
   const _d = new THREE.Vector3();
   api.update = (dt, P, isPlaying = true) => {
     playing = isPlaying && !!P;

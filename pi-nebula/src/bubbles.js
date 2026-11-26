@@ -8,7 +8,8 @@
 //   B.update(dt, list)                each frame: every bubble over its speaker's head on the screen; hidden while the
 //                                     speaker is out of sight (not drawn, behind something solid, too far off)
 //   B.ask({ who, what, yes, no, onYes, onNo })   the question at the bottom of the screen (two buttons; E answers yes):
-//                                     -> { close() }; B.asking: the one up, or null
+//                                     -> { close() }; B.asking: the one up, or null; B.askShown: up and not hidden;
+//                                     B.answer(yes): answered, as its buttons do
 //   B.clear(P), B.clearAll(), B.count()
 const CSS = `
 .pnb-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
@@ -146,6 +147,8 @@ export function makeBubbles({ camera, walls = null, root = document.body }) {
   // (shown only while walking: never over the title screen, where the station's life goes on behind it)
   let showing = true;
   const show = (on) => { if (on === showing) return; showing = on; layer.style.visibility = on ? '' : 'hidden'; };
-  const api = { say, update, clear, show, clearAll() { for (const b of [...live.values()]) drop(b); }, count: () => live.size, live, ask, asking: null, hideAsk(on) { if (asking) q.hidden = !!on; } };
+  const api = { say, update, clear, show, clearAll() { for (const b of [...live.values()]) drop(b); }, count: () => live.size, live, ask, asking: null,
+    // (the question's yes, as E or its button gives it; and whether it is up on the screen now: for the mouse, src/friendcard.js)
+    answer: (yes = true) => answer(yes), get askShown() { return !!asking && !q.hidden; }, hideAsk(on) { if (asking) q.hidden = !!on; } };
   return api;
 }

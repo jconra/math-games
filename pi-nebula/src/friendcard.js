@@ -17,7 +17,7 @@
 // opens over those. A tap is picked only as it lands (nothing is worked out on other frames): the people near the
 // player, drawn, each tested as a line from their feet to their head on the screen, the nearest that is under it.
 //
-//   const F = makeFriendCard({ input, camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save })
+//   const F = makeFriendCard({ input, usable, camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save })
 //   F.update(dt, P)      each frame: P the player on their feet and free to talk (null: at a job, on a run...)
 //   F.open(id) / F.close() / F.talk() / F.play() / F.join()   (and the rigs) F.state()  F.at(x, y) -> the person under a point
 import * as THREE from 'three';
@@ -63,7 +63,7 @@ const CSS = `
 @media (max-width: 640px) { .pnf { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 86px); } .pnf-row button { min-width: 118px; } }
 `;
 
-export function makeFriendCard({ input, camera, people = () => null, friends, crew = () => null, game = {}, save = () => {}, root = document.body }) {
+export function makeFriendCard({ input, usable = null, camera, people = () => null, friends, crew = () => null, game = {}, save = () => {}, root = document.body }) {
   if (!document.getElementById('pnf-css')) { const st = document.createElement('style'); st.id = 'pnf-css'; st.textContent = CSS; document.head.appendChild(st); }
   const el = document.createElement('div'); el.className = 'pnf'; el.hidden = true;
   el.innerHTML = '<div class="pnf-top"><div class="pnf-w"><b></b><small></small></div><kbd>F</kbd><button type="button" class="pnf-x" aria-label="Close">&times;</button></div>' +
@@ -201,14 +201,15 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
 
   // ── who is under a point on the screen: the people near the player, drawn; worked out only as a tap lands ──
   const _a = new THREE.Vector3(), _b = new THREE.Vector3();
-  function at(x, y, touch = false) {
+  // (only: that person alone; S.atD: how far the camera is from the one found)
+  function at(x, y, touch = false, only = null) {
     const P = pp(); if (!P || !playerNow) return null;
     const t0 = performance.now(); S.picks++;
     camera.updateMatrixWorld();
     const W = innerWidth, H = innerHeight, f = H / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), pad = touch ? CARD.padTouch : CARD.padMouse;
     let best = null, bd = Infinity;
     for (const Q of P.list) {
-      if (Q.hidden || Q.away || !Q.shown || !Q.inScene || Q.byCam || !Q.c) continue;
+      if (Q.hidden || Q.away || !Q.shown || !Q.inScene || Q.byCam || !Q.c || (only && Q !== only)) continue;
       const d = Math.hypot(Q.pos.x - playerNow.pos.x, Q.pos.z - playerNow.pos.z);
       if (d > CARD.reach || Math.abs(Q.pos.y - playerNow.pos.y) > 1.5) continue;
       const head = Q.c.bones && Q.c.bones.Head ? Q.c.bones.Head.getWorldPosition(_a) : _a.set(Q.pos.x, (Q.drawnY ?? Q.pos.y) + 1.6, Q.pos.z);
@@ -224,7 +225,7 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
       if (off > CARD.half * f / depth + pad) continue;
       if (depth < bd) { bd = depth; best = Q; }
     }
-    S.pickMs += performance.now() - t0;
+    S.pickMs += performance.now() - t0; S.atD = bd;
     return best;
   }
   // (the nearest person in front of the player, within reach: the F key)
@@ -243,8 +244,19 @@ export function makeFriendCard({ input, camera, people = () => null, friends, cr
   // (another question on the screen: the card waits; a captain's comes first)
   const busy = () => { const P = pp(); return !!(P && P.bubbles && P.bubbles.asking); };
 
+  // A MOUSE (src/usable.js, the game's one helper): over a person near enough to talk to, the hand, and a click opens
+  // their card (F's); over the captain asking a question, the hand, and a click is its yes (E's). A finger is the
+  // tap below, as it was
+  let under = null;
+  const asker = () => { const P = pp(); const A = P && P.bubbles && P.bubbles.askShown ? P.bubbles.asking : null; return A ? P.list.find((Q) => Q.cap && Q.cap.ask === A) || null : null; };
+  if (usable) {
+    usable.add({ name: 'person', ready: () => !!playerNow && !busy(), use: () => { if (under) open(under); },
+      shape: { at: (x, y) => { under = at(x, y, false); return under ? S.atD : null; } } });
+    usable.add({ name: 'captain\'s question', ready: () => !!playerNow && !!asker(), use: () => { const P = pp(); if (P && P.bubbles.askShown) P.bubbles.answer(true); },
+      shape: { at: (x, y) => { const C = asker(); return C && at(x, y, false, C) ? S.atD : null; } } });
+  }
   if (input && input.onPick) input.onPick((pk) => {
-    if (!playerNow || busy()) return;
+    if (!playerNow || busy() || pk.used) return;
     const Q = at(pk.x, pk.y, pk.touch);
     // (something else that takes taps (a jobs board's screen) is under the point: theirs, unless the person stands in
     // front of it)

@@ -693,7 +693,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
         T.countUp = !countEl.hidden; countEl.hidden = true;
         // (tuned: the captain asks them back to their seat only if the next part is theirs; else they carry on as they like)
         const then = steps[T.i + 1], theirs = !!then && ((then.kind === 'jump' && then.mine) || (then.kind === 'work' && iDrill) || (then.kind === 'rescue' && iPilot));
-        tn = tuneMod.startTune({ boarding, crew, save }, { mission: M, step: st, say: (key, more) => say(key === 'tuned' && !theirs ? 'tunedFree' : key, more), strip: words, about: st.kind === 'scan' ? scanAbout(st) : null,
+        tn = tuneMod.startTune({ boarding, crew, save, usable: ctx.usable }, { mission: M, step: st, say: (key, more) => say(key === 'tuned' && !theirs ? 'tunedFree' : key, more), strip: words, about: st.kind === 'scan' ? scanAbout(st) : null,
           onPanel: (up) => { el.classList.toggle('has-panel', up); if (ctx.walk) ctx.walk(!up && T.afoot && !T.out); },
           // (tuned: the strip is the run's own again, and asks them back if the next part is theirs)
           onDone: () => { T.phase = 'back'; $('.pmt-chip b').textContent = RUN_NAME; words(theirs ? 'Back to your seat' : ''); el.classList.remove('is-tune'); } });
@@ -1051,7 +1051,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // ARRIVING above a rescue's planet (the colours all round): the station put away, the planet shown, the ship above it
   // (src/rescue.js), seen from the seat or from behind as the view was
   function makeSite() {
-    site = siteMod.makeSite({ W, boarding, keeper, ship: S, cfg: SHIP, lib: ctx.lib || null, startFlying: flMod.startFlying },
+    site = siteMod.makeSite({ W, boarding, keeper, ship: S, cfg: SHIP, lib: ctx.lib || null, startFlying: flMod.startFlying, usable: ctx.usable || null },
       { seed: ctx.seed, pilot: iPilot, medic: iMedic, locksFor: own && iMedic ? rockCards : null, flier: iPilot ? 'The autopilot' : flierShort, medicName: medicShort, settings: flyingOf(crew), onSettings: (set) => { setFlying(crew, set); save(crew); }, dash, run: dashRun,
         // (the crew member: their levels on the sensors' card and the locks, and their own look on foot out there)
         crew, save: () => save(crew), recipe: ctx.lib && crew.look ? recipeOf(crew.look, ctx.lib) : null,
@@ -1284,7 +1284,19 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (!drill) return;
     drillOn = false; drill.close(); drill = null; el.classList.remove('is-drill', 'is-hand'); camFresh = true;
   }
+  // A MOUSE ABOARD (src/usable.js): over the seat or bed its prompt offers, on their feet (their own seat, another, or
+  // the one they are on), the hand, and a click does what E does; taken away as the run ends
+  const seatPlace = () => {
+    const as = seatEl.dataset.as;
+    if (as === 'rest') return T.near || null;
+    if (as === 'rise') return T.rest || null;
+    if (as === 'down') return (crewA && crewA.mine) || boarding.places(M.ship).find((p) => p.job === seatOf()) || null;
+    return null;
+  };
+  const offMouse = ctx.usable ? ctx.usable.add({ name: 'seat aboard', ready: () => !seatEl.hidden && !T.done && ['down', 'rest', 'rise'].includes(seatEl.dataset.as), use: () => seatGo(),
+    shape: () => { const p = seatPlace(); return p ? boarding.placeShape(M.ship, p) : null; } }) : () => {};
   function cleanUp() {
+    offMouse();
     // (given up on their feet out at the rocks: the cabin and their own figure drawn where the ship stands again)
     // (on their feet when the run ends at home: they stay where they stand, in the ship as it now stands)
     if (T.rest) rise();

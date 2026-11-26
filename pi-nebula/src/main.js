@@ -66,6 +66,7 @@ import { bridgeStands } from './jobs/dock.js';
 import { pointGap } from '../kit/forkliftround.js';
 import { STORE } from '../kit/places-plan.js';
 import { musicWanted } from './music/switch.js';
+import { makeUsable } from './usable.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
 // (THE MAKER FIRST, in boot: the longest the station waits for the character maker's own files)
@@ -164,7 +165,7 @@ async function boot() {
   let music = null, musicPlaces = null;
   { let want = { on: false }; try { want = musicWanted(location.search, localStorage); } catch (e) { /* blocked: off */ }
     if (want.on) import('./music/game.js').then((m) => { music = GAME.music = m.startGameMusic({ sound, notes: want.notes }); return import('./music/places.js'); })
-      .then((m) => { musicPlaces = GAME.musicPlaces = m.startMusicPlaces({ W, walls, input, game: music, boarding, mission: { get busy() { return !!(GAME.mission && GAME.mission.busy); } },
+      .then((m) => { musicPlaces = GAME.musicPlaces = m.startMusicPlaces({ W, walls, input, usable, game: music, boarding, mission: { get busy() { return !!(GAME.mission && GAME.mission.busy); } },
         quiet: () => !!(GAME.jobs && (GAME.jobs.near || GAME.jobs.panel)) || !!(GAME.board && (GAME.board.near || GAME.board.isOpen)) || !!(GAME.kiosk && (GAME.kiosk.near || GAME.kiosk.isOpen)) || !!(people && people.bubbles.asking) }); }).catch(fail); }
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
@@ -185,11 +186,14 @@ async function boot() {
   // ── the player: the keys and the thumb stick (shared with Mathwood), the camera, the character ─────────────────
   const input = makeInput(canvas, { camera: W.camera, stick: { ring: 'rgba(170, 215, 255, .6)', back: 'rgba(10, 16, 24, .3)', knob: 'rgba(240, 150, 60, .75)' } });
   input.enabled = false;
+  // (with a mouse, everything that can be used: the hand over it while it is in reach, and a click does what its E key
+  // does: src/usable.js; made before anything else takes the view's clicks, so it hears each click first)
+  const usable = GAME.usable = makeUsable({ canvas, camera: W.camera, input });
   const chase = makeChase(W.camera, walls);
   let player = null, building = null, people = null;
   // (FRIENDSHIP: everyone's meter, kept with the crew member's save, src/friends.js; a tap on a person, src/friendcard.js)
   const friends = GAME.friends = makeFriends({ crew: () => GAME.player, save: (p) => save.save(p) });
-  const friendCard = GAME.friendCard = makeFriendCard({ input, camera: W.camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save: (p) => save.save(p) });
+  const friendCard = GAME.friendCard = makeFriendCard({ input, usable, camera: W.camera, people: () => people, friends, crew: () => GAME.player, game: GAME, save: (p) => save.save(p) });
   let walkFree = false;      // (on their feet and free to talk to someone: no job, run, lift or forklift)
   const auto = { way: null, i: 0 };       // (a rig walking the player somewhere: GAME.walkTo)
   const lib = await libP;
@@ -211,7 +215,7 @@ async function boot() {
   // the station's jobs: their spots, the prompt, the job panel (jobs/index.js); credits are saved with the crew member
   // (the smelter's pay slips count the canisters really in the hangar: the crane's load, as it is when a slip is made)
   // (the crane itself too: the operator area's two options, free control and the crane operator job, work it)
-  const jobs = GAME.jobs = startJobs({ W, walls, input, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
+  const jobs = GAME.jobs = startJobs({ W, walls, input, usable, crew: () => GAME.player, save: (p) => save.save(p), // (and at the smelter's controls a share of a captain's run may be waiting: its card comes first, src/mission.js)
     // (and a rescue's share at the triage desk: src/missions.js payAt)
     live: { smelter: { now: () => (crane.on ? crane.load() : null), card: () => (mission ? mission.payoutCard('smelter') : null) }, medical: { card: () => (mission ? mission.payoutCard('medical') : null), head: (o) => (mission ? mission.payoutHead(o) : null) } },
     // (and at the shipping computer the supply run: who has its contract, its load's state, its share waiting there:
@@ -229,16 +233,16 @@ async function boot() {
   const guide = GAME.guide = makeGuide({ W, walls });
   // (a game of Mathball against anyone: src/mathball/challenge.js; the menu on a tapped person asks it)
   GAME.mathball = makeChallenges({ people: () => people, jobs, player: () => (player ? player.P : null) });
-  const board = GAME.board = makeJobsBoard({ W, walls, input, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
+  const board = GAME.board = makeJobsBoard({ W, walls, input, usable, jobs, guide, asking: () => !!(people && people.bubbles.asking), captains: () => (people ? people.captain : null) });
   // a captain's run: the contract, the pilot's seat, the trip, the share at the smelter (src/mission.js; the trip and
   // the contract's card are loaded only when one is wanted)
-  const mission = GAME.mission = makeMission({ W, walls, input, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
+  const mission = GAME.mission = makeMission({ W, walls, input, usable, boarding, crane, jobs, guide, outside, visit, people: () => people, crew: () => GAME.player, save: (p) => save.save(p),
     body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, lib,
     // (the supply run: its cargo run in Cargo, src/supplyrun.js; the Hauler's bridge, src/dockwalk.js; is the crew member
     // down in Cargo just now)
     supply: () => GAME.supply, dock: dockWalk, inCargo: () => !!(player && player.P && GAME.lift && Math.abs(player.P.pos.y - STORE.floor) < 1 && GAME.lift.crewAt === 'store') });
   // the ship store's kiosk in the hallway, the one place a ship is bought (src/kiosk.js)
-  const kiosk = GAME.kiosk = makeKiosk({ W, walls, input, mission, shipPaint, crane, crew: () => GAME.player, bridge: () => bridgeStands(GAME.player),
+  const kiosk = GAME.kiosk = makeKiosk({ W, walls, input, usable, mission, shipPaint, crane, crew: () => GAME.player, bridge: () => bridgeStands(GAME.player),
     quiet: () => !!(jobs.near || jobs.panel || board.near || board.isOpen || (people && people.bubbles.asking)) });
   // the lift by the junction: up to the control room at the top of the tower, down to Cargo (src/lift.js)
   const lift = GAME.lift = makeLift({ W, walls, outside, body: () => (player ? player.P : null), put: (pos, heading = 0) => { auto.way = null; player.P.place(pos, heading); player.P.zone = null; chase.snap(player.P.pos, heading); }, snap: (pos, heading) => chase.snap(pos, heading, true) });
@@ -251,7 +255,7 @@ async function boot() {
   const forklift = GAME.forklift = makeCargoForklift({ W, walls, hold: () => !!((supply && supply.hold()) || (lap && lap.hold())), open: () => (supply ? supply.open() : []),
     summon: (id) => { const O = people && people.list.find((q) => q.id === id); if (O) people.send(O, { do: 'drive:forklift', hurry: 1.4 }); }, dismiss: (O) => { if (people) people.send(O, null); } });
   supply = GAME.supply = makeSupplyRun({ crew: () => GAME.player, save: (p) => save.save(p), forklift, bridge: () => bridgeStands(GAME.player), people: () => people });
-  const cargo = GAME.cargo = makeCargoDrive({ W, walls, input, forklift, run: supply, people: () => people });
+  const cargo = GAME.cargo = makeCargoDrive({ W, walls, input, usable, forklift, run: supply, people: () => people });
   // (and a timed lap of Cargo on it: Cargo's loader says how fast they do one; the start box, the countdown, the four
   // waypoints, the clock: src/cargolap.js. Never while a supply run waits to be loaded)
   // (each crew member's best official lap kept with them; the best on this device on the board by the forklift's bay)
@@ -352,6 +356,7 @@ async function boot() {
     // as the camera's room)
     if (music) music.update(dt, () => (GAME.mode === 'play' && P ? { zone: (W.zoneAt(P.pos) || {}).id || null, ship: boarding.where(P.pos), ground: !!(mission.trip && mission.trip.ground) } : { zone: (W.zoneAt(W.camera.position) || {}).id || null }));
     outside.update(W.camera, dt);
+    usable.update();      // (the mouse over what can be used, from the camera as it is about to be drawn)
     W.frame(dt, now, eyes);
     GAME.frames++;
   }

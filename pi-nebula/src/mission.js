@@ -93,7 +93,7 @@ const runOfShip = (id) => Object.values(MISSIONS).find((M) => M.ship === id) || 
 // (a run of the Miner's: its crane holds it on its pad for the run, and takes its canisters off it after)
 const minerRun = (m) => !!m && MISSIONS[m.id].ship === 'miner';
 
-export function makeMission({ W, walls, input = null, boarding, crane, jobs, guide, outside = null, visit = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {}, lib = null, supply = () => null, dock = null, inCargo = () => false }) {
+export function makeMission({ W, walls, input = null, usable = null, boarding, crane, jobs, guide, outside = null, visit = null, people = () => null, crew = () => null, save = () => {}, body = () => null, put = () => {}, lib = null, supply = () => null, dock = null, inCargo = () => false }) {
   let card = null, trip = null, loading = false, playing = false, lastRun = null, toast = null, toastT = 0, lineTo = null;
   // (a captain as they are called: the station's person, or before its people are aboard the roster's own entry)
   const nameOf = (id) => { const p = people(); const P = (p && p.list.find((x) => x.id === id)) || ROSTER.find((d) => d.id === id); return (P && P.name) || 'The captain'; };
@@ -137,6 +137,16 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     return r && (r.worked || r.done) ? null : 'The supplies are not worked out yet: the shipping computer in Cargo, down the lift';
   }
   prompt.querySelector('.pnj-go').addEventListener('click', () => seatGo());
+  // (a mouse: over the seat offered, while the prompt is up, the hand, and a click does what E does: src/usable.js. The
+  // seat: the pilot's for a pilot or a ship of their own; the drill's for the drill; every seat in the cockpit for one
+  // signed only as the engineer, whose prompt is the crew's to tell)
+  let seatFor = null;
+  const seatShapes = () => {
+    if (!seatFor) return null;
+    const list = boarding.places(seatFor.ship).filter((p) => p.cockpit && p.kind === 'sit' && (!seatFor.job || p.job === seatFor.job));
+    return list.map((p) => boarding.placeShape(seatFor.ship, p)).filter(Boolean);
+  };
+  if (usable) usable.add({ name: 'pilot\'s seat', ready: () => !prompt.hidden && playing && !trip && !card && !prompt.querySelector('.pnj-go').hidden, use: () => seatGo(), shape: seatShapes });
   addEventListener('keydown', (e) => { if (!prompt.hidden && playing && !trip && !card && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); seatGo(); } });
 
   // ── WHO KEEPS EACH SHIP'S HULL WHERE IT IS FLOWN AND STANDS (src/flying.js `hull`): the Miner's crane (its canisters
@@ -459,7 +469,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       // (dock: the Hauler's bridge, let go and taken again; pallets: what a supply run carries; again: the old station
       // saved before)
       const Mn = MISSIONS[m.id], S = supply(), cr = Mn.desk && S && S.contractRun ? S.contractRun(m.run) : null;
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: m.own ? `The ${shipName(Mn)}` : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
+      trip = startTrip({ W, walls, usable, boarding, crane, keeper: keeperOf(MISSIONS[m.id].ship), jobs, guide, outside, visit: visitOf(MISSIONS[m.id].ship), people, crew: c, save, body, put, captainName: m.own ? `The ${shipName(Mn)}` : nameOf(m.captain), seed: seedOf(c), lib, input, plan,
         dock, pallets: cr ? cr.pallets : 0, again: supplyRuns(c) > 0,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: MISSIONS[m.id], roles: m.roles, tune: tuneWhen(c),
         // (a run of the crew member's own, in a ship they bought: no captain aboard, their own crew who came, more cards: src/trip.js)
@@ -497,7 +507,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
     import('./trip.js').then(({ startTrip }) => {
       loading = false;
       if (!playing) { if (input) input.enabled = false; if (ship === 'miner') crane.awayHeld = held; return; }
-      trip = startTrip({ W, walls, boarding, crane, keeper: keeperOf(ship), jobs, guide, outside, visit: visitOf(ship), people, crew: c, save, body, put, captainName: `The ${nameOfShip(ship)}`, lib, input, dock,
+      trip = startTrip({ W, walls, usable, boarding, crane, keeper: keeperOf(ship), jobs, guide, outside, visit: visitOf(ship), people, crew: c, save, body, put, captainName: `The ${nameOfShip(ship)}`, lib, input, dock,
         walk: (on) => { if (input) input.enabled = !!on && playing; } }, { mission: freeFlight(ship), roles: ['pilot'], tune: null, free: true,
         onEnd: (r) => {
           const v = visits.get(ship);
@@ -547,6 +557,9 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
   document.body.appendChild(table.prompt);
   table.prompt.querySelector('.pnj-go').addEventListener('click', () => tableOpen());
   addEventListener('keydown', (e) => { if (!table.prompt.hidden && !table.panel && playing && (e.key === 'e' || e.key === 'E' || e.key === 'Enter')) { e.preventDefault(); tableOpen(); } });
+  // (a mouse: over the table, while its prompt is up, the hand, and a click opens it as E does: src/usable.js)
+  if (usable) usable.add({ name: 'survey table', ready: () => !table.prompt.hidden && !table.panel && playing, use: () => tableOpen(),
+    shape: () => { const m = contractOf(crew()); return m ? boarding.coreShape(MISSIONS[m.id].ship, 'survey') : null; } });
   const TABLE_NEAR = 1.2;
   function tableAt(P) {
     const c = crew(), m = c && contractOf(c);
@@ -650,6 +663,7 @@ export function makeMission({ W, walls, input = null, boarding, crane, jobs, gui
       const mineId = !at && here && here.endsWith('/cockpit') ? here.slice(0, -'/cockpit'.length) : null;
       ownAt = mineId && owns(c, mineId) && !(m && m.state === 'signed' && MISSIONS[m.id].ship === mineId) && !(mineId === 'miner' && ['out', 'live', 'handover'].includes(crane.mode)) ? mineId : null;
       if (at) promptFor(m); else if (ownAt) promptOwn(ownAt);
+      seatFor = at ? { ship: MISSIONS[m.id].ship, job: m.roles.includes('pilot') ? 'pilot' : m.roles.includes('drill') ? 'drill' : null } : ownAt ? { ship: ownAt, job: 'pilot' } : null;
       prompt.hidden = !at && !ownAt;
       tableStep(P);
       return loading || !!table.panel;

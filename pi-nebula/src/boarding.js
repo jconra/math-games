@@ -11,6 +11,8 @@
 //   B.inside(p)                                        the ship whose cabin a point is in (or null)
 //   B.where(p)                                         where aboard: 'explorer/mess' (the ship and its room), or null
 //   B.core(id)                                         a ship's own reactor core: where to stand before it, where it is
+//   B.places(id) / B.placeShape(id, place)              a ship's seats and beds; one's box, for the mouse (below)
+//   B.coreShape(id, which)                             the box round its core (or survey table), for the mouse
 //   B.fly(id, D)                                       a ship flown (src/flying.js): its cabin drawn where it is now
 //   B.stand(id, D)                                     a ship set down somewhere else than it is parked (below)
 //   B.hold(id, on)                                     a ship not parked yet (landing): its cabin and ways left alone
@@ -65,6 +67,7 @@ import { POD as MB_POD } from '../kit/ships/miner-built.hull.js';
 import { shine } from './player.js';
 import { frameOf } from './standing.js';
 import { coreIn, surveyIn } from './missions.js';
+import { placesOf, BED } from './aboardplan.js';
 
 // THE SHIPS THAT CAN BE BOARDED: the station file's room for each parked ship, its module (its LAB says how its cabin
 // meets its hull: kit/ships/<ship>-built.js), the blueprint the game's maker picked, and its ways in (the ship's
@@ -592,5 +595,32 @@ export function makeBoarding({ W, walls, quality = 'high', dock = null }) {
   }
   // (MUSIC 3: the cabins built just now, for the music's screen aboard each ship: src/music/places.js)
   const cabins = () => ships.filter((s) => s.state === 'in' && s.cabin).map((s) => ({ id: s.id, bp: s.bp, group: s.cabin.group, deck: s.space.deck }));
-  return { ships, update, inside, where, core, look, spots, hold, ride, fly, stand, cabins, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
+  // A SEAT OR A BED ABOARD, FOR THE MOUSE (src/usable.js): every place to sit or lie of a ship's rooms (aboardplan.js
+  // placesOf, from its blueprint), and a place's own furniture as a box in the ship's frame, drawn where its cabin is
+  // now (parked, flown, or out in the field). A seat: its footprint, from the floor to over its back; a bed: to a little
+  // over its pad. -> null while the cabin is not in
+  const placeLists = new Map();
+  function places(id) {
+    const s = ships.find((q) => q.id === id); if (!s || !s.bpData) return [];
+    if (!placeLists.has(s.bpData)) placeLists.set(s.bpData, placesOf(s.bpData, { deck: s.space.deck, cockpitFloor: s.cockpit && Number.isFinite(s.cockpit.floor) ? s.cockpit.floor : null }));
+    return placeLists.get(s.bpData);
+  }
+  const PLACE_BOX = { seat: 1.25, bed: 0.35, under: 0.1 };
+  function placeShape(id, p) {
+    const s = ships.find((q) => q.id === id); if (!s || !s.cabin || !p || !s.bpData) return null;
+    const it = (s.bpData.items || []).find((q) => q.id === p.item); if (!it || !it.rect) return null;
+    const [x0, z0, x1, z1] = it.rect, y0 = (p.kind === 'lie' ? p.y - BED.pad : p.y) - PLACE_BOX.under, y1 = p.kind === 'lie' ? p.y + PLACE_BOX.bed : p.y + (p.up || 0) + PLACE_BOX.seat;
+    return { box: [x0, y0, z0, x1, y1, z1], matrix: () => (s.cabin ? s.cabin.group.matrixWorld : null) };
+  }
+
+  // (a ship's core, or its survey table, the same way: a box round the glowing core (or the table's top) it looks at)
+  const CORE_BOX = { half: 0.55, down: 0.95, up: 0.3 };
+  function coreShape(id, which = 'core') {
+    const s = ships.find((q) => q.id === id); if (!s || !s.cabin || !s.bpData) return null;
+    const C = (which === 'survey' ? surveyIn : coreIn)(s.bpData); if (!C) return null;
+    const x = C.look[0], y = s.space.deck + C.floor + C.look[1], z = C.look[2], h = CORE_BOX.half;
+    return { box: [x - h, y - CORE_BOX.down, z - h, x + h, y + CORE_BOX.up, z + h], matrix: () => (s.cabin ? s.cabin.group.matrixWorld : null) };
+  }
+
+  return { ships, update, inside, where, core, coreShape, look, spots, hold, ride, fly, stand, cabins, places, placeShape, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
 }

@@ -109,7 +109,7 @@ const CSS = `
 @media (max-width: 640px) { .pjb-chip { top: max(60px, calc(env(safe-area-inset-top) + 56px)); } }
 `;
 
-export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = () => false, captains = () => null }) {
+export function makeJobsBoard({ W, walls, input = null, usable = null, jobs, guide, asking = () => false, captains = () => null }) {
   if (!document.getElementById('pjb-css')) { const st = document.createElement('style'); st.id = 'pjb-css'; st.textContent = CSS; document.head.appendChild(st); }
   // the boards in the station: the big one (the 'station' jobs board piece, its first: both its faces) and its small
   // copies (each 'pair' piece: its upper screen), and the room each hangs in
@@ -232,7 +232,7 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     return walls.reach(W.camera.position, _dir.multiplyScalar(1 / d), d) >= d - 0.35;
   };
   if (input && input.onPick) input.onPick((pk) => {
-    if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open) return;
+    if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open || pk.used) return;   // (used: the click was something else's, src/usable.js)
     const F = faceAt(pk.hit);
     // (beside a screen, not on it: the list, when the player is at a board; never a row guessed at)
     if (!F) { if (near) openFromTap(); return; }
@@ -336,6 +336,12 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     if (near && !prompt.hidden && (e.key === 'e' || e.key === 'E') && !(jobs && jobs.near)) { e.preventDefault(); e.stopImmediatePropagation(); openList(); }
   }, true);
 
+  // (a mouse: over the screens of the board walked up to (the big one: the captains' beside it too), while its prompt is
+  // up, the hand: src/usable.js; the click is the board's own, above: a row picks its job or captain, anywhere else on
+  // a screen opens the list as E does)
+  let nearB = null;
+  const BOX = 0.03, boxesOf = (B) => faces.filter((F) => F.board === B || (!B.small && !F.board)).map((F) => ({ box: [-F.w / 2, -F.h / 2, -BOX, F.w / 2, F.h / 2, BOX], matrix: F.world }));
+  if (usable) usable.add({ name: 'jobs board', ready: () => near && !prompt.hidden && !open, shape: () => (nearB ? (nearB.boxes || (nearB.boxes = boxesOf(nearB))) : null) });
   const _d = new THREE.Vector3();
   api.update = (dt, P, isPlaying = true) => {
     playing = isPlaying && !!P; player = P;
@@ -351,7 +357,7 @@ export function makeJobsBoard({ W, walls, input = null, jobs, guide, asking = ()
     if (!(jobs && (jobs.near || jobs.panel))) for (const B of boards) {
       const dx = B.at.x - P.pos.x, dz = B.at.z - P.pos.z, d = Math.hypot(dx, dz);
       if (d >= B.near || Math.abs(P.pos.y - B.at.y) >= 1.5) continue;
-      if (d < 1.5 || (_d.x * dx + _d.z * dz) / (d || 1) > BOARD.facing) { near = true; break; }
+      if (d < 1.5 || (_d.x * dx + _d.z * dz) / (d || 1) > BOARD.facing) { near = true; nearB = B; break; }
     }
     // (one prompt at a time: a captain's question up, the board's waits)
     prompt.hidden = !near || open || !!asking();

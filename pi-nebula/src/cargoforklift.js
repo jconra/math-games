@@ -651,6 +651,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
 
   return {
     ride, hand: handApi, stock, loader: loaderApi, get doors() { return doors; },
+    // (the forklift as drawn, once it is in: for the mouse over it, src/cargodrive.js)
+    get group() { return made ? made.group : null; },
     update(soon, { camera = null, feet = () => [], dt = 1 / 60, wants = () => false, player = null } = {}) {
       if (!zone) return;
       clock += dt; cam = camera; if (camera) frustum(camera); playerAt = player;

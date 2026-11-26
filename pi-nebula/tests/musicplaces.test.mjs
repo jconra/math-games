@@ -110,7 +110,7 @@ test('the screens always show the picture, MUSIC along its top; the controls onl
   const { TITLE } = await import('../src/music/screen.js');
   assert.equal(TITLE.word, 'MUSIC'); assert.ok(TITLE.share > 0.05 && TITLE.share < 0.2, 'a strip of its own over the picture');
   assert.doesNotMatch(screen + places, /Show the picture/);
-  assert.match(places, /mountMusicControls\(over, music, \{[^\n]*done:/); assert.match(places, /'pointer'/);
+  assert.match(places, /mountMusicControls\(over, music, \{[^\n]*done:/); assert.match(places, /usable\.add\(\{ name: 'music screen'/);   // (the hand over a screen: the game's one helper, src/usable.js)
   // every button one line: never breaking its words
   assert.match(screen, /\.pnm-btn \{[^}]*white-space: nowrap/);
   // the lab: one picture with a full screen button, and the same controls under it; no second small screen

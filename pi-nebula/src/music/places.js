@@ -25,7 +25,8 @@
 // rail (kit/wallkit.js musicLines: standing proud of the wall at hand height, seen down the whole hallway), worked out each frame a
 // hallway with lines is drawn. No real light. Hallway lights Off: the lines are not drawn (their tubes stay, dark).
 //
-//   const MP = startMusicPlaces({ W, walls, input, game, boarding, mission, quiet })
+//   const MP = startMusicPlaces({ W, walls, input, usable, game, boarding, mission, quiet })
+//     usable: the game's helper for the mouse over what can be used (src/usable.js)
 //     game: src/music/game.js's G; quiet(): something else's prompt or question is up
 //   MP.update(dt, P, playing)   each frame
 //   MP.open(i) / MP.close() / MP.state()     (the rigs: GAME.musicPlaces); MP.screens: [{ id, room, song, at, facing }]
@@ -56,7 +57,7 @@ const CSS = `
 body:has(.pnm-over:not([hidden])) .pnj-prompt { visibility: hidden; }
 `;
 
-export function startMusicPlaces({ W, walls, input = null, game, boarding = null, mission = null, quiet = () => false }) {
+export function startMusicPlaces({ W, walls, input = null, usable = null, game, boarding = null, mission = null, quiet = () => false }) {
   if (!document.getElementById('pnm-over-css')) { const st = document.createElement('style'); st.id = 'pnm-over-css'; st.textContent = CSS; document.head.appendChild(st); }
   const music = game.music, tap = tapOf(music);
   let picture = keptPicture(localStorage), lightsOn = hallwayOn(localStorage);
@@ -226,7 +227,6 @@ void main() {
       if (L.picture !== picture) { picture = L.picture; keepPicture(localStorage, picture); apply(); paintedAt = -1; }
     });
     mounted = mountMusicControls(over, music, { keep: '', link, play: false, hallway: { on: () => lightsOn, set: setLights }, onSong: (s) => game.edit(s), done: () => close() });
-    setCursor(false);
     addEventListener('keydown', onKey, true);
     return true;
   }
@@ -244,18 +244,8 @@ void main() {
     if (near && !prompt.hidden && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); e.stopImmediatePropagation(); open(); }
   }, true);
   // (a mouse: while a screen is near enough to use, the pointer over it is a hand and a click opens its controls, as
-  // the drill's view does over a rock: src/drillview.js; a tap is the prompt's button)
-  const canvasEl = W.renderer && W.renderer.domElement, ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
-  let pointerOn = false;
-  function setCursor(on) { if (on === pointerOn || !canvasEl) return; pointerOn = on; canvasEl.style.cursor = on ? 'pointer' : ''; }
-  const overNear = (x, y) => {
-    if (!near || prompt.hidden || isOpen || !canvasEl) return false;
-    const r = canvasEl.getBoundingClientRect(); _ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(_ndc, W.camera);
-    return ray.intersectObject(near.mesh, true).length > 0;
-  };
-  if (canvasEl) canvasEl.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') setCursor(overNear(e.clientX, e.clientY)); });
-  if (input && input.onPick) input.onPick((pk) => { if (pk.hit && pk.hit.data && pk.hit.data.musicScreen && !pk.touch && near && near.id === pk.hit.data.musicScreen && !prompt.hidden) open(near); });
+  // E does: the game's one helper for everything that can be used, src/usable.js; a tap is the prompt's button)
+  if (usable) usable.add({ name: 'music screen', ready: () => !!(near && !prompt.hidden && !isOpen && playing), shape: () => (near ? near.mesh : null), use: () => open(near) });
 
   // ── each frame ──
   const _d = new THREE.Vector3(), _c = new THREE.Vector3(), frus = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere();
@@ -320,7 +310,6 @@ void main() {
       }
       if (near) prompt.querySelector('small').textContent = near.song === 'arena' ? 'Change the arena\'s song' : 'Change the station\'s song';
       prompt.hidden = !near || !!isOpen || !!quiet() || !!(mission && mission.busy) || near.song !== game.which;
-      if (prompt.hidden) setCursor(false);
     },
     open: (i) => open(typeof i === 'number' ? screens[i] : typeof i === 'string' ? screens.find((S) => S.id === i) : near),
     close,
