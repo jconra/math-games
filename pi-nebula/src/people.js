@@ -346,6 +346,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     return false;
   };
+  // (THE MAKER WHILE THE GAME LOADS, 2026-11-26: the spots, the talking spots and the seats are tried a few at a time,
+  // the page given its turn between, so a name being typed on the title is never held up for long; some five seconds in
+  // one go before)
+  let lastTurn = performance.now();
+  const turn = async () => { if (performance.now() - lastTurn > 12) { await new Promise((go) => setTimeout(go, 0)); lastTurn = performance.now(); } };
   const okSpot = (p, post = false) => p && p.y - floorOf(p) < 0.45 && !(onDeck(p) && noGo(p.x, p.z)) && (post || (roomy(p) && walkOut(p)));
   for (const [name, defs] of Object.entries(SPOTS)) {
     groups[name] = [];
@@ -354,6 +359,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // (a spot the station has not, or that nobody can stand on, is kept as a gap: a post's number stays its own)
       if (!all.length) { missing.push('spot ' + name); groups[name].push(null); continue; }
       for (const r of all) {
+        await turn();
         const s = place(W, walls, at, r, pieces);
         if (!s || !okSpot(s.pos, posts.has(name))) { missing.push('spot ' + name + '.' + groups[name].length + (s ? (noGo(s.pos.x, s.pos.z) ? ' (on a patch kept off)' : s.pos.y >= 0.45 ? ' (not on the floor)' : ' (no room round it)') : ' (no floor)')); groups[name].push(null); continue; }
         if (s.heading == null) { const z = W.zoneAt(s.pos), c = z ? z.box.getCenter(new THREE.Vector3()) : null; s.heading = c ? Math.atan2(c.x - s.pos.x, c.z - s.pos.z) : 0; }
@@ -366,6 +372,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   for (const [name, defs] of Object.entries(TALKS)) {
     talks[name] = [];
     for (const at of defs) {
+      await turn();
       const r = rough(W, pieces, at); if (!r) { missing.push('talk ' + name); continue; }
       const hd = r.heading ?? 0, fx = Math.sin(hd) * APART / 2, fz = Math.cos(hd) * APART / 2, two = [];
       for (const sg of [-1, 1]) { const p = walls.snap(r.p.x + fx * sg, r.p.y + 0.35, r.p.z + fz * sg, 0.6); if (okSpot(p)) two.push(p); }
@@ -397,6 +404,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         for (const k of d.two ? [-0.42, 0.42] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true, table: o.clone() });
       }
       for (const s of list2) {
+        await turn();
         // where one stands to sit down: behind a stool (away from its table), in front of a bench, beside a desk chair
         // (its back is in the way behind it, its desk in front: the side away from the desk's middle first)
         let ap = null;

@@ -26,7 +26,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeMaterials, U } from '../kit/materials.js';
 import { createSky } from '../world/sky.js';
-import { buildRoom, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
+import { buildRoomSoon, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
 import { makeBeams, beamsOf } from '../kit/beams.js';
@@ -53,6 +53,37 @@ const FAR = new THREE.Vector3(1e6, 1e6, 1e6), ONE = [null];
 // in the title's name box or a press of its maker, is seen to before the next piece. THE MAKER WHILE THE GAME LOADS,
 // 2026-11-26: the rooms' shine was worked out in one go of some nine seconds, and nothing typed got through)
 const beat = () => new Promise((done) => setTimeout(done, 0));
+// (THE MAKER WHILE THE GAME LOADS: each shader's first use, when three asks the graphics card how it came out and where
+// its inputs are (some 10 ms each, a few hundred of them, all at the first picture before), taken a few at a time with
+// a beat between, for the shaders of what is under root; three's own program objects, as its renderer keeps them)
+export async function usePrograms(renderer, root) {
+  const progs = new Set();
+  root.traverse((o) => { for (const m of [].concat(o.material || [])) { const P = renderer.properties.get(m); if (P && P.programs) for (const p of P.programs.values()) progs.add(p); } });
+  let t0 = performance.now();
+  for (const p of progs) {
+    try { p.getUniforms(); p.getAttributes(); } catch (e) { /* used at its first picture, as before */ }
+    if (performance.now() - t0 > 12) { await beat(); t0 = performance.now(); }
+  }
+}
+// (a cube camera's six pictures, as three's CubeCamera.update draws them, a beat between each: one room's six held the
+// page about a third of a second: THE MAKER WHILE THE GAME LOADS)
+async function cubeSoon(cc, renderer, scene) {
+  if (cc.parent === null) cc.updateMatrixWorld();
+  const { renderTarget, activeMipmapLevel } = cc;
+  if (cc.coordinateSystem !== renderer.coordinateSystem) { cc.coordinateSystem = renderer.coordinateSystem; cc.updateCoordinateSystem(); }
+  const cams = cc.children.slice(0, 6), mips = renderTarget.texture.generateMipmaps;
+  renderTarget.texture.generateMipmaps = false;
+  for (let i = 0; i < 6; i++) {
+    const was = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), level = renderer.getActiveMipmapLevel(), xr = renderer.xr.enabled;
+    renderer.xr.enabled = false;
+    if (i === 5) renderTarget.texture.generateMipmaps = mips;     // (the mipmaps made with the last side)
+    renderer.setRenderTarget(renderTarget, i, activeMipmapLevel);
+    renderer.render(scene, cams[i]);
+    renderer.setRenderTarget(was, face, level); renderer.xr.enabled = xr;
+    if (i < 5) await beat();
+  }
+  renderTarget.texture.needsPMREMUpdate = true;
+}
 const breath = () => new Promise((done) => { let went = false; const go = () => { if (!went) { went = true; done(); } }; requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 120); });
 
 export async function loadStation({ canvas, quality = null, rig = false, room = 'station', say = () => {} } = {}) {
@@ -63,9 +94,12 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   renderer.shadowMap.enabled = false; renderer.info.autoReset = false;
   renderer.setPixelRatio(Math.min(devicePixelRatio, Q.ratio));
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, 1, 0.03, SEES);
+  await beat();      // (THE MAKER WHILE THE GAME LOADS: the page's turn between these first pieces too)
   const mats = makeMaterials(), pmrem = new THREE.PMREMGenerator(renderer);
+  await beat();
   const fill = new THREE.HemisphereLight(0xdde2e8, 0x5d6065, 0.75); scene.add(fill);
   const dust = makeDust(); dust.visible = false; scene.add(dust);
+  await beat();
   const sky = createSky(renderer, { quality: qName }); scene.add(sky.object);
   scene.fog = new THREE.Fog(0x8a8e93, 7, 60);
   U.aoDirect.value = 0.6; U.bakeGain.value = 1;
@@ -106,7 +140,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     if (!zoneSets.has(id)) { const m = makeMaterials(); zoneSets.set(id, { ...mats, solid: m.solid, floor: m.floor, decal: m.decal, solidInst: mats.solidInst, floorInst: mats.floorInst, decalInst: mats.decalInst }); }
     return zoneSets.get(id);
   };
-  const built = buildRoom(R, mats, { bake: Q.bake, saved, zoneMats, compact: true });
+  const built = await buildRoomSoon(R, mats, { bake: Q.bake, saved, zoneMats, compact: true }, beat);   // (a piece at a time: the title usable meanwhile)
   scene.add(built.group);
   hoopLights(built, Q.hoop, mats);   // (before the first picture: its room's materials are made once, with it or without)
   // (the beams of lit haze some lights carry, as the Kit Lab shows them: the forge's pours; none at low quality)
@@ -120,14 +154,29 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
 
   // ── the shine: the station's picture of itself (twice, so the second holds the first's shine), then each room's ──
   say(0.62, 'Switching on the lights'); await breath();
+  // (THE MAKER WHILE THE GAME LOADS: every picture the rooms' materials use sent to the graphics card one at a time, a
+  // beat between, before the first pictures below would send them all in one go)
+  { const seen = new Set(); let t0 = performance.now();
+    const maps = []; scene.traverse((o) => { for (const m of [].concat(o.material || [])) for (const v of Object.values(m)) if (v && v.isTexture && !v.isRenderTargetTexture && !seen.has(v)) { seen.add(v); maps.push(v); } });
+    for (const t of maps) { try { renderer.initTexture(t); } catch (e) { /* sent at its first picture, as before */ } if (performance.now() - t0 > 12) { await beat(); t0 = performance.now(); } } }
   // (THE MAKER WHILE THE GAME LOADS, 2026-11-26: each room's shaders built on their own, a beat between rooms, before
   // the pictures below would build them all in one go; the same shaders, so the same light, but the title's name box
   // and maker are heard between rooms)
-  const warm = async () => {
+  // (target: what the pictures below are drawn into, a cube's render target: a shader is built for what it draws into,
+  // the screen or a target, so it is built for that)
+  const warm = async (target = null) => {
     for (const z of built.zones) {
       const was = z.group.visible; z.group.visible = true;
-      try { renderer.compile(z.group, camera, scene); } catch (e) { /* drawn as before: built at its first picture */ }
-      z.group.visible = was; await beat();
+      // (three's compileAsync: the shaders handed to the graphics card at once, then waited for without holding the page;
+      // a browser that cannot build them alongside builds them there and then, a room at a time)
+      let ready = null;
+      const was2 = renderer.getRenderTarget(); renderer.setRenderTarget(target);
+      try { ready = renderer.compileAsync ? renderer.compileAsync(z.group, camera, scene) : (renderer.compile(z.group, camera, scene), null); } catch (e) { /* drawn as before: built at its first picture */ }
+      renderer.setRenderTarget(was2);
+      z.group.visible = was;
+      if (ready) await ready.catch(() => {});
+      await beat();
+      await usePrograms(renderer, z.group);
     }
   };
   let envTex = null;
@@ -135,8 +184,8 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     const rt = new THREE.WebGLCubeRenderTarget(Q.probe, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(0.05, 80, rt);
     cc.position.set(...(R.probe || R.views?.start?.at || R.spawn?.at || [0, 1.6, 0])); scene.add(cc);
     scene.environment = null; sky.object.visible = false;
-    await warm();
-    for (let i = 0; i < 2; i++) { if (i) await warm(); cc.update(renderer, scene); const t = pmrem.fromCubemap(rt.texture).texture; if (envTex) envTex.dispose(); envTex = t; scene.environment = t; await beat(); }
+    await warm(rt);
+    for (let i = 0; i < 2; i++) { if (i) await warm(rt); await cubeSoon(cc, renderer, scene); const t = pmrem.fromCubemap(rt.texture).texture; if (envTex) envTex.dispose(); envTex = t; scene.environment = t; await beat(); }
     sky.object.visible = true; scene.remove(cc); rt.dispose();
   }
   if (R.rooms) {
@@ -145,13 +194,13 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     scene.add(cc);
     for (let pass = 0; pass < 2; pass++) {
       say(0.7 + pass * 0.12, pass ? 'Polishing the floors' : 'Switching on the lights');
-      await warm();      // (the station's shine, then each room's own, on the materials: their shaders built again, room by room)
+      await warm(rt);      // (the station's shine, then each room's own, on the materials: their shaders built again, room by room)
       const envs = [];
       for (const z of built.zones) {
         if (z.with) { envs.push(null); continue; }
         const c = z.box.getCenter(new THREE.Vector3());
         cc.position.set(...(z.probe || [c.x, z.box.min.y + 1.6, c.z]));
-        updateZones(built, cc.position, RANGE); cc.update(renderer, scene);
+        updateZones(built, cc.position, RANGE); await cubeSoon(cc, renderer, scene);
         envs.push(pmrem.fromCubemap(rt.texture).texture);
         await beat();
       }
@@ -213,7 +262,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     for (const f of W0.after) f(renderer);
   }
 
-  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
+  return { target: () => (composer ? composer.readBuffer : null), renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, driven, get env() { return envTex; },
     get seenFrom() { return W0.seenFrom; }, set seenFrom(p) { W0.seenFrom = p || null; },
     get alone() { return W0.alone; }, set alone(ids) { setAlone(ids); },
     get rooms() { return W0.rooms; }, set rooms(fn) { W0.rooms = fn || null; }, after: W0.after, sees: SEES, pmrem };

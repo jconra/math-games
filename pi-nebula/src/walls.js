@@ -51,7 +51,7 @@
 // door is most of the way open. A part that glides by itself (the big scanner's ring) is not part of either: the
 // whole box it glides through stops a person, always.
 import * as THREE from 'three';
-import { makeVoxels } from '../kit/bake.js';
+import { makeVoxels, makeVoxelsSoon } from '../kit/bake.js';
 import { frameOf } from './standing.js';
 
 export const BODY = {
@@ -67,9 +67,10 @@ const FC = 0.5;                  // the floors' squares (m)
 // a person walking head on into a door's frame is eased sideways into the opening, up to `most` (m), in steps of `step`
 export const NUDGE = { most: 0.24, step: 0.02 };
 
-export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], ground = null } = {}) {
-  const t0 = performance.now();
-  // ── the walls and the floors: the station's, and the parts added later (each its own, tried after it) ──────────
+// THE WALLS' VOXELS AHEAD (2026-11-26, THE MAKER WHILE THE GAME LOADS): the station's and its rooms-apart's voxels,
+// made a piece at a time (bake.js makeVoxelsSoon) with the page given its turn between, then handed to makeWalls as
+// `ahead`; the very same voxels as makeWalls makes itself
+function wallsGeos(built, apart) {
   const solid = [], up = [], own = new Map();
   for (const z of built.zones) {
     // (a room that can be stood somewhere else: a part of its own, below)
@@ -77,10 +78,24 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
     for (const k of ['solid', 'floor', 'glass', 'shield']) if (z.merged[k]) (S ? S.solid : solid).push(z.merged[k]);
     for (const k of ['solid', 'floor']) if (z.merged[k]) (S ? S.up : up).push(z.merged[k]);
   }
+  return { solid, up, own };
+}
+export async function wallsAhead(built, { voxel = 0.1, apart = [] } = {}) {
+  const { solid, up, own } = wallsGeos(built, apart), rooms = new Map(), floors = new Map();
+  const turn = () => new Promise((go) => setTimeout(go, 0));
+  const station = solid.length ? await makeVoxelsSoon(solid, voxel) : null;
+  const F0 = await makeFloorsSoon(up, turn);
+  for (const [id, S] of own) { if (S.solid.length) rooms.set(id, await makeVoxelsSoon(S.solid, voxel)); floors.set(id, await makeFloorsSoon(S.up, turn)); }
+  return { voxel, station, rooms, F0, floors };
+}
+export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], ground = null, ahead = null } = {}) {
+  const t0 = performance.now();
+  // ── the walls and the floors: the station's, and the parts added later (each its own, tried after it) ──────────
+  const { solid, up, own } = wallsGeos(built, apart), A = ahead && ahead.voxel === voxel ? ahead : null;
   // (no walls of the station's own, a planet's ground alone: nothing is full, a line goes on)
-  const V = solid.length ? makeVoxels(solid, voxel) : { full: () => false, march: () => -1, bricks: 0, bytes: 0 };
+  const V = solid.length ? (A && A.station) || makeVoxels(solid, voxel) : { full: () => false, march: () => -1, bricks: 0, bytes: 0 };
   const tV = performance.now();
-  const F0 = makeFloors(up);
+  const F0 = (A && A.F0) || makeFloors(up);
   const parts = new Map();
   let extra = [];                 // (the parts in play: for the loops below, no Map walked on every step)
   let pathing = false;            // (working out a way: a part whose `when` asks is counted as if its door were open)
@@ -589,9 +604,9 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
   // (at: where it stands, if not where it is made: walls.place)
   // (box: its voxels' box, if more than its own (a camera's line is felt by a part only from inside that box: the
   // bridge to the Hauler gives one from the airlock to the Hauler's rooms, src/dockwalk.js)
-  function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null, at = null, box: vbox = null } = {}) {
+  function add(key, { solid: S = [], up: U = [], doors: D = [], when = null, voxel: vs = voxel, r = null, at = null, box: vbox = null, voxels = null, floors = null } = {}) {
     drop(key);
-    const t = performance.now(), L = { key, when, r, V: S.length ? makeVoxels(S, vs, vbox) : null, F: makeFloors(U), box: new THREE.Box3(), doors: [], dy: 0, fr: null };
+    const t = performance.now(), L = { key, when, r, V: S.length ? voxels || makeVoxels(S, vs, vbox) : null, F: floors || makeFloors(U), box: new THREE.Box3(), doors: [], dy: 0, fr: null };
     for (const g of [...S, ...U]) { if (!g.boundingBox) g.computeBoundingBox(); L.box.union(g.boundingBox); }
     L.box.expandByScalar(0.6); L.wbox = L.box;
     for (const d of D) { const e = { D: d.D, box: d.box, locked: false, part: key, when }; L.doors.push(e); doors.push(e); }
@@ -640,7 +655,7 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
   // the rooms that can be stood somewhere else, each a part of its own (felt exactly as when they were part of the
   // station's own walls, until they are placed)
   const tA = performance.now();
-  for (const [id, S] of own) add('room:' + id, { solid: S.solid, up: S.up });
+  for (const [id, S] of own) add('room:' + id, { solid: S.solid, up: S.up, voxels: (A && A.rooms.get(id)) || null, floors: (A && A.floors.get(id)) || null });
   stats.apartMs = Math.round(performance.now() - tA);
   // (radius(x, y, z): a person's half width against the walls there, BODY.r, or a ship's cabin's own where they are in one)
   return { V, floorAt, free, move, snap, path, plan, reach, doors, stats, add, drop, lift, place, parts, solidAt: (x, y, z) => full(x, y, z), steps: () => STEPS.size,
@@ -649,12 +664,16 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
 
 // THE FLOORS of a set of geometries: every triangle that faces up, sorted into half-metre squares; at(x, z, top, drop)
 // the highest of them under a point, not above `top` and not more than `drop` below it (or null)
-function makeFloors(geos) {
+function makeFloors(geos) { const it = floorSteps(geos); let r; while (!(r = it.next()).done); return r.value; }
+// (the same, some 12 ms' worth at a time, the page given its turn between: wallsAhead)
+async function makeFloorsSoon(geos, turn) { const it = floorSteps(geos); let r, t0 = performance.now(); while (!(r = it.next()).done) if (performance.now() - t0 > 12) { await turn(); t0 = performance.now(); } return r.value; }
+function* floorSteps(geos) {
   const T = [], cells = new Map();
   const key = (i, k) => (i + 8192) * 16384 + (k + 8192);
   for (const g of geos) {
     const p = g.attributes.position.array, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.length / 3;
     for (let t = 0; t < n; t += 3) {
+      if (t % 3000 === 0) yield;
       const a = (ix ? ix[t] : t) * 3, b = (ix ? ix[t + 1] : t + 1) * 3, c = (ix ? ix[t + 2] : t + 2) * 3;
       const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, len = Math.hypot(nx, ny, nz);

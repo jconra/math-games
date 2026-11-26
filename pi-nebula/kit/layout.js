@@ -116,13 +116,28 @@ function mergePlaced(items) {
 export function zonesOf(room) { return room.rooms ? room.rooms : [{ id: room.id || 'room', name: room.name, probe: room.probe, sky: room.sky, coarse: room.coarse, pieces: room.pieces || [] }]; }
 // the grid a zone's pieces are placed on: its own, its room's, or (none given) the station's
 const gridOf = (zd, room) => zd.grid || room.grid || null;
+// THE ROOMS BUILT A PIECE AT A TIME (2026-11-26, THE MAKER WHILE THE GAME LOADS): buildRoom's work as steps (a step a
+// piece, a zone, a door leaf); buildRoom takes them all at once, as ever; buildRoomSoon takes some 12 ms' worth at a
+// time and gives the page its turn between (turn(): a promise), so the title can be used while the station is built
 export function buildRoom(room, mats, opts = {}) {
+  const it = roomSteps(room, mats, opts); let r;
+  while (!(r = it.next()).done);
+  return r.value;
+}
+export async function buildRoomSoon(room, mats, opts = {}, turn = () => new Promise((go) => setTimeout(go, 0))) {
+  const it = roomSteps(room, mats, opts); let r, t0 = performance.now();
+  while (!(r = it.next()).done) if (performance.now() - t0 > 12) { await turn(); t0 = performance.now(); }
+  return r.value;
+}
+function* roomSteps(room, mats, opts) {
   const t0 = performance.now(), problems = [], lights = [], doors = [], glides = [], leafGroups = new Map(), zones = [];
   let pieceCount = 0;
   for (const zd of zonesOf(room)) {
+    yield;
     const list = expand(zd.pieces || [], problems), lists = Object.fromEntries(MAT_KEYS.map((k) => [k, []])), stills = {};
     pieceCount += list.length;
     for (const pl of list) {
+      yield;
       const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant, zd.coarse), off = [...(pl.off || [0, 0, 0])];
       if (def.at === 'wall') off[2] += WALL_FACE;
       // (a piece whose catalog entry has a `raise` stands that much higher than it is placed: the Miner on its longer legs)
@@ -181,6 +196,7 @@ export function buildRoom(room, mats, opts = {}) {
   // voxels, so a room's corners and shadows see its neighbours' walls through a doorway)
   let V = null, bins = null, bakeMs = 0, saved = 0, live = 0, verts = 0;
   for (const z of zones) {
+    yield;
     const todo = [];
     for (const k of BAKED) if (z.merged[k]) { if (opts.saved && applyBake(opts.saved, z.id, k, z.merged[k], THREE)) saved++; else todo.push(z.merged[k]); verts += z.merged[k].attributes.position.count; }
     z.bakedFrom = todo.length ? 'live' : 'saved';
@@ -193,7 +209,7 @@ export function buildRoom(room, mats, opts = {}) {
   }
   // smaller numbers for what does not need floats, once the light is in: normals as 16-bit, the painted parts' colour
   // and roughness / metalness / wear as bytes (a vertex shrinks from about 84 bytes to 52: less to send to the GPU)
-  if (opts.compact !== false) for (const z of zones) for (const k of ['solid', 'floor']) { const g = z.merged[k]; if (!g) continue; compact(g, 'normal', Int16Array, 32767); if (k === 'solid') { compact(g, 'color', Uint8Array, 255); compact(g, 'aRMW', Uint8Array, 255); } }
+  if (opts.compact !== false) for (const z of zones) for (const k of ['solid', 'floor']) { yield; const g = z.merged[k]; if (!g) continue; compact(g, 'normal', Int16Array, 32767); if (k === 'solid') { compact(g, 'color', Uint8Array, 255); compact(g, 'aRMW', Uint8Array, 255); } }
   const group = new THREE.Group(); group.name = room.name || 'room';
   const stats = { pieces: pieceCount, draws: 0, tris: 0, perMat: {}, perZone: {}, zones: zones.length, lights: lights.length, doors: doors.length, glides: glides.length, leaves: 0,
     bake: { ms: Math.round(bakeMs), verts, saved, live, voxels: V?.count || 0, bricks: V?.bricks || 0, voxelMB: V ? +(V.bytes / 1048576).toFixed(1) : 0, voxel: V?.s || 0 }, problems };
@@ -219,6 +235,7 @@ export function buildRoom(room, mats, opts = {}) {
   }
   // the door leaves: one instanced mesh per material per kind of leaf
   for (const [key, G] of leafGroups) {
+    yield;
     const lp = G.piece, byMat = {};
     for (const part of lp.parts) (byMat[part.mat] ||= []).push(part.geo.clone());
     const geos = {}; for (const [k, gs] of Object.entries(byMat)) geos[k] = mergeGeometries(gs, false);

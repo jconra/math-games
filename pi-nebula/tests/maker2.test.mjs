@@ -14,7 +14,8 @@ const THEME = read('../src/ui/title.js'), CSS = read('../src/ui/title.css');
 const ARM_LENGTH = new Function(`return ${/export const ARM_LENGTH = (\{[^\n]*\});/.exec(CREW)[1]};`)();
 
 test('the arms are made shorter (never more than the 10% the game\'s maker named), the hands smaller, one setting for every outfit (THE ARMS ONE LENGTH stands)', () => {
-  // (by the numbers, 3% brings the fingertips to about half way down the thigh: MAKER_2.md)
+  // (5%: the least the game's maker named; by the numbers 3% already brings the fingertips past half way down the
+  // thigh, and he is asked which he likes: MAKER_2.md, QUESTIONS.md)
   assert.ok(ARM_LENGTH.arm >= 0.90 && ARM_LENGTH.arm < 1, `arm ${ARM_LENGTH.arm}`);
   assert.ok(ARM_LENGTH.hand > 0.8 && ARM_LENGTH.hand < 1, `hand ${ARM_LENGTH.hand}`);
   // (no outfit of its own: crew.json has no per-outfit arm length)
@@ -71,4 +72,25 @@ test('the figure as large as the window allows: on a wide window the card takes 
   assert.match(block, /\.cst-panel:has\(> \.cst-crew\) \{ flex: 1 1 auto;/);
   assert.match(block, /grid-template-rows: auto 1fr auto auto;/);
   assert.match(block, /\.cst-stage \{ height: auto;/);
+});
+
+test('an android\'s own hands keep their size; its arms are drawn in as everyone\'s', () => {
+  assert.match(CREW, /AL = \(lib\.entry\('suit', id\) \|\| \{\}\)\.ownHands \? \{ \.\.\.AL0, hand: 1 \} : AL0;/);
+  const list = JSON.parse(read('../assets/crew/crew.json'));
+  for (const id of ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine']) assert.ok(list.parts.suit.find((x) => x.id === id).ownHands, id);
+});
+
+test('the station is put together a piece at a time, the page given its turn between: rooms, light, shaders, walls, people', () => {
+  const STATION = read('../src/station.js'), WALLS = read('../src/walls.js'), PEOPLE = read('../src/people.js'), LAYOUT = read('../kit/layout.js'), BAKE = read('../kit/bake.js');
+  assert.match(STATION, /await buildRoomSoon\(R, mats, /);
+  assert.match(LAYOUT, /export function buildRoom\(room, mats, opts = \{\}\) \{\n  const it = roomSteps\(room, mats, opts\);/);
+  assert.match(STATION, /await cubeSoon\(cc, renderer, scene\)/);
+  assert.doesNotMatch(STATION, /cc\.update\(renderer, scene\)/);
+  assert.match(STATION, /export async function usePrograms\(renderer, root\)/);
+  assert.match(MAIN, /const ahead = await wallsAhead\(W\.built, \{ apart: STANDS_ANYWHERE \}\);/);
+  assert.match(WALLS, /const V = solid\.length \? \(A && A\.station\) \|\| makeVoxels\(solid, voxel\)/);
+  assert.match(BAKE, /export async function makeVoxelsSoon\(/);
+  assert.equal((PEOPLE.match(/await turn\(\);/g) || []).length, 3);
+  // (and the shaders built for what they draw into: the bloom's target)
+  assert.match(MAIN, /W\.renderer\.setRenderTarget\(W\.target\(\)\);/);
 });

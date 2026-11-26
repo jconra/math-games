@@ -26,12 +26,12 @@ import * as THREE from 'three';
 import { GAME_NAME } from './name.js';
 import * as save from './save.js';
 import { showTitle } from './ui/title.js';
-import { loadStation } from './station.js';
+import { loadStation, usePrograms } from './station.js';
 import { loadCrew } from '../kit/crew.js';
 import { drawLooks, drawn, storedReady, storedInfo, useKit, restStudio, made } from './portraits.js';
 import { showLoadBar } from './ui/loadbar.js';
 import { recipeOf } from './looks.js';
-import { makeWalls } from './walls.js';
+import { makeWalls, wallsAhead } from './walls.js';
 import { makeBoarding, STANDS_ANYWHERE } from './boarding.js';
 import { makeDockWalk } from './dockwalk.js';
 import { makeVisit } from './visit.js';
@@ -135,7 +135,9 @@ async function boot() {
   // (the parked Miner's own room is felt as a part of its own: flown in by hand it stands wherever it was set down,
   // and its hull and legs with it: walls.js `apart`, boarding.js stand. The Explorer's and the Medic's too: the Miner,
   // flown into their hangars, can shove them about: src/visit.js)
-  const walls = makeWalls(W.built, { portals: W.R.portals, apart: STANDS_ANYWHERE });
+  // (the walls' voxels first, a piece at a time, the title usable meanwhile: walls.js wallsAhead)
+  const ahead = await wallsAhead(W.built, { apart: STANDS_ANYWHERE });
+  const walls = makeWalls(W.built, { portals: W.R.portals, apart: STANDS_ANYWHERE, ahead });
   for (const d of walls.doors) if (d.locked) W.keepShut.add(d.D);   // (the doors to space stay shut)
   GAME.walls = walls;
   // (the big scanner glides only with someone on its bed: parked until the station's people put a patient there)
@@ -361,7 +363,21 @@ async function boot() {
   // still be used; the first picture was one long go of some nine seconds otherwise, in which nothing typed or pressed on
   // the title got through)
   progress(0.97, 'Getting the picture ready');
-  try { if (W.renderer.compileAsync) await Promise.race([W.renderer.compileAsync(W.scene, W.camera).catch((e) => console.warn('station: the shaders built ahead', e)), new Promise((go) => setTimeout(go, 30000))]); } catch (e) { console.warn('station: the shaders built ahead', e); }
+  // (and every picture the station's materials use sent to the graphics card one at a time, the page given its turn
+  // between: sent all at once at the first picture they held the page over a second)
+  { const seen = new Set(), maps = []; W.scene.traverse((o) => { for (const m of [].concat(o.material || [])) for (const v of Object.values(m)) if (v && v.isTexture && !v.isRenderTargetTexture && !seen.has(v)) { seen.add(v); maps.push(v); } });
+    let t0 = performance.now();
+    for (const t of maps) { try { W.renderer.initTexture(t); } catch (e) { /* sent at the first picture, as before */ } if (performance.now() - t0 > 12) { await new Promise((go) => setTimeout(go, 0)); t0 = performance.now(); } } }
+  // (built for what the station's picture is drawn into: the bloom's target, or the screen)
+  try {
+    if (W.renderer.compileAsync) {
+      const was = W.renderer.getRenderTarget(); W.renderer.setRenderTarget(W.target());
+      const built = W.renderer.compileAsync(W.scene, W.camera).catch((e) => console.warn('station: the shaders built ahead', e));
+      W.renderer.setRenderTarget(was);
+      await Promise.race([built, new Promise((go) => setTimeout(go, 30000))]);
+    }
+  } catch (e) { console.warn('station: the shaders built ahead', e); }
+  await usePrograms(W.renderer, W.scene);
   tick(1 / 60);
   canvas.classList.add('is-on');
   T.setProgress(1, 'Station ready');

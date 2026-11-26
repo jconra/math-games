@@ -46,9 +46,10 @@ export class Voxels {
     return b >= 0 && this.pool[b * BS3 + (((k & 7) << 3) + (j & 7)) * BS + (i & 7)] === 1;
   }
   // mark every voxel a geometry's triangles pass through (by sampling each triangle finer than a voxel)
-  addGeometry(geo) {
-    const p = geo.attributes.position.array, ix = geo.index ? geo.index.array : null, n = ix ? ix.length : p.length / 3, st = this.s * 0.5, inv = 1 / this.s, mx = this.min.x, my = this.min.y, mz = this.min.z;
-    for (let t = 0; t < n; t += 3) {
+  // (from, to: only the triangles from that place in its list to that one, three to a triangle: makeVoxelsSoon)
+  addGeometry(geo, from = 0, to = Infinity) {
+    const p = geo.attributes.position.array, ix = geo.index ? geo.index.array : null, n = Math.min(to, ix ? ix.length : p.length / 3), st = this.s * 0.5, inv = 1 / this.s, mx = this.min.x, my = this.min.y, mz = this.min.z;
+    for (let t = from; t < n; t += 3) {
       const a = (ix ? ix[t] : t) * 3, b = (ix ? ix[t + 1] : t + 1) * 3, c = (ix ? ix[t + 2] : t + 2) * 3;
       const ax = p[a], ay = p[a + 1], az = p[a + 2], ux = p[b] - ax, uy = p[b + 1] - ay, uz = p[b + 2] - az, vx = p[c] - ax, vy = p[c + 1] - ay, vz = p[c + 2] - az;
       const nu = Math.max(1, Math.ceil(Math.hypot(ux, uy, uz) / st)), nv = Math.max(1, Math.ceil(Math.hypot(vx, vy, vz) / st));
@@ -87,6 +88,21 @@ export function makeVoxels(occluders, size, box = null) {
   const bx = box ? box.clone() : new THREE.Box3();
   if (!box) for (const g of occluders) { g.computeBoundingBox(); bx.union(g.boundingBox); }
   const V = new Voxels(bx, size); for (const g of occluders) V.addGeometry(g);
+  return V;
+}
+
+// THE SAME, A PIECE AT A TIME (2026-11-26, THE MAKER WHILE THE GAME LOADS): the voxels made the same, the triangles
+// taken some 12 ms' worth at a time with the page given its turn between (turn(): a promise, the page's turn), so the
+// title can be used while the station's walls are worked out (some three seconds in one go before)
+export async function makeVoxelsSoon(occluders, size, box = null, turn = () => new Promise((go) => setTimeout(go, 0))) {
+  const bx = box ? box.clone() : new THREE.Box3();
+  if (!box) for (const g of occluders) { g.computeBoundingBox(); bx.union(g.boundingBox); }
+  const V = new Voxels(bx, size), STEP = 3 * 200;
+  let t0 = performance.now();
+  for (const g of occluders) {
+    const n = g.index ? g.index.count : g.attributes.position.count;
+    for (let t = 0; t < n; t += STEP) { V.addGeometry(g, t, t + STEP); if (performance.now() - t0 > 12) { await turn(); t0 = performance.now(); } }
+  }
   return V;
 }
 

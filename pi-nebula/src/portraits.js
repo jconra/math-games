@@ -71,21 +71,38 @@ async function draw(lib, recipe, kinds, pose = null, quality = 0.9) {
   c.play(stand.clip, { fade: 0 }); c.update(0); c.update(stand.at);
   const other = held && held.c.root;
   if (other) other.visible = false;
-  const got = snap(S, c, kinds, quality);
+  const got = await snap(S, c, kinds, quality);
   if (other) other.visible = true;
   S.scene.remove(c.root); c.dispose();
   liveRender();
   return got;
 }
 // a person standing in the studio, drawn as each kind asked for
-function snap(S, c, kinds, quality = 0.9) {
+// (THE MAKER WHILE THE GAME LOADS, 2026-11-26: the page given its turn between the two pictures, and each picture
+// written out by the browser alongside (toBlob), not in the page's own time: a look changed in the maker held the page
+// some 0.4 s before)
+// (the studio's shaders for whoever stands in it now built alongside, by three's compileAsync, and each one's first use
+// taken a few at a time: a person's first picture held the page a third of a second or more before)
+async function shadersReady(S) {
+  try { if (S.renderer.compileAsync) await S.renderer.compileAsync(S.scene, S.camera); } catch (e) { return; }
+  const progs = new Set();
+  S.scene.traverse((o) => { for (const m of [].concat(o.material || [])) { const P = S.renderer.properties.get(m); if (P && P.programs) for (const p of P.programs.values()) progs.add(p); } });
+  let t0 = performance.now();
+  for (const p of progs) { try { p.getUniforms(); p.getAttributes(); } catch (e) { /* at its first picture */ } if (performance.now() - t0 > 12) { await new Promise((go) => setTimeout(go, 0)); t0 = performance.now(); } }
+}
+const asData = (canvas, quality) => new Promise((done) => {
+  canvas.toBlob((b) => { if (!b) { done(canvas.toDataURL('image/webp', quality)); return; } const r = new FileReader(); r.onload = () => done(r.result); r.onerror = () => done(null); r.readAsDataURL(b); }, 'image/webp', quality);
+});
+async function snap(S, c, kinds, quality = 0.9) {
   const got = {};
-  // (as made: facing the front and their own height, whatever the maker's window last had them turned to)
-  c.root.rotation.set(0, 0, 0); c.root.scale.setScalar(1);
+  await shadersReady(S);
   // (a head sized on its outfit, kit/crew.js THE HEAD'S PLACE, is sized about its Head joint: its middle, and the face
   // picture's camera, are taken by that size, so every face fills its window alike. 1 for a head as made)
   const k = c.place && +c.place.size > 0 ? +c.place.size : 1;
   for (const kind of kinds) {
+    if (Object.keys(got).length) await new Promise((go) => setTimeout(go, 0));
+    // (as made: facing the front and their own height, whatever the maker's window last had them turned to)
+    c.root.rotation.set(0, 0, 0); c.root.scale.setScalar(1);
     const [w, h] = SIZES[kind] || SIZES.face, cam = S.camera;
     c.root.updateMatrixWorld(true);
     c.bones.Head.getWorldPosition(_h); _h.y += 0.09 * k; _h.z += 0.03 * k;   // (the middle of the head)
@@ -109,7 +126,7 @@ function snap(S, c, kinds, quality = 0.9) {
     S.out.width = w; S.out.height = h;
     S.pen.clearRect(0, 0, w, h); S.pen.imageSmoothingEnabled = true; S.pen.imageSmoothingQuality = 'high';
     S.pen.drawImage(S.canvas, 0, 0, w, h);
-    got[kind] = S.out.toDataURL('image/webp', quality);
+    got[kind] = await asData(S.out, quality);
   }
   return got;
 }
@@ -286,6 +303,7 @@ function standFor(recipe, still = null) {
       held = { pk, c, frame: null }; S.scene.add(c.root);
       c.play(POSE.clip, { fade: 0 }); c.update(0);
       posed(c); held.frame = frameOf(c);
+      await shadersReady(S);      // (its shaders built before the window first draws them)
       if (pk === LIVE.pk) live.made++;
     } else held.c.setColours(coloursOf(recipe));
     return held.c;
@@ -313,7 +331,7 @@ async function drawMade(look) {
   // (stood as the ready-made pictures' people stand, each time)
   if (c.person.cur) c.person.cur.time = 0;
   c.update(0); c.update(POSE.at);
-  const got = snap(openStudio(), c, ['body', 'face'], 0.86);
+  const got = await snap(openStudio(), c, ['body', 'face'], 0.86);
   // (the window's person in the window's own colours again, drawn again at once: the picture was taken in between)
   if (LIVE.recipe && held && held.c === c && held.pk === LIVE.pk) c.setColours(coloursOf(LIVE.recipe));
   liveRender();
