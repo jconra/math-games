@@ -74,7 +74,7 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
     if (shaders[id]) return shaders[id];
     const V = visualOf(id); if (!V.shader) return null;
     shaders[id] = { loading: true, m: null };
-    const maker = V.shader === 'hex' ? import('./hex.js').then((m) => m.hexMaterial) : import('./electric.js').then((m) => m.electricMaterial);
+    const maker = import('./hex.js').then((m) => m.hexMaterial);
     maker.then((make) => {
       const m = make(THREE, { aspect: WALL.w / WALL.h, px: 1 / PAINT.h });
       // (the picture's own colours are the page's (display) colours; the station draws in linear light, tone-mapped

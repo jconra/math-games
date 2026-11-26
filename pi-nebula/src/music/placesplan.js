@@ -27,7 +27,7 @@ export const songOf = (room) => (room === 'arena' ? 'arena' : 'station');
 
 export const KEEP = { picture: 'pi-nebula.music.picture', hallway: 'pi-nebula.music.hallway' };
 export function keptPicture(store) {
-  try { const v = store && store.getItem(KEEP.picture); if (v && VISUALS.some((x) => x.id === v)) return v; } catch (e) { /* blocked */ }
+  try { const v = store && store.getItem(KEEP.picture); if (v) return visualOf(v).id; } catch (e) { /* blocked */ }
   return VISUALS[0].id;
 }
 export function keepPicture(store, id) { try { if (store) store.setItem(KEEP.picture, visualOf(id).id); } catch (e) { /* not kept */ } }

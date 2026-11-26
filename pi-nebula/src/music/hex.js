@@ -1,5 +1,6 @@
-// THE HEX PICTURE: a second, calmer electric picture, a hexagon wall behind and light beams in front. The game's maker,
-// 2026-11-26, of the Electric picture (src/music/electric.js, kept as it is to compare): "it might be too busy ... it
+// THE HEX PICTURE: the one electric picture (the game's maker, 2026-11-26, of Electric and Hex: "Only Hex."), a hexagon
+// wall behind and light beams in front, made calmer than Electric was. The game's maker, 2026-11-26, of the Electric picture:
+// "it might be too busy ... it
 // might be better if there were fewer effects ... can you do one where instead of the bass fire, the bass fills in the
 // center portions of the hex grid. And maybe the pads also do laser but they are wider and more like spotlights. Maybe
 // the lightning can be an effect in the hex grid that runs out like a strike following the hex outlines. That way its
@@ -25,17 +26,14 @@
 //             family); fading in and out over a few tenths of a second, lasting the chord's length, with a soft pool
 //             of light where it meets the top.
 //
-//   hexMaterial(THREE, o?)   a three.js ShaderMaterial of the picture, as electricMaterial is (o.aspect, o.px)
+//   hexMaterial(THREE, o?)   a three.js ShaderMaterial of the picture, for any flat panel with uvs (o.aspect: its width / height, 46/25; o.px: a pixel, as a share of its height)
 //   hexUniforms(f, U, o?)    puts a tap frame into its uniforms: the same function as Electric's, the same uniforms
 //                            (the material's userData.state); hexState(o?) makes them
 //   HEX_SHADER               { vertex, fragment }
-import { FRAG_HEAD, FRAG_OPEN, FRAG_BEAT, FRAG_MEL, FRAG_END, SLOTS, pictureMaterial, electricState, electricUniforms, ELECTRIC_SHADER } from './electric.js';
+import { FRAG_HEAD, FRAG_OPEN, FRAG_BEAT, FRAG_MEL, FRAG_END, SLOTS, pictureMaterial, electricState, electricUniforms, PICTURE_VERT } from './electric.js';
 
 export const hexState = electricState, hexUniforms = electricUniforms;
-// How the bass's "fills in the center portions of the hex grid" is read: 'insides' (as built: the insides of hexagons,
-// placed by the note) or 'middle' (the hexagons in the middle of the picture, one place for every note); the game's
-// maker is asked which (shots/electric-2/QUESTIONS.md). Only the shader's text changes.
-export const BASS_READING = 'insides';
+// (the bass as built, the insides of hexagons placed by the note: the game's maker, 2026-11-26, "It looks great")
 
 const FRAG_HEX_BASS = `  // ── BASS: the hexagons' insides filling with light, a column of them a note ──
   float bassF = 0.0;
@@ -45,11 +43,9 @@ const FRAG_HEX_BASS = `  // ── BASS: the hexagons' insides filling with ligh
     float x = 0.16 + ( A - 0.32 ) * idx / SPAN_BASS;
     // (on in a few hundredths of a second, held, then gone smoothly over the note's last light)
     float life = held( age, d.z, 2.5 ) * ss( 0.0, 0.07, age ) * ss( d.z + 0.35, d.z, age );
-${BASS_READING === 'middle' ? `    // (the other reading: the hexagons in the middle of the picture, one place for every note, wider the louder)
-    float rr = 0.1 + 0.18 * v, k = ss( rr + 0.02, rr - 0.08, length( hc - mid ) );
-    bassF = max( bassF, life * v * k );` : `    float tall = 0.16 + 0.34 * v;
+    float tall = 0.16 + 0.34 * v;
     float k = ss( HEX * 1.05, HEX * 0.45, abs( hc.x - x ) ) * ss( tall + 0.02, tall - 0.1, hc.y );
-    bassF = max( bassF, life * v * k * ( 1.0 - 0.4 * clamp( hc.y / tall, 0.0, 1.0 ) ) );`}
+    bassF = max( bassF, life * v * k * ( 1.0 - 0.4 * clamp( hc.y / tall, 0.0, 1.0 ) ) );
   }
   if ( bassF > 0.0 ) {
     // (inside the outline, a hair of dark between: the fill and the beat's line stay two things)
@@ -115,4 +111,4 @@ const FRAG_HEX_PADS = `  // ── PADS: wide soft beams, spotlights, in the har
 const FRAG = FRAG_HEAD + FRAG_OPEN + FRAG_BEAT + FRAG_HEX_BASS + FRAG_HEX_LEAD + FRAG_MEL + FRAG_HEX_PADS + FRAG_END;
 
 export const hexMaterial = (THREE, o = {}) => pictureMaterial(THREE, FRAG, 'music-hex', o);
-export const HEX_SHADER = { vertex: ELECTRIC_SHADER.vertex, fragment: FRAG };
+export const HEX_SHADER = { vertex: PICTURE_VERT, fragment: FRAG };

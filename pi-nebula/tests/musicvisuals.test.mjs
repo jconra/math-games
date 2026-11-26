@@ -70,7 +70,7 @@ function fakeCanvas() {
   return { g, calls, bad };
 }
 test('every picture paints from made-up notes without error, at the wall screen\'s size and the lab\'s, playing or not', () => {
-  assert.ok(VISUALS.length >= 3 && VISUALS.some((v) => v.id === 'notes') && VISUALS.some((v) => v.id === 'electric'));
+  assert.ok(VISUALS.length >= 3 && VISUALS.some((v) => v.id === 'notes') && VISUALS.some((v) => v.id === 'hex'));
   for (const p of PART_IDS) assert.match(PART_COLOURS[p], /^#[0-9a-f]{6}$/);
   const music = { song, tapRaw: () => raw(10 + bar * 1.37) };
   const quiet = { song, tapRaw: () => ({ now: 0, playing: false, song, anchor: null, next: null, bars: [] }) };

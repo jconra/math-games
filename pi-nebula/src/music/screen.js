@@ -34,7 +34,7 @@
 //   each press picks that choice with a new number (the song's field[part]), shown small on the button ("Random 4821").
 //   screenLink({ face, picture, idle }) -> { face: 'picture' | 'controls', picture, show(face), pick(id), touch() }
 //   WALL       the wall screen's shape, cm
-// A picture with a shader (VISUALS' `shader`: Electric, src/music/electric.js, and Hex, hex.js) is drawn by WebGL on a second
+// A picture with a shader (VISUALS' `shader`: Hex, src/music/hex.js; Electric's place on the row since MUSIC 3) is drawn by WebGL on a second
 // canvas in the face (src/music/electricview.js, loaded the first time it is shown); with no WebGL, a shader that will
 // not build, or the context lost, the screen paints that picture's own paint instead (the Notes picture) and goes on.
 //   S.stats.gl   'off' (not asked for yet), 'loading', 'on', 'failed'; S.glView() the WebGL view (the rigs)
@@ -156,7 +156,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
       const v = JSON.parse(localStorage.getItem(keep) || 'null');
       if (v && v.song && !checkSong(cleanSong(v.song)).length) music.set(cleanSong(v.song));
       if (heardIn && v && v.place && PLACES.some((p) => p.id === v.place)) music.room(v.place);
-      if (v && v.picture && VISUALS.some((x) => x.id === v.picture)) L.picture = v.picture;
+      if (v && v.picture) L.picture = visualOf(v.picture).id;
     } catch (e) { /* blocked: the music's own */ }
   }
   const save = () => { if (!keep) return; try { localStorage.setItem(keep, JSON.stringify({ song: music.song, place: music.place, picture: L.picture })); } catch (e) { /* not kept */ } };

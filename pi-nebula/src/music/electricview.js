@@ -11,10 +11,10 @@
 //   V.cost(n)                        the rigs: the mean ms of n pictures, each read back so the drawing is really done
 //   V.dispose()
 import * as THREE from 'three';
-import { electricMaterial, electricUniforms } from './electric.js';
+import { electricUniforms } from './electric.js';
 import { hexMaterial } from './hex.js';
 
-const MAKERS = { electric: electricMaterial, hex: hexMaterial };
+const MAKERS = { hex: hexMaterial };
 
 export function electricView(canvas) {
   // (asked first on a spare canvas, so a browser with no WebGL is told plainly and three never complains on the screen)
@@ -28,17 +28,17 @@ export function electricView(canvas) {
   // (a shader that will not build on this device: as lost, the screen shows the Notes picture)
   renderer.debug.onShaderError = (gl, prog, vs, fs) => { lost = true; console.warn('music: the electric picture\'s shader did not build:', gl.getShaderInfoLog(fs)); };
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const mats = {}, matOf = (k) => mats[k] || (mats[k] = (MAKERS[k] || MAKERS.electric)(THREE));
-  const mat = matOf('electric'), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  const mats = {}, matOf = (k) => mats[k] || (mats[k] = (MAKERS[k] || MAKERS.hex)(THREE));
+  const mat = matOf('hex'), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
   quad.frustumCulled = false; scene.add(quad);
   let U = mat.userData.state;
-  let W = 0, H = 0, last = null, lastShader = 'electric';
+  let W = 0, H = 0, last = null, lastShader = 'hex';
   const V = {
     renderer, get material() { return quad.material; },
     ok: () => !lost,
-    draw(f, w, h, time, shader = 'electric') {
+    draw(f, w, h, time, shader = 'hex') {
       if (lost) return;
-      const m = matOf(MAKERS[shader] ? shader : 'electric');
+      const m = matOf(MAKERS[shader] ? shader : 'hex');
       if (quad.material !== m) { quad.material = m; U = m.userData.state; }
       lastShader = shader;
       if (w !== W || h !== H) { renderer.setSize(w, h, false); W = w; H = h; }

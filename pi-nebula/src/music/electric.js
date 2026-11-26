@@ -25,10 +25,6 @@
 // the whole field is small and soft; the fast drums (hats, snare rolls) light small things only; the pads' streams,
 // the biggest shapes, come and go over a few tenths of a second.
 //
-//   electricMaterial(THREE, o?)   a three.js ShaderMaterial of the picture, for any flat panel with uvs (0..1 across
-//                                 it): the lab's screen draws it on a quad, a wall screen in the game can wear it on
-//                                 its own panel. o.aspect (its width / height, 46/25), o.px (a pixel, as a share of
-//                                 its height: 1/278). Its uniforms' values are electricState()'s arrays.
 //   electricState(o?) -> U        the uniforms' values: plain numbers and small Float32Arrays (no three in it)
 //   electricUniforms(f, U, o?)    puts a tap frame (src/music/tap.js T.frame()) into U: each part's notes now (those
 //                                 sounding, and just ended, newest first) as a few slots of four numbers each
@@ -39,7 +35,9 @@
 //                                 uniforms reading electricState()'s arrays (the Hex picture, src/music/hex.js, is one)
 //   FRAG_HEAD, FRAG_OPEN, FRAG_BEAT, FRAG_MEL, FRAG_END   the shared pieces: the uniforms and small sums, main's start,
 //                                 the beat's hexagon field, the melody's laser harp, main's end (stopped, the frame).
-//                                 Electric is these with its own pads, bass and lead between, exactly as first made.
+//   PICTURE_VERT                  the vertex shader (any flat panel with uvs, 0..1 across it)
+// MUSIC 3: the game's maker, 2026-11-26, of Electric and the calmer Hex made from it: "Only Hex." Electric's own pads,
+// bass and lead and its material are gone; what Hex shares with it is here (src/music/hex.js is the picture now).
 // Every loop in the shader has a fixed small count (SLOTS); nothing is read back. A slot's loudness 0 is empty.
 import { PART_IDS } from './song.js';
 import { PART_COLOURS, RANGES } from './visuals.js';
@@ -195,48 +193,6 @@ export const FRAG_BEAT = `  // ── BEAT: the hexagon field ──
 
 `;
 // Electric's pads: streams of plasma
-export const FRAG_PADS = `  // ── PADS: slow streams of plasma across the picture ──
-  for ( int i = 0; i < ${SLOTS.pads}; i++ ) {
-    vec4 d = uPad[i]; if ( d.w <= 0.0 ) continue;
-    float idx = floor( d.x ), sd = fract( d.x ), age = d.y, v = d.w;
-    float y = 0.3 + 0.6 * idx / SPAN_PADS + 0.025 * sin( p.x * 3.1 + t * 0.6 + sd * 20.0 );
-    float swept = ss( age * 6.0 * A, age * 6.0 * A - 0.4, p.x ), life = held( age, d.z, 2.5 ) * ss( 0.0, 0.18, age );
-    float band = exp( -sq( ( p.y - y ) / 0.026 ) );
-    if ( band < 0.01 ) continue;
-    // (streams as the reactor's are: long thin ridges of the noise, flowing along, the gaps left dark)
-    float n = vnoise( vec2( p.x * 3.0 - t * 0.9 + sd * 31.0, ( p.y - y ) * 30.0 + sd * 5.0 ) ), n2 = vnoise( vec2( p.x * 9.0 - t * 2.0, ( p.y - y ) * 55.0 + 3.0 ) );
-    float ridge = ss( 0.45, 0.8, n ); ridge *= ridge;
-    float a = band * life * swept * v * ( 0.12 + 2.2 * ridge * ( 0.4 + n2 ) );
-    col += dPad * a * 1.35 + cPad * ridge * band * life * swept * v * 0.2; white += a * a * 0.04;
-  }
-
-`;
-// Electric's bass: tongues of plasma
-export const FRAG_BASS = `  // ── BASS: tongues of plasma rising from the floor ──
-  // (the brightest tongue at each place, not their sum: a note played again over its own dying light does not jump)
-  float floorGlow = 0.0, bassA = 0.0;
-  for ( int i = 0; i < ${SLOTS.bass}; i++ ) {
-    vec4 d = uBass[i]; if ( d.w <= 0.0 ) continue;
-    float idx = floor( d.x ), sd = fract( d.x ), age = d.y, v = d.w;
-    float x = 0.16 + ( A - 0.32 ) * idx / SPAN_BASS, life = held( age, d.z, 2.5 ), flare = exp( -age * 7.0 ) * min( 1.0, d.z / 0.3 );
-    // (the flare is small: a rolling bass plays sixteenths, and a patch of the picture must not blink that fast)
-    float tall = ( 0.2 + 0.22 * v ) * ( 0.85 + 0.25 * flare ) * ( 0.35 + 0.65 * life ), wide = 0.06 + 0.04 * v + 0.015 * flare;
-    float dx = ( p.x - x ) / wide, up = p.y / max( tall, 0.01 );
-    if ( abs( dx ) > 3.0 || up > 1.6 ) { floorGlow = max( floorGlow, life * v * exp( -abs( p.x - x ) * 3.0 ) ); continue; }
-    float n = vnoise( vec2( dx * 1.6 + sd * 17.0, p.y * 9.0 - t * 2.2 ) ), n2 = vnoise( vec2( dx * 3.5, p.y * 21.0 - t * 4.0 + sd * 9.0 ) );
-    float bodyw = 1.0 - 0.75 * up;                    // narrowing toward the top: a tongue, not a box
-    float body = exp( -dx * dx / max( bodyw * bodyw, 0.02 ) ) * ss( 1.25, 0.2, up + 0.35 * ( n - 0.5 ) );
-    float ridge = ss( 0.4, 0.8, n );
-    float a = life * v * body * ( 0.65 + 1.8 * ridge * ( 0.6 + 0.8 * n2 ) ) * ( 1.0 + 0.5 * flare );
-    bassA = max( bassA, a );
-    floorGlow = max( floorGlow, life * v * exp( -abs( p.x - x ) * 3.0 ) );
-  }
-  col += dBass * bassA * 1.5 + cBass * bassA * bassA * 0.3; white += bassA * bassA * bassA * 0.08;
-  col += cBass * floorGlow * 0.5 * exp( -p.y / 0.03 ) * uOn[1];
-  col += cBass * 0.06 * uOn[1] * exp( -p.y / 0.02 );
-
-`;
-// the melody: the laser harp (Electric and Hex both)
 export const FRAG_MEL = `  // ── MELODY: the laser harp ──
   vec2 base = vec2( A * 0.5, -0.95 );
   float lo = 0.1, wid = A - 0.2;
@@ -267,51 +223,6 @@ export const FRAG_MEL = `  // ── MELODY: the laser harp ──
 
 `;
 // Electric's lead: the plasma ball and its bolts
-export const FRAG_LEAD = `  // ── LEAD: the plasma ball and its bolts ──
-  vec2 C = vec2( A * 0.5, 0.57 );
-  float R = 0.37, r = length( p - C );
-  float leadLife = 0.0;
-  for ( int i = 0; i < ${SLOTS.lead}; i++ ) {
-    vec4 d = uLead[i]; if ( d.w <= 0.0 ) continue;
-    float idx = floor( d.x ), sd = fract( d.x ), age = d.y, v = d.w;
-    float life = held( age, d.z, 16.0 ), grow = clamp( age / 0.06, 0.0, 1.0 );
-    leadLife = max( leadLife, life * v );
-    float ang = radians( 210.0 ) - idx / SPAN_LEAD * radians( 240.0 );
-    vec2 dir = vec2( cos( ang ), sin( ang ) ), side = vec2( -dir.y, dir.x );
-    // (lightning strikes again and again: its kinks change about twelve times a second)
-    float strike = floor( t * 12.0 + sd * 5.0 );
-    // (a bolt in seven kinked stretches, and a short fork leaving it from its third joint)
-    vec2 a = C + dir * 0.045, fork = a; float ds = 9.0;
-    for ( int j = 1; j <= 7; j++ ) {
-      float sj = float( j ) / 7.0, jit = ( h21( vec2( strike, float( j ) + sd * 13.0 ) ) - 0.5 ) * 0.12 * sin( sj * 3.14159 );
-      vec2 b = C + dir * ( 0.045 + ( R - 0.045 ) * sj * grow ) + side * jit;
-      ds = min( ds, seg( p, a, b ) ); a = b;
-      if ( j == 3 ) fork = b;
-    }
-    float fs = h21( vec2( strike, sd * 7.0 ) ) > 0.5 ? 1.0 : -1.0;
-    vec2 f1 = fork + ( dir * 0.06 + side * fs * 0.07 ) * grow, f2 = f1 + ( dir * 0.05 + side * fs * 0.02 ) * grow;
-    float df = min( seg( p, fork, f1 ), seg( p, f1, f2 ) );
-    vec2 tip = C + dir * R * grow; float dt = length( p - tip );
-    float w = px * ( 1.4 + 2.0 * v );
-    float core = exp( -sq( ds / w ) ) + 0.6 * exp( -sq( df / ( w * 0.7 ) ) ), glow = 0.004 / ( ds + 0.008 ) + exp( -sq( ds / 0.022 ) ) * 0.4 + 0.0015 / ( df + 0.008 );
-    float splash = exp( -sq( dt / 0.028 ) ) * 1.1 + 0.002 / ( dt + 0.01 ) * 0.5;
-    float flick = 0.8 + 0.4 * h21( vec2( strike, sd * 31.0 ) );
-    col += ( dLead * ( glow * 1.1 + splash ) + cLead * core * 1.2 ) * life * v * flick * ( 1.0 + exp( -age * 10.0 ) );
-    white += life * v * core * 0.9 * flick + splash * life * v * 0.25;
-  }
-  if ( uOn[3] > 0.5 ) {
-    // the ring the bolts reach, the plasma ball they leap from (it swells while the lead plays)
-    float ringl = exp( -sq( ( r - R ) / ( px * 1.0 ) ) ) * ss( -0.2, 0.25, ( p.y - C.y ) / R + 0.75 );
-    col += cLead * ringl * ( 0.1 + 0.12 * leadLife );
-    // (the ball: plasma in it winding, the reactor's knot of light, small and hard at its middle)
-    float n = vnoise( ( p - C ) * 30.0 + vec2( 0.0, -t * 1.4 ) ), n2 = vnoise( ( p - C ) * 60.0 + vec2( t * 1.1, 4.0 ) ), rr = r / ( 0.055 + 0.015 * leadLife );
-    float vein = 1.0 - abs( 2.0 * n - 1.0 ); vein = vein * vein * vein;
-    float ball = exp( -rr * rr ) * ( 0.3 + 0.5 * n2 + 1.2 * vein ) + 0.012 / ( r + 0.03 );
-    col += dLead * ball * ( 0.45 + 0.75 * leadLife ); white += exp( -rr * rr * 5.0 ) * ( 0.15 + 0.6 * leadLife );
-  }
-
-`;
-// main's end: stopped, the frame, the light eased toward white
 export const FRAG_END = `  // ── stopped: two calm bars in the middle ──
   if ( uPlay < 0.5 ) {
     vec2 q = abs( p - mid - vec2( 0.0, 0.0 ) );
@@ -331,8 +242,6 @@ export const FRAG_END = `  // ── stopped: two calm bars in the middle ──
   gl_FragColor = vec4( col, 1.0 );
 }
 `;
-// (the pieces joined: exactly the picture as it was made, ELECTRIC 1)
-const FRAG = FRAG_HEAD + FRAG_OPEN + FRAG_BEAT + FRAG_PADS + FRAG_BASS + FRAG_MEL + FRAG_LEAD + FRAG_END.slice(0, -1);
 
 // a picture's material from its fragment shader (Electric's here, Hex's in src/music/hex.js): the uniforms read U
 export function pictureMaterial(THREE, fragment, name, o = {}) {
@@ -345,5 +254,4 @@ export function pictureMaterial(THREE, fragment, name, o = {}) {
   m.userData.state = U;   // electricUniforms(f, m.userData.state) each frame: nothing else to do
   return m;
 }
-export const electricMaterial = (THREE, o = {}) => pictureMaterial(THREE, FRAG, 'music-electric', o);
-export const ELECTRIC_SHADER = { vertex: VERT, fragment: FRAG };
+export const PICTURE_VERT = VERT;

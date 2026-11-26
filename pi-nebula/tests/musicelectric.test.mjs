@@ -1,4 +1,4 @@
-// THE ELECTRIC PICTURE AND THE HALLWAY LINES (src/music/electric.js, lights.js lightLines; visuals.js without Spectrum).
+// THE SHADER PICTURE (Hex, on the pieces src/music/electric.js keeps) AND THE HALLWAY LINES (lights.js lightLines; visuals.js without Spectrum and Electric).
 // The game's maker, 2026-11-25: "some kind of eletric effect for each instrument? Like laser harp for melody, some
 // background flashes for the beat ... hexagon outlines", "I want to avoid the histogram of the spectrum", "a line that
 // represents each instrument that pulses. Maybe the line can get bright on the x axis representing the note being
@@ -10,13 +10,12 @@ import assert from 'node:assert/strict';
 import { PRESETS, PART_IDS } from '../src/music/song.js';
 import { tapOf, pulses } from '../src/music/tap.js';
 import { VISUALS, visualOf, RANGES } from '../src/music/visuals.js';
-import { electricState, electricUniforms, electricMaterial, SLOTS, DRUM_KIND, placeOf, ELECTRIC_SHADER } from '../src/music/electric.js';
+import { electricState, electricUniforms, SLOTS, DRUM_KIND, placeOf } from '../src/music/electric.js';
 import { lightLines, DRUM_PLACE, LINE_LOOK, lineColour } from '../src/music/lights.js';
 import { screenLink } from '../src/music/screen.js';
 import { paintVisual } from '../src/music/visuals.js';
-import { hexMaterial, hexUniforms, hexState, HEX_SHADER, BASS_READING } from '../src/music/hex.js';
+import { hexMaterial, hexUniforms, hexState, HEX_SHADER } from '../src/music/hex.js';
 import { FRAG_HEAD, FRAG_BEAT, FRAG_MEL, FRAG_END } from '../src/music/electric.js';
-import { createHash } from 'node:crypto';
 
 const song = PRESETS.find((p) => p.id === 'stationdrive').song;
 const UNI = { beat: 'uDrum', bass: 'uBass', pads: 'uPad', lead: 'uLead', melody: 'uMel' };
@@ -75,19 +74,6 @@ test('the electric picture\'s uniforms from the real tap: every number finite, e
   assert.equal(placeOf({ part: 'bass', midi: 2 }), 0); assert.equal(placeOf({ part: 'bass', midi: 200 }), RANGES.bass[1] - RANGES.bass[0]);
 });
 
-test('the material: a ShaderMaterial whose uniforms read the state electricUniforms fills, fixed loops in its shader', () => {
-  class ShaderMaterial { constructor(o) { Object.assign(this, o); this.userData = {}; } }
-  const m = electricMaterial({ ShaderMaterial });
-  const U = m.userData.state;
-  electricUniforms(frame([N('melody', { midi: 70 })]), U, { time: 7 });
-  assert.equal(m.uniforms.uTime.value, 7, 'a number set in the state is the uniform\'s');
-  assert.equal(m.uniforms.uMel.value, U.uMel);
-  for (const k of Object.keys(U)) assert.ok(ELECTRIC_SHADER.fragment.includes(k), k + ' declared');
-  // every loop counts to a fixed small number (no loop over a uniform)
-  for (const m2 of ELECTRIC_SHADER.fragment.matchAll(/for \( int \w+ = \d; \w+ <=? (\w+);/g)) assert.match(m2[1], /^\d+$/);
-  assert.doesNotMatch(ELECTRIC_SHADER.fragment, /\bpow\(/, 'no pow (a negative number to a power is undefined in GLSL)');
-});
-
 test('the hallway lines: a line a part, brightest at its notes\' places (low toward the start), each drum its own place', () => {
   const cols = 64, at = (b, r, x) => b[r * cols + Math.round(x * (cols - 1))];
   const [lo, hi] = RANGES.bass, row = (p) => PART_IDS.indexOf(p);
@@ -116,42 +102,39 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
   assert.ok(Math.max(...rest) <= LINE_LOOK.rest + 1e-9);
 });
 
-test('Spectrum is gone from the pictures; a kept or asked-for "spectrum" is the first picture', () => {
-  assert.deepEqual(VISUALS.map((v) => v.id), ['notes', 'electric', 'hex', 'orbit', 'sections']);
-  assert.ok(!VISUALS.some((v) => /spectrum/i.test(v.id + v.label)));
+test('the Picture row: Notes, Hex, Orbit, Sections ("Only Hex."); a kept or asked-for Electric is Hex, Spectrum Notes', () => {
+  assert.deepEqual(VISUALS.map((v) => v.id), ['notes', 'hex', 'orbit', 'sections']);
+  assert.ok(!VISUALS.some((v) => /spectrum|electric/i.test(v.id + v.label)));
   assert.equal(visualOf('spectrum').id, VISUALS[0].id);
-  const L = screenLink({ picture: 'electric' }); L.pick('spectrum'); assert.equal(L.picture, 'notes');
-  const E = visualOf('electric');
-  assert.equal(E.shader, 'electric'); assert.equal(E.paint, visualOf('notes').paint, 'with no WebGL the Electric picture paints as Notes');
-  assert.ok(E.label.split(' ').length <= 2);
+  assert.equal(visualOf('electric').id, 'hex');
+  const L = screenLink({ picture: 'electric' }); assert.equal(L.picture, 'electric'); L.pick('electric'); assert.equal(L.picture, 'hex');
+  L.pick('spectrum'); assert.equal(L.picture, 'notes');
 });
 
 // ── ELECTRIC 2: the Hex picture, and Orbit's glow. The game's maker, 2026-11-26: "Eletric is interesting, but it might
 // be too busy ... Maybe you can keep that one to compare" and "The orbit is cool, but I feel like it could use a glow
 // behind it that pulses."
-test('Hex: its own material on the same uniforms as Electric, sharing the hexagon field and the harp; Electric unchanged', () => {
+test('Hex: its own material on the shared uniforms, its hexagon field and harp the shared pieces, fixed loops, no pow', () => {
   class ShaderMaterial { constructor(o) { Object.assign(this, o); this.userData = {}; } }
   const m = hexMaterial({ ShaderMaterial }), U = m.userData.state;
   assert.equal(m.name, 'music-hex'); assert.equal(hexUniforms, electricUniforms); assert.equal(hexState, electricState);
   hexUniforms(frame([N('lead', { midi: 70 }), N('bass', { midi: 40 })]), U, { time: 4 });
-  assert.equal(m.uniforms.uTime.value, 4); assert.equal(m.uniforms.uLead.value, U.uLead);
+  assert.equal(m.uniforms.uTime.value, 4, 'a number set in the state is the uniform\'s'); assert.equal(m.uniforms.uLead.value, U.uLead);
   const F = HEX_SHADER.fragment;
   for (const k of Object.keys(U)) assert.ok(F.includes(k), k + ' declared');
-  // the beat's hexagon outlines and the melody's harp are Electric's own pieces, not copies
-  for (const piece of [FRAG_HEAD, FRAG_BEAT, FRAG_MEL, FRAG_END]) { assert.ok(F.includes(piece)); assert.ok(ELECTRIC_SHADER.fragment.includes(piece.trimEnd())); }
+  for (const piece of [FRAG_HEAD, FRAG_BEAT, FRAG_MEL, FRAG_END]) assert.ok(F.includes(piece));
   // none of Electric's busier effects: no plasma ball or ring, no tongues, no streams
   for (const gone of ['plasma ball', 'tongues', 'streams of plasma', 'ringl']) assert.ok(!F.includes(gone), gone);
   for (const m2 of F.matchAll(/for \( int \w+ = \d; \w+ <=? (\w+);/g)) assert.match(m2[1], /^\d+$/);
-  assert.doesNotMatch(F, /\bpow\(/);
-  assert.equal(BASS_READING, 'insides', 'the bass fills the insides of hexagons placed by the note (as built)');
-  // Electric's shader text exactly as ELECTRIC 1 made it ("keep that one to compare")
-  assert.equal(createHash('sha256').update(ELECTRIC_SHADER.fragment).digest('hex'), 'e5b35f35820cf3f077b8864f287a04d755b58d06c4d44f1256d7517b8ebbe14e');
+  assert.doesNotMatch(F, /\bpow\(/, 'no pow (a negative number to a power is undefined in GLSL)');
+  // the bass as built, the insides of hexagons (the game's maker: "It looks great"): the other reading is gone
+  assert.doesNotMatch(F, /other reading/);
 });
 
-test('Hex on the Picture row right after Electric, with Notes as its fallback; an unknown name is still Notes', () => {
+test('Hex on the Picture row after Notes, with Notes as its fallback; an unknown name is still Notes', () => {
   const H = visualOf('hex');
   assert.equal(H.label, 'Hex'); assert.equal(H.shader, 'hex'); assert.equal(H.paint, visualOf('notes').paint);
-  assert.equal(VISUALS.findIndex((v) => v.id === 'hex'), VISUALS.findIndex((v) => v.id === 'electric') + 1);
+  assert.equal(VISUALS.findIndex((v) => v.id === 'hex'), 1);
   assert.equal(visualOf('nonesuch').id, 'notes');
   const L = screenLink(); L.pick('hex'); assert.equal(L.picture, 'hex');
 });

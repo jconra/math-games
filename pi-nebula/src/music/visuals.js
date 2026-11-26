@@ -13,14 +13,14 @@
 //   VISUALS   [{ id, label, paint, shader? }]: the Picture row's choices, in order
 //     notes     every note of every part as it plays: a lane a part in its own colour, how high it is, how long, where
 //               in the bar (the bar's lines and beats), the notes coming from the right before they sound
-//     electric  the music as electricity, a light effect a part (src/music/electric.js): drawn by a shader, so the
-//               screen draws it with WebGL (src/music/electricview.js); its paint here is the Notes picture, which a
-//               screen shows instead where there is no WebGL (or it is lost). (The Spectrum picture was here: the
-//               game's maker, 2026-11-25, "I want to avoid the histogram of the spectrum because I see it everywhere".)
-//     hex       a second, calmer electric picture (src/music/hex.js; the game's maker, 2026-11-26, found Electric "might
-//               be too busy"): a hexagon wall behind (the beat's outlines, the bass filling the hexagons' insides, the
-//               lead's lightning running down the outlines) and light beams in front (the melody's laser harp, the
-//               pads' wide soft spotlights); drawn by a shader as Electric is, Notes where there is no WebGL
+//     hex       the music as electricity (src/music/hex.js, on src/music/electric.js's shared pieces): a hexagon wall
+//               behind (the beat's outlines, the bass filling the hexagons' insides, the lead's lightning running down
+//               the outlines) and light beams in front (the melody's laser harp, the pads' wide soft spotlights); drawn
+//               by a shader, so the screen draws it with WebGL (src/music/electricview.js); its paint here is the Notes
+//               picture, which a screen shows instead where there is no WebGL (or it is lost). Electric, the busier
+//               one it was made from, is gone (the game's maker, 2026-11-26: "Only Hex."): a kept 'electric' is Hex.
+//               (The Spectrum picture went before it: "I want to avoid the histogram of the spectrum because I see it
+//               everywhere".)
 //     orbit     the bar as a clock: the sixteen steps round a ring, a ring a part, each note lit on its ring as the
 //               hand passes it, the ones about to play just ahead of the hand; the core flashes on each kick; a soft
 //               glow behind it all swells on each beat
@@ -245,10 +245,11 @@ function paintSections(g, f) {
 
 export const VISUALS = [
   { id: 'notes', label: 'Notes', paint: paintNotes },
-  { id: 'electric', label: 'Electric', paint: paintNotes, shader: 'electric' },
   { id: 'hex', label: 'Hex', paint: paintNotes, shader: 'hex' },
   { id: 'orbit', label: 'Orbit', paint: paintOrbit },
   { id: 'sections', label: 'Sections', paint: paintSections },
 ];
-export const visualOf = (id) => VISUALS.find((v) => v.id === id) || VISUALS[0];
+// (a picture no longer on the row: the one in its place. The game's maker, 2026-11-26, of Electric and Hex: "Only Hex.")
+const GONE = { electric: 'hex' };
+export const visualOf = (id) => VISUALS.find((v) => v.id === id) || VISUALS.find((v) => v.id === GONE[id]) || VISUALS[0];
 export function paintVisual(id, g, f) { visualOf(id).paint(g, f); }
