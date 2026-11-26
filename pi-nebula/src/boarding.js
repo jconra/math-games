@@ -77,8 +77,9 @@ import { coreIn, surveyIn } from './missions.js';
 // waits at the dock instead: DOCKED_SHIP below.)
 // HOW A SHIP IS FLOWN, from its kit: its main engine's nozzles (its jetNozzles) and their jets' look (JET), its deck over
 // its ground line (DECK), and its thruster pods if it has any (their piece, half their length, their jets' look:
-// POD_JET; none: null)
-export const flight = (kit, pods = null) => ({ nozzles: kit.jetNozzles, jet: kit.JET, deck: kit.DECK, pods });
+// POD_JET; none: null); and its landing gear, if it folds in flight (src/shiphull.js gear): the pieces that are its
+// legs and their wells' doors, and its kit's own gearStep (up folds the legs, then shuts the doors; down the reverse)
+export const flight = (kit, pods = null, gear = null) => ({ nozzles: kit.jetNozzles, jet: kit.JET, deck: kit.DECK, pods, gear: gear ? { pieces: gear, step: kit.gearStep } : null });
 // THE HAULER, AT THE DOCK (`dock`: not parked in a hangar of the station file but waiting outside at the docking port,
 // src/haulerdock.js; its way in the docking bridge and its tunnel, src/dockwalk.js, which gives makeBoarding({ dock })
 // the hooks: whether it may be gone into (the bridge stands), where it is, its hull's version with the rooms inside and
@@ -89,9 +90,9 @@ export const flight = (kit, pods = null) => ({ nozzles: kit.jetNozzles, jet: kit
 // dock (src/haulerdock.js), so none is given
 export const DOCKED_SHIP = { id: 'hauler', dock: true, near: ['airlock'], lab: HB.LAB, cockpit: HB.COCKPIT, bp: 'hauler-his-plan', flight: flight(HB), ways: [] };
 export const SHIPS = [
-  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: flight(EB), ways: ['ebAirstair'] },
-  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: flight(MD), ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
-  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: flight(MB, { piece: 'mbPod', half: MB_POD.size[2] / 2, jet: MB.POD_JET }), ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
+  { id: 'explorer', zone: 'ship-explorer', lab: EB.LAB, cockpit: EB.COCKPIT, bp: 'explorer-c-row', flight: flight(EB, null, ['ebGear', 'ebGearDoors']), ways: ['ebAirstair'] },
+  { id: 'medic', zone: 'ship-medic', lab: MD.LAB, cockpit: MD.COCKPIT, bp: 'medic-open-bench', flight: flight(MD, null, ['mdGear']), ways: ['mdRamp', 'mdCrewDoor'], step: (doors) => MD.rampFoot({ doors }) },
+  { id: 'miner', zone: 'ship-miner', lab: MB.LAB, cockpit: MB.COCKPIT, bp: 'miner-ore-cockpit', flight: flight(MB, { piece: 'mbPod', half: MB_POD.size[2] / 2, jet: MB.POD_JET }, ['mbGear', 'mbGearDoors']), ways: [], lifts: [{ piece: 'mbLift', foot: [2.6, -0.15], drop: MB.CLIFT.drop }] },
   DOCKED_SHIP,
 ];
 // the ships that are flown by hand, by their rooms: each may be set down somewhere else than it is parked (B.stand)
@@ -174,6 +175,9 @@ export function makeBoarding({ W, walls, quality = 'high', dock = null }) {
     // the lifts: driven here; their door's box never stops anyone (the lift is a moving floor of its own: liftParts)
     const lifts = (S.lifts || []).flatMap((Lf) => W.built.doors.filter((D) => D.zone === S.zone && D.hold == null && D.piece === Lf.piece).map((D) => ({ ...Lf, D, carried: new Set(), key: null, patch: null })));
     for (const L of lifts) { W.driven.add(L.D); W.keepShut.delete(L.D); const e = walls.doors.find((d) => d.D === L.D); if (e) e.when = () => false; }
+    // its landing gear: down while it is parked (the station's frame keeps it so: nobody walking by folds it), and solid
+    // to walk into, as the legs always were; folded and lowered only in flight (src/shiphull.js gear)
+    for (const D of W.built.doors) if (D.zone === S.zone && S.flight.gear && S.flight.gear.pieces.includes(D.piece)) { W.keepShut.add(D); const e = walls.doors.find((d) => d.D === D); if (e) e.locked = true; }
     ships.push({ ...S, zd, zone, hangar, near, ways, lifts, entries, state: 'out', away: 0, cabin: null, wayParts: new Map(), M: null, M0: null, inv: null, D: new THREE.Matrix4(), Di: new THREE.Matrix4(), moved: false, stats: null });
   }
   let stands = 0;

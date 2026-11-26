@@ -91,7 +91,7 @@ import { podsPlan, footprintTris } from './planet/pods.js';
 import { makePods } from './planet/podsdraw.js';
 import { SLEEPERS } from './sleeper.js';
 import { loadPod } from '../kit/stasispod.js';
-import { facing } from './flymodel.js';
+import { facing, gearOverGround } from './flymodel.js';
 import { planetPad, groundSolid, planDown, padNose } from './planet/landing.js';
 import { makeSearch } from './planet/search.js';
 import { makeMedicDown } from './planet/medicdown.js';
@@ -216,7 +216,15 @@ export function makeSite(ctx, opts = {}) {
     const onGround = GROUND_PHASES.includes(st.phase);
     keeper.fly(_D, dt, { acc: _acc, spin: 0, hold: onGround ? 0 : 0.6, engine: onGround ? 0.15 : 0.45, heat: 1, x: 0, z: 0, height: null });
     boarding.fly(S.id, _D);
+    // ITS LANDING GEAR over the planet (src/flymodel.js GEAR): down near the ground, up above it (how high its feet are:
+    // its kit frame's own ground line over the ground under it); on the ground, down
+    if (keeper.gear) {
+      const h = M.elements[13] - ground(M.elements[12], M.elements[14]);
+      gearUp = !onGround && gearOverGround(h, gearUp);
+      keeper.gear(gearUp, dt);
+    }
   }
+  let gearUp = false;
   // WHAT IT BUMPS INTO OUT HERE, her pilot flying (the view from behind is kept clear of the ground: clear(a, b), how
   // much of the way from a to b is over the ground). The pilot's own flying: the ground itself (landing.js groundSolid)
   const solid = {
@@ -242,7 +250,7 @@ export function makeSite(ctx, opts = {}) {
       cfg, goal: iPilot ? 'land' : 'field', pilot: iPilot, flier: opts.flier || 'The pilot', view, settings: opts.settings || null, onSettings: opts.onSettings || null,
       words: () => {}, ...(opts.dash ? { dash: opts.dash, run: opts.run } : {}),
       ...(iPilot ? { onLanded: () => { if (st.phase === 'fly') touchdown(); } } : {}),
-      body: { at: new THREE.Matrix4(), M0: KIT, p: at.p.toArray(), f: at.dir.toArray(), fly: (M, dt) => drawShip(M, dt), solid: iPilot ? groundSolid(land, cfg) : solid, ...(iPilot ? { plan: (s) => planDown(s, land), far: SITE.far } : {}) },
+      body: { at: new THREE.Matrix4(), M0: KIT, p: at.p.toArray(), f: at.dir.toArray(), fly: (M, dt) => drawShip(M, dt), gearDown: () => !keeper.gear || keeper.gearDown, solid: iPilot ? groundSolid(land, cfg) : solid, ...(iPilot ? { plan: (s) => planDown(s, land), far: SITE.far } : {}) },
     });
     fl.lock(true);
     st.phase = 'above'; st.t = 0;

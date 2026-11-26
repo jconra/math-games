@@ -65,7 +65,7 @@
 // (S.q: a quaternion; none: parked, nose out of the bay door), its speed (S.v, the station's frame), its turning
 // (S.w, its own frame). Its own frame here: [ahead, up, right]. cfg is the ship's own facts (MINER below): another
 // ship is another cfg. makeShip(cfg, at): standing where it was last set down ({ p, q }: standOf), not on its pad.
-import { OUTSIDE_BOX, DOOR } from '../kit/outside-plan.js';
+import { OUTSIDE_BOX, DOOR, HANGARS } from '../kit/outside-plan.js';
 import { SKIN } from './flysolid.js';
 import { flightOf } from './fleet.js';
 import { standElements, frameOf, outOf, yawOf } from './standing.js';
@@ -103,6 +103,34 @@ export const SETTLE = { reach: 4.5, low: 1.2, slow: 3, level: 0.94, hold: 1.0, t
 //   level   ... and its legs bring it level, at up to this many radians a second (a lean of 30 degrees in a third of a second)
 //   still   slower than this (m/s), and level: it is down
 export const LAND = { tilt: 30, touch: 0.08, grip: 9, level: 1.6, still: 0.05 };
+// THE LANDING GEAR (the game's maker, 2026-11-26, watching the trailer's Miner fly out: "it would be terrific if it's
+// landing gear could be raising up ... I'd just build it so that it is automatically lowered when you go in the hanger
+// or near the surface of a planet, and up otherwise"). Nothing is asked of the pilot; the legs fold and come down with
+// their own move (src/shiphull.js gear). gearWanted(S): true while they should be up. Down:
+//   - on a floor, and in a hangar's bay, its own or another's: inside the door's line, within `side` of the bay's middle
+//     across it and lower than the door's top and `over` more;
+//   - coming in: outside a bay door, lined up with it, within `lead` metres of it and closing on it faster than
+//     `toward` m/s (so most of the way down before it is in: the legs take about 4.4 s to come down);
+//   - over a planet, near its ground (src/rescue.js: gearOverGround, how high its feet are): down under `near` metres,
+//     up again only over `clear` (so it never flutters at one height). The autopilot carries the Medic 26 m over the
+//     landing place before it comes down (src/rescue.js SITE.over): there its legs are up, and they come down as it
+//     sets down.
+// AND IT NEVER STANDS ON A FLOOR WITHOUT THEM: however fast it comes in, it is not down (S.landed) until every leg is
+// fully down (S.gearDown, told by whoever moves the legs). Until then it rests on its feet's line over the floor, as
+// it always has (what it bumps by is the same with its legs up or down), while they come down under it.
+export const GEAR = { side: 13.8, over: 3, lead: 30, toward: 0.5, near: 25, clear: 30 };
+export function gearWanted(S) {
+  if (S.landed) return false;
+  for (const H of HANGARS) {
+    if (Math.abs(S.p[2] - H.z) > GEAR.side || S.p[1] > DOOR.h + GEAR.over) continue;
+    const out = S.p[0] - DOOR.face;
+    if (out <= 0) return false;
+    if (out < GEAR.lead && S.v[0] < -GEAR.toward) return false;
+  }
+  return true;
+}
+// over a planet: h, how high its feet are over the ground (m); up, whether they are up now
+export const gearOverGround = (h, up) => (up ? h > GEAR.near : h > GEAR.clear);
 // THE GUIDE: `near`: within this of the pad's middle (m, across the floor) the heading asked for is the parking one,
 // nose out; further off it is simply the way to the pad. Each hint is dark inside its first number and at its
 // brightest from its second: across the floor (m), up and down (m), the nose's turn (degrees), the roll (degrees).
@@ -338,6 +366,8 @@ function legs(S, dt, fy) {
   if (ang > step) { S.q = qUnit(qMul(qOf(mul(e, step / ang)), S.q)); S.p[1] += fy - lowest(S); return; }
   S.q = flat; S.p[1] = fy;
   if (sp * k >= LAND.still) return;
+  // (its legs not yet fully down: it waits on its feet's line until they are)
+  if (S.gearDown === false) return;
   S.v = [0, 0, 0]; S.acc = [0, 0, 0]; S.spin = 0; S.settle = null; S.landed = true; S.justLanded = true; S.tilt = 0;
 }
 // eased back out of whatever it has come too near, keeping the speed that runs along it
@@ -707,7 +737,7 @@ function settle(S, dt, solid) {
   if (solid && !lined) bump(S, solid);
   S.v = mul(sub(S.p, was), 1 / Math.max(dt, 1e-6)); S.w = [0, 0, 0]; S.acc = [0, 0, 0]; S.spin = 0;
   S.engine += (0.15 - S.engine) * Math.min(1, dt * 2.5);
-  if (lined && S.p[1] - P[1] < 0.003) { park(S); S.settle = null; S.justLanded = true; }
+  if (lined && S.p[1] - P[1] < 0.003 && S.gearDown !== false) { park(S); S.settle = null; S.justLanded = true; }
 }
 
 // ── A SHIP THAT DOCKS (cfg.dock: { away, nose }, src/fleet.js DOCKED; the Hauler at the bridge's end, and at the old

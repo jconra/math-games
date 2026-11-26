@@ -26,6 +26,12 @@
 //                      flight.js makeFlight) or false (its pods are not live doors in this station)
 //   H.thrust(dt, how)  while it is flown: { acc, spin, hold, engine, heat } and { x, z, height } over its hangar's floor
 //   H.rest()           its pods back along it, its jets out, the air gone (the nozzle's heat goes with the rest)
+//   H.gear(up, dt)     ITS LANDING GEAR moved a step toward up (folded, its wells shut) or down, with its kit's own
+//                      folding (kit.gear: its pieces and gearStep): legs then doors going up, doors then legs coming down.
+//                      Whoever flies it says which (src/flymodel.js gearWanted; over a planet, src/rescue.js). Fully down
+//                      again, it is given back to the station's frame, which keeps a parked ship's gear down
+//   H.gearSet(up)      put there at once (only where nobody sees it: out of a jump, or the flying put away)
+//   H.gearDown         every leg fully down (true for a ship with no gear that folds); H.gearUp: every leg folded away
 //   H.zone, H.meshes, H.pods, H.flight, H.air
 // AS ITS OWN KEEPER, for a ship that has no crane of its own (the Explorer, the Medic: what src/flying.js asks of the
 // Miner's crane, ctx.hull):
@@ -35,6 +41,7 @@
 //   H.padBusy()        is anyone standing on its pad (not those aboard)
 import * as THREE from 'three';
 import { makeFlight, makeDownwash } from '../kit/ships/flight.js';
+import { updateDoors, setDoors } from '../kit/layout.js';
 
 // THE THRUSTERS IN A HANGAR: how far the pods may turn (a little further down than the ship lab's swing, so the jets
 // blow down at the floor), the pods' jets' length against the lab's, the main engine idling, how long its nozzle takes
@@ -89,8 +96,24 @@ export function makeHull({ W, id, kit, skip = null, hangar = null, boarding = nu
   const P = kit && kit.pods;
   if (P && home) for (const D of W.built.doors) if (D.zone === room && D.piece === P.piece) for (const leaf of D.leaves) for (const im of leaf.meshes || []) if (meshes.includes(im)) home.group.add(im);
 
+  // (its landing gear's doors: the legs and their wells' doors, live doors of its room)
+  const G = kit && kit.gear, legs = G ? W.built.doors.filter((D) => D.zone === room && G.pieces.includes(D.piece) && D.hold == null && D.leaves.length) : [];
   const H = {
-    id, zone, meshes, pods: [], flight: null, air: null,
+    id, zone, meshes, pods: [], flight: null, air: null, legs,
+    gear(up, dt) {
+      if (!legs.length) return false;
+      for (const D of legs) W.driven.add(D);
+      const moved = G.step({ doors: legs }, up, dt, updateDoors);
+      if (!up && legs.every((D) => D.t <= 0)) for (const D of legs) W.driven.delete(D);
+      return moved;
+    },
+    gearSet(up) {
+      if (!legs.length) return;
+      setDoors(legs, up ? 1 : 0);
+      for (const D of legs) { if (up) W.driven.add(D); else W.driven.delete(D); }
+    },
+    get gearDown() { return legs.every((D) => D.t <= 0); },
+    get gearUp() { return legs.length > 0 && legs.every((D) => D.t >= 1); },
     move(M) {
       if (!M) { zone.group.matrix.identity(); zone.group.matrixWorldNeedsUpdate = true; for (const im of meshes) { im.matrix.identity(); im.matrixWorldNeedsUpdate = true; } return; }
       zone.group.matrixAutoUpdate = false; zone.group.matrix.copy(M); zone.group.matrixWorldNeedsUpdate = true;

@@ -256,7 +256,8 @@ export function makeCrane({ W, walls, boarding = null }) {
     // (down: the pods' flames dying away, then the pods back along it; the engine off, its nozzle hot and cooling; the
     // dust settling)
     if (flight) { cool = 1; settle = 1; wind = 1; }
-    if (ship) { for (const D of ship.legs) { D.hold = D.held0 ?? 0; W.driven.delete(D); } setDoors(ship.legs, 0); }
+    // (as they were held before: none now, the station's frame keeps a parked ship's gear down: src/boarding.js)
+    if (ship) { for (const D of ship.legs) { D.hold = D.held0 !== undefined ? D.held0 : 0; W.driven.delete(D); } setDoors(ship.legs, 0); }
     if (boarding && boarding.hold) boarding.hold('miner', false);
   }
 
@@ -506,6 +507,9 @@ export function makeCrane({ W, walls, boarding = null }) {
       return true;
     },
     get aloft() { return aloft; },
+    // its landing gear, flown (the shared hull's: src/shiphull.js gear)
+    gear: (up, dt) => (hull ? hull.gear(up, dt) : false), gearSet: (up) => { if (hull) hull.gearSet(up); },
+    get gearDown() { return !hull || hull.gearDown; }, get gearUp() { return !!hull && hull.gearUp; },
     // is anyone standing on the Miner's pad? (a ship being flown down onto it waits over it, as the landing above does;
     // not those aboard it: the crew member's own body stays in the parked seat while it flies)
     padBusy: () => !!ship && eyesNow.some((e) => e.y < 2 && Math.hypot(e.x - ship.at.x, e.z - ship.at.z) < 7 && !(boarding && boarding.inside && boarding.inside(e))),

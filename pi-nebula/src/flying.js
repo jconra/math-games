@@ -609,6 +609,11 @@ export function startFlying(ctx, opts = {}) {
   const _D = new THREE.Matrix4(), _T = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1), _acc = new THREE.Vector3(), now = new THREE.Matrix4();
   let parked = true;
   function pose(dt) {
+    // ITS LANDING GEAR (flymodel.js GEAR): down in a hangar, or coming in to one, up otherwise, by itself; and the ship
+    // is not down on a floor until it is fully down (S.gearDown). Over a planet, whoever draws the ship there moves it
+    // (src/rescue.js) and says when it is down (body.gearDown); at the rocks the drill's own Miner keeps its legs up.
+    if (body) S.gearDown = body.gearDown ? body.gearDown() : true;
+    else if (hull.gear) { hull.gear(M.gearWanted(S), dt); S.gearDown = hull.gearDown; }
     // (at the rocks: the drill's own Miner drawn where the ship is; `now` is the ship's kit frame in the field's)
     if (body) { parked = false; now.compose(_p.set(...S.p), _q.set(...S.q), _one).multiply(body.M0); body.fly(now, dt); rig.matrix.multiplyMatrices(body.at, now); rig.matrixWorldNeedsUpdate = true; return; }
     // (on its pad with the power off: exactly as it is parked, its thrusters at rest; with the power on its engine idles)
@@ -996,6 +1001,8 @@ export function startFlying(ctx, opts = {}) {
     arrive() {
       if (closed) return;
       const A = M.arrival(cfg); M.place(S, A.p, A.q); S.engine = 0.15; letGo(); if (ownDash) D.last = null;
+      // (out of the jump with its legs as the rule has them out there, folded: unseen, nothing moves)
+      if (hull && hull.gearSet) hull.gearSet(M.gearWanted(S));
       goal = 'land'; offered = false; auto = !pilot; plan = null; startIn = pilot ? 0 : 0.8; on = true; locked = false; fresh = true; rig.visible = true; el.hidden = false; painted = '';
       if (outside) outside.flying = cfg.room || cfg.id;
       pose(1 / 60); paint();
@@ -1042,6 +1049,9 @@ export function startFlying(ctx, opts = {}) {
       removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerdown', onDown); removeEventListener('pointerup', onUp); canvas.removeEventListener('contextmenu', onMenu);
       document.removeEventListener('pointerlockchange', onLock); capture(false);
       if (!body) { hull.fly(null); boarding.fly(cfg.id, null); }
+      // (put away with its legs not down, which only a run given up while it is out does: down at once, as it is then
+      // shown parked; a ship that has landed has them down already)
+      if (!body && hull.gearSet && !hull.gearDown) hull.gearSet(false);
       W.scene.remove(rig); dash.dispose(); holo.dispose(); el.remove(); if (outside) outside.flying = null; restoreCamera();
       if (visit) visit.fly(null);
     },

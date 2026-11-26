@@ -10,7 +10,8 @@
 //   - ITS KIT (kit/ships/<ship>-built.js): what it is built of. The shared piece reads from there its deck and cockpit
 //     (src/boarding.js SHIPS: `lab`, `cockpit`), its ways in (its doors that come down to the floor, or a lift), its
 //     engine's nozzles, their jets' look and its thruster pods if it has any (boarding's `flight`, from the kit's own
-//     jetNozzles, JET, DECK and POD_JET), and its legs (they stay down as it flies, the Miner's too).
+//     jetNozzles, JET, DECK and POD_JET), and its legs: down in a hangar or near a planet's ground, folded away
+//     otherwise, by themselves (src/flymodel.js GEAR; the game's maker, 2026-11-26).
 //   - ONE ENTRY HERE (SHIPS below), every one in the same shape: its name; where it is parked (its hangar, which way
 //     its nose points there; its pad is the station file's); its shape, as a few boxes (what it bumps by when flown,
 //     what is bumped and shoved when it is parked and another ship comes in; the small model in the landing guide);

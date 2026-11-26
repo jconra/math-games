@@ -44,7 +44,7 @@ test('every ship\'s entry is in the same shape, and true to the station file and
   assert.deepEqual(F.SHIP_IDS, ['miner', 'explorer', 'medic']);
   const keys = (s) => Object.keys(s).filter((k) => k !== 'claw').sort();
   // (the ships that are boarded, with their blueprints, as src/boarding.js lists them: read from its text, it loads three.js)
-  const BOARD = Object.fromEntries([...read('../src/boarding.js').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, cockpit: [\w.]+, bp: '([\w-]+)', flight: flight\(([A-Z]+)(, \{ piece: '\w+', half: [^}]+, jet: [\w.]+ \})?\)/g)].map((m) => [m[1], m[2]]));
+  const BOARD = Object.fromEntries([...read('../src/boarding.js').matchAll(/\{ id: '(\w+)', zone: '[\w-]+', lab: [\w.]+, cockpit: [\w.]+, bp: '([\w-]+)', flight: flight\(([A-Z]+)(, (?:null|\{ piece: '\w+', half: [^}]+, jet: [\w.]+ \}))?(, \[[^\]]*\])?\)/g)].map((m) => [m[1], m[2]]));
   for (const s of F.SHIPS) {
     assert.deepEqual(keys(s), keys(F.SHIPS[0]), s.id + ': the same facts as every other ship');
     const cfg = F.flightOf(s.id), placed = STATION.places.ships[s.id];
