@@ -29,6 +29,7 @@ import { createSky } from '../world/sky.js';
 import { buildRoomSoon, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
+import { OUTSIDE_BOX } from '../kit/outside-plan.js';
 import { makeBeams, beamsOf } from '../kit/beams.js';
 
 // low: no bloom, 1x; medium: bloom, 1.5x; high: bloom, a sharper room picture, 2x (the Kit Lab's own three steps; the
@@ -113,7 +114,12 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 }));
     // (the scene's own draws are counted inside its pass, before the bloom's passes add theirs)
     const rp = new RenderPass(scene, camera), rpRender = rp.render.bind(rp);
-    rp.render = (...a) => { renderer.info.reset(); rpRender(...a); stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles; };
+    rp.render = (r, wb, rb, ...a) => {
+      renderer.info.reset();
+      if (!split()) rpRender(r, wb, rb, ...a);
+      else twoDepths((first) => { if (!first) { renderer.setRenderTarget(rp.renderToScreen ? null : rb); renderer.clearDepth(); rp.clear = false; } rpRender(r, wb, rb, ...a); rp.clear = true; });
+      stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles;
+    };
     composer.addPass(rp); composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.32, 2.2)); composer.addPass(new OutputPass());
   }
   function resize(force = false) {
@@ -123,9 +129,37 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     if (composer) { composer.setPixelRatio(pr); composer.setSize(w, h); }
   }
   resize(true);
+  // THE PICTURE IN TWO DEPTHS, SEEN FROM OUT IN SPACE (2026-11-26: the game's maker saw flickering on the station from
+  // outside in the trailer). The depth buffer tells near from far finely close to the eye and coarsely far off; with
+  // the eye's near limit a few centimetres out (the cockpit's 5 cm, a person's 3 cm), the station a few hundred metres
+  // away was told apart only to tens of centimetres, so its plates, frames and windows fought for the picture. With the
+  // camera outside the station's box (and nothing of a trip drawn alone), the picture is drawn twice: everything from
+  // SPLIT.at metres out to the far limit, then, over it, whatever is nearer than that (the cockpit, its own hull) with the
+  // eye's own near limit. Each part has the whole depth buffer to itself: at 700 m things are told apart to under a
+  // centimetre. The second pass draws only what reaches that close (most of the station is not in its view at all).
+  const box = OUTSIDE_BOX, SPLIT = { at: 6, margin: 4 };
+  const split = () => {
+    if (W0.alone || camera.near >= SPLIT.at) return false;
+    const p = camera.position, m = SPLIT.margin;
+    return p.x < box.min[0] - m || p.x > box.max[0] + m || p.y < box.min[1] - m || p.y > box.max[1] + m || p.z < box.min[2] - m || p.z > box.max[2] + m;
+  };
+  function twoDepths(once) {
+    const n0 = camera.near, f0 = camera.far, skyOn = sky.object.visible, bg = scene.background;
+    camera.near = SPLIT.at; camera.updateProjectionMatrix();
+    once(true);
+    camera.near = n0; camera.far = Math.min(f0, SPLIT.at * 1.001); camera.updateProjectionMatrix();
+    sky.object.visible = false; scene.background = null;
+    once(false);
+    camera.far = f0; camera.updateProjectionMatrix(); sky.object.visible = skyOn; scene.background = bg;
+  }
   function draw(dt) {
     if (composer) composer.render(dt);
-    else { renderer.info.reset(); renderer.render(scene, camera); stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles; }
+    else {
+      renderer.info.reset();
+      if (!split()) renderer.render(scene, camera);
+      else { const ac = renderer.autoClear; twoDepths((first) => { if (!first) { renderer.autoClear = false; renderer.clearDepth(); } renderer.render(scene, camera); }); renderer.autoClear = ac; }
+      stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles;
+    }
   }
 
   // ── the rooms ──────────────────────────────────────────────────────────────────────────────────────────────────

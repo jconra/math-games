@@ -22,6 +22,7 @@
 //   g.U (the shader's settings, shared with the cover's), g.stats { patches, tris, lightMs, bytes }
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
+import { takesShadows } from './groundshadow.js';
 
 // the patches: the smallest is SIZE0 metres across; a patch of level L is SIZE0 * 2^L and is drawn while the camera is
 // within RANGE times its size (a bigger one beyond). RANGE and MORPH keep every meeting of two sizes gap-free (see the
@@ -259,7 +260,8 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   };
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
-  const material = new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: look.air ? { AIR: 1 } : {} });
+  // (its spots of the picture marked as ground: the shadows are drawn there and only there, src/planet/groundshadow.js)
+  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: look.air ? { AIR: 1 } : {} }));
 
   // the grid: (G + 1)^2 corners, x and z in grid steps
   const pos = new Float32Array((G + 1) * (G + 1) * 3), idx = [];

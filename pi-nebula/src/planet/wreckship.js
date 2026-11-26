@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { HAZE_SKY_GLSL } from './cover.js';
+import { castsShadow } from './groundshadow.js';
 import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, PAINTS, wreckFor, WRECK_SHIPS } from './wreck.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
@@ -198,6 +199,8 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
         glass: onGround(M.glass, { ground, sky, kind: 'glass' }),
         dark: onGround(new THREE.MeshStandardMaterial({ color: 0x16191d, roughness: 0.55, metalness: 0.1 }), { ground, sky, kind: 'dark' }),
       };
+      // (its own spots of the picture marked, so no shadow is drawn over it: src/planet/groundshadow.js castsShadow)
+      for (const m of Object.values(byKind)) castsShadow(m);
       materials.push(...Object.values(byKind));
       broken.pieces.forEach((pc, k) => {
         for (const [kind, s] of Object.entries(pc)) {

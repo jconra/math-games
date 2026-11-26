@@ -25,6 +25,7 @@ import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { HAZE_SKY_GLSL } from './cover.js';
 import { PAINTS } from './wreck.js';
+import { castsShadow } from './groundshadow.js';
 import { loadPod, podMaterials, podPaint, makePod } from '../../kit/stasispod.js';
 
 // the sleepers: drawn with the crew kit's far copy beyond `far` metres from the camera, not drawn beyond `seen` (they are
@@ -89,6 +90,8 @@ function shadowMaterial({ ground, sunDir, air }) {
 export async function makePods({ plan, scene, ground, sky = null, sunDir = null, paint = null }) {
   const t0 = performance.now(), P = await loadPod(), tLoad = performance.now();
   const mats = podMaterials(P, { patch: (m, kind) => onPlanet(m, { ground, sky, kind }), paint: PAINTS[paint] || null });
+  // (their own spots of the picture marked, so no shadow is drawn over them: src/planet/groundshadow.js castsShadow)
+  for (const m of Object.values(mats)) if (m && m.isMaterial) castsShadow(m);
   const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;
   const group = new THREE.Group(); group.name = 'planet:pods'; scene.add(group);
   const pods = plan.pods.map((pp) => {

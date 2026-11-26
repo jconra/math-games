@@ -36,7 +36,7 @@ import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
 import { MEDIC, patientBeds, restOrder } from '../rescueplan.js';
 import { INSIDE_FILL, FILL_UNIFORMS, insideLight } from './inside.js';
-import { groundShadowMaterial, shadowUnder } from './groundshadow.js';
+import { groundShadowMaterial, shadowUnder, castsShadow } from './groundshadow.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 // the hull's corners' darkness baked coarser than the Ship Lab's (it is made each time a planet is landed on: as the
@@ -65,6 +65,8 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   // (lit as the planet's own things are: the sun and the sky's light from the ground's light picture where it stands,
   // the haze: as the pods are, src/planet/podsdraw.js onPlanet)
   eachMaterial(hullMats, (m) => { if (m.isMeshStandardMaterial) onPlanet(m, { ground, sky, kind: 'medic-' + m.name }); });
+  // (its own spots of the picture marked, so no shadow is drawn over it, its own legs' or the pods': groundshadow.js)
+  eachMaterial(hullMats, (m) => castsShadow(m));
   await breath();
   let t = performance.now();
   const B = buildRoom(room, hullMats, { bake: MEDIC_BAKE });

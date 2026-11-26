@@ -25,6 +25,18 @@ import * as THREE from 'three';
 // and how dark (with a sky, without one: the wreck's own)
 export const GROUND_SHADOW = { lift: 0.06, people: 0.03, air: 0.5, bare: 0.7 };
 
+// THE SHADOWS STAY ON THE GROUND (the game's maker, 2026-11-26, of the trailer's crashed ship: "that is where I also see
+// z-fighting, in the lower nose panel of the wrecked ship"). A shadow is drawn just over the ground and pulled toward
+// the eye so the ground never hides it; seen low and from the side, that pull carried it over the bottom of the very
+// thing casting it (the wreck's nose where it lies in the ground, the stasis pods' sides), in speckles that changed with
+// every small move of the eye. Now the stencil says, for each spot of the picture, what is drawn there: the ground marks
+// its spots 0 (`takesShadows`), whatever casts one marks its own 1 (`castsShadow`: the wreck, the pods, the Medic set
+// down), and a shadow is drawn only on a spot still marked 0 (and marks it 1: each spot darkened once, as before). So
+// it falls on the ground and never on what casts it, at any distance and from any side.
+const mark = (mat, ref) => { mat.stencilWrite = true; mat.stencilRef = ref; mat.stencilFunc = THREE.AlwaysStencilFunc; mat.stencilZPass = THREE.ReplaceStencilOp; mat.stencilFail = THREE.KeepStencilOp; mat.stencilZFail = THREE.KeepStencilOp; return mat; };
+export const takesShadows = (mat) => mark(mat, 0);
+export const castsShadow = (mat) => mark(mat, 1);
+
 export function groundShadowMaterial({ ground, sunDir, air = false, curved = false, lift = GROUND_SHADOW.lift }) {
   const U = ground.U, sun = sunDir.clone().normalize(); if (sun.y < 0.12) { sun.y = 0.12; sun.normalize(); }
   return new THREE.ShaderMaterial({
