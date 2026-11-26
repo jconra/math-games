@@ -45,6 +45,8 @@
 /* ── the goal buttons and the words, at the bottom ──────────────────────────────────────────────────────────── */
 .mbl-bottom { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .mbl-bottom > * { pointer-events: auto; }
+/* (the words line is only words: a tap on a ball under it reaches the court) */
+.mbl-bottom > .mbl-hint { pointer-events: none; }
 /* the goal buttons: a small map of the four goals in the bottom right corner, two rows of two (the far end on top) */
 .mbl-goals { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(320px, 46vw); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .mbl-goals button { min-height: 48px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05;
