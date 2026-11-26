@@ -42,7 +42,7 @@ export function craneLink({ crane, W, walls, onFree = null }) {
   const site = crane.site, G = gridOf(site);
   const live = () => crane.live;
   const Q = makeGame(site, { state: () => crane.live.state });
-  const cam = followCam(W, site);
+  const cam = followCam(W, site, crane.world && crane.world.solid);
   let closed = false, clock = 0, view = 0, card = null, moving = false, lastBusy = false, ghost = null, waitT = -9, blink = null;
   let check = { n: 0, of: GAME.questions, phase: null, done: false, bannerT: -9, verified: 0 }, magicDue = 0, trip = null, film = null;
   const filmAt = new THREE.Vector3(), filmLook = new THREE.Vector3(), _w = new THREE.Vector3(), _l = new THREE.Vector3();

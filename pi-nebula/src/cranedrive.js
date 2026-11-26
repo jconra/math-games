@@ -10,8 +10,9 @@
 //                 push across the screen (a push within about 37 degrees of the hangar's x or y goes that way only)
 //     up, down    the ▲ ▼ buttons (held), or R / F (Space / C as well)
 //     turn        the ↺ ↻ buttons (held), or Q / E: the cradle turns the canister
-//     view        the View button, or V: following the load, the camera on the crane looking down, the cameras on
-//                 the hangar's walls
+//     view        the View button, or V: following the load (dragged round, all the way round), the crane's own
+//                 looking straight down from the grab (a crosshair and a box to line up by), one wall camera
+//                 (src/craneview.js: the game's maker, 2026-11-26)
 //     done        Done, or Esc: the crane works its way up and the round takes over from where things are
 //   THERE IS NO GRAB BUTTON: lowered onto a canister the crane takes it; lowered into a free place (a socket, a ship's
 //   tray, a rack bay) it lets go; in front of a free socket at its height it pushes the canister in. Near a place it
@@ -20,7 +21,7 @@
 //   const D = openDrive(root, { crane, input, W, walls, onClose, onGame, onDock })   D.update(dt) (before the camera),
 //                                     D.aim(camera, dt), D.close(), D.state() (for rigs); onGame: the screen's switch
 //                                     back to the crane game; onDock(c, socket) -> the credits it paid (src/jobs/index.js)
-//   followCam(W, site) -> { aim(camera, S, dt, opts), orbit, zoom }     the view that follows the load
+//   followCam(W, site, solid) -> { aim(camera, S, dt, opts), orbit, zoom }   the view that follows the load
 //   viewCam(crane, name) / VIEWS                                        the crane's cameras by name
 //   readout(r, crane) -> { x, y, h, load }                              the readouts as words
 //   chairScreen(W, crane) -> { update(dt) }                             the chair's middle screen showing them
@@ -28,6 +29,8 @@ import * as THREE from 'three';
 import { expand, zonesOf } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix } from '../kit/grid.js';
+import { VIEWS, VIEW_NAMES, WALL_CAM, orbitBy, orbitEye, clearAlong, hangarClear, fitFov, markOf, markCorners } from './craneview.js';
+export { VIEWS, VIEW_NAMES };
 
 const CSS = new URL('./cranedrive.css', import.meta.url).href;
 export function ensureCss() {
@@ -76,39 +79,68 @@ export function readout(r, crane) {
   return { x: m1(gx), y: m1(gy), h: m1(r.hook) + ' m', load: r.held >= 0 ? 'a canister' : 'nothing' };
 }
 
-// ── the cameras: following the load; on the crane looking down; on the hangar's walls ─────────────────────────────
-export const VIEWS = ['follow', 'crane', 'miner-cam-sw', 'miner-cam-nw', 'miner-cam-ne', 'miner-cam-se'];
-export const VIEW_NAMES = { follow: 'Following the load', crane: 'From the crane, looking down', 'miner-cam-sw': 'Wall camera 1', 'miner-cam-nw': 'Wall camera 2', 'miner-cam-ne': 'Wall camera 3', 'miner-cam-se': 'Wall camera 4' };
+// ── the cameras: following the load; on the grab looking straight down; one on the hangar's wall ────────────────
+// (src/craneview.js: VIEWS, the orbit's sums, the crane's own camera, the mark)
 export function viewCam(crane, name) { return crane.cams().find((c) => c.name === name) || null; }
+const NEAR = 0.03;   // (the game's own near plane: src/station.js)
 // the view that follows the load: from the hangar's middle side of it, above, looking at the hook; `orbit` (radians)
-// swings it round, `zoom` (metres) nearer or further; kept inside the hangar
-export function followCam(W, site) {
+// swings it round, all the way round; `zoom` (metres) nearer or further. Where it would be behind a wall or inside
+// something (solid: the crane's own look-up of what stands still), it is brought in along its line to the hook as far
+// as is clear
+export function followCam(W, site, solid = null) {
   const mid = new THREE.Vector3((site.rail.x[0] + site.rail.x[1]) / 2, 0, (site.rail.z[0] + site.rail.z[1]) / 2);
-  const at = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3(), hook = new THREE.Vector3();
-  let fresh = true, base = null;
+  const at = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3(), hook = new THREE.Vector3(), drawn = new THREE.Vector3();
+  const clear = hangarClear(site, solid), tight = hangarClear(site, solid, { r: 0.15 }), _a = [0, 0, 0], _b = [0, 0, 0];
+  // (from the look toward p, as far as is clear: p brought in along that line)
+  const bringIn = (p, from, ok = clear) => { _a[0] = from.x; _a[1] = from.y; _a[2] = from.z; _b[0] = p.x; _b[1] = p.y; _b[2] = p.z; const L = p.distanceTo(from), t = clearAlong(_a, _b, ok); if (t < 1) p.lerpVectors(from, p, Math.max(Math.min(1, 1.2 / Math.max(L, 1e-6)), t)); return p; };
+  // (the load as a ball round the hook: a held canister, or the empty grab)
+  const loadR = Math.hypot(site.can.half, site.dims.R) + 0.2, grabR = site.dims.grip.half + 0.3;
+  let fresh = true, base = null, fov = 62, share = 1;
   const F = { orbit: 0, zoom: 9, fresh() { fresh = true; base = null; },
     aim(camera, S, dt, { fixed = null, shift = null } = {}) {
+      // (the crane's own camera puts its near plane past a held canister: back to the game's own otherwise)
+      const near = (fixed && fixed.near) || NEAR;
+      if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
       if (fixed) {
         want.copy(fixed.at); wantLook.copy(fixed.look);
         if (camera.fov !== fixed.fov) { camera.fov = fixed.fov; camera.updateProjectionMatrix(); }
         // (the camera on the crane rides with it: no easing behind)
         if (fixed.down) { at.copy(want); look.copy(wantLook); camera.position.copy(at); camera.up.set(0, 0, -1); camera.lookAt(look); camera.up.set(0, 1, 0); return; }
       } else {
-        if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
         hook.set(S.x, S.hoist, S.z);
         // (from the hangar's middle side of the hook, settled once and then only swung by hand)
         if (base == null) base = Math.atan2(mid.x - hook.x, mid.z - hook.z) || 0;
-        const a = base + F.orbit, d = F.zoom;
-        want.set(hook.x + Math.sin(a) * d, Math.min(8.0, Math.max(2.2, hook.y + 3.2)), hook.z + Math.cos(a) * d);
-        want.x = Math.max(site.rail.x[0] - 1, Math.min(site.rail.x[1] + 1, want.x)); want.z = Math.max(site.rail.z[0] - 0.6, Math.min(site.rail.z[1] + 0.6, want.z));
+        const d = F.zoom;
+        want.fromArray(orbitEye([hook.x, hook.y, hook.z], base, F.orbit, d));
         wantLook.copy(hook); wantLook.y -= 0.9;
+        // (behind a wall, or inside the ship or the rack: brought in along its line to the hook)
+        bringIn(want, wantLook);
+        // (brought in close, it looks at the load itself rather than under it, so the load stays in the middle)
+        const near = Math.min(1, Math.max(0, (Math.hypot(want.x - hook.x, want.z - hook.z) - 2.5) / 4));
+        wantLook.y = hook.y - 0.9 * near;
         if (shift) { const fx = wantLook.x - want.x, fz = wantLook.z - want.z, L = Math.hypot(fx, fz) || 1; wantLook.x += (-fz / L) * shift[0] * d; wantLook.z += (fx / L) * shift[0] * d; wantLook.y += shift[1] * d; }
       }
       // (it starts where it belongs, not swooping there through the walls)
+      const fresh0 = fresh;
       if (fresh) { at.copy(want); look.copy(wantLook); fresh = false; }
       const k = 1 - Math.exp(-4.5 * dt), kl = 1 - Math.exp(-7 * dt);
       at.lerp(want, k); look.lerp(wantLook, kl);
-      camera.position.copy(at); camera.lookAt(look);
+      // (the place it has eased to is clear as a rule, the place it wants having been: brought in only if not, and on a
+      // tighter rule than the one it wants, so it never flickers to and fro at the edge)
+      drawn.copy(at);
+      if (!fixed) {
+        // (in at once where it must be, so never inside anything; back out easing, so never a jump)
+        let want1 = 1;
+        if (!tight(drawn.x, drawn.y, drawn.z)) { _a[0] = look.x; _a[1] = look.y; _a[2] = look.z; _b[0] = drawn.x; _b[1] = drawn.y; _b[2] = drawn.z; want1 = Math.max(Math.min(1, 1.2 / Math.max(drawn.distanceTo(look), 1e-6)), clearAlong(_a, _b, tight)); }
+        share = fresh0 || want1 < share ? want1 : share + (want1 - share) * (1 - Math.exp(-6 * dt));
+        if (share < 1) drawn.lerpVectors(look, at, share);
+        // (brought in close on a wall's side: the lens a little wider, easing, so the load stays wholly in the picture)
+        const held = S.cans && S.cans.some((q) => q.where === 'held'), d = drawn.distanceTo(hook);
+        const wantFov = fitFov(62, camera.aspect || 1, d, held ? loadR : grabR);
+        fov = fresh0 ? wantFov : fov + (wantFov - fov) * (1 - Math.exp(-5 * dt));
+        if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      }
+      camera.position.copy(drawn); camera.lookAt(look);
     },
   };
   return F;
@@ -152,6 +184,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   const el = document.createElement('div');
   el.className = 'pcd';
   el.innerHTML = `
+    <svg class="pcd-mark" hidden aria-hidden="true"><polygon class="pcd-box"/><path class="pcd-cross"/></svg>
     <header class="pcd-top">
       <div class="pcd-title"><b>Free control</b><small>The crane by hand: ${FREE.dock} credits for each canister docked</small></div>
       ${onGame ? '<button type="button" class="pcd-swap" aria-label="Back to the crane game">Crane game</button>' : ''}
@@ -184,7 +217,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   let paidT = -9, earned = 0;                            // (the credits a docking by hand just paid, and in all this time)
   // (a push keeps the way it was given while it is held, though the view swings round: let go and push again)
   let ahead = null;
-  const cam = followCam(W, crane.site);
+  const cam = followCam(W, crane.site, crane.world && crane.world.solid);
   if (input) input.enabled = true;
   crane.take();
 
@@ -217,7 +250,8 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
     if (crane.mode === 'landing') $('.pcd-wait').textContent = 'The Miner is landing: the crane waits.';
     // the look and the zoom are the crane camera's while it is up
     if (input) {
-      const Lk = input.takeLook(); if (VIEWS[view] === 'follow') cam.orbit = Math.max(-2.6, Math.min(2.6, cam.orbit - Lk.dx * 0.006));
+      // (the orbit has no stop: round and round, as often as you like; src/craneview.js)
+      const Lk = input.takeLook(); if (VIEWS[view] === 'follow') cam.orbit = orbitBy(cam.orbit, Lk.dx);
       const z = input.takeZoom(); if (z) cam.zoom = Math.max(4, Math.min(16, cam.zoom + z * 0.8));
     }
     if (!D) return;
@@ -298,12 +332,35 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   function aim(camera, dt) {
     const S = crane.live ? crane.live.state : crane.L.state(crane.t), v = VIEWS[view];
     cam.aim(camera, S, dt, { fixed: v === 'follow' ? null : viewCam(crane, v) });
+    drawMark(camera, v === 'crane' ? crane.live : null);
+  }
+  // THE MARK in the crane's own view (src/craneview.js markOf): a crosshair straight under the grab, and a box the size
+  // of a canister where it (or the one it holds) will come down; amber and green as the docking lights
+  const mark = $('.pcd-mark'), box = $('.pcd-box'), cross = $('.pcd-cross'), _p = new THREE.Vector3();
+  let markLook = '', markAt = null;   // (markAt: where it is on the screen, for the rigs)
+  function drawMark(camera, D) {
+    if (!D) { if (!mark.hasAttribute('hidden')) mark.setAttribute('hidden', ''); markAt = null; return; }
+    const w = innerWidth, h = innerHeight, r = D.read(), m = markOf(r, D.state, crane.site, crane.world && crane.world.solid);
+    camera.updateMatrixWorld();
+    const px = (p) => { _p.set(p[0], p[1], p[2]).project(camera); return [(_p.x + 1) / 2 * w, (1 - _p.y) / 2 * h, _p.z]; };
+    const pts = markCorners(m).map(px);
+    mark.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    // (a place at the grab's own height, nearer than the picture's near plane: no box, the crosshair alone)
+    box.setAttribute('points', pts.every((q) => q[2] > -1 && q[2] < 1) ? pts.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') : '');
+    // (the crosshair: straight under the grab, on what it will come down on; a gap in its middle to see through)
+    const [cx, cy] = px([r.x, m.at[1], r.z]), s = Math.max(22, Math.min(w, h) * 0.06), g = s * 0.35;
+    cross.setAttribute('d', `M${cx - s},${cy}H${cx - g}M${cx + g},${cy}H${cx + s}M${cx},${cy - s}V${cy - g}M${cx},${cy + g}V${cy + s}`);
+    if (m.look !== markLook) { markLook = m.look; mark.dataset.look = m.look; }
+    markAt = { y: m.at[1], cross: [cx, cy], box: [pts.reduce((a, q) => a + q[0], 0) / 4, pts.reduce((a, q) => a + q[1], 0) / 4], look: m.look, place: m.place };
+    if (mark.hasAttribute('hidden')) mark.removeAttribute('hidden');   // (an svg has no .hidden of its own)
   }
   function close(silent = false) {
     if (closed) return;
     closed = true;
     removeEventListener('keydown', onKey, true);
     crane.places = [];
+    // (the crane's own camera may have left the near plane past a held canister)
+    if (W.camera && W.camera.near !== NEAR) { W.camera.near = NEAR; W.camera.updateProjectionMatrix(); }
     el.classList.add('is-going');
     setTimeout(() => el.remove(), 250);
     // (silent: the crane game takes over, the crane still live)
@@ -311,7 +368,7 @@ export function openDrive(root, { crane, input, W, walls, onClose = () => {}, on
   }
   requestAnimationFrame(() => el.classList.add('is-on'));
   showView();
-  const api = { el, update, aim, close, cam, act, pilot: null, get view() { return VIEWS[view]; }, setView(n) { const i = VIEWS.indexOf(n); if (i >= 0) { view = i; cam.fresh(); } }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), dots: [...el.querySelectorAll('[data-a]')].map((d) => d.dataset.look || 'off'), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations, earned }) };
+  const api = { el, update, aim, close, cam, act, pilot: null, get view() { return VIEWS[view]; }, setView(n) { const i = VIEWS.indexOf(n); if (i >= 0) { view = i; cam.fresh(); showView(); } }, state: () => ({ mode: crane.mode, view: VIEWS[view], hint: $('.pcd-hint').textContent, reads: [...el.querySelectorAll('[data-r]')].map((d) => d.textContent), dots: [...el.querySelectorAll('[data-a]')].map((d) => d.dataset.look || 'off'), aids: crane.live ? crane.live.read().aids : null, live: crane.live ? crane.live.read() : null, notice: $('.pcd-notice').hidden ? null : $('.pcd-notice').textContent, violations, earned, mark: markAt }) };
   return api;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -369,7 +426,7 @@ export function chairScreen(W, crane, chair = chairFrame(W)) {
     const block = new THREE.Matrix4().makeRotationY(a + Math.PI).setPosition(Math.sin(a) * R, 0, Math.cos(a) * R);
     const local = new THREE.Matrix4().makeRotationX(-tilt).setPosition(0, 0.83 + 0.024 * Math.sin(tilt) + 0.006 * nx, -0.02 + 0.024 * Math.cos(tilt) + 0.006 * -nz);
     m.matrixAutoUpdate = false; m.matrix.copy(block).multiply(local); holder.add(m);
-    return { rt, mesh: m, cam: new THREE.PerspectiveCamera(70, 320 / 208, 0.05, 90), name: n ? 'crane' : 'miner-cam-sw' };
+    return { rt, mesh: m, cam: new THREE.PerspectiveCamera(70, 320 / 208, 0.05, 90), name: n ? 'crane' : WALL_CAM };
   });
   let turn = 0, frame = 0;
   const _cp = new THREE.Vector3();
@@ -378,7 +435,7 @@ export function chairScreen(W, crane, chair = chairFrame(W)) {
     if (!holder.parent || C.position.distanceTo(_cp) > 7 || (C.view && C.view.enabled)) return;
     if (++frame % 6) return;
     const v = views[turn = (turn + 1) % views.length], c = crane.cams().find((q) => q.name === v.name); if (!c) return;
-    v.cam.position.copy(c.at); if (c.down) v.cam.up.set(0, 0, -1); else v.cam.up.set(0, 1, 0); v.cam.lookAt(c.look); v.cam.fov = c.fov || 70; v.cam.updateProjectionMatrix();
+    v.cam.position.copy(c.at); if (c.down) v.cam.up.set(0, 0, -1); else v.cam.up.set(0, 1, 0); v.cam.lookAt(c.look); v.cam.fov = c.fov || 70; v.cam.near = c.near || 0.05; v.cam.updateProjectionMatrix();
     const R2 = W.renderer, was = R2.getRenderTarget(), fog = W.scene.fog;
     // (the screens themselves hidden while a picture is drawn: a wall camera can see them through the window, and a
     // screen drawn into its own picture is a feedback loop the GPU refuses)

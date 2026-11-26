@@ -67,8 +67,9 @@
 //   - THE LOAD SWINGS a little after a move (the game's maker: "I was also thinking it should swing"): drawn only, a
 //     pendulum driven by the trolley's and bridge's starting and stopping; what it touches is worked out on the still
 //     load, so it never swings into anything.
-//   - THE CAMERAS (the crane's View button, and the chair's screens): the station file's views on the hangar's walls
-//     (miner-cam-*), one on the trolley looking straight down, and the plan from above for the grid (src/jobs/crane.js).
+//   - THE CAMERAS (the crane's View button, and the chair's screens): the station file's one view on the hangar's wall
+//     (src/craneview.js WALL_CAM), one on the grab looking straight down (src/craneview.js grabCam: nothing of the crane
+//     under it at any height), and the plan from above for the grid (src/jobs/crane.js).
 //   - THE SCREENS on the trolley: the crane's x, y and height, as the grid counts them (src/jobs/crane.js gridOf: the
 //     hangar's `craneGrid` in the station file, from the back corner on your left as you come in, y toward the bay door).
 //
@@ -86,7 +87,7 @@
 //   crane.awayHeld                 true: the Miner stays on its pad when the player leaves the area (a contract signed)
 //   crane.load()                   the load in plain numbers, and for how long each stays as it is (the smelter job)
 //   crane.grid(x, z) -> [gx, gy]   a point of the station as the grid counts it (src/jobs/crane.js toGrid)
-//   crane.cams()                   the cameras: [{ name, at, look, fov }]
+//   crane.cams()                   the cameras: [{ name, at, look, fov, near?, down? }]
 //   crane.t, crane.round, crane.waiting, crane.seek(t), crane.skip(seconds), crane.pose(), crane.land(), crane.away()   (rigs)
 import { makeOreLine } from '../kit/crane.js';
 import { makeDrive, DRIVE } from '../kit/crane-drive.js';
@@ -101,6 +102,7 @@ import { SHOVE } from './flymodel.js';
 import { SHIPS as BOARDED } from './boarding.js';
 import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
+import { WALL_CAM, grabCam } from './craneview.js';
 
 export const RULES = {
   margin: 0.9,      // how far beyond the canister's own patch of floor a person stops it (metres)
@@ -304,11 +306,13 @@ export function makeCrane({ W, walls, boarding = null }) {
     L.swing(sw.z[0], -sw.x[0]);
   }
 
-  // ── the cameras: the station file's views on the hangar's walls, and the one on the trolley looking down ──
-  const wallCams = Object.keys(W.R?.views || {}).filter((n) => /^miner-cam-/.test(n)).sort().map((n) => ({ name: n, ...W.view(n) }));
+  // ── the cameras: the station file's one view on the hangar's wall, and the one on the grab looking straight down ──
+  // (the game's maker, 2026-11-26: "One is probably best", and "one you could look straight down from (like it is on the
+  // part that lowers down)": src/craneview.js)
+  const wallCams = W.R?.views?.[WALL_CAM] ? [{ name: WALL_CAM, ...W.view(WALL_CAM) }] : [];
   function cams() {
-    const S = live ? live.state : L.state(t);
-    return [...wallCams, { name: 'crane', at: new THREE.Vector3(S.x + 0.6, site.rail.y + site.dims.trolley.y0 - 0.2, S.z + 0.02), look: new THREE.Vector3(S.x, Math.max(0, S.hoist - 3), S.z), fov: 70, down: true }];
+    const S = live ? live.state : L.state(t), g = grabCam(S, site.dims);
+    return [...wallCams, { ...g, at: new THREE.Vector3(...g.at), look: new THREE.Vector3(...g.look) }];
   }
 
   const C = {

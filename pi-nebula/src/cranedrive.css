@@ -149,3 +149,14 @@ body.pcg-on .hud-menu { visibility: hidden; }   /* (the crane system's strip is 
   .pcg-banner b { font-size: 15px; }
   .pcg-banner span { font-size: 13px; }
 }
+
+/* the mark in the crane's own view (looking straight down from the grab): a crosshair under the grab, a box the size of
+   a canister where it will come down; light lines on the dark, amber and green as the docking lights */
+.pcd-mark { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.pcd-mark[hidden] { display: none; }
+.pcd-mark .pcd-box, .pcd-mark .pcd-cross { fill: none; stroke: rgba(226, 244, 255, 0.92); stroke-width: 2.5px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.9)); }
+.pcd-mark .pcd-box { stroke-dasharray: 10 6; }
+.pcd-mark[data-look="near"] .pcd-box, .pcd-mark[data-look="near"] .pcd-cross { stroke: #ffab3d; }
+.pcd-mark[data-look="on"] .pcd-box, .pcd-mark[data-look="on"] .pcd-cross { stroke: #4fe08a; }
+.pcd-mark[data-look="on"] .pcd-box { stroke-dasharray: none; stroke-width: 3px; }
