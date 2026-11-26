@@ -68,6 +68,8 @@ import { STORE } from '../kit/places-plan.js';
 import { musicWanted } from './music/switch.js';
 
 const LOAD_BYTES = 'calc-station.load.bytes';   // (the bytes the last whole load came to, for the loading strip)
+// (THE MAKER FIRST, in boot: the longest the station waits for the character maker's own files)
+const MAKER_WAIT = 12000;
 const BUILD = 5;                 // shown small on the title; goes up with index.html's ?v=
 const q = new URLSearchParams(location.search);
 const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
@@ -76,6 +78,16 @@ document.title = GAME_NAME;
 const canvas = document.getElementById('game');
 const GAME = window.GAME = { ready: false, mode: 'title', frames: 0, missing: [], drawn, made };
 const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
+
+// THE MAKER FIRST: the files of the person the title's window shows first (the chosen crew member, or the ready-made
+// look a new crew member's form starts in): their parts and their outfit's moves, fetched (and the moves fitted) ahead
+async function makerParts(lib, T) {
+  const p = T.player(), d = T.ctx && T.ctx.S.draft, R = recipeOf(p ? p.look : { id: d && d.look }, lib);
+  const hand = R.hand !== undefined ? R.hand : lib.handFor(R.suit), H = R.hair ? lib.entry('hair', R.hair) || {} : {};
+  const want = [['suit', R.suit], ['head', R.head], ['hand', hand], ['hair', H.paint && !H.file ? null : R.hair]].filter((x) => x[1] && lib.entry(x[0], x[1]));
+  await Promise.all([...want.map(([k, id]) => lib.part(k, id).catch(() => null)), lib.clipsFor(R.suit, hand).catch(() => null),
+    H.cards || H.paint || (H.scalp && H.scalp.line) || H.strands ? lib.hairAtlas().catch(() => null) : null]);
+}
 
 async function boot() {
   const players = save.load();
@@ -89,7 +101,11 @@ async function boot() {
   try { expect = +localStorage.getItem(LOAD_BYTES) || 0; } catch (e) { /* blocked: the rig's figure */ }
   const bar = GAME.bar = showLoadBar(document.body, { expect });
   if (!expect) storedReady.then(() => bar.expect(storedInfo().bytes)).catch(() => {});
-  const progress = (f, words) => { T.setProgress(f, words); bar.set(f, words); };
+  // (the start button shows the load as far as the strip does: the strip counts the megabytes in too, THE MAKER WHILE
+  // THE GAME LOADS; never the whole of it, so the button is never ready before the station is)
+  let work = 0;
+  const progress = (f, words) => { work = f; T.setProgress(Math.max(f, Math.min(0.99, bar.shown())), words); bar.set(f, words); };
+  const same = setInterval(() => { if (!GAME.ready) T.setProgress(Math.max(work, Math.min(0.99, bar.shown()))); }, 250);
   progress(0.01, 'Waking the station');
   // each file that arrives moves the loading bar on a little
   try { new PerformanceObserver((list) => { for (let i = list.getEntries().length; i > 0; i--) T.nudge(); }).observe({ type: 'resource' }); } catch (e) { /* an old browser: the bar still moves */ }
@@ -98,7 +114,14 @@ async function boot() {
   const libP = loadCrew();
   // (the looks' pictures are stored ready-made and on their way already; a look with none is drawn here once the kit is in;
   // then the kit is the character maker's: its arrows' list of parts, and the pictures of the looks made with it)
-  Promise.all([libP, storedReady]).then(([lib, missing]) => (missing.length ? drawLooks(lib, { only: missing }) : null)).catch(fail).then(() => libP).then(useKit).catch(fail);
+  const kitP = Promise.all([libP, storedReady]).then(([lib, missing]) => (missing.length ? drawLooks(lib, { only: missing }) : null)).catch(fail).then(() => libP).then(useKit);
+  kitP.catch(fail);
+  // THE MAKER FIRST (2026-11-26; the game's maker: "It might be better if it let you name AND customize your character
+  // while it was loading"): what the character maker needs, the crew kit and the parts and moves of the person its
+  // window will show (the chosen crew member's, or the look a new crew member starts in), is fetched first and by
+  // itself, and only then the station (or after MAKER_WAIT at most, should those be slow to come), so the maker can be
+  // used within moments of the page opening. Only going aboard waits for the whole load.
+  await Promise.race([kitP.then((lib) => makerParts(lib, T)).catch(() => {}), new Promise((go) => setTimeout(go, MAKER_WAIT))]);
 
   const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => progress(0.02 + f * 0.8, words) });
   GAME.W = W;
@@ -334,10 +357,15 @@ async function boot() {
   if (!HOLD) W.renderer.setAnimationLoop((ms) => { const dt = last ? Math.min(0.05, (ms - last) / 1000) : 1 / 60; last = ms; tick(dt); });
   GAME.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) tick(dt); };
 
+  // (THE MAKER WHILE THE GAME LOADS: the station's shaders are built ahead, by three's compileAsync, while the title can
+  // still be used; the first picture was one long go of some nine seconds otherwise, in which nothing typed or pressed on
+  // the title got through)
+  progress(0.97, 'Getting the picture ready');
+  try { if (W.renderer.compileAsync) await Promise.race([W.renderer.compileAsync(W.scene, W.camera).catch((e) => console.warn('station: the shaders built ahead', e)), new Promise((go) => setTimeout(go, 30000))]); } catch (e) { console.warn('station: the shaders built ahead', e); }
   tick(1 / 60);
   canvas.classList.add('is-on');
   T.setProgress(1, 'Station ready');
-  bar.done();
+  bar.done(); clearInterval(same);
   GAME.loadBytes = bar.bytes();
   try { localStorage.setItem(LOAD_BYTES, String(GAME.loadBytes)); } catch (e) { /* blocked */ }
   GAME.ready = true;

@@ -225,6 +225,11 @@ export function showTitle(root, theme, opts = {}) {
     const n = el.querySelector(`[data-k="${CSS.escape(k)}"]`);
     if (n) n.focus({ preventScroll: !scroll });
   }
+  // NO KEYBOARD BY ITSELF ON A PHONE (the game's maker, 2026-11-21: "It is really annoying how my keyboard on my phone
+  // keeps popping up"): the name box takes the focus by itself only where there is a mouse; on a touch screen alone the
+  // keyboard comes up only when the box itself is tapped
+  const touchOnly = () => { try { return matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches; } catch (e) { return false; } };
+  const nameFocus = (scroll = true) => { if (!touchOnly()) focusKey('name', scroll); };
 
   // the optional age as a row of round buttons ("Skip" first); kind names the action
   function agePick(cur, kind, label) {
@@ -375,16 +380,21 @@ export function showTitle(root, theme, opts = {}) {
     return r ? '' : W.makeFirst;
   }
   const ready = () => !S.load.known || S.load.f >= 1;
+  // THE START BUTTON SHOWS THE LOADING (a theme with words.loadingStart(percent), 2026-11-26: Pi Nebula, whose title can
+  // be used while the game loads): until the world is loaded the button is in its waiting look with the loading filling
+  // it, and its words say so; pressed then, it waits and goes by itself once loaded (as before); loaded, it is the start
+  // button as ever. A theme without those words keeps the button as it was
+  const loadShown = () => typeof W.loadingStart === 'function' && !ready() && !S.waiting && !S.riding;
 
   function renderActions() {
     const r = current();
     if (S.view === 'new' || !r) { actionsEl.innerHTML = ''; actionsEl.hidden = true; return; }
     actionsEl.hidden = false;
     const why = whyNot(r);
-    const label = S.riding ? W.starting : S.waiting ? W.waiting : W.start;
+    const label = S.riding ? W.starting : S.waiting ? W.waiting : loadShown() ? W.loadingStart(0) : W.start;
     actionsEl.innerHTML = `
       ${theme.actionsBefore ? theme.actionsBefore(r, S) : ''}
-      <button class="${P}-ride ${S.waiting ? 'is-waiting' : ''}" data-act="ride" data-k="ride" ${why || S.riding ? 'disabled' : ''}
+      <button class="${P}-ride ${S.waiting ? 'is-waiting' : loadShown() ? 'is-waiting is-loading' : ''}" data-act="ride" data-k="ride" ${why || S.riding ? 'disabled' : ''}
           aria-describedby="${P}-status"><i class="${P}-fill"></i><span>${label}</span></button>
       <div class="${P}-status" id="${P}-status" aria-live="polite">${why
         ? `<span class="${P}-why">${ICON.info}${why}</span>`
@@ -420,7 +430,9 @@ export function showTitle(root, theme, opts = {}) {
     const pct = Math.floor(at * 100), wide = (at * 100).toFixed(1) + '%';
     const load = actionsEl.querySelector(`.${P}-load`);
     const fill = actionsEl.querySelector(`.${P}-fill`);
-    if (fill) fill.style.width = S.waiting ? wide : '0';
+    if (fill) fill.style.width = S.waiting || loadShown() ? wide : '0';
+    const rideWords = actionsEl.querySelector(`.${P}-ride.is-loading span`);
+    if (rideWords && loadShown()) { const words = W.loadingStart(pct); if (rideWords.innerHTML !== words) rideWords.innerHTML = words; }
     if (!load) return;
     const bar = load.querySelector(`.${P}-bar i`), runner = load.querySelector(`.${P}-bar svg`), text = load.querySelector(`.${P}-loadtext`);
     if (!S.load.known) { load.style.display = 'none'; return; }
@@ -508,7 +520,7 @@ export function showTitle(root, theme, opts = {}) {
         if (!canMakeMore()) return;
         S.view = 'new'; S.draft = freshDraft(); S.waiting = false;
         renderAll();
-        focusKey('name');
+        nameFocus();
         return;
       case 'cancel':
         if (!players.length) return;
@@ -549,7 +561,7 @@ export function showTitle(root, theme, opts = {}) {
       }
       case 'create': {
         const name = (S.draft && S.draft.name || '').trim() || (S.draft && S.draft.pick) || '';
-        if (!name || !canMakeMore()) { focusKey('name'); return; }
+        if (!name || !canMakeMore()) { nameFocus(); return; }
         const nr = save.make(name, draftLook());
         nr.start = STARTS.includes(S.draft.start) ? S.draft.start : STARTS[0];   // (in place of an age: nothing more is asked)
         if (theme.created) theme.created(nr, S.draft);
@@ -665,7 +677,7 @@ export function showTitle(root, theme, opts = {}) {
   // ---- start ----
   renderAll();
   if (theme.begin) theme.begin(ctx);
-  const firstFocus = () => { if (S.view === 'new') focusKey('name', false); else focusKey('ride', false); };   // no scrolling: the name stays in view
+  const firstFocus = () => { if (S.view === 'new') nameFocus(false); else focusKey('ride', false); };   // no scrolling: the name stays in view
   ensureStyles(theme.css, () => {
     if (!S.visible) return;
     el.classList.remove('is-hidden');
@@ -710,6 +722,7 @@ export function showTitle(root, theme, opts = {}) {
       if (S.load.f < BAR.shown - 0.3) BAR.shown = S.load.f;   // (a new start: a second load after the first)
       paintLoad(); barGo();
       if (S.load.f >= 1 && S.waiting) rideNow();
+      else if (S.load.f >= 1 && actionsEl.querySelector(`.${P}-ride.is-loading`)) keepFocus(renderActions);   // (loaded: the start button as ever)
     },
     // A file finished downloading, or some other small piece of the work is done: the bar moves on a little (never past
     // what the next step is likely to show).

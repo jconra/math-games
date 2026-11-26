@@ -308,6 +308,8 @@
 }
 .cst-ride:hover:not(:disabled):not(.is-waiting) { --fill: #ffa24d; }
 .cst-ride span { position: relative; }
+/* (THE MAKER WHILE THE GAME LOADS: the button filling with the loading, its words and how far under them, small) */
+.cst-ride span small { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
 .cst-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); }
 .cst-ride.is-waiting { --fill: rgba(70, 44, 20, 0.9); color: #fff3e6; }
 .cst-ride.is-waiting span { text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
@@ -478,6 +480,35 @@
   .cst-row .cst-facts dd { margin-bottom: 6px; }
   .cst-facts .cst-startpick { max-width: none; }
   .cst-card { padding: 18px 16px 24px; --cut: 18px; }
+}
+/* THE MAKER WHILE THE GAME LOADS (2026-11-26): until the real person is drawn in the window, a line at its foot says
+   they are on the way (the picture of the look stands in behind it, dimmed) */
+.cst-waitwords { position: absolute; left: 8px; right: 8px; bottom: 10px; z-index: 1; text-align: center; font-style: normal; font-size: 12px;
+  font-weight: 600; letter-spacing: 0.08em; color: var(--ink); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); pointer-events: none; transition: opacity 0.3s; }
+.cst-full[data-live="ready"] .cst-waitwords { opacity: 0; }
+.cst-full:not([data-live="ready"]) .cst-pic { filter: brightness(0.75) saturate(0.8); }
+/* THE FIGURE AS LARGE AS THE WINDOW ALLOWS (2026-11-26; the game's maker: "I'd also make the small model of the person
+   you are customizing as large as possible. On my desktop it could expand quite a bit", and his picture: the card from
+   near the top of the window down to its foot, and the figure's window as much bigger as that frees). On a wide
+   window the chosen crew member's card is wider and takes the window's whole height above the button; the maker's
+   window takes the height and width that frees, the colours beside it at their own size; the person is drawn in it head
+   to feet, as large as it fits (portraits.js liveShow). Everything stays in sight without scrolling. */
+@media (min-width: 1101px) and (min-height: 561px) {
+  .cst { grid-template-columns: minmax(300px, 1fr) minmax(440px, 880px); }
+  .cst-panel:has(> .cst-crew) { flex: 1 1 auto; display: flex; flex-direction: column; }
+  .cst-panel > .cst-crew { flex: 1 1 auto; min-height: 0; grid-template-rows: auto 1fr auto auto; }
+  .cst-maker { grid-template-columns: minmax(250px, 1fr) minmax(280px, 330px); align-items: stretch; min-height: 0; }
+  .cst-maker .cst-tints { align-self: start; }
+  .cst-stage { height: auto; min-height: 260px; }
+}
+/* (and on a phone: upright, the window taller, as much of the screen as leaves its arrows and the top of the colours
+   in reach; on its side, the window the panel's whole height and a little wider) */
+@media (max-width: 700px) and (min-height: 561px) {
+  .cst-stage { height: clamp(336px, 56svh, 500px); }
+}
+@media (max-height: 560px) and (min-width: 600px) {
+  .cst-maker { grid-template-columns: 200px minmax(0, 1fr); }
+  .cst-stage { height: clamp(232px, calc(100svh - 140px), 320px); }
 }
 /* very large screens: everything bigger */
 @media (min-width: 1600px) and (min-height: 900px) { .cst { zoom: 1.15; } }

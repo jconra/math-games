@@ -8,6 +8,7 @@
 //   bar.set(0.4, 'Building the rooms')    how far the work is, 0..1, and what it is doing
 //   bar.done()                            full, then it fades away
 //   bar.bytes()                           bytes that have come in so far
+//   bar.shown()                           how far the strip shows the load, 0..1
 //   bar.expect(n)                         the bytes a whole load is, when it is known later
 //
 // The megabytes are counted from the files as each one arrives (the browser's list of finished downloads). The bar
@@ -69,6 +70,7 @@ export function showLoadBar(parent = document.body, { expect = 0 } = {}) {
   function paint() {
     const m = /matrix\(([-\d.e]+)/.exec(getComputedStyle(fill).transform || '');
     const shown = S.done ? 1 : m ? Math.max(0, Math.min(1, +m[1])) : 0, pct = Math.floor(shown * 100);
+    S.shown = shown;
     el.setAttribute('aria-valuenow', String(pct));
     what.textContent = S.done ? 'Station ready' : S.words;
     const total = Math.max(expect, got * 1.05);
@@ -87,6 +89,7 @@ export function showLoadBar(parent = document.body, { expect = 0 } = {}) {
       setTimeout(() => { el.remove(); style.remove(); }, 1800);
     },
     bytes: () => got,
+    shown: () => S.shown || 0,      // (how far the strip shows it, 0..1: the title's start button shows the same)
     expect(n) { if (+n > 0) expect = +n; },
   };
 }

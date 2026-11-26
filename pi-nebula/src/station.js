@@ -49,6 +49,10 @@ const FAR = new THREE.Vector3(1e6, 1e6, 1e6), ONE = [null];
 
 // a pause long enough for the screen to be drawn (so the title's loading bar moves between the heavy steps); a
 // hidden tab draws nothing, so it never waits on a frame for long
+// (a beat between two pieces of the work, the shortest the page allows: whatever the player did meanwhile, a key typed
+// in the title's name box or a press of its maker, is seen to before the next piece. THE MAKER WHILE THE GAME LOADS,
+// 2026-11-26: the rooms' shine was worked out in one go of some nine seconds, and nothing typed got through)
+const beat = () => new Promise((done) => setTimeout(done, 0));
 const breath = () => new Promise((done) => { let went = false; const go = () => { if (!went) { went = true; done(); } }; requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 120); });
 
 export async function loadStation({ canvas, quality = null, rig = false, room = 'station', say = () => {} } = {}) {
@@ -116,12 +120,23 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
 
   // ── the shine: the station's picture of itself (twice, so the second holds the first's shine), then each room's ──
   say(0.62, 'Switching on the lights'); await breath();
+  // (THE MAKER WHILE THE GAME LOADS, 2026-11-26: each room's shaders built on their own, a beat between rooms, before
+  // the pictures below would build them all in one go; the same shaders, so the same light, but the title's name box
+  // and maker are heard between rooms)
+  const warm = async () => {
+    for (const z of built.zones) {
+      const was = z.group.visible; z.group.visible = true;
+      try { renderer.compile(z.group, camera, scene); } catch (e) { /* drawn as before: built at its first picture */ }
+      z.group.visible = was; await beat();
+    }
+  };
   let envTex = null;
   {
     const rt = new THREE.WebGLCubeRenderTarget(Q.probe, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(0.05, 80, rt);
     cc.position.set(...(R.probe || R.views?.start?.at || R.spawn?.at || [0, 1.6, 0])); scene.add(cc);
     scene.environment = null; sky.object.visible = false;
-    for (let i = 0; i < 2; i++) { cc.update(renderer, scene); const t = pmrem.fromCubemap(rt.texture).texture; if (envTex) envTex.dispose(); envTex = t; scene.environment = t; }
+    await warm();
+    for (let i = 0; i < 2; i++) { if (i) await warm(); cc.update(renderer, scene); const t = pmrem.fromCubemap(rt.texture).texture; if (envTex) envTex.dispose(); envTex = t; scene.environment = t; await beat(); }
     sky.object.visible = true; scene.remove(cc); rt.dispose();
   }
   if (R.rooms) {
@@ -130,6 +145,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     scene.add(cc);
     for (let pass = 0; pass < 2; pass++) {
       say(0.7 + pass * 0.12, pass ? 'Polishing the floors' : 'Switching on the lights');
+      await warm();      // (the station's shine, then each room's own, on the materials: their shaders built again, room by room)
       const envs = [];
       for (const z of built.zones) {
         if (z.with) { envs.push(null); continue; }
@@ -137,6 +153,7 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
         cc.position.set(...(z.probe || [c.x, z.box.min.y + 1.6, c.z]));
         updateZones(built, cc.position, RANGE); cc.update(renderer, scene);
         envs.push(pmrem.fromCubemap(rt.texture).texture);
+        await beat();
       }
       built.zones.forEach((z, i) => {
         if (z.with) return;

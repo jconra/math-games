@@ -137,6 +137,9 @@ const swatches = (T, cur) => {
 // (the window: what it says to a screen reader, and the small sign at its foot that it turns, till it first has)
 const TURN_SAID = 'Your character. Drag to turn them round, or use the arrow keys; plus and minus come nearer.';
 const TURN_HINT = `<i class="${P}-turnhint" aria-hidden="true"><svg viewBox="0 0 40 16"><path d="M7 5.2C10.5 3.8 15 3 20 3s9.5.8 13 2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M33 13c-3.5 1.1-8 1.8-13 1.8S10.5 14.1 7 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.2 2.6"/><path d="M29.5 1.6l4 3.7-5.1 1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></i>`;
+// (THE MAKER WHILE THE GAME LOADS: until the real person can be drawn in the window, it says so at its foot; the arrows,
+// the colours and the rest work meanwhile)
+const WAIT_WORDS = `<i class="${P}-waitwords" aria-hidden="true">Getting your character ready</i>`;
 let turnedOnce = false, turnOff = null;
 const frecklesRow = (on) => `<div class="${P}-heights ${P}-two" role="radiogroup" aria-label="Freckles" data-nav="radio">
   ${[[0, 'No'], [1, 'Yes']].map(([v, word]) => `<button class="${P}-agech is-skip" role="radio" aria-checked="${!!on === !!v}" tabindex="${!!on === !!v ? 0 : -1}"
@@ -148,7 +151,7 @@ function makerHtml(p) {
   const android = !!brings(R.suit), tints = TINTS.filter((T) => !android || T.id === 'uniform' || T.id === 'eyes');
   return `<div class="${P}-maker">
     <div class="${P}-stage" role="group" aria-label="Your character: hair, head and body" data-nav="grid">
-      <span class="${P}-face ${P}-full" tabindex="0" role="img" aria-label="${TURN_SAID}">${pic(p.look)}${TURN_HINT}</span>
+      <span class="${P}-face ${P}-full" tabindex="0" role="img" aria-label="${TURN_SAID}">${pic(p.look)}${TURN_HINT}${WAIT_WORDS}</span>
       ${ROWS.map((row) => { const on = !!lib && !(row.part !== 'suit' && brings(R.suit)); return arrow(row, -1, on) + arrow(row, 1, on); }).join('')}
     </div>
     <div class="${P}-tints">
@@ -343,6 +346,9 @@ const theme = {
     create: 'Join the crew',
     start: 'GO ABOARD',
     waiting: 'Docking…',
+    // (THE MAKER WHILE THE GAME LOADS: until the station is loaded the start button shows the loading, filling as it goes;
+    // pressed meanwhile it waits, "Docking…", and goes aboard by itself once loaded)
+    loadingStart: (pct) => `GO ABOARD<small>loading ${pct}%</small>`,
     starting: 'Going aboard…',
     makeFirst: 'Make a crew member first',
     loading: 'Powering up',
