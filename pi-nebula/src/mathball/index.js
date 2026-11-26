@@ -331,16 +331,19 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     }
     return out;
   }
-  // A TAP (or a click): a ball right under it, else a goal (a ball in hand), else the nearest ball to it within a
-  // finger's reach (HANDS.reach), else, with a ball in hand, a goal just beside it or (the mouse) the spot the arc shows
+  // A TAP (or a click): a ball right under it, or all but (HANDS.onIt: where it is, or was a moment before: a rolling
+  // ball moves out from under a finger), else a goal right under it (a ball in hand), else the nearest ball to it
+  // within a finger's reach (HANDS.reach), else, with a ball in hand, a goal just beside it or (the mouse) the spot the
+  // arc shows
   function tapAt(p, from) {
     sound.wake();
     const held = G.you.holding, hit = input.pickAt(p.x, p.y, p.touch), d = hit && !hit.near ? hit.data : {};
     if (d.ball != null && (!held || d.ball !== held.id) && pickBall(d.ball)) return true;
-    if (d.goal != null && held) { throwAt(d.goal, 'court'); return true; }
     const was = new Map((from || []).map((b) => [b.id, b])), past = new Map();
     for (const S of seenOnScreen) for (const b of S.list) { if (!past.has(b.id)) past.set(b.id, []); past.get(b.id).push([b.x, b.y]); }
     const n = nearestBall(p.x, p.y, ballsOnScreen().map((b) => ({ ...b, past: past.get(b.id), ...(was.has(b.id) ? { x0: was.get(b.id).x, y0: was.get(b.id).y } : {}) })), p.touch ? HANDS.reach.touch : HANDS.reach.mouse);
+    if (n && n.d <= (p.touch ? HANDS.onIt.touch : HANDS.onIt.mouse) && pickBall(n.id)) return true;
+    if (d.goal != null && held) { throwAt(d.goal, 'court'); return true; }
     if (n && pickBall(n.id)) return true;
     if (held) {
       const T = targetAt(p.x, p.y);

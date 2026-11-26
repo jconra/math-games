@@ -19,6 +19,7 @@ export const HANDS = {
   slop: { touch: 12, mouse: 6 },        // px a press may move and still be a tap
   tapMs: { touch: 800, mouse: 1500 },   // ms: a press held longer than this is no tap
   reach: { touch: 44, mouse: 22 },      // px beyond a ball's edge on the screen that a tap still picks it
+  onIt: { touch: 16, mouse: 6 },        // ... and that counts as on it: before a goal behind it, with a ball in hand
   hold: 280,                            // ms a finger rests still on the court, a ball in hand, before it aims
   past: 0.35,                           // s of where each ball was on the screen that a tap still counts
   stick: 0.42,                          // the left part of a phone's screen, where a thumb makes the walking stick
