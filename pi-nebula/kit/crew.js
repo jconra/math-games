@@ -21,6 +21,11 @@
 // the sleeve where its cloth is plainest, the cuff and the hand moved along whole; and makes each outfit's other sleeve
 // the shape of its better made one, turned over about the body's own middle (its own texture kept). The arms' joints of
 // an outfit whose body stands off the skeleton's middle are mirrored about the body's. Nothing here changed for it.
+//   THE ARMS' LENGTH BY THE BONES (2026-11-26; the game's maker: "I feel like the arms are too long and hands are too
+// bag", "can that be controlled by the bones?"): it is, here, as each person is put together (ARM_LENGTH, below): every
+// outfit's arm drawn in along itself by the same share, the upper arm and the forearm alike, and the hand drawn in toward
+// the wrist, by moving the elbow's, the wrist's and the hand's joints and leading the parts' points with them. The files
+// are as they were; the outfit build's one length is kept as the length before this share.
 //   Two things differ from a Mathwood person, both done here at load and after each update:
 //   - the clips' moves (their position tracks: the body's root, the feet, a shrug; the Blender-made clips carry one
 //     for every bone) were made for the Mathwood bones' lengths, so each is laid on the crew's own rest offset:
@@ -180,6 +185,8 @@
 //   lib.shouldersOf(suit id) -> how far its upper arms' joints are moved out (SHOULDER WIDTH; metres, 0 as made);
 //   lib.shoulders { suit id: metres } (a layer over crew.json's, the Crew Lab's while it's tried); SHOULDER_LIMITS,
 //   SHOULDER_STEP; c.shoulders (what a person wears)
+//   ARM_LENGTH { arm, hand } (THE ARMS' LENGTH BY THE BONES: the share of their length the arms and hands are drawn in
+//   to, every outfit alike); lib.armLength (tried in its place, before anyone is made), lib.armLengthOf(); c.armLength
 //   JOBS, UNIFORM_COLOURS, BAND_COLOURS (THE BANDS), SKIN_TONES, SKIN_LIMIT and skinTone (THE SKIN'S LIMITS),
 //   HAIR_UNDERSIDE (THE HAIR'S UNDERSIDE), HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
@@ -370,6 +377,10 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
     const v = +(own(lib.shoulders, suit) ? lib.shoulders[suit] : (lib.entry('suit', suit) || {}).shoulders);
     return Number.isFinite(v) && v ? +Math.min(SHOULDER_LIMITS[1], Math.max(SHOULDER_LIMITS[0], v)).toFixed(4) : 0;
   };
+  // THE ARMS' LENGTH BY THE BONES (makeCrew, clipsFor): lib.armLength { arm, hand } (tried in ARM_LENGTH's place, as the
+  // checks do; set before anyone is made) over ARM_LENGTH, the same for every outfit
+  lib.armLength = null;
+  lib.armLengthOf = () => armLengthOf(lib.armLength);
   // (the older form: a head entry's `seat`, and lib.seats over it, as the Crew Lab kept them before 2026-11-11)
   lib.seats = {};
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -422,12 +433,15 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // (and the outfit's shoulder width (SHOULDER WIDTH): its upper arms' joints moved out in the rig's rest places, so a
   // clip that sets their places (the crowd's) keeps them there; once a suit, hand and width)
   lib.clipsFor = async (id, hand = null) => {
-    const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh;
+    const sh = lib.shouldersOf(id), AL = lib.armLengthOf(), key = id + '|' + (hand || '') + '|' + sh + '|' + AL.arm + '|' + AL.hand;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
         const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm', hg = hand ? await lib.part('hand', hand) : null;
-        const moves = shoulderMoves(g.scene, sh);
-        const rig = shoulderRig(handRig(g.scene.userData.crewRig, hg ? hg.scene.userData.crewRig : null), moves);
+        // (the shoulder width's moves (the parts kept as made), then THE ARMS' LENGTH's on top (the parts drawn in with
+        // them): `moves` is both, as the clips and every step below have the bones)
+        const shoulders = shoulderMoves(g.scene, sh), hr = handRig(g.scene.userData.crewRig, hg ? hg.scene.userData.crewRig : null);
+        const moves = armMoves(g.scene, shoulders, hr, AL);
+        const rig = shoulderRig(hr, moves);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
         const clips = retargetClips(await lib.rawClips(body), rig, rest);
         // (the crew's own copies: THE CALM STANDING POSE, THE FINGERS RELAXED, THE HANDS ON THE THIGHS (sitting) and ON A
@@ -436,9 +450,9 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
         const has = (k) => Object.prototype.hasOwnProperty.call(lib, k);
         const C0 = lib.calm || CALM; let cl = calmStand(clips, g.scene, { ...C0, ...((C0[body]) || {}) }, moves, rig);
         cl = relaxFingers(cl, g.scene, rig, moves, has('fingers') ? lib.fingers : FINGERS);
-        cl = seatedArms(cl, g.scene, hg ? hg.scene : null, rig, moves, has('seat') ? lib.seat : SEAT, has('drive') ? lib.drive : DRIVE);
+        cl = seatedArms(cl, g.scene, hg ? hg.scene : null, rig, moves, has('seat') ? lib.seat : SEAT, has('drive') ? lib.drive : DRIVE, AL);
         cl = humanWrists(cl, g.scene, has('wrists') ? lib.wrists : WRISTS);
-        return { body, rig, moves, shoulders: sh, clips: cl, stride: strideOf(rig, body) };
+        return { body, rig, moves, shoulderMoves: shoulders, armLength: AL, shoulders: sh, clips: cl, stride: strideOf(rig, body) };
       })());
     }
     return fitted.get(key);
@@ -609,6 +623,104 @@ function shoulderMoves(scene, d) {
     out[ua.name] = ua.position.clone().sub(p0); out[la.name] = la.position.clone().sub(q0);
   }
   return out;
+}
+// THE ARMS' LENGTH BY THE BONES (2026-11-26; the game's maker, of the figure on the start screen: "I feel like the arms
+// are too long and hands are too bag ... He is reaching down almost to his knees. When I reach down my fingers only go to
+// about half way down my thighs. If the arms could be made just 5-10% shorter it would probably fix it (can that be
+// controlled by the bones?)"). It can, and is, here, as a person is put together: for every outfit alike (THE ARMS ONE
+// LENGTH stands: each arm the same share shorter, so they stay one length), the elbow's joint and the wrist's are brought
+// in along the arm to ARM_LENGTH.arm of where they were (the upper arm and the forearm alike, so the two keep a person's
+// proportion to each other), and the hand's joints in toward the wrist to ARM_LENGTH.hand. Each part's bind for those
+// bones is led so its points follow them (as SHOULDER WIDTH leads it, but here the points move): a sleeve's points riding
+// the upper arm are drawn in along the upper arm toward the shoulder's joint, the forearm's along the forearm toward the
+// elbow (each only along its length: the sleeve's girth and its cuff's are kept), and the hand's (and a cuff's points
+// riding the wrist) in toward the wrist, the hand's length and width alike. The clips' moves keep the joints there (the
+// rig's rest places with the moves in) and the steps worked out from the bones at load (THE CALM STANDING POSE, THE
+// FINGERS RELAXED, THE HANDS ON THE THIGHS and ON A WHEEL) work on the shorter arms, so a hand still lands where it
+// rested. Nothing in a part's file changes: his bodies' points are as he made them; the shoulders and the body are not
+// touched. lib.armLength (as ARM_LENGTH) tries other values. (The numbers, every outfit before and after:
+// ~/pw/space-math/MAKER_2.md)
+export const ARM_LENGTH = { arm: 0.97, hand: 0.95 };
+function armLengthOf(A) {
+  const v = { ...ARM_LENGTH, ...(A || {}) }, k = (x) => (+x > 0.6 && +x <= 1.2 ? +x : 1);
+  return { arm: k(v.arm), hand: k(v.hand) };
+}
+// (the moves, on the suit's bones at rest with the shoulder width's moves in: each elbow's and wrist's own place (its
+// line from the joint above) taken to ARM_LENGTH.arm of itself, and every joint under a wrist (the hand's own rest
+// places, rest: a hand part's rig) to ARM_LENGTH.hand of itself; laid over the shoulder moves, or those as they were)
+function armMoves(scene, moves, rest, A) {
+  if (A.arm === 1 && A.hand === 1) return moves;
+  const bare = bareBones(scene); if (!bare) return moves;
+  const { B } = bare, out = { ...(moves || {}) }, own = {};
+  for (const [b, v] of Object.entries((rest && rest.dstRest) || {})) if (HAND_BONE.test(b)) own[clean(b)] = v;
+  const add = (n, v) => { out[n] = out[n] ? out[n].clone().add(v) : v; };
+  const place = (b) => { const p = own[b.name] ? new THREE.Vector3().fromArray(own[b.name]) : b.position.clone(); if (moves && moves[b.name]) p.add(moves[b.name]); return p; };
+  for (const s of ['L', 'R']) {
+    if (A.arm !== 1) for (const n of ['LowerArm' + s, 'Wrist' + s]) if (B[n]) add(n, place(B[n]).multiplyScalar(A.arm - 1));
+    const wr = B['Wrist' + s]; if (!wr || A.hand === 1) continue;
+    wr.traverse((b) => { if (b !== wr) add(b.name, place(b).multiplyScalar(A.hand - 1)); });
+  }
+  return out;
+}
+// (the person's template drawn in: its elbows', wrists' and hands' joints moved as armMoves says, and every part's bind
+// for the arms' bones led so its points go with them (above). Returns, for the points' own frames (seatedArms), each
+// moved bone's map of the rest: { bone: Matrix4 } in the world at rest)
+function shortenArms(tpl, A, { cuffs = false } = {}) {
+  if (A.arm === 1 && A.hand === 1) return null;
+  const bones = {}; tpl.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  tpl.updateMatrixWorld(true);
+  const W = (b) => b.getWorldPosition(new THREE.Vector3()), maps = {}, before = {}, cuff = {};
+  const along = (u, k) => new THREE.Matrix4().set(   // (the length along u taken to k of itself)
+    1 + (k - 1) * u.x * u.x, (k - 1) * u.x * u.y, (k - 1) * u.x * u.z, 0,
+    (k - 1) * u.y * u.x, 1 + (k - 1) * u.y * u.y, (k - 1) * u.y * u.z, 0,
+    (k - 1) * u.z * u.x, (k - 1) * u.z * u.y, 1 + (k - 1) * u.z * u.z, 0, 0, 0, 0, 1);
+  const T = (v) => new THREE.Matrix4().makeTranslation(v.x, v.y, v.z);
+  for (const s of ['L', 'R']) {
+    const ua = bones['UpperArm' + s], la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!ua || !la || !wr) continue;
+    const sp = W(ua), ep = W(la), wp = W(wr), u = ep.clone().sub(sp).normalize(), f = wp.clone().sub(ep).normalize();
+    const e2 = sp.clone().lerp(ep, A.arm), w2 = e2.clone().add(wp.clone().sub(ep).multiplyScalar(A.arm));
+    maps[ua.name] = T(sp).multiply(along(u, A.arm)).multiply(T(sp.clone().negate()));
+    maps[la.name] = T(e2).multiply(along(f, A.arm)).multiply(T(ep.clone().negate()));
+    const hand = T(w2).multiply(new THREE.Matrix4().makeScale(A.hand, A.hand, A.hand)).multiply(T(wp.clone().negate()));
+    wr.traverse((b) => { if (b.isBone) maps[b.name] = hand; });
+    // (an outfit worn with a hand part: its own points riding the wrist are its cuff, which goes with the wrist whole,
+    // its girth kept; the hand part's, and an outfit's own hands, are drawn in with the hand)
+    if (cuffs) cuff[wr.name] = T(w2.clone().sub(wp));
+  }
+  for (const n of Object.keys(maps)) before[n] = bones[n].matrixWorld.clone();
+  for (const s of ['L', 'R']) {
+    const la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!la || !wr) continue;
+    la.position.multiplyScalar(A.arm); wr.position.multiplyScalar(A.arm);
+    wr.traverse((b) => { if (b !== wr && b.isBone) b.position.multiplyScalar(A.hand); });
+  }
+  tpl.updateMatrixWorld(true);
+  const lead = new THREE.Matrix4();
+  tpl.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    let inv = null;
+    o.skeleton.bones.forEach((b, i) => {
+      const M = (o.userData.part !== 'hand' && cuff[b.name]) || maps[b.name]; if (!M) return;
+      inv = inv || o.skeleton.boneInverses.slice();
+      inv[i] = lead.copy(b.matrixWorld).invert().multiply(M).multiply(before[b.name]).multiply(o.skeleton.boneInverses[i]).clone();
+    });
+    if (inv) o.skeleton.boneInverses = inv;
+  });
+  return maps;
+}
+// (a part's points in their bones' own frames at rest (pointsByBone), drawn in as shortenArms draws the person's: a
+// forearm's along the forearm (its wrist's own line), a hand's toward its bone's joint)
+function armPoints(P, B, A) {
+  if (!P || (A.arm === 1 && A.hand === 1)) return P;
+  const pts = P.pts.slice(), d = new THREE.Vector3();
+  for (let k = 0; k < P.names.length; k++) {
+    const n = P.names[k], i = k * 3;
+    if (/^LowerArm[LR]$/.test(n) && B['Wrist' + n.slice(-1)]) {
+      d.copy(B['Wrist' + n.slice(-1)].position).normalize();
+      const t = (pts[i] * d.x + pts[i + 1] * d.y + pts[i + 2] * d.z) * (A.arm - 1);
+      pts[i] += d.x * t; pts[i + 1] += d.y * t; pts[i + 2] += d.z * t;
+    } else if (SEAT_HAND.test(n)) { pts[i] *= A.hand; pts[i + 1] *= A.hand; pts[i + 2] *= A.hand; }
+  }
+  return { ...P, pts };
 }
 // (the rig's rest places with the moves in, for the clips that set those bones' places)
 function shoulderRig(rig, moves) {
@@ -881,7 +993,7 @@ function reachArm(B, s, T, H) {
   turnBoneOnto(la, W3.sub(E3).normalize(), T2.sub(E3).normalize());
   wr.quaternion.copy(la.getWorldQuaternion(_ik.q).invert().multiply(H)); wr.updateMatrixWorld(true);
 }
-function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
+function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE, AL = null) {
   const which = clips.map((c, j) => (S && S.clips.test(c.name) ? 'sit' : D && c.name === D.clip ? 'drive' : null));
   if (!which.some(Boolean)) return clips;
   const bare = bareBones(scene); if (!bare) return clips;
@@ -900,13 +1012,15 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
     if (P.tris) { o.tris = []; for (let k = 0; k < P.tris.length; k += 3) { const a = at[P.tris[k]], b = at[P.tris[k + 1]], c = at[P.tris[k + 2]]; if (a >= 0 && b >= 0 && c >= 0) o.tris.push(a, b, c); } }
     return o;
   };
-  const legs0 = pointsByBone(scene, (n) => SEAT_LEG.test(n), !!S.fill), fore0 = pointsByBone(scene, (n) => SEAT_ARM.test(n));
+  // (THE ARMS' LENGTH BY THE BONES: the forearms' and hands' points drawn in as the person's are)
+  const AP = (P) => (AL ? armPoints(P, B, AL) : P);
+  const legs0 = pointsByBone(scene, (n) => SEAT_LEG.test(n), !!S.fill), fore0 = AP(pointsByBone(scene, (n) => SEAT_ARM.test(n)));
   const legs = only(legs0, (k) => along(legs0, k, 'LowerLeg' + legs0.names[k].slice(-1)) > 0.06);
   const fore = only(fore0, (k) => { const s = fore0.names[k].slice(-1), w = B['Wrist' + s]; return w && along(fore0, k, 'Wrist' + s) > 0.5 * w.position.length(); });
-  const hands = pointsByBone(handScene || scene, (n) => SEAT_HAND.test(n));
+  const hands = AP(pointsByBone(handScene || scene, (n) => SEAT_HAND.test(n)));
   // (THE FINGERS RELAXED: a hand laid flat on the thigh brings its wrist down to it, so with a hand part the sleeve's own
   // cuff, the outfit's points riding the wrist, is lifted over the thigh too)
-  const cuffs = handScene ? pointsByBone(scene, (n) => /^Wrist[LR]$/.test(n)) : null;
+  const cuffs = handScene ? (AL ? armPoints(pointsByBone(scene, (n) => /^Wrist[LR]$/.test(n)), B, { arm: AL.arm, hand: 1 }) : pointsByBone(scene, (n) => /^Wrist[LR]$/.test(n))) : null;
   const v = new THREE.Vector3(), C = 0.015;
   const at = (P, k, out) => out.set(P.pts[k * 3], P.pts[k * 3 + 1], P.pts[k * 3 + 2]).applyMatrix4(B[P.names[k]].matrixWorld);
   return clips.map((src, j) => {
@@ -916,7 +1030,10 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
     const pose = (t) => { for (const [b, p, I] of interp) { const r = I.evaluate(t); if (p === 'quaternion') b.quaternion.fromArray(r).normalize(); else if (p === 'position') b.position.fromArray(r); } holder.updateMatrixWorld(true); };
     // (driving: each wrist's own middle over the clip, to keep its steering moves about)
     const mid = { L: new THREE.Vector3(), R: new THREE.Vector3() };
-    if (kind === 'drive') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
+    // (THE ARMS' LENGTH BY THE BONES: the wheel is where it was, so its middle is taken from the arms at their length
+    // before they were drawn in; the shorter arms then reach out to it)
+    const full = (on) => { if (!AL || AL.arm === 1) return; for (const s of ['L', 'R']) for (const n of ['LowerArm' + s, 'Wrist' + s]) if (B[n]) B[n].position.multiplyScalar(on ? 1 / AL.arm : AL.arm); holder.updateMatrixWorld(true); };
+    if (kind === 'drive') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); full(true); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); full(false); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
     const centre = mid.L.clone().add(mid.R).multiplyScalar(0.5), side = Math.sign(B.UpperArmL.getWorldPosition(new THREE.Vector3()).x - B.UpperArmR.getWorldPosition(new THREE.Vector3()).x) || 1;
     let moved = 0;
     // (THE HAND'S MIDDLE OVER THE THIGH, below: how far out a hand is to go, at this moment of the clip)
@@ -997,7 +1114,8 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE) {
           if (lift > 0 || fwd.lengthSq() > 0) T = W0.clone().add(fwd).add(new THREE.Vector3(0, Math.min(lift, S.most), 0));
         } else {
           const sg = s === 'L' ? side : -side;
-          T = W0.clone().add(new THREE.Vector3(centre.x + sg * D.apart / 2 - mid[s].x, D.up, D.forward || 0));
+          full(true); const Wf = B['Wrist' + s].getWorldPosition(new THREE.Vector3()); full(false);
+          T = Wf.add(new THREE.Vector3(centre.x + sg * D.apart / 2 - mid[s].x, D.up, D.forward || 0));
         }
         if (T) { reachArm(B, s, T, H); moved++; }
         for (const n of ['UpperArm' + s, 'LowerArm' + s, 'Wrist' + s]) (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());
@@ -3562,7 +3680,9 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
   // SHOULDER WIDTH: the upper arms' joints where this outfit's clips have them (lib.clipsFor), the parts kept as made
-  if (fit.moves) moveShoulders(tpl, fit.moves);
+  if (fit.shoulderMoves) moveShoulders(tpl, fit.shoulderMoves);
+  // THE ARMS' LENGTH BY THE BONES: the elbows, the wrists and the hands drawn in, the parts' points with them
+  shortenArms(tpl, fit.armLength || armLengthOf(null), { cuffs: !!hand });
   // THE SEAT, THE HEAD'S PLACE and THE HEAD'S CENTRE: the head (its neck, its eyes and face bones) and its hair lowered,
   // brought forward, moved side to side and sized as the outfit, the head and the pair say, and centred on its joints as
   // the head entry says, before the collar fit measures the neck
@@ -3725,7 +3845,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   const farMeshes = [];
   if (far) person.root.traverse((o) => { const fi = o.isSkinnedMesh && o.geometry.index && lib.farIndex && lib.farIndex.get(o.geometry.index); if (fi) farMeshes.push({ mesh: o, index: fi, near: null, geo: null }); });
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK, shoulders: fit.shoulders,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand, arms: armK, shoulders: fit.shoulders, armLength: fit.armLength || armLengthOf(null),
     // (ARMS OUT: the outfit's angles, degrees, and the angle worn this frame)
     armsOut: AO, armsOutNow: () => THREE.MathUtils.radToDeg(armsNow),
     // (THE HEAD'S PLACE: how this head sits on this outfit, each level's and the total)
