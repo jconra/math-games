@@ -13,11 +13,12 @@
 //   out.dispose()
 // WHAT IT COSTS: the plated hull is the kit's five draws at most (three groups of plates, the glass, the shields); the
 // girders, wings, radiators, reactor, masts and containers are ONE mesh (each corner carries its colour), the things
-// that glow by themselves a second, the radiators' heat pipes a third (they pulse slowly together: that mesh's own
-// colour is turned up and down, nothing else), the painted marks a fourth (one small picture drawn in code).
+// that glow by themselves a second, the radiators' heat pipes a third (a slow band of brighter glow rolls down them:
+// worked out on the graphics card from the kit's clock, nothing done for it each frame), the painted marks a fourth (one small picture drawn in code).
 import * as THREE from 'three';
 import { buildHull } from './hull.js';
-import { outsidePlans, outsideGear, outsideMarks } from './outside-plan.js';
+import { outsidePlans, outsideGear, outsideMarks, RADIATOR, PULSE } from './outside-plan.js';
+import { U } from './materials.js';
 
 // the painted marks: every text drawn once into one small picture, a flat piece for each mark
 function marksMesh(fog) {
@@ -38,6 +39,25 @@ function marksMesh(fog) {
   return { mesh, bytes: Math.round(CW * c.height * 4 * 4 / 3), triangles: idx.length / 3 };
 }
 
+function pulseMaterial(fog) {
+  const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog });
+  const top = RADIATOR.pipes.y0 + (RADIATOR.pipes.n - 1) * RADIATOR.pipes.pitch + RADIATOR.pipes.tall, foot = RADIATOR.pipes.y0;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uHeatTime = U.time;
+    sh.vertexShader = 'varying float vHeatY;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vHeatY = position.y;');
+    sh.fragmentShader = `uniform float uHeatTime; varying float vHeatY;
+float heatPulse(float y) {
+  float span = ${(PULSE.secs + PULSE.gap).toFixed(4)}, k = mod(uHeatTime, span) / ${PULSE.secs.toFixed(4)};
+  float mid = ${(top + PULSE.wide).toFixed(4)} - k * ${(top - foot + 2 * PULSE.wide).toFixed(4)};
+  float d = min(1.0, abs(y - mid) / ${PULSE.wide.toFixed(4)}), b = k <= 1.0 ? (1.0 - d * d) * (1.0 - d * d) : 0.0;
+  return ${PULSE.low.toFixed(4)} + ${(PULSE.high - PULSE.low).toFixed(4)} * b;
+}
+` + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb *= heatPulse(vHeatY);');
+  };
+  m.customProgramCacheKey = () => 'outside-heat-pulse';
+  return m;
+}
+
 export function buildOutside(look, mats, opts = {}) {
   const group = new THREE.Group(), fog = opts.fog !== false, own = []; group.name = 'outside';
   let hull = null;
@@ -54,10 +74,14 @@ export function buildOutside(look, mats, opts = {}) {
   };
   make(gear.lit, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.62, metalness: 0.35, side: THREE.DoubleSide, fog }), 'gear');
   make(gear.glow, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog }), 'glow');
-  // (the game's maker, 2026-11-19, of the radiators: "black and glowing red like hot metal, maybe pulsing": about one
-  // slow breath every six seconds, between a little over half and the whole of their glow)
-  const heatMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog }), heat = make(gear.heat, heatMat, 'heat');
-  heat.onBeforeRender = () => { heatMat.color.setScalar(0.8 + 0.2 * Math.sin(performance.now() / 1000 * 1.05)); };
+  // THE RADIATORS' PULSE (the game's maker, 2026-11-19: "black and glowing red like hot metal, maybe pulsing"; and
+  // 2026-11-26, of the trailer: "it is a lot of rapid flickering and I think they should very slowly have rolling
+  // pulses from the top to bottom or some kind of slow effect"): a broad band of brighter glow rolls slowly down the
+  // rows of pipes of each radiator, from its top to its foot (PULSE), worked out on the graphics card from the kit's
+  // one clock (U.time: the game's own time, so a film drawn frame by frame shows it at its true speed; the labs step it
+  // too). Nothing else changes from frame to frame.
+  const heatMat = pulseMaterial(fog);
+  make(gear.heat, heatMat, 'heat');
   const marks = marksMesh(fog); group.add(marks.mesh); own.push(marks.mesh.geometry, marks.mesh.material, marks.mesh.material.map);
   const gearBytes = gear.lit.position.byteLength * 2 + gear.lit.index.byteLength + gear.glow.position.byteLength * 2 + gear.glow.index.byteLength + gear.heat.position.byteLength * 2 + gear.heat.index.byteLength;
   return {

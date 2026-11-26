@@ -377,6 +377,22 @@ export function outsidePlans(opts = {}) {
 // ── THE GEAR: what is not plated hull (girders, solar wings, radiators, the reactor, masts, containers, lights) ──
 // plain boxes, rods, balls and rings in one list of triangles, each corner carrying its colour; a second list of the
 // things that glow by themselves; and a third, the radiators' heat pipes, which glow and pulse together
+// THE RADIATORS under the keel (outsideGear below): each panel's reach out from the keel's middle (u, m), its foot and
+// top (y), half its thickness; its 13 rows of heat pipes across both faces, each `tall` high, `pitch` apart from row to
+// row, from `from` to `to` out along it in `pieces` (their colour cools along them)
+export const RADIATOR = { panel: { u: [5, 24], y: [-37.5, -16.5], half: 0.3 }, pipes: { n: 13, y0: -36.95, pitch: 1.55, tall: 0.95, from: 5.5, to: 23.5, pieces: 9 } };
+// THE PULSE: one band takes `secs` to roll from the pipes' top row to past their foot, `gap` seconds before the next
+// starts at the top; the glow `low` times its colour away from the band and `high` times it at the band's middle, the
+// band `wide` metres from its middle to where it has faded (the rows are 1.55 m apart: about three rows lit at once)
+export const PULSE = { secs: 9, gap: 3, low: 0.72, high: 1.18, wide: 3.2 };
+// the glow at height y at time t (kit/outside.js has the shader, which does the same sums; tests/outside.test.mjs holds the two together)
+export function pulseAt(y, t, P = PULSE) {
+  const top = RADIATOR.pipes.y0 + (RADIATOR.pipes.n - 1) * RADIATOR.pipes.pitch + RADIATOR.pipes.tall, foot = RADIATOR.pipes.y0;
+  const round = P.secs + P.gap, k = (((t % round) + round) % round) / P.secs;
+  // (the band's middle starts a band's width above the top and ends a band's width under the foot)
+  const mid = top + P.wide - k * (top - foot + 2 * P.wide), d = Math.min(1, Math.abs(y - mid) / P.wide), b = k <= 1 ? (1 - d * d) * (1 - d * d) : 0;
+  return P.low + (P.high - P.low) * b;
+}
 export const GIRDER = { x: 40, y: 4.4, half: 2.5, runs: [[-31.2, -105], [85.8, 159.6]], wings: [30, 58], wingW: 22, wingFrom: 6, wingTo: 40 };
 // (the paint on the containers and the cargo deck: made-up marks, the station's own sign and a number, no company's name)
 export const MARKS = [
@@ -444,19 +460,31 @@ export function outsideGear(opts = {}) {
   const black = lin('#0b0c0f'), HEAT = [[0, lin('#ff6a22', 1.2)], [0.14, lin('#f0400e', 1.1)], [0.32, lin('#b81a08', 1.0)], [0.55, lin('#5e0d04', 0.9)], [0.8, lin('#220503', 0.8)], [1, lin('#0c0303', 0.8)]];
   // (2026-11-19, later: "a little less bright at the center (It seems a bit too hot)": the hot end is a red-orange now, no longer a yellow)
   const heatAt = (t) => { let i = 1; while (i < HEAT.length - 1 && HEAT[i][0] < t) i++; const [t0, c0] = HEAT[i - 1], [t1, c1] = HEAT[i], k = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); return c0.map((v, j) => v + (c1[j] - v) * k); };
-  const PIPES = { n: 13, y0: -36.95, pitch: 1.55, tall: 0.95, from: 5.5, to: 23.5, pieces: 9, proud: 0.34 };
+  // (THE PIPES LIE IN THE PANEL'S OWN FACES, 2026-11-26: they were drawn 4 cm off a whole black face, and from a few
+  // hundred metres the two fought for the picture, which flickered in the trailer's frames. Now each face is cut into
+  // the pipes and the black strips between them, edge to edge with no overlap and with their corners shared, so there
+  // is nothing behind a pipe to fight with at any distance; RADIATOR has the numbers)
+  const P = RADIATOR.pipes, R0 = RADIATOR.panel;
+  // (the cuts across the panel: along it at the panel's ends and the pipes' pieces, up it at its foot and top and each
+  // row's edges; a cell of the grid is a pipe where it is in a row and between the pipes' ends)
+  const us = [R0.u[0], ...Array.from({ length: P.pieces + 1 }, (_, k) => P.from + (P.to - P.from) * k / P.pieces), R0.u[1]];
+  const ys = [R0.y[0], ...Array.from({ length: P.n }, (_, r) => [P.y0 + r * P.pitch, P.y0 + r * P.pitch + P.tall]).flat(), R0.y[1]];
   for (const a of [45, 135, 225, 315]) {
-    const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180), out = [c, 0, s], side = [-s, 0, c];
-    G.box([X + c * 14.5, -27, Z + s * 14.5], [9.5, 10.5, 0.3], black, out, [0, 1, 0], side);
-    for (const f of [-1, 1]) for (let r = 0; r < PIPES.n; r++) {
-      const y0 = PIPES.y0 + r * PIPES.pitch, y1 = y0 + PIPES.tall, cool = 0.14 * Math.abs(r - (PIPES.n - 1) / 2) / ((PIPES.n - 1) / 2);
-      const at = (u, y) => [X + c * u + side[0] * f * PIPES.proud, y, Z + s * u + side[2] * f * PIPES.proud];
-      for (let k = 0; k < PIPES.pieces; k++) {
-        const u0 = PIPES.from + (PIPES.to - PIPES.from) * k / PIPES.pieces, u1 = PIPES.from + (PIPES.to - PIPES.from) * (k + 1) / PIPES.pieces;
-        const c0 = heatAt(Math.min(1, k / PIPES.pieces + cool)), c1 = heatAt(Math.min(1, (k + 1) / PIPES.pieces + cool)), b = H.count;
-        H.vert(at(u0, y0), c0); H.vert(at(u1, y0), c1); H.vert(at(u1, y1), c1); H.vert(at(u0, y1), c0); H.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180), side = [-s, 0, c];
+    const at = (u, y, w) => [X + c * u + side[0] * w, y, Z + s * u + side[2] * w], T = R0.half;
+    for (const f of [-1, 1]) {
+      for (let j = 0; j + 1 < ys.length; j++) for (let i = 0; i + 1 < us.length; i++) {
+        const [u0, u1, y0, y1] = [us[i], us[i + 1], ys[j], ys[j + 1]], r = (j - 1) / 2;
+        const pipe = j % 2 === 1 && i > 0 && i < us.length - 2;
+        if (!pipe) { G.quad([at(u0, y0, f * T), at(u1, y0, f * T), at(u1, y1, f * T), at(u0, y1, f * T)], black); continue; }
+        const k = i - 1, cool = 0.14 * Math.abs(r - (P.n - 1) / 2) / ((P.n - 1) / 2);
+        const c0 = heatAt(Math.min(1, k / P.pieces + cool)), c1 = heatAt(Math.min(1, (k + 1) / P.pieces + cool)), b = H.count;
+        H.vert(at(u0, y0, f * T), c0); H.vert(at(u1, y0, f * T), c1); H.vert(at(u1, y1, f * T), c1); H.vert(at(u0, y1, f * T), c0); H.index.push(b, b + 1, b + 2, b, b + 2, b + 3);
       }
     }
+    // (its four edges, cut where the faces are, so every corner is shared)
+    for (const [ue, ys1] of [[R0.u[0], ys], [R0.u[1], ys]]) for (let j = 0; j + 1 < ys1.length; j++) G.quad([at(ue, ys1[j], -T), at(ue, ys1[j], T), at(ue, ys1[j + 1], T), at(ue, ys1[j + 1], -T)], black);
+    for (const ye of R0.y) for (let i = 0; i + 1 < us.length; i++) G.quad([at(us[i], ye, -T), at(us[i + 1], ye, -T), at(us[i + 1], ye, T), at(us[i], ye, T)], black);
     G.rod([X + c * 4.6, KEEL_FOOT + 0.6, Z + s * 4.6], [X + c * 9.2, -49.5, Z + s * 9.2], 0.7, steel);
   }
   G.ball([X, -49.5, Z], 7.5, pale, 16); L.ring([X, -49.5, Z], 9.2, 0.45, teal);
