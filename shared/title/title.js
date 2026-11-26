@@ -715,10 +715,12 @@ export function showTitle(root, theme, opts = {}) {
     },
     // The world's loading progress behind the title: fraction 0..1, and a few words on what it is doing.
     setProgress(fraction, text) {
-      const f = Number(fraction);
+      const f = Number(fraction), first = !S.load.known;
       S.load.known = true;
       S.load.f = Number.isFinite(f) ? Math.max(0, Math.min(1, f)) : 0;
       if (text != null) S.load.text = String(text);
+      // (the start button drawn before the first word of the load: drawn again, showing it)
+      if (first && loadShown() && !actionsEl.hidden) keepFocus(renderActions);
       if (S.load.f < BAR.shown - 0.3) BAR.shown = S.load.f;   // (a new start: a second load after the first)
       paintLoad(); barGo();
       if (S.load.f >= 1 && S.waiting) rideNow();

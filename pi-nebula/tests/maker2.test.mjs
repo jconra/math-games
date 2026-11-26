@@ -91,6 +91,8 @@ test('the station is put together a piece at a time, the page given its turn bet
   assert.match(WALLS, /const V = solid\.length \? \(A && A\.station\) \|\| makeVoxels\(solid, voxel\)/);
   assert.match(BAKE, /export async function makeVoxelsSoon\(/);
   assert.equal((PEOPLE.match(/await turn\(\);/g) || []).length, 3);
+  // (a returning player's start button, drawn before the load starts, shows it from its first word)
+  assert.match(ENGINE, /if \(first && loadShown\(\) && !actionsEl\.hidden\) keepFocus\(renderActions\);/);
   // (and the shaders built for what they draw into: the bloom's target)
   assert.match(MAIN, /W\.renderer\.setRenderTarget\(W\.target\(\)\);/);
 });
