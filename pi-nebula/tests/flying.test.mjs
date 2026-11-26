@@ -845,7 +845,8 @@ const fieldHold = (S, secs, k, rocks) => hold(S, secs, k, M.rockSolid(() => rock
 test('at the rocks it is the same ship and the same keys, and there is nothing to land on', () => {
   const S = M.makeFieldShip([0, 0, 0], [0, 0, 1]);
   assert.ok(!S.landed && S.power && M.FIELD.bay === null && M.FIELD.floor === null && M.FIELD.others === null);
-  assert.deepEqual(M.FIELD.points, M.MINER.points); assert.deepEqual(M.FIELD.seat, M.MINER.seat);
+  // (its seat: the same one, 13 cm higher with that ship's cockpit: tests/dash.test.mjs)
+  assert.deepEqual(M.FIELD.points, M.MINER.points); assert.deepEqual(M.FIELD.seat.eye, [M.MINER.seat.eye[0], +(M.MINER.seat.eye[1] + M.FIELD_UP).toFixed(5), M.MINER.seat.eye[2]]);
   fieldHold(S, 3, ['forward'], []);
   assert.ok(S.p[2] > 20 && Math.abs(S.p[0]) < 1e-6 && Math.abs(S.p[1]) < 1e-6, 'W takes it along its nose');
   fieldHold(S, 6, [], []); const at = [...S.p];

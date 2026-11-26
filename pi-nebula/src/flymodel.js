@@ -570,8 +570,12 @@ export function voiceStep(V, S, dt, there = null, secs = VOICE) {
 // (the flight's screen is the drill's own Miner's dashboard's: that ship's whole cockpit stands 13 cm higher in its
 // frame than the cabin's in the hangar, and nowhere else apart (~/pw/space-math/rigs/dashboard-2/deckprobe.cjs), its
 // screens set into its dashboard as the hangar's are: so the screen is the hangar's, 13 cm higher)
+// (and so are the seat's eyes and where they look: left at the hangar's height they sat 13 cm low in this cockpit, and
+// the view from the seat was seen to jump inside the wormhole, the moment the place changed)
 export const FIELD_UP = 0.13;
 const raised = (d) => (d ? { ...d, at: [d.at[0], +(d.at[1] + FIELD_UP).toFixed(5), d.at[2]] } : d);
+const up13 = (v) => [v[0], +(v[1] + FIELD_UP).toFixed(5), v[2]];
+const raisedSeat = (s) => ({ ...s, eye: up13(s.eye), look: up13(s.look), lookPanel: up13(s.lookPanel), eyeTall: up13(s.eyeTall), lookTall: up13(s.lookTall), lookTallPanel: up13(s.lookTallPanel) });
 // THE DRILL'S OWN MINER AS IT IS DRAWN AT THE ROCKS, its legs up and its two arms reaching ahead of its nose (for a
 // rock that gives way to it: pushRocks, below). Every drawn point of it was measured in the game
 // (~/pw/space-math/rigs/fieldstop-1/shape.cjs, which also holds these two parts to it: no point of the ship is further
@@ -588,7 +592,7 @@ export const FIELD_SHAPE = [
   { part: 'hull', a: [-9, 6.8], u: [1.0, 5.2], r: [-2.75, 2.75], k: 1.0 },
   { part: 'arms', a: [3.5, 9.6], u: [0.35, 3.35], r: [-4.6, 3.6], k: 1.5 },
 ].map(rounded);
-export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash), shape: FIELD_SHAPE };
+export const FIELD = { ...MINER, pad: [0, 0, 0], bay: null, floor: null, others: null, field: true, dash: raised(MINER.dash), seat: raisedSeat(MINER.seat), shape: FIELD_SHAPE };
 export const TAKE = { reach: 4.5, slow: 3 };
 // where the claw's hand is now
 export const clawOf = (S) => add(S.p, turn(S.q, S.cfg.claw || MINER.claw));

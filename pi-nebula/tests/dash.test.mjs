@@ -305,6 +305,12 @@ test('the drill\'s own Miner at the rocks: its cockpit stands 13 cm higher in it
   const a = M.MINER.dash, b = M.FIELD.dash;
   assert.ok(Math.abs(b.at[1] - a.at[1] - M.FIELD_UP) < 1e-9 && b.at[0] === a.at[0] && b.at[2] === a.at[2] && b.w === a.w && b.h === a.h && b.lean === a.lean, 'the same screen, 13 cm higher');
   assert.equal(b.arc, a.arc, 'on the same curve');
+  // (and the seat's eyes with it: the same view of the cockpit at the rocks as in the hangar, so nothing jumps when the
+  // wormhole changes the place)
+  const s = M.MINER.seat, f = M.FIELD.seat, keys = ['eye', 'look', 'lookPanel', 'eyeTall', 'lookTall', 'lookTallPanel'];
+  for (const k of keys) assert.ok(f[k][0] === s[k][0] && f[k][2] === s[k][2] && Math.abs(f[k][1] - s[k][1] - M.FIELD_UP) < 1e-9, `the seat's ${k}, 13 cm higher`);
+  assert.deepEqual(Object.keys(f).sort(), Object.keys(s).sort(), 'nothing else of the seat changed');
+  assert.ok(f.fov === s.fov && f.fovTall === s.fovTall);
 });
 
 test('landing (the life-size blue ship from behind only then): not on the pad, not flying out, from the jump home until it is down, never at the rocks', () => {

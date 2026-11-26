@@ -197,7 +197,7 @@ import { HAULER_CAPTAIN } from './life.js';
 import { news } from './news.js';
 import { kept, numberWord, fromWords } from './wardplan.js';
 import { SLEEPERS } from './sleeper.js';
-import { MINER, flyingOf, setFlying } from './flymodel.js';
+import { MINER, FIELD as FIELD_FLIGHT, flyingOf, setFlying } from './flymodel.js';
 import { flightOf, seatView } from './fleet.js';
 import { makeWormhole } from './wormhole.js';
 import { makeAboard } from './aboard.js';
@@ -1194,8 +1194,10 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
   // and back (drill.glideFrom, glideTo). The view begins under the jump's flash (openDrill, from ARRIVING); if the
   // drill's own ship was not built by then, from the seat as soon as it is.
   const DRILL_AT = new THREE.Matrix4().makeRotationY(-0.62).setPosition(0, 4000, 0);
-  // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship)
-  const seatEye = () => seatView(SHIP.seat, { pilot: iPilot, tall: innerHeight > innerWidth * 1.05 || innerWidth <= 640 });
+  // (the crew member's eyes in their seat, in a ship's own frame: the pilot's seat, or the other one across the ship.
+  // Asked for at the rocks only, where the eye glides back into the drill's own Miner: that ship's seat, which stands
+  // 13 cm higher in its frame than the hangar's (src/flymodel.js FIELD), the same one the flying there sees from)
+  const seatEye = () => seatView(FIELD_FLIGHT.seat, { pilot: iPilot, tall: innerHeight > innerWidth * 1.05 || innerWidth <= 640 });
   // (the flying's own view from behind, in the same frame: where the eye goes back to for whoever came out to the rocks
   // in that view, so the jump home is theirs to watch from behind too)
   const behindEye = () => { const tall = innerHeight > innerWidth * 1.05 || innerWidth <= 640, b = SHIP.behind; return { eye: [b.look[0], b.up, -b.back], look: b.look, fov: tall ? b.fovTall : b.fov }; };
