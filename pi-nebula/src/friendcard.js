@@ -248,11 +248,13 @@ export function makeFriendCard({ input, usable = null, camera, people = () => nu
   // their card (F's); over the captain asking a question, the hand, and a click is its yes (E's). A finger is the
   // tap below, as it was
   let under = null;
+  // (out on a run the station's people are not where the player is: never theirs to click, src/mission.js)
+  const away = () => !!(game.mission && game.mission.trip);
   const asker = () => { const P = pp(); const A = P && P.bubbles && P.bubbles.askShown ? P.bubbles.asking : null; return A ? P.list.find((Q) => Q.cap && Q.cap.ask === A) || null : null; };
   if (usable) {
-    usable.add({ name: 'person', ready: () => !!playerNow && !busy(), use: () => { if (under) open(under); },
+    usable.add({ name: 'person', ready: () => !!playerNow && !busy() && !away(), use: () => { if (under) open(under); },
       shape: { at: (x, y) => { under = at(x, y, false); return under ? S.atD : null; } } });
-    usable.add({ name: 'captain\'s question', ready: () => !!playerNow && !!asker(), use: () => { const P = pp(); if (P && P.bubbles.askShown) P.bubbles.answer(true); },
+    usable.add({ name: 'captain\'s question', ready: () => !!playerNow && !away() && !!asker(), use: () => { const P = pp(); if (P && P.bubbles.askShown) P.bubbles.answer(true); },
       shape: { at: (x, y) => { const C = asker(); return C && at(x, y, false, C) ? S.atD : null; } } });
   }
   if (input && input.onPick) input.onPick((pk) => {

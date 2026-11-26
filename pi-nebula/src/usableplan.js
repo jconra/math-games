@@ -54,7 +54,7 @@ export function nearestUnder(things, x, y, hit) {
 export function makeUsableCore({ hit, cursor = () => {}, clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) }) {
   const things = [];
   let mouse = null, dirty = false, over = null, hand = false, readyKey = '';
-  const stats = { tests: 0, ms: 0, frames: 0, used: 0 };
+  const stats = { tests: 0, ms: 0, frames: 0, used: 0, last: null };
   const setHand = (on) => { if (on === hand) return; hand = on; cursor(on); };
   // (the things in reach now: their names joined, so a change is seen without a test)
   const readyNow = () => things.filter((T) => { try { return !!T.ready(); } catch (e) { return false; } });
@@ -90,7 +90,7 @@ export function makeUsableCore({ hit, cursor = () => {}, clock = () => (typeof p
       const list = readyNow(); if (!list.length) return null;
       const T = test(list, x, y);
       if (!T) return null;
-      if (T.use) { stats.used++; over = null; setHand(false); dirty = true; T.use(x, y); }
+      stats.last = T.name; if (T.use) { stats.used++; over = null; setHand(false); dirty = true; T.use(x, y); }
       return T;
     },
     // (the thing in reach under a point, nothing used: for the rigs)
