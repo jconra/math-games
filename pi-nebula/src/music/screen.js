@@ -113,9 +113,8 @@ const CSS = `
 .pnm-line { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 6px; }
 .pnm-cap { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
 .pnm-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
-.pnm-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.pnm-two:has(> :only-child) { grid-template-columns: 100%; }
-.pnm-two .pnm-line { grid-template-columns: auto minmax(0, 1fr); }
+/* (Speed and Lights, a row each: the speed's number and its unit have the room between its minus and plus) */
+.pnm-two { display: grid; grid-template-columns: 100%; gap: 6px; }
 .pnm-speed { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; gap: 4px; align-items: center; }
 .pnm-speed output { text-align: center; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; }
 .pnm-speed output small { font-size: 11px; color: var(--dim); font-weight: 400; margin-left: 3px; }
