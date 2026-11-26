@@ -1,17 +1,18 @@
-// THE MUSIC LAB: the station's music (src/music/), and its control screen full page, to hear before any of it goes
-// into the game. The game's maker, 2026-11-24: "Btw we should work on some music too ... We might want to make a lab
-// for it." The screen is the game's own module (src/music/screen.js), with the "Heard in" row the lab has and a
-// station wall will not. The music plays by itself here (its own audio context, made on the first Play).
-// Beside it the same screen at a station wall screen's shape and about its size (the wall's own version: no "Heard
-// in"), on one link with the big one: both show the same face and picture, a touch on either works. Under them a
-// preview of the hallways' lines (src/music/lights.js: a line a part, brightest along it where its notes are, the one
-// style the game's maker chose) drawn as the game's hallways draw them: long, at the same thickness.
-// The lab's "Notes" row on the big screen (lab only, as "Heard in" is; MUSICGAME 1): Live, every note made by the
-// engine as it plays; Pre-rendered, each different note rendered once in the background and played back
-// (src/music/bake.js), as the game plays it, so the two can be compared by ear. Kept in this browser
-// ('pi-nebula.music-lab.notes'); Pre-rendered at first. Under it a small line: how many notes are rendered.
+// THE MUSIC LAB: the station's music (src/music/), to hear before any of it goes into the game. The game's maker,
+// 2026-11-24: "Btw we should work on some music too ... We might want to make a lab for it." 2026-11-26: "I'd prefer to
+// just have the visualization and the controls on the same page. And no need for the second "A station wall screen,
+// small". Just put the visualization at the top or bottom. Instead of "show the picture" maybe have a full screen
+// button." So: the picture at the top (the wall screen's own: src/music/screen.js mountMusicPicture, MUSIC along its
+// top, the wall's 46 x 25 shape), a Full screen button on it; under it the controls, the very panel the game opens
+// from a wall screen (mountMusicControls), with the lab's own rows (Heard in, Notes) and Play / Stop; under them a
+// preview of the hallways' lines (src/music/lights.js) drawn as the game's rail draws them. The music plays by itself
+// here (its own audio context, made on the first Play).
+// The lab's "Notes" row (lab only, as "Heard in" is; MUSICGAME 1): Live, every note made by the engine as it plays;
+// Pre-rendered, each different note rendered once in the background and played back (src/music/bake.js), as the game
+// plays it, so the two can be compared by ear. Kept in this browser ('pi-nebula.music-lab.notes'); Pre-rendered at
+// first. Under it a small line: how many notes are rendered.
 import { createMusic } from '../../src/music/player.js';
-import { mountMusicScreen, screenLink } from '../../src/music/screen.js';
+import { mountMusicPicture, mountMusicControls, screenLink } from '../../src/music/screen.js';
 import { tapOf } from '../../src/music/tap.js';
 import { lightLines, lineColour } from '../../src/music/lights.js';
 import { MUSIC_LINES, lineY } from '../../kit/musiclines.js';
@@ -23,15 +24,15 @@ let notes = 'baked';
 try { if (localStorage.getItem(KEEP + '.notes') === 'live') notes = 'live'; } catch (e) { /* blocked: pre-rendered */ }
 const music = createMusic({ notes });
 const link = screenLink();
-const screen = mountMusicScreen(document.getElementById('screen'), music, { heardIn: true, notes: true, keep: KEEP, link });
+const controls = mountMusicControls(document.getElementById('controls'), music, { heardIn: true, notes: true, keep: KEEP, link });
+const picture = mountMusicPicture(document.getElementById('picture'), music, { link, full: true });
 // (what is rendered so far, once a second: MUSICGAME 1)
 setInterval(() => {
-  const said = document.querySelector('#screen [data-baked]'), B = music.bakery; if (!said) return;
+  const said = document.querySelector('#controls [data-baked]'), B = music.bakery; if (!said) return;
   if (music.notes !== 'baked' || !B) { said.textContent = music.notes === 'live' ? 'Every note made as it plays.' : ''; return; }
   const s = B.stats();
   said.textContent = `${s.baked} notes rendered (${s.MB} MB)${s.queued ? `, ${s.queued} to come` : ''}; played back ${s.played}, live ${s.live}`;
 }, 1000);
-const wall = mountMusicScreen(document.getElementById('wall'), music, { heardIn: false, keep: KEEP, link, fit: true });
 
 // ── the hallway lines ────────────────────────────────────────────────────────────────────────────────────────────
 // (the one style the game's maker chose, as the game's hallways draw it: the rail (kit/musiclines.js), its five lines
@@ -63,4 +64,4 @@ function paintLights() {
 function frame() { requestAnimationFrame(frame); if (!document.hidden) paintLights(); }
 requestAnimationFrame(frame);
 // (the rigs: the music, its screens and the lights)
-window.MUSIC = { music, screen, wall, link, lights: () => ({ table: [...table] }) };
+window.MUSIC = { music, picture, controls, link, lights: () => ({ table: [...table] }) };

@@ -10,13 +10,14 @@
 // the other. Low notes light up near one end and high notes near the other", "I like 4, but I think the lines need to be
 // a little thicker so the effect is overall brighter".
 //
-// THE SCREENS. Left alone, each shows the picture picked on the Picture row (one for every screen, kept in this
-// browser), painted only while a screen is in view, PAINT times a second: ONE picture for them all (one canvas and one
-// texture, or one shader material for Electric and Hex), so a second screen in view costs nothing more to paint. Walked
-// up to (a prompt, as the ship store's kiosk: E, or its button on a phone), its controls open over the game: the Music
-// Lab's own screen (src/music/screen.js) laid out for a phone as the lab's small one is, with one more row, Hallway
-// lights, and no Play / Stop (the HUD's mute rules the music). "Show the picture" (or Esc) closes them; left alone for
-// 30 s they close by themselves. A change is heard at once wherever the music plays and kept (src/music/game.js edit):
+// THE SCREENS. Each always shows the picture picked on the Picture row (one for every screen, kept in this browser),
+// the word MUSIC along its top (the game's maker, 2026-11-26: "the wall screens should always show the music
+// visualization (And maybe say "Music" on the top)"), painted only while a screen is in view, PAINT times a second: ONE
+// picture for them all (one canvas and one texture, or one shader material for Hex), so a second screen in view costs
+// nothing more to paint. Walked up to, the game's prompt (as the ship store's kiosk: Music, Open, E, its button on a
+// phone), and for a mouse the hand over the screen and a click; then its controls open over the game: the Music Lab's
+// own panel (src/music/screen.js mountMusicControls), with the Hallway lights row and no Play / Stop (the HUD's mute
+// rules the music). Done (or Esc) closes them. A change is heard at once wherever the music plays and kept (src/music/game.js edit):
 // the arena's screen changes the arena's song, every other screen (aboard a ship too) the station's.
 // THE LINES. In each hallway (placesplan.js HALLWAYS) the 'lines' pieces on one wall, end to end, are five long lines,
 // low notes at the hallway's north or west end (placesplan.js alongOf); one small table (src/music/lights.js lightLines,
@@ -32,7 +33,7 @@ import * as THREE from 'three';
 import { piecesOf } from '../people.js';
 import { MUSIC_FACE, MUSIC_LINES, lineY } from '../../kit/wallkit.js';
 import { CABIN_MUSIC, MUSIC_SCREEN } from '../../kit/ships/musicscreen.js';
-import { mountMusicScreen, screenLink, WALL } from './screen.js';
+import { mountMusicControls, screenLink, WALL, TITLE } from './screen.js';
 import { tapOf } from './tap.js';
 import { visualOf, PART_COLOURS } from './visuals.js';
 import { PART_IDS } from './song.js';
@@ -43,13 +44,14 @@ import { SCREEN_ROOMS, songOf, keptPicture, keepPicture, hallwayOn, keepHallway,
 // how often the pictures are painted while a screen is in view; how far off a screen is still painted (m); the canvas;
 // near a screen: the spot to stand, out from its face, how near it the prompt comes up and how much the view must be
 // turned toward it (as the kiosk's: src/kiosk.js STAND); the lines' table's places along a line
-export const PAINT = { fps: 12, far: 24, w: 512, h: Math.round(512 * WALL.h / WALL.w) };
+// (the picture under the screen's title strip: TITLE, src/music/screen.js)
+export const PAINT = { fps: 12, far: 24, w: 512, h: Math.round(512 * WALL.h * (1 - TITLE.share) / WALL.w) };
 export const STAND = { out: 0.9, near: 2.2, facing: 0.25 };
 export const LINE_COLS = 128;
 
 const CSS = `
-.pnm-over { position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 26; width: min(720px, calc(100vw - 16px));
-  max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px); overflow-y: auto; overscroll-behavior: contain; }
+.pnm-over { position: fixed; left: 50%; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 26; width: min(920px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .pnm-over[hidden] { display: none; }
 body:has(.pnm-over:not([hidden])) .pnj-prompt { visibility: hidden; }
 `;
@@ -76,7 +78,7 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
     shaders[id] = { loading: true, m: null };
     const maker = import('./hex.js').then((m) => m.hexMaterial);
     maker.then((make) => {
-      const m = make(THREE, { aspect: WALL.w / WALL.h, px: 1 / PAINT.h });
+      const m = make(THREE, { aspect: PAINT.w / PAINT.h, px: 1 / PAINT.h });
       // (the picture's own colours are the page's (display) colours; the station draws in linear light, tone-mapped
       // after: made linear here, the canvas pictures' way, so the two kinds of picture look alike on a wall)
       m.fragmentShader = m.fragmentShader.replace(/\}\s*$/, '  gl_FragColor.rgb = gl_FragColor.rgb * gl_FragColor.rgb * 1.3;\n}\n');
@@ -88,7 +90,15 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
   };
   const matNow = () => { const V = visualOf(picture); if (!V.shader || shaderFailed) return flat; const s = shaderMat(picture); return s && s.m ? s.m : flat; };
   let current = null;
-  const screens = [], faceGeo = new THREE.PlaneGeometry(MUSIC_FACE.w, MUSIC_FACE.h);
+  // (the face: the picture, and over it the strip with the word MUSIC, as the Music Lab's picture has it)
+  const TH = MUSIC_FACE.h * TITLE.share, screens = [], faceGeo = new THREE.PlaneGeometry(MUSIC_FACE.w, MUSIC_FACE.h - TH).translate(0, -TH / 2, 0);
+  const titleGeo = new THREE.PlaneGeometry(MUSIC_FACE.w, TH).translate(0, MUSIC_FACE.h / 2 - TH / 2, 0);
+  const tcv = document.createElement('canvas'); tcv.width = 512; tcv.height = Math.round(512 * TH / MUSIC_FACE.w);
+  { const tg = tcv.getContext('2d'), H = tcv.height; tg.fillStyle = '#0b1119'; tg.fillRect(0, 0, 512, H); tg.fillStyle = 'rgba(150,210,250,0.35)'; tg.fillRect(0, H - 2, 512, 2);
+    tg.fillStyle = '#8fd3ff'; tg.font = `bold ${Math.round(H * 0.62)}px "DejaVu Sans", Arial, sans-serif`; tg.textAlign = 'center'; tg.textBaseline = 'middle';
+    const word = TITLE.word.split('').join(String.fromCharCode(8202, 8202)); tg.fillText(word, 256, H * 0.52); }
+  const titleTex = new THREE.CanvasTexture(tcv); titleTex.colorSpace = THREE.SRGBColorSpace; titleTex.anisotropy = 4;
+  const titleMat = new THREE.MeshBasicMaterial({ map: titleTex, color: new THREE.Color(1.3, 1.3, 1.3), toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   function apply() { current = matNow(); for (const S of screens) S.mesh.material = current; }
 
   // ── the station's screens: each music screen piece, its face's picture in its room's own group ──
@@ -98,7 +108,9 @@ export function startMusicPlaces({ W, walls, input = null, game, boarding = null
     const mesh = new THREE.Mesh(faceGeo, current || matNow());
     mesh.name = 'music screen: ' + id; mesh.matrixAutoUpdate = false;
     mesh.matrix.copy(_m.copy(holder.matrixWorld).invert().multiply(world)); mesh.matrixWorldNeedsUpdate = true;
+    const title = new THREE.Mesh(titleGeo, titleMat); title.name = 'music screen title'; mesh.add(title);
     holder.add(mesh);
+    if (input && input.addTarget) input.addTarget(mesh, { musicScreen: id });
     const S = { id, room, song, ship, mesh, holder, at: new THREE.Vector3(), out: new THREE.Vector3(), stand: new THREE.Vector3(), facing: 0 };
     screens.push(S); where(S);
     return S;
@@ -209,13 +221,12 @@ void main() {
     if (!game.settled) game.settle();
     isOpen = S; over.hidden = false; prompt.hidden = true;
     if (input) { wasInput = input.enabled; input.enabled = false; }
-    link = screenLink({ face: 'controls', picture, idle: 30000 });
+    link = screenLink({ picture });
     link.fans.add((L) => {
       if (L.picture !== picture) { picture = L.picture; keepPicture(localStorage, picture); apply(); paintedAt = -1; }
-      if (L.face === 'picture') close();
     });
-    mounted = mountMusicScreen(over, music, { keep: '', link, play: false, hallway: { on: () => lightsOn, set: setLights }, onSong: (s) => game.edit(s) });
-    link.show('controls');
+    mounted = mountMusicControls(over, music, { keep: '', link, play: false, hallway: { on: () => lightsOn, set: setLights }, onSong: (s) => game.edit(s), done: () => close() });
+    setCursor(false);
     addEventListener('keydown', onKey, true);
     return true;
   }
@@ -232,6 +243,19 @@ void main() {
     if (!playing || isOpen) return;
     if (near && !prompt.hidden && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); e.stopImmediatePropagation(); open(); }
   }, true);
+  // (a mouse: while a screen is near enough to use, the pointer over it is a hand and a click opens its controls, as
+  // the drill's view does over a rock: src/drillview.js; a tap is the prompt's button)
+  const canvasEl = W.renderer && W.renderer.domElement, ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+  let pointerOn = false;
+  function setCursor(on) { if (on === pointerOn || !canvasEl) return; pointerOn = on; canvasEl.style.cursor = on ? 'pointer' : ''; }
+  const overNear = (x, y) => {
+    if (!near || prompt.hidden || isOpen || !canvasEl) return false;
+    const r = canvasEl.getBoundingClientRect(); _ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(_ndc, W.camera);
+    return ray.intersectObject(near.mesh, true).length > 0;
+  };
+  if (canvasEl) canvasEl.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') setCursor(overNear(e.clientX, e.clientY)); });
+  if (input && input.onPick) input.onPick((pk) => { if (pk.hit && pk.hit.data && pk.hit.data.musicScreen && !pk.touch && near && near.id === pk.hit.data.musicScreen && !prompt.hidden) open(near); });
 
   // ── each frame ──
   const _d = new THREE.Vector3(), _c = new THREE.Vector3(), frus = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere();
@@ -266,7 +290,7 @@ void main() {
           if (current !== flat && current && current.userData.state) {
             // (the screen's height on the page, for the shader's fine lines)
             const px = Math.max(24, (MUSIC_FACE.h / Math.max(0.3, nd)) / (2 * Math.tan(THREE.MathUtils.degToRad(W.camera.fov) / 2)) * innerHeight * Math.min(2, devicePixelRatio || 1));
-            electricUniforms(f, current.userData.state, { time: t % 1000, aspect: WALL.w / WALL.h, px: 1 / px });
+            electricUniforms(f, current.userData.state, { time: t % 1000, aspect: PAINT.w / PAINT.h, px: 1 / px });
           } else {
             f.w = PAINT.w; f.h = PAINT.h; f.memo = memo[V.id] || (memo[V.id] = {});
             V.paint(g, f); tex.needsUpdate = true;
@@ -296,6 +320,7 @@ void main() {
       }
       if (near) prompt.querySelector('small').textContent = near.song === 'arena' ? 'Change the arena\'s song' : 'Change the station\'s song';
       prompt.hidden = !near || !!isOpen || !!quiet() || !!(mission && mission.busy) || near.song !== game.which;
+      if (prompt.hidden) setCursor(false);
     },
     open: (i) => open(typeof i === 'number' ? screens[i] : typeof i === 'string' ? screens.find((S) => S.id === i) : near),
     close,

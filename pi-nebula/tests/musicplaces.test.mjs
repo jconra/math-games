@@ -104,3 +104,16 @@ test('the music\'s switch: off at first, and the screens\' code loads only with 
   assert.match(text('../kit/catalog.js'), /lines: \{ name: 'Music lines'/);
   assert.match(text('../kit/wallkit.js'), /if \(!music\) p\.light/);
 });
+
+test('the screens always show the picture, MUSIC along its top; the controls only when used, Done to leave; one designed panel that never wraps', async () => {
+  const screen = text('../src/music/screen.js'), places = text('../src/music/places.js'), lab = text('../labs/music/main.js'), page = text('../labs/music/index.html');
+  const { TITLE } = await import('../src/music/screen.js');
+  assert.equal(TITLE.word, 'MUSIC'); assert.ok(TITLE.share > 0.05 && TITLE.share < 0.2, 'a strip of its own over the picture');
+  assert.doesNotMatch(screen + places, /Show the picture/);
+  assert.match(places, /mountMusicControls\(over, music, \{[^\n]*done:/); assert.match(places, /'pointer'/);
+  // every button one line: never breaking its words
+  assert.match(screen, /\.pnm-btn \{[^}]*white-space: nowrap/);
+  // the lab: one picture with a full screen button, and the same controls under it; no second small screen
+  assert.match(lab, /mountMusicPicture\([^\n]*full: true/); assert.match(lab, /mountMusicControls\(/);
+  assert.doesNotMatch(page, /station wall screen, small/);
+});
