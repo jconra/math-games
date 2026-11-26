@@ -134,9 +134,13 @@ async function boot() {
   // (the station's announcements over the speakers, a chime first, about once a minute: src/announce.js)
   const announce = GAME.announce = makeAnnounce({ sound, W, visit, people: () => people, crew: () => GAME.player });
   // (the station's music, only when asked for: ?music=1; otherwise none of it is loaded, src/music/switch.js)
-  let music = null;
+  // (and with it, its screens in the station's places and aboard the ships, and the hallways' lines: src/music/places.js;
+  // with the music off they are there, dark, and none of this is loaded)
+  let music = null, musicPlaces = null;
   { let want = { on: false }; try { want = musicWanted(location.search, localStorage); } catch (e) { /* blocked: off */ }
-    if (want.on) import('./music/game.js').then((m) => { music = GAME.music = m.startGameMusic({ sound, notes: want.notes }); }).catch(fail); }
+    if (want.on) import('./music/game.js').then((m) => { music = GAME.music = m.startGameMusic({ sound, notes: want.notes }); return import('./music/places.js'); })
+      .then((m) => { musicPlaces = GAME.musicPlaces = m.startMusicPlaces({ W, walls, input, game: music, boarding, mission: { get busy() { return !!(GAME.mission && GAME.mission.busy); } },
+        quiet: () => !!(GAME.jobs && (GAME.jobs.near || GAME.jobs.panel)) || !!(GAME.board && (GAME.board.near || GAME.board.isOpen)) || !!(GAME.kiosk && (GAME.kiosk.near || GAME.kiosk.isOpen)) || !!(people && people.bubbles.asking) }); }).catch(fail); }
 
   // ── the title's view: a named view in the station file, the camera swaying a little round it ──────────────────
   const TITLE_VIEWS = ['terminal', 'windows', 'hangar', 'overlook', 'start', 'spawn'];
@@ -267,6 +271,7 @@ async function boot() {
       const driving = cargo.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding, { inLift: !!lift.here });
       lap.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding);
       kiosk.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here);
+      if (musicPlaces) musicPlaces.update(dt, P, GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here);
       const move = ctl ? ctl.move : atJob || onTrip || riding || driving ? null : auto.way ? autoMove() : input.move;
       walkFree = GAME.mode === 'play' && !atJob && !onTrip && !riding && !driving && !lift.here && !cargo.on && !mission.seated && !visit.focus;
       // (aboard a ship on a run: its crew are people to walk round, and a seat aboard has its own clip: src/aboard.js)
@@ -369,7 +374,7 @@ async function boot() {
   function toTitle() {
     if (GAME.mode !== 'play') return;
     GAME.mode = 'title'; input.enabled = false; menu.hidden = true; soundSw.show(false); auto.way = null; mission.stop(); lift.stop(); cargo.stop(); lap.stop(); jobs.update(0, null, false); jobs.close();
-    board.update(0, null, false); board.stop(); kiosk.update(0, null, false);
+    board.update(0, null, false); board.stop(); kiosk.update(0, null, false); if (musicPlaces) musicPlaces.update(0, null, false);
     if (people) { people.bubbles.clearAll(); if (people.bubbles.asking) people.bubbles.asking.close(); }
     T.show();
   }

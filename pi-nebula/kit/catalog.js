@@ -4,7 +4,7 @@
 //   foot   how much room it takes, for the lab's framing [w, h, d] in metres
 //   prefab a piece made of other pieces (a list of placements relative to it)
 import { floorTile, ceilingTile, wallPanel, rib, beam, trim, corner, hatch } from './shell.js';
-import { breaker, jbox, extinguisher, wallScreen, label, pipe, cableTray } from './wallkit.js';
+import { breaker, jbox, extinguisher, wallScreen, label, pipe, cableTray, musicLines, MUSIC_LINES } from './wallkit.js';
 import { LABELS, SIGNS } from './tex.js';
 import { pane, filler } from './windows.js';
 import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTile } from './bigroom.js';
@@ -54,7 +54,8 @@ export const PIECES = {
   breaker: { name: 'Breaker panel', group: 'Wall kit', at: 'wall', variants: ['switches'], foot: [0.45, 0.9, 0.15], build: breaker },
   jbox: { name: 'Junction box', group: 'Wall kit', at: 'wall', variants: ['plain'], foot: [0.4, 0.7, 0.17], build: jbox },
   extinguisher: { name: 'Extinguisher', group: 'Wall kit', at: 'wall', variants: ['red'], foot: [0.2, 0.6, 0.2], build: extinguisher },
-  screen: { name: 'Wall screen', group: 'Wall kit', at: 'wall', variants: ['math', 'status', 'terminal', 'radar'], foot: [0.6, 0.4, 0.1], build: wallScreen },
+  screen: { name: 'Wall screen', group: 'Wall kit', at: 'wall', variants: ['math', 'status', 'terminal', 'radar', 'music'], foot: [0.6, 0.4, 0.1], build: wallScreen },
+  lines: { name: 'Music lines', group: 'Wall kit', at: 'wall', variants: MUSIC_LINES.lens, foot: [1.8, 0.24, 0.03], build: musicLines },
   label: { name: 'Stencil label', group: 'Wall kit', at: 'wall', variants: LABELS.flatMap((l) => [l, l + ' dark']), foot: [0.45, 0.12, 0.01], build: label },
   pipe: { name: 'Pipe run', group: 'Wall kit', at: 'free', variants: ['straight', 'elbow', 'elbow-r', 'elbow-in', 'elbow-in-r', 'flange', 'sleeve', 'valve'], foot: [2, 0.4, 0.4], build: pipe },
   tray: { name: 'Cable tray', group: 'Wall kit', at: 'wall', variants: ['cables'], foot: [2, 0.25, 0.25], build: cableTray },

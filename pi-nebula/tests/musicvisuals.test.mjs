@@ -10,7 +10,6 @@ import { PRESETS, PART_IDS, VOL, volOf, volGain, volsOf, checkSong, cleanSong, s
 import { barNotes } from '../src/music/patterns.js';
 import { notesOfBar, barsAround, notesWindow, pulses, sectionsAround, tapOf } from '../src/music/tap.js';
 import { VISUALS, PART_COLOURS, paintVisual } from '../src/music/visuals.js';
-import { lightBars, LIGHT_STYLES } from '../src/music/lights.js';
 
 const song = PRESETS.find((p) => p.id === 'stationdrive').song;
 const sd = 60 / song.bpm / 4, bar = 16 * sd;
@@ -83,15 +82,6 @@ test('every picture paints from made-up notes without error, at the wall screen\
   // the frame really is the music's: the notes the Notes picture shows include every part playing in that bar
   const f = tapOf(music).frame();
   assert.ok(f.playing && f.bar === 21 && f.step >= 0 && f.notes.length > 10);
-});
-
-test('the light bars: one brightness a strip, 0..1, in every style; the beat style follows the kick', () => {
-  const P = (kick) => ({ ...pulses([], 0, sd), kick, level: kick, barPhase: 0.3 });
-  for (const S of LIGHT_STYLES) for (const k of [0, 0.5, 1]) {
-    const b = lightBars(P(k), 24, S.id);
-    assert.equal(b.length, 24); for (const v of b) assert.ok(v >= 0 && v <= 1, S.id);
-  }
-  assert.ok(lightBars(P(1), 8, 'beat')[0] > lightBars(P(0), 8, 'beat')[0] + 0.5);
 });
 
 test('each part\'s volume belongs to the song: kept, copied in its text only when away from the usual, checked', () => {

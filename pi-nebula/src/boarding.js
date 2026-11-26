@@ -586,5 +586,7 @@ export function makeBoarding({ W, walls, quality = 'high', dock = null }) {
     poolKey = null; stands++;
     return true;
   }
-  return { ships, update, inside, where, core, look, spots, hold, ride, fly, stand, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
+  // (MUSIC 3: the cabins built just now, for the music's screen aboard each ship: src/music/places.js)
+  const cabins = () => ships.filter((s) => s.state === 'in' && s.cabin).map((s) => ({ id: s.id, bp: s.bp, group: s.cabin.group, deck: s.space.deck }));
+  return { ships, update, inside, where, core, look, spots, hold, ride, fly, stand, cabins, get stands() { return stands; }, stats: () => ships.map((s) => ({ id: s.id, state: s.state, held: !!s.held, moved: s.moved, ...(s.stats || {}) })) };
 }

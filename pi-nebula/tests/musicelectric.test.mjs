@@ -11,7 +11,7 @@ import { PRESETS, PART_IDS } from '../src/music/song.js';
 import { tapOf, pulses } from '../src/music/tap.js';
 import { VISUALS, visualOf, RANGES } from '../src/music/visuals.js';
 import { electricState, electricUniforms, electricMaterial, SLOTS, DRUM_KIND, placeOf, ELECTRIC_SHADER } from '../src/music/electric.js';
-import { lightLines, lightBars, LIGHT_STYLES, DRUM_PLACE } from '../src/music/lights.js';
+import { lightLines, DRUM_PLACE, LINE_LOOK } from '../src/music/lights.js';
 import { screenLink } from '../src/music/screen.js';
 import { paintVisual } from '../src/music/visuals.js';
 import { hexMaterial, hexUniforms, hexState, HEX_SHADER, BASS_READING } from '../src/music/hex.js';
@@ -93,7 +93,7 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
   const [lo, hi] = RANGES.bass, row = (p) => PART_IDS.indexOf(p);
   const f = frame([N('bass', { midi: lo + 0.25 * (hi - lo) }), N('pads', { midi: RANGES.pads[0] }), N('pads', { midi: RANGES.pads[1] }),
     N('beat', { sound: 'kick' }), N('beat', { sound: 'hat', at: 9.98 })]);
-  const b = lightLines(f, cols, 'notes');
+  const b = lightLines(f, cols);
   assert.equal(b.length, 5 * cols);
   for (const v of b) assert.ok(v >= 0 && v <= 1);
   assert.ok(at(b, row('bass'), 0.25) > 0.5 && at(b, row('bass'), 0.75) < 0.3 && at(b, row('bass'), 0.75) > 0.1, 'the bass note lights its place; the whole line glows with the bass');
@@ -101,18 +101,13 @@ test('the hallway lines: a line a part, brightest at its notes\' places (low tow
   assert.ok(at(b, row('beat'), DRUM_PLACE.kick) > 0.5 && at(b, row('beat'), DRUM_PLACE.hat) > 0.3 && at(b, row('beat'), DRUM_PLACE.snare) < 0.4, 'each drum its place');
   assert.ok(at(b, row('melody'), 0.5) < 0.1, 'a part with no note: its line low');
   // the line pulses with its part: a note dying away dims it
-  const later = lightLines({ ...f, now: 11, pulse: pulses(f.notes, 11, 60 / song.bpm / 4) }, cols, 'notes');
+  const later = lightLines({ ...f, now: 11, pulse: pulses(f.notes, 11, 60 / song.bpm / 4) }, cols);
   assert.ok(at(later, row('bass'), 0.25) < at(b, row('bass'), 0.25) * 0.3);
-  // the other two line styles and stopped: 0..1, right size
-  for (const s of ['pass', 'one']) { const t = lightLines(f, cols, s); assert.equal(t.length, 5 * cols); for (const v of t) assert.ok(v >= 0 && v <= 1, s); }
-  const pass = lightLines(frame([N('lead', { midi: 70, at: 10 + f.barDur * 0.5, dur: 0.2 })]), cols, 'pass');
-  assert.ok(at(pass, row('lead'), 0.77) > 0.1 && at(pass, row('lead'), 0.25) < 0.05, 'going by: a note to come is ahead of the middle');
-  const one = lightLines(frame([N('bass', { midi: RANGES.bass[0] }), N('melody', { midi: RANGES.melody[1] })]), cols, 'one');
-  assert.ok(at(one, row('bass'), 0) > 0.5 && at(one, row('melody'), 1) > 0.5, 'one line: bass at the start, melody at the end');
-  for (const v of lightLines({ playing: false }, cols, 'notes')) assert.ok(v < 0.1);
-  // the strips' styles stay as they were, and every style is listed
-  assert.deepEqual(LIGHT_STYLES.map((s) => s.id), ['beat', 'run', 'meter', 'notes', 'pass', 'one']);
-  assert.equal(lightBars(f.pulse, 8, 'beat').length, 8);
+  // stopped: all low
+  for (const v of lightLines({ playing: false }, cols)) assert.ok(v < 0.1);
+  // the one style left (the game's maker chose it), its lines a little thicker than the lab first drew them (a core a
+  // sixth of the gap between lines, a glow about half of it)
+  assert.ok(LINE_LOOK.core / LINE_LOOK.gap > 1 / 6 * 1.3 && LINE_LOOK.glow / LINE_LOOK.gap > 0.55);
 });
 
 test('Spectrum is gone from the pictures; a kept or asked-for "spectrum" is the first picture', () => {

@@ -48,6 +48,7 @@ import { SURF, GLOW } from '../materials.js';
 import { Piece } from '../piece.js';
 import { ITEM_KINDS, doorWall, hangs, spaceAt } from './blueprint.js';
 import { furnishRoom } from './cabin-furnish.js';
+import { CABIN_MUSIC, MUSIC_SCREEN } from './musicscreen.js';
 import { SIGNS } from '../shipparts/cabin/print.js';
 import { makeMaterials } from '../materials.js';
 
@@ -378,6 +379,14 @@ export function buildCabin(p, bp, opts = {}) {
       const slopeAt = (axis, v, a) => { if (axis !== 'x') return null; const L = linings.find((s) => Math.abs(s.v - v) < EPS && a >= s.lo - EPS && a <= s.hi + EPS); return L ? { y0: L.y0, run: L.run } : null; };
       const openings = (axis, v) => panels.filter((P) => P.axis === axis && Math.abs(P.v - v) < EPS).map((P) => (P.outer ? [P.lo, P.hi] : [P.lo - 0.2, P.hi + 0.2]));
       for (const r of rooms) if (!canopy(r)) for (const id of furnishRoom(q, bp, r, { put, slopeAt, openings, look: LOOKS[look], outer, outerDoors, disc })) furnished.add(id);
+      // (the music's screen, on the wall kit/ships/musicscreen.js names for this blueprint: its case, its face dark)
+      const M = CABIN_MUSIC[bp.id], R = M && byId[M.room];
+      if (R && !canopy(R)) {
+        const s = new Piece(), S = MUSIC_SCREEN, f = +(R.floor || 0);
+        s.slab('black', -S.w / 2 - S.bezel, S.w / 2 + S.bezel, -S.h / 2 - S.bezel, S.h / 2 + S.bezel, 0, S.depth - 0.006, { r: 0.01 });
+        s.slab(S.look, -S.w / 2, S.w / 2, -S.h / 2, S.h / 2, S.depth - 0.008, S.depth, { r: 0.003, seg: 1 });
+        put('music screen', s, { at: [M.at[0], f + M.at[1], M.at[2]], rot: [0, M.ry, 0] });
+      }
     }
     // ── the downlights: a room's ceiling light is glowing discs set in its ceiling (kit/shipparts/cabin/lights.js), each
     // with its pool and its beam: where the room's fittings asked for them (ctx.disc), else one in its middle (two in a

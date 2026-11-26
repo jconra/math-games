@@ -345,10 +345,7 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
   // THE TAP, read only: nothing in it changes what is played
   //   M.tapRaw() -> { now, playing, song, anchor, next, bars: [{ bar, t, sd, song, section }] }   the bars made lately
   //               (each with the song it was made from), where the next bar will start, the audio clock now
-  //   M.analyser() -> AnalyserNode | null   the sound's levels, made on the first ask (after the limiter and the
-  //               stop's fade, before the place's loudness); null until there is a context
   const tapBars = [];
-  let analyser = null;
   const tick0 = M.tick, seen = new WeakSet();
   M.tick = () => {
     vols();
@@ -362,11 +359,6 @@ export function createMusic({ sound = null, ctx = null, dest = null, timer = tru
   M.tapRaw = () => {
     const now = A ? A.ctx.currentTime - (A.ctx.outputLatency || 0) : 0;
     return { now, playing, song, anchor: anchor && { ...anchor }, next: next && { ...next }, bars: tapBars };
-  };
-  M.analyser = () => {
-    if (analyser || !A) return analyser;
-    try { analyser = A.ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.7; analyser.minDecibels = -90; analyser.maxDecibels = -12; A.fade.connect(analyser); } catch (e) { analyser = null; }
-    return analyser;
   };
   // ── (end of VISUALS 1's block) ──────────────────────────────────────────────────────────────────────────────────────
   return M;

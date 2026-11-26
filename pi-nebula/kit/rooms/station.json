@@ -121,7 +121,8 @@
         {"piece":"chair","cell":[-2,2],"turn":0,"variant":"desk","off":[0,0,0.1]},
         {"piece":"cabinet","cell":[-1,2.5],"turn":2,"variant":"tall","off":[0.4,0,0.24]},
         {"piece":"screen","cell":[-1,0.5],"turn":0,"variant":"status","off":[0.3,1.35,0]},
-        {"piece":"label","cell":[-0.5,2],"turn":3,"variant":"HAB-A dark","off":[0.55,1.95,0.002]}
+        {"piece":"label","cell":[-0.5,2],"turn":3,"variant":"HAB-A dark","off":[0.55,1.95,0.002]},
+        {"piece":"screen","cell":[-2.5,2],"turn":1,"variant":"music","off":[0.5,1.35,0]}
       ]
     },
     {
@@ -314,7 +315,17 @@
         {"piece":"pipe","cell":[-0.5,8],"turn":1,"variant":"straight","off":[0,2.62,0.78]},
         {"piece":"pipe","cell":[-0.5,8],"turn":1,"variant":"flange","off":[0.3,2.62,0.78]},
         {"piece":"pipe","cell":[-0.5,9],"turn":1,"variant":"straight","off":[0,2.62,0.78]},
-        {"piece":"pipe","cell":[-0.5,10],"turn":1,"variant":"elbow-in-r","off":[0,2.62,0.78]}
+        {"piece":"pipe","cell":[-0.5,10],"turn":1,"variant":"elbow-in-r","off":[0,2.62,0.78]},
+        {"piece":"lines","cell":[-0.5,4],"turn":1,"variant":"1.0","off":[-0.39,1.371,0]},
+        {"piece":"lines","cell":[-0.5,5],"turn":1,"variant":"0.3","off":[-0.71,1.371,0]},
+        {"piece":"lines","cell":[-0.5,5],"turn":1,"variant":"0.3","off":[0.71,1.371,0]},
+        {"piece":"lines","cell":[-0.5,6],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[-0.5,7],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[-0.5,8],"turn":1,"variant":"0.3","off":[-0.71,1.371,0]},
+        {"piece":"lines","cell":[-0.5,8],"turn":1,"variant":"0.3","off":[0.71,1.371,0]},
+        {"piece":"lines","cell":[-0.5,9],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[-0.5,10],"turn":1,"variant":"0.6","off":[-0.588,1.371,0]},
+        {"piece":"lines","cell":[-0.5,10],"turn":1,"variant":"0.6","off":[0.588,1.371,0]}
       ]
     },
     {
@@ -812,7 +823,8 @@
         {"piece":"planter","cell":[2,18],"turn":0,"variant":"long","off":[0,0,-0.3]},
         {"piece":"planter","cell":[-2,18],"turn":0,"variant":"long","off":[0,0,-0.3]},
         {"piece":"planter","cell":[-1.5,11],"turn":0,"variant":"long","off":[0.4,0,-0.4]},
-        {"piece":"planter","cell":[2.5,11],"turn":0,"variant":"long","off":[0,0,-0.4]}
+        {"piece":"planter","cell":[2.5,11],"turn":0,"variant":"long","off":[0,0,-0.4]},
+        {"piece":"screen","cell":[2,10.5],"turn":0,"variant":"music","off":[0.5,1.35,0]}
       ]
     },
     {
@@ -942,7 +954,13 @@
         {"piece":"breaker","cell":[4,1.5],"turn":2,"variant":"switches","off":[-0.5,1.15,0]},
         {"piece":"jbox","cell":[6,-0.5],"turn":0,"variant":"plain","off":[0.3,1.78,0]},
         {"piece":"sign","cell":[2,-0.5],"turn":0,"variant":"QUARTERS","off":[0,1.9,0.02]},
-        {"piece":"sign","cell":[6,-0.5],"turn":0,"variant":"HANGAR","off":[0,1.9,0.02]}
+        {"piece":"sign","cell":[6,-0.5],"turn":0,"variant":"HANGAR","off":[0,1.9,0.02]},
+        {"piece":"lines","cell":[2,1.5],"turn":2,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[3,1.5],"turn":2,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[4,1.5],"turn":2,"variant":"0.5","off":[0.057,1.371,0]},
+        {"piece":"lines","cell":[5,1.5],"turn":2,"variant":"0.5","off":[-0.615,1.371,0]},
+        {"piece":"lines","cell":[5,1.5],"turn":2,"variant":"0.5","off":[0.615,1.371,0]},
+        {"piece":"lines","cell":[6,1.5],"turn":2,"variant":"1.8","off":[0.0,1.371,0]}
       ]
     },
     {
@@ -967,7 +985,8 @@
       "probe": [8,2.6,12],
       "coarse": true,
       "pieces": [
-        {"piece":"arena","cell":[4,6],"turn":0,"variant":"octagon"}
+        {"piece":"arena","cell":[4,6],"turn":0,"variant":"octagon"},
+        {"piece":"screen","cell":[1.5,8.5],"turn":1,"variant":"music","off":[0.2,1.35,-0.02]}
       ]
     },
     {
@@ -1290,7 +1309,22 @@
         {"piece":"pipe","cell":[6.5,6],"turn":1,"variant":"valve","off":[0.4,2.62,0.78]},
         {"piece":"pipe","cell":[6.5,7],"turn":1,"variant":"flange","off":[0.3,2.62,0.78]},
         {"piece":"pipe","cell":[6.5,10],"turn":1,"variant":"flange","off":[0.3,2.62,0.78]},
-        {"piece":"pipe","cell":[6.5,11],"turn":1,"variant":"elbow-in-r","off":[0,2.62,0.78]}
+        {"piece":"pipe","cell":[6.5,11],"turn":1,"variant":"elbow-in-r","off":[0,2.62,0.78]},
+        {"piece":"lines","cell":[6.5,-3],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,-2],"turn":1,"variant":"0.5","off":[-0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,-2],"turn":1,"variant":"0.5","off":[0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,-1],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,2],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,3],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,4],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,5],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,6],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,7],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,8],"turn":1,"variant":"0.5","off":[-0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,8],"turn":1,"variant":"0.5","off":[0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,9],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,10],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,11],"turn":1,"variant":"1.8","off":[0.0,1.371,0]}
       ]
     },
     {
@@ -1551,7 +1585,25 @@
         {"piece":"pipe","cell":[6.5,22],"turn":1,"variant":"flange","off":[0.3,2.62,0.78]},
         {"piece":"pipe","cell":[6.5,25],"turn":1,"variant":"flange","off":[0.3,2.62,0.78]},
         {"piece":"pipe","cell":[6.5,26],"turn":1,"variant":"elbow-in-r","off":[0,2.62,0.78]},
-        {"piece":"trim","cell":[6.5,14],"turn":1,"variant":"cornice-grey"}
+        {"piece":"trim","cell":[6.5,14],"turn":1,"variant":"cornice-grey"},
+        {"piece":"lines","cell":[6.5,15],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,16],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,17],"turn":1,"variant":"0.5","off":[-0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,17],"turn":1,"variant":"0.5","off":[0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,18],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,19],"turn":1,"variant":"0.3","off":[-0.71,1.371,0]},
+        {"piece":"lines","cell":[6.5,19],"turn":1,"variant":"0.3","off":[0.71,1.371,0]},
+        {"piece":"lines","cell":[6.5,20],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,21],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,22],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,23],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,24],"turn":1,"variant":"0.5","off":[-0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,24],"turn":1,"variant":"0.5","off":[0.615,1.371,0]},
+        {"piece":"lines","cell":[6.5,25],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,26],"turn":1,"variant":"0.3","off":[-0.71,1.371,0]},
+        {"piece":"lines","cell":[6.5,26],"turn":1,"variant":"0.3","off":[0.71,1.371,0]},
+        {"piece":"lines","cell":[6.5,27],"turn":1,"variant":"1.8","off":[0.0,1.371,0]},
+        {"piece":"lines","cell":[6.5,28],"turn":1,"variant":"1.8","off":[0.0,1.371,0]}
       ]
     },
     {
@@ -2790,7 +2842,8 @@
         {"piece":"mark","cell":[15.5,-7.5],"turn":2,"variant":"hazard","off":[0,0,-0.5]},
         {"piece":"mark","cell":[16.5,-7.5],"turn":2,"variant":"hazard","off":[0,0,-0.5]},
         {"piece":"mark","cell":[17.5,-7.5],"turn":2,"variant":"hazard","off":[0,0,-0.5]},
-        {"piece":"mark","cell":[18.5,-7.5],"turn":2,"variant":"hazard","off":[0,0,-0.5]}
+        {"piece":"mark","cell":[18.5,-7.5],"turn":2,"variant":"hazard","off":[0,0,-0.5]},
+        {"piece":"screen","cell":[9.5,-1],"turn":1,"variant":"music","off":[-0.5,1.35,0]}
       ]
     },
     {
@@ -3925,7 +3978,8 @@
         {"piece":"crate","cell":[13,19],"turn":0,"variant":"stack","off":[0.4,0,-0.3]},
         {"piece":"crate","cell":[18.5,19],"turn":0,"variant":"long","off":[-0.4,0,-0.2]},
         {"piece":"crate","cell":[19,19],"turn":0,"variant":"small","off":[0.4,0,-0.1]},
-        {"piece":"crate","cell":[12,17],"turn":1,"variant":"cart","off":[0.2,0,0]}
+        {"piece":"crate","cell":[12,17],"turn":1,"variant":"cart","off":[0.2,0,0]},
+        {"piece":"screen","cell":[9.5,14],"turn":1,"variant":"music","off":[-0.5,1.35,0]}
       ]
     },
     {
@@ -5051,7 +5105,8 @@
         {"piece":"crate","cell":[13,34],"turn":0,"variant":"stack","off":[0.4,0,-0.3]},
         {"piece":"crate","cell":[18.5,34],"turn":0,"variant":"long","off":[-0.4,0,-0.2]},
         {"piece":"crate","cell":[19,34],"turn":0,"variant":"small","off":[0.4,0,-0.1]},
-        {"piece":"crate","cell":[12,32],"turn":1,"variant":"cart","off":[0.2,0,0]}
+        {"piece":"crate","cell":[12,32],"turn":1,"variant":"cart","off":[0.2,0,0]},
+        {"piece":"screen","cell":[9.5,29],"turn":1,"variant":"music","off":[-0.5,1.35,0]}
       ]
     },
     {
@@ -5924,7 +5979,8 @@
         {"piece":"chair","cell":[17,37],"turn":3,"variant":"desk","off":[0,0,-0.4]},
         {"piece":"cabinBasin","cell":[16.5,35],"turn":1,"variant":"0.6 m","off":[0.3,0,0]},
         {"piece":"screen","cell":[17,37.5],"turn":2,"variant":"status","off":[0,1.35,0]},
-        {"piece":"cabinet","cell":[19,37.5],"turn":2,"variant":"tall","off":[0.2,0,0.24]}
+        {"piece":"cabinet","cell":[19,37.5],"turn":2,"variant":"tall","off":[0.2,0,0.24]},
+        {"piece":"screen","cell":[23.5,38],"turn":3,"variant":"music","off":[0.5,1.35,0]}
       ]
     },
     {
@@ -6448,7 +6504,8 @@
         {"piece":"chair","cell":[20.5,10],"turn":2,"variant":"desk","off":[-0.4,0,0.1]},
         {"piece":"console","cell":[20,15.5],"turn":2,"variant":"readouts","off":[0,0,-0.2]},
         {"piece":"chair","cell":[20.5,15],"turn":0,"variant":"desk","off":[0.4,0,0.1]},
-        {"piece":"chair","cell":[19.5,15],"turn":0,"variant":"desk","off":[-0.4,0,0.1]}
+        {"piece":"chair","cell":[19.5,15],"turn":0,"variant":"desk","off":[-0.4,0,0.1]},
+        {"piece":"screen","cell":[19.5,12.5],"turn":3,"variant":"music","off":[0.5,1.35,0]}
       ]
     },
     {
@@ -6600,7 +6657,8 @@
         {"piece":"bench","cell":[-1.5,13.5],"turn":0,"variant":"packing","off":[0.05,0,-0.3]},
         {"piece":"bench","cell":[0.5,13.5],"turn":0,"variant":"packing","off":[-0.25,0,-0.3]},
         {"piece":"shipDesk","cell":[-0.5,15.5],"turn":0,"variant":"desk","off":[-0.1,0,-0.3]},
-        {"piece":"chair","cell":[-0.5,16],"turn":2,"variant":"desk","off":[-0.1,0,0.35]}
+        {"piece":"chair","cell":[-0.5,16],"turn":2,"variant":"desk","off":[-0.1,0,0.35]},
+        {"piece":"screen","cell":[6,14.5],"turn":0,"variant":"music","off":[0.5,1.35,0]}
       ]
     }
   ]

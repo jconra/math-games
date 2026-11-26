@@ -10,7 +10,7 @@
 //     it fades out, and no notes are made until they are back aboard, where it fades in again;
 //   - the arena: its own song (Mathball Drop to begin with) in place of the station's, changed over on the next bar
 //     as they go in and as they come out, each from its top; each song kept in this browser on its own
-//     ('pi-nebula.music.station', 'pi-nebula.music.arena': the screens to come will change them);
+//     ('pi-nebula.music.station', 'pi-nebula.music.arena': the screens change them, src/music/places.js);
 //   - quieter under talking (a voice clip, a station announcement) and while a math card is up (rooms.js QUIET);
 //   - its work on the main thread is the scheduler's tick (every 60 ms, a bar's notes when one is due) and this
 //     file's look round, four times a second; while the page is hidden no notes are made (the player's `rests`).
@@ -19,6 +19,9 @@
 //   G.update(dt, where)   each frame; where: () => { zone, ship, ground } (src/music/rooms.js hearing), asked only
 //                         when it looks round
 //   G.music               the music player; G.state() for the rigs
+//   G.which, G.settled    (MUSIC 3) the song playing here, 'station' or 'arena', and whether it has come in yet (a
+//                         song switched to starts on the next bar); G.settle() brings it in now (a screen opened)
+//   G.edit(song)          (MUSIC 3) a screen changed the song playing here: kept as that place's song
 import { createMusic } from './player.js';
 import { cleanSong, checkSong } from './song.js';
 import { SOUNDS, SONGS, hearing, quiet } from './rooms.js';
@@ -63,6 +66,17 @@ export function startGameMusic({ sound, notes = 'baked' } = {}) {
       card = typeof document !== 'undefined' && !!document.querySelector('.pnj:not(.is-going)');
       const q = quiet({ talking: sound.playing('voices') + sound.playing('station') > 0, card });
       if (q !== hush) { hush = q; music.hush(q); }
+    },
+    // (MUSIC 3: the screens. Which song is playing here (the arena's or the station's), and whether it has come in yet:
+    // a song switched to plays from the next bar, until then the one before is heard)
+    get which() { return which; },
+    get settled() { return JSON.stringify(music.song) === JSON.stringify(songs[which]); },
+    // a screen opened before the song switched to has come in: it plays from the next bar not yet made instead
+    settle() { if (!G.settled) music.set({ ...songs[which] }); },
+    // a change made on a screen (to the song playing here, music.set already done): kept as that place's song
+    edit(song) {
+      songs[which] = { ...song };
+      try { localStorage.setItem(KEEP[which], JSON.stringify(songs[which])); } catch (e) { /* not kept */ }
     },
     state: () => ({ which, kind, heard, hush, card, song: music.song.name, playing: music.playing, notes: music.notes, stats: { ...music.stats }, bakery: music.bakery ? music.bakery.stats() : null, place: music.roomNow }),
   };

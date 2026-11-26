@@ -24,6 +24,9 @@
 //       fit      true: the screen is the wall screen's shape (46 by 25) whichever face (the controls scroll inside)
 //       idle     ms without a touch before the controls go back to the picture (30 s; a link's own when given)
 //       fps      at most this many pictures a second (0: every frame the page draws)
+//       play     false: no Play / Stop button (the game: the music plays wherever it is heard; the HUD's mute rules it)
+//       hallway  { on(), set(on) }: one more row, "Hallway lights" On / Off (the game's hallway lines, MUSIC 3)
+//       onSong   called with the song after each change made on this screen (the game keeps it, src/music/game.js)
 //   S.destroy()  takes it away; S.stats { paints, ms (the last picture's painting time), errors, error (the last) }; S.link
 //   A part's switches (PARTS[part].switches: [{ id, label }]) are tick boxes after its choices, each the song's field
 //   of that id, true or false.
@@ -89,6 +92,8 @@ const CSS = `
 .pnm-foot { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
 .pnm-go { min-height: 46px; padding: 6px 18px; font-size: 14px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; clip-path: var(--oct); --cut: 8px;
   color: #06202e !important; background: var(--cyan) !important; }
+.pnm-go[hidden] { display: none; }
+.pnm-foot.no-go { grid-template-columns: 1fr auto; }
 .pnm-go.is-stop { color: var(--ink) !important; background: rgba(40, 47, 56, 0.92) !important; box-shadow: inset 0 0 0 1.5px var(--line); }
 .pnm-steps { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; min-width: 0; }
 .pnm-steps i { height: 18px; background: rgba(150, 210, 250, 0.08); box-shadow: inset 0 0 0 1px rgba(150, 210, 250, 0.18); }
@@ -142,7 +147,7 @@ export function screenLink({ face = 'picture', picture = VISUALS[0].id, idle = 3
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function mountMusicScreen(el, music, { heardIn = false, notes = false, keep = 'pi-nebula.music', link = null, fit = false, idle = 30000, fps = 0 } = {}) {
+export function mountMusicScreen(el, music, { heardIn = false, notes = false, keep = 'pi-nebula.music', link = null, fit = false, idle = 30000, fps = 0, play = true, hallway = null, onSong = null } = {}) {
   style();
   const L = link || screenLink({ idle });
   // what this browser kept: the song (and the place)
@@ -167,10 +172,11 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     ${PARTS.map((P) => `<div class="pnm-row" data-row="${P.id}">${head(P.label, P.id)}<div class="pnm-ch" role="group" aria-label="${esc(P.label)}">${P.choices.map((c) => `<button type="button" class="pnm-b" data-part="${P.id}" data-choice="${c.id}">${esc(c.label)}</button>`).join('')}<button type="button" class="pnm-b is-off" data-part="${P.id}" data-choice="off">Off</button>${(P.switches || []).map((w) => `<label class="pnm-b pnm-sw"><input type="checkbox" data-switch="${esc(w.id)}"><i aria-hidden="true"></i><span>${esc(w.label)}</span></label>`).join('')}${P.numbered ? `<button type="button" class="pnm-b pnm-num" data-numbered="${P.id}">${esc(P.numbered.label)}<small data-number="${P.id}"></small></button>` : ''}</div></div>`).join('')}
     <div class="pnm-row">${head('Speed')}<div class="pnm-speed"><button type="button" class="pnm-b" data-bpm="-1" aria-label="Slower">&minus;</button><output data-bpm-out></output><button type="button" class="pnm-b" data-bpm="1" aria-label="Faster">+</button></div></div>
     <div class="pnm-row">${head('Picture')}<div class="pnm-ch" role="group" aria-label="Picture">${VISUALS.map((v) => `<button type="button" class="pnm-b" data-picture="${v.id}">${esc(v.label)}</button>`).join('')}</div></div>
+    ${hallway ? `<div class="pnm-row">${head('Hallway lights')}<div class="pnm-ch" role="group" aria-label="Hallway lights"><button type="button" class="pnm-b" data-hallway="on">On</button><button type="button" class="pnm-b is-off" data-hallway="off">Off</button></div></div>` : ''}
     ${heardIn ? `<div class="pnm-row">${head('Heard in')}<div class="pnm-ch" role="group" aria-label="Heard in">${PLACES.map((p) => `<button type="button" class="pnm-b" data-place="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>` : ''}
     ${notes ? `<div class="pnm-row">${head('Notes')}<div class="pnm-ch" role="group" aria-label="Notes"><button type="button" class="pnm-b" data-notes="live">Live</button><button type="button" class="pnm-b" data-notes="baked">Pre-rendered</button><small data-baked style="flex: 1 1 100%; font-size: 12px; color: var(--dim);"></small></div></div>` : ''}
-    <div class="pnm-foot">
-      <button type="button" class="pnm-go" data-go>Play</button>
+    <div class="pnm-foot${play ? '' : ' no-go'}">
+      <button type="button" class="pnm-go" data-go${play ? '' : ' hidden'}>Play</button>
       <div class="pnm-steps" aria-hidden="true">${Array.from({ length: 16 }, (_, i) => `<i class="${i % 4 ? '' : 'is-beat'}"></i>`).join('')}</div>
       <button type="button" class="pnm-b pnm-copy" data-copy>Copy this song</button>
     </div>
@@ -193,9 +199,10 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
     for (const c of $$('[data-switch]')) c.checked = !!s[c.dataset.switch];
     for (const b of $$('[data-numbered]')) { const v = numberOf(s, b.dataset.numbered); b.classList.toggle('is-on', v != null); b.querySelector('small').textContent = v != null ? ' ' + v : ''; }
     for (const b of $$('[data-picture]')) b.classList.toggle('is-on', b.dataset.picture === L.picture);
+    for (const b of $$('[data-hallway]')) b.classList.toggle('is-on', (b.dataset.hallway === 'on') === !!hallway.on());
     const go = $('[data-go]'); go.textContent = music.playing ? 'Stop' : 'Play'; go.classList.toggle('is-stop', music.playing);
   }
-  const change = (s) => { music.set(s); save(); };
+  const change = (s) => { music.set(s); save(); if (onSong) onSong(music.song); };
   root.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const s = music.song;
@@ -211,6 +218,7 @@ export function mountMusicScreen(el, music, { heardIn = false, notes = false, ke
       change({ ...s, vol: { ...(s.vol || {}), [p]: v } });
     }
     else if (b.dataset.picture) { L.pick(b.dataset.picture); save(); }
+    else if (b.dataset.hallway) { hallway.set(b.dataset.hallway === 'on'); show(); }
     else if ('show' in b.dataset) L.show('picture');
     else if (b.dataset.bpm) change({ ...s, bpm: Math.max(BPM.min, Math.min(BPM.max, s.bpm + BPM.step * +b.dataset.bpm)) });
     else if (b.dataset.place) { music.room(b.dataset.place); save(); }

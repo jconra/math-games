@@ -12,8 +12,8 @@
 //               will be unless the song is changed first): { part, sound, midi, at, dur, vel, bar, step, len }
 //               (a chord is one note a pitch; at and dur in seconds on the audio clock)
 //       pulse   PULSES (below): the numbers for lights, each 0..1
-//   (The sound's levels by frequency, for the Spectrum picture, are no longer read: that picture is gone, ELECTRIC 1.
-//   The player's M.analyser is still there, made only when asked, and nothing asks.)
+//   (The sound's levels by frequency, for the Spectrum picture, are no longer read: that picture is gone, ELECTRIC 1,
+//   and the player's analyser that gave them went with MUSIC 3.)
 //   }
 //   notesOfBar(entry), barsAround(raw, back, ahead), notesWindow(bars, from, to), pulses(notes, now, sd, playing),
 //   sectionsAround(song, bar)    the plain parts, for the tests and a rig

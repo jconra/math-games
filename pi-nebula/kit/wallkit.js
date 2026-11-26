@@ -84,16 +84,32 @@ function conduit(p, at, dir, len, r = 0.02) {
   p.cyl('dark', r + 0.008, 0.02, [x, y1 + dir * R, 0.02], [PI / 2, 0, 0], 12);
 }
 
-// a wall screen: a pale bezel, a glowing blue face (where the math stations go), a button below
+// a wall screen: a pale bezel, a glowing blue face (where the math stations go), a button below.
+// 'music': THE MUSIC'S SCREEN (src/music/places.js), a copy in each of the station's places: the same case with its face
+// left dark and no light of its own. The game lays the music's picture over the face (MUSIC_FACE) only while the music
+// is on, so the room's saved light is the same with the music on or off.
+export const MUSIC_FACE = { w: 0.46, h: 0.25, y: 0.2375, z: 0.0745, look: { c: '#0d131b', r: 0.1, m: 0.3, w: 0.05 } };   // (look: dark glass, a screen switched off)
 export function wallScreen(p, v) {
-  const rect = SCREEN_RECT[v] || SCREEN_RECT.math;
+  const rect = SCREEN_RECT[v] || SCREEN_RECT.math, music = v === 'music';
   p.slab('white2', -0.28, 0.28, 0, 0.4, 0, 0.07, { r: 0.018 });
   p.slab('black', -0.245, 0.245, 0.1, 0.375, 0.062, 0.074, { r: 0.006 });
-  p.screen(rect, 0.46, 0.25, [0, 0.2375, 0.0745], null, 1.15);
+  if (music) p.slab(MUSIC_FACE.look, -MUSIC_FACE.w / 2, MUSIC_FACE.w / 2, MUSIC_FACE.y - MUSIC_FACE.h / 2, MUSIC_FACE.y + MUSIC_FACE.h / 2, 0.07, MUSIC_FACE.z, { r: 0.003, seg: 1 });
+  else p.screen(rect, 0.46, 0.25, [0, 0.2375, 0.0745], null, 1.15);
   p.slab('dark', -0.2, 0.2, 0.025, 0.075, 0.066, 0.072, { r: 0.004, seg: 1 });
   p.cyl('black', 0.022, 0.01, [0.17, 0.05, 0.075], [PI / 2, 0, 0], 14); p.cyl('yellow', 0.017, 0.014, [0.17, 0.05, 0.082], [PI / 2, 0, 0], 14);
   for (let i = 0; i < 5; i++) p.slab('black', -0.18 + i * 0.025, -0.17 + i * 0.025, 0.035, 0.065, 0.071, 0.074, { r: 0.002, seg: 1 });
-  p.light([0, 0.24, 0.22], 0.45, [0.35, 0.65, 1], [0, 0, 1], 3);
+  if (!music) p.light([0, 0.24, 0.22], 0.45, [0.35, 0.65, 1], [0, 0, 1], 3);
+}
+
+// THE MUSIC'S HALLWAY LINES (src/music/places.js, src/music/lights.js): five thin dark tubes laid in a wall panel's dark
+// band, one for each part, a stretch of them `variant` metres long (centred on the piece). A hallway's stretches, end
+// to end along one wall, are its five long lines; the game makes them glow while the music is on. The piece's middle
+// is the band's middle (placed at MUSIC_LINES.band); the tubes stand in the band's channel, 3 to 2 cm behind the
+// panels' face.
+export const MUSIC_LINES = { gap: 0.05, tube: 0.012, band: 1.371, z: -0.02, lens: Array.from({ length: 16 }, (_, i) => (1.8 - i * 0.1).toFixed(1)) };
+export function musicLines(p, v) {
+  const len = parseFloat(v) || 1.8, h = MUSIC_LINES.tube / 2;
+  for (let k = 0; k < 5; k++) { const y = (2 - k) * MUSIC_LINES.gap; p.slab('black', -len / 2, len / 2, y - h, y + h, MUSIC_LINES.z - 0.01, MUSIC_LINES.z, { r: 0.004, seg: 1 }); }
 }
 
 // a stencilled sector name, painted on: pale paint for dark panels, or ' dark' paint for the off-white ones
