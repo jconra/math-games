@@ -146,19 +146,24 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // (the second pass leaves out what cannot reach that close: every room whose box is further off than the split, where
   // it stands now (a flown ship's room is moved by its group's matrix), and the station's outside hull, which is never
   // that near once the camera is outside its box)
-  const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _off = [];
+  // (a room holding a moved part, a flown ship's pods drawn with its hangar, is kept: the part may be near; the moving
+  // parts of the doors, each drawn for all of its kind at once, are left out where every room they belong to is)
+  const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _off = [], _far = new Set();
+  let leafZones = null;
   function twoDepths(once) {
     const n0 = camera.near, f0 = camera.far, skyOn = sky.object.visible, bg = scene.background;
     camera.near = SPLIT.at; camera.updateProjectionMatrix();
     once(true);
     camera.near = n0; camera.far = Math.min(f0, SPLIT.at * 1.001); camera.updateProjectionMatrix();
     sky.object.visible = false; scene.background = null;
-    _off.length = 0;
+    _off.length = 0; _far.clear();
     for (const z of built.zones) {
-      if (!z.group.visible) continue;
+      if (!z.group.visible) { _far.add(z.id); continue; }
       _eye.copy(camera.position).applyMatrix4(_inv.copy(z.group.matrixWorld).invert());
-      if (z.box.distanceToPoint(_eye) > SPLIT.at) { z.group.visible = false; _off.push(z.group); }
+      if (z.box.distanceToPoint(_eye) > SPLIT.at && !z.group.children.some((c) => c.matrixAutoUpdate === false)) { z.group.visible = false; _off.push(z.group); _far.add(z.id); }
     }
+    if (!leafZones) { leafZones = new Map(); for (const D of built.doors) for (const leaf of D.leaves) for (const im of leaf.meshes || []) { if (!leafZones.has(im)) leafZones.set(im, new Set()); leafZones.get(im).add(D.zone); } }
+    for (const [im, zs] of leafZones) if (im.visible && im.matrixAutoUpdate !== false && [...zs].every((id) => _far.has(id))) { im.visible = false; _off.push(im); }
     for (const o of scene.children) if (o.name === 'outside' && o.visible) { o.visible = false; _off.push(o); }
     once(false);
     for (const o of _off) o.visible = true;
