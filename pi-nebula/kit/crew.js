@@ -204,6 +204,8 @@ export const PEOPLE_DIR = new URL('../../mathwood-valley/models/people/', import
 // 'm' and the women's 'f' are built differently: a suit is rigged to one of them) and file
 const BASIC = ['Idle', 'Idle_Neutral', 'Walk', 'Run', 'Run_Back', 'Run_Left', 'Run_Right', 'Wave', 'Interact', 'Roll', 'HitRecieve', 'Death'];
 const CROWD = ['Stand_Listen', 'Stand_Clap', 'Sit_Listen', 'Sit_Clap', 'Stool_Bar', 'Stool_Clap'];
+// (the page given its turn, between two steps of work: THE MAKER WHILE THE GAME LOADS)
+const turn = () => new Promise((go) => setTimeout(go, 0));
 export const CLIP_FILES = {
   m: { 'anims_m.glb': BASIC, 'clips_crowd_m.glb': [...CROWD, 'Bar_Polish'], 'clips_work_m.glb': ['Hammer', 'Tend_Forge'], 'clips_drive_m.glb': ['Drive'] },
   f: { 'anims_f.glb': BASIC, 'clips_crowd_f.glb': CROWD, 'clips_drive_f.glb': ['Drive'] },
@@ -433,7 +435,10 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // (and the outfit's shoulder width (SHOULDER WIDTH): its upper arms' joints moved out in the rig's rest places, so a
   // clip that sets their places (the crowd's) keeps them there; once a suit, hand and width)
   lib.clipsFor = async (id, hand = null) => {
-    const sh = lib.shouldersOf(id), AL = lib.armLengthOf(), key = id + '|' + (hand || '') + '|' + sh + '|' + AL.arm + '|' + AL.hand;
+    // (THE ARMS' LENGTH BY THE BONES: an outfit with hands of its own, an android's, keeps its hands' size; its arms are
+    // drawn in as everyone's)
+    const AL0 = lib.armLengthOf(), AL = (lib.entry('suit', id) || {}).ownHands ? { ...AL0, hand: 1 } : AL0;
+    const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh + '|' + AL.arm + '|' + AL.hand;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
         const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm', hg = hand ? await lib.part('hand', hand) : null;
@@ -448,9 +453,14 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
         // WHEEL (driving), THE WRISTS A PERSON'S; lib.calm, lib.fingers, lib.seat, lib.drive and lib.wrists tried in their
         // places, null: that step left out)
         const has = (k) => Object.prototype.hasOwnProperty.call(lib, k);
+        // (THE MAKER WHILE THE GAME LOADS: the page given its turn between these steps, each a fifth of a second or less)
+        await turn();
         const C0 = lib.calm || CALM; let cl = calmStand(clips, g.scene, { ...C0, ...((C0[body]) || {}) }, moves, rig);
+        await turn();
         cl = relaxFingers(cl, g.scene, rig, moves, has('fingers') ? lib.fingers : FINGERS);
+        await turn();
         cl = seatedArms(cl, g.scene, hg ? hg.scene : null, rig, moves, has('seat') ? lib.seat : SEAT, has('drive') ? lib.drive : DRIVE, AL);
+        await turn();
         cl = humanWrists(cl, g.scene, has('wrists') ? lib.wrists : WRISTS);
         return { body, rig, moves, shoulderMoves: shoulders, armLength: AL, shoulders: sh, clips: cl, stride: strideOf(rig, body) };
       })());
@@ -638,12 +648,14 @@ function shoulderMoves(scene, d) {
 // rig's rest places with the moves in) and the steps worked out from the bones at load (THE CALM STANDING POSE, THE
 // FINGERS RELAXED, THE HANDS ON THE THIGHS and ON A WHEEL) work on the shorter arms, so a hand still lands where it
 // rested. Nothing in a part's file changes: his bodies' points are as he made them; the shoulders and the body are not
-// touched. lib.armLength (as ARM_LENGTH) tries other values. (The numbers, every outfit before and after:
+// touched. An outfit with hands of its own (crew.json `ownHands`: the androids, Captain Vega) keeps its hands' size, its
+// arms drawn in as everyone's. ARM_LENGTH.arm is the one number for how much shorter; lib.armLength (as ARM_LENGTH)
+// tries other values. (The numbers, every outfit before and after:
 // ~/pw/space-math/MAKER_2.md)
-export const ARM_LENGTH = { arm: 0.97, hand: 0.95 };
+export const ARM_LENGTH = { arm: 0.95, hand: 0.95, stub: 0.8 };
 function armLengthOf(A) {
   const v = { ...ARM_LENGTH, ...(A || {}) }, k = (x) => (+x > 0.6 && +x <= 1.2 ? +x : 1);
-  return { arm: k(v.arm), hand: k(v.hand) };
+  return { arm: k(v.arm), hand: k(v.hand), stub: k(v.stub) };
 }
 // (the moves, on the suit's bones at rest with the shoulder width's moves in: each elbow's and wrist's own place (its
 // line from the joint above) taken to ARM_LENGTH.arm of itself, and every joint under a wrist (the hand's own rest
@@ -666,7 +678,7 @@ function armMoves(scene, moves, rest, A) {
 // for the arms' bones led so its points go with them (above). Returns, for the points' own frames (seatedArms), each
 // moved bone's map of the rest: { bone: Matrix4 } in the world at rest)
 function shortenArms(tpl, A, { cuffs = false } = {}) {
-  if (A.arm === 1 && A.hand === 1) return null;
+  if (A.arm === 1 && A.hand === 1 && (!A.stub || A.stub === 1)) return null;
   const bones = {}; tpl.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   tpl.updateMatrixWorld(true);
   const W = (b) => b.getWorldPosition(new THREE.Vector3()), maps = {}, before = {}, cuff = {};
@@ -675,12 +687,22 @@ function shortenArms(tpl, A, { cuffs = false } = {}) {
     (k - 1) * u.y * u.x, 1 + (k - 1) * u.y * u.y, (k - 1) * u.y * u.z, 0,
     (k - 1) * u.z * u.x, (k - 1) * u.z * u.y, 1 + (k - 1) * u.z * u.z, 0, 0, 0, 0, 1);
   const T = (v) => new THREE.Matrix4().makeTranslation(v.x, v.y, v.z);
+  // (the distance from the line along u taken to r of itself, about a point on it)
+  const round = (u, r) => new THREE.Matrix4().set(
+    r + (1 - r) * u.x * u.x, (1 - r) * u.x * u.y, (1 - r) * u.x * u.z, 0,
+    (1 - r) * u.y * u.x, r + (1 - r) * u.y * u.y, (1 - r) * u.y * u.z, 0,
+    (1 - r) * u.z * u.x, (1 - r) * u.z * u.y, r + (1 - r) * u.z * u.z, 0, 0, 0, 0, 1);
+  const stub = {};
   for (const s of ['L', 'R']) {
     const ua = bones['UpperArm' + s], la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!ua || !la || !wr) continue;
     const sp = W(ua), ep = W(la), wp = W(wr), u = ep.clone().sub(sp).normalize(), f = wp.clone().sub(ep).normalize();
     const e2 = sp.clone().lerp(ep, A.arm), w2 = e2.clone().add(wp.clone().sub(ep).multiplyScalar(A.arm));
     maps[ua.name] = T(sp).multiply(along(u, A.arm)).multiply(T(sp.clone().negate()));
     maps[la.name] = T(e2).multiply(along(f, A.arm)).multiply(T(ep.clone().negate()));
+    // (THE HAND'S WRIST INSIDE THE SLEEVE: the hand part's own points riding the forearm, its wrist's stub that runs
+    // back inside the cuff, drawn in toward the forearm's line to ARM_LENGTH.stub of how far out they were, so a bent
+    // wrist does not bring it out through the cloth; what shows past the cuff rides the wrist and keeps its size)
+    if (A.stub && A.stub !== 1) stub[la.name] = maps[la.name].clone().multiply(T(ep).multiply(round(f, A.stub)).multiply(T(ep.clone().negate())));
     const hand = T(w2).multiply(new THREE.Matrix4().makeScale(A.hand, A.hand, A.hand)).multiply(T(wp.clone().negate()));
     wr.traverse((b) => { if (b.isBone) maps[b.name] = hand; });
     // (an outfit worn with a hand part: its own points riding the wrist are its cuff, which goes with the wrist whole,
@@ -699,7 +721,7 @@ function shortenArms(tpl, A, { cuffs = false } = {}) {
     if (!o.isSkinnedMesh) return;
     let inv = null;
     o.skeleton.bones.forEach((b, i) => {
-      const M = (o.userData.part !== 'hand' && cuff[b.name]) || maps[b.name]; if (!M) return;
+      const M = (o.userData.part !== 'hand' ? cuff[b.name] : stub[b.name]) || maps[b.name]; if (!M) return;
       inv = inv || o.skeleton.boneInverses.slice();
       inv[i] = lead.copy(b.matrixWorld).invert().multiply(M).multiply(before[b.name]).multiply(o.skeleton.boneInverses[i]).clone();
     });
@@ -3678,6 +3700,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
     ...(far && lib.farReady ? ['suit', 'head', 'hair', 'hand'].filter(hasPart).map((k) => lib.farReady(k, R[k])) : [])]);
   // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
+  await turn();      // (THE MAKER WHILE THE GAME LOADS: the page's turn between the steps of putting a person together)
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
   // SHOULDER WIDTH: the upper arms' joints where this outfit's clips have them (lib.clipsFor), the parts kept as made
   if (fit.shoulderMoves) moveShoulders(tpl, fit.shoulderMoves);
@@ -3710,6 +3733,7 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
   }
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
+  await turn();
   const person = new Person({ clips: { [fit.body]: fit.clips } }, { scene: tpl, body: fit.body }, { shadows: true });
   const meshes = {}, mats = [];
   const made = person.mesh.material;            // (the Mathwood vertex-colour material it made: not ours)
