@@ -120,3 +120,15 @@ test('every usable thing hands itself to the one helper (and the music screens u
   assert.ok(main.indexOf('makeUsable({') < main.indexOf('makeFriendCard({'), 'made before anything else that takes the view\'s clicks');
   assert.ok(main.includes('usable.update();'));
 });
+
+test('held still (sitting or lying aboard, the walking keys off): only what can be used then shows the hand and takes a click', () => {
+  const { U, log } = rig();
+  U.add({ name: 'kiosk', ready: () => true, shape: sq(0, 0, 50, 50), use: () => log.used.push('kiosk') });
+  U.add({ name: 'seat aboard', held: true, ready: () => true, shape: sq(100, 0, 150, 50), use: () => log.used.push('seat') });
+  U.move(10, 10); assert.equal(U.frame(false, false, true), null, 'held: the kiosk is not');
+  U.move(110, 10); assert.equal(U.frame(false, false, true).name, 'seat aboard');
+  assert.equal(U.click(10, 10, { held: true }), null);
+  assert.equal(U.click(110, 10, { held: true, moved: 30 }), null, 'a drag is still no click');
+  assert.equal(U.click(110, 10, { held: true }).name, 'seat aboard'); assert.deepEqual(log.used, ['seat']);
+  assert.ok(text('../src/trip.js').includes("name: 'seat aboard', held: true"));
+});

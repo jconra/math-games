@@ -1293,7 +1293,7 @@ export function startTrip(ctx, { mission: M, roles, tune = null, onEnd = () => {
     if (as === 'down') return (crewA && crewA.mine) || boarding.places(M.ship).find((p) => p.job === seatOf()) || null;
     return null;
   };
-  const offMouse = ctx.usable ? ctx.usable.add({ name: 'seat aboard', ready: () => !seatEl.hidden && !T.done && ['down', 'rest', 'rise'].includes(seatEl.dataset.as), use: () => seatGo(),
+  const offMouse = ctx.usable ? ctx.usable.add({ name: 'seat aboard', held: true, ready: () => !seatEl.hidden && !T.done && ['down', 'rest', 'rise'].includes(seatEl.dataset.as), use: () => seatGo(),
     shape: () => { const p = seatPlace(); return p ? boarding.placeShape(M.ship, p) : null; } }) : () => {};
   function cleanUp() {
     offMouse();

@@ -17,6 +17,8 @@
 //     ready()   true while it is in reach and could be used now (its prompt is up): only these are ever tested
 //     shape     what the mouse must be over: a shape hit() knows, a list of them, or a function giving one or a list
 //               (asked only while ready)
+//     held      true: it can be used while the player is held still (sitting or lying aboard: the walking keys and
+//               the view's own clicks are off then, frame(.., .., true) and click(.., { held: true }) ask only these)
 //     use(x, y) what its E key does (x, y: where it was clicked); left out: the thing takes its own clicks (a hand is shown, the click is its own)
 //   U.move(x, y) / U.leave()   the mouse moved over the view, or went off it (onto a panel, out of the window)
 //   U.frame(viewChanged, blocked)   once a frame: tested again only if the mouse moved, the view changed or what is in
@@ -57,7 +59,7 @@ export function makeUsableCore({ hit, cursor = () => {}, clock = () => (typeof p
   const stats = { tests: 0, ms: 0, frames: 0, used: 0, last: null };
   const setHand = (on) => { if (on === hand) return; hand = on; cursor(on); };
   // (the things in reach now: their names joined, so a change is seen without a test)
-  const readyNow = () => things.filter((T) => { try { return !!T.ready(); } catch (e) { return false; } });
+  const readyNow = (held = false) => things.filter((T) => { if (held && !T.held) return false; try { return !!T.ready(); } catch (e) { return false; } });
   function test(list, x, y) {
     const t0 = clock(); stats.tests++;
     const r = nearestUnder(list, x, y, hit);
@@ -70,24 +72,24 @@ export function makeUsableCore({ hit, cursor = () => {}, clock = () => (typeof p
     get hand() { return hand; },
     get count() { return things.length; },
     add(T) {
-      const it = { name: T.name || 'thing', ready: T.ready || (() => false), shape: T.shape, use: T.use || null };
+      const it = { name: T.name || 'thing', ready: T.ready || (() => false), shape: T.shape, use: T.use || null, held: !!T.held };
       things.push(it); dirty = true;
       return () => { const i = things.indexOf(it); if (i >= 0) things.splice(i, 1); if (over === it) over = null; dirty = true; };
     },
     move(x, y) { mouse = { x, y }; dirty = true; },
     leave() { mouse = null; dirty = true; },
-    frame(viewChanged = false, blocked = false) {
+    frame(viewChanged = false, blocked = false, held = false) {
       stats.frames++;
       if (blocked || !mouse) { over = null; setHand(false); readyKey = ''; return null; }
-      const list = readyNow(), key = list.map((T) => T.name).join('|');
+      const list = readyNow(held), key = list.map((T) => T.name).join('|');
       if (!list.length) { over = null; setHand(false); readyKey = ''; dirty = false; return null; }
       if (dirty || viewChanged || key !== readyKey) { readyKey = key; dirty = false; over = test(list, mouse.x, mouse.y); }
       setHand(!!over);
       return over;
     },
-    click(x, y, { touch = false, moved = 0, button = 0, blocked = false } = {}) {
+    click(x, y, { touch = false, moved = 0, button = 0, blocked = false, held = false } = {}) {
       if (blocked || !isClick({ touch, moved, button })) return null;
-      const list = readyNow(); if (!list.length) return null;
+      const list = readyNow(held); if (!list.length) return null;
       const T = test(list, x, y);
       if (!T) return null;
       stats.last = T.name; if (T.use) { stats.used++; over = null; setHand(false); dirty = true; T.use(x, y); }

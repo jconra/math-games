@@ -64,7 +64,18 @@ export function makeUsable({ canvas, camera, input = null }) {
   addEventListener('resize', () => { rect = null; });
   // (nothing is used while a panel is up over the game (the input let go), the view is being dragged round, or the
   // pointer is locked to the flying)
-  const blocked = () => (input && input.enabled === false) || !!document.pointerLockElement || !!(input && input.dragging);
+  // (held: the input let go while the player is held still (sitting or lying aboard): only what says it can be used
+  // then (held: true, its prompt up) is shown and clicked, its clicks read here, as the input's own are: no drag)
+  const held = () => !!input && input.enabled === false && !document.pointerLockElement;
+  const blocked = () => (!held() && input && input.enabled === false) || !!document.pointerLockElement || !!(input && input.dragging);
+  let press = null;
+  canvas.addEventListener('pointerdown', (e) => { press = e.pointerType === 'mouse' && held() ? { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, button: e.button } : null; });
+  canvas.addEventListener('pointermove', (e) => { if (press && e.pointerId === press.id) press.moved = Math.max(press.moved, Math.hypot(e.clientX - press.x, e.clientY - press.y)); });
+  canvas.addEventListener('pointerup', (e) => {
+    const p = press; press = null;
+    if (!p || e.pointerId !== p.id || !held()) return;
+    n++; core.click(e.clientX, e.clientY, { moved: p.moved, button: p.button, held: true });
+  });
   if (input && input.onPick) input.onPick((pk) => {
     if (pk.touch || pk.used) return;
     n++;
@@ -81,7 +92,7 @@ export function makeUsable({ canvas, camera, input = null }) {
   };
   return {
     add: (T) => core.add(T),
-    update() { camera.updateMatrixWorld(); const v = viewMoved(); n++; core.frame(v, blocked()); },
+    update() { camera.updateMatrixWorld(); const v = viewMoved(); n++; core.frame(v, blocked(), held()); },
     get over() { return core.over ? core.over.name : null; },
     at(x, y) { n++; const T = core.which(x, y); return T ? T.name : null; },
     state: () => ({ over: core.over ? core.over.name : null, hand: core.hand, cursor: canvas.style.cursor || '', ready: core.readyNames(), all: core.names(), stats: { ...core.stats, ms: +core.stats.ms.toFixed(3) } }),
