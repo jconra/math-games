@@ -143,13 +143,25 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     const p = camera.position, m = SPLIT.margin;
     return p.x < box.min[0] - m || p.x > box.max[0] + m || p.y < box.min[1] - m || p.y > box.max[1] + m || p.z < box.min[2] - m || p.z > box.max[2] + m;
   };
+  // (the second pass leaves out what cannot reach that close: every room whose box is further off than the split, where
+  // it stands now (a flown ship's room is moved by its group's matrix), and the station's outside hull, which is never
+  // that near once the camera is outside its box)
+  const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _off = [];
   function twoDepths(once) {
     const n0 = camera.near, f0 = camera.far, skyOn = sky.object.visible, bg = scene.background;
     camera.near = SPLIT.at; camera.updateProjectionMatrix();
     once(true);
     camera.near = n0; camera.far = Math.min(f0, SPLIT.at * 1.001); camera.updateProjectionMatrix();
     sky.object.visible = false; scene.background = null;
+    _off.length = 0;
+    for (const z of built.zones) {
+      if (!z.group.visible) continue;
+      _eye.copy(camera.position).applyMatrix4(_inv.copy(z.group.matrixWorld).invert());
+      if (z.box.distanceToPoint(_eye) > SPLIT.at) { z.group.visible = false; _off.push(z.group); }
+    }
+    for (const o of scene.children) if (o.name === 'outside' && o.visible) { o.visible = false; _off.push(o); }
     once(false);
+    for (const o of _off) o.visible = true;
     camera.far = f0; camera.updateProjectionMatrix(); sky.object.visible = skyOn; scene.background = bg;
   }
   function draw(dt) {
