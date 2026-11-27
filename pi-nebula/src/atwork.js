@@ -26,8 +26,9 @@ export const WORK = {
   desk: { in: 0.04, apart: 0.36, lean: 0.45, tap: 0.012, along: 0.12 },
   panel: { in: 0.06, apart: 0.38, lean: 0.24, along: 0.16 },
   // (the cook's counter: wiped to and fro along its near strip, nearly upright, a little bow, his head clear of the
-  // heat lamp over the counter (two critics, r3: folded over with his head up in the lamp's hood))
-  wipe: { in: 0.0, left: [-0.15, 0.02], right: [0.05, 0.02], stroke: 0.11, deep: 0.015, round: 1.7, lean: 0.5 },
+  // heat lamp over the counter (two critics, r3: folded over with his head up in the lamp's hood); his arms come down to
+  // it nearly straight, as one wipes a counter standing)
+  wipe: { in: 0.0, left: [-0.15, 0.02], right: [0.05, 0.02], stroke: 0.11, deep: 0.015, round: 1.7, lean: 0.35 },
   // (a face to work on, upright: the pump's screen; one hand goes to a point of it, taps a while, and comes down a
   // moment; a little bow the lower the point)
   face: { visit: [2.6, 4.0], rest: [0.5, 0.9], lean: [0.12, 0.3], tap: 0.012 },

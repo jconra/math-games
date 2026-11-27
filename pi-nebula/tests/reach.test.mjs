@@ -60,7 +60,9 @@ test('the pump: each point of its screen within reach of the mechanic, the elbow
   for (const b of AT('pump')) { const F = WORK_AT.pump, k = worst(b, { kind: 'face', at: [0, 0, F.face], heading: 0, points: F.points, stepIn: F.stepIn }); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
 });
 test('the cook\'s counter (its near edge 0.43 m ahead, its top 0.94 m up, as the walls find it): his wipe within reach', () => {
-  for (const b of AT('cook')) { const k = worst(b, ahead(0.43, 0.94, WORK_OF.Bar_Polish)); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
+  // (nearly upright, his head clear of the heat lamp: so the arms come down to the counter nearly straight, as one
+  // wipes a counter standing: within the arm, not within REACH.most's bent elbow)
+  for (const b of AT('cook')) { const k = worst(b, ahead(0.43, 0.94, WORK_OF.Bar_Polish)); assert.ok(k <= 1, `${b.id}: ${k.toFixed(3)} of the arm`); }
 });
 test('the furnace\'s console: both hands within reach of its worker', () => {
   const W = WORK_OF.Tend_Forge;
@@ -94,5 +96,16 @@ test('the pump: his head and his knees stay out of its cabinet through every vis
       assert.ok(head[2] + 0.12 < face, `${b.id}: the head ${head[2].toFixed(3)} m ahead, the face ${face.toFixed(2)}`);
       assert.ok(sc(B.knee)[2] + 0.08 < face, 'the knees');
     }
+  }
+});
+
+test('the cook\'s head stays clear of the heat lamp\'s canopy over his counter (two critics, r3)', () => {
+  // (kit/furniture.js counter 'serve': the canopy at 1.5 m up from z -0.26 of the counter's middle; his spot at z
+  // -0.85 facing it, life.js SPOTS.cook: so 0.59 m ahead of his spot, less the step in, a head's front 0.1 m ahead of its joint)
+  const W = WORK_OF.Bar_Polish, lamp = 0.59 - W.stepIn;
+  for (const b of AT('cook')) {
+    const B = bones(b.suit), k = b.size, sc = (p) => p.map((v) => v * k);
+    const head = shoulderAt(sc(B.head), sc(B.ab), sc(B.ch), WORK.wipe.lean);
+    assert.ok(head[1] + 0.12 < 1.5 || head[2] + 0.1 < lamp, `the head at ${head[2].toFixed(3)} m ahead, ${head[1].toFixed(2)} up; the canopy from ${lamp.toFixed(2)} ahead`);
   }
 });
