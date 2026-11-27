@@ -111,6 +111,8 @@ export const LIFE = {
   camClear: 0.65,       // m: someone this near the camera (across the floor, and not well below it) is not drawn
   talkRoom: 1.8,        // m kept clear round two people talking: no other spot taken that near
 };
+// (a turn on the spot bigger than this (radians) is stepped round, the legs walking it, not swivelled on still feet)
+const TURN_STEP = 0.35;
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
 export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
@@ -1005,8 +1007,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.phase === 'turn') {
       const want = a.spot.heading ?? P.heading, diff = wrap(want - P.heading);
       P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * dt));
-      play(P, STAND);
-      if (Math.abs(diff) < 0.05) { a.phase = a.kind === 'scan' ? 'ready' : 'do'; a.t = 0; }
+      // (a turn of any size taken in a step or two, as a person turns round, never on the spot like a turntable)
+      if (Math.abs(diff) > TURN_STEP) a.stepping = true;
+      play(P, a.stepping && Math.abs(diff) > 0.05 ? CLIPS.walk : STAND, { speed: 0.5, fade: 0.25 });
+      if (Math.abs(diff) < 0.05) { a.phase = a.kind === 'scan' ? 'ready' : 'do'; a.t = 0; a.stepping = false; }
       return;
     }
     // onto the seat as a person sits (src/seatsteps.js): turned to face the way it faces, a step back or across to just
