@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, bedFor, nextShut, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
+import { medicStand, toWorld, toShip, patientBeds, bedToShip, seatsFor, choose, leanOn, restOrder, crewBeds, bedFor, nextShut, rampFelt, MEDIC, PATIENT, POD_OUT, OUT, ON } from '../src/rescueplan.js';
 import { placesOf } from '../src/aboardplan.js';
 import { pose, SECS } from '../src/onbed.js';
 import { bedFrame, POD, podScale } from '../kit/stasispod-plan.js';
@@ -196,4 +196,29 @@ test('getting out of a pod, the feet are carried over its front rim: higher than
     // (and on their feet at the end as before: the last move is the plain one's)
     assert.deepEqual(pose('hopdown', SECS.hopdown, pod, who).feet, pose('hopdown', SECS.hopdown, plain, who).feet);
   }
+});
+
+test('the ramp\'s treads: walked on once the ramp is down; a way worked out over them from the moment it starts down, and whenever they can be walked on', () => {
+  for (let k = 0; k <= 1000; k++) {
+    const t = k / 1000;
+    for (const want of [0, 1]) {
+      // (walking: once down, as its door lets a person through)
+      assert.equal(rampFelt(false, want, t), t >= MEDIC.wayOpen, `walking, t ${t}`);
+      // (a way worked out ahead: while it comes down or is down, whatever t; never less than walking has)
+      if (want === 1) assert.equal(rampFelt(true, want, t), true, `a way, coming down, t ${t}`);
+      if (rampFelt(false, want, t)) assert.equal(rampFelt(true, want, t), true, `walked on but no way over them, t ${t}`);
+    }
+  }
+  // going up, past the point a person may walk on them: no way over them either
+  assert.equal(rampFelt(true, 0, MEDIC.wayOpen - 0.01), false);
+  // THE MEDIC SET DOWN LAYS THEM SO (src/planet/medicdown.js, a three.js module): once, as its walls are added, felt by
+  // rampFelt, and not laid again as the ramp moves
+  const src = fs.readFileSync(new URL('../src/planet/medicdown.js', import.meta.url), 'utf8');
+  assert.match(src, /walls\.add\('medic:ramp', \{ solid: g, up: g, at: M, when: \(pathing\) => rampFelt\(pathing, rampWant, D\.t\) \}\)/);
+  assert.match(src, /function addTo\(W\) \{[\s\S]*?rampWalls\(\);\n {2}\}/);
+  assert.doesNotMatch(src.slice(src.indexOf('function update('), src.indexOf('// inside its cabin')), /rampWalls\(\)/);
+  // (and the rescue's own "the ramp is down", when her paramedic and the rescued set off down it, is no sooner than that:
+  // src/rescue.js SITE.ramp against MEDIC.wayOpen)
+  const site = fs.readFileSync(new URL('../src/rescue.js', import.meta.url), 'utf8').match(/export const SITE = \{[^\n]*\bramp: ([\d.]+)/);
+  assert.ok(site && +site[1] >= MEDIC.wayOpen, 'the rescue\'s ramp down is no sooner than the treads are felt');
 });

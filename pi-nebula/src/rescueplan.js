@@ -27,6 +27,15 @@ import { MOVES_ON, MOVES_OFF } from './onbed.js';
 // the Medic's blueprint (src/boarding.js SHIPS: 'medic-open-bench', his pick; a test holds the two together) and how a
 // person is felt in its cabin (boarding.js CABIN_WALLS), and when a person may walk through a way in (WAY_OPEN)
 export const MEDIC = { bp: 'medic-open-bench', cabin: { voxel: 0.05, r: 0.15 }, wayOpen: 0.97 };
+// WHEN THE RAMP'S TREADS ARE FELT (src/planet/medicdown.js: the walls' part of them, `when`), t: how far down the ramp is
+// (0 up .. 1 down), want: 1 while it is coming down or down, 0 while it goes up. Someone walking feels them once it is
+// down (wayOpen, as its door lets them through). A way worked out ahead counts them down as soon as the ramp is on its
+// way down, as it counts every door open and as boarding.js counts a parked ship's ways in: whoever walks it waits at the
+// ramp's top until it is down; and while anyone can walk on them, a way can be worked out over them. (Felt only once
+// down, a way asked a moment before found no floor past the deck's edge and ended there, at the ramp's top edge, 4.7 m
+// short of its foot: the rescue's rigs ask theirs as soon as its state says the ramp is 0.97 down, which it says from
+// 0.965. RAMP_1.md)
+export const rampFelt = (pathing, want, t) => (pathing ? want === 1 || t >= MEDIC.wayOpen : t >= MEDIC.wayOpen);
 // THE PATIENT BED (kit/shipparts/cabin/medbay.js patientBed, as kit/ships/medic-furnish.js puts it in: its head at the
 // hull's wall, running in along the bed's item; the stretcher on its base, its pads' top the item's height): for onbed,
 // its pads' half width (the stretcher's 0.72 m), where the hips lie along it from the wall (at the back section's hinge,

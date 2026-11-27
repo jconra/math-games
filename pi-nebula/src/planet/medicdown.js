@@ -34,7 +34,7 @@ import { liveTick, livePalette } from '../../kit/shipparts/cabin/live.js';
 import { makeBeams } from '../../kit/beams.js';
 import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
-import { MEDIC, patientBeds, restOrder } from '../rescueplan.js';
+import { MEDIC, patientBeds, restOrder, rampFelt } from '../rescueplan.js';
 import { INSIDE_FILL, FILL_UNIFORMS, insideLight } from './inside.js';
 import { groundShadowMaterial, shadowUnder, castsShadow } from './groundshadow.js';
 
@@ -133,14 +133,20 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   }
   for (const z of C.built.zones) for (const k of ['solid', 'floor', 'glass']) { const g = z.merged[k]; if (!g) continue; const w = geoOf(g); cabin.solid.push(w); if (k !== 'glass') cabin.up.push(w); }
   for (const D of C.built.doors) { const box = boxOf(D); if (!box.isEmpty()) cabin.doors.push({ D, box }); }
-  // (the ramp's treads, down: its leaves as they lie)
-  const rampGeos = () => {
-    const out = [], m = new THREE.Matrix4();
-    if (!ramp) return out;
-    for (const leaf of ramp.leaves) for (const im of leaf.meshes || []) {
+  // (a ramp's treads as they lie all the way down, its foot unfolded: the ramp posed down a moment to take them, then put
+  // back as it stands; once for each ramp. Taken as it came past MEDIC.wayOpen, its foot was still unfolding: the treads
+  // felt there were up to 5 cm over the ones drawn)
+  const treads = new Map();
+  const rampGeos = (D) => {
+    if (treads.has(D)) return treads.get(D);
+    const out = [], m = new THREE.Matrix4(), t0 = D.t;
+    ONE[0] = D; setDoors(ONE, 1); MD.rampFoot(B);
+    for (const leaf of D.leaves) for (const im of leaf.meshes || []) {
       if (/glass|glow|decal/.test(im.name)) continue;
       im.getMatrixAt(leaf.index, m); const w = geoOf(im.geometry); w.applyMatrix4(m); out.push(w);
     }
+    ONE[0] = D; setDoors(ONE, t0); MD.rampFoot(B);
+    treads.set(D, out);
     return out;
   };
   let walls = null;
@@ -153,13 +159,14 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     W.add('medic:cabin', { solid: cabin.solid, up: cabin.up, doors: cabin.doors, voxel: MEDIC.cabin.voxel, r: MEDIC.cabin.r, at: M });
     rampWalls();
   }
-  // (the ramp's treads felt only while it is down; worked out again each time it comes down)
-  let rampIn = false;
+  // (the ramp's treads, laid once for the ramp on its side and felt as rescueplan.js rampFelt says: walking, once it is
+  // down; a way worked out ahead, from the moment it starts down)
+  let rampIn = null;
   function rampWalls() {
-    if (!walls || !ramp) return;
-    const down = ramp.t >= MEDIC.wayOpen;
-    if (down && !rampIn) { const g = rampGeos(); walls.add('medic:ramp', { solid: g, up: g, at: M }); rampIn = true; }
-    else if (!down && rampIn) { walls.drop('medic:ramp'); rampIn = false; }
+    if (!walls || !ramp || rampIn === ramp) return;
+    const D = ramp, g = rampGeos(D);
+    walls.add('medic:ramp', { solid: g, up: g, at: M, when: (pathing) => rampFelt(pathing, rampWant, D.t) });
+    rampIn = ramp;
   }
 
   // ── each frame ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -170,7 +177,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     // the planet's curve where it stands, seen from the camera (the ground's own rule: src/planet/ground.js CURVE)
     if (cam) { const dx = stand.x - cam.position.x, dz = stand.z - cam.position.z; group.matrix.copy(M); group.matrix.elements[13] -= (dx * dx + dz * dz) * ground.U.uCurve.value; group.matrixWorldNeedsUpdate = true; }
     // the ramp, slowly (the kit's heavy door: five seconds, gently at both ends), its foot unfolding as it goes
-    if (ramp && ramp.t !== rampWant) { ONE[0] = ramp; updateDoors(ONE, FAR, dt, rampWant ? 'open' : 'shut'); MD.rampFoot(B); rampWalls(); }
+    if (ramp && ramp.t !== rampWant) { ONE[0] = ramp; updateDoors(ONE, FAR, dt, rampWant ? 'open' : 'shut'); MD.rampFoot(B); }
     // the cabin's sliding doors, for whoever is nearest each (in its own frame)
     for (const D of C.built.doors) {
       let best = FAR, bd = Infinity;
@@ -199,7 +206,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     if (was && was !== ramp) { ONE[0] = was; setDoors(ONE, 0); }
     if (ramp) { ONE[0] = ramp; setDoors(ONE, down ? 1 : 0); }
     MD.rampFoot(B); rampWant = down ? 1 : 0; footAt();
-    if (walls) { walls.place('medic:hull', M); walls.place('medic:cabin', M); if (rampIn) { walls.drop('medic:ramp'); rampIn = false; } rampWalls(); }
+    if (walls) { walls.place('medic:hull', M); walls.place('medic:cabin', M); if (rampIn === ramp) walls.place('medic:ramp', M); else rampWalls(); }
   }
   const stats = { ms: Math.round(performance.now() - t0), hullMs, cabinMs, bake: Math.round(B.stats.bake?.ms || 0), tris: Math.round(B.stats.tris + C.built.stats.tris), draws: B.stats.draws + C.built.stats.draws + (beams ? 2 : 0) + (shade ? shade.count : 0), shadows: shade ? shade.count : 0 };
   return {
@@ -210,7 +217,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
       if (walls) { walls.drop('medic:hull'); walls.drop('medic:cabin'); walls.drop('medic:ramp'); }
       if (shade) shade.dispose(); if (shadowMat) shadowMat.dispose();
       group.removeFromParent(); B.dispose(); C.built.dispose(); if (beams) beams.dispose();
-      for (const g of [...hull.solid, ...cabin.solid]) g.dispose(); if (env) env.dispose();
+      for (const g of [...hull.solid, ...cabin.solid, ...[...treads.values()].flat()]) g.dispose(); if (env) env.dispose();
       eachMaterial(hullMats, (m) => m.dispose()); eachMaterial(cabinMats, (m) => m.dispose());
     },
   };
