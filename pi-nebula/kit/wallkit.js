@@ -119,8 +119,10 @@ export function musicLines(p, v) {
   if (SLANT.top !== TOP || SLANT.face !== WALL_FACE || SLANT.ceiling !== ROOM_H) throw new Error('kit: the music lines\' slant is not the cornice\'s');
   // (a box lying on the slant: its height up the slant, its depth out of the slant's face; turned 45 degrees about x)
   const onFace = (surf, x0, x1, s0, s1, n0, n1, opts) => { const [y, z] = onSlant((s0 + s1) / 2, (n0 + n1) / 2); return p.box(surf, [x1 - x0, s1 - s0, n1 - n0], [(x0 + x1) / 2, y, z], [PI / 4, 0, 0], opts); };
-  onFace('black', -L / 2, L / 2, R.s0, R.s0 + R.h, 0.001, R.depth, { r: 0.005 });
-  for (let k = 0; k < 5; k++) { const s = R.s0 + lineY(k); onFace('dark', -L / 2 + 0.01, L / 2 - 0.01, s - R.line / 2, s + R.line / 2, R.depth - 0.001, R.depth + 0.0015, { r: 0.002, seg: 1 }); }
+  // (few triangles: 92 sets in the station. The plate's long faces in 60 cm steps, for the saved light along it; the
+  // inlays plain strips, which the game's glowing lines cover)
+  onFace('black', -L / 2, L / 2, R.s0, R.s0 + R.h, 0.001, R.depth, { r: 0.004, seg: 1, cell: 0.6, loops: [] });
+  for (let k = 0; k < 5; k++) { const s = R.s0 + lineY(k); onFace('dark', -L / 2 + 0.01, L / 2 - 0.01, s - R.line / 2, s + R.line / 2, R.depth - 0.001, R.depth + 0.0015, { r: 0, cell: 0.6, loops: [] }); }
 }
 
 // a stencilled sector name, painted on: pale paint for dark panels, or ' dark' paint for the off-white ones
