@@ -52,8 +52,8 @@ import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
 import { happened } from '../announce.js';
-import { frame, place } from './camera.js';
-import { makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, HANDS } from './hands.js';
+import { target, follow } from './camera.js';
+import { makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, inView, buttonDoes, mouthAt, lookRoundDue, HANDS } from './hands.js';
 
 const MID = COURT.mid;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -75,14 +75,14 @@ export const OPPONENTS = [
 const skillWords = (o) => `Mathball skill ${o.skill}`;
 const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
 // THE CAMERA (camera.js): behind the player and above, looking down the court (a phone held upright sees a narrow
-// strip, so it stands further back and higher, looking more steeply down). Up and down it is main's, exactly (the look
-// raised with a ball in hand, the rise against a wall, the mouse's drag up and down); its TURN is the player's own (a
-// drag sideways: hands.js HANDS.turn, radians a pixel), and nothing turns it by itself
+// strip, so it stands further back and higher, looking more steeply down). Away from walls it is main's, exactly (the
+// look raised with a ball in hand, the mouse's drag up and down); beside a wall it comes in rather than turning; its
+// TURN is the player's own (a drag sideways: hands.js HANDS.turn, radians a pixel), and nothing turns it by itself
 export const MBCAM = {
   // (holdUp: how much higher it looks with a ball in hand, so the far end's two goal signs come down the screen, clear
-  // of the score at the top)
-  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1 },
-  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2 },
+  // of the score at the top; side: degrees off the view's line it may slide beside a wall, camera.js)
+  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1, side: 25 },
+  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2, side: 12 },
   under: 0.7,                     // m it always stays under the ceiling (above it, nothing is drawn: a black screen)
   ease: 6,                        // how quickly it follows (1/s): main's
 };
@@ -243,7 +243,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     $('.mbl-pick').hidden = true; $('.mbl-end').hidden = true; $('.mbl-top').hidden = false;
     $('.mbl-them b').textContent = opp.name.replace(/^(old )?(Captain|Pilot) /, '');
     $('.mbl-cr span').textContent = '0';
-    say('Here come the balls, out of the walls', 2.5); askedBall = false; lookedRound = false; unseenFor = 0;
+    say('Here come the balls, out of the walls', 2.5); askedBall = false; lookRound.said = false; lookRound.unseenFor = 0;
     phase = 'play';
     hideStationCopy(opp.id);
     // the body: the one already made for this crew member, or made now (the round waits for nothing: until it comes,
@@ -406,10 +406,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const o = aimRay.ray.origin, dir = aimRay.ray.direction;
     if (dir.y < -1e-4) {
       const t = -o.y / dir.y, px = o.x - MID[0] + dir.x * t, pz = o.z - MID[2] + dir.z * t;
-      if (offFront([px, PHYS.r, pz]) <= FRONT.arc) for (const G2 of GOALS) {
-        const dx = px - G2.mid[0], dz = pz - G2.mid[1], front = dx * G2.n[0] + dz * G2.n[1], side = dx * G2.u[0] + dz * G2.u[1];
-        if (front > 0 && front < 1.3 && Math.abs(side) < COURT.goal.w / 2 + 0.25) return G2.i;
-      }
+      if (offFront([px, PHYS.r, pz]) <= FRONT.arc) { const gi = mouthAt(px, pz, GOALS, COURT.goal.w); if (gi != null) return gi; }
     }
     const pad = touch ? 26 : 10; let best = null, bd = Infinity;
     for (const m of view.goalHits) {
@@ -445,10 +442,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
         // resting on it swung the view round to the goal behind; FRONT)
         if (offFront([px, PHYS.r, pz]) > FRONT.arc) return null;
         // (the floor in front of a goal's mouth counts as the goal: an aim a little short still goes in)
-        for (const G2 of GOALS) {
-          const dx = px - G2.mid[0], dz = pz - G2.mid[1], front = dx * G2.n[0] + dz * G2.n[1], across = dx * G2.u[0] + dz * G2.u[1];
-          if (front > 0 && front < 1.3 && Math.abs(across) < COURT.goal.w / 2 + 0.25) return { goal: G2.i };
-        }
+        { const gi = mouthAt(px, pz, GOALS, COURT.goal.w); if (gi != null) return { goal: gi }; }
         // (nor is a spot at the player's feet, a step away or less, where the arc would only drop the ball: FRONT.near)
         return Math.hypot(px - G.you.x, pz - G.you.z) >= FRONT.near ? { at: [px, PHYS.r, pz], hit: 'floor' } : null;
       }
@@ -512,7 +506,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     // in either player's hands, which would only hide a goal behind it; the goals' boxes always are)
     const live = new Set();
     for (const b of G.balls) {
-      if (b.fading || !['air', 'roll', 'rest', 'turn'].includes(b.mode)) continue;
+      if (!canPick(b)) continue;
       const m = view.ballMesh(b.id); if (!m) continue; live.add(b.id);
       // (a new round's ball with an old round's number: its own mesh, never the old one's)
       const had = ballTargets.get(b.id); if (had && had.m !== m) { had.off(); ballTargets.delete(b.id); }
@@ -534,10 +528,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (!G.you.holding) { say(press('a ball first, then a goal'), 2.5); return; }
     // (a goal's button for a goal not on the screen: A, the view turns to it once and the throw waits for that; B, a
     // line says where it is. A goal on the screen is thrown at, and nothing turns)
-    if (how === 'button' && !seen(gi)) {
-      if (FRONT.buttonTurns) { if (pending !== gi) pendingAt = G.t; pending = gi; oneTurn = gi; return; }
-      const g = GOALS[gi].aim; say(`The ${GOALS[gi].colour} goal is ${offFront(g) > Math.PI / 2 ? 'behind you' : 'out of view'}: drag the view round to it`, 3); return;
-    }
+    const does = how === 'button' ? buttonDoes(seen(gi), FRONT.buttonTurns) : 'throw';
+    if (does === 'turn') { if (pending !== gi) pendingAt = G.t; pending = gi; oneTurn = gi; return; }
+    if (does === 'say') { const g = GOALS[gi].aim; say(`The ${GOALS[gi].colour} goal is ${offFront(g) > Math.PI / 2 ? 'behind you' : 'out of view'}: drag the view round to it`, 3); return; }
     pending = null;
     if (!lastArc || lastArc.goal !== gi || G.you.aim == null) lastArc = pathFor({ goal: gi });
     G.throwAt(gi);
@@ -555,20 +548,18 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   // a goal in front, for a throw: within FRONT.turn of the way the camera looks and well inside the view (or turned to
   // and waited on a moment: a camera held off a wall can leave a goal near the side for good)
   const inFront = (gi) => offFront(GOALS[gi].aim) <= FRONT.turn && (across(GOALS[gi].aim) <= FRONT.edge || (pending === gi && G.t - pendingAt > FRONT.wait));
-  // how far down the page a spot on the court is drawn (page px), or null behind the camera
-  function downPage(to) {
+  // where on the page a spot on the court is drawn ([x, y] page px), or null behind the camera
+  function pageAt(to) {
     const C = W.camera, r = canvas.getBoundingClientRect(); _sv.set(MID[0] + to[0], to[1], MID[2] + to[2]).applyMatrix4(C.matrixWorldInverse);
     if (_sv.z > -0.05) return null;
-    return r.top + (1 - _sv.applyMatrix4(C.projectionMatrix).y) / 2 * r.height;
+    _sv.applyMatrix4(C.projectionMatrix);
+    return [r.left + (_sv.x + 1) / 2 * r.width, r.top + (1 - _sv.y) / 2 * r.height];
   }
   // the foot of the top bar (the score and the credits): a goal under it is not in view
   const topBar = () => { const t = $('.mbl-top'); return t && !t.hidden ? t.getBoundingClientRect().bottom : 0; };
   // A GOAL IN VIEW, by the screen alone: its mouth drawn on the screen, across and up and down, under the top bar as
   // the page has it now (an arc for it shows, the line after a pick-up and the goal buttons go by it)
-  const seen = (gi) => {
-    const a = GOALS[gi].aim; if (across(a) > 1) return false;
-    const y = downPage(a); return y != null && y >= topBar() && y <= canvas.getBoundingClientRect().bottom;
-  };
+  const seen = (gi) => inView(pageAt(GOALS[gi].aim), canvas.getBoundingClientRect(), topBar());
   // (pending: a goal button's throw waiting for its turn; oneTurn: the goal that turn faces, until it does or a drag)
   let pending = null, pendingAt = 0, oneTurn = null, placeReq = null;   // (placeReq: a rig's hook, placeAt)
   const seenBalls = []; let clock = 0;   // (where each free ball was in the court this last moment, HANDS.past s: tapAt)
@@ -577,10 +568,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   // (yaw: the view's turn, which only a drag sideways changes (hands.js viewTurn) and a goal button's one turn
   // (turnToward); lift: the mouse's drag up and down, as on main; feet: the player's place, followed smoothly; f: main's
   // framing numbers, eased)
-  const cam = { yaw: Math.PI, lift: 0, feet: new THREE.Vector3(), f: null, fresh: true, blend: 1, from: null, fromLook: null, byHand: 0 };   // (byHand: drags taken, for the rigs)
+  const cam = { yaw: Math.PI, lift: 0, s: { at: null }, fresh: true, blend: 1, from: null, fromLook: null, byHand: 0 };   // (byHand: drags taken, for the rigs)
   let lastCam = new THREE.Vector3(MID[0], 3, MID[2] + 8);
   const youNow = { x: 0, z: 0, vx: 0, vz: 0, heading: 0 }, prev = new THREE.Vector3();
-  let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null, askAt = 0, lookedRound = false, unseenFor = 0;
+  let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null, askAt = 0;
+  const lookRound = { said: false, unseenFor: 0 };   // (the once-a-round line on looking round: hands.js lookRoundDue)
   function update(dt, P) {
     if (closed) return;
     // (the shared input's drags and zooms, taken so the station's camera never sees them: Mathball's own drags turn its
@@ -634,13 +626,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (phase === 'play' && !askedBall && !G.you.holding && !G.you.target && G.balls.some((b) => b.seen && (b.mode === 'roll' || b.mode === 'rest'))) { askedBall = true; say(press('a ball to grab it'), 5); }
     // (once a round: every ball on the court behind the view for two seconds, with empty hands: one plain line on how to
     // look round, since nothing turns the view by itself now)
-    // (it waits while another line is still showing: a score, a miss, a rule changing)
-    if (phase === 'play' && !lookedRound && !G.you.holding && !G.you.target && G.t > 4) {
-      const free = G.balls.filter((b) => b.mode === 'roll' || b.mode === 'rest' || b.mode === 'turn');
-      unseenFor = free.length && !free.some((b) => b.seen) ? unseenFor + dt : 0;
-      const showing = hintUntil && G.t < hintUntil && hint.textContent;
-      if (unseenFor > 2 && !showing) { lookedRound = true; say(touchy() ? 'Swipe sideways on the right of the screen to look round for the balls' : 'Drag with the mouse to look round for the balls', 4); }
-    } else unseenFor = 0;
+    // (it waits while another line is still showing: a score, a miss, a rule changing: hands.js lookRoundDue)
+    if (phase === 'play' && lookRoundDue(lookRound, { dt, t: G.t, holding: !!G.you.holding, running: !!G.you.target, balls: G.balls, showing: !!(hintUntil && G.t < hintUntil && hint.textContent) })) {
+      say(touchy() ? 'Swipe sideways on the right of the screen to look round for the balls' : 'Drag with the mouse to look round for the balls', 4);
+    }
   }
   // THE GOAL BUTTONS: a small map of the four goals, two rows of two: the end of the court the camera looks toward on
   // top, each row as the goals stand across the view (looking north, west on the left; looking south, the other way
@@ -794,16 +783,12 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const C = tall() ? MBCAM.tall : MBCAM.wide;
     // (a goal's button pressed for a goal out of the way: the view turns to it once; done, or a drag, ends it)
     if (oneTurn != null) { const g = GOALS[oneTurn].aim; if (turnToward(cam, Math.atan2(g[0] - youNow.x, g[2] - youNow.z), FRONT.rate, dt)) oneTurn = null; }
-    // (main's framing, eased as main eased its camera (MBCAM.ease): the player's place, how far back, the walls' push,
-    // the height, the look's height; the way it looks across the floor is cam.yaw exactly, every frame)
+    // (camera.js: main's framing away from walls, coming in beside one; its place eased in the court as main eased its
+    // camera (MBCAM.ease) and kept inside the court every frame; the way it looks across the floor is cam.yaw exactly)
     const k = 1 - Math.exp(-MBCAM.ease * dt);
-    if (cam.fresh) cam.feet.set(MID[0] + youNow.x, 0, MID[2] + youNow.z);
-    else cam.feet.lerp(_d.set(MID[0] + youNow.x, 0, MID[2] + youNow.z), k);
-    const feet = cam.feet, x = feet.x - MID[0], z = feet.z - MID[2];
-    const F = frame(C, x, z, cam.yaw, cam.lift, !!G.you.holding, MBCAM.under);
-    if (!cam.f) cam.f = { back: F.back, shift: F.shift.slice(), ay: F.ay, ly: F.ly };
-    else { const e = cam.f; e.back += (F.back - e.back) * k; e.shift[0] += (F.shift[0] - e.shift[0]) * k; e.shift[1] += (F.shift[1] - e.shift[1]) * k; e.ay += (F.ay - e.ay) * k; e.ly += (F.ly - e.ly) * k; }
-    const P = place(C, x, z, cam.yaw, cam.f);
+    if (cam.fresh) cam.s = { at: null };
+    const T = target(C, youNow.x, youNow.z, cam.yaw, cam.lift, !!G.you.holding, MBCAM.under);
+    const P = follow(cam.s, T, cam.yaw, k, MBCAM.under);
     _w.set(MID[0] + P.eye[0], P.eye[1], MID[2] + P.eye[2]); _l.set(MID[0] + P.look[0], P.look[1], MID[2] + P.look[2]);
     // (as the game opens: from where the station's camera was, over most of a second)
     if (cam.fresh) { cam.from = camera.position.clone(); cam.fromLook = camera.position.clone().add(camera.getWorldDirection(_d).multiplyScalar(4)); cam.blend = 0; cam.fresh = false; }

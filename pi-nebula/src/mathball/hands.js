@@ -169,6 +169,34 @@ export function chooseTap({ held = false, touch = true, underIn = null, under = 
   return null;
 }
 
+// THE SMALL RULES index.js goes by, as plain functions (so node tests what they do):
+// a ball a tap can hit: one that can be picked up (never one flying to a goal, just scored, fading, or in a hand)
+export const canPick = (b) => !!b && !b.fading && ['air', 'roll', 'rest', 'turn'].includes(b.mode);
+// a goal in view: its mouth drawn on the screen (page px [x, y], or null behind the camera) inside the page's
+// rectangle and under the top bar's foot (as the page measures it)
+export const inView = (p, rect, bar) => !!p && p[0] >= rect.left && p[0] <= rect.right && p[1] >= Math.max(rect.top, bar) && p[1] <= rect.bottom;
+// a goal's button pressed: 'throw' (the goal is in view), else under A 'turn' (the view turns to it once, then the
+// throw) and under B 'say' (a line says where it is)
+export const buttonDoes = (seen, buttonTurns) => (seen ? 'throw' : buttonTurns ? 'turn' : 'say');
+// the goal whose mouth's floor is under a point on the floor (court frame), or null: in front of the mouth, up to 1.3 m
+// out and the mouth's width plus 0.25 m either side (balls play no part in it)
+export function mouthAt(px, pz, goals, w) {
+  for (const g of goals) {
+    const dx = px - g.mid[0], dz = pz - g.mid[1], front = dx * g.n[0] + dz * g.n[1], side = dx * g.u[0] + dz * g.u[1];
+    if (front > 0 && front < 1.3 && Math.abs(side) < w / 2 + 0.25) return g.i;
+  }
+  return null;
+}
+// the once-a-round line on looking round: every free ball behind the view for 2 s, empty hands, not running to one,
+// after the first 4 s; it waits while another line is still showing. S: { said, unseenFor } -> true when due
+export function lookRoundDue(S, { dt, t, holding, running, balls, showing }) {
+  if (S.said || holding || running || t <= 4) { S.unseenFor = 0; return false; }
+  const free = balls.filter((b) => b.mode === 'roll' || b.mode === 'rest' || b.mode === 'turn');
+  S.unseenFor = free.length && !free.some((b) => b.seen) ? S.unseenFor + dt : 0;
+  if (S.unseenFor > 2 && !showing) { S.said = true; return true; }
+  return false;
+}
+
 // THE VIEW'S TURN. viewTurn: the player's own drag (dx, dy: pixels): dx turns it; dy (the mouse's only: a finger's drag
 // turns the view sideways and never tilts it) brings the camera nearer and higher or further and lower, as on main.
 // turnToward: a goal button's one turn (index.js, FRONT.buttonTurns), at `rate` radians a second; true once it faces
