@@ -500,6 +500,29 @@
   .cst-maker { grid-template-columns: minmax(250px, 1fr) minmax(280px, 330px); align-items: stretch; min-height: 0; }
   .cst-maker .cst-tints { align-self: start; }
   .cst-stage { height: auto; min-height: 260px; }
+  /* (the wider card leaves the game's name a narrower column: it stays on ONE line, a little smaller where the window is
+     narrow, its full size from about 1900 wide; seen broken in two, "PI / NEBULA", at 1280 and 1366 wide) */
+  .cst-name { font-size: clamp(22px, calc(2.9vw - 8px), 48px); }
+  .cst-name b { white-space: nowrap; }
+  /* (the maker's row is never shorter than what is in it: on a short window the colours' column is taller than the row's
+     share, and the figure's window, stretched to match it, lay over the "Ready-made looks" heading under it) */
+  .cst-panel > .cst-crew { grid-template-rows: auto minmax(min-content, 1fr) auto auto; }
+}
+/* (a wide but short window, a small laptop's: the same card with a little less air between its rows, so all of it is
+   still in sight without scrolling) */
+@media (min-width: 1101px) and (min-height: 561px) and (max-height: 820px) {
+  .cst-crew { gap: 10px; }
+  .cst-tints { gap: 6px; }
+  .cst-tints .cst-label { margin-bottom: 4px; }
+}
+/* (and shorter still, 720 tall: the colours' column a little narrower, so its swatches are smaller and the whole card,
+   the levels' button too, is in sight) */
+@media (min-width: 1101px) and (min-height: 561px) and (max-height: 760px) {
+  .cst-crew { gap: 8px; }
+  .cst-maker { grid-template-columns: minmax(250px, 1fr) 270px; }
+  .cst-tints { gap: 4px; }
+  .cst-tints .cst-label { margin-bottom: 2px; }
+  .cst-tints .cst-agech { height: 28px; }
 }
 /* (and on a phone: upright, the window taller, as much of the screen as leaves its arrows and the top of the colours
    in reach; on its side, the window the panel's whole height and a little wider) */
