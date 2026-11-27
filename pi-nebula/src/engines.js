@@ -27,8 +27,10 @@
 //
 //   const E = makeEngines({ sound })    (the game's one: `engines`, below)
 //   E.own(S)                    each frame, the ship of the run while its flight model flies it (src/flymodel.js)
-//   E.own(S, floor)             each frame, the ship of the run while the run moves it itself, the flight model at
-//                               rest: its RPMs from its speed, at least `floor` (0 still: idling; ENGINE.aloft held up)
+//   E.own(S, floor, at)         each frame, the ship of the run while the run moves it itself, the flight model at
+//                               rest: its RPMs from its speed, at least `floor` (0 still: idling; ENGINE.aloft held up);
+//                               at: where the ship that really moves is ({ x, y, z }: the drill's view's own ship at the
+//                               rocks, src/fieldfly.js), when the resting flight model is not moved with it
 //   E.other(key, x, y, z)       each frame, a ship moving by itself, where it is (its speed is worked out here)
 //   E.update(dt, ears, quality) each frame, after everything has moved: ears, the camera's place ({ x, y, z });
 //                               quality: the game's quality level ('low', 'medium', 'high')
@@ -63,10 +65,10 @@ export function makeEngines({ sound = gameSound } = {}) {
   // THE WATCH: the game's frames gone, every engine stopped (one slow frame is not enough: src/sounds.js makeWatch)
   const watch = makeWatch(stopAll);
   const E = {
-    own(S, floor = null) {
+    own(S, floor = null, at = null) {
       if (!S || !S.power) return;
       const s = slotOf('own'); s.S = S; s.floor = floor;
-      seen(s, S.p[0], S.p[1], S.p[2]);
+      if (at) seen(s, at.x, at.y, at.z); else seen(s, S.p[0], S.p[1], S.p[2]);
     },
     other(key, x, y, z) { seen(slotOf(key), x, y, z); },
     update(dt, ears, quality) {

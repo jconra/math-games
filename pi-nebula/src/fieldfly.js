@@ -48,7 +48,7 @@
 import * as THREE from 'three';
 import { FIELD, rockNear, rockSolid } from './flymodel.js';
 import { engines } from './engines.js';
-import { FIELD_FLOOR } from './sounds.js';
+import { FIELD_FLOOR, ENGINE } from './sounds.js';
 
 // the ship's kit frame (x to port, y up, z to its nose) in the flight model's own [ahead, up, right]
 const KIT = new THREE.Matrix4().makeRotationY(Math.PI / 2);
@@ -72,6 +72,9 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
     dump: () => ({ mode, taken, stage: drill.stage, mark: byCrew ? drill.crew.mark : undefined }),
   });
   fl.lock(true); drill.eye = false; drill.show(false);
+  // (the flight model put to rest: its throttle back to idle, as the flying's own arrive() does, so it does not wake
+  // with the pilot's last "forward" in it and swell the engine with the ship standing still)
+  const rest = () => { fl.S.engine = ENGINE.idle; };
 
   api = {
     fl, get mode() { return mode; }, get matrix() { return fl.matrix; }, get taken() { return taken; },
@@ -80,7 +83,7 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
       if (closed || mode === 'drill') return;
       if (mode === 'hand') drill.hand(false, W.camera);
       const from = fl.eye(W.camera);
-      fl.pause(true); drill.eye = true; drill.show(true); drill.glideFrom(from, secs, wait); mode = 'drill';
+      fl.pause(true); rest(); drill.eye = true; drill.show(true); drill.glideFrom(from, secs, wait); mode = 'drill';
     },
     go() { drill.glideGo(); },
     // INTO THE SEAT, for the jump home: the flying's own views, the controls put away
@@ -99,7 +102,7 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
     // THE DRILL'S TASK again: the ship stays where it was flown to, and a tapped rock is where the autopilot flies
     drill() {
       if (closed || mode !== 'hand') return false;
-      fl.pause(true); drill.hand(false, W.camera); mode = 'drill'; words('At the rocks');
+      fl.pause(true); rest(); drill.hand(false, W.camera); mode = 'drill'; words('At the rocks');
       return true;
     },
     // THE CREW'S DRILLER: the drill's view moves the ship, the flying's views follow it, the controls put away
@@ -107,7 +110,7 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
       if (closed || mode === 'ride') return;
       if (mode === 'hand') drill.hand(false, W.camera);
       if (mode === 'drill') { const at = poseNow(); fl.put(at.p, at.q); fl.pause(false); drill.eye = false; drill.show(false); }
-      fl.lock(true); mode = 'ride';
+      rest(); fl.lock(true); mode = 'ride';
     },
     update(dt) {
       if (closed) return;
@@ -116,16 +119,17 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
       if (byCrew && mode === 'ride' && byCrew.hand() && drill.stage === 'look' && drill.crew.mark != null && drill.hand(true)) { const at = poseNow(); fl.put(at.p, at.q); fl.lock(false); mode = 'hand'; }
       else if (byCrew && mode === 'hand' && !byCrew.hand()) api.ride();
       // (the flying put away while the drill's view or its ride moves the ship: its engine still heard, its RPMs from
-      // how the ride moves it and idling while it holds still among the rocks; the resting flight model's throttle is
-      // never read: src/engines.js)
-      if (mode === 'seat' || mode === 'hand') fl.update(dt); else engines.own(fl.S, FIELD_FLOOR);
+      // how fast the ship that really moves goes (the drill's view's own ship: on a tapped trip it is that one that
+      // flies, the flight model stays where it was) and idling while it holds still among the rocks; the resting flight
+      // model's throttle is never read: src/engines.js)
+      if (mode === 'seat' || mode === 'hand') fl.update(dt); else engines.own(fl.S, FIELD_FLOOR, drill.ship.p);
       // (flown up to a rock: the claw takes it, and the drill's task is on with that rock; the crew's driller takes only
       // the rock they marked, and the ship is watched from where the eye is)
       if (mode === 'hand') {
         // (the nearest of the rocks the claw takes: a rock that gave way and lies nearer its hand is not in the mark's way)
         const R = rockNear(fl.S, takes ? drill.rocksNow().filter(takes) : drill.rocksNow());
         if (R && byCrew) { if (R.id === drill.crew.mark && drill.take(R.id, W.camera)) { taken++; const at = poseNow(); fl.put(at.p, at.q); fl.lock(true); mode = 'ride'; } }
-        else if (R) { fl.pause(true); mode = 'drill'; words('At the rocks'); if (drill.take(R.id, W.camera)) taken++; else drill.hand(false, W.camera); }
+        else if (R) { fl.pause(true); rest(); mode = 'drill'; words('At the rocks'); if (drill.take(R.id, W.camera)) taken++; else drill.hand(false, W.camera); }
       }
     },
     // the camera: the flying's own view from the seat and flown by hand, the drill's otherwise (which still places

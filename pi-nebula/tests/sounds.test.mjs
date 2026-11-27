@@ -255,6 +255,27 @@ test('at the rocks, flown to a rock and then drilling or riding: the engine idle
   E.update(1, null, 'low');
 });
 
+test('the drill at the rocks: the drill view\'s own ship flies a tapped trip while the flight model stays put; the engine follows the ship that moves', () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = flownThenLeft(), frozen = [...S.p];
+  E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');
+  // (fieldfly's drill mode: the flight model paused and never put; its throttle put back to idle as it rests; the drill
+  // view's ship, a vector of its own, is what moves: engines.own(fl.S, FIELD_FLOOR, drill.ship.p))
+  S.engine = ENGINE.idle;
+  const ship = { x: S.p[0], y: S.p[1], z: S.p[2] };
+  const leg = (secs, v) => { const out = []; for (let t = 0; t < secs; t += DT) { ship.x += v * DT; E.own(S, FIELD_FLOOR, ship); E.update(DT, { x: 0, y: 0, z: 0 }, 'low'); out.push(snd.live()[0].rpm.at(-1)); } return out; };
+  const before = leg(2, 0), trip = leg(4, 26), after = leg(4, 0);
+  assert.deepEqual(S.p, frozen, 'the flight model was never moved');
+  assert.ok(before.at(-1) < 0.05, 'drilling, still: idling ' + before.at(-1));
+  assert.ok(trip.at(-1) > 0.9, 'on the tapped trip at 26 m/s: ' + trip.at(-1));
+  assert.ok(after.at(-1) < 0.05, 'there, still again: idling ' + after.at(-1));
+  assert.equal(snd.started.length, 1);
+  // woken again (the seat for the jump home, or flown by hand): its throttle is the idle it rested at, not the pilot's
+  // last "forward", so the engine does not swell with the ship still; without the rest it would read near full
+  assert.ok(rpmOf(S) <= ENGINE.aloft + 1e-9, 'woken after its rest: ' + rpmOf(S));
+  const left = flownThenLeft(); assert.ok(rpmOf(left) > 0.9, '(a model not put to rest would wake at ' + rpmOf(left) + ')');
+  E.update(1, null, 'low');
+});
+
 test('a rescue\'s parts, after the pilot has flown: the engine through every one, by how the run moves the ship', () => {
   const snd = fakeSound(), E = makeEngines({ sound: snd }), S = flownThenLeft(), p = [...S.p];
   E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');

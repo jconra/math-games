@@ -21,8 +21,9 @@ import { JUMP } from './wormplan.js';
 export const SOUNDS = {
   // the game's maker (2026-11-27): "For engine noises. We could use something that sounds like the lurcher engine (but
   // maybe softer)". Five takes in the lab, for him to choose by ear: A the Lurcher's own sound, quieter; B rounder; C a
-  // gentler, slower throb; D quieter but brighter and buzzier, so a phone's own speaker plays it; E between A and D, a
-  // hum with some body that a phone still plays (A, B and C are nearly all below 300 Hz, lower than a phone's speaker
+  // gentler, slower throb; D quieter but brighter and buzzier, so a phone's own speaker plays it; E between A and D:
+  // quieter than the Lurcher with a gentler throb, but brighter in tone than A so a phone still plays it, less buzzy
+  // than D (A, B and C are nearly all below 300 Hz, lower than a phone's speaker
   // goes, and he plays on his phone). E until he chooses: by the numbers it is the easier on the ear of the two a phone
   // plays (a tenth of D's share above 1 kHz, the middle of its sound about 200 Hz against D's 275, a shallower chop),
   // for 2 dB less of it on a phone's speaker than D and 6 dB more than A.
