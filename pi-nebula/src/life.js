@@ -201,6 +201,11 @@ export const APART = 1.15;
 // THE SEATS, by group: every such piece in the room; a stool faces the table nearest it, a bench seats two facing its
 // own front (the terminal's: out of the windows); a desk chair (face 'own') faces its own front, the desk it is set at
 // (`near`: the chairs within 2 m of that piece), and is sat on from beside it (its back is in the way behind it)
+// A BENCH'S TWO SEATS (m apart, middle to middle; the bench is 1.7 m long): one person to a seat, a person's width and
+// a hand's breadth between two strangers (four blind critics, 2026-11-26: on the window benches, 0.84 apart, people sat
+// through each other, a hand on a stranger's thigh). Each seat's middle then 0.27 m in from its end, a seated person's
+// hips half as wide
+export const SEAT_APART = 1.16;
 export const SEATS = {
   cafe: [{ room: 'terminal', piece: 'chair', variant: 'stool', face: 'table' }],
   window: [{ room: 'terminal', piece: 'chair', variant: 'bench', two: true }],

@@ -71,7 +71,7 @@ import { makeCrew } from '../kit/crew.js';
 import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
-import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
+import { NEAR, SPOTS, TALKS, APART, SEATS, SEAT_APART, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
 import { seatSteps, leanOf } from './seatsteps.js';
 import { surfaceAhead, handsAt } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
@@ -403,7 +403,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const hd = Math.atan2(f.x, f.z); list2.push({ seat: o.clone(), heading: hd, back: f.clone().negate(), table: desk || o.clone(), beside: true });
       } else {
         const hd = Math.atan2(f.x, f.z), side = new THREE.Vector3(Math.cos(hd), 0, -Math.sin(hd));
-        for (const k of d.two ? [-0.42, 0.42] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true, table: o.clone() });
+        // (a bench's two seats at its two ends, a person's width and more apart: life.js SEAT_APART)
+        for (const k of d.two ? [-SEAT_APART / 2, SEAT_APART / 2] : [0]) list2.push({ seat: o.clone().addScaledVector(side, k), heading: hd, back: f.clone().negate(), front: true, table: o.clone() });
       }
       for (const s of list2) {
         await turn();
