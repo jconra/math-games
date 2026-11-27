@@ -29,8 +29,9 @@ import { lookOff } from './kinds.js';
 
 // the picture: its size (pixels across) per quality tier; how much ground it covers (half its width, metres): `near`
 // standing on the ground, more the higher the camera is (`per` metres for each metre up), at most `far`; the softening
-// (metres: about how far the edge of a shadow is spread); and how much of the sky's light a shadow takes as well as the sun's
-export const SHADOW_PIC = { size: { low: 512, medium: 1024, high: 1024 }, near: 30, per: 1.6, far: 220, soft: 0.12, sky: 0.5 };
+// (metres: about how far the edge of a shadow is spread); how much of the sky's light a shadow takes as well as the sun's;
+// and the softened picture's edge brought back to full darkness inside (edge: from, to)
+export const SHADOW_PIC = { size: { low: 512, medium: 1024, high: 1024 }, near: 30, per: 1.6, far: 220, soft: 0.05, sky: 0.5, edge: [0.06, 0.45] };
 // (kept for the station's own marks: the stencil the ground and what casts once used, src/planet/ground.js)
 export const GROUND_SHADOW = { lift: 0.06, people: 0.03, air: 0.5, bare: 0.7 };
 const mark = (mat, ref) => { mat.stencilWrite = true; mat.stencilRef = ref; mat.stencilFunc = THREE.AlwaysStencilFunc; mat.stencilZPass = THREE.ReplaceStencilOp; mat.stencilFail = THREE.KeepStencilOp; mat.stencilZFail = THREE.KeepStencilOp; return mat; };

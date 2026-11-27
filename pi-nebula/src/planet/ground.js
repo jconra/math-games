@@ -262,8 +262,12 @@ void main() {
   // hill, and some of the sky's too where the sun reaches (in the land's own shade there is no second shadow)
   float sh = 0.0;
   { vec2 su = (vXZ - uShadowBox.xy) / uShadowBox.z; float e = max(abs(su.x), abs(su.y));
-    if (e < 1.0) sh = texture2D(uShadow, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
-  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh * L.r));
+    // (the softened picture brought back to full darkness inside a shape, so a thin leg's shadow is as dark as a ship's
+    // and only the edge is soft: the same shadow for everything)
+    if (e < 1.0) sh = smoothstep(${SHADOW_PIC.edge[0].toFixed(2)}, ${SHADOW_PIC.edge[1].toFixed(2)}, texture2D(uShadow, su * 0.5 + 0.5).r) * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
+  // (in the land's own shade there is no sun to take away: there a shadow takes the sky's light, so a person standing in
+  // the moon's crater shade still has hers, black on the nearly black ground)
+  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - sh * mix(1.0, SHADOW_SKY, L.r)));
   #ifdef AIR
   // the haze: the sky behind, more of it the further off and the lower down
   col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), hazeAmt(cameraPosition, vWorld));
@@ -309,6 +313,10 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   };
   // THE SHADOW PICTURE of what stands on the ground (src/planet/groundshadow.js)
   const shadows = makeShadowPicture({ renderer, ground: { U }, sunDir, quality });
+  // (the light picture's sun read back once, for the people on foot: in the land's shade the sun is off them too)
+  const LN = light.rt.width, sunPx = new Uint8Array(LN * LN * 4);
+  try { renderer.readRenderTargetPixels(light.rt, 0, 0, LN, LN, sunPx); } catch (e) { sunPx.fill(255); }
+  const sunAt = (x, z) => { const P = land.width, u = (x + 0.5 * P) / P + 0.5 / land.N, v = (z + 0.5 * P) / P + 0.5 / land.N, i = ((Math.floor(u * LN) % LN) + LN) % LN, j = ((Math.floor(v * LN) % LN) + LN) % LN; return sunPx[(j * LN + i) * 4] / 255; };
   Object.assign(U, shadows.U);
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
@@ -375,7 +383,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   };
   stats.buildMs = Math.round(performance.now() - t0);
   return {
-    mesh, U, stats, update, light, shadows,
+    mesh, U, stats, update, light, shadows, sunAt,
     dispose() { shadows.dispose(); grit.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
   };
 }

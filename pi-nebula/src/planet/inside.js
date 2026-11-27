@@ -10,6 +10,7 @@
 //   const L = peopleLight(c, env)   a crew kit person's materials made to take it (once; made again on their next
 //                                   drawing); env: the cabin's picture of itself (boarding's s.cabin.env), or none
 //   L.set(k)                    k: 0 outside .. 1 inside (a step at a time: L.to(k, dt) eases there)
+//   L.sunlit(v, dt)             outside: how much of the planet's sun reaches them (0 in the land's own shade .. 1)
 import * as THREE from 'three';
 import { shine } from '../player.js';
 
@@ -34,10 +35,10 @@ function patch(mat, U, key, { pars, sun, fill }) {
 export const insideLight = (mat, U) => patch(mat, U, '|medic-inside', { pars: '', sun: '0.0', fill: 'h.skyColor = uFillSky; h.groundColor = uFillGround;' });
 
 export function peopleLight(c, env = null) {
-  const U = { ...FILL_UNIFORMS(), uInside: { value: 0 } }, mats = [];
+  const U = { ...FILL_UNIFORMS(), uInside: { value: 0 }, uOutSun: { value: 1 } }, mats = [];
   c.root.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && !mats.includes(m)) mats.push(m); });
   for (const m of mats) {
-    patch(m, U, '|in-a-cabin', { pars: ' uniform float uInside;', sun: '( 1.0 - uInside )', fill: 'h.skyColor = mix( h.skyColor, uFillSky, uInside ); h.groundColor = mix( h.groundColor, uFillGround, uInside );' });
+    patch(m, U, '|in-a-cabin', { pars: ' uniform float uInside, uOutSun;', sun: '( 1.0 - uInside ) * uOutSun', fill: 'h.skyColor = mix( h.skyColor, uFillSky, uInside ); h.groundColor = mix( h.groundColor, uFillGround, uInside );' });
     m.userData.outside = { envMap: m.envMap, shine: m.envMapIntensity };
     m.needsUpdate = true;
   }
@@ -51,6 +52,8 @@ export function peopleLight(c, env = null) {
       else for (const m of mats) { m.envMap = m.userData.outside.envMap || null; m.envMapIntensity = m.userData.baseShine !== undefined ? m.userData.baseShine : m.userData.outside.shine; }
     },
     to(k, dt) { L.set(k + (k0 - k) * Math.exp(-8 * dt)); },
+    // (outside, how much of the sun reaches where they stand: in the land's own shade, none)
+    sunlit(v, dt = 1) { U.uOutSun.value = v + (U.uOutSun.value - v) * Math.exp(-8 * dt); },
     get k() { return k0; },
   };
   return L;
