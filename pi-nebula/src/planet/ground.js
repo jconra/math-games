@@ -97,6 +97,9 @@ const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 const ROCK_MOTTLE = 0.8;
 // how much of the sky's colour the farthest ground takes (with air: the moon has none)
 export const HORIZON_HAZE = 0.75;
+// (and from how far toward the horizon it begins: at 0.45 of the way, hills a short walk off were washed out to flat
+// pale cut-outs (round 3's critics); the haze is the far horizon's)
+export const HORIZON_FROM = 0.85;
 export const HAZE_GLSL = /* glsl */`
 uniform float uHaze, uHazeH, uHazeBase;
 float hazeAmt(vec3 eye, vec3 p) {
@@ -109,7 +112,7 @@ float hazeAmt(vec3 eye, vec3 p) {
 // ship the land is as it was, and the trees in the middle distance never fade to pale ghosts)
 float horizonAmt(vec3 eye, vec3 p) {
   float h0 = max(eye.y - uHazeBase, 0.0), edge = sqrt(2.0 * ${CURVE.toFixed(1)} * (h0 + 1.5));
-  return ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.45, 1.0, distance(eye, p) / edge) * (1.0 - smoothstep(4.0, 12.0, h0));
+  return ${HORIZON_HAZE.toFixed(2)} * smoothstep(${HORIZON_FROM.toFixed(2)}, 1.0, distance(eye, p) / edge) * (1.0 - smoothstep(4.0, 12.0, h0));
 }
 `;
 
