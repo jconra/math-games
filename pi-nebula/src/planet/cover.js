@@ -33,7 +33,7 @@ const CLEAR = 0.92;
 // THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
 // small stones and the plants up to `tall` metres grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
 // middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js)
-export const CLEARING = { pad: 11, kept: 0.999, tall: 1.1 };
+export const CLEARING = { pad: 11, kept: 0.999, tall: 1.35, gaps: 0.45, least: 0.2, thin: 0.6 };
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
 export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
 
@@ -275,7 +275,12 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       plantMats.push(...ms);
       const total = list.reduce((s, p) => s + p.share, 0);
       L.lay = (L2, cx, cz, ci, cj, wi, wj) => {
-        const g = land.growthAt(cx, cz); if (g < 0.04) return;
+        // ON THE LANDING PLACE (round 1's critics: white flowers crowding the walk, laid out almost in a grid, and the
+        // canyons as bare as before): loose clumps with gaps (a patch in CLEARING.gaps has nothing), fewer than in the
+        // wild, but some even where little grows, and no flowers
+        const pad = land.landingAt(cx, cz) > CLEAR;
+        if (pad && hash2(wi, wj, 77) < CLEARING.gaps) return;
+        const g = pad ? Math.max(land.growthAt(cx, cz), CLEARING.least) * CLEARING.thin : land.growthAt(cx, cz); if (g < 0.04) return;
         // how many in this patch: the close ones thick where it grows; the big ones few
         const many = far ? g * 0.4 : g * 3.5, n = Math.floor(many * Q.many + hash2(wi, wj, 11));
         for (let q = 0; q < n; q++) {
@@ -287,7 +292,8 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
           for (let e = 0; e < k; e++) {
             const a = hash2(wi + e, wj, 90 + q) * 6.283, d = clumpR * Math.sqrt(hash2(wi, wj + e, 95 + q));
             const x = bx + Math.cos(a) * d, z = bz + Math.sin(a) * d;
-            if (land.growthAt(x, z) < 0.05 || keptClear(x, z)) continue;
+            if ((!pad && land.growthAt(x, z) < 0.05) || keptClear(x, z)) continue;
+            if (pad && PLANTS[p.k].flower && land.landingAt(x, z) > CLEAR) continue;
             const hgt = PLANTS[p.k].height * p.size * (0.7 + 0.6 * hash2(wi + e, wj + q, 7)), y = land.heightAt(x, z) - PLANT_SINK[p.k] * hgt;
             // (the tall ones keep off the landing place, as before: a person walking there would have the camera in them)
             if (hgt > CLEARING.tall && land.landingAt(x, z) > CLEAR) continue;

@@ -33,7 +33,7 @@ export const PLANTS = [
   ['broad-leaf hosta', 0.36], ['wild strawberry', 0.4], ['dandelion', 0.67], ['yucca', 1.16, true],
   ['paintbrush', 0.58], ['snowdrops', 0.33], ['columbine', 0.88], ['violets', 0.28],
   ['cattails', 1.4, true], ['sprig shrub', 1.32, true], ['spruce sapling', 1.16, true], ['marsh marigold', 0.62],
-].map(([name, height, lit = false], k) => ({ k, name, height, lit }));
+].map(([name, height, lit = false], k) => ({ k, name, height, lit, flower: [5, 6, 8, 9, 10, 11, 15].includes(k) }));
 // each model's root clump sinks this share of its height into the ground (the Terrain Lab's numbers)
 export const PLANT_SINK = [0.06, 0.06, 0.06, 0.03, 0.04, 0.03, 0.03, 0.04, 0.03, 0.06, 0.03, 0.03, 0.04, 0.03, 0.03, 0.04];
 // THE TREES: two of the Terrain Lab's (its Tree Lab's trees, the lighter "sparse" ones its phones get:
