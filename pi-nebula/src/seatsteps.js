@@ -14,7 +14,8 @@
 //   same backward: up off it, leaning forward, then back to where they stood the way they came.
 //   leanOf(step, u) -> radians the body leans forward at `u` (0 to 1) through a step (moves.js M.lean)
 export const SIT = {
-  pre: 0.14,          // (m in front of the seat's middle: where they stand, their back to it, before they sit)
+  pre: 0.24,          // (m in front of the seat's middle: where they stand, their back to it, before they sit: their
+                      // shins just clear of a chair's cushion, 0.14 put them through it)
   round: 0.46,        // (m out to a stool's side, walked to first when they come from behind it)
   speed: 0.55,        // (m/s stepping back or across)
   turn: 3.2,          // (radians a second turning on the spot)
