@@ -861,7 +861,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       // (the aiming arc now: what it aims at, where it ends; and the last throw's, as it was made)
       aim: aimT ? { goal: aimT.goal ?? null, ball: aimT.ball ?? null, hit: aimT.goal != null ? 'goal' : aimT.hit || null, ahead: !!aimT.ahead, wait: !!aimT.wait, end: arcEnd(aimT),
         off: aimT.goal != null || aimT.at ? +((offFront(aimT.goal != null ? GOALS[aimT.goal].aim : aimT.at)) * 180 / Math.PI).toFixed(1) : null } : null,
-      pending, oneTurn, camYaw: +cam.yaw.toFixed(4), viewYaw: +viewYaw().toFixed(4), tilt: +cam.lift.toFixed(4), topBar: Math.round(topBar()), dragging: hands.dragging, byHand: cam.byHand, opening: cam.blend < 1,
+      pending, oneTurn, camYaw: +cam.yaw.toFixed(4), viewYaw: +viewYaw().toFixed(4), tilt: +cam.lift.toFixed(4), eye: [+(lastCam.x - MID[0]).toFixed(3), +lastCam.y.toFixed(3), +(lastCam.z - MID[2]).toFixed(3)], topBar: Math.round(topBar()), dragging: hands.dragging, byHand: cam.byHand, opening: cam.blend < 1,
       lastArc: lastArc ? { goal: lastArc.goal, hit: lastArc.hit, end: lastArc.end.map((v) => +v.toFixed(2)) } : null,
     }),
     // (for the rigs: where a ball or a goal is on the screen, in page pixels)
