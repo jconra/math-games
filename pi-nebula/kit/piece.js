@@ -73,15 +73,18 @@ export class Piece {
   // `still`: a leaf whose outside is part of what stands still round it (a door flush in a ship's skin): its light is
   // worked out with its room as it stands shut, and it is painted with the room's own materials, so shut it cannot be
   // told from the skin round it (layout.js); nobody walks on it or is stopped by it.
+  // `aim`: a leaf that rides a line whose ends move straight as it opens, turning as the line turns (kit/leafaim.js: a
+  // landing leg's stages, its braces), instead of sliding or swinging.
   // `hoop`: a hoop of light this leaf carries with it, lighting its room live as it glides (materials.js hoopLit; a
   // glide's leaf only): { at (the hoop's middle, in the leaf's frame; the hoop lies in the leaf's x-y plane), r (its
   // radius), color [r, g, b], i (its strength), reach (metres), every (seconds its bright part takes to go round) }
-  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide = [0, 0, 0], door = 0, hinge = null, still = false, hoop = null }) {
+  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide = [0, 0, 0], door = 0, hinge = null, still = false, hoop = null, aim = null }) {
     let lp = this._leafCache?.get(key);
     if (!lp) { lp = new Piece(); build(lp); (this._leafCache ||= new Map()).set(key, lp); }
     const base = new THREE.Matrix4().compose(new THREE.Vector3(...at), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(1, 1, 1));
     const mv = { key, piece: lp, base, slide: new THREE.Vector3(...slide), door, still };
     if (hoop) mv.hoop = hoop;
+    if (aim) mv.aim = aim;
     if (hinge) mv.hinge = (Array.isArray(hinge) ? hinge : [hinge]).map((H) => ({ at: [...H.at], axis: new THREE.Vector3(...H.axis).normalize().toArray(), angle: H.angle }));
     this.movers.push(mv);
   }
@@ -96,4 +99,7 @@ export class Piece {
   glide(id, { go = 8, rest = 2.5, start = 0, sweep = true } = {}) { this.doors.push({ id, sense: [0, 0, 0], near: 0, speed: 0, glide: { go, rest, start, sweep } }); }
 }
 Piece.coarse = false;
+// (the picture's detail: false at the game's low quality level, src/station.js, where pieces leave off small parts
+// nobody would miss there: the landing legs' bolts, hoses and links; true everywhere else, the labs included)
+Piece.fine = true;
 

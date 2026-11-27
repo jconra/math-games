@@ -29,82 +29,108 @@ export function turn(p, o, k, ang) {
 }
 
 // ── THE LEG ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-// LEG: the pad's height, how far into the well the cylinder's top stands when down (e), how far over the shut door's skin
-// the stowed foot stays (clear), how much of each stage stays in the one over it (overlap), the knuckle's height and its
-// radius beyond the piston's (knuckle)
-export const LEG = { pad: 0.1, e: 0.06, clear: 0.07, overlap: 0.1, knuckle: { h: 0.26, out: 0.07 } };
-// A leg's whole plan, from its LEGS entry and the floor (the ship's frame):
-//   hip      where it joins the hull (its well's mouth, on the belly) and the turn that stands it upright going up
-//            ({ at, axis, angle }: about the line along the ship through the hip; none for a leg that does not lean)
-//   foot     the pad's middle on the floor, `splay` out from under the hip; dir, the unit axis down the leg; length
-//   spin     where the pad is wider than the well, its turn about the leg's own axis going up (a quarter turn), so it
-//            goes in long side along the well
-//   knee     the knuckle's middle (`knee` up the leg from the floor), where the braces meet it
-//   tubes    the cylinder [0], the piston [n - 1] (a stage between where the well is shallow): { u0, u1 (along the leg
-//            from the floor, down), r, rise (how far it slides up, after the turn, going up) }; the foot, the piston's
-//            lowest part and the knuckle rise with the last
-//   braces   each: { name, from (where it mounts on the hull, a little inside its well's mouth), to (its lug on the
-//            knuckle), r, length, hinge (its turn about where it mounts, going up, so that it swings up into the well,
-//            its far end coming in under the belly), shrink, rodLength, slide (where the well is too small for it, its
-//            rod's run into its sleeve going up), up (its far end, up) }
-//   well     the box of its well, [[x0, y0, z0], [x1, y1, z1]] (the hull rigs cut it), and at(u), up(p, rise), move
-export function legPlan(L, floor, P = LEG) {
-  const side = Math.sign(L.at[0]) || 0, lean = side ? (L.splay || 0) : 0;
-  const hip = [L.at[0], L.belly, L.at[1]], foot = [L.at[0] + side * lean, floor, L.at[1]];
-  const dir = unit(sub(foot, hip)), length = len3(sub(foot, hip)), at = (u) => add(foot, mul(dir, -u));
-  // (the turn upright is about a point `lift` over the hip, and each part slides back under it as it rises: so the leg,
-  // turning and rising at once, keeps passing through the middle of its well's mouth instead of sweeping out across it)
-  const angle = lean ? -side * Math.atan2(lean, L.belly - floor) : 0, lift = angle ? (L.lift || 0) : 0, pivot = add(hip, [0, lift, 0]);
-  const hipTurn = angle ? { at: pivot, axis: [0, 0, 1], angle } : null;
-  const slideOf = (rise) => [-Math.sin(angle) * lift, rise - lift * (1 - Math.cos(angle)), 0];
-  const spin = L.spin ? { at: foot, axis: mul(dir, -1), angle: Math.PI / 2 } : null;
-  const up = (p, rise) => add(angle ? turn(p, pivot, [0, 0, 1], angle) : p, slideOf(rise));
-  // THE STAGES (along the leg, u from the floor): the cylinder's top e into the well when down; up, every stage inside
-  // the well's depth D, the knuckle (the foot group's top) under the cylinder, the foot `clear` over the belly (and a
-  // little more where the pad, turned upright, tilts)
-  const D = L.top - L.belly, padX = (L.spin ? L.pad[1] : L.pad[0]) / 2, tilt = padX * Math.abs(Math.sin(angle));
-  const fitTop = L.knee + P.knuckle.h / 2, lMax = D - fitTop - P.clear - tilt;
-  if (lMax < 0.25) throw new Error(`landing leg: its well is too shallow (${lMax.toFixed(2)} m of cylinder)`);
-  const Td = length + P.e, total = Td - fitTop;
-  const n = Math.max(2, Math.ceil((total - lMax) / (lMax - P.overlap) - 1e-9) + 1), step = (total - lMax) / (n - 1);
-  const rise = (k) => D - P.e + k * step, radius = (k) => (k ? L.r * (n > 2 ? 0.75 - 0.17 * (k - 1) : 0.6) : L.r);
-  const tubes = Array.from({ length: n }, (_, k) => ({ u0: Td - k * step - lMax, u1: Td - k * step, r: radius(k), rise: rise(k) }));
-  const footRise = rise(n - 1), knee = at(L.knee), rk = radius(n - 1) + P.knuckle.out;
-  // THE WELL: its box (well [in, out, aft, fore]: how far it reaches from the hip inboard, outboard, aft and forward)
-  const [wi, wo, wa, wf] = L.well, xs = side ? [L.at[0] - side * wi, L.at[0] + side * wo].sort((a, b) => a - b) : [L.at[0] - wi, L.at[0] + wo];
-  const well = [[xs[0], 0.5, L.at[1] - wa], [xs[1], L.top + 0.02, L.at[1] + wf]];
-  // THE BRACES: each a fat rod from its mount on the hull to a lug on the knuckle; going up it swings about its mount,
-  // up and in, to lie in the well toward its far side (the point `stow`: the well's middle, high), its far end coming
-  // in under the belly and up through the well's mouth
-  const mid = [(well[0][0] + well[1][0]) / 2, L.top - 0.3, (well[0][2] + well[1][2]) / 2];
-  const braces = (L.braces || []).map((B) => {
-    const from = [side < 0 ? -B.from[0] : B.from[0], B.from[1], B.from[2]], h = sub(from, knee); h[1] = 0;
-    const to = add(knee, mul(unit(h), rk + 0.02)), u0 = unit(sub(to, from)), length = len3(sub(to, from));
-    const u1 = unit(sub(B.stow ? [side < 0 ? -B.stow[0] : B.stow[0], B.stow[1], B.stow[2]] : mid, from));
-    const ax = cross(u0, u1), sa = len3(ax), ang = Math.atan2(sa, dot(u0, u1)), axis = sa > 1e-9 ? mul(ax, 1 / sa) : [1, 0, 0];
-    // (where it is longer than the well has room for along that line, its rod slides into its sleeve as it swings, by
-    // `shrink`, along the line it ends on: its slide)
-    let room = Infinity; for (let k = 0; k < 3; k++) if (Math.abs(u1[k]) > 1e-9) room = Math.min(room, ((u1[k] > 0 ? well[1][k] - 0.04 : well[0][k] + 0.04) - from[k]) / u1[k]);
-    const shrink = Math.max(0, length - room);
-    const rodLength = shrink ? length / 2 + shrink / 2 + 0.1 : 0;
-    return { name: B.name, from, to, r: B.r, length, shrink, rodLength, slide: mul(u1, -shrink), hinge: { at: from, axis, angle: ang }, up: add(from, mul(u1, length - shrink)) };
-  });
-  // WHERE A POINT OF A PART IS, t of the way up (as the kit's door leaves move: each hinge in turn, by the eased t, then
-  // the slide): part 'tube k' | 'foot' | a brace's index (its sleeve, or the whole brace) | 'rod k' (a brace's rod)
-  const ease = (t) => t * t * (3 - 2 * t);
-  const move = (part, p, t) => {
-    const e = ease(t);
-    if (typeof part === 'number' || /^rod /.test(part)) {
-      const B = braces[typeof part === 'number' ? part : +part.split(' ')[1]], q = turn(p, B.hinge.at, B.hinge.axis, B.hinge.angle * e);
-      return typeof part === 'number' ? q : add(q, mul(B.slide, e));
+// The game's maker: "Its fine if the landing gear is kind of magic and folds into itself". So a leg is ONE joined thing
+// all the way up and down: it rides a LINE from its hip (where it leaves the hull) to its ankle (over the pad), and
+// going up both ends move straight to their places in the well (kit/leafaim.js), the line turning and shortening as
+// they go; its stages ride the line (the cylinder its hip, the piston its ankle, a stage between a share of the way),
+// so they slide into each other and never leave each other; the pad rides the ankle with the piston; each brace its own
+// line from its mount on the hull (still, in the well's mouth) to the knuckle on the leg, its sleeve the mount, its rod
+// the knuckle, so the rod never leaves its sleeve and the brace never leaves the leg. Nothing swings out: the foot goes
+// straight up and in.
+// LEG: the pad's height, the ankle pin's over it, how far into the well the cylinder's top stands when down (e), how
+// far over the shut doors the stowed pad stays (clear), how much of each stage stays in the one it slides in (overlap),
+// the knuckle's height and its reach beyond the piston, how far a stage's end keeps from what it must not run into, and
+// how far a mount's carriage on a track stands beyond its brace (a still mount's block: 6 cm)
+export const LEG = { pad: 0.1, ankle: 0.07, e: 0.12, clear: 0.07, overlap: 0.1, knuckle: { h: 0.28, out: 0.08 }, keep: 0.03, carriage: 0.03 };
+// the stages that slide in each other along a line from its a end to its b end, which is `long` metres long at its
+// longest and `short` at its shortest: the first rides the a end (from 0 to its length from there), the last the b end,
+// those between each a share of the way along (so at the shortest they lie side by side in the free stretch, and at the
+// longest spread out); `top` keeps the first `top` metres short of the b end at the shortest (the knuckle), `bot` the
+// last `bot` short of the a end (the mount block). Each { ride, len, span(L): [s0, s1] (from the a end, when the line
+// is L long) }. The fewest that keep `overlap` in each other at the longest.
+export function stagesOf(long, short, { top = 0, bot = 0, overlap = LEG.overlap, keep = LEG.keep, most = 5 } = {}) {
+  const f0 = bot + keep, f1 = short - top - keep, l0 = f1, ln = short - f0;
+  if (l0 <= 0.05 || ln <= 0.05) return null;
+  const first = { ride: { from: 'a', at: 0 }, len: l0, span: () => [0, l0] }, last = { ride: { from: 'b', at: 0 }, len: ln, span: (L) => [L - ln, L] };
+  for (let n = 2; n <= most; n++) {
+    const m = n - 2;
+    for (let h = (f1 - f0) / 2; h > 0.05; h -= 0.01) {
+      const mids = Array.from({ length: m }, (_, j) => {
+        const c = m === 1 ? (f0 + f1) / 2 : f0 + h + (f1 - f0 - 2 * h) * j / (m - 1), f = c / short;
+        return { ride: { frac: f }, len: 2 * h, span: (L) => [f * L - h, f * L + h] };
+      });
+      const st = [first, ...mids, last];
+      if (st.every((x, j) => j === 0 || st[j - 1].span(long)[1] - x.span(long)[0] >= overlap - 1e-9)) return st;
+      if (m === 0) break;
     }
-    let q = p;
-    if (part === 'foot' && spin) q = turn(q, spin.at, spin.axis, spin.angle * e);
-    if (angle) q = turn(q, pivot, [0, 0, 1], angle * e);
-    const r = part === 'foot' ? footRise : tubes[+part.split(' ')[1]].rise;
-    return add(q, mul(slideOf(r), e));
-  };
-  return { side, hip, hipTurn, slideOf, spin, foot, dir, length, at, up, tubes, footRise, knee, rk, braces, well, n, move, angle };
+  }
+  return null;
+}
+// A leg's whole plan, from its LEGS entry and the floor (the ship's frame, port +x, nose +z):
+//   foot     the pad's middle on the floor, `splay` out from under the hip; hip, ankle (where its line runs, down)
+//   line     { a: hip, av, b: ankle, bv } (kit/leafaim.js): up, the hip goes to up.a and the ankle to up.b
+//   dir      the unit axis down the leg, down; length (down), long and short (its longest and shortest on the way);
+//            lean (degrees out)
+//   stages   the cylinder [0] .. the piston [n - 1] (stagesOf), each with its radius r
+//   knee     the knuckle's middle, `kneeAt` metres up the line from the ankle (`knee` over the floor); rk its reach
+//   braces   each { name, from (its mount: still, on the hull; or on a track, `track`), r, line { a: from, av,
+//            b: { on: line, at: kneeAt } }, stages, long, short, angle (degrees between it and the leg, down)
+//   pad      the pad rides the ankle with the piston (level when down: it tilts as the leg does on the way up); or,
+//            padLevel, a leaf of its own that slides with the ankle, level all the way (where the leg folds far over)
+//   well     its box [[x0, y0, z0], [x1, y1, z1]] (the hull rigs cut it); step: where the hull's side comes in over it,
+//            its ceiling lower outboard: { x (outboard of it), low (the ceiling there) }
+export function legPlan(L, floor, P = LEG) {
+  const side = Math.sign(L.at[0]) || 0, sx = (q) => (side < 0 ? [-q[0], q[1], q[2]] : q);
+  const foot = [L.at[0] + side * (L.splay || 0), floor, L.at[1]];
+  const hip = [L.at[0], L.belly + P.e, L.at[1]], ankle = [foot[0], floor + P.pad + P.ankle, foot[2]];
+  const up = { a: sx(L.stow.a), b: sx(L.stow.b) };
+  const line = { a: hip, av: sub(up.a, hip), b: ankle, bv: sub(up.b, ankle) };
+  const dir = unit(sub(ankle, hip)), length = len3(sub(ankle, hip));
+  // (both ends move straight, so the line may be at its longest or shortest part way: looked at all the way)
+  const at = (e, q) => add(q === 'a' ? hip : ankle, mul(q === 'a' ? line.av : line.bv, e));
+  let long = 0, short = Infinity;
+  for (let i = 0; i <= 100; i++) { const l = len3(sub(at(i / 100, 'a'), at(i / 100, 'b'))); long = Math.max(long, l); short = Math.min(short, l); }
+  const lean = Math.acos(Math.min(1, -dir[1])) * 180 / Math.PI;
+  const kneeAt = (L.knee - P.pad - P.ankle) / -dir[1], knee = add(ankle, mul(dir, -kneeAt)), K = P.knuckle;
+  const stages = stagesOf(long, short, { top: kneeAt + K.h / 2 });
+  if (!stages) throw new Error(`landing leg: it cannot fold between ${long.toFixed(2)} m and ${short.toFixed(2)} m`);
+  const n = stages.length;
+  stages.forEach((s, k) => { s.r = L.r * (1 - 0.38 * k / (n - 1)); });
+  const rk = stages[n - 1].r + K.out;
+  const braces = (L.braces || []).map((B) => {
+    // (a mount on a track, `slide`: its block rides up the well's side as the leg rises, so the brace keeps nearly its
+    // length; where the hull leaves the mount no room to stand away from where the leg comes in)
+    const from = sx(B.from), av = B.slide ? sx(B.slide) : null, bl = { a: from, ...(av ? { av } : {}), b: { on: line, at: kneeAt } };
+    let long = 0, shortB = Infinity;
+    for (let i = 0; i <= 100; i++) {
+      const e = i / 100, kp = add(at(e, 'b'), mul(unit(sub(at(e, 'a'), at(e, 'b'))), kneeAt));
+      const l = len3(sub(kp, av ? add(from, mul(av, e)) : from)); long = Math.max(long, l); shortB = Math.min(shortB, l);
+    }
+    const st = stagesOf(long, shortB, { top: rk + P.keep, bot: (B.r + 0.06) });
+    if (!st) throw new Error(`landing leg: its ${B.name} brace cannot fold from ${long.toFixed(2)} m to ${shortB.toFixed(2)} m`);
+    st.forEach((s, k) => { s.r = B.r * (1 - 0.38 * k / (st.length - 1)); });
+    const d = unit(sub(knee, from)), angle = Math.acos(Math.min(1, Math.abs(dot(d, dir)))) * 180 / Math.PI;
+    return { name: B.name, from, r: B.r, line: bl, stages: st, long, short: shortB, angle, track: !!av };
+  });
+  const [wi, wo, wa, wf] = L.well, xs = side ? [L.at[0] - side * wi, L.at[0] + side * wo].sort((p, q) => p - q) : [L.at[0] - wi, L.at[0] + wo];
+  const well = [[xs[0], 0.5, L.at[1] - wa], [xs[1], L.top + 0.02, L.at[1] + wf]];
+  const step = L.step ? { x: side < 0 ? -L.step.x : L.step.x, low: L.step.low } : null;
+  return { side, foot, hip, ankle, line, dir, length, long, short, lean, stages, n, knee, kneeAt, rk, braces, well, step, padLevel: !!L.padLevel };
+}
+// THE LEAVES THE KIT IS HANDED (built-common.js strutLeg; the tests pose these same ones): the plan's lines lowered
+// into the piece's own frame (`deck` metres down: the ships' pieces are drawn with their deck at 0), so every part
+// turns about the point it is drawn at. part: 'stage k' (the last carries the knuckle, and the pad but where it has its
+// own) | 'brace NAME k' | 'pad'; each { part, aim } or { part, slide }
+const lower = (q, deck) => (Array.isArray(q) ? [q[0], q[1] - deck, q[2]] : q);
+export function kitLeaves(G, deck) {
+  const line = { a: lower(G.line.a, deck), av: G.line.av, b: lower(G.line.b, deck), bv: G.line.bv };
+  const out = G.stages.map((s, k) => ({ part: `stage ${k}`, aim: { ...line, ...s.ride } }));
+  for (const B of G.braces) {
+    const bl = { a: lower(B.line.a, deck), ...(B.line.av ? { av: B.line.av } : {}), b: { on: line, at: B.line.b.at } };
+    B.stages.forEach((s, k) => out.push({ part: `brace ${B.name} ${k}`, aim: { ...bl, ...s.ride } }));
+  }
+  if (G.padLevel) out.push({ part: 'pad', slide: G.line.bv });
+  return out;
 }
 
 // ── THE SLIDING DOORS ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -134,39 +160,62 @@ export function gearOrder(legs, doors, up, move) {
 }
 
 // ── WHERE THE LEGS ARE ────────────────────────────────────────────────────────────────────────────────────────────────
-// Each leg: at [x, z] (the ship's frame: port +x, nose +z; its well's middle, where it joins the hull), splay (how much
-// further out its foot stands than that), top (its well's top), belly (the skin's highest point over its well's mouth:
-// the hull rigs measure it), r (the cylinder's radius), pad [across, along] (the foot's size), braces (the well's edges
-// its braces come from: each { name, from (its mount on the hull), r, stow (the point in the well it swings toward, up;
-// chosen by a search, rigs/gear-2/tools/search.mjs, for the fewest points through the hull on the way) }), lift (how
-// far over the hip its turn upright is centred: the search's too). floor: the ground in the ship's frame (the Miner stands STAND higher on its legs than its
-// hull's own ground line). well [in, out, aft, fore] (how far its mouth reaches from the hip each way), split (the axis its doors part along: 2 fore and
-// aft, the default; 0 port and starboard), braceMin (the least angle its braces meet it at, where the hull leaves no
-// room for wider: 12 degrees if not), sink (how far its doors go into the hull as they open, where the skin round
-// the well is not flat; DOOR.sink if not), one, up (how its doors slide: doorSlide). The wells are cut in the hull data
-// (WELLS, DOORS) by the rigs in ~/pw/space-math/rigs/gear-2/.
-const mirror = (L) => Object.fromEntries(Object.entries(L).flatMap(([k, v]) => (k.includes('port') ? [[k, v], [k.replace('port', 'starboard'), { ...v, at: [-v.at[0], v.at[1]], ...(v.one && v.split === 0 ? { one: -v.one } : {}) }]] : [[k, v]])));
+// Each leg (the ship's frame: port +x, nose +z; a port leg's numbers, its starboard twin mirrored, but for what its own
+// `starboard` gives where the hull is not the same on that side):
+//   at [x, z]   where it leaves the hull; belly: the skin's height there (its hip stands LEG.e over it)
+//   splay       how much further out its foot stands than that; r: its cylinder's radius; pad [across, along]
+//   knee        the knuckle's middle, over the floor
+//   stow { a, b } where its hip and its ankle are, up (in its well)
+//   braces      each { name, from (its mount: a block standing in the well's mouth, its bolt here), r, slide (where
+//               its block rides up a track in the well, up: none, where it stands still) }
+//   top, well [in, out, aft, fore]: its well's top and how far its mouth reaches from `at` each way; step { x, low }:
+//               outboard of x its ceiling is low, where the hull's side comes in (legPlan)
+//   split (the axis its doors part along: 2 fore and aft, the default; 0 port and starboard), sink, one, up (how its
+//   doors slide: doorSlide)
+// floor: the ground in the ship's frame (the Miner stands STAND higher on its legs than its hull's own ground line).
+// The wells are cut in the hull data (WELLS, DOORS) by the rigs in ~/pw/space-math/rigs/gear-2/; the numbers were
+// tried there against the hull as it was before (rigs/gear-2/tools/design.mjs).
+const mirror = (L) => Object.fromEntries(Object.entries(L).flatMap(([k, v]) => {
+  if (!k.includes('port')) return [[k, v]];
+  const { starboard = {}, ...p } = v;
+  return [[k, p], [k.replace('port', 'starboard'), { ...p, ...starboard, at: [-p.at[0], p.at[1]], ...(p.one && p.split === 0 ? { one: -p.one } : {}) }]];
+}));
 export const LEGS = {
-  // the Explorer: the nose leg under the cockpit (its well's top under the cockpit's floor), upright, braced from ahead
-  // and behind; the aft two under the hull's sides, 2.31 m out (where its old legs stood), leaning out 23 degrees (their
-  // feet 96 cm further out: inside the ship's own shape for bumps there, its wings' box 6.6 m out), their wells going up
-  // beside the cabin's side walls and long along the ship, braced from the wells' fore and aft ends
+  // the Explorer: the nose leg under the cockpit, where it stood before these legs (z 4.2), upright, braced from ahead
+  // and behind, folding back flat into its well as it rises; the aft two under the hull's sides, 2.31 m out (where its
+  // old legs stood), leaning out 25 degrees (their feet inside the ship's own shape for bumps there, its wings' box
+  // 6.6 m out), each braced from ahead and from behind, both mounts inboard of it (so seen from behind they come in from
+  // inboard), their wells in the hull's side beside the cabin's walls, long along the ship (their doors slide out
+  // together under the wing: aft, they would run past the stern); the hull is not quite the same each side, so each
+  // side's leg stows its own way
   explorer: { floor: 0, legs: mirror({
-    nose: { at: [0, 5.95], top: 1.99, belly: 1.08, r: 0.14, pad: [0.58, 0.5], knee: 0.3, well: [0.3, 0.3, 0.55, 0.75], split: 0, sink: 0.4,
-      braces: [{ name: 'fore', from: [0, 1.22, 6.65], r: 0.07, stow: [-0.24, 1.25, 5.47] }, { name: 'aft', from: [0, 1.36, 5.45], r: 0.07, stow: [-0.24, 1.71, 6.05] }] },
-    port: { at: [2.31, -3.72], top: 4.2, belly: 2.27, r: 0.19, splay: 0.96, pad: [0.8, 0.44], spin: true, knee: 0.66, well: [0.24, 0.45, 0.95, 0.95], sink: 0.16,
-      braces: [{ name: 'fore', from: [2.12, 1.64, -2.84], r: 0.09, stow: [2.14, 2.36, -4.58] }, { name: 'aft', from: [2.12, 1.97, -4.6], r: 0.09, stow: [2.14, 2.36, -4.29] }] },
+    nose: { at: [0, 4.2], belly: 1.17, splay: 0, r: 0.16, pad: [0.5, 0.62], knee: 0.32, padLevel: true,
+      stow: { a: [0, 1.676, 5.23], b: [0, 1.759, 3.91] }, top: 1.96, well: [0.27, 0.27, 1.27, 1.17], split: 0, sink: 0.4,
+      braces: [{ name: 'fore', from: [0, 1.431, 5.193], r: 0.1 }, { name: 'aft', from: [0, 1.272, 3.115], r: 0.1 }] },
+    port: { at: [2.31, -3.72], belly: 1.98, splay: 0.92, r: 0.2, pad: [0.62, 0.9], knee: 0.62,
+      stow: { a: [2.403, 3.45, -2.741], b: [2.554, 2.494, -4.302] }, padLevel: true, top: 3.7, well: [0.24, 0.64, 1.48, 1.15], split: 0, one: 1, sink: 0.16, cutBelow: 2.95, cutDown: true,
+      braces: [{ name: 'fore', from: [2.294, 2.321, -2.78], r: 0.12 }, { name: 'aft', from: [2.323, 2.338, -4.98], r: 0.12 }],
+      starboard: { stow: { a: [2.327, 3.58, -4.86], b: [2.5, 2.86, -3.403] }, padLevel: true, top: 3.83, well: [0.24, 0.72, 1.48, 1.15],
+        braces: [{ name: 'fore', from: [2.29, 2.333, -2.78], r: 0.12 }, { name: 'aft', from: [2.29, 2.351, -4.98], r: 0.12 }] } },
   }) },
-  // the Miner: a pair under the cockpit's sides (their wells going up between the cockpit's walls and the hull's sides;
-  // the hull there leaves room for no longer a well, so their braces come in steeply), and the aft pair under the
-  // stern's block, beside the engine room (their wells reaching in under the engine room's side, braced from there and
-  // from behind); each leaning out 20 degrees (further, a leg folding up would pass through the cheek beside the
-  // cockpit, or the stern block's lower outer lip); 13 cm longer (STAND)
+  // the Miner: a pair under the cockpit's sides, their wells between the cockpit's lining and the hull's sides, long
+  // along the ship, braced from their ends (the starboard cheek is narrower: 48 cm at the well's top from the lining to
+  // the hull's side, so these legs are no thicker than that leaves room for, and the wells' ceilings step down outboard
+  // where the cheek comes in); and the aft pair under the stern's block, hung from its inboard side and leaning out 28
+  // degrees, braced from its outboard lip beside and behind them (the block is 1 m wide and 1.2 m long: there is no
+  // room on it for a mount half a leg's length away), the braces' mounts riding up tracks in the well as they fold;
+  // every foot outside the hull's edge; 13 cm longer (STAND)
   miner: { floor: -0.13, legs: mirror({
-    'nose port': { at: [1.38, 3.75], top: 2.72, belly: 1.54, r: 0.14, splay: 0.62, pad: [0.32, 0.56], knee: 0.36, well: [0.17, 0.3, 0.3, 0.3], sink: 0.32, braceMin: 6,
-      braces: [{ name: 'fore', from: [1.25, 1.62, 4.0], r: 0.075, stow: [1.26, 2.63, 3.84] }, { name: 'aft', from: [1.25, 1.5, 3.5], r: 0.075, stow: [1.26, 1.96, 3.57] }] },
-    port: { at: [1.38, -6.42], top: 3.9, belly: 1.88, r: 0.15, splay: 0.75, lift: 1.5, pad: [0.6, 0.5], knee: 0.59, well: [0.36, 0.4, 0.28, 0.28], sink: 0.45, up: true, braceMin: 6,
-      braces: [{ name: 'in', from: [1.06, 1.73, -6.42], r: 0.09, stow: [1.25, 3.75, -6.17] }, { name: 'aft', from: [1.3, 1.9, -6.67], r: 0.09, stow: [1.1, 3.75, -6.59] }] },
+    'nose port': { at: [1.32, 3.75], belly: 1.36, splay: 0.76, r: 0.13, pad: [0.3, 0.72], knee: 0.38,
+      stow: { a: [1.318, 2.418, 4.627], b: [1.441, 2.045, 3.449] }, top: 2.6, step: { x: 1.6, low: 2.3 }, well: [0.24, 0.41, 1.15, 1.15], sink: 0.32, cutBelow: 2.9, cutDown: true,
+      braces: [{ name: 'fore', from: [1.37, 2.14, 4.708], r: 0.09 }, { name: 'aft', from: [1.293, 1.757, 2.79], r: 0.09 }],
+      starboard: { padLevel: true, stow: { a: [1.261, 2.41, 4.738], b: [1.415, 2.01, 3.494] }, step: { x: 1.56, low: 2.15 }, cutBelow: 2.6, well: [0.24, 0.33, 1.15, 1.21],
+        braces: [{ name: 'fore', from: [1.278, 2.11, 4.75], r: 0.09 }, { name: 'aft', from: [1.233, 1.788, 2.753], r: 0.09 }] } },
+    port: { at: [1.32, -6.42], belly: 1.8, splay: 1.02, r: 0.24, pad: [0.62, 0.74], knee: 0.5, padLevel: true,
+      stow: { a: [1.71, 3.409, -6.515], b: [1.331, 2.018, -6.558] }, top: 3.97, step: { x: 1.63, low: 3.7 }, well: [0.3, 0.73, 0.54, 0.3], sink: 0.45, up: true,
+      braces: [{ name: 'out', from: [1.7, 2.028, -6.466], r: 0.14, slide: [0, 1.32, 0] }, { name: 'out aft', from: [1.62, 2.293, -6.72], r: 0.14, slide: [0, 1.3, 0] }],
+      starboard: { stow: { a: [1.453, 3.715, -6.453], b: [1.371, 2.156, -6.517] }, top: 3.95, step: { x: 1.5, low: 3.85 }, well: [0.28, 0.66, 0.5, 0.3],
+        braces: [{ name: 'out', from: [1.63, 2.297, -6.463], r: 0.14, slide: [0, 1.3, 0] }, { name: 'out aft', from: [1.642, 2.221, -6.664], r: 0.14, slide: [0, 1.36, 0] }] } },
   }) },
 };
 // EVERY SHIP'S FEET [x, z] (nose +z), for the rule that each stands on legs fore and aft: the two above from LEGS (where

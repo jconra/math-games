@@ -21,7 +21,8 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
 import { U as KU, kitTextures, spinVertex } from '../materials.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
-import { legPlan, doorSlide, gearOrder, LEG } from './gear-plan.js';
+import { legPlan, kitLeaves, doorSlide, gearOrder, LEG } from './gear-plan.js';
+import { Piece } from '../piece.js';
 
 export const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -389,34 +390,39 @@ export function cockpitTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf,
 
 // ── THE GEAR (kit/ships/gear-plan.js: the plan, the leg's and the doors' numbers, the order they move in) ──────────────
 // A LEG (gear-plan.js legPlan; the game's maker: "something like the F-16 landing gear. It goes out wider, and has a few
-// cylinders that meet up"): leaning out 22 to 23 degrees from its well, a fat main cylinder with a mounting collar
-// where it leaves the hull and a bolted collar at its foot, a bright piston sliding out of it (a stage between where
-// the well is shallow), a chunky knuckle a quarter of the way up from the foot, bolted, with a lug for each brace, and
-// a broad pad; and two fat braces (each a round strut, a mounting block with its bolts where it meets the hull, an eye
-// at the knuckle) coming in at wide angles from the ends of its long well. Leaves of one kit door ('gear', 0 down, 1
-// up), one for each part that moves on its own way (so few draws): the cylinder; a stage between; the foot (the piston,
-// the knuckle and the pad: it turns upright about the hip, a quarter turn about its own axis where the pad is wider
-// than the well, and slides up the most); each brace (it swings up about its mount into the well; where the well is
-// too small for it, its rod is a leaf of its own and runs into its sleeve on the way). L: the leg's LEGS entry;
-// floor: the ground in the ship's frame; key: the leaves' name stem ('eb'); which: the variant; paint: { cyl, stage,
-// piston, joint, bolt, band, pad, sole, brace (the braces' sleeves, if not the cylinder's paint) }; style: 'sleek' (the Explorer: white, slim joints, a bevelled pad and a torque
-// link) or 'heavy' (the Miner: graphite and hazard yellow, deep collars, a gusseted skid with a striped toe)
-const OCT = Array.from({ length: 8 }, (_, i) => (i + 0.5) * PI / 4);
-// an eight-sided rod from a to b (Vector3s, the ship's frame), radius r, its ends shut (or not)
+// cylinders that meet up", and "Its fine if the landing gear is kind of magic and folds into itself"): a fat main
+// cylinder leaning out from its well, a stage between where it must fold short, a bright piston, ONE chunky round
+// knuckle a quarter of the way up from the foot with an eye for each brace, and a broad pad; and fat round braces,
+// each a sleeve from its mount on the hull and a bright rod sliding in it to the knuckle. Every part is a leaf of one
+// kit door ('gear', 0 down, 1 up) riding a line (kit/leafaim.js; the plan's gear-plan.js kitLeaves, lowered into the
+// piece's own frame): the stages ride the leg's line from its hip to its ankle, both of which go straight up into the
+// well, so they slide into each other and never part; each brace's sleeve and rod ride its own line from its mount to
+// the knuckle, so the rod never leaves its sleeve and the brace never leaves the leg; the pad rides the ankle. A mount
+// block stands still in the well (legMounts), but where it rides a track, and goes up with its brace.
+// L: the leg's LEGS entry; floor: the ground in the ship's frame; key: the leaves' name stem ('eb'); which: the variant;
+// paint: { cyl, stage, piston, joint, bolt, band, pad, sole, brace (the braces' sleeves, if not the cylinder's paint) };
+// style: 'sleek' (the Explorer: white, slim joints, hoses, a torque link, a bevelled pad) or 'heavy' (the Miner:
+// graphite and cream, hazard yellow, deep collars, a gusseted skid with a striped toe). At the low quality level
+// (Piece.fine false) the small parts are left off (bolts, hoses, the torque link) and the rods are six-sided.
+const SIDES = (n) => Array.from({ length: n }, (_, i) => (i + 0.5) * 2 * PI / n);
+const OCT = SIDES(8), HEX = SIDES(6);
+let RING = OCT;
+// a round rod (eight-sided; six at the low level) from a to b (Vector3s, the ship's frame), radius r, its ends shut (or not)
 export function rod(acc, a, b, r, surf, dk, ends = true) {
   const ax = b.clone().sub(a).normalize(), ref = Math.abs(ax.z) < 0.9 ? V3(0, 0, 1) : V3(1, 0, 0);
-  const u = ref.clone().cross(ax).normalize(), v = ax.clone().cross(u);
+  const u = ref.clone().cross(ax).normalize(), v = ax.clone().cross(u), n = RING.length;
   const off = (ang) => u.clone().multiplyScalar(Math.cos(ang) * r).addScaledVector(v, Math.sin(ang) * r);
-  for (let i = 0; i < 8; i++) {
-    const p = off(OCT[i]), q = off(OCT[(i + 1) % 8]), n = off((OCT[i] + OCT[(i + 1) % 8]) / 2).normalize();
-    acc.poly([a.clone().add(p), a.clone().add(q), b.clone().add(q), b.clone().add(p)].map(dk), n, surf, 'solid', 99);
+  for (let i = 0; i < n; i++) {
+    const p = off(RING[i]), q = off(RING[(i + 1) % n]), m = off((RING[i] + RING[(i + 1) % n]) / 2 + (i === n - 1 ? PI : 0)).normalize();
+    acc.poly([a.clone().add(p), a.clone().add(q), b.clone().add(q), b.clone().add(p)].map(dk), m, surf, 'solid', 99);
   }
-  if (ends) for (const [c, n] of [[b, ax], [a, ax.clone().negate()]]) acc.poly(OCT.map((t) => dk(c.clone().add(off(t)))), n, surf, 'solid', 99);
+  if (ends) for (const [c, m] of [[b, ax], [a, ax.clone().negate()]]) acc.poly(RING.map((t) => dk(c.clone().add(off(t)))), m, surf, 'solid', 99);
 }
-// an upright eight-sided tube about (cx, cz) from y0 to y1
+// an upright tube about (cx, cz) from y0 to y1
 export function tube(acc, cx, cz, y0, y1, r, surf, dk, ends = true) { rod(acc, V3(cx, y0, cz), V3(cx, y1, cz), r, surf, dk, ends); }
-// a ring of n bolt heads round the line a to b at its point c, radius r (small hexagonal studs, standing out)
+// a ring of n bolt heads round the line along ax at its point c, radius r (small studs standing out); none at the low level
 function bolts(acc, c, ax, r, n, surf, dk, h = 0.022) {
+  if (!Piece.fine) return;
   const ref = Math.abs(ax.z) < 0.9 ? V3(0, 0, 1) : V3(1, 0, 0), u = ref.clone().cross(ax).normalize(), v = ax.clone().cross(u);
   for (let i = 0; i < n; i++) { const a = (i + 0.5) * 2 * PI / n, o = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a)); rod(acc, c.clone().addScaledVector(o, r - 0.005), c.clone().addScaledVector(o, r + h), 0.016, surf, dk); }
 }
@@ -426,20 +432,27 @@ function collar(acc, a, ax, s0, s1, r, surf, boltSurf, nb, dk) {
   if (nb) bolts(acc, a.clone().addScaledVector(ax, (s0 + s1) / 2), ax, r, nb, boltSurf, dk);
 }
 // the pads: level on the floor about c (its middle on the floor), [hx, hz] its half sizes (hx across the ship), h its
-// height. 'sleek': a slab with its top edges cut back at 45 degrees and its sole rubber; 'heavy': a skid with its toe
-// and heel turned up, ribs (gussets) standing on it fore and aft of the knuckle, hazard stripes on its toe
+// height. 'sleek': a slab with its top edges cut back at 45 degrees, a yellow band round it, its sole rubber; 'heavy':
+// a skid with its toe and heel turned up, ribs (gussets) standing on it fore and aft of the leg, spikes round its post,
+// hazard stripes on its toe
 function pad(acc, c, hx, hz, h, style, paint, dk) {
   if (style === 'sleek') {
     const b = Math.min(0.05, h * 0.5), R = (x, z, y) => [V3(c.x - x, y, c.z - z), V3(c.x + x, y, c.z - z), V3(c.x + x, y, c.z + z), V3(c.x - x, y, c.z + z)];
     const lo = R(hx, hz, c.y), mid = R(hx, hz, c.y + h - b), hi = R(hx - b, hz - b, c.y + h), sides = [V3(0, 0, -1), V3(1, 0, 0), V3(0, 0, 1), V3(-1, 0, 0)];
-    for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; acc.poly([lo[i], lo[j], mid[j], mid[i]].map(dk), sides[i], paint.pad, 'solid', 99); acc.poly([mid[i], mid[j], hi[j], hi[i]].map(dk), sides[i].clone().add(V3(0, 1, 0)).normalize(), paint.pad, 'solid', 99); }
+    const band = R(hx + 0.004, hz + 0.004, c.y + (h - b) * 0.35), band2 = R(hx + 0.004, hz + 0.004, c.y + (h - b) * 0.65);
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      acc.poly([lo[i], lo[j], mid[j], mid[i]].map(dk), sides[i], paint.pad, 'solid', 99);
+      acc.poly([band[i], band[j], band2[j], band2[i]].map(dk), sides[i], paint.band, 'solid', 99);
+      acc.poly([mid[i], mid[j], hi[j], hi[i]].map(dk), sides[i].clone().add(V3(0, 1, 0)).normalize(), paint.pad, 'solid', 99);
+    }
     acc.poly(hi.map(dk), V3(0, 1, 0), paint.pad, 'solid', 99); acc.poly(lo.map(dk), V3(0, -1, 0), paint.sole, 'solid', 99);
     return;
   }
   const prof = [[-hz + 0.12, 0], [hz - 0.12, 0], [hz, h * 0.55], [hz, h], [-hz, h], [-hz, h * 0.55]], P = (sx, [z, y]) => V3(c.x + sx * hx, c.y + y, c.z + z);
   for (const sx of [1, -1]) acc.poly(prof.map((q) => P(sx, q)).map(dk), V3(sx, 0, 0), paint.pad, 'solid', 99);
   prof.forEach(([za, ya], i) => { const [zb, yb] = prof[(i + 1) % prof.length], n = V3(0, -(zb - za), yb - ya).normalize(); acc.poly([P(-1, [za, ya]), P(1, [za, ya]), P(1, [zb, yb]), P(-1, [zb, yb])].map(dk), n, i === 0 ? paint.sole : paint.pad, 'solid', 99); });
-  // (its ribs: three across, fore and aft of the middle, triangles standing on the pad up toward the knuckle)
+  // (its ribs: three across, fore and aft of the middle, triangles standing on the pad up toward the post)
   for (const sz of [1, -1]) for (const sx of [-0.6, 0, 0.6]) {
     const x = c.x + sx * hx, a = V3(x, c.y + h, c.z + sz * 0.1), b = V3(x, c.y + h, c.z + sz * (hz - 0.06)), t = V3(x, c.y + h + 0.16, c.z + sz * 0.1);
     for (const ox of [0.02, -0.02]) acc.tris([[a, b, t].map((q) => dk(q.clone().add(V3(ox, 0, 0))))], V3(Math.sign(ox), 0, 0), paint.joint);
@@ -451,88 +464,107 @@ function pad(acc, c, hx, hz, h, style, paint, dk) {
     acc.poly([V3(x0, y0 + 0.004, z0), V3(x1, y0 + 0.004, z0), V3(x1 + 0.03, y1, z1 + sz * 0.003), V3(x0 + 0.03, y1, z1 + sz * 0.003)].map(dk), V3(0, 0.1, sz * (h * 0.55)).normalize(), paint.band, 'solid', 99);
   }
 }
+// a brace's mount: a bolted block round its pin at s (the brace leaving it along w), its pin across; on a track, a
+// slimmer carriage (LEG.carriage)
+function mountBlock(acc, s, w, r, paint, dk, track = false) {
+  const bu = Math.abs(w.y) > 0.95 ? V3(1, 0, 0) : V3(0, 1, 0).cross(w).normalize(), h = r + (track ? LEG.carriage : 0.06);
+  boxAt(acc, s, [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)], [h, h, h], paint.joint, [], dk);
+  rod(acc, s.clone().addScaledVector(bu, -h - 0.03), s.clone().addScaledVector(bu, h + 0.03), Math.min(0.05, r * 0.45), paint.piston, dk);
+  // (its bolts' heads on its underside, where they are seen)
+  if (Piece.fine) for (const sa of [1, -1]) for (const sb of [1, -1]) { const c = s.clone().add(V3(sa * h * 0.65, -h, sb * h * 0.65)); rod(acc, c, c.clone().add(V3(0, -0.025, 0)), 0.018, paint.bolt, dk); }
+}
+// the still mount blocks of a leg's braces (those that do not ride a track), drawn with its well
+export function legMounts(acc, L, floor, paint, dk) {
+  const G = legPlan(L, floor);
+  for (const B of G.braces) if (!B.track) mountBlock(acc, V3(...B.from), V3(...G.knee).sub(V3(...B.from)).normalize(), B.r, paint, dk);
+}
 export function strutLeg(p, L, { floor, key, which, dk, paint, speed, style = 'sleek' }) {
-  const G = legPlan(L, floor), A = (u) => V3(...G.at(u)), down = V3(...G.dir), up = down.clone().negate();
-  const across = V3(0, 0, 1).cross(up).normalize(), along = V3(0, 0, 1), heavy = style === 'heavy';
-  const hipH = G.hipTurn ? [G.hipTurn] : [], last = G.tubes.length - 1, K = LEG.knuckle;
-  const opt = (rise, extra = []) => ({ door: 'gear', slide: G.slideOf(rise), ...(hipH.length || extra.length ? { hinge: [...hipH, ...extra] } : {}) });
-  // THE CYLINDER (and a stage between): the cylinder's mounting collar where it leaves the hull, its bolted collar at its
-  // foot; the hoses clamped along it (the Explorer's), its hazard bands (the Miner's)
-  G.tubes.slice(0, last).forEach((T, k) => {
-    p.leaf(`${key}:leg ${k ? 'stage ' + k : 'cylinder'}:${which}`, (lp) => {
-      const acc = new Acc(), a = A(T.u0), b = A(T.u1);
-      rod(acc, A(T.u0 + 0.1), b, T.r, k ? paint.stage : paint.cyl, dk);
-      collar(acc, a, up, 0, 0.1, T.r + (heavy ? 0.04 : 0.028), paint.joint, paint.bolt, heavy ? 8 : 6, dk);
-      if (k === 0) {
-        collar(acc, A(G.length - 0.06), up, 0, 0.12, T.r + 0.05, paint.joint, paint.bolt, 8, dk);   // (where it meets the hull)
-        if (heavy) for (const u of [T.u0 + 0.22, T.u0 + 0.3]) rod(acc, A(u), A(u + 0.04), T.r + 0.006, paint.band, dk);
-        else for (const sx of [1, -1]) {
-          const o = across.clone().multiplyScalar(sx * (T.r + 0.02)).addScaledVector(along, 0.06);
-          rod(acc, A(T.u0 + 0.14).add(o), A(G.length - 0.08).add(o), 0.014, paint.joint, dk);
-          for (const u of [T.u0 + 0.35, (T.u0 + G.length) / 2]) rod(acc, A(u - 0.025).add(o.clone().multiplyScalar(0.96)), A(u + 0.025).add(o.clone().multiplyScalar(0.96)), 0.026, paint.bolt, dk);
+  RING = Piece.fine ? OCT : HEX;
+  try { return strutLegOf(p, L, { floor, key, which, dk, paint, speed, style }); } finally { RING = OCT; }
+}
+function strutLegOf(p, L, { floor, key, which, dk, paint, speed, style }) {
+  const G = legPlan(L, floor), deck = -dk(V3(0, 0, 0)).y, K = LEG.knuckle, heavy = style === 'heavy', fine = Piece.fine;
+  const kit = Object.fromEntries(kitLeaves(G, deck).map((q) => [q.part, q]));
+  const opt = (part) => ({ door: 'gear', ...(kit[part].aim ? { aim: kit[part].aim } : { slide: kit[part].slide }) });
+  const a0 = V3(...G.line.a), down = V3(...G.dir), up = down.clone().negate(), at = (s) => a0.clone().addScaledVector(down, s);
+  const across = Math.abs(up.z) < 0.9 ? V3(0, 0, 1).cross(up).normalize() : V3(1, 0, 0), along = up.clone().cross(across).normalize();
+  const last = G.n - 1, kc = V3(...G.knee), sk = G.length - G.kneeAt;   // (the knuckle, s from the hip)
+  // THE STAGES: the cylinder, with its mounting collar where it leaves the hull, its bolted collar at its foot, its hoses
+  // (the Explorer's) or its hazard bands (the Miner's); a stage between, its collar; the piston, bright
+  G.stages.forEach((S, k) => {
+    p.leaf(`${key}:leg stage ${k}:${which}`, (lp) => {
+      const acc = new Acc(), [s0, s1] = S.span(G.length);
+      if (k < last) {
+        rod(acc, at(s0), at(s1 - 0.1), S.r, k ? paint.stage : paint.cyl, dk);
+        collar(acc, at(s1), up, 0, 0.1, S.r + (heavy ? 0.05 : 0.03), paint.joint, paint.bolt, heavy ? 8 : 6, dk);
+        if (k === 0) {
+          collar(acc, at(s0), down, 0, 0.14, S.r + 0.05, paint.joint, paint.bolt, 8, dk);
+          if (heavy) for (const s of [s0 + 0.3, s0 + 0.38, s1 - 0.3]) rod(acc, at(s), at(s + 0.05), S.r + 0.008, paint.band, dk);
+          else if (fine) for (const sx of [1, -1]) {
+            const o = across.clone().multiplyScalar(sx * (S.r + 0.022)).addScaledVector(along, 0.05);
+            rod(acc, at(s0 + 0.14).add(o), at(s1 - 0.12).add(o), 0.015, paint.joint, dk);
+            for (const s of [s0 + 0.35, (s0 + s1) / 2, s1 - 0.25]) rod(acc, at(s - 0.025).add(o.clone().multiplyScalar(0.97)), at(s + 0.025).add(o.clone().multiplyScalar(0.97)), 0.027, paint.bolt, dk);
+          }
         }
+      } else {
+        // (the piston, down to the knuckle; the knuckle, one round fitting: a deep drum on the leg with a collar over and
+        // under it, bolted, and an eye standing out toward each brace)
+        rod(acc, at(s0), at(sk - K.h / 2), S.r, paint.piston, dk);
+        rod(acc, at(sk - K.h / 2), at(sk + K.h / 2), G.rk, paint.joint, dk);
+        for (const sg of [1, -1]) collar(acc, at(sk + sg * K.h / 2), sg > 0 ? down : up, 0, 0.05, G.rk + 0.025, heavy ? paint.band : paint.joint, paint.bolt, 8, dk);
+        for (const B of G.braces) {
+          const w = V3(...B.from).sub(kc); w.addScaledVector(down, -w.dot(down)).normalize();
+          rod(acc, kc.clone().addScaledVector(w, G.rk * 0.7), kc.clone().addScaledVector(w, G.rk + 0.05), B.r * 0.85, paint.joint, dk);
+        }
+        // (under the knuckle the ankle, its pin across, down to the pad)
+        const ank = V3(...G.ankle);
+        rod(acc, ank, at(sk + K.h / 2), S.r + 0.03, paint.joint, dk);
+        rod(acc, ank.clone().addScaledVector(across, -(S.r + 0.08)), ank.clone().addScaledVector(across, S.r + 0.08), 0.045, paint.piston, dk);
+        // (the torque link: two arms hinged across the piston's front, the Explorer's)
+        if (!heavy && fine) {
+          const lo = at(sk - K.h / 2).addScaledVector(along, S.r + 0.04), hi = at(sk - K.h / 2 - 0.5).addScaledVector(along, S.r + 0.02), mid = at(sk - K.h / 2 - 0.25).addScaledVector(along, S.r + 0.16);
+          rod(acc, lo, mid, 0.03, paint.joint, dk); rod(acc, mid, hi, 0.03, paint.joint, dk);
+        }
+        if (!G.padLevel) pad(acc, V3(...G.foot), L.pad[0] / 2, L.pad[1] / 2, LEG.pad, style, paint, dk);
       }
       acc.flush(lp);
-    }, opt(T.rise));
+    }, opt(`stage ${k}`));
   });
-  // THE FOOT: the piston, the knuckle (a bolted block with a collar over and under it and an eye for each brace), the
-  // torque link across the piston's front (the Explorer's), the pad
-  p.leaf(`${key}:leg foot:${which}`, (lp) => {
-    const acc = new Acc(), T = G.tubes[last], kc = V3(...G.knee), rk = G.rk;
-    rod(acc, A(L.knee + K.h / 2 - 0.02), A(T.u1), T.r, paint.piston, dk);
-    // (the knuckle: a block, across and along, and its collars)
-    boxAt(acc, kc, [across, up, along], [rk, K.h / 2, rk], paint.joint, [], dk);
-    for (const s of [1, -1]) collar(acc, kc, up, s > 0 ? K.h / 2 : -K.h / 2 - 0.05, s > 0 ? K.h / 2 + 0.05 : -K.h / 2, T.r + 0.035, heavy ? paint.band : paint.joint, paint.bolt, 6, dk);
-    for (const sa of [1, -1]) for (const sb of [1, -1]) bolts(acc, kc.clone().addScaledVector(across, sa * rk * 0.6).addScaledVector(up, sb * K.h * 0.3), along, rk, 1, paint.bolt, dk);
-    for (const B of G.braces) {
-      const to = V3(...B.to), w = to.clone().sub(kc); w.y = 0; w.normalize();
-      rod(acc, kc.clone().addScaledVector(w, rk * 0.8), to.clone().addScaledVector(w, 0.02), B.r * 0.75, paint.joint, dk);   // (its lug)
-    }
-    // (an ankle under the knuckle down to the pad)
-    const ankle = A(LEG.pad);
-    rod(acc, ankle, A(L.knee - K.h / 2), T.r + 0.03, paint.joint, dk);
-    rod(acc, ankle.clone().addScaledVector(across, -(T.r + 0.1)), ankle.clone().addScaledVector(across, T.r + 0.1), 0.045, paint.piston, dk);
-    if (!heavy) {
-      const lo = kc.clone().addScaledVector(up, K.h / 2).addScaledVector(along, T.r + 0.04), hi = A(L.knee + 0.55).addScaledVector(along, T.r + 0.02), knee = A(L.knee + 0.32).addScaledVector(along, T.r + 0.17);
-      rod(acc, lo, knee, 0.028, paint.joint, dk); rod(acc, knee, hi, 0.028, paint.joint, dk);
-      rod(acc, knee.clone().addScaledVector(across, -0.045), knee.clone().addScaledVector(across, 0.045), 0.032, paint.piston, dk);
-    }
-    pad(acc, V3(...G.foot), L.pad[0] / 2, L.pad[1] / 2, LEG.pad, style, paint, dk);
-    acc.flush(lp);
-  }, opt(G.footRise, G.spin ? [G.spin] : []));
-  // THE BRACES: each a fat round strut from a mounting block on the hull (its bolts) to an eye at the knuckle; it
-  // swings up about its mount into the well; where the well is too small for it, its rod (bright) runs into its sleeve
-  G.braces.forEach((B, i) => {
-    const s = V3(...B.from), e = V3(...B.to), w = e.clone().sub(s).normalize(), H = { hinge: [B.hinge], door: 'gear' };
-    const sleeveEnd = B.shrink ? s.clone().addScaledVector(w, B.length - B.rodLength + 0.12) : e;
-    p.leaf(`${key}:leg brace ${B.name}:${which}`, (lp) => {
-      const acc = new Acc();
-      // (its mounting block: a bolted block standing on the hull, the strut leaving it)
-      const bu = Math.abs(w.y) > 0.95 ? V3(1, 0, 0) : V3(0, 1, 0).cross(w).normalize(), bv = w.clone().cross(bu).normalize();
-      boxAt(acc, s.clone().addScaledVector(w, 0.06), [bu, bv, w], [B.r + 0.05, B.r + 0.05, 0.08], paint.joint, [], dk);
-      for (const sa of [1, -1]) for (const sb of [1, -1]) bolts(acc, s.clone().addScaledVector(w, 0.06).addScaledVector(bu, sa * (B.r + 0.02)).addScaledVector(bv, sb * (B.r + 0.02)), w, 0.0, 1, paint.bolt, dk, 0.04);
-      rod(acc, s.clone().addScaledVector(w, 0.14), sleeveEnd, B.r, paint.brace || paint.cyl, dk);
-      collar(acc, s.clone().addScaledVector(w, 0.14), w, 0, 0.06, B.r + 0.022, paint.joint, null, 0, dk);
-      if (heavy) rod(acc, s.clone().addScaledVector(w, B.length * 0.45), s.clone().addScaledVector(w, B.length * 0.45 + 0.05), B.r + 0.006, paint.band, dk);
-      if (B.shrink) collar(acc, sleeveEnd, w, -0.06, 0, B.r + 0.02, paint.joint, null, 0, dk);
-      else rod(acc, e.clone().addScaledVector(w, -0.09), e, B.r + 0.018, paint.joint, dk);   // (its eye's boss)
-      acc.flush(lp);
-    }, H);
-    if (B.shrink) p.leaf(`${key}:leg brace rod ${B.name}:${which}`, (lp) => {
-      const acc = new Acc();
-      rod(acc, e.clone().addScaledVector(w, -B.rodLength), e.clone().addScaledVector(w, -0.09), B.r * 0.62, paint.piston, dk);
-      rod(acc, e.clone().addScaledVector(w, -0.09), e, B.r + 0.018, paint.joint, dk);
-      acc.flush(lp);
-    }, { ...H, slide: B.slide });
-  });
+  if (G.padLevel) p.leaf(`${key}:leg pad:${which}`, (lp) => {
+    const acc = new Acc(); pad(acc, V3(...G.foot), L.pad[0] / 2, L.pad[1] / 2, LEG.pad, style, paint, dk); acc.flush(lp);
+  }, opt('pad'));
+  // THE BRACES: each a fat round sleeve from its mount (its eye on the mount's pin; its block, where the mount rides a
+  // track) and a bright rod sliding out of it to an eye on the knuckle's pin (a stage between where it folds short)
+  for (const B of G.braces) {
+    const m = V3(...B.from), w = kc.clone().sub(m), l0 = w.length(); w.normalize();
+    B.stages.forEach((S, k) => {
+      p.leaf(`${key}:leg brace ${B.name} ${k}:${which}`, (lp) => {
+        const acc = new Acc(), [s0, s1] = S.span(l0), A = (s) => m.clone().addScaledVector(w, s), lastB = k === B.stages.length - 1;
+        if (k === 0) {
+          rod(acc, A(0), A(Math.min(0.1, s1)), S.r + 0.03, paint.joint, dk);                    // (its eye on the mount's pin)
+          if (B.track) mountBlock(acc, m, w, B.r, paint, dk, true);
+        }
+        if (!lastB) {
+          rod(acc, A(Math.max(s0, 0.1)), A(s1 - 0.06), S.r, k ? paint.stage : (paint.brace || paint.cyl), dk);
+          collar(acc, A(s1), w, -0.06, 0, S.r + 0.022, paint.joint, null, 0, dk);
+          if (heavy && k === 0) rod(acc, A((s0 + s1) / 2), A((s0 + s1) / 2 + 0.05), S.r + 0.006, paint.band, dk);
+        } else {
+          rod(acc, A(s0), A(l0 - G.rk - 0.04), S.r, paint.piston, dk);
+          rod(acc, A(l0 - G.rk - 0.06), A(l0 - G.rk * 0.7), S.r + 0.03, paint.joint, dk);   // (its eye at the knuckle)
+        }
+        acc.flush(lp);
+      }, opt(`brace ${B.name} ${k}`));
+    });
+  }
   p.door('gear', [G.foot[0], dk(V3(0, floor, 0)).y, G.foot[2]], 0, speed);
   return p;
 }
 // A WELL'S SLIDING DOORS: the skin cut out of it (the hull rig's DOORS: two halves), flush in the hull when shut; each
 // slides open (gear-plan.js doorSlide) as a leaf of the kit door 'doors' (here 0 open, 1 shut: it stands at its slid
 // place and slides back by the same). paint(P, n): its outer face's surface; inner: its inside (3 cm in)
-// edge, box: a thin edge round each door (a strip 2.5 cm wide just proud of it, in `edge`) along the well's sides and
-// the line the doors part on, so the doors can be seen sliding shut (box: the well's)
+// edge, box: a fine line round each door (a strip 1 cm wide on it, in `edge`: a shade off the skin, no bright outline;
+// the game's maker asked for doors that slide in place, flush) along the well's sides and the line the doors part on
+// (box: the well's)
 export function slideDoors(p, halves, { key, which, paint, inner, dk, speed, edge = null, box = null }) {
   halves.forEach((H, i) => {
     const S = doorSlide(H);
@@ -552,7 +584,7 @@ export function slideDoors(p, halves, { key, which, paint, inner, dk, speed, edg
           if (!onLine(a) || !onLine(b) || !sameLine(a, b)) continue;
           const A = V3(...a), B = V3(...b), along = B.clone().sub(A); if (along.length() < 0.01) continue;
           const inw = n.clone().cross(along).normalize(); if (inw.dot(c.clone().sub(A)) < 0) inw.negate();
-          const w = Math.min(0.025, c.clone().sub(A).dot(inw) * 0.8), up = n.clone().multiplyScalar(0.003);
+          const w = Math.min(0.01, c.clone().sub(A).dot(inw) * 0.8), up = n.clone().multiplyScalar(0.0015);
           acc.poly([A, B, B.clone().addScaledVector(inw, w), A.clone().addScaledVector(inw, w)].map((v) => dk(v.clone().add(up))), n, edge, 'solid', 99);
         }
       }
@@ -569,21 +601,53 @@ export const leafPose = (M) => { const q = new THREE.Quaternion(), pos = new THR
 // normal)
 export const panel = (acc, P, n, paint, inner, dk) => { acc.poly(P.map(dk), n, paint(P, n), 'solid', 99); acc.poly(P.map((v) => dk(v.clone().addScaledVector(n, -0.03))).reverse(), n.clone().negate(), inner, 'solid', 99); };
 // a well (W { box, rim, ceil }): dark walls standing on its rim up to its ceiling, and the ceiling (or, with `ceil`,
-// lower (ceil.low) aft of ceil.z, a step up between them)
-export function wellWalls(acc, W, { dark, dk }) {
-  const [mn, mx] = W.box, c = V3((mn[0] + mx[0]) / 2, 0, (mn[2] + mx[2]) / 2), zs = W.ceil?.z ?? -Infinity, topAt = (z) => (z < zs ? W.ceil.low : mx[1]);
+// lower (ceil.low) aft of ceil.z, a step up between them; or, with `step` { x, low } (gear-plan.js legPlan: where the
+// hull's side comes in over it), lower outboard of x, a step up between them). cover: the well's doors (the skin cut
+// out of its mouth): the ceiling then lies over the mouth's own outline, not the box's, so where the hull's side
+// comes in nothing of it stands out of the hull
+// A well with a ROOF (the hull rigs write it: over each piece of its mouth, under the hull's own top, gear-plan.js's
+// wells) has its walls up to the roof at each end (rimTop) and that roof.
+export function wellWalls(acc, W, { dark, dk, step = null, cover = null }) {
+  const [mn, mx] = W.box, c = V3((mn[0] + mx[0]) / 2, 0, (mn[2] + mx[2]) / 2), zs = W.ceil?.z ?? -Infinity;
+  if (W.roof) {
+    W.rim.forEach(([a0, b0], i) => {
+      const a = V3(...a0), b = V3(...b0), n = b.clone().sub(a).cross(V3(0, 1, 0)).normalize(), [ta, tb] = W.rimTop[i];
+      if (n.dot(V3(c.x - a.x, 0, c.z - a.z)) < 0) n.negate();
+      const q = [a, b, V3(b.x, Math.max(tb, b.y), b.z), V3(a.x, Math.max(ta, a.y), a.z)];
+      if (Math.max(ta - a.y, tb - b.y) > 0.005) acc.poly(q.map(dk), n, dark, 'solid', 99);
+    });
+    for (const P of W.roof) acc.poly(P.map((p) => dk(V3(...p))), V3(0, -1, 0), dark, 'solid', 99);
+    return;
+  }
+  const xs = step ? step.x : null, out = (x) => step && Math.sign(xs) * x > Math.abs(xs);
+  const topAt = (x, z) => (out(x) ? step.low : z < zs ? W.ceil.low : mx[1]);
+  const cut = (a, b, k, v) => ((a.getComponent(k) - v) * (b.getComponent(k) - v) < 0 ? (() => { const m = a.clone().lerp(b, (v - a.getComponent(k)) / (b.getComponent(k) - a.getComponent(k))); return [[a, m], [m, b]]; })() : [[a, b]]);
   for (const [a0, b0] of W.rim) {
     const a = V3(...a0), b = V3(...b0), n = b.clone().sub(a).cross(V3(0, 1, 0)).normalize();
     if (n.dot(V3(c.x - a.x, 0, c.z - a.z)) < 0) n.negate();
-    const parts = (a.z - zs) * (b.z - zs) < 0 ? (() => { const m = a.clone().lerp(b, (zs - a.z) / (b.z - a.z)); return [[a, m], [m, b]]; })() : [[a, b]];
+    const parts = cut(a, b, 2, zs).flatMap(([u, v]) => (step ? cut(u, v, 0, xs) : [[u, v]]));
     for (const [u, v] of parts) {
-      const top = topAt((u.z + v.z) / 2), [q] = clipPlane([u, v, V3(v.x, top, v.z), V3(u.x, top, u.z)], [0, 1, 0, top]);
+      const top = topAt((u.x + v.x) / 2, (u.z + v.z) / 2), [q] = clipPlane([u, v, V3(v.x, top, v.z), V3(u.x, top, u.z)], [0, 1, 0, top]);
       if (q.length > 2) acc.poly(q.map(dk), n, dark, 'solid', 99);
     }
   }
-  const roof = (z0, z1, y) => acc.poly([V3(mn[0], y, z0), V3(mx[0], y, z0), V3(mx[0], y, z1), V3(mn[0], y, z1)].map(dk), V3(0, -1, 0), dark, 'solid', 99);
-  if (W.ceil) { roof(mn[2], zs, W.ceil.low); roof(zs, mx[2], mx[1]); acc.poly([V3(mn[0], W.ceil.low, zs), V3(mx[0], W.ceil.low, zs), V3(mx[0], mx[1], zs), V3(mn[0], mx[1], zs)].map(dk), V3(0, 0, 1), dark, 'solid', 99); }
-  else roof(mn[2], mx[2], mx[1]);
+  if (cover) {
+    // (the ceiling over the mouth's own outline: each piece of the cut skin lifted to it; outboard of a step, low; the
+    // step's face where the outline crosses it)
+    const lift = (P, y) => P.map((p) => V3(p.x, y, p.z)), z2 = [Infinity, -Infinity];
+    for (const h of cover) for (const poly of h.polys) {
+      const P = poly.map((q) => V3(...q));
+      const [inn, outer] = step ? clipPlane(P, [1, 0, 0, Math.abs(xs)]) : [P, []];
+      if (inn.length > 2) acc.poly(lift(inn, mx[1]).map(dk), V3(0, -1, 0), dark, 'solid', 99);
+      if (outer.length > 2) acc.poly(lift(outer, step.low).map(dk), V3(0, -1, 0), dark, 'solid', 99);
+      if (step) for (const v of inn) if (Math.abs(Math.abs(v.x) - Math.abs(xs)) < 1e-6) { z2[0] = Math.min(z2[0], v.z); z2[1] = Math.max(z2[1], v.z); }
+    }
+    if (step && z2[0] < z2[1]) acc.poly([V3(xs, step.low, z2[0]), V3(xs, step.low, z2[1]), V3(xs, mx[1], z2[1]), V3(xs, mx[1], z2[0])].map(dk), V3(Math.sign(xs), 0, 0), dark, 'solid', 99);
+    return;
+  }
+  const roof = (x0, x1, z0, z1, y) => acc.poly([V3(x0, y, z0), V3(x1, y, z0), V3(x1, y, z1), V3(x0, y, z1)].map(dk), V3(0, -1, 0), dark, 'solid', 99);
+  if (W.ceil) { roof(mn[0], mx[0], mn[2], zs, W.ceil.low); roof(mn[0], mx[0], zs, mx[2], mx[1]); acc.poly([V3(mn[0], W.ceil.low, zs), V3(mx[0], W.ceil.low, zs), V3(mx[0], mx[1], zs), V3(mn[0], mx[1], zs)].map(dk), V3(0, 0, 1), dark, 'solid', 99); }
+  else roof(mn[0], mx[0], mn[2], mx[2], mx[1]);
 }
 // MOVING THE GEAR (the game, or the lab): up folds the legs, then shuts the wells' doors; down opens the doors, then
 // lowers the legs. built: buildRoom's result; updateDoors: the kit's (kit/layout.js; passed in, as these files are part

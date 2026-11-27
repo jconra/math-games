@@ -16,7 +16,7 @@
 //                            one part, the spar, placed again and again
 //   ebMarks      'marks'     what is laid on the skin: the blue light strips, the nose's lamps, the yellow marks by the
 //                            door, the nav lights, his emblem (the ringed planet, blue), the vent on the stern's face
-//                            between the engines (VENT)
+//                            between the engines (the service panel he chose)
 //   ebDoorway    'port' / 'starboard'   a doorway: a pocket in the hull's side (the 3k has no skin there). Port: its
 //                            sides and sill, and the airlock behind it (its floor, walls, ceiling and inner door);
 //                            starboard: the sealed hatch, fixed: the hull's skin carried across the pocket, flush
@@ -39,7 +39,7 @@ import { part } from '../shipparts/place.js';
 import { GLOW_SHIP } from '../shipparts/palette.js';
 import { SURF } from '../materials.js';
 import { HULL, DOORS, WELLS, JAMBS, DOOR, DOORSKIN, PARTS, Q } from './explorer-built.hull.js';
-import { LEGS as GEAR_PLAN } from './gear-plan.js';
+import { LEGS as GEAR_PLAN, legPlan } from './gear-plan.js';
 import * as C from './built-common.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
@@ -55,6 +55,7 @@ export const PAL = {
   black: s('#1c1e22', 0.42, 0.3, 0.35),      // window spars, flaps, rudders
   blackEdge: s('#1c1e22', 0.42, 0.3, 0.9),
   belly: s('#80858c', 0.55, 0.2, 0.7),       // the grey belly
+  seam: s('#6c7077', 0.6, 0.2, 0.7),        // the line round a flush door in it, a shade darker
   trim: s('#3a3e44', 0.48, 0.3, 0.55),       // dark trim: the lower sides, the roof modules' sides, the engines
   trimEdge: s('#3a3e44', 0.48, 0.3, 1.0),
   yellow: s('#e8b923', 0.45, 0.02, 0.45),    // his yellow accents
@@ -363,7 +364,7 @@ function ebMarks(p) {
   // his emblem, both sides (a point of it off the hull says so)
   const em = C.emblem(acc, MARKS.emblem, hullFaces(), drawn, dk);
   if (em.missed) console.warn(`ebMarks: ${em.missed} of the emblem's ${em.points} points missed the hull`);
-  // the vent on the stern's face between the engines (VENT, below)
+  // the vent on the stern's face between the engines (below)
   sternVent(acc, p);
   acc.flush(p);
   p.light([0, 2.35 - DECK, 9.0], 0.9, [1.2, 0.95, 0.6], [0, -0.2, 1], 5);
@@ -375,13 +376,9 @@ const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
 // The game's maker, 2026-11-26, of the plain face between the engines, seen low from behind: "I feel like the explorer
 // needs a panel or something there in between the engines on the back. It looks kind of basic. Some kind of vent or
 // something would be a lot better." Kit-built and laid on his hull's flat stern face (z STERN.z, facing aft; his model
-// is not cut): eight-sided outlines (45-degree corners), standing a few centimetres proud. VENT picks which (the game's
-// maker chose the panel, 2026-11-26):
-//   'louvres'  a wide louvred vent: a dark frame, metal slats leaning down and aft over a black back
-//   'grille'   a grille set deep in a thick frame: upright bars over a faint warm glow, quiet beside the nozzles' own
-//   'panel'    a framed service panel in the hull's dark trim, a smaller louvred vent in it, two small amber lamps and a
-//              hazard stripe along its foot
-export const VENT = 'panel';
+// is not cut): eight-sided outlines (45-degree corners), standing a few centimetres proud. Of three he was shown he
+// chose the panel (2026-11-26): a framed service panel in the hull's dark trim, a smaller louvred vent in it, two
+// small amber lamps and a hazard stripe along its foot.
 export const STERN = { z: -5.485, x: 0, y: 3.25 };
 const AFT = V3(0, 0, -1);
 // a rectangle's outline with its corners cut at 45 degrees: [x, y] round it (half sizes hw, hh, the cut c)
@@ -414,24 +411,9 @@ function louvres(acc, cx, cy, hw, hh, c, n, d0, d1, surf) {
     acc.poly(P.slice().reverse().map(dk), (nOut.y > 0 ? nOut : nOut.clone().negate()), surf, 'solid', 99);
   }
 }
-function sternVent(acc, p, kind = VENT) {
+function sternVent(acc, p) {
   const { x: cx, y: cy } = STERN;
-  if (kind === 'louvres') {
-    const O = oct(cx, cy, 0.8, 0.62, 0.16), I = oct(cx, cy, 0.7, 0.52, 0.12);
-    walls(acc, O, 0, 0.05, PAL.trim); band(acc, O, I, 0.05, PAL.trim); walls(acc, I, 0.012, 0.05, PAL.black, true);
-    face(acc, I, 0.012, PAL.black);
-    louvres(acc, cx, cy, 0.7, 0.52, 0.12, 9, 0.016, 0.046, PAL.metal);
-  } else if (kind === 'grille') {
-    const O = oct(cx, cy, 0.78, 0.6, 0.16), I = oct(cx, cy, 0.64, 0.46, 0.11);
-    walls(acc, O, 0, 0.09, PAL.trim); band(acc, O, I, 0.09, PAL.trim); walls(acc, I, 0.012, 0.09, PAL.black, true);
-    face(acc, I, 0.012, [0.3, 0.12, 0.025], 'glow');   // (the faint warm glow behind the bars)
-    for (let x = -0.6; x <= 0.6 + 1e-9; x += 0.075) {
-      const h = 0.46 - Math.max(0, Math.abs(x) - (0.64 - 0.11)) - 0.005;   // (the bar's half height, inside the cut corners)
-      if (h <= 0.03) continue;
-      C.boxAt(acc, V3(cx + x, cy, STERN.z - 0.045), [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)], [0.012, h - 0.004, 0.022], PAL.black, ['w+'], dk);
-    }
-    p.light([cx, cy - DECK, STERN.z - 0.25], 0.12, [1, 0.5, 0.15], [0, 0, -1], 1.4);
-  } else {
+  {
     // the panel: a raised plate in the trim, its edge cut back at 45 degrees, a seam round it
     const O = oct(cx, cy - 0.05, 0.92, 0.78, 0.18), T = oct(cx, cy - 0.05, 0.89, 0.75, 0.165), S1 = oct(cx, cy - 0.05, 0.84, 0.7, 0.145), S2 = oct(cx, cy - 0.05, 0.825, 0.685, 0.14);
     band(acc, O, T, 0.012, PAL.trim); band(acc, T, S1, 0.03, PAL.trim); band(acc, S1, S2, 0.03, PAL.black); face(acc, S2, 0.03, PAL.trim);
@@ -895,21 +877,25 @@ function ebAirstair(p) {
 // slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1 shut); gearStep moves them in turn (up: the legs, then the doors; down: the doors, then the legs).
 export const GEAR_SPEED = 0.42, GEAR_DOOR_SPEED = 0.9;
 const LEGS = GEAR_PLAN.explorer;
+// (sleek: its cylinders and braces the hull's white, the pistons bright, the joints and the bevelled pad its dark trim
+// with metal bolts, a yellow band round the pad to match the wings' tips, hoses along the cylinder, a torque link)
+const GEAR_PAINT = { cyl: PAL.skin, stage: PAL.skin, piston: PAL.chrome, joint: PAL.trim, bolt: PAL.metal, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
 function ebGear(p, which) {
-  // (sleek: its cylinders and braces the hull's white, the pistons bright, the joints and the bevelled pad its dark
-  // trim with metal bolts, hoses along the cylinder, a torque link; the doors edged in white)
-  const paint = { cyl: PAL.skin, stage: PAL.skin, piston: PAL.chrome, joint: PAL.trim, bolt: PAL.metal, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
-  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED, style: 'sleek' });
+  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint: GEAR_PAINT, speed: GEAR_SPEED, style: 'sleek' });
 }
 // THE WELLS' DOORS: each well's two halves of skin, painted as the hull there by its own rules (a face on its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
 function ebGearDoors(p, which) {
-  return C.slideDoors(p, DOORS[which], { key: 'eb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk, speed: GEAR_DOOR_SPEED, edge: PAL.skin, box: WELLS[which].box });
+  return C.slideDoors(p, DOORS[which], { key: 'eb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk, speed: GEAR_DOOR_SPEED, edge: PAL.seam, box: WELLS[which].box });
 }
 // THE WELLS: dark walls standing on each well's rim up to its top, and the top
 function ebWells(p) {
   const acc = new Acc();
-  for (const W of Object.values(WELLS)) C.wellWalls(acc, W, { dark: PAL.trim, dk });
+  // (each leg's well, and the still blocks its braces are mounted on, standing in its mouth)
+  for (const [which, L] of Object.entries(LEGS.legs)) {
+    C.wellWalls(acc, WELLS[which], { dark: PAL.trim, dk, step: legPlan(L, LEGS.floor).step, cover: DOORS[which] });
+    C.legMounts(acc, L, LEGS.floor, GEAR_PAINT, dk);
+  }
   return acc.flush(p);
 }
 // MOVING THE GEAR (the game, or the lab): up folds the legs, then shuts the wells' doors; down opens the doors, then

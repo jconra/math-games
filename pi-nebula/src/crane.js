@@ -92,7 +92,7 @@
 import { makeOreLine } from '../kit/crane.js';
 import { makeDrive, DRIVE } from '../kit/crane-drive.js';
 import { Voxels } from '../kit/bake.js';
-import { updateDoors, setDoors } from '../kit/layout.js';
+import { updateDoors, setDoors, leafAt } from '../kit/layout.js';
 import * as THREE from 'three';
 import * as MB from '../kit/ships/miner-built.js';
 // (the Miner's hull drawn where it is, its pods, its engine and the air under it: the one shared ship piece's, as for
@@ -589,7 +589,9 @@ function loadOfState(S, site) {
 // stairs and the catwalk (the station's merged meshes), up to the hook's highest, each marked into REACH.voxel cubes
 // (the kit's own voxels, kit/bake.js). The bridge crane reaches the whole hangar; the floor itself is left out (the
 // crane's own check knows where the floor is). skip, only: [room id]: all but these rooms, or these rooms alone (the
-// Miner is kept apart from the hangar: it may stand somewhere else than it is parked, src/crane.js reachNow).
+// Miner is kept apart from the hangar: it may stand somewhere else than it is parked, src/crane.js reachNow). And a
+// parked ship's landing legs, as they stand down: they are moving parts (door leaves), not in the merged meshes, and
+// stand out beside the hull where nothing over them would keep the hook off (GEAR 2's legs, round four).
 export function reachVoxels(W, site, size = REACH.voxel, { skip = null, only = null } = {}) {
   const t0 = performance.now(), top = site.carry + site.dims.hookTop + 0.4;
   const pad = site.can.half + REACH.pad;
@@ -598,16 +600,26 @@ export function reachVoxels(W, site, size = REACH.voxel, { skip = null, only = n
   let tris = 0, kept = 0;
   const tb = new THREE.Box3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   const st = size * 0.5, inv = 1 / size, mx = V.min.x, my = V.min.y, mz = V.min.z;
+  const wanted = (id) => !((skip && skip.includes(id)) || (only && !only.includes(id)));
+  const meshes = [];
   for (const z of W.built.zones) for (const k of ['solid', 'floor', 'glass', 'shield']) {
-    if ((skip && skip.includes(z.id)) || (only && !only.includes(z.id))) continue;
+    if (!wanted(z.id)) continue;
     const g = z.merged && z.merged[k]; if (!g) continue;
     if (!g.boundingBox) g.computeBoundingBox();
-    if (!box.intersectsBox(g.boundingBox)) continue;
+    if (box.intersectsBox(g.boundingBox)) meshes.push({ g, m: null });
+  }
+  // (the landing legs, down: each leaf of a ship's gear posed as it stands with its legs down)
+  for (const D of W.built.doors || []) if (/Gear$/.test(D.piece || '') && wanted(D.zone)) for (const leaf of D.leaves) {
+    const m = leafAt(leaf, 0);
+    for (const part of leaf.piece.parts) meshes.push({ g: part.geo, m });
+  }
+  for (const { g, m } of meshes) {
     const p = g.attributes.position.array, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.length / 3;
     for (let t = 0; t < n; t += 3) {
       tris++;
       const ia = (ix ? ix[t] : t) * 3, ib = (ix ? ix[t + 1] : t + 1) * 3, ic = (ix ? ix[t + 2] : t + 2) * 3;
       a.set(p[ia], p[ia + 1], p[ia + 2]); b.set(p[ib], p[ib + 1], p[ib + 2]); c.set(p[ic], p[ic + 1], p[ic + 2]);
+      if (m) { a.applyMatrix4(m); b.applyMatrix4(m); c.applyMatrix4(m); }
       // (the floor's own triangles: the crane knows where the floor is)
       if (a.y < 0.03 && b.y < 0.03 && c.y < 0.03) continue;
       tb.makeEmpty().expandByPoint(a).expandByPoint(b).expandByPoint(c);

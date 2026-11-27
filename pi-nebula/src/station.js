@@ -27,6 +27,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeMaterials, U } from '../kit/materials.js';
 import { createSky } from '../world/sky.js';
 import { buildRoomSoon, updateDoors, updateGlides, hoopLights, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
+import { Piece } from '../kit/piece.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
 import { OUTSIDE_BOX } from '../kit/outside-plan.js';
@@ -89,6 +90,8 @@ const breath = () => new Promise((done) => { let went = false; const go = () => 
 
 export async function loadStation({ canvas, quality = null, rig = false, room = 'station', say = () => {} } = {}) {
   const qName = pickQuality(quality), Q = QUALITY[qName];
+  // (at the low quality level the pieces leave off small parts: kit/piece.js Piece.fine)
+  Piece.fine = qName !== 'low';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: rig });
   if (!renderer.capabilities.isWebGL2) throw new Error('This game needs WebGL2, which this browser does not have.');
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.74;

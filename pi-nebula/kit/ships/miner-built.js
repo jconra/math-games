@@ -46,7 +46,7 @@ import { engineerStation } from '../shipparts/cockpit/consoles.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD, DECK as DECK0, HATCH, DOORS, WELLS, PARTS, Q } from './miner-built.hull.js';
-import { LEGS as GEAR_PLAN } from './gear-plan.js';
+import { LEGS as GEAR_PLAN, legPlan } from './gear-plan.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
 const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -75,6 +75,7 @@ export const PAL = {
   blackEdge: s('#1b1d20', 0.42, 0.3, 0.9),
   yellow: s('#e2ae1c', 0.45, 0.03, 0.6),       // hazard yellow: the stripes, the canisters' bands, the clamps
   belly: s('#555a61', 0.6, 0.25, 0.8),         // the belly
+  seam: s('#43474d', 0.65, 0.25, 0.8),          // the line round a flush door in it, a shade darker
   metal: s('#6d7177', 0.4, 0.6, 0.6),          // joints, rails, rods
   chrome: s('#d3d6da', 0.3, 0.35, 0.25),       // the landing legs' pistons, bright
   can: s('#cbc2a8', 0.5, 0.18, 0.85),          // the canisters' bodies
@@ -1035,17 +1036,24 @@ function mbLift(p, variant) {
 // (1 shut).
 export const GEAR = { speed: 0.42, doorSpeed: 0.9 };
 const LEGS = GEAR_PLAN.miner;
+// (heavy and industrial: its main cylinders dark graphite, the stage and the braces the cream of its panels, the
+// pistons bright, the joints black with metal bolts, hazard-yellow bands, a gusseted skid with a striped toe)
+const GEAR_PAINT = { cyl: PAL.dark, stage: PAL.cream, brace: PAL.cream, piston: PAL.chrome, joint: PAL.black, bolt: PAL.metal, band: PAL.yellow, pad: PAL.dark, sole: PAL.rubber };
 function legLeaves(p, which) {
-  // (heavy and industrial: its main cylinders dark graphite, the stage and the braces the cream of its panels, the
-  // pistons bright, the joints black with metal bolts, hazard-yellow bands, a gusseted skid with a striped toe; the doors
-  // edged in yellow)
-  const paint = { cyl: PAL.dark, stage: PAL.cream, brace: PAL.cream, piston: PAL.chrome, joint: PAL.black, bolt: PAL.metal, band: PAL.yellow, pad: PAL.dark, sole: PAL.rubber };
-  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint, speed: GEAR.speed, style: 'heavy' });
+  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint: GEAR_PAINT, speed: GEAR.speed, style: 'heavy' });
 }
 // the doors painted as the hull there by its own rules (a face of its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
-function mbGearDoors(p, which) { return C.slideDoors(p, DOORS[which], { key: 'mb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.dark, dk, speed: GEAR.doorSpeed, edge: PAL.yellow, box: WELLS[which].box }); }
-function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS)) C.wellWalls(acc, W, { dark: PAL.dark, dk }); return acc.flush(p); }
+function mbGearDoors(p, which) { return C.slideDoors(p, DOORS[which], { key: 'mb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.dark, dk, speed: GEAR.doorSpeed, edge: PAL.seam, box: WELLS[which].box }); }
+function mbWells(p) {
+  const acc = new Acc();
+  // (each leg's well, and the still blocks its braces are mounted on, standing in its mouth)
+  for (const [which, L] of Object.entries(LEGS.legs)) {
+    C.wellWalls(acc, WELLS[which], { dark: PAL.dark, dk, step: legPlan(L, LEGS.floor).step, cover: DOORS[which] });
+    C.legMounts(acc, L, LEGS.floor, GEAR_PAINT, dk);
+  }
+  return acc.flush(p);
+}
 
 // ── THE COCKPIT ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // The cockpit family's parts (built-common.js builtCockpitPlan): two bucket seats in the ship's colours side by side,
