@@ -1,10 +1,10 @@
 // THE MUSIC IN THE STATION'S PLACES (MUSIC 3): a music screen in each place the game's maker named and aboard each ship,
-// the hallways' lines on one wall from end to end, which song a screen changes, what the browser keeps, the switch.
+// the hallways' lines (MUSIC 4: a set on the slanted panel at the top of each side of each section), which song a screen changes, what the browser keeps, the switch.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SCREEN_ROOMS, songOf, KEEP, keptPicture, keepPicture, hallwayOn, keepHallway, HALLWAYS, alongOf } from '../src/music/placesplan.js';
-import { MUSIC_LINES } from '../kit/musiclines.js';
+import { SCREEN_ROOMS, songOf, KEEP, keptPicture, keepPicture, hallwayOn, keepHallway, HALLWAYS, alongOf, SPREAD, setPlaces } from '../src/music/placesplan.js';
+import { MUSIC_LINES, lineY, SLANT, onSlant, linesLength } from '../kit/musiclines.js';
 import { VISUALS } from '../src/music/visuals.js';
 import { musicWanted } from '../src/music/switch.js';
 import { CABIN_MUSIC, MUSIC_SCREEN } from '../kit/ships/musicscreen.js';
@@ -41,42 +41,112 @@ test('a music screen aboard each of the four ships, on a room the crew sit in (n
   assert.deepEqual([MUSIC_SCREEN.w, MUSIC_SCREEN.h], [0.46, 0.25]);
 });
 
-test('the hallway lines: a rail along one wall of each hallway, proud of its posts and ribs, stopping only at doorways and round what stands out as far', () => {
-  // (what hangs on a wall: half its width, its height from its foot, how far it stands out)
-  const ext = { screen: [0.28, 0, 0.4, 0.07], breaker: [0.215, 0, 0.565, 0.13], extinguisher: [0.1, 0, 0.66, 0.21], jobs: [0.56, -0.45, 0.45, 0.3], kiosk: [0.42, 0, 2, 0.6], board: [0.5, 0, 0.6, 0.2] };
+// (MUSIC 4) where a placed piece is, from the room file alone: its cell, its quarter turns (counter-clockwise from
+// above) and its nudge along its own x (kit/grid.js placeMatrix, without three.js): its middle and the way its x runs
+const CELL = 2;
+const placed = (p) => { const t = (((p.turn || 0) % 4) + 4) % 4, a = t * Math.PI / 2, ux = Math.round(Math.cos(a)), uz = -Math.round(Math.sin(a)), o = (p.off || [0])[0]; return { x: p.cell[0] * CELL + ux * o, z: p.cell[1] * CELL + uz * o, ux, uz }; };
+const sameEdge = (a, b) => a.cell[0] === b.cell[0] && a.cell[1] === b.cell[1] && a.turn === b.turn && !a.deck && !b.deck;
+// a hallway's slanted panels (trim 'cornice'), the ones along its sides: those running the way most of them run
+const sidesOf = (r) => {
+  const corn = r.pieces.filter((p) => p.piece === 'trim' && /^cornice/.test(p.variant)), odd = corn.filter((p) => p.turn % 2 === 1).length;
+  const way = odd >= corn.length - odd ? 1 : 0;
+  return { corn, sides: corn.filter((p) => p.turn % 2 === way), ends: corn.filter((p) => p.turn % 2 !== way) };
+};
+
+test('the hallway lines: a set on the slanted panel at the top of each side of each section, in every hallway, between its frames', () => {
   const R = MUSIC_LINES;
-  // the rail stands clear of the panels' posts (9 cm) and the ribs' fins (18 cm), at hand height, under the wall screens
-  assert.ok(R.out > 0.18 && R.y > 0.85 && R.y + R.h < 1.25);
-  // five lines filling most of its face, small gaps between them, each several times the band's first lines (1.2 cm)
-  assert.ok(5 * R.pitch - (R.pitch - R.line) <= R.h && 5 * R.line > 0.65 * R.h && R.line >= 2.5 * 0.012);
+  // the five lines as the game's maker chose them (3.2 cm each, "a little thicker"), on a plate that fits the slant
+  assert.equal(R.line, 0.032); assert.ok(5 * R.pitch - (R.pitch - R.line) <= R.h);
+  assert.ok(R.s0 > 0 && R.s0 + R.h < (SLANT.ceiling - SLANT.top) * Math.SQRT2, 'on the slant, short of the ceiling');
+  assert.ok(R.depth > 0 && R.depth <= 0.015, 'standing off the panel no more than it must');
+  // (the plate's corners, up the slant and out of its face: between the wall's top and the ceiling, in from the wall)
+  for (const [s, n] of [[R.s0, 0], [R.s0 + R.h, R.depth]]) { const [y, z] = onSlant(s, n); assert.ok(y > SLANT.top && y < SLANT.ceiling && z > SLANT.face, `${s}, ${n}`); }
+  // the beat's line nearest the ceiling, the melody's at the foot, all on the plate
+  for (let k = 0; k < 5; k++) assert.ok(lineY(k) - R.line / 2 >= 0 && lineY(k) + R.line / 2 <= R.h);
+  assert.ok(lineY(0) > lineY(4));
+  // every room with lines is a hallway named, and every hallway named has them; nowhere else
+  const withLines = station.rooms.filter((r) => r.pieces.some((p) => p.piece === 'lines')).map((r) => r.id);
+  assert.deepEqual(withLines.sort(), [...HALLWAYS].sort());
+  // (the junction: no slanted panels, its four sides hatches)
+  assert.equal(sidesOf(roomOf('junction')).corn.length, 0);
+  const hatches = station.rooms.flatMap((r) => r.pieces.filter((p) => p.piece === 'hatch'));
+  let sets = 0;
   for (const id of HALLWAYS) {
-    const r = roomOf(id), lines = r.pieces.filter((p) => p.piece === 'lines');
-    assert.ok(lines.length >= 5, id);
-    const sides = new Set(lines.map((p) => p.turn + ':' + (p.turn % 2 ? p.cell[0] : p.cell[1])));
-    assert.equal(sides.size, 1, id + ' one wall');
-    let total = 0;
+    const r = roomOf(id), { sides, ends } = sidesOf(r), lines = r.pieces.filter((p) => p.piece === 'lines');
+    // one set on each side panel, none on an end wall's
+    assert.ok(sides.length >= 2, id);
+    for (const c of sides) assert.equal(lines.filter((L) => sameEdge(L, c)).length, 1, `${id} ${c.cell}: one set`);
+    for (const c of ends) assert.equal(lines.filter((L) => sameEdge(L, c)).length, 0, `${id} ${c.cell}: no set on the end wall`);
+    assert.equal(lines.length, sides.length, id);
+    const ribs = r.pieces.filter((p) => p.piece === 'rib');
     for (const L of lines) {
-      const w = r.pieces.find((p) => p.piece === 'wall' && p.cell[0] === L.cell[0] && p.cell[1] === L.cell[1] && p.turn === L.turn && !p.deck);
-      assert.ok(w && !['door', 'locked'].includes(w.variant), id + ' on a wall panel, never a doorway');
-      assert.ok(R.lens.includes(L.variant) && L.off[1] === R.y, id);
-      const len = +L.variant, a = L.off[0] - len / 2, b = L.off[0] + len / 2;
-      assert.ok(a >= -1.001 && b <= 1.001, id + ' on its panel');
-      for (const f of r.pieces.filter((p) => ext[p.piece] && p.cell[0] === L.cell[0] && p.cell[1] === L.cell[1] && p.turn === L.turn)) {
-        const [hw, y0, y1, z] = ext[f.piece], fy0 = f.off[1] + y0, fy1 = f.off[1] + y1;
-        if (fy0 < R.y + R.h && fy1 > R.y && z + (f.off[2] || 0) >= 0.18) assert.ok(b <= f.off[0] - hw || a >= f.off[0] + hw, `${id}: clear of the ${f.piece}`);
+      const len = linesLength(L.variant), P = placed(L), lo = { x: P.x - P.ux * len / 2, z: P.z - P.uz * len / 2 }, hi = { x: P.x + P.ux * len / 2, z: P.z + P.uz * len / 2 };
+      assert.ok(len >= R.min && len <= 2 - 2 * R.end, `${id} ${L.cell}: ${L.variant}`);
+      assert.deepEqual([L.off[1], L.off[2]], [0, 0], 'placed as its panel is, only slid along it');
+      // on its own panel (a section is one cell along)
+      assert.ok(Math.abs(L.off[0]) + len / 2 <= 1 - R.end + 1e-9, `${id} ${L.cell}: on its panel`);
+      // clear of the frames' knees on the slant (13 cm either side of a rib) by `end`
+      const along = (q) => (P.ux ? q.x : q.z), line0 = P.ux ? P.z : P.x;
+      for (const b of ribs) {
+        const B = placed(b); if (Math.abs((P.ux ? B.z : B.x) - line0) > 0.01) continue;
+        const at = along(B); if (Math.abs(at - along(P)) > 1.5) continue;
+        assert.ok(Math.min(Math.abs(at - along(lo)), Math.abs(at - along(hi))) >= 0.13 + R.end - 1e-9 && !(at > Math.min(along(lo), along(hi)) && at < Math.max(along(lo), along(hi))), `${id} ${L.cell}: clear of the frame at ${b.cell}`);
       }
-      total += len;
+      // clear of a hatch's portal posts (where the plate is, up the slant, they reach 41.5 cm out from its line: measured
+      // against the kit's own triangles) by `end`
+      for (const h of hatches) {
+        const H = placed(h), across = (H.ux ? 1 : 0) !== (P.ux ? 1 : 0);
+        if (!across) continue;
+        const at = P.ux ? H.x : H.z, side = P.ux ? H.z : H.x;
+        if (Math.abs(side - line0) > 2.1 || Math.abs(at - along(P)) > 1.5) continue;
+        assert.ok(Math.min(Math.abs(at - along(lo)), Math.abs(at - along(hi))) >= 0.415 + R.end - 1e-9, `${id} ${L.cell}: clear of the hatch at ${h.cell}`);
+      }
+      sets++;
     }
-    // (most of the hallway's wall: the doorways and the ends aside)
-    const line0 = lines[0].turn % 2 ? lines[0].cell[0] : lines[0].cell[1];
-    const panels = r.pieces.filter((p) => p.piece === 'wall' && !p.deck && p.turn === lines[0].turn && (p.turn % 2 ? p.cell[0] : p.cell[1]) === line0).length;
-    assert.ok(total > 0.75 * 2 * panels - 1, `${id}: ${total} m of rail along ${panels} panels`);
   }
+  assert.ok(sets >= 90, `${sets} sets`);
+});
+
+test('the lines\' notes: each section the whole range (as built), or the whole hallway\'s (the other reading), low at the north or west', () => {
+  assert.equal(SPREAD, 0, 'as built: each section shows the whole thing');
+  // a hallway running north and south, three sections on the west side (one short, by a hatch) and one on the east
+  // listed south to north
+  const sets = [[[0, 7.6], [0, 9.0]], [[0, 9.16], [0, 10.84]], [[0, 11.16], [0, 12.84]], [[4, 10.84], [4, 9.16]]];
+  // each section: the low notes at its north end, the high at its south, whatever its length or the way it is listed
+  assert.deepEqual(setPlaces(sets, 0), [[0, 1], [0, 1], [0, 1], [1, 0]]);
+  // the whole hallway: each set its own stretch, in step along it, the first at its north end, the last at its south
+  const B = setPlaces(sets, 1), len = 12.84 - 7.6;
+  assert.equal(B[0][0], 0); assert.equal(B[2][1], 1);
+  for (const [i, [a, b]] of [[1, [9.16, 10.84]], [2, [11.16, 12.84]]]) { assert.ok(Math.abs(B[i][0] - (a - 7.6) / len) < 1e-9 && Math.abs(B[i][1] - (b - 7.6) / len) < 1e-9, String(i)); }
+  // the two sides of one section show the same stretch
+  assert.deepEqual(B[3], [B[1][1], B[1][0]]);
+  // a stretch a set's length long: shorter sets show less of the range in the whole-hallway reading, all of it as built
+  assert.ok(Math.abs((B[0][1] - B[0][0]) - 1.4 / len) < 1e-9);
+  // a hallway one section long is wider than it is long: its notes still run along it (east and west here)
+  assert.deepEqual(setPlaces([[[22.2, 23], [23.4, 23]], [[23.4, 27], [22.2, 27]]], 0), [[0, 1], [1, 0]]);
+  assert.deepEqual(setPlaces([[[22.2, 23], [23.4, 23]], [[23.4, 27], [22.2, 27]]], 1), [[0, 1], [1, 0]]);
   // along a hallway: low notes at the smaller z (north) or the smaller x (west), whichever way it runs
   const ns = alongOf([[2, 14], [2, 30], [2.3, 22]]);
   assert.equal(ns.axis, 'z'); assert.equal(ns.u(2, 14), 0); assert.equal(ns.u(2, 30), 1); assert.equal(ns.u(2, 22), 0.5);
   const ew = alongOf([[3, 3], [13, 3]]);
   assert.equal(ew.axis, 'x'); assert.equal(ew.u(3, 3), 0); assert.equal(ew.u(13, 3), 1);
+  assert.equal(alongOf([[0, 0], [1, 4]], 'x').axis, 'x');
+});
+
+test('the lines in the station: in every hallway each side\'s sets run its length in order, and in the whole-hallway reading they never go backwards', () => {
+  for (const id of HALLWAYS) {
+    const lines = roomOf(id).pieces.filter((p) => p.piece === 'lines');
+    const ends = lines.map((L) => { const P = placed(L), h = linesLength(L.variant) / 2; return [[P.x - P.ux * h, P.z - P.uz * h], [P.x + P.ux * h, P.z + P.uz * h]]; });
+    const A = setPlaces(ends, 0), B = setPlaces(ends, 1);
+    for (const [a, b] of A) assert.ok((a === 0 && b === 1) || (a === 1 && b === 0), id);
+    // (the whole-hallway reading: sorted along the hallway, each set's stretch starts where or after the one before ends)
+    const way = Math.abs(ends[0][1][0] - ends[0][0][0]) > Math.abs(ends[0][1][1] - ends[0][0][1]) ? 0 : 1;
+    for (const side of new Set(ends.map((e) => e[0][1 - way].toFixed(2)))) {
+      const mine = B.filter((_, i) => ends[i][0][1 - way].toFixed(2) === side).map(([a, b]) => [Math.min(a, b), Math.max(a, b)]).sort((p, q) => p[0] - q[0]);
+      for (let i = 1; i < mine.length; i++) assert.ok(mine[i][0] >= mine[i - 1][1] - 1e-9, `${id} side ${side}`);
+    }
+    assert.ok(Math.min(...B.flat()) === 0 && Math.max(...B.flat()) === 1, id);
+  }
 });
 
 test('kept in this browser: the picture (Notes first, one for every screen) and the hallway lights (on to begin with)', () => {

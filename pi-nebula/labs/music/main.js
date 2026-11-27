@@ -5,7 +5,8 @@
 // button." So: the picture at the top (the wall screen's own: src/music/screen.js mountMusicPicture, MUSIC along its
 // top, the wall's 46 x 25 shape), a Full screen button on it; under it the controls, the very panel the game opens
 // from a wall screen (mountMusicControls), with the lab's own rows (Heard in, Notes) and Play / Stop; under them a
-// preview of the hallways' lines (src/music/lights.js) drawn as the game's rail draws them. The music plays by itself
+// preview of the hallways' lines (src/music/lights.js): one set's plate as the game draws it on a slanted panel, seen
+// face on. The music plays by itself
 // here (its own audio context, made on the first Play).
 // The lab's "Notes" row (lab only, as "Heard in" is; MUSICGAME 1): Live, every note made by the engine as it plays;
 // Pre-rendered, each different note rendered once in the background and played back (src/music/bake.js), as the game
@@ -35,15 +36,15 @@ setInterval(() => {
 }, 1000);
 
 // ── the hallway lines ────────────────────────────────────────────────────────────────────────────────────────────
-// (the one style the game's maker chose, as the game's hallways draw it: the rail (kit/musiclines.js), its five lines
-// filling its face, each a part's colour at its full strength where its note is and dim where it rests:
+// (the one style the game's maker chose, as the game's hallways draw it: a set's plate (kit/musiclines.js), its five
+// lines filling its face, each a part's colour at its full strength where its note is and dim where it rests:
 // src/music/lights.js lineColour)
 const cv = document.getElementById('lights'), g = cv.getContext('2d'), tap = tapOf(music);
 const COLS = 128;
 let table = new Float32Array(5 * COLS);
 const css = (c) => `rgb(${c.map((x) => Math.round(Math.min(1, x) * 255)).join(', ')})`;
-// the rail along a hallway wall, its five lines, each place along a line as bright as the table says; the rail's
-// metres to the canvas's pixels by its height (MUSIC_LINES.h)
+// a set's plate, face on, its five lines, each place along a line as bright as the table says; the plate's metres to
+// the canvas's pixels by its height (MUSIC_LINES.h)
 function paintLights() {
   const d = Math.min(2, window.devicePixelRatio || 1), w = Math.round(cv.clientWidth * d), h = Math.round(cv.clientHeight * d);
   if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }

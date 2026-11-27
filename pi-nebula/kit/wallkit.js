@@ -8,7 +8,9 @@
 import * as THREE from 'three';
 import { rrect, circle, line, bend } from './geo.js';
 import { SCREEN_RECT } from './tex.js';
-import { MUSIC_LINES, lineY } from './musiclines.js';
+import { MUSIC_LINES, lineY, SLANT, onSlant, linesLength } from './musiclines.js';
+import { TOP } from './shell.js';
+import { WALL_FACE, ROOM_H } from './grid.js';
 
 const PI = Math.PI;
 
@@ -102,18 +104,23 @@ export function wallScreen(p, v) {
   if (!music) p.light([0, 0.24, 0.22], 0.45, [0.35, 0.65, 1], [0, 0, 1], 3);
 }
 
-// THE MUSIC'S HALLWAY LINES (src/music/places.js, src/music/lights.js): a slim dark rail standing proud of the wall at
-// hand height, clear of the panels' posts and the ribs' fins (so the length of the hallway is seen along it), with five
-// dark inlays along its face, one for each part; a stretch of it `variant` metres long, centred on the piece, held off
-// the wall by a bracket at its middle. A hallway's stretches, end to end along one wall, are its five long lines; the
-// game makes them glow while the music is on. Placed with its foot at MUSIC_LINES.y (off y), its back `out` from the
-// wall's face (its numbers: kit/musiclines.js).
+// THE MUSIC'S HALLWAY LINES (src/music/places.js, src/music/lights.js), MUSIC 4: a thin dark plate lying on the slanted
+// panel where a hallway's wall meets its ceiling (the cornice: kit/shell.js trim), high on it near the ceiling, facing
+// down into the hallway, with five dark inlays along its face, one for each part; `variant` metres long, centred on the
+// piece. One set in each section of a hallway, on both sides, between its frames; the game makes them glow while the
+// music is on. Placed as its panel is (an edge piece: the panel's cell and turn), slid along it by `off` x (its numbers:
+// kit/musiclines.js). The game's maker, 2026-11-26: "I think it would look best if it was on both sides at the top in
+// the 45 degree angle section and it repeated for each section."
 export { MUSIC_LINES, lineY };
 export function musicLines(p, v) {
-  const L = parseFloat(v) || 2, R = MUSIC_LINES, z0 = R.out, z1 = R.out + R.depth;
-  p.slab('black', -L / 2, L / 2, 0, R.h, z0, z1, { r: 0.008 });
-  for (let k = 0; k < 5; k++) { const y = lineY(k); p.slab('dark', -L / 2 + 0.01, L / 2 - 0.01, y - R.line / 2, y + R.line / 2, z1 - 0.001, z1 + 0.0015, { r: 0.002, seg: 1 }); }
-  if (L >= 0.8) p.slab('black', -0.03, 0.03, R.h / 2 - 0.06, R.h / 2 + 0.06, 0, z0 + 0.005, { r: 0.006 });   // (the bracket)
+  const L = linesLength(v), R = MUSIC_LINES;
+  if (!(L > 0)) throw new Error('kit: music lines have no length ' + v);
+  // (the slant's numbers are kept beside the lines' for the tests, which cannot load the shell: they must be the shell's)
+  if (SLANT.top !== TOP || SLANT.face !== WALL_FACE || SLANT.ceiling !== ROOM_H) throw new Error('kit: the music lines\' slant is not the cornice\'s');
+  // (a box lying on the slant: its height up the slant, its depth out of the slant's face; turned 45 degrees about x)
+  const onFace = (surf, x0, x1, s0, s1, n0, n1, opts) => { const [y, z] = onSlant((s0 + s1) / 2, (n0 + n1) / 2); return p.box(surf, [x1 - x0, s1 - s0, n1 - n0], [(x0 + x1) / 2, y, z], [PI / 4, 0, 0], opts); };
+  onFace('black', -L / 2, L / 2, R.s0, R.s0 + R.h, 0.001, R.depth, { r: 0.005 });
+  for (let k = 0; k < 5; k++) { const s = R.s0 + lineY(k); onFace('dark', -L / 2 + 0.01, L / 2 - 0.01, s - R.line / 2, s + R.line / 2, R.depth - 0.001, R.depth + 0.0015, { r: 0.002, seg: 1 }); }
 }
 
 // a stencilled sector name, painted on: pale paint for dark panels, or ' dark' paint for the off-white ones

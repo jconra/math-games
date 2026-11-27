@@ -1,5 +1,5 @@
 // THE MUSIC IN THE STATION'S PLACES (MUSIC 3): the music's screen, a copy in each place, and the hallways' lines. Loaded
-// only when the music is on (src/main.js, with src/music/game.js); with it off the screens' faces and the lines' tubes
+// only when the music is on (src/main.js, with src/music/game.js); with it off the screens' faces and the lines' plates
 // are there in the station (kit: wallkit.js wallScreen 'music', musicLines) and dark, and none of this runs.
 // The game's maker, 2026-11-24: "Maybe have a few screens around the station that interface with it to change the
 // song, or modify the song", "Since the screens would all be copies, Id say put one in each place (storage, terminal,
@@ -19,20 +19,24 @@
 // own panel (src/music/screen.js mountMusicControls), with the Hallway lights row and no Play / Stop (the HUD's mute
 // rules the music). Done (or Esc) closes them. A change is heard at once wherever the music plays and kept (src/music/game.js edit):
 // the arena's screen changes the arena's song, every other screen (aboard a ship too) the station's.
-// THE LINES. In each hallway (placesplan.js HALLWAYS) the 'lines' pieces on one wall, end to end, are five long lines,
-// low notes at the hallway's north or west end (placesplan.js alongOf); one small table (src/music/lights.js lightLines,
-// LINE_COLS places x 5 lines) is a data texture on one glowing material for every hallway, on the face of the lines'
-// rail (kit/wallkit.js musicLines: standing proud of the wall at hand height, seen down the whole hallway), worked out each frame a
-// hallway with lines is drawn. No real light. Hallway lights Off: the lines are not drawn (their tubes stay, dark).
+// THE LINES (MUSIC 4). In each hallway (placesplan.js HALLWAYS) a 'lines' piece on the slanted panel at the top of each
+// side of each section (kit/wallkit.js musicLines), each a set of the five lines; the game's maker, 2026-11-26: "I
+// think it would look best if it was on both sides at the top in the 45 degree angle section and it repeated for each
+// section." In every set the low notes at its north or west end (placesplan.js setPlaces, SPREAD). One small table
+// (src/music/lights.js lightLines, LINE_COLS places x 5 lines) is a data texture on one glowing material for every
+// hallway, worked out once a frame while a hallway with lines is drawn; each hallway's sets are one mesh. No real
+// light. Hallway lights Off: the lines are not drawn (their plates stay, dark).
 //
 //   const MP = startMusicPlaces({ W, walls, input, usable, game, boarding, mission, quiet })
 //     usable: the game's helper for the mouse over what can be used (src/usable.js)
 //     game: src/music/game.js's G; quiet(): something else's prompt or question is up
 //   MP.update(dt, P, playing)   each frame
 //   MP.open(i) / MP.close() / MP.state()     (the rigs: GAME.musicPlaces); MP.screens: [{ id, room, song, at, facing }]
+//   MP.spread(k)     (the rigs) the lines' notes laid out by the other reading on this page: setPlaces with k
 import * as THREE from 'three';
 import { piecesOf } from '../people.js';
-import { MUSIC_FACE, MUSIC_LINES, lineY } from '../../kit/wallkit.js';
+import { MUSIC_FACE } from '../../kit/wallkit.js';
+import { MUSIC_LINES, lineY, onSlant, linesLength } from '../../kit/musiclines.js';
 import { CABIN_MUSIC, MUSIC_SCREEN } from '../../kit/ships/musicscreen.js';
 import { mountMusicControls, screenLink, WALL, TITLE } from './screen.js';
 import { tapOf } from './tap.js';
@@ -40,7 +44,7 @@ import { visualOf, PART_COLOURS } from './visuals.js';
 import { PART_IDS } from './song.js';
 import { lightLines, LINE_LOOK } from './lights.js';
 import { electricUniforms } from './electric.js';
-import { SCREEN_ROOMS, songOf, keptPicture, keepPicture, hallwayOn, keepHallway, HALLWAYS, alongOf } from './placesplan.js';
+import { SCREEN_ROOMS, songOf, keptPicture, keepPicture, hallwayOn, keepHallway, HALLWAYS, setPlaces } from './placesplan.js';
 
 // how often the pictures are painted while a screen is in view; how far off a screen is still painted (m); the canvas;
 // near a screen: the spot to stand, out from its face, how near it the prompt comes up and how much the view must be
@@ -170,25 +174,31 @@ void main() {
     toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
   lineMat.name = 'music lines';
+  // (MUSIC 4: a set of the five lines on each side of each section, on the slanted panel; ONE mesh a hallway, all its
+  // sets, on the one material: a set more is a few more triangles in the same draw, and the table is worked out once a
+  // frame whatever the number of sets. Each set's two ends are given their place on the notes' range by
+  // placesplan.js setPlaces: each section the whole range (SPREAD 0), or the whole hallway's (1).)
   const halls = [];
   {
     const byRoom = new Map();
     for (const B of piecesOf(W.R).filter((x) => x.piece === 'lines')) { if (!byRoom.has(B.room)) byRoom.set(B.room, []); byRoom.get(B.room).push(B); }
-    const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+    const _a = new THREE.Vector3();
     for (const [room, list] of byRoom) {
-      // (the hallway's line: its stretches' ends, along it from the low end)
-      const ends = list.map((B) => { const L = parseFloat(B.variant) || 2; return [_a.set(-L / 2, 0, 0).applyMatrix4(B.M).clone(), _b.set(L / 2, 0, 0).applyMatrix4(B.M).clone()]; });
-      const A = alongOf(ends.flat().map((v) => [v.x, v.z]));
-      const zone = (W.room && W.room(room)) || W.zoneAt(ends[0][0]), holder = zone ? zone.group : W.scene;
+      const lens = list.map((B) => linesLength(B.variant));
+      const ends = list.map((B, i) => [-1, 1].map((sx) => { _a.set(sx * lens[i] / 2, 0, 0).applyMatrix4(B.M); return [_a.x, _a.z]; }));
+      const zone = (W.room && W.room(room)) || W.zoneAt(_a.set(ends[0][0][0], 1, ends[0][0][1])), holder = zone ? zone.group : W.scene;
       holder.updateMatrixWorld(true);
       const toHolder = new THREE.Matrix4().copy(holder.matrixWorld).invert(), pos = [], line = [], ix = [], v = new THREE.Vector3(), m = new THREE.Matrix4();
+      const places = setPlaces(ends);
       list.forEach((B, i) => {
-        const L = parseFloat(B.variant) || 2, [e0, e1] = ends[i], u0 = A.u(e0.x, e0.z), u1 = A.u(e1.x, e1.z);
+        const L = lens[i], [u0, u1] = places[i], hh = MUSIC_LINES.line / 2;
         m.multiplyMatrices(toHolder, B.M);
         for (let r = 0; r < 5; r++) {
-          const y = lineY(r), k = pos.length / 3, hh = MUSIC_LINES.line / 2;
+          const k = pos.length / 3, sm = MUSIC_LINES.s0 + lineY(r);
           for (const [x, s] of [[-L / 2, -1], [L / 2, -1], [L / 2, 1], [-L / 2, 1]]) {
-            v.set(x + (x < 0 ? 0.01 : -0.01), y + s * hh, MUSIC_LINES.out + MUSIC_LINES.depth + 0.0025).applyMatrix4(m); pos.push(v.x, v.y, v.z);
+            // (over its dark inlay, a hair off the plate's face)
+            const [y, z] = onSlant(sm + s * hh, MUSIC_LINES.depth + 0.0025);
+            v.set(x + (x < 0 ? 0.01 : -0.01), y, z).applyMatrix4(m); pos.push(v.x, v.y, v.z);
             line.push(x < 0 ? u0 : u1, r, s);
           }
           ix.push(k, k + 1, k + 2, k, k + 2, k + 3);
@@ -199,7 +209,16 @@ void main() {
       geo.computeBoundingSphere();
       const mesh = new THREE.Mesh(geo, lineMat); mesh.name = 'music lines: ' + room; mesh.matrixAutoUpdate = false; mesh.renderOrder = 2; mesh.visible = lightsOn;
       holder.add(mesh);
-      halls.push({ room, mesh, holder, axis: A.axis, lo: +A.lo.toFixed(2), hi: +A.hi.toFixed(2), stretches: list.length, hallway: HALLWAYS.includes(room) });
+      halls.push({ room, mesh, holder, ends, sets: list.length, hallway: HALLWAYS.includes(room) });
+    }
+  }
+  // (the rigs: the other reading shown on the same page, its films; the game itself keeps SPREAD)
+  function spread(k) {
+    for (const H of halls) {
+      const P = setPlaces(H.ends, k), a = H.mesh.geometry.attributes.line;
+      // (a set's 5 quads, 4 corners each: corners 0 and 3 of each quad are its low-x end)
+      for (let i = 0; i < P.length; i++) for (let j = 0; j < 20; j++) a.setX(i * 20 + j, j % 4 === 0 || j % 4 === 3 ? P[i][0] : P[i][1]);
+      a.needsUpdate = true;
     }
   }
   function setLights(on) { lightsOn = !!on; keepHallway(localStorage, lightsOn); for (const H of halls) H.mesh.visible = lightsOn; }
@@ -313,11 +332,11 @@ void main() {
     },
     open: (i) => open(typeof i === 'number' ? screens[i] : typeof i === 'string' ? screens.find((S) => S.id === i) : near),
     close,
-    setLights, setPicture: (id) => { picture = visualOf(id).id; keepPicture(localStorage, picture); apply(); paintedAt = -1; },
+    setLights, spread, setPicture: (id) => { picture = visualOf(id).id; keepPicture(localStorage, picture); apply(); paintedAt = -1; },
     get isOpen() { return !!isOpen; },
     state: () => ({ open: isOpen ? isOpen.id : null, near: near ? near.id : null, prompt: !prompt.hidden, picture, lights: lightsOn, which: game.which, settled: game.settled,
       material: current ? current.name : null, stats: { ...stats }, screens: screens.map((S) => ({ id: S.id, room: S.room, song: S.song, ship: S.ship, at: S.at.toArray().map((v) => +v.toFixed(2)), stand: S.stand.toArray().map((v) => +v.toFixed(2)), facing: +S.facing.toFixed(3), inView: inView(S) })),
-      halls: halls.map((H) => { const b = H.mesh.geometry.boundingSphere.center.clone().applyMatrix4(H.mesh.matrixWorld); return { room: H.room, axis: H.axis, lo: H.lo, hi: H.hi, stretches: H.stretches, shown: shown(H.mesh), mid: b.toArray().map((v) => +v.toFixed(2)) }; }), places: SCREEN_ROOMS }),
+      halls: halls.map((H) => { const b = H.mesh.geometry.boundingSphere.center.clone().applyMatrix4(H.mesh.matrixWorld); return { room: H.room, sets: H.sets, shown: shown(H.mesh), mid: b.toArray().map((v) => +v.toFixed(2)) }; }), places: SCREEN_ROOMS }),
     table: () => table,
   };
   return api;

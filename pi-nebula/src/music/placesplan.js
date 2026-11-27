@@ -13,10 +13,18 @@
 //   KEEP                  what this browser keeps: the picture picked (one for every screen) and the hallway lights'
 //                         switch (on to begin with); the songs are kept by src/music/game.js
 //   keptPicture(store), keepPicture(store, id), hallwayOn(store), keepHallway(store, on)
-//   HALLWAYS              the hallways with lines (one wall of each)
-//   alongOf(points) -> { axis, lo, hi, u(x, z) }   a hallway's line: along x or z, whichever its stretches run; low
+//   HALLWAYS              the hallways with lines: every one with slanted panels along its sides (MUSIC 4: a set of
+//                         the five lines on each side of each section; the junction has none, its walls are hatches)
+//   alongOf(points, way?) -> { axis, lo, hi, u(x, z) }   a hallway's way along: x or z (`way`, or whichever the points
+//                         spread along most); low
 //                         notes at its north end (the smaller z) on a hallway running north and south, at its west end
 //                         (the smaller x) on one running east and west: the same end in every hallway that way
+//   SPREAD                the two readings of "it repeated for each section" (the game's maker's to choose): 0, each
+//                         section shows the whole thing (in every set the low notes at its north or west end, the high
+//                         at its other); 1, the notes spread over the whole hallway as first asked ("from one end of
+//                         the hallway to the other"), each set showing its own stretch of it
+//   setPlaces(sets, spread) -> [[u0, u1], ...]   for a hallway's sets, each [[x, z], [x, z]] (its two ends), where on
+//                         the notes' range (0 low .. 1 high) each set's two ends are, in the same order
 import { VISUALS, visualOf } from './visuals.js';
 
 export const SCREEN_ROOMS = {
@@ -34,11 +42,21 @@ export function keepPicture(store, id) { try { if (store) store.setItem(KEEP.pic
 export function hallwayOn(store) { try { return !store || store.getItem(KEEP.hallway) !== '0'; } catch (e) { return true; } }
 export function keepHallway(store, on) { try { if (store) store.setItem(KEEP.hallway, on ? '1' : '0'); } catch (e) { /* not kept */ } }
 
-export const HALLWAYS = ['c1', 'loop', 'spine-n', 'spine-s'];
+export const HALLWAYS = ['qc', 'c1', 'loop', 'c2', 'spine-n', 'spine-s', 'stub-miner', 'stub-explorer', 'stub-medic'];
+export const SPREAD = 0;
 
-export function alongOf(points) {
+export function alongOf(points, way = null) {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const [x, z] of points) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-  const axis = x1 - x0 > z1 - z0 ? 'x' : 'z', lo = axis === 'x' ? x0 : z0, hi = axis === 'x' ? x1 : z1, span = Math.max(1e-6, hi - lo);
+  const axis = way || (x1 - x0 > z1 - z0 ? 'x' : 'z'), lo = axis === 'x' ? x0 : z0, hi = axis === 'x' ? x1 : z1, span = Math.max(1e-6, hi - lo);
   return { axis, lo, hi, u: (x, z) => Math.max(0, Math.min(1, ((axis === 'x' ? x : z) - lo) / span)) };
+}
+export function setPlaces(sets, spread = SPREAD) {
+  // (the way the sets run: a hallway one section long is wider than it is long, so not by its extents)
+  const [[ax, az], [bx, bz]] = sets[0], A = alongOf(sets.flat(), Math.abs(bx - ax) > Math.abs(bz - az) ? 'x' : 'z');
+  return sets.map(([e0, e1]) => {
+    // (over the whole hallway: where each end is along it; in each section: its own low end at the hallway's low end)
+    const a = A.u(e0[0], e0[1]), b = A.u(e1[0], e1[1]), s0 = a <= b ? 0 : 1, s1 = 1 - s0;
+    return [s0 + (a - s0) * spread, s1 + (b - s1) * spread];
+  });
 }

@@ -22,7 +22,7 @@
 import { PART_IDS } from './song.js';
 import { RANGES } from './visuals.js';
 
-// (the lines themselves are on the rail, kit/wallkit.js MUSIC_LINES: 3.2 cm each, five filling the rail's face with
+// (the lines themselves are on a plate on each slanted panel, kit/musiclines.js MUSIC_LINES: 3.2 cm each, five filling its face with
 // small gaps, "a little thicker so the effect is overall brighter". How a place's brightness v becomes light: a resting
 // line is `rest` of its part's colour, the colour at its full strength (no washing out to white) where v is 1, a hint
 // toward white only at the very top (white * v * v))
