@@ -134,7 +134,7 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
   const loaded = await Promise.all(used.map((i) => loadTree(TREES[T0.kinds[i].tree].file)));
   const t1 = performance.now();
   const stats = { trees: count, models: 0, kinds: used.length, loadMs: Math.round(t1 - t0), bakeMs: 0, buildMs: 0 };
-  const built = [], Y = new THREE.Vector3(0, 1, 0);
+  const built = [], shades = [], Y = new THREE.Vector3(0, 1, 0);
   let canopy = [0, 0, 0], canopyW = 0;
   used.forEach((ki, n) => {
     const kind = T0.kinds[ki], M = loaded[n], turn = turnOf(leaves[kind.leaf] || leaves[0]);
@@ -172,6 +172,8 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
       im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Q.most * 3), 3); im.instanceColor.setUsage(THREE.DynamicDrawUsage);
       im.userData = { local: part.local, fade: mf };
       group.add(im); meshes.push(im);
+      // (its shadow on the ground, its leaves cut out of their picture: src/planet/groundshadow.js)
+      if (ground.shadows) shades.push(ground.shadows.add(im, { map: m2.alphaTest > 0 && m2.map ? m2.map : null }));
     }
     built.push({ kind, list, imposter, fade, meshes, bake, near: [] });
     // the woods' colour from afar: the leaves' own (their picture's average) turned as the trees' are, by how many
@@ -234,6 +236,7 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
     update(camera) { assign(camera); },
     relayNow(camera) { lastX = lastZ = Infinity; assign(camera); },
     dispose() {
+      for (const s of shades) s.dispose();
       for (const b of built) {
         b.imposter.geometry.dispose(); b.imposter.material.dispose(); b.imposter.material.userData.depthMaterial?.dispose();
         b.bake.targets.forEach((t) => t.dispose());

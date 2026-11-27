@@ -273,6 +273,11 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     }
   }
 
+  // ── their shadows on the ground (src/planet/groundshadow.js): every rock, plant and flower casts, its leaves cut out
+  // of their picture as they are drawn ──
+  const shades = [];
+  if (ground.shadows) for (const L of layers) for (const m of L.meshes) shades.push(ground.shadows.add(m, { reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
+
   // ── laid out round the camera ──────────────────────────────────────────────────────────────────────────────────
   let lastX = Infinity, lastZ = Infinity;
   function relay(cx, cz) {
@@ -299,6 +304,6 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       if (Math.hypot(x - lastX, z - lastZ) > CELL * 1.5) { lastX = x; lastZ = z; relay(x, z); }
     },
     relayNow(camera) { lastX = camera.position.x; lastZ = camera.position.z; relay(lastX, lastZ); },
-    dispose() { for (const L of layers) for (const m of L.meshes) { m.dispose(); } for (const g of rockShapesG) g.dispose(); rockMat.dispose(); boulderMat.dispose(); for (const m of plantMats) m.dispose(); },
+    dispose() { for (const s of shades) s.dispose(); for (const L of layers) for (const m of L.meshes) { m.dispose(); } for (const g of rockShapesG) g.dispose(); rockMat.dispose(); boulderMat.dispose(); for (const m of plantMats) m.dispose(); },
   };
 }
