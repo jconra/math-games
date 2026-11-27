@@ -45,6 +45,9 @@ export const WRECK = {
   apart: 1.0,              // the least gap between two pieces (metres)
   tilt: 0.3,               // the most a piece leans with the ground under it (radians)
   settle: 0.35,            // the most a piece turns as it comes to rest on the ground, each of two turns (radians)
+  // and then it does not balance on an edge or a corner: its middle is over what it touches by `stand` metres, else it
+  // topples over the edge it hangs past (each fall no more than `fall` radians, at most `falls` of them)
+  stand: 0.3, fall: 0.2, falls: 16, lean: 45 * Math.PI / 180, touch: 0.2, dig: 0.6,
 };
 // where each ship breaks (its own frame, z metres, nose +z; each break's teeth reach up to 1.6 m nose-ward of it), in
 // two pieces or in three: [where, how far either way it may be], kept off the canopy and the engines; the Miner's
@@ -272,6 +275,53 @@ export function settle(parts, land, site, plan) {
     }
     return M;
   };
+  // NOT BALANCED ON AN EDGE (two critics saw a piece of the wreck hang in the air: it stood on one corner): what it
+  // touches (its points within 20 cm of its lowest, against the ground under each), and its middle over that; past an
+  // edge of it, it falls over that edge, about the line through the edge's two points, until another point touches
+  const standing = (M, k, band) => {
+    const s = many[k], W = [], d = []; let cx = 0, cz = 0;
+    for (let i = 0; i < s.length; i += 3) { const w = apply(M, s[i], s[i + 1], s[i + 2]); W.push(w); d.push(w[1] - land.heightAt(w[0], w[2])); cx += w[0]; cz += w[2]; }
+    cx /= W.length; cz /= W.length;
+    const lo = Math.min(...d), H = hull2(W.filter((w, i) => d[i] < lo + band).map((w) => [w[0], w[2]]));
+    if (H.length < 3) return -Infinity;
+    let m = Infinity; for (let e = 0; e < H.length; e++) { const a = H[e], b = H[(e + 1) % H.length], ex = b[0] - a[0], ez = b[1] - a[1]; m = Math.min(m, (ex * (cz - a[1]) - ez * (cx - a[0])) / (Math.hypot(ex, ez) || 1)); }
+    return m;
+  };
+  const deeper = [];
+  const topple = (M, k) => {
+    const s = many[k]; let backing = false;
+    for (let f = 0; f < WRECK.falls; f++) {
+      const W = [], d = []; let cx = 0, cz = 0;
+      for (let i = 0; i < s.length; i += 3) { const w = apply(M, s[i], s[i + 1], s[i + 2]); W.push(w); d.push(w[1] - land.heightAt(w[0], w[2])); cx += w[0]; cz += w[2]; }
+      cx /= W.length; cz /= W.length;
+      const lo = Math.min(...d), touch = []; for (let i = 0; i < W.length; i++) if (d[i] < lo + WRECK.touch) touch.push(i);
+      const H = hull2(touch.map((i) => [W[i][0], W[i][2], i]));
+      // (the edge its middle is furthest past, or nearest inside of)
+      let worst = Infinity, edge = null;
+      if (H.length < 3) { const a = H[0], b = H[H.length - 1]; edge = [a, b]; worst = -1; }
+      else for (let e = 0; e < H.length; e++) { const a = H[e], b = H[(e + 1) % H.length], ex = b[0] - a[0], ez = b[1] - a[1], l = Math.hypot(ex, ez) || 1, m = (ex * (cz - a[1]) - ez * (cx - a[0])) / l; if (m < worst) { worst = m; edge = [a, b]; } }
+      if (worst >= WRECK.stand) break;
+      const A = W[edge[0][2]], B = W[edge[1][2]];
+      let lx = B[0] - A[0], lz = B[2] - A[2], ll = Math.hypot(lx, lz);
+      // (one point, or two on top of each other: it falls toward its middle about a line across that way)
+      let hx, hz;
+      if (ll < 0.3) { hx = cx - A[0]; hz = cz - A[2]; const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl; lx = -hz; lz = hx; ll = 1; }
+      else { lx /= ll; lz /= ll; hx = -lz; hz = lx; if (hx * (cx - A[0]) + hz * (cz - A[2]) < 0) { hx = -hx; hz = -hz; } }
+      // (turned down on the middle's side until the next point there touches)
+      const dl = (i) => d[edge[0][2]] + 0;
+      let phi = Infinity; for (let i = 0; i < W.length; i++) { const sd = (W[i][0] - A[0]) * hx + (W[i][2] - A[2]) * hz; if (sd < 0.3) continue; const q = (d[i] - dl(i)) / sd; if (q < phi) phi = q; }
+      if (!isFinite(phi)) break;
+      phi = Math.max(0.02, Math.min(phi, WRECK.fall));
+      const N = mul(tr(A[0], A[1], A[2]), mul(axisAngle(hz, 0, -hx, phi), mul(tr(-A[0], -A[1], -A[2]), M)));
+      // (never over onto its back or its side: past WRECK.lean it rolls back toward upright instead, about its own length,
+      // as if the crash had rolled it less)
+      if (!backing && leanOf(N) <= WRECK.lean) { M = N; continue; }
+      backing = true;
+      const ul = Math.hypot(M[4], M[5], M[6]), lean = leanOf(M); if (lean < 0.01) break;
+      M = mul(tr(cx, 0, cz), mul(axisAngle(-M[6] / ul, 0, M[4] / ul, Math.min(WRECK.fall, lean)), mul(tr(-cx, 0, -cz), M)));
+    }
+    return M;
+  };
   const place = (gap, full) => parts.map((p, k) => {
     const P = plan.poses[k], [px, py, pz] = p.pivot, along = (k - (n - 1) / 2) * gap;
     // in the ship's frame: turned about its middle, slid; then onto the site
@@ -283,11 +333,14 @@ export function settle(parts, land, site, plan) {
     for (let i = 0; i < sp.length; i += 3) { const q = apply(M, sp[i], sp[i + 1], sp[i + 2]); x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[2]); }
     const nrm = groundPlane(land, x0, x1, z0, z1), ang = Math.min(WRECK.tilt, Math.acos(Math.min(1, nrm[1])));
     if (ang > 1e-4) M = mul(tr(w[0], w[1], w[2]), mul(axisAngle(nrm[2], 0, -nrm[0], ang), mul(tr(-w[0], -w[1], -w[2]), M)));
-    M = rest(M, k);
-    // lowered: its lowest point (against the ground under each point) the plan's sink in the ground
+    M = topple(rest(M, k), k);
+    // lowered: its lowest point (against the ground under each point) the plan's sink in the ground, and deeper still
+    // if what it would rest on is not under its middle even so (dug in rather than balanced: up to WRECK.dig more)
     let low = Infinity; const pts = full ? p.pts : many[k];
     for (let i = 0; i < pts.length; i += 3) { const q = apply(M, pts[i], pts[i + 1], pts[i + 2]), d = q[1] - land.heightAt(q[0], q[2]); if (d < low) low = d; }
-    return mul(tr(0, -low - P.sink, 0), M);
+    let e = 0; while (e < WRECK.dig && standing(M, k, WRECK.touch + e) < WRECK.stand) e += 0.05;
+    deeper[k] = +e.toFixed(2);
+    return mul(tr(0, -low - P.sink - e, 0), M);
   });
   const pointsOf = (M, k) => { const s = sample[k], out = []; for (let i = 0; i < s.length; i += 3) out.push(apply(M, s[i], s[i + 1], s[i + 2])); return out; };
   let gap = plan.gap || 3, mats = null;
@@ -306,7 +359,18 @@ export function settle(parts, land, site, plan) {
   mats = place(gap, true);
   const low = mats.map((M, k) => { let lo = Infinity; const pts = parts[k].pts; for (let i = 0; i < pts.length; i += 3) { const q = apply(M, pts[i], pts[i + 1], pts[i + 2]); lo = Math.min(lo, q[1] - land.heightAt(q[0], q[2])); } return +lo.toFixed(3); });
   S.y = land.heightAt(S.x, S.z);
-  return { mats, gap, site: S, low };
+  return { mats, gap, site: S, low, deeper: deeper.slice() };
+}
+// how far a piece's own up leans from the sky's (radians)
+const leanOf = (M) => Math.acos(Math.min(1, M[5] / Math.hypot(M[4], M[5], M[6])));
+// the convex hull of points [x, z, ...] (anticlockwise seen from above, as x right and z toward the eye)
+function hull2(pts) {
+  pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
 }
 // the ground's facing over a box, by the plane through its heights there (least squares, a sample every 2 m or so)
 function groundPlane(land, x0, x1, z0, z1) {

@@ -134,9 +134,9 @@ test('the pieces lie on the ground beside the landing ring: sunk a little, tilte
     const W = wreckOn(L, ship, pieces), { flat } = L.landing, why = `${kind} ${ship} in ${pieces}`;
     const world = W.placed.mats.map((M, k) => { const P = W.parts[k].pts, out = []; for (let i = 0; i < P.length; i += 3) out.push(apply(M, P[i], P[i + 1], P[i + 2])); return out; });
     world.forEach((pts, k) => {
-      const d = pts.map((p) => p[1] - L.heightAt(p[0], p[2])), low = Math.min(...d), sink = W.plan.poses[k].sink;
+      const d = pts.map((p) => p[1] - L.heightAt(p[0], p[2])), low = Math.min(...d), sink = W.plan.poses[k].sink + W.placed.deeper[k];
       // sunk a little: its lowest point the plan's sink under the ground, and no more
-      assert.ok(Math.abs(low + sink) < 0.02 && sink >= 0.25 && sink <= 0.8, `${why}: piece ${k}'s lowest point ${low.toFixed(2)} m from the ground`);
+      assert.ok(Math.abs(low + sink) < 0.02 && sink >= 0.25 && sink <= 0.8 + WRECK.dig, `${why}: piece ${k}'s lowest point ${low.toFixed(2)} m from the ground`);
       // lying on it, not balanced on a point: the part of it touching the ground (within 35 cm) runs a good way along it
       const M = W.placed.mats[k], ax = [M[8], M[9], M[10]], touch = pts.filter((p, i) => d[i] < 0.35).map((p) => p[0] * ax[0] + p[1] * ax[1] + p[2] * ax[2]);
       const all = pts.map((p) => p[0] * ax[0] + p[1] * ax[1] + p[2] * ax[2]), len = Math.max(...all) - Math.min(...all), run = Math.max(...touch) - Math.min(...touch);
@@ -206,5 +206,26 @@ test('each ship breaks where its own parts allow, and the Planet Lab offers all 
     assert.ok(CUT_AT[ship] && CUT_AT[ship][2].length === 1 && CUT_AT[ship][3].length === 2, ship);
     const box = boxOf(HULLS[ship]);
     for (const n of [2, 3]) for (const [z, w] of CUT_AT[ship][n]) assert.ok(z - w > box.min[2] + 0.8 && z + w + 1.6 < box.max[2] - 1, `${ship}: a break at ${z} m inside its ${box.min[2].toFixed(1)}..${box.max[2].toFixed(1)}`);
+  }
+});
+
+// Two blind critics (2026-11-26) saw a piece of the wreck hanging in the air: it stood on one corner, its middle out past
+// what it touched. Every piece rests: its middle over the ground it touches (the hull of its points within WRECK.touch,
+// 20 cm, of its lowest, and as much again as it was dug in deeper), on every kind of land, every ship, in two and in
+// three, and on the seeds that once balanced on an edge.
+test('no piece is balanced on an edge or a corner: its middle is over what it touches', () => {
+  const hull = (pts) => { pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]); const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = []; for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); } for (const p of pts.slice().reverse()) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); } return lo.slice(0, -1).concat(up.slice(0, -1)); };
+  const inside = (h, c) => { if (h.length < 3) return -Infinity; let m = Infinity; for (let i = 0; i < h.length; i++) { const a = h[i], b = h[(i + 1) % h.length], ex = b[0] - a[0], ez = b[1] - a[1]; m = Math.min(m, (ex * (c[1] - a[1]) - ez * (c[0] - a[0])) / (Math.hypot(ex, ez) || 1)); } return m; };
+  const cases = [];
+  for (const [kind, L] of Object.entries(LANDS)) for (const ship of WRECK_SHIPS) for (const pieces of [2, 3]) cases.push([kind, L, ship, pieces, L.seed]);
+  for (const seed of [37, 17, 25, 63]) { const L = makeLand(seed, { n: 512 }), w = wreckFor(seed); cases.push([L.kind.id, L, w.ship, w.pieces, seed]); }
+  for (const [kind, L, ship, pieces, seed] of cases) {
+    const W = wreckOn(L, ship, pieces, seed);
+    W.placed.mats.forEach((M, k) => {
+      const P = W.parts[k].pts, pts = []; let cx = 0, cz = 0;
+      for (let i = 0; i < P.length; i += 3) { const p = apply(M, P[i], P[i + 1], P[i + 2]); pts.push([p[0], p[2], p[1] - L.heightAt(p[0], p[2])]); cx += p[0]; cz += p[2]; }
+      const lo = Math.min(...pts.map((p) => p[2])), m = inside(hull(pts.filter((p) => p[2] < lo + WRECK.touch + W.placed.deeper[k])), [cx / pts.length, cz / pts.length]);
+      assert.ok(m > 0, `${kind} (seed ${seed}) ${ship} in ${pieces}: piece ${k}'s middle is ${(-m).toFixed(2)} m past what it rests on`);
+    });
   }
 });
