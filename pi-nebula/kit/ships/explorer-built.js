@@ -888,23 +888,23 @@ function ebAirstair(p) {
 // none of this was here and you could just see the landing gear. We should just have doors that slide in place. Its
 // fine if the landing gear is kind of magic and folds into itself"; and of the legs then: "something like the F-16
 // landing gear. It goes out wider, and has a few cylinders that meet up". So three legs (gear-plan.js LEGS.explorer:
-// the nose leg under the cockpit, braced from both sides and ahead; the aft two under the hull's sides, where the old
-// ones stood, splayed 35 cm out, each braced from its well's fore and aft edges), each a pale main cylinder
-// and a bright piston over a skid pad, folding into itself up into its well, and each well shut by two doors cut from
-// the hull's own skin that slide apart to let it down (built-common.js strutLeg, slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1
-// shut); gearStep moves them in turn (up: the legs, then the doors; down: the doors, then the legs).
+// the nose leg under the cockpit, upright, braced from ahead and behind; the aft two under the hull's sides, where the
+// old ones stood, leaning out 23 degrees, each with two fat braces from its long well's ends to a knuckle low on it),
+// each a white main cylinder and a bright piston over a broad pad, folding into itself up into its well, and each well
+// shut by two doors cut from the hull's own skin, edged, that slide apart to let it down (built-common.js strutLeg,
+// slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1 shut); gearStep moves them in turn (up: the legs, then the doors; down: the doors, then the legs).
 export const GEAR_SPEED = 0.42, GEAR_DOOR_SPEED = 0.9;
 const LEGS = GEAR_PLAN.explorer;
 function ebGear(p, which) {
-  // (its cylinders the hull's white, the pistons and the braces' rods bright metal, the joints and the pad its dark trim, a
-  // yellow band at each fitting, the sole rubber)
-  const paint = { cyl: PAL.skin, piston: PAL.chrome, joint: PAL.trim, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
-  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED });
+  // (sleek: its cylinders and braces the hull's white, the pistons bright, the joints and the bevelled pad its dark
+  // trim with metal bolts, hoses along the cylinder, a torque link; the doors edged in white)
+  const paint = { cyl: PAL.skin, stage: PAL.skin, piston: PAL.chrome, joint: PAL.trim, bolt: PAL.metal, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
+  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED, style: 'sleek' });
 }
 // THE WELLS' DOORS: each well's two halves of skin, painted as the hull there by its own rules (a face on its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
 function ebGearDoors(p, which) {
-  return C.slideDoors(p, DOORS[which], { key: 'eb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk, speed: GEAR_DOOR_SPEED });
+  return C.slideDoors(p, DOORS[which], { key: 'eb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk, speed: GEAR_DOOR_SPEED, edge: PAL.skin, box: WELLS[which].box });
 }
 // THE WELLS: dark walls standing on each well's rim up to its top, and the top
 function ebWells(p) {
