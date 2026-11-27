@@ -195,7 +195,7 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
     pos.x = x; pos.z = z; pos.y = f; return true;
   }
   // (a step that went nowhere: slid along the walls, or eased sideways into a door's opening: src/slide.js)
-  const blocked = makeSlide(tryStep, BODY.stride);
+  const blocked = makeSlide(tryStep, BODY.stride), ownWalls = solid.length > 0;
   // doorsOpen: walk as if every door that can open were open (for working out a way)
   // (the frame of a part stood somewhere else that a person is in or beside, if any: `turned` says whether any part is)
   let turned = false;
@@ -211,8 +211,11 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
     const n = Math.max(1, Math.ceil(dist / BODY.stride)), sx = dx / n, sz = dz / n, x0 = pos.x, z0 = pos.z;
     for (let i = 0; i < n; i++) {
       if (tryStep(pos, sx, sz, r, doorsOpen)) continue;
-      // a wall: slid along it, or eased sideways into a door's opening (src/slide.js); else no way on
-      if (!blocked(pos, sx, sz, turned ? frameAt(pos) : null, r, doorsOpen)) break;
+      // a wall: slid along it, or eased sideways into a door's opening (src/slide.js); else no way on. (Square: the
+      // walls there run along the frame: a part stood somewhere else, or the station's own, its walls along x and z.
+      // Out on a planet away from a ship set down, only the rocks, the wreck and the pods, with no frame of their own)
+      const fr = turned ? frameAt(pos) : null;
+      if (!blocked(pos, sx, sz, fr, r, doorsOpen, fr !== null || ownWalls)) break;
     }
     return Math.hypot(pos.x - x0, pos.z - z0);
   }
