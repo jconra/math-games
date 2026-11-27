@@ -176,7 +176,8 @@ const MEADOW = {
     // a tree on its own in the open; only where plants grow (not on rock, nor steep ground). How much of the land is
     // wooded is the seed's: from a few copses to woods over half the grass
     const R = rng(subSeed(ctx.seed, 'woods')), line = -0.12 + 0.28 * R(), woods = field(ctx, fbm({ cells: 5, n: 3, seed: subSeed(ctx.seed, 'woods') }), 4);
-    for (let k = 0; k < H.length; k++) ctx.woods[k] = ctx.growth[k] * (0.025 + 0.85 * smooth(line, line + 0.1, woods[k]));
+    // (from the growth as it was before its edge was ragged: the trees, and so where the wreck lies, as before for every seed)
+    for (let k = 0; k < H.length; k++) ctx.woods[k] = (1 - ctx.rock[k]) * (1 - smooth(0.3, 0.65, slope[k])) * smooth(-0.45, 0.1, bare[k]) * (0.025 + 0.85 * smooth(line, line + 0.1, woods[k]));
   },
   palette(R, { familiar = false } = {}) {
     // (the strange looks drawn for every seed, so a familiar one takes nothing from the rest of its colours' numbers)

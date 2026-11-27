@@ -23,17 +23,15 @@ import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { PLANTS, PLANT_SINK } from './kinds.js';
 import { hash2 } from './noise.js';
-import { wrapD } from './land.js';
+import { wrapD, CLEARING } from './land.js';
+export { CLEARING };
 import { lookOff } from './kinds.js';
 
 const CELL = 8;
 // no boulder stands on the landing place, nor within a few metres of its edge (the mark eases out over 52 m past its
 // edge: src/planet/land.js; 0.92 is about 4 m past it)
 const CLEAR = 0.92;
-// THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
-// small stones and the plants up to `tall` metres grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
-// middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js)
-export const CLEARING = { pad: 11, kept: 0.999, tall: 1.35, gaps: 0.45, least: 0.2, thin: 0.6 };
+// THE LANDING PLACE NOT A BARE CLEARING: src/planet/land.js CLEARING (plain numbers, for the tests too)
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
 export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
 
@@ -125,7 +123,7 @@ vec3 hazeSky(vec3 p) { vec3 d = normalize(p - cameraPosition); return skyAt(came
 
 // THE ROCKS' LOOK (two critics: plain faceted lumps in the ground's own colour): a shade darker than the rock the ground
 // is painted with, each its own, and a surface of their own
-export const ROCK_LOOK = { dark: 0.35, shade: [0.62, 0.38] };
+export const ROCK_LOOK = { dark: 0.2, shade: [0.75, 0.35] };
 const STONE_GLSL = `{
   vec3 q = vPlace * 2.7; vec3 i = floor(q), t = fract(q); t = t * t * (3.0 - 2.0 * t);
   #define H3(o) fract(sin(dot(i + o, vec3(12.99, 78.23, 37.71))) * 43758.55)

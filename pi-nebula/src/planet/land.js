@@ -31,6 +31,10 @@ export const LANDING = { flat: 32, edge: 52, within: 170 };   // metres: level o
 // the trees: numbers per tree in land.trees; how far past the landing place's level ground the nearest trunk stands
 // (about a big tree's crown, so none hangs over it); the steepest ground one stands on (degrees)
 export const TREE_STRIDE = 6, TREE_CLEAR = 10, TREE_STEEP = 32;
+// THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
+// small stones and the plants up to `tall` metres grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
+// middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js); the cover reads it: src/planet/cover.js
+export const CLEARING = { pad: 11, kept: 0.999, tall: 1.35, gaps: 0.3, least: 0.5, thin: 1.0 };
 
 export function makeLand(seed, { kind = null, n = SAMPLES } = {}) {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();

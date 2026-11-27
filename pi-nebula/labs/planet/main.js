@@ -280,7 +280,7 @@ async function build(seed, { keepView = false } = {}) {
       plan = podsPlan(land, seed, { site: W.site, tris });
       clearUnder(land, footprintTris(plan));
       // (and the way from where the Medic sets down to the pods, as the game keeps it: src/planet/cover.js CLEARING)
-      if (plan.pods.length) clearWay(land, [land.landing.x, land.landing.z], [plan.pods.reduce((s, p) => s + p.x, 0) / plan.pods.length, plan.pods.reduce((s, p) => s + p.z, 0) / plan.pods.length]);
+      for (const p of plan.pods) clearWay(land, [land.landing.x, land.landing.z], [p.x, p.z]);
     }
     const tpd = performance.now();
     const tw = performance.now();

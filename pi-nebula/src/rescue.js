@@ -85,7 +85,8 @@
 //   site.words    what is going on, for the strip along the top;  site.state();  site.close()
 import * as THREE from 'three';
 import { makePlanet, makeLandAsync } from './planet/planet.js';
-import { clearUnder, clearWay, wreckFor } from './planet/wreck.js';
+import { clearUnder, clearWay, clearDisc, wreckFor } from './planet/wreck.js';
+import { CLEARING } from './planet/cover.js';
 import { makeWreck } from './planet/wreckship.js';
 import { podsPlan, footprintTris } from './planet/pods.js';
 import { makePods } from './planet/podsdraw.js';
@@ -148,8 +149,9 @@ export function makeSite(ctx, opts = {}) {
     const all = Wk.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
     podPlan = podsPlan(land, seed, { site: Wk.site, tris });
     clearUnder(land, footprintTris(podPlan));
-    // (and the way from where the Medic sets down to the pods: src/planet/cover.js CLEARING)
-    if (podPlan.pods.length) clearWay(land, [land.landing.x, land.landing.z], [podPlan.pods.reduce((s, p) => s + p.x, 0) / podPlan.pods.length, podPlan.pods.reduce((s, p) => s + p.z, 0) / podPlan.pods.length]);
+    // (and the way from where the Medic sets down to each pod: src/planet/cover.js CLEARING; again from its real ramp
+    // foot once it is down: swap())
+    for (const p of podPlan.pods) clearWay(land, [land.landing.x, land.landing.z], [p.x, p.z]);
     if (st.closed) return;
     planet = await makePlanet({ renderer: W.renderer, scene: group, land, quality: W.quality });
     if (st.closed) { planet.dispose(); return; }
@@ -295,6 +297,10 @@ export function makeSite(ctx, opts = {}) {
   // down drawn in its very place, its ramp up, then coming down; its rooms and the ground walkable (`ground`)
   function swap() {
     medic.place(st.stand, { down: false }); medic.group.visible = true;
+    // (nothing under it, on its ramp, at its foot or on the walks from there to each pod, wherever it came down)
+    clearDisc(land, st.stand.x, st.stand.z, CLEARING.pad);
+    for (const p of podPlan.pods) clearWay(land, [medic.foot.x, medic.foot.z], [p.x, p.z]);
+    planet.relayNow(W.camera);
     if (!st.skipAll) medic.ramp(1);
     kept.alone = W.alone; W.alone = []; boarding.hold(S.id, true);
     st.swapped = true; st.ground = true;

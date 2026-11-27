@@ -7,8 +7,8 @@
 //   node --test pi-nebula/tests/wreck.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeLand } from '../src/planet/land.js';
-import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, paintClass, hslOf, PAINTS, PAINT_IDS, WRECK, WRECK_SHIPS, shipFor, wreckFor, pieceAt, pastBreak, apply, fingerprint, CUT_AT } from '../src/planet/wreck.js';
+import { makeLand, CLEARING } from '../src/planet/land.js';
+import { wreckPlan, breakApart, wreckSite, settle, clearUnder, recolour, paintClass, hslOf, PAINTS, PAINT_IDS, WRECK, WRECK_SHIPS, shipFor, wreckFor, pieceAt, pastBreak, apply, fingerprint, CUT_AT, clearWay, clearDisc } from '../src/planet/wreck.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
 import * as MEDIC from '../kit/ships/medic-built.hull.js';
@@ -166,8 +166,8 @@ test('nothing grows through it: the ground under the pieces is kept clear of tre
   assert.ok(r.cells > 40, `${r.cells} samples of ground cleared`);
   assert.equal(L.trees.length / 6, before - r.trees);
   for (const { tris } of world) for (let i = 0; i < tris.length; i += 99) {
-    // (marked as the landing place is, which the rocks and plants keep off: src/planet/cover.js CLEAR 0.92)
-    assert.ok(L.landingAt(tris[i], tris[i + 2]) > 0.92, 'the ground under it is marked clear');
+    // (marked kept clear, which every rock and plant keeps off, the landing place's own plants too: CLEARING.kept)
+    assert.ok(L.landingAt(tris[i], tris[i + 2]) > CLEARING.kept, 'the ground under it is marked clear');
     for (let k = 0; k < L.trees.length; k += 6) assert.ok(Math.hypot(L.trees[k] - tris[i], L.trees[k + 2] - tris[i + 2]) > 1.5, 'a tree stands in the wreck');
   }
 });
@@ -225,7 +225,25 @@ test('no piece is balanced on an edge or a corner: its middle is over what it to
       const P = W.parts[k].pts, pts = []; let cx = 0, cz = 0;
       for (let i = 0; i < P.length; i += 3) { const p = apply(M, P[i], P[i + 1], P[i + 2]); pts.push([p[0], p[2], p[1] - L.heightAt(p[0], p[2])]); cx += p[0]; cz += p[2]; }
       const lo = Math.min(...pts.map((p) => p[2])), m = inside(hull(pts.filter((p) => p[2] < lo + WRECK.touch + W.placed.deeper[k])), [cx / pts.length, cz / pts.length]);
+      // (over what it rests on at all: the margin WRECK.stand (or a narrow piece's own) is what the settling tries for,
+      // and a piece that still has not got it is dug in, up to WRECK.dig, where it stops)
       assert.ok(m > 0, `${kind} (seed ${seed}) ${ship} in ${pieces}: piece ${k}'s middle is ${(-m).toFixed(2)} m past what it rests on`);
     });
   }
+});
+
+// The walks kept clear (the code review of round 2): from where the Medic sets down to EACH pod, not only to their middle,
+// and a disc round wherever it really came down: every point of them marked kept clear, which every rock and plant on
+// the landing place keeps off (CLEARING.kept)
+test('the walks to each pod and round the Medic where it came down are kept clear', () => {
+  const L = makeLand(7, { kind: 'meadow', n: 512 }), c = L.landing, pods = [[c.x + 40, c.z + 9], [c.x + 38, c.z - 14], [c.x + 45, c.z + 2]];
+  for (const p of pods) clearWay(L, [c.x, c.z], p);
+  for (const p of pods) for (let t = 0; t <= 1; t += 0.05) for (const side of [-3, 0, 3]) {
+    const dx = p[0] - c.x, dz = p[1] - c.z, l = Math.hypot(dx, dz), x = c.x + dx * t - (dz / l) * side, z = c.z + dz * t + (dx / l) * side;
+    assert.ok(L.landingAt(x, z) > CLEARING.kept, `the walk to a pod is not kept clear at ${x.toFixed(1)}, ${z.toFixed(1)}`);
+  }
+  const sx = c.x + 15, sz = c.z - 12; clearDisc(L, sx, sz, CLEARING.pad);
+  for (let a = 0; a < 6.28; a += 0.4) for (const r of [0, 4, 8, CLEARING.pad - 1]) assert.ok(L.landingAt(sx + Math.cos(a) * r, sz + Math.sin(a) * r) > CLEARING.kept, `not clear ${r} m from where it came down`);
+  // (and the landing place's own mark stays below kept clear: its low plants and stones may grow there)
+  assert.ok(L.landingAt(c.x - 20, c.z) < CLEARING.kept);
 });

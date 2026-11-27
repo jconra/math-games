@@ -254,6 +254,9 @@ export function settle(parts, land, site, plan) {
   // its lowest point while the pieces are being moved apart; every point for the last placing)
   const every = (p, most) => { const out = [], m = p.pts.length / 3, step = Math.max(1, Math.floor(m / most)); for (let i = 0; i < m; i += step) out.push(p.pts[i * 3], p.pts[i * 3 + 1], p.pts[i * 3 + 2]); return out; };
   const sample = parts.map((p) => every(p, 500)), many = parts.map((p) => every(p, 4000));
+  // (how far inside what it rests on a piece's middle must be: WRECK.stand, or for a narrow piece a quarter of its
+  // narrowest span across (a narrow piece cannot have its middle 0.3 m inside: it was always dug in to the cap))
+  const standOf = parts.map((p) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; const P = p.pts; for (let i = 0; i < P.length; i += 3) { x0 = Math.min(x0, P[i]); x1 = Math.max(x1, P[i]); z0 = Math.min(z0, P[i + 2]); z1 = Math.max(z1, P[i + 2]); } return Math.min(WRECK.stand, Math.min(x1 - x0, z1 - z0) / 4); });
   // COMING TO REST, as a dropped piece does: tipped toward its middle about its lowest point until a second point
   // touches, then about the line through those two until a third does (each turn no more than WRECK.settle), so it lies
   // on the ground rather than on a wing's tip or one corner; what is left of its roll and nose-down is the crash's
@@ -300,7 +303,7 @@ export function settle(parts, land, site, plan) {
       let worst = Infinity, edge = null;
       if (H.length < 3) { const a = H[0], b = H[H.length - 1]; edge = [a, b]; worst = -1; }
       else for (let e = 0; e < H.length; e++) { const a = H[e], b = H[(e + 1) % H.length], ex = b[0] - a[0], ez = b[1] - a[1], l = Math.hypot(ex, ez) || 1, m = (ex * (cz - a[1]) - ez * (cx - a[0])) / l; if (m < worst) { worst = m; edge = [a, b]; } }
-      if (worst >= WRECK.stand) break;
+      if (worst >= standOf[k]) break;
       const A = W[edge[0][2]], B = W[edge[1][2]];
       let lx = B[0] - A[0], lz = B[2] - A[2], ll = Math.hypot(lx, lz);
       // (one point, or two on top of each other: it falls toward its middle about a line across that way)
@@ -338,7 +341,7 @@ export function settle(parts, land, site, plan) {
     // if what it would rest on is not under its middle even so (dug in rather than balanced: up to WRECK.dig more)
     let low = Infinity; const pts = full ? p.pts : many[k];
     for (let i = 0; i < pts.length; i += 3) { const q = apply(M, pts[i], pts[i + 1], pts[i + 2]), d = q[1] - land.heightAt(q[0], q[2]); if (d < low) low = d; }
-    let e = 0; while (e < WRECK.dig && standing(M, k, WRECK.touch + e) < WRECK.stand) e += 0.05;
+    let e = 0; while (e < WRECK.dig && standing(M, k, WRECK.touch + e) < standOf[k]) e += 0.05;
     deeper[k] = +e.toFixed(2);
     return mul(tr(0, -low - P.sink - e, 0), M);
   });
@@ -427,6 +430,18 @@ export function clearWay(land, a, b, half = 3.5) {
   const ux = dx / l, uz = dz / l, nx = -uz * half, nz = ux * half, n = Math.ceil(l / 1.5), out = [];
   for (let i = 0; i < n; i++) for (let s = -1; s < 1; s += 0.5) {
     const t0 = (i / n) * l, t1 = ((i + 1) / n) * l, x0 = a[0] + ux * t0 + nx * s, z0 = a[1] + uz * t0 + nz * s, x1 = a[0] + ux * t1 + nx * (s + 0.5), z1 = a[1] + uz * t1 + nz * (s + 0.5);
+    out.push(x0, 0, z0, x1, 0, z0, x0, 0, z1, x1, 0, z0, x1, 0, z1, x0, 0, z1);
+  }
+  return clearUnder(land, [{ tris: Float32Array.from(out) }], { margin: 0.3, trunk: 0 });
+}
+
+// AND ROUND WHERE THE SHIP REALLY CAME DOWN (a pilot flying by hand may set down anywhere on the level ground): a disc
+// `r` metres round (x, z), marked as under the wreck
+export function clearDisc(land, x, z, r) {
+  const out = [], n = Math.ceil(r / 1.5);
+  for (let j = -n; j < n; j++) for (let i = -n; i < n; i++) {
+    const x0 = x + i * 1.5, z0 = z + j * 1.5, x1 = x0 + 1.5, z1 = z0 + 1.5;
+    if (Math.hypot((x0 + x1) / 2 - x, (z0 + z1) / 2 - z) > r) continue;
     out.push(x0, 0, z0, x1, 0, z0, x0, 0, z1, x1, 0, z0, x1, 0, z1, x0, 0, z1);
   }
   return clearUnder(land, [{ tris: Float32Array.from(out) }], { margin: 0.3, trunk: 0 });
