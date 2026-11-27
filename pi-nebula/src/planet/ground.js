@@ -94,7 +94,7 @@ const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 // how much bare rock (and on the meadows, bare earth: uBare) is mottled at every distance
 const ROCK_MOTTLE = 0.8;
 // how much of the sky's colour the farthest ground takes (with air: the moon has none)
-export const HORIZON_HAZE = 0.6;
+export const HORIZON_HAZE = 0.75;
 export const HAZE_GLSL = /* glsl */`
 uniform float uHaze, uHazeH, uHazeBase;
 float hazeAmt(vec3 eye, vec3 p) {
@@ -103,7 +103,7 @@ float hazeAmt(vec3 eye, vec3 p) {
   // (and where the land meets the sky over the planet's curve, it melts into the sky rather than ending in a ruled
   // line: toward the farthest ground the eye can see from its height over the landing place, more haze)
   float edge = sqrt(2.0 * ${CURVE.toFixed(1)} * (h0 + 1.5));
-  return max(1.0 - exp(-uHaze * d * od), ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.35, 1.0, d / edge));
+  return max(1.0 - exp(-uHaze * d * od), ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.3, 1.0, d / edge));
 }
 `;
 
