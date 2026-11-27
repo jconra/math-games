@@ -143,7 +143,7 @@ export function pastOnScreen(hist, toScreen) {
 //   underIn   the ball the finger came down INSIDE (its disc on the screen, as the balls were then), or null
 //   under     the ball under the finger as it came down, inside or within onIt of its edge (underAt), or null
 //   hitBall   the ball the tap is on exactly now (not the one in hand), or null
-//   near      nearestBall over reach: { id, d } (d 0: inside it, now or a moment ago) or null
+//   near      nearestBall over reach: { id, d } (d: from its edge, now or a moment ago) or null
 //   hitGoal   the goal whose box the tap is on exactly, or null
 //   goalBy    the goal just beside the tap (its box padded, or the floor at its mouth), or null
 //   spot      a spot on the floor or a wall in front that a throw could go to (the mouse throws there)
@@ -155,7 +155,8 @@ export function pastOnScreen(hist, toScreen) {
 export function chooseTap({ held = false, touch = true, underIn = null, under = null, hitBall = null, near = null, hitGoal = null, goalBy = null, spot = false }, H = HANDS) {
   const onIt = touch ? H.onIt.touch : H.onIt.mouse, reach = touch ? H.reach.touch : H.reach.mouse;
   if (held) {
-    const inside = underIn ?? hitBall ?? (near && near.d === 0 ? near.id : null);
+    // (inside it as the finger came down, or now: never by where a ball rolled a moment ago, which is for empty hands)
+    const inside = underIn ?? hitBall;
     if (inside != null) return { pick: inside };
     const g = hitGoal ?? goalBy; if (g != null) return { throw: g };
     if (under != null) return { pick: under };
