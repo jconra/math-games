@@ -59,7 +59,7 @@ export function makeLand(seed, { kind = null, n = SAMPLES } = {}) {
   seed = Math.max(1, Math.floor(Math.abs(+seed) || 1));
   const K = (kind && kindById(kind)) || kindOf(seed);
   const N = n, P = WIDTH, T = P / N, H = new Float32Array(N * N);
-  const ctx = { N, P, T, H, seed };
+  const ctx = { N, P, T, H, seed, sun: K.air ? null : MOON_SUN };
   K.shape(ctx);
 
   // THE LANDING PLACE: of the spots near the middle, the one where the land is already most nearly level, made level
@@ -155,17 +155,43 @@ function sampleB(A, N, P, x, z, ch) {
 }
 
 // the spot near the middle where the land is most nearly level already (so making it level changes it least)
+// THE SUN ON AN AIRLESS WORLD (the game's own sky: world/sky.js DIR.sun, at(-145, 12), its turn 112 added), toward it
+const MOON_SUN = (() => { const a = (-145 + 112) * Math.PI / 180, e = 12 * Math.PI / 180; return [Math.cos(e) * Math.cos(a), Math.sin(e), Math.cos(e) * Math.sin(a)]; })();
+// SET DOWN IN THE SUN, on a world with no air (the game's maker: "so you walk in sunlight and see the long black shadows
+// round you"): how much of the landing place and the ground round it the sun reaches, as the light picture works it out
+// (src/planet/ground.js LIGHT_FRAG: the steepest rise of the land toward the sun against the sun's own height), at its
+// middle and three rings out to `SUNNY.reach` metres; a spot is sunny when at least `SUNNY.least` of them are lit
+export const SUNNY = { reach: 48, least: 0.9 };
+export function sunLit(H, N, P, x, z, y, sun) {
+  const T = P / N, l = Math.hypot(sun[0], sun[2]) || 1e-4, dx = sun[0] / l, dz = sun[2] / l, tanSun = sun[1] / l;
+  let steepest = -1e9;
+  for (let d = T * 0.75; d <= 2200; d *= 1.13) steepest = Math.max(steepest, (sampleH(H, N, P, x + dx * d, z + dz * d) - y) / d);
+  return tanSun - steepest > 0.06;
+}
+function sunnyAt(ctx, x, z, y) {
+  const { N, P, H, sun } = ctx; let lit = 0, n = 0;
+  const pts = [[0, 0]]; for (const r of [SUNNY.reach / 3, (2 * SUNNY.reach) / 3, SUNNY.reach]) for (let a = 0; a < 12; a++) pts.push([Math.cos(a * Math.PI / 6) * r, Math.sin(a * Math.PI / 6) * r]);
+  for (const [ox, oz] of pts) { const inside = Math.hypot(ox, oz) <= LANDING.flat, h = inside ? y : sampleH(H, N, P, x + ox, z + oz); if (sunLit(H, N, P, x + ox, z + oz, h + 0.25, sun)) lit++; n++; }
+  return lit / n;
+}
 function findLanding(ctx) {
   const { N, P, T, H } = ctx, { flat, within } = LANDING, step = 20, r = flat + 12;
   let best = null;
+  const all = [];
   for (let z = -within; z <= within; z += step) for (let x = -within; x <= within; x += step) {
     if (Math.hypot(x, z) > within) continue;
     let s = 0, s2 = 0, n = 0;
     for (let dz = -r; dz <= r; dz += 6) for (let dx = -r; dx <= r; dx += 6) { if (dx * dx + dz * dz > r * r) continue; const h = sampleH(H, N, P, x + dx, z + dz); s += h; s2 += h * h; n++; }
     const mean = s / n, spread = Math.sqrt(Math.max(0, s2 / n - mean * mean)) + Math.hypot(x, z) * 0.004;   // (nearer the middle wins a tie)
+    all.push({ x, z, mean, spread });
     if (!best || spread < best.spread) best = { x, z, mean, spread };
   }
-  return best;
+  if (!ctx.sun) return best;
+  // (with no air: the most nearly level of the sunny ones; if none is, the sunniest)
+  all.sort((a, b) => a.spread - b.spread);
+  let sunniest = null;
+  for (const c of all) { c.lit = sunnyAt(ctx, c.x, c.z, c.mean); if (c.lit >= SUNNY.least) return c; if (!sunniest || c.lit > sunniest.lit) sunniest = c; }
+  return sunniest;
 }
 // make it level: the land round the spot eased to its mean height, all the way within `flat` metres (a trace of the
 // old shape left, a few centimetres, so it is not a polished floor), back to the land as it was by `flat + edge`

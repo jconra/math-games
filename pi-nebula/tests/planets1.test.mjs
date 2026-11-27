@@ -3,7 +3,7 @@
 // settle's main), the pieces themselves resting where they toppled to.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeLand, CLEARING, kneeCap } from '../src/planet/land.js';
+import { makeLand, CLEARING, kneeCap, sunLit, SUNNY } from '../src/planet/land.js';
 import { wreckPlan, breakApart, wreckSite, settle, wreckFor } from '../src/planet/wreck.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
@@ -49,4 +49,15 @@ test('settle hands the pods main\'s resting places: the same seed the same each 
     // (the toppled pieces lie near main's: within a couple of metres)
     for (let k = 0; k < a.mats.length; k++) { const d = Math.hypot(a.mats[k][12] - a.main.mats[k][12], a.mats[k][14] - a.main.mats[k][14]); assert.ok(d < 3, `${kind} ${seed} piece ${k}: ${d.toFixed(2)} m from main's`); }
   }
+});
+
+test('on the moon the ship sets down out in the sun: most of the landing place and the ground round it lit', () => {
+  const a = (-145 + 112) * Math.PI / 180, e = 12 * Math.PI / 180, sun = [Math.cos(e) * Math.cos(a), Math.sin(e), Math.cos(e) * Math.sin(a)];
+  let sunny = 0;
+  for (const seed of [11, 17, 51, 64]) {
+    const land = makeLand(seed, { kind: 'moon', n: 512 }), g = land.landing; let lit = 0, n = 0;
+    for (const r of [0, 12, 24, 36]) for (let k = 0; k < (r ? 12 : 1); k++) { const x = g.x + Math.cos(k * 0.5236) * r, z = g.z + Math.sin(k * 0.5236) * r; if (sunLit(land.H, land.N, land.width, x, z, land.heightAt(x, z) + 0.25, sun)) lit++; n++; }
+    if (lit / n >= SUNNY.least - 0.05) sunny++;
+  }
+  assert.ok(sunny >= 3, `${sunny} of 4 moons set down in the sun`);
 });
