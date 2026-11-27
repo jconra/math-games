@@ -365,6 +365,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     else if (held && !touch) { const T = targetAt(p.x, p.y); spot = !!(T && T.at); }
     const what = chooseTap({
       held: !!held, touch,
+      underIn: p.from && from ? underAt(p.from[0], p.from[1], from, 0) : null,
       under: p.from && from ? underAt(p.from[0], p.from[1], from, touch ? HANDS.onIt.touch : HANDS.onIt.mouse) : null,
       hitBall: d.ball != null && (!held || d.ball !== held.id) ? d.ball : null,
       near, hitGoal: d.goal != null ? d.goal : null, goalBy, spot,

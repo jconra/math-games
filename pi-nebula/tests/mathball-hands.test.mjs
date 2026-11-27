@@ -131,9 +131,14 @@ test('the order of a tap\'s rules (chooseTap): empty hands and a ball in hand; b
   assert.deepEqual(T({ hitGoal: 1 }), { say: 'ball first' });
   assert.equal(T({}), null, 'the floor: nothing');
   // a ball in hand
-  assert.deepEqual(T({ held: true, under: 3, hitGoal: 1 }), { pick: 3 }, 'a tap ON a ball swaps for it');
-  assert.deepEqual(T({ held: true, near: { id: 5, d: 16 }, hitGoal: 1 }), { pick: 5 }, 'on it: 16 px');
-  assert.deepEqual(T({ held: true, near: { id: 5, d: 16.01 }, hitGoal: 1 }), { throw: 1 }, 'past 16 px: the goal');
+  assert.deepEqual(T({ held: true, underIn: 3, under: 3, hitGoal: 1 }), { pick: 3 }, 'a tap truly ON a ball (inside it) swaps for it');
+  assert.deepEqual(T({ held: true, hitBall: 4, hitGoal: 1 }), { pick: 4 });
+  assert.deepEqual(T({ held: true, near: { id: 5, d: 0 }, hitGoal: 1 }), { pick: 5 }, 'inside it a moment ago');
+  assert.deepEqual(T({ held: true, under: 3, near: { id: 3, d: 9 }, hitGoal: 1 }), { throw: 1 }, 'a ball at the goal\'s foot, the tap just beside it: the goal');
+  assert.deepEqual(T({ held: true, under: 3, goalBy: 2 }), { throw: 2 }, 'beside a goal too');
+  assert.deepEqual(T({ held: true, under: 3 }), { pick: 3 }, 'no goal there: a ball within 16 px swaps');
+  assert.deepEqual(T({ held: true, near: { id: 5, d: 16 } }), { pick: 5 }, 'on it: 16 px');
+  assert.equal(T({ held: true, near: { id: 5, d: 16.01 } }), null, 'past 16 px: nothing');
   assert.deepEqual(T({ held: true, near: { id: 5, d: 30 }, goalBy: 2 }), { throw: 2 }, 'a goal just beside, a ball in reach: the throw');
   assert.equal(T({ held: true, near: { id: 5, d: 30 } }), null, 'a ball merely in reach never drops the one in hand');
   assert.equal(T({ held: true, spot: true }), null, 'a finger on the floor: nothing (never a throw by mistake)');

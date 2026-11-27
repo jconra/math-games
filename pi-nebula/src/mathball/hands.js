@@ -139,27 +139,32 @@ export function pastOnScreen(hist, toScreen) {
 }
 
 // WHAT A TAP DOES, in order (the rules, as one plain function):
-//   held     a ball in hand
-//   under    the ball under the finger as it came down, within onIt of its edge (underAt), or null
-//   hitBall  the ball the tap is on exactly now (not the one in hand), or null
-//   near     nearestBall over reach: { id, d } or null
-//   hitGoal  the goal whose box the tap is on exactly, or null
-//   goalBy   the goal just beside the tap (its box padded, or the floor at its mouth), or null
-//   spot     a spot on the floor or a wall in front that a throw could go to (the mouse throws there)
+//   held      a ball in hand
+//   underIn   the ball the finger came down INSIDE (its disc on the screen, as the balls were then), or null
+//   under     the ball under the finger as it came down, inside or within onIt of its edge (underAt), or null
+//   hitBall   the ball the tap is on exactly now (not the one in hand), or null
+//   near      nearestBall over reach: { id, d } (d 0: inside it, now or a moment ago) or null
+//   hitGoal   the goal whose box the tap is on exactly, or null
+//   goalBy    the goal just beside the tap (its box padded, or the floor at its mouth), or null
+//   spot      a spot on the floor or a wall in front that a throw could go to (the mouse throws there)
 // -> { pick: id } | { throw: goal } | { toss: true } | { say: 'ball first' } | null
 // Empty hands: a ball under it, on it, or the nearest within reach; a goal says "a ball first". A ball in hand: a
-// ball the tap is ON (under it, exactly, or within onIt) is swapped for; else a goal on or just beside it is thrown
-// at, whatever lies near; else (the mouse) the spot; a ball merely within reach never drops the one in hand.
-export function chooseTap({ held = false, touch = true, under = null, hitBall = null, near = null, hitGoal = null, goalBy = null, spot = false }, H = HANDS) {
+// ball the tap is truly ON (inside its disc) is swapped for; else a goal on or just beside the tap is thrown at,
+// whatever lies near (a ball come to rest at a goal's foot never takes a tap meant for the goal); else a ball within
+// onIt of the tap is swapped for; else (the mouse) the spot; a ball merely within reach never drops the one in hand.
+export function chooseTap({ held = false, touch = true, underIn = null, under = null, hitBall = null, near = null, hitGoal = null, goalBy = null, spot = false }, H = HANDS) {
   const onIt = touch ? H.onIt.touch : H.onIt.mouse, reach = touch ? H.reach.touch : H.reach.mouse;
-  if (under != null) return { pick: under };
-  if (hitBall != null) return { pick: hitBall };
   if (held) {
-    if (near && near.d <= onIt) return { pick: near.id };
+    const inside = underIn ?? hitBall ?? (near && near.d === 0 ? near.id : null);
+    if (inside != null) return { pick: inside };
     const g = hitGoal ?? goalBy; if (g != null) return { throw: g };
+    if (under != null) return { pick: under };
+    if (near && near.d <= onIt) return { pick: near.id };
     if (!touch && spot) return { toss: true };
     return null;
   }
+  if (under != null) return { pick: under };
+  if (hitBall != null) return { pick: hitBall };
   if (near && near.d <= reach) return { pick: near.id };
   if (hitGoal != null || goalBy != null) return { say: 'ball first' };
   return null;
