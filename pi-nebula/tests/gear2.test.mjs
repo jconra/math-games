@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { register } from 'node:module';
 import { homedir } from 'node:os';
-import { LEGS, LEG, FEET, legPlan, kitLeaves, doorFolds, gearOrder, behindAngle } from '../kit/ships/gear-plan.js';
+import { LEGS, LEG, FEET, legPlan, kitLeaves, doorFolds, doorHalves, keptPieces, gearOrder, behindAngle } from '../kit/ships/gear-plan.js';
 import { aimPoint, foldPoint, aimMatrix } from '../kit/leafaim.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
@@ -170,12 +170,14 @@ async function kitOf() {
 test('each leg folds AS DRAWN: every vertex of every part, at a hundred moments, out of the hull but by its well, and up behind its shut door', { skip: DRAWN }, async () => {
   const K = await kitOf(), bad = [];
   for (const [ship, S] of Object.entries(LEGS)) {
-    const H = HULLS[ship], skin = skinOf(H), deck = K.ships[ship].deck;
+    const H = HULLS[ship], skin0 = skinOf(H), deck = K.ships[ship].deck;
     for (const which of Object.keys(S.legs)) {
+      // (the hull's skin, with the pieces cut with the well that stay in it (an upper skin over it); its mouth without them)
+      const kept = polysAt(keptPieces(H.DOORS[which], S.legs[which].door)), skin = (x, z) => { const k = kept(x, z), hs = skin0(x, z); return k == null ? hs : [...hs, k].sort((p, q) => p - q); };
       // (each kind of fault once a part, with the moments it was seen at, first and last)
       const name = `${ship} ${which}`, G = legPlan(S.legs[which], S.floor), [mn, mx] = G.well, note = new Map();
       const say = (k, q, i = null) => { const n = note.get(k); if (!n) note.set(k, { q, i0: i, i1: i }); else n.i1 = i; };
-      const door = polysAt(H.DOORS[which].flatMap((h) => h.polys)), roof = polysAt(H.WELLS[which].roof);
+      const door = polysAt(doorHalves(H.DOORS[which], S.legs[which].door).flatMap((h) => h.polys)), roof = polysAt(H.WELLS[which].roof);
       const inMouth = (x, z) => [[0, 0], [0.005, 0], [-0.005, 0], [0, 0.005], [0, -0.005]].some(([dx, dz]) => door(x + dx, z + dz) != null);
       const ceil = (x, z) => roof(x, z) ?? mx[1];
       const legs = K.leaves(K.build(ship, K.ships[ship].gear, which), 'gear');

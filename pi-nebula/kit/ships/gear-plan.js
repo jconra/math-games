@@ -124,6 +124,9 @@ export function kitLeaves(G, deck) {
 // own edge. Returns the leaves' folds: [{ halves (indices), fold { at, along, from, to } }] (kit/leafaim.js foldMatrix:
 // t 0, open: from; t 1, shut: to).
 export const DOOR = { keep: 0.03, lift: 0.05, inset: 0.03 };
+// a well's door halves without the pieces of skin that stay in the hull (LEGS `door.stay`), and those pieces
+export const doorHalves = (halves, how = {}) => halves.map((h, i) => ({ ...h, polys: h.polys.filter((_, j) => !(how.stay || []).some(([a, b]) => a === i && b === j)) }));
+export const keptPieces = (halves, how = {}) => (how.stay || []).map(([a, b]) => halves[a].polys[b]);
 export function doorFolds(halves, { toward = null, apart = false, lift = DOOR.lift, inset = DOOR.inset, keep = DOOR.keep } = {}) {
   const groups = apart ? halves.map((h, i) => [[i], h.axis, h.dir]) : [[halves.map((_, i) => i), toward[0], toward[1]]];
   return groups.map(([idx, axis, dir]) => {
@@ -161,7 +164,10 @@ export function gearOrder(legs, doors, up, move) {
 //   top, well [in, out, aft, fore]: its well's top and how far its mouth reaches from `at` each way; step { x, low }:
 //               outboard of x its ceiling is low, where the hull's side comes in (legPlan)
 //   door        how its door folds into its frame (doorFolds): { toward: [axis, dir] } (the port side's: mirrored
-//               across the ship for the starboard twin) or { apart: true }
+//               across the ship for the starboard twin) or { apart: true }; stay: [[half, piece], ...] the pieces of
+//               the cut skin that stay in the hull (an upper skin over the well, the wing's root over the
+//               Explorer's, a cheek's top over the Miner's: with nothing of the hull over them, which the leg never
+//               passes, and which would leave a hole in the hull's top with the door open)
 // floor: the ground in the ship's frame (the Miner stands STAND higher on its legs than its hull's own ground line).
 // The wells are cut in the hull data (WELLS, DOORS) by the rigs in ~/pw/space-math/rigs/gear-2/; the legs' numbers were
 // tried in ~/pw/space-math/rigs/gear-3/ against the hull, by pictures from behind first.
@@ -180,13 +186,13 @@ export const LEGS = {
   // walls, long along the ship; the hull is not quite the same each side, so each side's leg stows its own way
   explorer: { floor: 0, legs: mirror({
     nose: { at: [0, 4.2], belly: 1.17, splay: 0, r: 0.16, pad: [0.5, 0.62], knee: 0.32, show: 0.16, padLevel: true,
-      stow: { a: [0, 1.65, 5.23], b: [0, 1.725, 3.91] }, top: 1.96, well: [0.27, 0.27, 1.27, 1.17], door: { apart: true },
+      stow: { a: [0, 1.47, 5.23], b: [0, 1.47, 3.91] }, top: 1.68, well: [0.27, 0.27, 1.27, 1.17], door: { apart: true },
       braces: [{ name: 'fore', from: [0, 1.431, 5.193], r: 0.11 }, { name: 'aft', from: [0, 1.272, 3.115], r: 0.11 }] },
     port: { at: [2.42, -3.72], belly: 2.15, splay: 0.9, r: 0.3, pad: [0.8, 1.4], knee: 0.62, padLevel: true,
-      stow: { a: [2.45, 3.4, -2.85], b: [2.5, 2.55, -4.35], via: { b: [[0.45, [2.5, 1.3, -4.0]]] } }, top: 3.7, well: [0.35, 0.53, 1.48, 1.15], door: { toward: [0, 1] },
-      braces: [{ name: 'in', from: [1.874, 1.419, -3.735], face: [0.6, -0.796, -0.078], r: 0.2, via: [[0.4, [2.27, 1.73, -3.735]]], to: [2.5, 2.9, -3.735] },
-        { name: 'fore', from: [2.404, 1.592, -2.195], face: [0.647, -0.762, 0.029], r: 0.2, via: [[0.4, [2.404, 1.52, -2.8]]], to: [2.5, 2.95, -2.9] }],
-      starboard: { top: 3.83, well: [0.35, 0.61, 1.48, 1.15] } },
+      stow: { a: [2.43, 3.5, -3.85], b: [2.48, 2.55, -4.45], via: { b: [[0.45, [2.48, 1.3, -4.1]]] } }, top: 3.7, well: [0.35, 0.53, 1.48, 1.15], door: { toward: [0, 1], stay: [[1, 7], [1, 10]] },
+      braces: [{ name: 'in', from: [1.874, 1.419, -3.735], face: [0.6, -0.796, -0.078], r: 0.2, via: [[0.4, [2.27, 1.73, -3.735]]], to: [2.36, 2.9, -3.9] },
+        { name: 'fore', from: [2.404, 1.592, -2.195], face: [0.647, -0.762, 0.029], r: 0.2, via: [[0.4, [2.404, 1.45, -2.8]]], to: [2.36, 2.95, -2.9] }],
+      starboard: { top: 3.83, well: [0.35, 0.61, 1.48, 1.15], door: { toward: [0, -1], stay: [[0, 9], [0, 11]] } } },
   }) },
   // the Miner: a pair under the cockpit's sides, their wells between the cockpit's lining and the hull's sides, long
   // along the ship, braced from their ends (the starboard cheek is narrower: 48 cm at the well's top from the lining to
@@ -198,9 +204,9 @@ export const LEGS = {
   // boot, the bands, the spiked skid) as the game's maker chose it ("steal theirs")
   miner: { floor: -0.13, legs: mirror({
     'nose port': { at: [1.32, 3.75], belly: 1.36, splay: 0.76, r: 0.13, pad: [0.3, 0.72], knee: 0.38, show: 0.18, padLevel: true,
-      stow: { a: [1.318, 2.418, 4.627], b: [1.441, 2.045, 3.449] }, top: 2.6, step: { x: 1.6, low: 2.3 }, well: [0.24, 0.41, 1.15, 1.15], door: { toward: [0, -1] },
+      stow: { a: [1.318, 2.418, 4.627], b: [1.441, 2.045, 3.449] }, top: 2.6, step: { x: 1.6, low: 2.3 }, well: [0.24, 0.41, 1.15, 1.15], door: { toward: [0, -1], stay: [[0, 3]] },
       braces: [{ name: 'fore', from: [1.33, 2.12, 4.72], r: 0.09 }, { name: 'aft', from: [1.27, 1.77, 2.77], r: 0.09 }],
-      starboard: { stow: { a: [1.29, 2.41, 4.738], b: [1.415, 2.01, 3.494] }, step: { x: 1.56, low: 2.15 }, well: [0.24, 0.33, 1.15, 1.21] } },
+      starboard: { stow: { a: [1.29, 2.41, 4.738], b: [1.415, 2.01, 3.494] }, step: { x: 1.56, low: 2.15 }, well: [0.24, 0.33, 1.15, 1.21], door: { toward: [0, 1], stay: [[0, 2], [1, 7]] } } },
     port: { at: [1.32, -6.42], belly: 1.8, splay: 1.02, r: 0.24, pad: [0.62, 0.74], knee: 0.5, padLevel: true,
       stow: { a: [1.62, 3.1, -6.515], b: [1.331, 2.06, -6.558] }, top: 3.97, step: { x: 1.63, low: 3.7 }, well: [0.3, 0.73, 0.54, 0.3], door: { toward: [0, -1] },
       braces: [{ name: 'in', from: [0.6, 1.293, -6.507], face: [0, -0.725, -0.689], r: 0.145, via: [[0.45, [1.2, 1.293, -6.507]]], to: [1.2, 2.4, -6.507] },

@@ -21,7 +21,7 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
 import { U as KU, kitTextures, spinVertex } from '../materials.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
-import { legPlan, kitLeaves, doorFolds, gearOrder, LEG } from './gear-plan.js';
+import { legPlan, kitLeaves, doorFolds, doorHalves, keptPieces, gearOrder, LEG } from './gear-plan.js';
 import { Piece } from '../piece.js';
 
 export const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -486,6 +486,11 @@ function mountBlock(acc, s, w, r, paint, dk, still = false) {
   rod(acc, s.clone().addScaledVector(bu, -h - 0.03), s.clone().addScaledVector(bu, h + 0.03), Math.min(0.05, r * 0.45), paint.rod || paint.piston, dk);
   if (still || SMALL) for (const sa of [1, -1]) for (const sb of [1, -1]) { const c = s.clone().add(V3(sa * h * 0.65, -h * 0.8, sb * h * 0.65)); rod(acc, c, c.clone().add(V3(0, -0.025, 0)), 0.018, paint.bolt, dk); }
 }
+// the pieces of a well's cut skin that stay in the hull (gear-plan.js LEGS door.stay: an upper skin over the well),
+// drawn with the well as the skin they are, facing up and out; paint(P, n) their surface, inner their inside
+export function keptSkin(acc, halves, how, paint, inner, dk) {
+  for (const poly of keptPieces(halves, how)) { const P = poly.map((q) => V3(...q)), n = tnorm(P.slice(0, 3)).normalize(); if (n.y < 0) n.negate(); panel(acc, P, n, paint, inner, dk); }
+}
 // the still mount blocks of a leg's supports (those whose lugs do not slide), drawn with its well
 export function legMounts(acc, L, floor, paint, dk) {
   const G = legPlan(L, floor);
@@ -578,8 +583,8 @@ function strutLegOf(p, L, { floor, key, which, dk, paint, speed, style = 'sleek'
 // 'doors' (here 0 open, 1 shut). paint(P, n): its outer face's surface; inner: its inside (3 cm in); edge, box: a fine
 // line round it (a strip 1 cm wide on it, in `edge`: a shade off the skin, no bright outline; the game's maker asked
 // for doors that slide in place, flush) along the well's sides and the line the halves meet on (box: the well's)
-export function foldDoors(p, halves, { key, which, how, paint, inner, dk, speed, edge = null, box = null }) {
-  const deck = -dk(V3(0, 0, 0)).y;
+export function foldDoors(p, halves0, { key, which, how, paint, inner, dk, speed, edge = null, box = null }) {
+  const deck = -dk(V3(0, 0, 0)).y, halves = doorHalves(halves0, how);
   doorFolds(halves, how).forEach(({ halves: idx, fold }, g) => {
     p.leaf(`${key}:well door:${which}:${g}`, (lp) => {
       const acc = new Acc();

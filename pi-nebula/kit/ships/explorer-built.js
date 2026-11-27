@@ -898,6 +898,7 @@ function ebWells(p) {
   for (const [which, L] of Object.entries(LEGS.legs)) {
     C.wellWalls(acc, WELLS[which], { dark: PAL.trim, dk, step: legPlan(L, LEGS.floor).step, cover: DOORS[which] });
     C.legMounts(acc, L, LEGS.floor, GEAR_PAINT, dk);
+    C.keptSkin(acc, DOORS[which], L.door, (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), PAL.trim, dk);
   }
   return acc.flush(p);
 }
