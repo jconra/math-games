@@ -23,6 +23,7 @@
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { GRIT, gritData } from './grit.js';
+import { lookOff } from './kinds.js';
 import { takesShadows, makeShadowPicture, SHADOW_PIC } from './groundshadow.js';
 
 // the patches: the smallest is SIZE0 metres across; a patch of level L is SIZE0 * 2^L and is drawn while the camera is
@@ -307,7 +308,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
   // (its spots of the picture marked as ground: the shadows are drawn there and only there, src/planet/groundshadow.js)
-  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: { ...(look.air ? { AIR: 1 } : {}), ...(Q.fine ? { GRIT: 1 } : {}) } }));
+  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: { ...(look.air ? { AIR: 1 } : {}), ...(Q.fine && !lookOff('grit') ? { GRIT: 1 } : {}) } }));
 
   // the grid: (G + 1)^2 corners, x and z in grid steps
   const pos = new Float32Array((G + 1) * (G + 1) * 3), idx = [];

@@ -24,6 +24,7 @@ import { HAZE_GLSL } from './ground.js';
 import { PLANTS, PLANT_SINK } from './kinds.js';
 import { hash2 } from './noise.js';
 import { wrapD } from './land.js';
+import { lookOff } from './kinds.js';
 
 const CELL = 8;
 // no boulder stands on the landing place, nor within a few metres of its edge (the mark eases out over 52 m past its
@@ -190,7 +191,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   const t0 = performance.now(), Q = COVER_QUALITY[quality] || COVER_QUALITY.medium, K = land.kind, C = K.cover, P = land.width, wrapN = P / CELL;
   const group = new THREE.Group(); group.name = 'planet:cover';
   const layers = [], dummy = new THREE.Object3D(), col = new THREE.Color();
-  const L0 = land.landing, keptClear = (x, z) => land.landingAt(x, z) > CLEARING.kept || Math.hypot(wrapD(x - L0.x, P), wrapD(z - L0.z, P)) < CLEARING.pad;
+  const L0 = land.landing, keptClear = lookOff('clearing') ? (x, z) => land.landingAt(x, z) > CLEAR : (x, z) => land.landingAt(x, z) > CLEARING.kept || Math.hypot(wrapD(x - L0.x, P), wrapD(z - L0.z, P)) < CLEARING.pad;
   const srgb = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const stats = { rocks: 0, plants: 0, tris: 0, buildMs: 0, layers: 0 };
   // a layer: one InstancedMesh for each of its shapes, laid out round the camera out to `reach` metres
@@ -211,10 +212,10 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
 
   // ── the rocks ──────────────────────────────────────────────────────────────────────────────────────────────────
   // (the boulders rounder on the best quality: four times the triangles, a few hundred of them near the camera)
-  const rockShapesG = rockShapes(Q.detail), boulderShapesG = Q.detail && quality === 'high' ? rockShapes(2) : rockShapesG, rockCol = srgb(look.rock), dustCol = srgb(look.dust), darkCol = srgb(look.dark || look.rock);
+  const rockShapesG = rockShapes(Q.detail), boulderShapesG = Q.detail && quality === 'high' && !lookOff('rocks') ? rockShapes(2) : rockShapesG, rockCol = srgb(look.rock), dustCol = srgb(look.dust), darkCol = srgb(look.dark || look.rock);
   const stoneReach = 70 * Q.reach, boulderReach = 260 * Q.reach;
-  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach, stone: true });
-  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach, stone: true });
+  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach, stone: !lookOff('rocks') });
+  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach, stone: !lookOff('rocks') });
   // small stones: everywhere a few, more where it is rocky
   const stones = layer({ name: 'stones', shapes: rockShapesG, material: rockMat, reach: stoneReach, most: Math.round(2200 * Q.many), lay: (L, cx, cz, ci, cj, wi, wj) => {
     const rock = land.rockAt(cx, cz), n = Math.floor((0.7 + rock * 4.5) * C.rocks.many * Q.many * 1.6 + hash2(wi, wj, 77));
@@ -299,7 +300,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   // ── their shadows on the ground (src/planet/groundshadow.js): every rock, plant and flower casts, its leaves cut out
   // of their picture as they are drawn ──
   const shades = [];
-  if (ground.shadows) for (const L of layers) for (const m of L.meshes) shades.push(ground.shadows.add(m, { reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
+  if (ground.shadows && !lookOff('plantShadows')) for (const L of layers) for (const m of L.meshes) shades.push(ground.shadows.add(m, { reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
 
   // ── laid out round the camera ──────────────────────────────────────────────────────────────────────────────────
   let lastX = Infinity, lastZ = Infinity;

@@ -25,6 +25,7 @@
 //
 //   const P = makePeopleShadows({ ground })      the people: P.sync(people, hide) each frame (as before), P.stats(), P.dispose()
 import * as THREE from 'three';
+import { lookOff } from './kinds.js';
 
 // the picture: its size (pixels across) per quality tier; how much ground it covers (half its width, metres): `near`
 // standing on the ground, more the higher the camera is (`per` metres for each metre up), at most `far`; the softening
@@ -148,7 +149,9 @@ export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium'
   }
   const stats = { casters: 0, draws: 0, size: N, half: 0 };
   const _p = new THREE.Vector3();
+  const off = lookOff('shadows');
   function update(camera) {
+    if (off) { box.w = 0; return; }
     // where the picture is: round the camera's foot, wider the higher it is; its middle moved a whole pixel at a time
     const up = Math.max(0, GU.uCamUp ? GU.uCamUp.value : 0);
     const h = Math.min(SHADOW_PIC.far, SHADOW_PIC.near + up * SHADOW_PIC.per), px = (2 * h) / N;

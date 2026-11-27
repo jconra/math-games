@@ -59,6 +59,11 @@ const sunDir = (el, az) => { const e = el * Math.PI / 180, a = az * Math.PI / 18
 // a sample of a field at a point of the ground (nearest sample)
 const at = (ctx, F, x, z) => { const { N, P, T } = ctx, i = Math.round((x + P / 2) / T) & (N - 1), j = Math.round((z + P / 2) / T) & (N - 1); return F[j * N + i]; };
 
+// FOR MEASURING WHAT EACH LOOK COSTS (the rigs only: a page sets globalThis.PLANET_LOOK_OFF = { grit: true, ... }
+// before a planet is made): 'shadows' the shadow picture, 'plantShadows' the plants', trees' and rocks' part in it,
+// 'grit' the ground underfoot, 'clearing' plants and stones on the landing place, 'rocks' the rocks' own look
+export const lookOff = (k) => !!(globalThis.PLANET_LOOK_OFF && globalThis.PLANET_LOOK_OFF[k]);
+
 // THE CANYONS' DARK PATCHES on the sand and the slopes: how strong (two critics read them, at 0.7, as dark smudges and
 // stains on the far hillsides that do not follow the sun); and how far the steps' cliffs are softened (samples: at one,
 // their rims seen from the ship were torn into teeth)

@@ -29,7 +29,7 @@ import { bakeImposterSteps, imposterMaterial } from './imposter.js';
 import { onGround, TURN_GLSL, HAZE_SKY_GLSL, turnOf, planetTurn } from './cover.js';
 import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
-import { TREES } from './kinds.js';
+import { TREES, lookOff } from './kinds.js';
 import { TREE_STRIDE, wrapD } from './land.js';
 
 // per tier (the game's own three: src/station.js), after the Terrain Lab's own tiers (its src/valley.js TIER_SET: potato,
@@ -173,7 +173,7 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
       im.userData = { local: part.local, fade: mf };
       group.add(im); meshes.push(im);
       // (its shadow on the ground, its leaves cut out of their picture: src/planet/groundshadow.js)
-      if (ground.shadows) shades.push(ground.shadows.add(im, { map: m2.alphaTest > 0 && m2.map ? m2.map : null }));
+      if (ground.shadows && !lookOff('plantShadows')) shades.push(ground.shadows.add(im, { map: m2.alphaTest > 0 && m2.map ? m2.map : null }));
     }
     built.push({ kind, list, imposter, fade, meshes, bake, near: [] });
     // the woods' colour from afar: the leaves' own (their picture's average) turned as the trees' are, by how many
