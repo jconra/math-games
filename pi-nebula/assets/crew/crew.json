@@ -22,12 +22,12 @@
       { "id": "atlantis1", "name": "Atlantis 1 (crew uniform)", "file": "suit_atlantis1.glb", "skeleton": "m", "armsOut": 13, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "collarRide": false, "headFit": { "seat": 0.022, "forward": -0.018, "size": 1.08 } },
       { "id": "atlantis2", "name": "Atlantis 2 (crew uniform)", "file": "suit_atlantis2.glb", "skeleton": "f", "armsOut": 12, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "arms": 0.75, "shoulders": 0.035, "headFit": { "seat": 0.02, "forward": -0.04 }, "collarRide": false },
       { "id": "crew1", "name": "Crew 1's suit", "file": "suit_crew1.glb", "skeleton": "m", "armsOut": 13, "armsOutMove": { "Walk": 0, "Run": 0, "Run_Back": 0 }, "headFit": { "seat": 0.006 } },
-      { "id": "androidDock", "name": "Dock android", "file": "suit_androidDock.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true },
-      { "id": "androidHeavy", "name": "Heavy android", "file": "suit_androidHeavy.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true },
-      { "id": "androidOld", "name": "Old android", "file": "suit_androidOld.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true },
-      { "id": "androidMedical", "name": "Medical android", "file": "suit_androidMedical.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true },
-      { "id": "androidService", "name": "Service android", "file": "suit_androidService.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true },
-      { "id": "androidFeminine", "name": "Feminine android", "file": "suit_androidFeminine.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true }
+      { "id": "androidDock", "name": "Dock android", "file": "suit_androidDock.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 },
+      { "id": "androidHeavy", "name": "Heavy android", "file": "suit_androidHeavy.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 },
+      { "id": "androidOld", "name": "Old android", "file": "suit_androidOld.glb", "skeleton": "m", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 },
+      { "id": "androidMedical", "name": "Medical android", "file": "suit_androidMedical.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 },
+      { "id": "androidService", "name": "Service android", "file": "suit_androidService.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 },
+      { "id": "androidFeminine", "name": "Feminine android", "file": "suit_androidFeminine.glb", "skeleton": "f", "armsOut": 15, "armsOutMove": { "Walk": 5, "Run": 5, "Run_Back": 5 }, "ownHands": true, "handSize": 0.7 }
     ],
     "head": [
       { "id": "vega", "name": "Vega's helmet (visor)", "file": "head_vega.glb", "skeleton": "m", "with": "vega" },

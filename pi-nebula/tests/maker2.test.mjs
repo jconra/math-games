@@ -74,10 +74,10 @@ test('the figure as large as the window allows: on a wide window the card takes 
   assert.match(block, /\.cst-stage \{ height: auto;/);
 });
 
-test('an android\'s own hands keep their size; its arms are drawn in as everyone\'s', () => {
-  assert.match(CREW, /AL = \(lib\.entry\('suit', id\) \|\| \{\}\)\.ownHands \? \{ \.\.\.AL0, hand: 1 \} : AL0;/);
+test('an android\'s own hands are drawn in toward a person\'s size (its handSize, MAKER2-2); its arms are drawn in as everyone\'s', () => {
+  assert.match(CREW, /AL = E0\.ownHands \? \{ \.\.\.AL0, hand: \+E0\.handSize > 0\.3 && \+E0\.handSize <= 1 \? \+E0\.handSize : 1 \} : AL0;/);
   const list = JSON.parse(read('../assets/crew/crew.json'));
-  for (const id of ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine']) assert.ok(list.parts.suit.find((x) => x.id === id).ownHands, id);
+  for (const id of ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine']) { const s = list.parts.suit.find((x) => x.id === id); assert.ok(s.ownHands, id); assert.ok(s.handSize > 0.5 && s.handSize < 0.9, id); }
 });
 
 test('the station is put together a piece at a time, the page given its turn between: rooms, light, shaders, walls, people', () => {

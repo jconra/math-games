@@ -437,7 +437,7 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   lib.clipsFor = async (id, hand = null) => {
     // (THE ARMS' LENGTH BY THE BONES: an outfit with hands of its own, an android's, keeps its hands' size; its arms are
     // drawn in as everyone's)
-    const AL0 = lib.armLengthOf(), AL = (lib.entry('suit', id) || {}).ownHands ? { ...AL0, hand: 1 } : AL0;
+    const E0 = lib.entry('suit', id) || {}, AL0 = lib.armLengthOf(), AL = E0.ownHands ? { ...AL0, hand: +E0.handSize > 0.3 && +E0.handSize <= 1 ? +E0.handSize : 1 } : AL0;
     const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh + '|' + AL.arm + '|' + AL.hand;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
@@ -651,8 +651,10 @@ function shoulderMoves(scene, d) {
 // touched. An outfit with hands of its own (crew.json `ownHands`: the androids, Captain Vega) keeps its hands' size, its
 // arms drawn in as everyone's. ARM_LENGTH.arm is the one number for how much shorter; lib.armLength (as ARM_LENGTH)
 // tries other values. (The numbers, every outfit before and after:
-// ~/pw/space-math/MAKER_2.md)
-export const ARM_LENGTH = { arm: 0.95, hand: 0.95, stub: 0.8 };
+// ~/pw/space-math/MAKER_2.md.) 0.92 from 2026-11-27, the game's maker's answer MAKER2-1: "8% shorter".
+// THE ANDROIDS' HANDS (his answer MAKER2-2: "Smaller still, nearer a person's size"): an outfit with hands of its own
+// may say how much of their size it wears (crew.json `handSize`, as ARM_LENGTH.hand is for everyone else's)
+export const ARM_LENGTH = { arm: 0.92, hand: 0.95, stub: 0.8 };
 function armLengthOf(A) {
   const v = { ...ARM_LENGTH, ...(A || {}) }, k = (x) => (+x > 0.6 && +x <= 1.2 ? +x : 1);
   return { arm: k(v.arm), hand: k(v.hand), stub: k(v.stub) };
