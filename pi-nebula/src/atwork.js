@@ -21,7 +21,7 @@
 export const WORK = {
   desk: { in: 0.04, apart: 0.36, lean: 0.45, tap: 0.012, along: 0.12 },
   panel: { in: 0.06, apart: 0.38, lean: 0.24, along: 0.16 },
-  wipe: { in: 0.05, left: [-0.2, 0.02], right: [0.12, 0.1], r: 0.055, round: 1.5, lean: 0.32 },
+  wipe: { in: 0.03, left: [-0.2, 0.02], right: [0.12, 0.08], r: 0.05, round: 1.5, lean: 0.42 },
   // (how often a hand goes along to another place and back: every [least, most] seconds, taking `secs`)
   move: { every: [2.5, 6], secs: 1.4 },
 };

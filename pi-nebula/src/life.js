@@ -77,9 +77,9 @@ const shipSpots = (room) => [
 // (all: every such piece), { room, at: [across x, across z] (0..1 of its box), face: [x, z] (a way to face) },
 // { place, toward, out }. face [x, z] is in the piece's own frame (or the world's, for a room).
 export const SPOTS = {
-  // the cook behind the serving counter, facing whoever comes up to it (a step nearer it, 2026-11-26: his hands on its
-  // top as he wipes it, src/atwork.js; from 0.85 m his arms only just reached)
-  cook: [{ piece: 'counter', variant: 'serve', local: [0, 0, -0.75], face: [0, 1] }],
+  // the cook behind the serving counter, facing whoever comes up to it (wiping its top he leans in over it, his hands on
+  // it: src/atwork.js; a step nearer it, 0.75 m, could not be walked to)
+  cook: [{ piece: 'counter', variant: 'serve', local: [0, 0, -0.85], face: [0, 1] }],
   // the terminal: the jobs board (hung high: looked up at from the floor, from its open east side), the serving
   // counter's front, the drinks
   board: [{ piece: 'jobs', variant: 'hang', local: [2.6, -4.3, 0.9], face: [-0.6, -1] }, { piece: 'jobs', variant: 'hang', local: [3.5, -4.3, 1.8], face: [-0.7, -1] }],
