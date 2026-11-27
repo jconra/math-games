@@ -15,7 +15,8 @@
 //                            straight black spar along each border between them and a wider one round the sill: all
 //                            one part, the spar, placed again and again
 //   ebMarks      'marks'     what is laid on the skin: the blue light strips, the nose's lamps, the yellow marks by the
-//                            door, the nav lights, his emblem (the ringed planet, blue)
+//                            door, the nav lights, his emblem (the ringed planet, blue), the vent on the stern's face
+//                            between the engines (VENT)
 //   ebDoorway    'port' / 'starboard'   a doorway: a pocket in the hull's side (the 3k has no skin there). Port: its
 //                            sides and sill, and the airlock behind it (its floor, walls, ceiling and inner door);
 //                            starboard: the sealed hatch, fixed: the hull's skin carried across the pocket, flush
@@ -361,12 +362,97 @@ function ebMarks(p) {
   // his emblem, both sides (a point of it off the hull says so)
   const em = C.emblem(acc, MARKS.emblem, hullFaces(), drawn, dk);
   if (em.missed) console.warn(`ebMarks: ${em.missed} of the emblem's ${em.points} points missed the hull`);
+  // the vent on the stern's face between the engines (VENT, below)
+  sternVent(acc, p);
   acc.flush(p);
   p.light([0, 2.35 - DECK, 9.0], 0.9, [1.2, 0.95, 0.6], [0, -0.2, 1], 5);
   return p;
 }
 // a small glowing cube (h half its side) at a point (ship frame)
 const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
+// ── THE STERN'S VENT ────────────────────────────────────────────────────────────────────────────────────────────────
+// The game's maker, 2026-11-26, of the plain face between the engines, seen low from behind: "I feel like the explorer
+// needs a panel or something there in between the engines on the back. It looks kind of basic. Some kind of vent or
+// something would be a lot better." Kit-built and laid on his hull's flat stern face (z STERN.z, facing aft; his model
+// is not cut): eight-sided outlines (45-degree corners), standing a few centimetres proud. VENT picks which:
+//   'louvres'  a wide louvred vent: a dark frame, metal slats leaning down and aft over a black back
+//   'grille'   a grille set deep in a thick frame: upright bars over a faint warm glow, quiet beside the nozzles' own
+//   'panel'    a framed service panel in the hull's dark trim, a smaller louvred vent in it, two small amber lamps and a
+//              hazard stripe along its foot
+export const VENT = 'louvres';
+export const STERN = { z: -5.485, x: 0, y: 3.25 };
+const AFT = V3(0, 0, -1);
+// a rectangle's outline with its corners cut at 45 degrees: [x, y] round it (half sizes hw, hh, the cut c)
+const oct = (cx, cy, hw, hh, c) => [[cx - hw + c, cy - hh], [cx + hw - c, cy - hh], [cx + hw, cy - hh + c], [cx + hw, cy + hh - c], [cx + hw - c, cy + hh], [cx - hw + c, cy + hh], [cx - hw, cy + hh - c], [cx - hw, cy - hh + c]];
+const sp = (q, d) => V3(q[0], q[1], STERN.z - d);   // (a point on the face: q [x, y], d how far aft of it)
+// a flat outline facing aft, d aft of the face
+const face = (acc, Q, d, surf, mat = 'solid') => acc.poly(Q.map((q) => dk(sp(q, d))), AFT, surf, mat, 99);
+// a band between two outlines (same corner count) facing aft, d aft of the face
+const band = (acc, A, B, d, surf) => { for (let i = 0; i < A.length; i++) { const j = (i + 1) % A.length; acc.poly([A[i], A[j], B[j], B[i]].map((q) => dk(sp(q, d))), AFT, surf, 'solid', 99); } };
+// the walls round an outline from d0 to d1 aft of the face, facing out (or in, inward)
+const walls = (acc, Q, d0, d1, surf, inward = false) => {
+  const c = Q.reduce((t, q) => [t[0] + q[0] / Q.length, t[1] + q[1] / Q.length], [0, 0]);
+  for (let i = 0; i < Q.length; i++) {
+    const j = (i + 1) % Q.length, mx = (Q[i][0] + Q[j][0]) / 2 - c[0], my = (Q[i][1] + Q[j][1]) / 2 - c[1];
+    const n = V3(Q[j][1] - Q[i][1], -(Q[j][0] - Q[i][0]), 0).normalize(); if (n.x * mx + n.y * my < 0) n.negate(); if (inward) n.negate();
+    acc.poly([sp(Q[i], d0), sp(Q[j], d0), sp(Q[j], d1), sp(Q[i], d1)].map(dk), n, surf, 'solid', 99);
+  }
+};
+// the half width of an outline at height y (its sides upright, its corners cut by c)
+const halfAt = (cx, cy, hw, hh, c, y) => hw - Math.max(0, Math.abs(y - cy) - (hh - c));
+// louvres: n slats across an eight-sided opening, each leaning down and aft from d0 (its top, inside) to d1 (its foot)
+function louvres(acc, cx, cy, hw, hh, c, n, d0, d1, surf) {
+  const step = (2 * hh) / n;
+  for (let k = 0; k < n; k++) {
+    const yT = cy + hh - k * step - 0.01, yB = yT - step * 0.95, w = Math.min(halfAt(cx, cy, hw, hh, c, yT), halfAt(cx, cy, hw, hh, c, yB)) - 0.005;
+    if (w <= 0.02) continue;
+    const P = [V3(cx - w, yT, STERN.z - d0), V3(cx + w, yT, STERN.z - d0), V3(cx + w, yB, STERN.z - d1), V3(cx - w, yB, STERN.z - d1)];
+    const nOut = V3(0, -(d1 - d0), -(yT - yB)).normalize().negate();   // (facing down and aft)
+    acc.poly(P.map(dk), nOut.y > 0 ? nOut.negate() : nOut, surf, 'solid', 99);
+    acc.poly(P.slice().reverse().map(dk), (nOut.y > 0 ? nOut : nOut.clone().negate()), surf, 'solid', 99);
+  }
+}
+function sternVent(acc, p, kind = VENT) {
+  const { x: cx, y: cy } = STERN;
+  if (kind === 'louvres') {
+    const O = oct(cx, cy, 0.8, 0.62, 0.16), I = oct(cx, cy, 0.7, 0.52, 0.12);
+    walls(acc, O, 0, 0.05, PAL.trim); band(acc, O, I, 0.05, PAL.trim); walls(acc, I, 0.012, 0.05, PAL.black, true);
+    face(acc, I, 0.012, PAL.black);
+    louvres(acc, cx, cy, 0.7, 0.52, 0.12, 9, 0.016, 0.046, PAL.metal);
+  } else if (kind === 'grille') {
+    const O = oct(cx, cy, 0.78, 0.6, 0.16), I = oct(cx, cy, 0.64, 0.46, 0.11);
+    walls(acc, O, 0, 0.09, PAL.trim); band(acc, O, I, 0.09, PAL.trim); walls(acc, I, 0.012, 0.09, PAL.black, true);
+    face(acc, I, 0.012, [0.3, 0.12, 0.025], 'glow');   // (the faint warm glow behind the bars)
+    for (let x = -0.6; x <= 0.6 + 1e-9; x += 0.075) {
+      const h = 0.46 - Math.max(0, Math.abs(x) - (0.64 - 0.11)) - 0.005;   // (the bar's half height, inside the cut corners)
+      if (h <= 0.03) continue;
+      C.boxAt(acc, V3(cx + x, cy, STERN.z - 0.045), [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)], [0.012, h - 0.004, 0.022], PAL.black, ['w+'], dk);
+    }
+    p.light([cx, cy - DECK, STERN.z - 0.25], 0.12, [1, 0.5, 0.15], [0, 0, -1], 1.4);
+  } else {
+    // the panel: a raised plate in the trim, its edge cut back at 45 degrees, a seam round it
+    const O = oct(cx, cy - 0.05, 0.92, 0.78, 0.18), T = oct(cx, cy - 0.05, 0.89, 0.75, 0.165), S1 = oct(cx, cy - 0.05, 0.84, 0.7, 0.145), S2 = oct(cx, cy - 0.05, 0.825, 0.685, 0.14);
+    band(acc, O, T, 0.012, PAL.trim); band(acc, T, S1, 0.03, PAL.trim); band(acc, S1, S2, 0.03, PAL.black); face(acc, S2, 0.03, PAL.trim);
+    walls(acc, O, 0, 0.012, PAL.trim);
+    // (the chamfer from the plate's edge up to its face)
+    for (let i = 0; i < O.length; i++) { const j = (i + 1) % O.length; acc.poly([sp(O[i], 0.012), sp(O[j], 0.012), sp(T[j], 0.03), sp(T[i], 0.03)].map(dk), AFT, PAL.trim, 'solid', 99); }
+    // the smaller vent, high on it
+    const vy = cy + 0.28, VO = oct(cx, vy, 0.5, 0.24, 0.09), VI = oct(cx, vy, 0.44, 0.18, 0.07);
+    walls(acc, VO, 0.03, 0.06, PAL.trim); band(acc, VO, VI, 0.06, PAL.trim); walls(acc, VI, 0.035, 0.06, PAL.black, true);
+    face(acc, VI, 0.035, PAL.black);
+    louvres(acc, cx, vy, 0.44, 0.18, 0.07, 4, 0.038, 0.058, PAL.metal);
+    // two small amber lamps low on it, and a hazard stripe along its foot (yellow bars leaning, on black)
+    for (const sx of [-1, 1]) C.boxAtGlow(acc, V3(cx + sx * 0.6, cy - 0.32, STERN.z - 0.05), 0.038, GLOW.warm, dk);
+    const yb = cy - 0.62, yt = cy - 0.5, hw = 0.56;
+    face(acc, [[cx - hw, yb], [cx + hw, yb], [cx + hw, yt], [cx - hw, yt]], 0.034, PAL.black);
+    for (let x = -hw; x < hw - 0.01; x += 0.12) {
+      const a = Math.max(-hw, x), b = Math.min(hw, x + 0.06), lean = 0.06;
+      if (b - a < 0.01) continue;
+      face(acc, [[cx + a, yb], [cx + b, yb], [cx + Math.min(hw, b + lean), yt], [cx + Math.min(hw, a + lean), yt]], 0.037, PAL.yellow);
+    }
+    for (const sx of [-1, 1]) p.light([cx + sx * 0.6, cy - 0.32 - DECK, STERN.z - 0.2], 0.08, [1, 0.65, 0.2], [0, 0, -1], 1.0);
+  }
+}
 // ── THE COCKPIT ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The cockpit family's parts (kit/shipparts/cockpit), as its sample cockpit puts them (cockpitPlan), fitted under this
 // canopy: two bucket seats side by side in the ship's colours (the pilot on the left, port), the throttle pedestal
