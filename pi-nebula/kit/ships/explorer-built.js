@@ -375,12 +375,13 @@ const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
 // The game's maker, 2026-11-26, of the plain face between the engines, seen low from behind: "I feel like the explorer
 // needs a panel or something there in between the engines on the back. It looks kind of basic. Some kind of vent or
 // something would be a lot better." Kit-built and laid on his hull's flat stern face (z STERN.z, facing aft; his model
-// is not cut): eight-sided outlines (45-degree corners), standing a few centimetres proud. VENT picks which:
+// is not cut): eight-sided outlines (45-degree corners), standing a few centimetres proud. VENT picks which (the game's
+// maker chose the panel, 2026-11-26):
 //   'louvres'  a wide louvred vent: a dark frame, metal slats leaning down and aft over a black back
 //   'grille'   a grille set deep in a thick frame: upright bars over a faint warm glow, quiet beside the nozzles' own
 //   'panel'    a framed service panel in the hull's dark trim, a smaller louvred vent in it, two small amber lamps and a
 //              hazard stripe along its foot
-export const VENT = 'louvres';
+export const VENT = 'panel';
 export const STERN = { z: -5.485, x: 0, y: 3.25 };
 const AFT = V3(0, 0, -1);
 // a rectangle's outline with its corners cut at 45 degrees: [x, y] round it (half sizes hw, hh, the cut c)
