@@ -63,6 +63,8 @@ const at = (ctx, F, x, z) => { const { N, P, T } = ctx, i = Math.round((x + P / 
 // stains on the far hillsides that do not follow the sun); and how far the steps' cliffs are softened (samples: at one,
 // their rims seen from the ship were torn into teeth)
 export const CANYON_PATCH = 0.35, CANYON_SOFT = 2;
+// THE MOON'S SHADE: how much light its shadows get, off the ringed planet (see the moon's palette)
+export const MOON_SHADE = 0.45;
 // THE MEADOWS' BARE EARTH: how ragged its edge is (see the meadow's paint)
 export const MEADOW_RAGGED = 0.45;
 
@@ -105,8 +107,10 @@ const MOON = {
     return {
       dust: mul([0.5, 0.5, 0.5], mul(tint, b)), rock: mul([0.36, 0.36, 0.36], tint), bright: mul([0.72, 0.72, 0.71], tint), dark: mul([0.3, 0.3, 0.3], tint),
       sun: null, sunColor: [1.0, 0.98, 0.95], sunPower: 2.6,
-      // no air, so the shadows are dark but for a little light off the ringed planet (from the game's sky, its +z)
-      ambient: { sky: [0.36, 0.46, 0.62], ground: [0.06, 0.06, 0.06], power: 0.2 },
+      // no air, so the shadows are dark but for a little light off the ringed planet (from the game's sky, its +z): the
+      // game's maker's "long, nearly black shadows" (PLAN1-1); nearly black, not empty (two critics: at 0.2 the shaded
+      // ground was pure black, the player standing on nothing): the faintest grey of the craters and stones still seen
+      ambient: { sky: [0.36, 0.46, 0.62], ground: [0.06, 0.06, 0.06], power: MOON_SHADE },
       air: null, exposure: 0.95,
     };
   },
