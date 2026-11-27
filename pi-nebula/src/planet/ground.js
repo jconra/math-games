@@ -236,13 +236,13 @@ void main() {
     float loose = (1.0 - rock) * (1.0 - grow), patchA = smoothstep(0.3, 0.7, d2.b), patchB = smoothstep(0.35, 0.65, d1.a);
     // the stones: a shade apart from the ground, lit from one side, more on the rocky ground
     float st = max(g1.r * (0.35 + 0.65 * patchA), g2.r * (0.5 + 0.5 * patchB)), stK = uGritK.x * min(1.0, 0.45 + rock + 0.4 * patchB) * nearG;
-    vec3 stone = mix(uRock, uDust, 0.35) * (0.45 + 1.0 * st);
+    vec3 stone = mix(uRock, uDust, 0.35) * (0.6 + 0.8 * st);
     base = mix(base, stone, stK * smoothstep(0.0, 0.08, st));
     // the cracks: on the hard ground, thin and dark
     base *= 1.0 - 0.45 * g1.g * uGritK.y * (0.3 + 0.7 * rock) * (1.0 - grow) * patchB * nearG;
     // the tufts: where something grows, blades lighter and darker than the grass round them
     float tf = max(g1.b, g2.b * 0.8) * uGritK.z * (0.25 + 0.75 * grow) * nearG;
-    base = mix(base, mix(uGrass2, uGrass, g2.a) * (0.7 + 0.6 * g1.a), tf * 0.75);
+    base = mix(base, mix(uGrass2 * 0.55, uGrass * 1.45, g2.a), tf * 0.8);
     // the ripples: in loose sand and dust, a long gentle side and a short steep one, darker in the trough
     base *= 1.0 + 0.22 * (g1.a - 0.5) * uGritK.w * loose * (0.5 + 0.5 * patchA) * nearG;
   }

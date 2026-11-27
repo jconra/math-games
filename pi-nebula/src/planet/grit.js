@@ -18,8 +18,8 @@ export const GRIT = {
   scales: [1.9, 0.62],    // metres across one repeat of the picture, the two layers
   kinds: {
     moon: [1.0, 0.25, 0.0, 0.0],
-    meadow: [0.55, 0.15, 1.0, 0.0],
-    canyon: [0.7, 0.45, 0.35, 1.0],
+    meadow: [0.35, 0.15, 1.0, 0.0],
+    canyon: [0.4, 0.45, 0.35, 1.0],
   },
 };
 
