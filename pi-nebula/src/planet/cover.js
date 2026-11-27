@@ -214,8 +214,8 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   // (the boulders rounder on the best quality: four times the triangles, a few hundred of them near the camera)
   const rockShapesG = rockShapes(Q.detail), boulderShapesG = Q.detail && quality === 'high' && !lookOff('rocks') ? rockShapes(2) : rockShapesG, rockCol = srgb(look.rock), dustCol = srgb(look.dust), darkCol = srgb(look.dark || look.rock);
   const stoneReach = 70 * Q.reach, boulderReach = 260 * Q.reach;
-  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach, stone: !lookOff('rocks') });
-  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach, stone: !lookOff('rocks') });
+  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach, stone: quality === 'high' && !lookOff('rocks') });
+  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach, stone: quality === 'high' && !lookOff('rocks') });
   // small stones: everywhere a few, more where it is rocky
   const stones = layer({ name: 'stones', shapes: rockShapesG, material: rockMat, reach: stoneReach, most: Math.round(2200 * Q.many), lay: (L, cx, cz, ci, cj, wi, wj) => {
     const rock = land.rockAt(cx, cz), n = Math.floor((0.7 + rock * 4.5) * C.rocks.many * Q.many * 1.6 + hash2(wi, wj, 77));

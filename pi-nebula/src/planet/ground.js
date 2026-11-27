@@ -84,6 +84,8 @@ function detailTexture(aniso) {
 
 // the ground underfoot's picture: made once, kept for every planet after
 let gritKept = null;
+// each world's turn and size of the grain: [cos, sin, size of the bigger layer, size of the finer], from its seed
+const gritTurn = (seed) => { const a = ((seed * 2654435761) >>> 0) / 4294967296 * Math.PI * 2, b = ((seed * 40503 + 17) % 1000) / 1000; return new THREE.Vector4(Math.cos(a), Math.sin(a), 0.75 + 0.6 * b, 0.8 + 0.5 * ((seed * 7919) % 1000) / 1000); };
 const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 
 // ── THE HAZE, shared with what stands on the ground (src/planet/cover.js) ───────────────────────────────────────
@@ -239,8 +241,10 @@ void main() {
   nearG *= 0.1 + 0.9 * L.r;      // (the moon's shade stays nearly black: no grain picked out in it)
   #endif
   if (nearG > 0.001) {
-    vec4 g1 = texture2D(uGrit, mat2(0.8, 0.6, -0.6, 0.8) * vXZ / ${GRIT.scales[0].toFixed(2)});
-    vec4 g2 = texture2D(uGrit, mat2(0.28, -0.96, 0.96, 0.28) * vXZ / ${GRIT.scales[1].toFixed(2)} + 0.37);
+    // (each world its own: the grain turned and sized by the seed, so no two worlds' ripples lie alike)
+    mat2 t1 = mat2(uGritTurn.x, uGritTurn.y, -uGritTurn.y, uGritTurn.x), t2 = mat2(uGritTurn.y, -uGritTurn.x, uGritTurn.x, uGritTurn.y);
+    vec4 g1 = texture2D(uGrit, t1 * vXZ / (${GRIT.scales[0].toFixed(2)} * uGritTurn.z));
+    vec4 g2 = texture2D(uGrit, t2 * vXZ / (${GRIT.scales[1].toFixed(2)} * uGritTurn.w) + 0.37);
     float loose = (1.0 - rock) * (1.0 - grow), patchA = smoothstep(0.3, 0.7, d2.b), patchB = smoothstep(0.35, 0.65, d1.a);
     // the stones: a shade apart from the ground, lit from one side, more on the rocky ground
     float st = max(g1.r * (0.35 + 0.65 * patchA), g2.r * (0.5 + 0.5 * patchB)), stK = uGritK.x * min(1.0, 0.45 + rock + 0.4 * patchB) * nearG;
@@ -294,7 +298,9 @@ export const GROUND_QUALITY = {
 export function makeGround({ renderer, land, look, quality = 'medium', sky = null }) {
   const Q = GROUND_QUALITY[quality] || GROUND_QUALITY.medium, G = Q.grid, t0 = performance.now();
   const aniso = Math.min(Q.aniso, renderer.capabilities.getMaxAnisotropy());
-  const hTex = heightTexture(land), nmTex = byteTexture(land.NM, land.N, aniso), detail = detailTexture(aniso), grit = byteTexture(gritPicture(), GRIT.size, aniso);
+  const hTex = heightTexture(land), nmTex = byteTexture(land.NM, land.N, aniso), detail = detailTexture(aniso);
+  // (the ground underfoot: made only on the level that draws it)
+  const gritOn = !!(Q.fine && quality === 'high' && !lookOff('grit')), grit = gritOn ? byteTexture(gritPicture(), GRIT.size, aniso) : null;
   const sunDir = new THREE.Vector3(...look.sun).normalize();
   const light = lightPass(renderer, land, hTex, sunDir, Math.min(Q.light, land.N));
   const col = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
@@ -312,7 +318,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     // (the woods' colour from afar and how far the trees themselves are drawn: set by src/planet/trees.js)
     uCanopy: { value: new THREE.Color(0, 0, 0) }, uTreeFar: { value: 1e9 },
     // (the ground underfoot, src/planet/grit.js: the kind's own stones, cracks, tufts and ripples)
-    uGrit: { value: grit }, uGritK: { value: new THREE.Vector4(...(GRIT.kinds[land.kind.id] || GRIT.kinds.moon)) },
+    uGrit: { value: grit }, uGritK: { value: new THREE.Vector4(...(GRIT.kinds[land.kind.id] || GRIT.kinds.moon)) }, uGritTurn: { value: gritTurn(land.seed) },
     // (the haze as thick as the air says at the landing place's height, thinning above it)
     uHaze: { value: look.air ? look.air.haze : 0 }, uHazeH: { value: look.air ? look.air.thin || 450 : 450 }, uHazeBase: { value: land.landing.y },
   };
@@ -326,7 +332,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
   // (its spots of the picture marked as ground: the shadows are drawn there and only there, src/planet/groundshadow.js)
-  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: { ...(look.air ? { AIR: 1 } : {}), ...(Q.fine && quality === 'high' && !lookOff('grit') ? { GRIT: 1 } : {}) } }));
+  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: { ...(look.air ? { AIR: 1 } : {}), ...(gritOn ? { GRIT: 1 } : {}) } }));
 
   // the grid: (G + 1)^2 corners, x and z in grid steps
   const pos = new Float32Array((G + 1) * (G + 1) * 3), idx = [];
@@ -388,6 +394,6 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   stats.buildMs = Math.round(performance.now() - t0);
   return {
     mesh, U, stats, update, light, shadows, sunAt,
-    dispose() { shadows.dispose(); grit.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
+    dispose() { shadows.dispose(); if (grit) grit.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
   };
 }
