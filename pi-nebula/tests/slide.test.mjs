@@ -43,14 +43,21 @@ function move(Wd, pos, dx, dz) {
   for (let i = 0; i < n; i++) if (!Wd.tryStep(pos, sx, sz) && !Wd.blocked(pos, sx, sz, Wd.fr, R, false)) break;
 }
 // the stick held forward at `off` rad from straight in (the plan's -x), from (x, z) in the plan, `secs` at most, until
-// done(plan x, plan z); every frame's place checked as a place a body may stand
+// done(plan x, plan z); every frame's place checked as a place a body may stand. Her pace as src/player.js has it: up
+// from standing at MOVE.accel, and held up (a step that got under 0.3 of its way), ready to set off again at no more
+// than what she got and 0.3 m/s: so a slide along a face at a crawl is the crawl it is in the game
+const WALK = 1.6, ACCEL = 9, DT = 1 / 60;
 function walk(Wd, [x, z], off, done, secs = 12, dir = -1) {
   const [wx, wz] = Wd.toWorld(x, z), pos = { x: wx, y: 0, z: wz };
   const [ux, uz] = Wd.toWorld(dir * Math.cos(off), Math.sin(off)), [o0, o1] = Wd.toWorld(0, 0), vx = ux - o0, vz = uz - o1;
-  let n = 0, inWall = 0;
+  let n = 0, inWall = 0, want = 0;
   for (; n < secs * 60; n++) {
-    const x0 = pos.x, z0 = pos.z;
-    move(Wd, pos, vx * STEP, vz * STEP);
+    const x0 = pos.x, z0 = pos.z, v0 = want;
+    want = Math.min(WALK, want + ACCEL * DT);
+    const v = (v0 + want) / 2;
+    move(Wd, pos, vx * v * DT, vz * v * DT);
+    const got = Math.hypot(pos.x - x0, pos.z - z0);
+    if (got < v * DT * 0.3) want = Math.min(want, got / DT + 0.3);
     if (!Wd.free(pos.x, pos.z) || !Wd.floor(pos.x, pos.z)) inWall++;
     // (no frame's move further than a shuffle and a stride: nobody jumps)
     assert.ok(Math.hypot(pos.x - x0, pos.z - z0) <= NUDGE.most + STRIDE + 1e-9, 'a frame moves no further than NUDGE.most and a stride');
@@ -73,7 +80,10 @@ test('walked up the ramp a little off straight, from anywhere across its foot: t
       assert.equal(r.inWall, 0, `yaw ${yaw} from ${z} at ${off}: never where a body may not stand`);
       assert.ok(r.ok, `yaw ${yaw} from across ${z} at ${off} rad: in through the opening (ended at ${r.at} after ${r.secs} s)`);
       // (and with no more than a short slow down along the frame: a straight walk in is 4.9 m at 1.6 m/s, 3.1 s)
-      assert.ok(r.secs < 4.0, `yaw ${yaw} from ${z} at ${off}: in within 4 s (${r.secs.toFixed(2)})`);
+      // (and never held up: no slower than the walk in along the ramp at her pace (4.9 m, the push's part along it)
+      // and a quarter of a second, the first steps from standing among it)
+      const t = 4.9 / (1.6 * Math.cos(off)) + 0.25;
+      assert.ok(r.secs < t, `yaw ${yaw} from ${z} at ${off}: in within ${t.toFixed(2)} s (${r.secs.toFixed(2)})`);
     }
   }
 });
@@ -128,10 +138,36 @@ test('head on (the push along one of the walls\' ways): only the shuffle square 
   assert.equal(calls.length, 1 + 2 + 2 * k * 2, 'the step, the crawl twice, one shuffle each side (sideways, then the push)');
   const side = calls.filter(([sx, sz]) => sx === 0 && Math.abs(Math.abs(sz) - NUDGE.step) < 1e-12).length;
   assert.equal(side, 2 * k, 'every sideways step square across the push, along the face');
-  // (a push off square into the same flat wall slides along it: the wall's own way, and no shuffle at all)
+  // (a push 0.2 rad off square into the same flat wall: the corner looked for along the face against the push's
+  // sideways part (none: each shuffle's step on is stopped), then slid along the face the way she pushes, as ever)
   calls.length = 0;
   const p2 = { x: 2.97 + R + 0.001, y: 0, z: 0 };
   assert.equal(blocked(p2, -STEP * Math.cos(0.2), STEP * Math.sin(0.2), null, R, false), true);
-  assert.ok(p2.x === 2.97 + R + 0.001 && p2.z > 0, 'slid along the face');
-  assert.equal(calls.length, 2 + 1, 'the two parts tried, then the crawl along the face: no shuffle');
+  assert.ok(p2.x === 2.97 + R + 0.001 && p2.z > 0, 'slid along the face, the way she pushes');
+  assert.equal(calls.length, 1 + 2 * k + 3, 'its greater part tried, one side\'s shuffle out to NUDGE.most, then the two parts and the crawl along the face');
+  assert.ok(calls.filter(([sx, sz]) => sx === 0 && Math.abs(Math.abs(sz) - NUDGE.step) < 1e-12).every(([, sz]) => sz < 0), 'the shuffle only against the push\'s sideways part');
+  // (pushed mostly along a wall, a little into it (a corridor walked 0.2 rad off its line): its greater part goes on,
+  // so no shuffle at all: slid along the wall, never stepped off it and back)
+  calls.length = 0;
+  const p3 = { x: 2.97 + R + 0.001, y: 0, z: 0 };
+  assert.equal(blocked(p3, -STEP * Math.sin(0.2), STEP * Math.cos(0.2), null, R, false), true);
+  assert.ok(p3.x === 2.97 + R + 0.001 && Math.abs(p3.z - STEP * Math.cos(0.2)) < 1e-12, 'slid along the wall by the push\'s part along it');
+  assert.equal(calls.length, 1 + 2, 'its greater part tried, then the two parts: no shuffle');
+});
+
+test('the corner of a jamb met a little off square: round it into the opening, not along the face away from it', () => {
+  // (the game's own case, traced: rigs/ramp-2/probe-trace.js. A jamb's corner at (2.97, 1.25), the opening on the
+  // side of smaller z; she is pressed against the face beside it, her ring's diagonal point just off its corner, the
+  // stick off straight toward the jamb's side. The face's own slide would carry her along it the way she pushes, away
+  // from the opening: a crawl, as the game slows a held-up walker. Instead, in one step: round the corner)
+  const jamb = { solid: [[2.5, 2.97, OPEN[1], 4]], floor: (x) => x > -4 && x < 8 }, Wd = world(0, 0, 0, jamb);
+  for (const off of [0.1, 0.2, 0.3]) {
+    const pos = { x: 2.97 + R * Math.SQRT1_2 + 0.002, y: 0, z: OPEN[1] - R * Math.SQRT1_2 + 0.05 }, z0 = pos.z, x0 = pos.x;
+    const sx = -STEP * Math.cos(off), sz = STEP * Math.sin(off);
+    assert.equal(Wd.tryStep({ ...pos }, sx, sz), false, 'the step itself is stopped by the corner');
+    assert.equal(Wd.tryStep({ ...pos }, 0, sz), true, 'the face\'s own slide would go on, away from the opening');
+    assert.equal(Wd.blocked(pos, sx, sz, null, R, false), true);
+    assert.ok(pos.z < z0 && pos.x < x0, `at ${off}: round the corner, toward the opening and in (${pos.x.toFixed(3)}, ${pos.z.toFixed(3)})`);
+    assert.ok(z0 - pos.z <= NUDGE.most + 1e-9, 'no further sideways than NUDGE.most');
+  }
 });

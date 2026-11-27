@@ -12,13 +12,13 @@ export const NUDGE = { most: 0.24, step: 0.02 };
 
 export function makeSlide(tryStep, stride) {
   const copy = (a, b) => { a.x = b.x; a.y = b.y; a.z = b.z; return a; };
-  // (the step taken from a point a little to either side, nearest first, up to NUDGE away: the person moved there)
+  // (the step taken from a point a little to the side, nearest first, up to NUDGE away: the person moved there)
   // (sideways a small step at a time, as a person would shuffle: never through anything; (ux, uz) the way sideways, a
-  // unit)
-  const _n = [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }], _f = { x: 0, y: 0, z: 0 };
-  function nudge(pos, sx, sz, ux, uz, r, doorsOpen) {
+  // unit; both: to either side, else to that side only)
+  const _n = [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }], _f = { x: 0, y: 0, z: 0 }, _g = { x: 0, y: 0, z: 0 };
+  function nudge(pos, sx, sz, ux, uz, r, doorsOpen, both) {
     const px = ux * NUDGE.step, pz = uz * NUDGE.step;
-    let open0 = true, open1 = true;
+    let open0 = true, open1 = both;
     copy(_n[0], pos); copy(_n[1], pos);
     for (let k = 1; k * NUDGE.step <= NUDGE.most + 1e-6 && (open0 || open1); k++) for (let i = 0; i < 2; i++) {
       if (i ? !open1 : !open0) continue;
@@ -36,6 +36,19 @@ export function makeSlide(tryStep, stride) {
     let ax = sx, az = 0, bx = 0, bz = sz;
     if (fr) { const l0 = fr.c * sx - fr.s * sz, l1 = fr.s * sx + fr.c * sz; ax = fr.c * l0; az = -fr.s * l0; bx = fr.s * l1; bz = fr.c * l1; }
     const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
+    // PUSHED A LITTLE OFF SQUARE INTO THE CORNER OF A DOOR'S FRAME (the Medic's ramp on a planet, walked up 0.1 to 0.45
+    // rad off straight: caught at its opening's jamb at every heading; and the station's narrow doors alike; RAMP_2.md).
+    // The step's greater part is stopped by a face across the way; its lesser part slid her along that face AWAY from the
+    // opening (it runs the way she pushes, sideways), at a crawl, for good where the ramp's edge or a jamb's end stopped
+    // that too. A round body meeting a corner is turned round it, into the opening. So first, along that face the other
+    // way (the walls' own way across the push, against its lesser part), a small step at a time up to NUDGE.most: if her
+    // step goes on from there, she has gone round the corner. Only for a push off square whose greater part is stopped;
+    // where nothing is found (a flat wall), the slide as ever.
+    if (la > 1e-6 && lb > 1e-6) {
+      const g = la >= lb;
+      copy(_g, pos);
+      if (!tryStep(_g, g ? ax : bx, g ? az : bz, r, doorsOpen) && (g ? nudge(pos, sx, sz, -bx / lb, -bz / lb, r, doorsOpen, false) : nudge(pos, sx, sz, -ax / la, -az / la, r, doorsOpen, false))) return true;
+    }
     const a = la > 1e-6 && tryStep(pos, ax, az, r, doorsOpen), b = lb > 1e-6 && tryStep(pos, bx, bz, r, doorsOpen);
     const L = Math.hypot(sx, sz), crawl = L < stride - 1e-6;
     // (one part taken, a slide along a wall. But if the part that went nowhere is the greater one, it may be a sliver
@@ -56,14 +69,6 @@ export function makeSlide(tryStep, stride) {
     }
     // head on into a door's frame, a little off its middle: eased sideways into the opening (a narrow ship's door
     // needs a person lined up within a hand's width, too fine for a thumb on a stick)
-    if (nudge(pos, sx, sz, -sz / L, sx / L, r, doorsOpen)) return true;
-    // PUSHED A LITTLE OFF SQUARE INTO THE CORNER OF A DOOR'S FRAME. The shuffle square across the push leans into the
-    // face the body is pressed against (as much as the push is off square), so its very first sideways step is stopped,
-    // and she stood there for good with the stick held (the Medic's ramp on a planet, walked up 0.2 rad off straight:
-    // caught on its opening's jamb at every heading; RAMP_2.md). So the shuffle is tried along that face too: along the
-    // walls' own way across the push (its lesser part's), as a person slides along a wall to its end and round the
-    // corner. Only when the push is off square (head on, the two shuffles are one), and only where the first got nowhere.
-    if (la > 1e-6 && lb > 1e-6) return la < lb ? nudge(pos, sx, sz, ax / la, az / la, r, doorsOpen) : nudge(pos, sx, sz, bx / lb, bz / lb, r, doorsOpen);
-    return false;
+    return nudge(pos, sx, sz, -sz / L, sx / L, r, doorsOpen, true);
   };
 }
