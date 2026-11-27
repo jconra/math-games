@@ -246,8 +246,10 @@ void main() {
   nearG *= 0.1 + 0.9 * L.r;      // (the moon's shade stays nearly black: no grain picked out in it)
   #endif
   if (nearG > 0.001) {
-    // (each world its own: the grain turned and sized by the seed, so no two worlds' ripples lie alike)
-    mat2 t1 = mat2(uGritTurn.x, uGritTurn.y, -uGritTurn.y, uGritTurn.x), t2 = mat2(uGritTurn.y, -uGritTurn.x, uGritTurn.x, uGritTurn.y);
+    // (each world its own: the grain turned and sized by the seed, so no two worlds' ripples lie alike; the second layer
+    // turned 110.6 degrees further, off a right angle, so the two layers' repeats never line up: the review)
+    vec2 r2 = vec2(uGritTurn.x * -0.3518 - uGritTurn.y * 0.9361, uGritTurn.y * -0.3518 + uGritTurn.x * 0.9361);
+    mat2 t1 = mat2(uGritTurn.x, uGritTurn.y, -uGritTurn.y, uGritTurn.x), t2 = mat2(r2.x, r2.y, -r2.y, r2.x);
     vec4 g1 = texture2D(uGrit, t1 * vXZ / (${GRIT.scales[0].toFixed(2)} * uGritTurn.z));
     vec4 g2 = texture2D(uGrit, t2 * vXZ / (${GRIT.scales[1].toFixed(2)} * uGritTurn.w) + 0.37);
     float loose = (1.0 - rock) * (1.0 - grow), patchA = smoothstep(0.3, 0.7, d2.b), patchB = smoothstep(0.35, 0.65, d1.a);
