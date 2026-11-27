@@ -170,8 +170,21 @@ export function chooseTap({ held = false, touch = true, underIn = null, under = 
 }
 
 // THE SMALL RULES index.js goes by, as plain functions (so node tests what they do):
-// a ball a tap can hit: one that can be picked up (never one flying to a goal, just scored, fading, or in a hand)
+// a ball that can be picked up (never one flying to a goal, just scored, fading, or in a hand)
 export const canPick = (b) => !!b && !b.fading && ['air', 'roll', 'rest', 'turn'].includes(b.mode);
+// a ball inside a goal's housing (between its cheeks, nearer the wall than its front, `out` m from the wall): no player
+// can come within reach of it there, and a tap there is a tap on the goal (its click box holds it), as on main.
+// p: [x, y, z] in the court's frame; goals: court.js GOALS; G: COURT.goal
+export function housed(p, goals, G) {
+  for (const g of goals) {
+    const dx = p[0] - g.mid[0], dz = p[2] - g.mid[1], front = dx * g.n[0] + dz * g.n[1], side = dx * g.u[0] + dz * g.u[1];
+    if (front < G.out && Math.abs(side) < G.w / 2 + G.cheek) return true;
+  }
+  return false;
+}
+// THE ONE RULE FOR A BALL A TAP CAN HIT (index.js's click targets, the balls on the screen, the record of where they
+// were): it can be picked up, and it is not inside a goal's housing; the one in the player's hand never
+export const canTap = (b, held, goals, G) => canPick(b) && b !== held && !housed(b.p, goals, G);
 // a goal in view: its mouth drawn on the screen (page px [x, y], or null behind the camera) inside the page's
 // rectangle and under the top bar's foot (as the page measures it)
 export const inView = (p, rect, bar) => !!p && p[0] >= rect.left && p[0] <= rect.right && p[1] >= Math.max(rect.top, bar) && p[1] <= rect.bottom;

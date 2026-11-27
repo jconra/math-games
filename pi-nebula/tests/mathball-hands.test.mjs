@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HANDS, makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, inView, buttonDoes, mouthAt, lookRoundDue } from '../src/mathball/hands.js';
+import { HANDS, makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, canTap, inView, buttonDoes, mouthAt, lookRoundDue } from '../src/mathball/hands.js';
 
 const W = 400;   // an upright phone's width (the left 42% is the walking stick's)
 function press(H, { x = 300, y = 400, moveBy = 0, ms = 100, touch = true, button = 0, aimable = false, id = 1, steps = 4 } = {}) {
@@ -153,15 +153,15 @@ test('inside two overlapping discs, the nearer ball (drawn on top) is the one ta
   assert.equal(underAt(142, 300, [near, far], 16), 'far', 'past the near ball\'s edge, inside only the far one');
 });
 
-// THE CAMERA (camera.js), SWEPT OVER THE COURT on the three screens, as the game draws it: away from walls it is main's
-// exactly; beside a wall it comes in rather than turning, and the player stays on the screen; a quick swipe never
-// takes it through a wall (the game's own easing, follow). Places: every metre inside the court, every half metre
-// along each wall 0.45 m in, each corner and goal mouth; turns every 30 degrees; with a ball in hand and without.
-test('the camera over the court: main\'s away from walls; beside one the player stays on the screen; never through a wall', async () => {
-  const { target, follow, onScreen } = await import('../src/mathball/camera.js');
+// THE CAMERA (camera.js) IS MAIN'S OWN, driven by the hand's turn: checked against main's lines (65bc920 index.js
+// aim(), written out here on their own) over the reviewer's grid (every half metre inside the court, every quarter
+// metre along each wall 0.45 m in, each corner and goal mouth), turns every 30 degrees, with and without a ball, and
+// the mouse's tilt at its two limits; and with main's easing, her figure stays on the screen through a quick swipe
+test('the camera is main\'s own on the grid, beside walls and away from them; a quick swipe never loses her', async () => {
+  const { target, ease, onScreen } = await import('../src/mathball/camera.js');
   const { MBCAM } = await readCam();
   const { COURT, WALLS, CORNERS, GOALS, clampIn, inside } = await import('../src/mathball/court.js');
-  const mainPose = (C, x, z, yaw, lift, holding) => {   // (main's own lines, 65bc920 index.js aim())
+  const mainPose = (C, x, z, yaw, lift, holding) => {   // (main's own lines)
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     let ax = x - fx * C.dist * (1 - lift * 0.12), az = z - fz * C.dist * (1 - lift * 0.12), ay = C.height + lift * 0.9;
     const [cx, cz] = clampIn(ax, az, 0.4), pushed = Math.hypot(cx - ax, cz - az);
@@ -169,48 +169,37 @@ test('the camera over the court: main\'s away from walls; beside one the player 
     return { eye: [cx, ay, cz], look: [x + fx * C.ahead, C.lookY + (holding ? C.holdUp : 0), z + fz * C.ahead] };
   };
   const places = [];
-  for (let x = -4.8; x <= 4.8 + 1e-9; x += 1) for (let z = -8.76; z <= 8.76 + 1e-9; z += 1) if (inside(x, z) >= 0.45) places.push([x, z]);
-  for (const W of WALLS) for (let s = 0; s <= W.len + 1e-9; s += 0.5) places.push(clampIn(W.A[0] + W.u[0] * s + W.n[0] * 0.45, W.A[1] + W.u[1] * s + W.n[1] * 0.45, 0.45));
+  for (let x = -4.8; x <= 4.8 + 1e-9; x += 0.5) for (let z = -8.76; z <= 8.76 + 1e-9; z += 0.5) if (inside(x, z) >= 0.45) places.push([x, z]);
+  for (const W of WALLS) for (let s = 0; s <= W.len + 1e-9; s += 0.25) places.push(clampIn(W.A[0] + W.u[0] * s + W.n[0] * 0.45, W.A[1] + W.u[1] * s + W.n[1] * 0.45, 0.45));
   for (const c of CORNERS) places.push(clampIn(c[0], c[1], 0.45));
   for (const g of GOALS) places.push(clampIn(g.mid[0], g.mid[1], 0.45));
-  const screens = [['upright', 400, 860, MBCAM.tall, 133], ['side', 860, 400, MBCAM.wide, 93], ['wide', 1280, 720, MBCAM.wide, 93]];
-  for (const [name, Wd, Ht, C, bar] of screens) {
-    let pushed = 0, goals = 0, mainGoals = 0;
-    for (const [x, z] of places) for (let yd = 0; yd < 360; yd += 30) for (const held of [false, true]) {
-      const yaw = yd * Math.PI / 180, P = target(C, x, z, yaw, 0, held), M = mainPose(C, x, z, yaw, 0, held);
-      const dir = Math.atan2(P.look[0] - P.eye[0], P.look[2] - P.eye[2]);
-      assert.ok(Math.abs(Math.atan2(Math.sin(dir - yaw), Math.cos(dir - yaw))) < 1e-9, 'it looks along the hand\'s turn exactly');
-      assert.ok(inside(P.eye[0], P.eye[2]) >= 0.4 - 1e-6 && P.eye[1] <= COURT.height - 0.7 + 1e-9, 'inside the court, under the ceiling');
-      const free = Math.hypot(M.eye[0] - (x - Math.sin(yaw) * C.dist), M.eye[2] - (z - Math.cos(yaw) * C.dist)) < 1e-9;
-      if (free) { for (let i = 0; i < 3; i++) { assert.ok(Math.abs(P.eye[i] - M.eye[i]) < 1e-9); assert.ok(Math.abs(P.look[i] - M.look[i]) < 1e-9); } continue; }
-      pushed++;
-      // beside a wall: her figure (feet, hip, head) on the screen, never off a side, her feet never under its foot
-      for (const h of [0, 0.9, 1.75]) {
-        const q = onScreen([x, h, z], P, C.fov, Wd, Ht);
-        assert.ok(q && q[0] >= 0 && q[0] <= Wd && q[1] >= 0 && q[1] <= Ht, `${name} at ${x.toFixed(2)},${z.toFixed(2)} turned ${yd}: her figure (${h} m) on the screen (${q && q.map(Math.round)})`);
-      }
-      if (held) for (const g of GOALS) {
-        if (Math.hypot(g.mid[0] - x, g.mid[1] - z) < 4) continue;
-        const ok = (Q) => { const q = onScreen(g.aim, Q, C.fov, Wd, Ht); return q && q[0] >= 0 && q[0] <= Wd && q[1] >= bar && q[1] <= Ht; };
-        if (ok(P)) goals++; if (ok(M)) mainGoals++;
-      }
-    }
-    assert.ok(pushed > 100, `${name}: the walls push it somewhere (${pushed})`);
-    // (far goals in view with a ball in hand, where a wall pushes it: nearly as often as main, whose view turned by
-    // itself toward the player there)
-    assert.ok(goals >= mainGoals * 0.85, `${name}: far goals in view ${goals} against main's ${mainGoals}`);
+  let n = 0, beside = 0;
+  for (const C of [MBCAM.tall, MBCAM.wide]) for (const [x, z] of places) for (let yd = 0; yd < 360; yd += 30) for (const held of [false, true]) for (const lift of [0, -1, 1.6]) {
+    const yaw = yd * Math.PI / 180, P = target(C, x, z, yaw, lift, held), M = mainPose(C, x, z, yaw, lift, held);
+    for (let i = 0; i < 3; i++) { assert.equal(P.eye[i], M.eye[i]); assert.equal(P.look[i], M.look[i]); }
+    n++; if (P.pushed > 0) beside++;
   }
-  // a quick swipe beside a wall: a quarter turn in a quarter second, at 60 and 30 frames a second, the game's easing
-  // (main's rate, 6 a second): the camera never outside the court at any frame
-  for (const [x, z] of places.filter(([x, z]) => inside(x, z) < 1.5)) for (const C of [MBCAM.tall, MBCAM.wide]) for (const dt of [1 / 60, 1 / 30]) for (const dir of [1, -1]) {
-    const S = { at: null }, k = 1 - Math.exp(-MBCAM.ease * dt);
-    let yaw = 0.3;
-    follow(S, target(C, x, z, yaw, 0, true), yaw, k);
-    for (let t = 0; t < 1.2; t += dt) {
+  assert.ok(n > 30000 && beside > n / 4, `${n} cases, ${beside} beside a wall`);
+  // a quarter turn in a quarter second by the hand (30 and 60 frames a second), facing every 45 degrees, both turn ways,
+  // with a ball in hand and without, on the three screens. In the court's middle (the fifth review's X1 case): her feet,
+  // hip and head on the screen at every frame. Beside a wall (0.45 m off the east wall, and in the corner by the green
+  // goal): the camera drawn at every frame is main's own eased camera, worked out here from main's own lines (main's
+  // camera there can let her pass the screen's edge for a moment in a swipe, as it does in the live game)
+  const screens = [[400, 860, MBCAM.tall], [860, 400, MBCAM.wide], [1280, 720, MBCAM.wide]];
+  for (const [Wd, Ht, C] of screens) for (const [x, z] of [[0, 0], [4.35, 0], [4.35, 5.5]]) for (let y0 = 0; y0 < 8; y0++) for (const dir of [1, -1]) for (const held of [false, true]) for (const dt of [1 / 30, 1 / 60]) {
+    const k = 1 - Math.exp(-MBCAM.ease * dt), S = { eye: null };
+    let yaw = y0 * Math.PI / 4;
+    ease(S, target(C, x, z, yaw, 0, held), k);
+    const M0 = mainPose(C, x, z, yaw, 0, held), mat = M0.eye.slice(), mlook = M0.look.slice();   // (main's cam.at, cam.look)
+    for (let t = 0; t < 1.0; t += dt) {
       if (t < 0.25) yaw += dir * (Math.PI / 2) * dt / 0.25;
-      const P = follow(S, target(C, x, z, yaw, 0, true), yaw, k);
-      assert.ok(inside(P.eye[0], P.eye[2]) >= 0.4 - 1e-6, `never through a wall: at ${x.toFixed(2)},${z.toFixed(2)}, ${t.toFixed(2)} s into the swipe`);
-      const d = Math.atan2(P.look[0] - P.eye[0], P.look[2] - P.eye[2]); assert.ok(Math.abs(Math.atan2(Math.sin(d - yaw), Math.cos(d - yaw))) < 1e-9);
+      const P = ease(S, target(C, x, z, yaw, 0, held), k);
+      const M = mainPose(C, x, z, yaw, 0, held); for (let i = 0; i < 3; i++) { mat[i] += (M.eye[i] - mat[i]) * k; mlook[i] += (M.look[i] - mlook[i]) * k; }
+      for (let i = 0; i < 3; i++) { assert.ok(Math.abs(P.eye[i] - mat[i]) < 1e-9); assert.ok(Math.abs(P.look[i] - mlook[i]) < 1e-9); }
+      if (x === 0 && z === 0) {
+        const on = [0, 0.9, 1.75].map((h) => { const q = onScreen([x, h, z], P, C.fov, Wd, Ht); return !!(q && q[0] >= 0 && q[0] <= Wd && q[1] >= 0 && q[1] <= Ht); });
+        assert.ok(on.every(Boolean), `${Wd}x${Ht} in the middle from ${y0 * 45} turning ${dir}: her figure on the screen ${t.toFixed(2)} s in (${on})`);
+      }
     }
   }
 });
@@ -239,10 +228,36 @@ test('the view turns only by viewTurn (a drag) and turnToward (a goal button\'s 
 });
 
 // THE SMALL RULES index.js goes by (hands.js), by what they do
-test('only a ball that can be picked up is a tap target: never one flying to a goal, just scored, fading or in a hand', () => {
+test('a ball a tap can hit: one that can be picked up, not in a hand, not inside a goal\'s housing', async () => {
+  const { GOALS, COURT } = await import('../src/mathball/court.js');
   for (const mode of ['air', 'roll', 'rest', 'turn']) assert.ok(canPick({ mode }), mode);
   for (const mode of ['fly', 'in', 'held', 'gone']) assert.equal(canPick({ mode }), false, mode);
   assert.equal(canPick({ mode: 'rest', fading: 1.2 }), false, 'fading');
+  for (const g of GOALS) {
+    const at = (front, side) => [g.mid[0] + g.n[0] * front + g.u[0] * side, 0.25, g.mid[1] + g.n[1] * front + g.u[1] * side];
+    const ball = (front, side) => ({ id: 1, mode: 'rest', p: at(front, side) });
+    assert.equal(canTap(ball(0.26, 0), null, GOALS, COURT.goal), false, `${g.key}: 0.26 m from the wall between the cheeks: inside the housing`);
+    assert.equal(canTap(ball(0.26, 0.9), null, GOALS, COURT.goal), false, 'near a cheek, still inside');
+    assert.ok(canTap(ball(0.6, 0), null, GOALS, COURT.goal), `${g.key}: 0.6 m out: in front of the goal, a ball to tap`);
+    assert.ok(canTap(ball(0.26, COURT.goal.w / 2 + COURT.goal.cheek + 0.1), null, GOALS, COURT.goal), 'beside the housing, along the wall');
+    const b = ball(0.6, 0); assert.equal(canTap(b, b, GOALS, COURT.goal), false, 'the ball in her hand');
+    // with a ball in hand, a tap on that goal where the housed ball is drawn: the ball is never offered, so the tap is
+    // a throw at the goal (the goal's box under the finger, as on main)
+    const housedBall = ball(0.26, 0), offered = [housedBall].filter((x) => canTap(x, null, GOALS, COURT.goal)).map((x) => ({ id: x.id, x: 200, y: 300, r: 12 }));
+    assert.deepEqual(chooseTap({ held: true, touch: true, underIn: underAt(200, 300, offered, 0), hitBall: underAt(200, 300, offered, 0), hitGoal: g.i }), { throw: g.i });
+    assert.deepEqual(chooseTap({ held: false, touch: true, under: underAt(200, 300, offered, 16), hitBall: null, near: nearestBall(200, 300, offered, 44), hitGoal: g.i }), { say: 'ball first' }, 'empty hands: "a ball first", as on main');
+  }
+});
+test('a tap where a ball was a moment before picks it (the record of where it was, through the camera as it is)', () => {
+  // a ball that rolled from where the finger lands to 100 px away in the last moment: picked by where it was
+  assert.equal(nearestBall(200, 400, [{ id: 'A', x: 300, y: 400, r: 10, past: [[200, 400]] }], HANDS.reach.touch).id, 'A');
+  assert.equal(nearestBall(200, 400, [{ id: 'A', x: 300, y: 400, r: 10 }], HANDS.reach.touch), null, '(without the record: missed)');
+  // the record round trip, the camera not turned: where it was is where it showed
+  const hist = [], cam = (p) => [200 + p[0] * 40, 400 - p[2] * 10];
+  remember(hist, 0, [{ id: 'A', p: [0, 0.25, 0] }]); remember(hist, 0.1, [{ id: 'A', p: [2.5, 0.25, 0] }]);
+  const past = pastOnScreen(hist, cam);
+  assert.deepEqual(past.get('A'), [[200, 400], [300, 400]]);
+  assert.equal(nearestBall(200, 400, [{ id: 'A', x: 300, y: 400, r: 10, past: past.get('A') }], HANDS.reach.touch).id, 'A');
 });
 test('a goal is in view by the screen alone: its mouth on the page, under the top bar as measured', () => {
   const rect = { left: 0, top: 0, right: 400, bottom: 860 };
@@ -278,12 +293,20 @@ test('the once-a-round line on looking round: after 2 s of every ball behind the
   for (let i = 0; i < 10; i++) assert.equal(lookRoundDue(S2, { dt: 0.5, t: 10, holding: false, running: false, balls: [{ mode: 'rest', seen: true }], showing: false }), false, 'never while a ball is in view');
 });
 
-// LOUD ALARM: the game's controller (it needs a page, so node cannot run it) writes the view's turn and the mouse's
-// tilt nowhere but through hands.js (a sum of the page's text: what turns the view cannot be run without a page)
-test('index.js: nothing but hands.js writes the view\'s turn', () => {
+// LOUD ALARMS on the game's controller (it needs a page, so node cannot run it; these read its text): the view's turn
+// is written from the hand's drag only (onMove) and the rigs' faceTo; a finger's drag passes no tilt; a goal's button
+// goes through buttonDoes; every list of balls a tap can hit goes through hands.js canTap
+test('index.js: the turn written only from the drag; no tilt from a finger; the button by its rule; one rule for tap targets', () => {
   const src = readFileSync(new URL('../src/mathball/index.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
   assert.equal((src.match(/cam\.yaw\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.yaw is written only by viewTurn / turnToward');
   assert.equal((src.match(/cam\.lift\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.lift (the tilt) only by viewTurn');
+  const turns = src.split('\n').filter((l) => /viewTurn\(/.test(l));
+  assert.equal(turns.length, 2, 'viewTurn is called in two places: ' + turns.map((l) => l.trim().slice(0, 60)).join(' | '));
+  assert.ok(turns.some((l) => /if \(r\.turn && !paused && !closed\) \{ viewTurn\(cam, r\.turn\[0\], e\.pointerType === 'mouse' \? r\.turn\[1\] : 0\);/.test(l)), 'the drag (onMove), a finger passing no tilt');
+  assert.ok(turns.some((l) => /faceTo: \(y\) => \{ viewTurn\(cam, wrapA\(cam\.yaw - y\) \/ HANDS\.turn, 0\)/.test(l)), 'the rigs\' faceTo');
   assert.equal((src.match(/turnToward\(/g) || []).length, 1, 'turnToward: the goal button\'s one turn only');
+  assert.ok(/const does = how === 'button' \? buttonDoes\(seen\(gi\), FRONT\.buttonTurns\) : 'throw';/.test(src), 'the goal\'s button by its rule');
   assert.ok(!/MBCAM\.(swing|after|turn)\b/.test(src) && !/turnTo\s*=/.test(src), 'the old swings are gone');
+  assert.ok(!/'air', 'roll', 'rest', 'turn'/.test(src), 'no list of ball modes of its own: hands.js canTap');
+  assert.equal((src.match(/canTap\(b, /g) || []).length, 3, 'the click targets, the balls on the screen and the record of where they were');
 });

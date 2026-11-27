@@ -52,8 +52,8 @@ import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
 import { happened } from '../announce.js';
-import { target, follow } from './camera.js';
-import { makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, inView, buttonDoes, mouthAt, lookRoundDue, HANDS } from './hands.js';
+import { target, ease } from './camera.js';
+import { makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canTap, inView, buttonDoes, mouthAt, lookRoundDue, HANDS } from './hands.js';
 
 const MID = COURT.mid;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -75,14 +75,16 @@ export const OPPONENTS = [
 const skillWords = (o) => `Mathball skill ${o.skill}`;
 const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
 // THE CAMERA (camera.js): behind the player and above, looking down the court (a phone held upright sees a narrow
-// strip, so it stands further back and higher, looking more steeply down). Away from walls it is main's, exactly (the
-// look raised with a ball in hand, the mouse's drag up and down); beside a wall it comes in rather than turning; its
-// TURN is the player's own (a drag sideways: hands.js HANDS.turn, radians a pixel), and nothing turns it by itself
+// strip, so it stands further back and higher, looking more steeply down). It is main's own camera (the look raised
+// with a ball in hand, the mouse's drag up and down, kept inside the court and rising against a wall, eased as main
+// eased it); its TURN is the player's own (a drag sideways: hands.js HANDS.turn, radians a pixel), and nothing writes
+// the turn by itself. (Beside a wall main's camera slides along the wall still looking at the player, so the view as
+// drawn turns a little there and comes back as she steps away: the game's maker's question 4)
 export const MBCAM = {
   // (holdUp: how much higher it looks with a ball in hand, so the far end's two goal signs come down the screen, clear
-  // of the score at the top; side: degrees off the view's line it may slide beside a wall, camera.js)
-  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1, side: 25 },
-  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2, side: 12 },
+  // of the score at the top)
+  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1 },
+  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2 },
   under: 0.7,                     // m it always stays under the ceiling (above it, nothing is drawn: a black screen)
   ease: 6,                        // how quickly it follows (1/s): main's
 };
@@ -336,7 +338,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const C = W.camera, r = canvas.getBoundingClientRect(), out = [], held = G.you.holding;
     const k = (r.height / 2) / Math.tan((C.fov * Math.PI / 180) / 2);
     for (const b of G.balls) {
-      if (b === held || b.fading || !['air', 'roll', 'rest', 'turn'].includes(b.mode)) continue;
+      if (!canTap(b, held, GOALS, COURT.goal)) continue;
       const m = view.ballMesh(b.id); if (!m) continue;
       _bp.copy(m.position).applyMatrix4(C.matrixWorldInverse); const depth = -_bp.z; if (depth < 0.2) continue;
       _bp.copy(m.position).project(C);
@@ -502,11 +504,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   const ballTargets = new Map();
   function syncTargets() {
-    // (every ball that can be picked up is something a tap can hit: never one flying to a goal, just scored, fading, or
-    // in either player's hands, which would only hide a goal behind it; the goals' boxes always are)
+    // (a ball a tap can hit, by hands.js canTap: never one flying to a goal, just scored, fading, in either player's
+    // hands, or inside a goal's housing, which would only hide the goal; the goals' boxes always are)
     const live = new Set();
     for (const b of G.balls) {
-      if (!canPick(b)) continue;
+      if (!canTap(b, G.you.holding, GOALS, COURT.goal)) continue;
       const m = view.ballMesh(b.id); if (!m) continue; live.add(b.id);
       // (a new round's ball with an old round's number: its own mesh, never the old one's)
       const had = ballTargets.get(b.id); if (had && had.m !== m) { had.off(); ballTargets.delete(b.id); }
@@ -568,7 +570,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   // (yaw: the view's turn, which only a drag sideways changes (hands.js viewTurn) and a goal button's one turn
   // (turnToward); lift: the mouse's drag up and down, as on main; feet: the player's place, followed smoothly; f: main's
   // framing numbers, eased)
-  const cam = { yaw: Math.PI, lift: 0, s: { at: null }, fresh: true, blend: 1, from: null, fromLook: null, byHand: 0 };   // (byHand: drags taken, for the rigs)
+  const cam = { yaw: Math.PI, lift: 0, s: { eye: null }, pushed: 0, fresh: true, byHand: 0 };   // (byHand: drags taken, for the rigs)
   let lastCam = new THREE.Vector3(MID[0], 3, MID[2] + 8);
   const youNow = { x: 0, z: 0, vx: 0, vz: 0, heading: 0 }, prev = new THREE.Vector3();
   let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null, askAt = 0;
@@ -615,7 +617,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     syncTargets();
     // (where each ball has been in the court this last moment: a tap where a person saw one still picks it)
     clock += dt;
-    if (phase === 'play') remember(seenBalls, clock, G.balls.filter((b) => b !== G.you.holding && !b.fading && ['air', 'roll', 'rest', 'turn'].includes(b.mode)), HANDS.past);
+    if (phase === 'play') remember(seenBalls, clock, G.balls.filter((b) => canTap(b, G.you.holding, GOALS, COURT.goal)), HANDS.past);
     else seenBalls.length = 0;
     view.update(dt, W.camera);
     otherBodyStep(dt);
@@ -783,16 +785,18 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const C = tall() ? MBCAM.tall : MBCAM.wide;
     // (a goal's button pressed for a goal out of the way: the view turns to it once; done, or a drag, ends it)
     if (oneTurn != null) { const g = GOALS[oneTurn].aim; if (turnToward(cam, Math.atan2(g[0] - youNow.x, g[2] - youNow.z), FRONT.rate, dt)) oneTurn = null; }
-    // (camera.js: main's framing away from walls, coming in beside one; its place eased in the court as main eased its
-    // camera (MBCAM.ease) and kept inside the court every frame; the way it looks across the floor is cam.yaw exactly)
+    // (camera.js: main's own camera for the hand's turn, eased as main eased it (MBCAM.ease); as the game opens it eases
+    // from where the station's camera was, as on main)
     const k = 1 - Math.exp(-MBCAM.ease * dt);
-    if (cam.fresh) cam.s = { at: null };
+    if (cam.fresh) {
+      const d = camera.getWorldDirection(_d);
+      cam.s = { eye: [camera.position.x - MID[0], camera.position.y, camera.position.z - MID[2]], look: [camera.position.x - MID[0] + d.x * 4, camera.position.y + d.y * 4, camera.position.z - MID[2] + d.z * 4] };
+      cam.fresh = false;
+    }
     const T = target(C, youNow.x, youNow.z, cam.yaw, cam.lift, !!G.you.holding, MBCAM.under);
-    const P = follow(cam.s, T, cam.yaw, k, MBCAM.under);
+    cam.pushed = T.pushed;
+    const P = ease(cam.s, T, k);
     _w.set(MID[0] + P.eye[0], P.eye[1], MID[2] + P.eye[2]); _l.set(MID[0] + P.look[0], P.look[1], MID[2] + P.look[2]);
-    // (as the game opens: from where the station's camera was, over most of a second)
-    if (cam.fresh) { cam.from = camera.position.clone(); cam.fromLook = camera.position.clone().add(camera.getWorldDirection(_d).multiplyScalar(4)); cam.blend = 0; cam.fresh = false; }
-    if (cam.blend < 1) { cam.blend = Math.min(1, cam.blend + dt / 0.7); const e = cam.blend * cam.blend * (3 - 2 * cam.blend); _w.lerpVectors(cam.from, _w, e); _l.lerpVectors(cam.fromLook, _l, e); }
     camera.position.copy(_w); camera.lookAt(_l);
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     lastCam.copy(camera.position);
@@ -861,7 +865,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
       // (the aiming arc now: what it aims at, where it ends; and the last throw's, as it was made)
       aim: aimT ? { goal: aimT.goal ?? null, ball: aimT.ball ?? null, hit: aimT.goal != null ? 'goal' : aimT.hit || null, ahead: !!aimT.ahead, wait: !!aimT.wait, end: arcEnd(aimT),
         off: aimT.goal != null || aimT.at ? +((offFront(aimT.goal != null ? GOALS[aimT.goal].aim : aimT.at)) * 180 / Math.PI).toFixed(1) : null } : null,
-      pending, oneTurn, camYaw: +cam.yaw.toFixed(4), viewYaw: +viewYaw().toFixed(4), tilt: +cam.lift.toFixed(4), eye: [+(lastCam.x - MID[0]).toFixed(3), +lastCam.y.toFixed(3), +(lastCam.z - MID[2]).toFixed(3)], topBar: Math.round(topBar()), dragging: hands.dragging, byHand: cam.byHand, opening: cam.blend < 1,
+      pending, oneTurn, camYaw: +cam.yaw.toFixed(4), viewYaw: +viewYaw().toFixed(4), tilt: +cam.lift.toFixed(4), eye: [+(lastCam.x - MID[0]).toFixed(3), +lastCam.y.toFixed(3), +(lastCam.z - MID[2]).toFixed(3)], topBar: Math.round(topBar()), dragging: hands.dragging, byHand: cam.byHand, pushed: +cam.pushed.toFixed(3),
       lastArc: lastArc ? { goal: lastArc.goal, hit: lastArc.hit, end: lastArc.end.map((v) => +v.toFixed(2)) } : null,
     }),
     // (for the rigs: where a ball or a goal is on the screen, in page pixels)
