@@ -75,7 +75,7 @@ import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, SEAT_APART, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
 import { seatSteps, leanOf, roundAt, SIT } from './seatsteps.js';
 import { fineFor, turnStep, deskSeat, DESK_SIT } from './finemoves.js';
-import { surfaceAhead, handsAt, WORK_OF, WORK_AT, SCAN_HOLD } from './atwork.js';
+import { surfaceAhead, handsAt, WORK_OF, WORK_AT, SCAN_HOLD, WORK } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
 import { pointGap } from '../kit/forkliftround.js';
@@ -1176,8 +1176,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (a desk whose edge stands further off than a sitter's arm reaches it bowed, DESK_REACH: the sitter on the front
     // of the seat, drawn forward that much more, at most 0.2 m: the review's measure, the control room's radio desk 8 to
     // 10 cm out of reach)
+    // (further still: bowed more, 2.5 radians a metre past that, at most 0.8)
     const stepIn = a.kind === 'sit' ? Math.max(0, Math.min(0.2, f.d - DESK_REACH)) : k.stepIn || 0;
-    return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean: k.lean, apart: k.apart, tilt: k.tilt || 0, stepIn };
+    const past = a.kind === 'sit' ? Math.max(0, f.d - DESK_REACH - 0.2) : 0, lean = past ? Math.min(0.8, (k.lean || WORK.desk.lean) + past * 2.5) : k.lean;
+    return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean, apart: k.apart, tilt: k.tilt || 0, stepIn };
   }
   // (each frame a person is drawn: the stance at rest, the lean, the hands on the work, for moves.js)
   const _hw = [new THREE.Vector3(), new THREE.Vector3()];
