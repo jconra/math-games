@@ -59,6 +59,13 @@ const sunDir = (el, az) => { const e = el * Math.PI / 180, a = az * Math.PI / 18
 // a sample of a field at a point of the ground (nearest sample)
 const at = (ctx, F, x, z) => { const { N, P, T } = ctx, i = Math.round((x + P / 2) / T) & (N - 1), j = Math.round((z + P / 2) / T) & (N - 1); return F[j * N + i]; };
 
+// THE CANYONS' DARK PATCHES on the sand and the slopes: how strong (two critics read them, at 0.7, as dark smudges and
+// stains on the far hillsides that do not follow the sun); and how far the steps' cliffs are softened (samples: at one,
+// their rims seen from the ship were torn into teeth)
+export const CANYON_PATCH = 0.35, CANYON_SOFT = 2;
+// THE MEADOWS' BARE EARTH: how ragged its edge is (see the meadow's paint)
+export const MEADOW_RAGGED = 0.45;
+
 // ── 1. THE CRATERED MOON ─────────────────────────────────────────────────────────────────────────────────────────
 // No air: grey rock and dust, craters of every size from a few metres to a few hundred, the young ones sharp with
 // bright rays and boulders round them, the old ones worn down; smooth dark plains in some, rough highlands. Black sky
@@ -145,12 +152,14 @@ const MEADOW = {
     addField(ctx, fbm({ cells: 64, n: 3, seed: subSeed(s, 'fine') }), 0.7);
   },
   paint(ctx) {
-    const { slope, crest, H, low } = ctx, patch = field(ctx, fbm({ cells: 10, n: 3, seed: subSeed(ctx.seed, 'patch') }), 4), bare = field(ctx, fbm({ cells: 6, n: 3, seed: subSeed(ctx.seed, 'bare') }), 4);
+    const { slope, crest, H, low } = ctx, patch = field(ctx, fbm({ cells: 10, n: 3, seed: subSeed(ctx.seed, 'patch') }), 4), bare = field(ctx, fbm({ cells: 6, n: 3, seed: subSeed(ctx.seed, 'bare') }), 4), ragged = field(ctx, fbm({ cells: 48, n: 3, seed: subSeed(ctx.seed, 'ragged') }), 2);
     for (let k = 0; k < H.length; k++) {
       const rk = Math.min(1, smooth(0.55, 1.0, slope[k]) + smooth(0.55, 0.8, crest[k]) * 0.9);
       ctx.rock[k] = rk;
       ctx.tone[k] = Math.max(-1, Math.min(1, patch[k] * 1.4 + 0.03 * (H[k] - low[k])));
-      ctx.growth[k] = (1 - rk) * (1 - smooth(0.3, 0.65, slope[k])) * smooth(-0.45, 0.1, bare[k]);
+      // (the bare earth's edge ragged, in tongues and islands: smooth, the big bare patches lay like spilled paint in the
+      // land seen from the ship, two critics: D's lilac pools)
+      ctx.growth[k] = (1 - rk) * (1 - smooth(0.3, 0.65, slope[k])) * smooth(-0.45, 0.1, bare[k] + MEADOW_RAGGED * ragged[k]);
     }
     // THE WOODS: where a slow noise is high, a wood (a tree in nearly every one of the trees' cells), and here and there
     // a tree on its own in the open; only where plants grow (not on rock, nor steep ground). How much of the land is
@@ -245,7 +254,7 @@ const CANYON = {
     }
     // (the steps softened over a few metres, so a cliff is never narrower than the samples it is drawn from: no saw
     // teeth along the rims)
-    ctx.H.set(blur(H, N, 1, 2));
+    ctx.H.set(blur(H, N, CANYON_SOFT, 2));
     addField(ctx, fbm({ cells: 64, n: 2, seed: subSeed(s, 'fine') }), 0.5);
   },
   // the cliffs' bands: layers of rock by height (about 25 m from one to the next, a little wavy), drawn by the ground's
@@ -259,7 +268,7 @@ const CANYON = {
     for (let k = 0; k < H.length; k++) {
       const rk = smooth(0.45, 0.95, slope[k]);
       ctx.rock[k] = rk;
-      ctx.tone[k] = Math.max(-1, Math.min(1, (1 - rk) * patch[k] * 0.7 - floor[k] * 0.15));
+      ctx.tone[k] = Math.max(-1, Math.min(1, (1 - rk) * patch[k] * CANYON_PATCH - floor[k] * 0.15));
       ctx.growth[k] = (1 - rk) * smooth(-0.1, 0.45, patch2[k]) * (0.35 + 0.4 * floor[k]);
       // the trees: a few, one here and there where plants grow, more on the canyons' floors
       ctx.woods[k] = ctx.growth[k] * 0.3;
