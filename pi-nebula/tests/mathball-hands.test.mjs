@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HANDS, makeHands, nearestBall, viewTurn, turnToward, pushFor } from '../src/mathball/hands.js';
+import { HANDS, makeHands, nearestBall, underAt, viewTurn, turnToward, pushFor } from '../src/mathball/hands.js';
 
 const W = 400;   // an upright phone's width (the left 42% is the walking stick's)
 function press(H, { x = 300, y = 400, moveBy = 0, ms = 100, touch = true, button = 0, aimable = false, id = 1, steps = 4 } = {}) {
@@ -125,4 +125,11 @@ test('index.js: nothing turns the view by itself', () => {
   for (const l of turns) assert.ok(/FRONT\.buttonTurns/.test(l), 'a goal button turns the view only with FRONT.buttonTurns: ' + l.trim());
   assert.equal((src.match(/turnToward\(/g) || []).length, 1, 'turnToward is called once: the goal button\'s turn');
   assert.ok(/if \(oneTurn != null\)[^\n]*turnToward/.test(src));
+});
+
+test('the ball under the finger as it came down is the one a tap means, even if another rolled over that spot', () => {
+  const then = [{ id: 1, x: 200, y: 300, r: 14 }, { id: 2, x: 260, y: 300, r: 30 }];
+  assert.equal(underAt(202, 301, then, HANDS.onIt.touch), 1);
+  assert.equal(underAt(250, 300, then, HANDS.onIt.touch), 2, 'a near ball in front: the one the point is on');
+  assert.equal(underAt(120, 300, then, HANDS.onIt.touch), null, 'nothing there then: no say');
 });

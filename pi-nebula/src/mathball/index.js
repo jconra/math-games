@@ -52,7 +52,7 @@ import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
 import { happened } from '../announce.js';
-import { makeHands, nearestBall, viewTurn, turnToward, pushFor, HANDS } from './hands.js';
+import { makeHands, nearestBall, underAt, viewTurn, turnToward, pushFor, HANDS } from './hands.js';
 
 const MID = COURT.mid;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -338,6 +338,9 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   function tapAt(p, from) {
     sound.wake();
     const held = G.you.holding, hit = input.pickAt(p.x, p.y, p.touch), d = hit && !hit.near ? hit.data : {};
+    // (first, the ball that was under the finger as it came down: what the person meant, even if another one rolled
+    // over that spot before the finger lifted)
+    if (p.from && from) { const at = underAt(p.from[0], p.from[1], from, p.touch ? HANDS.onIt.touch : HANDS.onIt.mouse); if (at != null && pickBall(at)) return true; }
     if (d.ball != null && (!held || d.ball !== held.id) && pickBall(d.ball)) return true;
     const was = new Map((from || []).map((b) => [b.id, b])), past = new Map();
     for (const S of seenOnScreen) for (const b of S.list) { if (!past.has(b.id)) past.set(b.id, []); past.get(b.id).push([b.x, b.y]); }

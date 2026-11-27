@@ -101,6 +101,14 @@ export function nearestBall(x, y, balls, reach) {
   return best;
 }
 
+// the ball under a point (as the balls were then): of those whose disc on the screen, widened by `pad` px, holds it,
+// the one it is most nearly in the middle of (a near ball in front of a far one: the one the point is on). An id or null
+export function underAt(x, y, balls, pad = 0) {
+  let best = null, bk = Infinity;
+  for (const b of balls) { const d = Math.hypot(x - b.x, y - b.y), r = Math.max(1, b.r || 0); if (d <= r + pad && d / r < bk) { bk = d / r; best = b.id; } }
+  return best;
+}
+
 // THE VIEW'S TURN. viewTurn: the player's own drag (dx, dy: pixels). turnToward: a goal button's one turn (index.js,
 // FRONT.buttonTurns), at `rate` radians a second; true once it faces `want`. Nothing else changes cam.yaw.
 export function viewTurn(cam, dx, dy = 0, H = HANDS) {
