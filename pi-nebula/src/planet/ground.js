@@ -82,11 +82,13 @@ function detailTexture(aniso) {
 
 // ── THE HAZE, shared with what stands on the ground (src/planet/cover.js) ───────────────────────────────────────
 // thick near the ground and thinning with height (halving every uHazeH * 0.69 metres up), so far hills fade into the
-// sky but the ground below stays clear from high up: how much of the sky's colour is between a point and the camera
+// sky but the ground below stays clear from high up: how much of the sky's colour is between a point and the camera.
+// Below the landing place's height it is no thicker than there (it grew without end downhill, and lay in the valleys as
+// flat pools of the sky's colour that two critics read as spilled paint)
 export const HAZE_GLSL = /* glsl */`
 uniform float uHaze, uHazeH, uHazeBase;
 float hazeAmt(vec3 eye, vec3 p) {
-  float d = distance(eye, p), k = 1.0 / uHazeH, h0 = eye.y - uHazeBase, dh = p.y - eye.y;
+  float d = distance(eye, p), k = 1.0 / uHazeH, h0 = max(eye.y - uHazeBase, 0.0), dh = max(p.y - uHazeBase, 0.0) - h0;
   float od = abs(dh) < 1.0 ? exp(-k * h0) : (exp(-k * h0) - exp(-k * (h0 + dh))) / (k * dh);
   return 1.0 - exp(-uHaze * d * od);
 }
