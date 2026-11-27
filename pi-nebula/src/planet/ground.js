@@ -102,10 +102,14 @@ uniform float uHaze, uHazeH, uHazeBase;
 float hazeAmt(vec3 eye, vec3 p) {
   float d = distance(eye, p), k = 1.0 / uHazeH, h0 = max(eye.y - uHazeBase, 0.0), dh = max(p.y - uHazeBase, 0.0) - h0;
   float od = abs(dh) < 1.0 ? exp(-k * h0) : (exp(-k * h0) - exp(-k * (h0 + dh))) / (k * dh);
-  // (and where the land meets the sky over the planet's curve, it melts into the sky rather than ending in a ruled
-  // line: toward the farthest ground the eye can see from its height over the landing place, more haze)
-  float edge = sqrt(2.0 * ${CURVE.toFixed(1)} * (h0 + 1.5));
-  return max(1.0 - exp(-uHaze * d * od), ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.3, 1.0, d / edge));
+  return 1.0 - exp(-uHaze * d * od);
+}
+// (the ground's own, not what stands on it: where the land meets the sky over the planet's curve, seen standing on it,
+// it melts into the sky rather than ending in a ruled line; gone by the time the eye is a few metres up, so from the
+// ship the land is as it was, and the trees in the middle distance never fade to pale ghosts)
+float horizonAmt(vec3 eye, vec3 p) {
+  float h0 = max(eye.y - uHazeBase, 0.0), edge = sqrt(2.0 * ${CURVE.toFixed(1)} * (h0 + 1.5));
+  return ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.45, 1.0, distance(eye, p) / edge) * (1.0 - smoothstep(4.0, 12.0, h0));
 }
 `;
 
@@ -232,7 +236,7 @@ void main() {
   base *= 0.9 + 0.2 * mix(0.5, d2.a, nearA) * (0.6 + 0.4 * rock);
   // (bare earth and rock mottled at every distance, in patches a few tens of metres across: plain, the meadows' bare
   // earth lay in the land seen from the ship as flat pools of one colour, D's lilac pools, two critics: "spilled paint")
-  base *= mix(1.0, (0.7 + 0.55 * d1.b) * (0.85 + 0.3 * d1.a), max(rock, uBare * (1.0 - grow)) * ${ROCK_MOTTLE.toFixed(2)});
+  base *= mix(1.0, (0.7 + 0.55 * d1.b) * (0.85 + 0.3 * d1.a), max(rock, uBare * (1.0 - grow)) * ${ROCK_MOTTLE.toFixed(2)} * (0.2 + 0.8 * flatK));   // (little on steep faces: laid on from above, it combed into streaks down the slopes)
   #ifdef GRIT
   // THE GROUND UNDERFOOT (src/planet/grit.js): small stones, cracks, tufts and ripples, each kind its own, near the eye
   // only; two sizes of it turned against each other, and how much of each comes and goes over the ground (d1, d2)
