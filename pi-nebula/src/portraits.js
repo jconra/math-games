@@ -462,7 +462,10 @@ function liveRender() {
   // the whole person, with room over their head for the tallest height (so a height picked is seen), the feet at the
   // bottom; nearer, their head and shoulders (zoom eased, so the first steps in are small)
   const z = V.zoom * V.zoom * (3 - 2 * V.zoom);
-  const top = (F.head + 0.2) * TALLEST, bottom = -0.04;
+  // (and room under the feet for the turn hint drawn there, 6 to 22 px up the window, and over the head: two critics,
+  // 2026-11-26, saw the feet on the window's bottom edge once the window was made bigger; at every window size)
+  const top0 = (F.head + 0.2) * TALLEST, bottom0 = -0.04, span = top0 - bottom0, under = 34 / Math.max(160, h), over = 10 / Math.max(160, h);
+  const bottom = bottom0 - span * under / (1 - under - over), top = top0 + span * over / (1 - under - over);
   const mid = (top + bottom) / 2 + ((F.head - 0.07) * size - (top + bottom) / 2) * z, tall = (top - bottom) + (LIVE_VIEW.close - (top - bottom)) * z;
   cam.fov = LIVE_VIEW.fov; cam.aspect = w / h; cam.updateProjectionMatrix();
   const t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
