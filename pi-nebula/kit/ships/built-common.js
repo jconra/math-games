@@ -9,7 +9,7 @@
 //   the canopy     buildPanes: named panes through named corners on the mesh's canopy, their borders as straight
 //                  spars; spar: the one black bar placed along every border; drawCanopy: the glass and its spars
 //   the cockpit    cockpitTub: dark walls from the canopy's outline down to its floor, so no gap shows the sky
-//   the gear       teleLeg (a telescoping leg as kit door leaves: its tubes and foot), slideDoors (a well's two doors,
+//   the gear       strutLeg (a landing leg as kit door leaves: its cylinder and braces, piston, foot), slideDoors (a well's two doors,
 //                  cut from the skin, sliding), wellWalls, gearStep (legs then doors, in turn: gear-plan.js), tube
 //   leaves         poseLeaf: a leaf set by hand (a turn, a spin), as the kit's layout code sets it, and more
 //   the throttle   THROTTLE, ENGINE, setThrottle: how hard the engines run, 0 to 1
@@ -21,7 +21,7 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
 import { U as KU, kitTextures, spinVertex } from '../materials.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
-import { telescope, doorSlide, gearOrder, LEG, TUBE_STEP } from './gear-plan.js';
+import { legPlan, doorSlide, gearOrder, LEG } from './gear-plan.js';
 
 export const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -387,55 +387,103 @@ export function cockpitTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf,
   return hull2;
 }
 
-// ── THE GEAR (kit/ships/gear-plan.js: the plan, the telescope's and the doors' numbers, the order they move in) ────────
-// A TELESCOPING LEG (gear-plan.js telescope): nested tubes, each an eight-sided tube with a darker collar round its foot,
-// over a broad foot (a hub and a pad with 45-degree edges, its sole rubber), as leaves of one kit door ('gear', 0 down,
-// 1 up): tube k slides up its `rise` as the leg goes up, the foot its own. L: the leg's plan (at, top, belly, r, pad);
-// floor: the ground in the ship's frame; key: the leaves' name stem ('eb'); which: the variant; paint: { tube, collar,
-// hub, pad, sole }
+// ── THE GEAR (kit/ships/gear-plan.js: the plan, the leg's and the doors' numbers, the order they move in) ──────────────
+// A LEG (gear-plan.js legPlan; the game's maker: "something like the F-16 landing gear. It goes out wider, and has a few
+// cylinders that meet up"): splayed out and down from its well, a fat pale main cylinder with a darker collar at its foot
+// and two hoses clamped along it, a slimmer bright piston sliding out of it (a slimmer stage between, where the well is
+// shallow), a dark fitting just over the foot with a torque link folded across the piston's front, and a skid pad with
+// its toe and heel turned up, its sole rubber; two or three braces (each a pale sleeve and a bright rod, a dark lug at
+// each end) from the well's edges down to that fitting. Leaves of one kit door ('gear', 0 down, 1 up): each turns
+// upright about the hip as it goes (the plan's hipTurn) and slides up its rise: the cylinder and the braces' sleeves
+// the least, the piston, the foot and the braces' rods the most, so up the whole leg stands folded into itself in its
+// well. L: the leg's LEGS entry; floor: the ground in the ship's frame; key: the leaves' name stem
+// ('eb'); which: the variant; paint: { cyl, piston, joint, band, pad, sole }
 const OCT = Array.from({ length: 8 }, (_, i) => (i + 0.5) * PI / 4);
-// an eight-sided upright tube about (cx, cz) from y0 to y1, radius r (its flats facing along the ship and across it),
-// with its ends shut
-export function tube(acc, cx, cz, y0, y1, r, surf, dk, ends = true) {
-  const P = (a, y) => V3(cx + r * Math.cos(a), y, cz + r * Math.sin(a));
+// an eight-sided rod from a to b (Vector3s, the ship's frame), radius r, its ends shut (or not)
+export function rod(acc, a, b, r, surf, dk, ends = true) {
+  const ax = b.clone().sub(a).normalize(), ref = Math.abs(ax.z) < 0.9 ? V3(0, 0, 1) : V3(1, 0, 0);
+  const u = ref.clone().cross(ax).normalize(), v = ax.clone().cross(u);
+  const off = (ang) => u.clone().multiplyScalar(Math.cos(ang) * r).addScaledVector(v, Math.sin(ang) * r);
   for (let i = 0; i < 8; i++) {
-    const a = OCT[i], b = OCT[(i + 1) % 8], m = (a + b) / 2;
-    acc.poly([P(a, y0), P(b, y0), P(b, y1), P(a, y1)].map(dk), V3(Math.cos(m), 0, Math.sin(m)), surf, 'solid', 99);
+    const p = off(OCT[i]), q = off(OCT[(i + 1) % 8]), n = off((OCT[i] + OCT[(i + 1) % 8]) / 2).normalize();
+    acc.poly([a.clone().add(p), a.clone().add(q), b.clone().add(q), b.clone().add(p)].map(dk), n, surf, 'solid', 99);
   }
-  if (ends) for (const [y, ny] of [[y1, 1], [y0, -1]]) acc.poly(OCT.map((a) => dk(P(a, y))), V3(0, ny, 0), surf, 'solid', 99);
+  if (ends) for (const [c, n] of [[b, ax], [a, ax.clone().negate()]]) acc.poly(OCT.map((t) => dk(c.clone().add(off(t)))), n, surf, 'solid', 99);
 }
-// a slab from y0 to y1 over the rectangle [hx, hz] about (cx, cz), its top edges cut back at 45 degrees by `bevel`
-function bevelSlab(acc, cx, cz, y0, y1, hx, hz, bevel, side, top, bottom, dk) {
-  const ym = y1 - bevel, R = (h, k, y) => [V3(cx - h, y, cz - k), V3(cx + h, y, cz - k), V3(cx + h, y, cz + k), V3(cx - h, y, cz + k)];
-  const lo = R(hx, hz, y0), mid = R(hx, hz, ym), hi = R(hx - bevel, hz - bevel, y1);
-  const sides = [V3(0, 0, -1), V3(1, 0, 0), V3(0, 0, 1), V3(-1, 0, 0)];
-  for (let i = 0; i < 4; i++) {
-    const j = (i + 1) % 4, n = sides[i];
-    acc.poly([lo[i], lo[j], mid[j], mid[i]].map(dk), n, side, 'solid', 99);
-    acc.poly([mid[i], mid[j], hi[j], hi[i]].map(dk), n.clone().add(V3(0, 1, 0)).normalize(), side, 'solid', 99);
-  }
-  acc.poly(hi.map(dk), V3(0, 1, 0), top, 'solid', 99);
-  acc.poly(lo.map(dk), V3(0, -1, 0), bottom, 'solid', 99);
-}
-export function teleLeg(p, L, { floor, key, which, dk, paint, speed }) {
-  const T = telescope({ top: L.top, belly: L.belly, floor }), [cx, cz] = L.at;
-  T.tubes.forEach((tb, k) => {
-    const r = L.r - TUBE_STEP * k;
-    p.leaf(`${key}:leg tube ${k}:${which}`, (lp) => {
-      const acc = new Acc();
-      tube(acc, cx, cz, tb.y0 + 0.06, tb.y1, r, paint.tube, dk);
-      tube(acc, cx, cz, tb.y0, tb.y0 + 0.06, r + 0.022, paint.collar, dk);   // (its collar)
-      acc.flush(lp);
-    }, { door: 'gear', slide: [0, tb.rise, 0] });
+// an upright eight-sided tube about (cx, cz) from y0 to y1
+export function tube(acc, cx, cz, y0, y1, r, surf, dk, ends = true) { rod(acc, V3(cx, y0, cz), V3(cx, y1, cz), r, surf, dk, ends); }
+// the skid pad: level on the floor about c (its middle on the floor), [hx, hz] its half sizes, h its height; its toe
+// and heel turned up (the Hauler's own pad's profile)
+function skidPad(acc, c, hx, hz, h, side, sole, dk) {
+  const prof = [[-hz + 0.1, 0], [hz - 0.1, 0], [hz, h * 0.55], [hz, h], [-hz, h], [-hz, h * 0.55]];
+  const P = (sx, [z, y]) => V3(c.x + sx * hx, c.y + y, c.z + z);
+  for (const sx of [1, -1]) acc.poly(prof.map((q) => P(sx, q)).map(dk), V3(sx, 0, 0), side, 'solid', 99);
+  prof.forEach(([za, ya], i) => {
+    const [zb, yb] = prof[(i + 1) % prof.length], n = V3(0, -(zb - za), yb - ya).normalize();
+    acc.poly([P(-1, [za, ya]), P(1, [za, ya]), P(1, [zb, yb]), P(-1, [zb, yb])].map(dk), n, i === 0 ? sole : side, 'solid', 99);
   });
-  const F = T.foot, rl = L.r - TUBE_STEP * (T.n - 1), [px, pz] = L.pad;
+}
+export function strutLeg(p, L, { floor, key, which, dk, paint, speed }) {
+  const G = legPlan(L, floor), A = (u) => V3(...G.at(u)), dir = V3(...G.dir), up = dir.clone().negate();
+  const across = V3(0, 0, 1).cross(up).normalize(), along = V3(0, 0, 1);
+  const hinge = G.hipTurn ? [G.hipTurn] : null, opt = (rise) => ({ door: 'gear', slide: [0, rise, 0], ...(hinge ? { hinge } : {}) });
+  const last = G.tubes.length - 1;
+  G.tubes.forEach((T, k) => {
+    p.leaf(`${key}:leg ${k ? (k === last ? 'piston' : 'stage ' + k) : 'cylinder'}:${which}`, (lp) => {
+      const acc = new Acc(), a = A(T.u0), b = A(T.u1);
+      if (k === 0) {
+        rod(acc, A(T.u0 + 0.08), b, T.r, paint.cyl, dk);
+        rod(acc, a, A(T.u0 + 0.08), T.r + 0.025, paint.joint, dk);                                     // (its collar)
+        // (two hoses along it, clamped)
+        for (const sx of [1, -1]) {
+          const o = across.clone().multiplyScalar(sx * (T.r + 0.018)).addScaledVector(along, 0.05);
+          rod(acc, A(T.u0 + 0.12).add(o), A(T.u1 - 0.2).add(o), 0.012, paint.joint, dk);
+          for (const u of [T.u0 + 0.35, (T.u0 + T.u1) / 2]) rod(acc, A(u - 0.02).add(o.clone().multiplyScalar(0.95)), A(u + 0.02).add(o.clone().multiplyScalar(0.95)), 0.024, paint.joint, dk);
+        }
+        // (a yellow band under its collar)
+        rod(acc, A(T.u0 + 0.08), A(T.u0 + 0.12), T.r + 0.012, paint.band, dk);
+      } else {
+        rod(acc, a, b, T.r, k === last ? paint.piston : paint.cyl, dk);
+        if (k !== last) rod(acc, a, A(T.u0 + 0.06), T.r + 0.018, paint.joint, dk);
+      }
+      acc.flush(lp);
+    }, opt(T.rise));
+  });
+  // THE BRACES: each a pale sleeve from its anchor (a dark lug, a dark gland at its open end) and a bright rod from the
+  // fitting (a dark lug there), as two leaves: the sleeve rising with the cylinder, the rod with the foot, each turning
+  // about its own end on the way (the plan's hinges), so up the rod lies run into the sleeve
+  for (const B of G.braces) {
+    const s = V3(...B.anchor), f = V3(...B.fit), w = f.clone().sub(s).normalize();
+    const hinges = (H) => [...(hinge || []), H];
+    p.leaf(`${key}:leg brace sleeve ${B.name}:${which}`, (lp) => {
+      const acc = new Acc(), e = s.clone().addScaledVector(w, B.sleeve.length);
+      rod(acc, s, s.clone().addScaledVector(w, 0.07), 0.075, paint.joint, dk);
+      rod(acc, s.clone().addScaledVector(w, 0.07), e, 0.055, paint.cyl, dk);
+      rod(acc, e.clone().addScaledVector(w, -0.06), e, 0.065, paint.joint, dk);
+      acc.flush(lp);
+    }, { door: 'gear', slide: [0, B.sleeve.rise, 0], hinge: hinges(B.sleeve.hinge) });
+    p.leaf(`${key}:leg brace rod ${B.name}:${which}`, (lp) => {
+      const acc = new Acc(), e = f.clone().addScaledVector(w, -B.rod.length);
+      rod(acc, e, f.clone().addScaledVector(w, -0.09), 0.036, paint.piston, dk);
+      rod(acc, f.clone().addScaledVector(w, -0.09), f, 0.05, paint.joint, dk);
+      acc.flush(lp);
+    }, { door: 'gear', slide: [0, B.rod.rise, 0], hinge: hinges(B.rod.hinge) });
+  }
+  // THE FOOT: the fitting over the pad (a dark block along the leg, a yellow band round its top), the torque link (two
+  // short bars from the fitting to the piston, bent forward at a knee), the pad level on the floor
   p.leaf(`${key}:leg foot:${which}`, (lp) => {
-    const acc = new Acc();
-    tube(acc, cx, cz, F.y0 + LEG.pad, F.y1, rl + 0.03, paint.hub, dk);   // (the hub the last tube stands in)
-    bevelSlab(acc, cx, cz, F.y0, F.y0 + LEG.pad, px / 2, pz / 2, 0.025, paint.pad, paint.pad, paint.sole, dk);
+    const acc = new Acc(), rl = G.tubes[last].r, f = A(LEG.fit), [px, pz] = L.pad;
+    boxAt(acc, f, [across, up, along], [rl + 0.07, (LEG.fitTop - LEG.pad) / 2, rl + 0.09], paint.joint, [], dk);
+    rod(acc, A(LEG.fitTop - 0.04), A(LEG.fitTop), rl + 0.06, paint.band, dk);
+    const lo = A(LEG.fitTop - 0.02).addScaledVector(along, rl + 0.06), hi = A(LEG.fitTop + 0.42).addScaledVector(along, rl + 0.03), knee = A(LEG.fitTop + 0.2).addScaledVector(along, rl + 0.2);
+    rod(acc, lo, knee, 0.025, paint.joint, dk); rod(acc, knee, hi, 0.025, paint.joint, dk);
+    rod(acc, knee.clone().addScaledVector(across, -0.04), knee.clone().addScaledVector(across, 0.04), 0.03, paint.piston, dk);
+    // (an ankle pin across, the pad's lug under it)
+    rod(acc, A(LEG.pad + 0.05).addScaledVector(across, -(rl + 0.09)), A(LEG.pad + 0.05).addScaledVector(across, rl + 0.09), 0.035, paint.piston, dk);
+    skidPad(acc, V3(...G.foot), px / 2, pz / 2, LEG.pad, paint.pad, paint.sole, dk);
     acc.flush(lp);
-  }, { door: 'gear', slide: [0, F.rise, 0] });
-  p.door('gear', [cx, dk(V3(0, floor, 0)).y, cz], 0, speed);
+  }, opt(G.footRise));
+  p.door('gear', [G.foot[0], dk(V3(0, floor, 0)).y, G.foot[2]], 0, speed);
   return p;
 }
 // A WELL'S SLIDING DOORS: the skin cut out of it (the hull rig's DOORS: two halves), flush in the hull when shut; each

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LEGS, LEG, FEET, DOOR, telescope, doorSlide, gearOrder } from '../kit/ships/gear-plan.js';
+import { LEGS, LEG, FEET, DOOR, legPlan, doorSlide, gearOrder } from '../kit/ships/gear-plan.js';
 import * as EXPLORER from '../kit/ships/explorer-built.hull.js';
 import * as MINER from '../kit/ships/miner-built.hull.js';
 import * as MEDIC from '../kit/ships/medic-built.hull.js';
@@ -34,10 +34,8 @@ test('the gear\'s coverings are gone: no gear pods, every leg in a well of its o
       assert.ok(W && !W.bay && W.rim.length > 0, `${ship} ${which}: a well with its rim`);
       assert.ok(D && D.length === 2 && D.every((h) => h.polys.length > 0), `${ship} ${which}: two doors cut from the skin`);
       const [mn, mx] = W.box;
-      // (its foot and its top tube go up into the well's mouth, and the top tube's top is in the well)
-      assert.ok(L.at[0] - L.pad[0] / 2 > mn[0] - eps && L.at[0] + L.pad[0] / 2 < mx[0] + eps, `${ship} ${which}: the foot fits the well across`);
-      assert.ok(L.at[1] - L.pad[1] / 2 > mn[2] - eps && L.at[1] + L.pad[1] / 2 < mx[2] + eps, `${ship} ${which}: the foot fits the well along the ship`);
-      assert.ok(L.top <= mx[1] + eps && L.r * 2 < Math.min(mx[0] - mn[0], mx[2] - mn[2]), `${ship} ${which}: the top tube in the well`);
+      // (its well round where it joins the hull, up to its top)
+      assert.ok(Math.abs((mn[0] + mx[0]) / 2 - L.at[0]) < 1e-3 && Math.abs((mn[2] + mx[2]) / 2 - L.at[1]) < 1e-3 && Math.abs(mx[1] - L.top - 0.02) < 1e-3, `${ship} ${which}: the well round the leg`);
     }
     assert.deepEqual(Object.keys(H.WELLS).sort(), Object.keys(LEGS[ship].legs).sort(), ship + ': a well for each leg and no other');
   }
@@ -45,19 +43,29 @@ test('the gear\'s coverings are gone: no gear pods, every leg in a well of its o
   assert.doesNotMatch(read('kit/ships/built-common.js'), /export function bayPod|export function bayDoors/);
 });
 
-test('each leg folds into itself: down its foot is on the floor, up every tube is inside the top one and the foot over the shut door', () => {
+test('each leg: splayed out to a wider stance, its braces meeting it at angles over the foot; up, folded into itself inside its well', () => {
   for (const [ship, S] of Object.entries(LEGS)) for (const [which, L] of Object.entries(S.legs)) {
-    const T = telescope({ top: L.top, belly: L.belly, floor: S.floor }), name = `${ship} ${which}`;
-    assert.ok(T.n >= 2 && T.n <= 3, `${name}: ${T.n} tubes (few, so the leg looks like a leg)`);
-    // down
-    assert.ok(Math.abs(T.foot.y0 - S.floor) < eps, name + ': its foot on the floor');
-    assert.ok(Math.abs(T.tubes[T.n - 1].y0 - T.foot.y1) < 1e-6, name + ': its last tube stands in its foot');
-    for (let k = 1; k < T.n; k++) assert.ok(T.tubes[k - 1].y0 - T.tubes[k].y1 <= -LEG.overlap + 1e-6, `${name}: tube ${k} overlaps the one over it`);
-    assert.equal(T.tubes[0].rise, 0, name + ': the top tube never moves');
-    // up: each tube moved by its rise lies within the top tube's span; the foot just over the belly
-    for (const tb of T.tubes) assert.ok(tb.y0 + tb.rise > T.tubes[0].y0 - 1e-6 && tb.y1 + tb.rise < L.top + 1e-6, name + ': a tube inside the top one, up');
-    assert.ok(Math.abs(T.foot.y0 + T.foot.rise - (L.belly + LEG.clear)) < 1e-6, name + ': the stowed foot just over the shut door');
-    assert.ok(T.foot.y1 + T.foot.rise <= T.tubes[0].y0 + 1e-6, name + ': the stowed foot under the tubes');
+    const G = legPlan(L, S.floor), name = `${ship} ${which}`, W = HULLS[ship].WELLS[which], [mn, mx] = W.box;
+    assert.ok(G.n >= 2 && G.n <= 3, `${name}: ${G.n} parts to its strut (a cylinder and a piston, a stage between if need be)`);
+    // down: its foot on the floor, out from under its hip (or under it, for a leg on the middle line)
+    assert.ok(Math.abs(G.foot[1] - S.floor) < eps, name + ': its foot on the floor');
+    assert.ok(Math.abs(G.foot[0]) >= Math.abs(G.hip[0]) + (L.splay || 0) - 1e-9, name + ': its foot further out than its hip');
+    assert.ok(G.tubes[0].r > G.tubes[G.n - 1].r * 1.5, name + ': a fat cylinder, a slimmer piston');
+    assert.ok(G.braces.length >= 2, name + ': two or three braces');
+    for (const B of G.braces) {
+      const d = B.fit.map((v, i) => v - B.anchor[i]), a = G.dir, ang = Math.acos(Math.abs(d[0] * a[0] + d[1] * a[1] + d[2] * a[2]) / Math.hypot(...d)) * 180 / Math.PI;
+      assert.ok(ang > 5, `${name}: its ${B.name} brace comes in at an angle to the leg (${ang.toFixed(0)} degrees)`);
+      assert.ok(B.sleeve.length + B.rod.length >= B.dDown + 0.015 && B.sleeve.length <= B.dUp + 1e-9 && B.rod.length <= B.dUp + 1e-9, `${name}: its ${B.name} brace's rod stays in its sleeve, down and up`);
+    }
+    for (let k = 1; k < G.n; k++) assert.ok(G.tubes[k].u1 - G.tubes[k - 1].u0 >= LEG.overlap - 1e-6, `${name}: part ${k} stays in the one over it`);
+    // up: every part of it (its cylinder and piston, round their ends; the braces; the pad's corners) inside its well,
+    // the foot over the shut door
+    const inWell = (p, what) => assert.ok(p[0] > mn[0] - 1e-6 && p[0] < mx[0] + 1e-6 && p[2] > mn[2] - 1e-6 && p[2] < mx[2] + 1e-6 && p[1] > L.belly + 0.05 && p[1] < mx[1] + 1e-6, `${name}: ${what} inside the well, up (${p.map((v) => v.toFixed(3))})`);
+    const ac = [-G.dir[1], G.dir[0], 0];   // (across the leg, square to it)
+    G.tubes.forEach((T, k) => { for (const u of [T.u0, T.u1]) for (const o of [ac.map((v) => v * T.r), ac.map((v) => -v * T.r), [0, 0, T.r], [0, 0, -T.r]]) inWell(G.up(G.at(u).map((v, i) => v + o[i]), T.rise), `part ${k}`); });
+    for (const B of G.braces) for (const p of [B.up.anchor, B.up.fit]) inWell(p, `its ${B.name} brace`);
+    for (const sx of [1, -1]) for (const sz of [1, -1]) inWell(G.up([G.foot[0] + sx * L.pad[0] / 2, S.floor, G.foot[2] + sz * L.pad[1] / 2], G.footRise), 'its pad');
+    assert.ok(Math.abs(G.up(G.at(G.tubes[0].u1), G.tubes[0].rise)[1] - L.top) < 1e-6, name + ': the cylinder\'s top at the well\'s top, up');
   }
 });
 

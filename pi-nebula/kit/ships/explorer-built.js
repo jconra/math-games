@@ -23,9 +23,9 @@
 //   ebAirstair   'port'      the airstair door: hinged at its foot, its outside the hull's skin carried across the
 //                            pocket (flush with the hull when shut), its steps set down into it between two side
 //                            beams; it swings out and down toward the ground as someone comes near (a kit door)
-//   ebGear       'nose' / 'port' / 'starboard'   a landing leg: a slim telescope (its tubes and its foot, which slide up
-//                            into one another as it folds into its well: gear-plan.js), kit door leaves, door 'gear' (no
-//                            one opens it by walking up: the game, or the lab's Gear up / down, moves it)
+//   ebGear       'nose' / 'port' / 'starboard'   a landing leg (gear-plan.js legPlan): a main cylinder and piston, its
+//                            braces, a fitting and a skid pad, splayed out; kit door leaves, door 'gear' (no one opens it
+//                            by walking up: the game, or the lab's Gear up / down, moves it)
 //   ebGearDoors  'nose' / 'port' / 'starboard'   a well's two doors: the skin cut out of it, sliding apart to open
 //   ebWells      'wells'     the three wells' walls and ceilings
 //   ebCockpit    'two seats' the cockpit: two bucket seats side by side, the throttle pedestal between them, the
@@ -58,7 +58,8 @@ export const PAL = {
   trim: s('#3a3e44', 0.48, 0.3, 0.55),       // dark trim: the lower sides, the roof modules' sides, the engines
   trimEdge: s('#3a3e44', 0.48, 0.3, 1.0),
   yellow: s('#e8b923', 0.45, 0.02, 0.45),    // his yellow accents
-  metal: s('#6d7177', 0.4, 0.6, 0.6),        // the landing legs' struts
+  metal: s('#6d7177', 0.4, 0.6, 0.6),        // joints, rods
+  chrome: s('#d3d6da', 0.3, 0.35, 0.25),     // the landing legs' pistons, bright
   rubber: s('#202225', 0.85, 0.0, 0.5),      // the feet's pads
   inner: s(SURF.white[0], SURF.white[1], SURF.white[2], 0.35),   // inside: the station's own off-white
   deck: s('#55595f', 0.6, 0.3, 0.6),         // the airlock's and cockpit's floors
@@ -884,17 +885,20 @@ function ebAirstair(p) {
 // ── THE LANDING GEAR ────────────────────────────────────────────────────────────────────────────────────────────────
 // The game's maker, 2026-11-26, of the old gear's pods under the hull's sides: "The ship would look a lot better if
 // none of this was here and you could just see the landing gear. We should just have doors that slide in place. Its
-// fine if the landing gear is kind of magic and folds into itself." So three slim telescoping legs (gear-plan.js
-// LEGS.explorer: the nose leg under the cockpit, the aft two under the hull's sides, where the old ones stood), each
-// folding into itself up into its well, and each well shut by two doors cut from the hull's own skin that slide apart
-// to let it down (built-common.js teleLeg, slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1
+// fine if the landing gear is kind of magic and folds into itself"; and of the legs then: "something like the F-16
+// landing gear. It goes out wider, and has a few cylinders that meet up". So three legs (gear-plan.js LEGS.explorer:
+// the nose leg under the cockpit, braced from both sides and ahead; the aft two under the hull's sides, where the old
+// ones stood, splayed 35 cm out, each braced from its well's fore and aft edges), each a pale main cylinder
+// and a bright piston over a skid pad, folding into itself up into its well, and each well shut by two doors cut from
+// the hull's own skin that slide apart to let it down (built-common.js strutLeg, slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1
 // shut); gearStep moves them in turn (up: the legs, then the doors; down: the doors, then the legs).
 export const GEAR_SPEED = 0.42, GEAR_DOOR_SPEED = 0.9;
 const LEGS = GEAR_PLAN.explorer;
 function ebGear(p, which) {
-  // (its tubes light metal, their collars, the hub and the pad dark, the sole rubber)
-  const paint = { tube: PAL.metal, collar: PAL.trim, hub: PAL.trim, pad: PAL.trim, sole: PAL.rubber };
-  return C.teleLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED });
+  // (its cylinders the hull's white, the pistons and the braces' rods bright metal, the joints and the pad its dark trim, a
+  // yellow band at each fitting, the sole rubber)
+  const paint = { cyl: PAL.skin, piston: PAL.chrome, joint: PAL.trim, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
+  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED });
 }
 // THE WELLS' DOORS: each well's two halves of skin, painted as the hull there by its own rules (a face on its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });

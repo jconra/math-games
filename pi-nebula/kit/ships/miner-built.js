@@ -31,8 +31,8 @@
 //                            corner rods: door 'lift', 1 down) and the hatch's two sliding doors (door 'hatch', 1 open)
 //                'belly, cabin'   the lift people ride, with the cabin built inside (cabinLift, CLIFT): its platform the
 //                            airlock's floor when up, the tower and rods telescoping into it (door 'lift', 1 down)
-//   mbGear       'nose port' / 'nose starboard' / 'port' / 'starboard'   a landing leg: a slim telescope (its tubes and
-//                            foot, sliding up into one another: door 'gear', 1 folded; gear-plan.js)
+//   mbGear       'nose port' / 'nose starboard' / 'port' / 'starboard'   a landing leg (gear-plan.js legPlan): a main
+//                            cylinder and piston, its braces, a fitting and a skid pad, splayed out (door 'gear', 1 up)
 //   mbGearDoors  (the same four)   its well's two doors, cut from the hull's skin, sliding (door 'doors', 1 shut)
 //   mbWells      'pods'      the legs' wells: dark walls and tops (the variant keeps its old name, as the layouts give it)
 //   mbCockpit    'two seats' two bucket seats side by side, the pedestal between them, the dash and side consoles, on
@@ -76,6 +76,7 @@ export const PAL = {
   yellow: s('#e2ae1c', 0.45, 0.03, 0.6),       // hazard yellow: the stripes, the canisters' bands, the clamps
   belly: s('#555a61', 0.6, 0.25, 0.8),         // the belly
   metal: s('#6d7177', 0.4, 0.6, 0.6),          // joints, rails, rods
+  chrome: s('#d3d6da', 0.3, 0.35, 0.25),       // the landing legs' pistons, bright
   can: s('#cbc2a8', 0.5, 0.18, 0.85),          // the canisters' bodies
   canEnd: s('#3a3d42', 0.45, 0.4, 0.8),        // their rounded ends
   rubber: s('#202225', 0.85, 0.0, 0.5),
@@ -1021,11 +1022,13 @@ function mbLift(p, variant) {
 }
 
 // ── THE LANDING GEAR ────────────────────────────────────────────────────────────────────────────────────────────────
-// Four slim telescoping legs (gear-plan.js LEGS.miner): a pair under the cockpit's sides (the game's maker, 2026-11-26:
+// Four legs (gear-plan.js LEGS.miner; the game's maker: "something like the F-16 landing gear. It goes out wider, and has
+// a few cylinders that meet up"), each a cream main cylinder and a bright piston over a skid pad, splayed 30 cm out and
+// braced from its well's edges: a pair under the cockpit's sides (the game's maker, 2026-11-26:
 // "I don't see front landing gear on the miner ship"; it stood on two legs at the stern and its lift), their wells going
 // up between the cockpit's walls and the hull's sides, clear of the folded arms outside and of the lift, the crew's way
 // in, amidships; and a pair under the stern's block, their wells beside the engine room. Each folds into itself up into
-// its well, which two doors cut from the hull's own skin shut, sliding (built-common.js teleLeg, slideDoors; the old legs
+// its well, which two doors cut from the hull's own skin shut, sliding (built-common.js strutLeg, slideDoors; the old legs
 // folded into pods hung under the lower canisters: "these landing gear coverings.. are kind of hideous", of the
 // Explorer's, and so these too are gone). Each leg reaches STAND further down than the hull's ground line (the plan's
 // floor), so its foot stands on the floor with the ship raised. The legs are the door 'gear' (1 up), the doors 'doors'
@@ -1033,9 +1036,10 @@ function mbLift(p, variant) {
 export const GEAR = { speed: 0.42, doorSpeed: 0.9 };
 const LEGS = GEAR_PLAN.miner;
 function legLeaves(p, which) {
-  // (its tubes light metal, their collars, the hub and the pad dark, the sole rubber)
-  const paint = { tube: PAL.metal, collar: PAL.dark, hub: PAL.dark, pad: PAL.dark, sole: PAL.rubber };
-  return C.teleLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint, speed: GEAR.speed });
+  // (its cylinders the cream of its panels, the pistons and the braces' rods bright metal, the joints and the pad its
+  // dark graphite, a hazard-yellow band at each fitting, the sole rubber)
+  const paint = { cyl: PAL.cream, piston: PAL.chrome, joint: PAL.dark, band: PAL.yellow, pad: PAL.dark, sole: PAL.rubber };
+  return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint, speed: GEAR.speed });
 }
 // the doors painted as the hull there by its own rules (a face of its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
