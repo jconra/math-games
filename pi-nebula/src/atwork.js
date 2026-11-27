@@ -65,14 +65,22 @@ export function handsAt(kind, S, t, seed = 0) {
 // CARGO'S FORKLIFT'S STEERING WHEEL, read off the game's maker's own file (assets/cargo/forklift.glb, its points over
 // and in front of the seat): its middle this far ahead of the seat's middle and up over the seat's cushion (m), its
 // rim's radius (m), its top tipped forward from straight up (radians: the wheel lies back toward the driver)
-export const FORKLIFT_WHEEL = { ahead: 0.505, up: 0.242, r: 0.147, tilt: 0.96, lean: 0.24 };
+export const FORKLIFT_WHEEL = { ahead: 0.505, up: 0.242, r: 0.147, tilt: 0.96, lean: 0.3, at: 1.85 };
 // the two wrists on it, in the driver's own frame (x their left, y up, z ahead; from their root, where the forklift
 // seats them: `chair` m under the cushion's top), [left, right], a little forward of a quarter past nine and a quarter
 // to three, easing round a little as they steer
 export function wheelLocal(chair, t = 0, seed = 0) {
   const W = FORKLIFT_WHEEL, c = [0, chair + W.up, W.ahead], top = [0, Math.cos(W.tilt), Math.sin(W.tilt)], axis = [0, Math.sin(W.tilt), -Math.cos(W.tilt)];
-  const a = 1.25 + wander(t, seed, 0.4) * 0.15;
-  // (the wrist a little back from the rim, toward the driver, the hand round it)
-  const at = (s) => [0, 1, 2].map((i) => c[i] + top[i] * Math.cos(a) * W.r + (i === 0 ? s * Math.sin(a) * W.r : 0) + axis[i] * 0.03);
+  // (on the rim's near half, a little toward the driver of a quarter past nine and a quarter to three: the elbows bend)
+  const a = W.at + wander(t, seed, 0.4) * 0.15;
+  // (the wrist just outside the rim and toward the driver, the hand round it)
+  const at = (s) => [0, 1, 2].map((i) => c[i] + top[i] * Math.cos(a) * W.r + (i === 0 ? s * (Math.sin(a) * W.r + 0.03) : 0) + axis[i] * 0.02);
   return [at(1), at(-1)];
+}
+// the hold of both hands round the wheel's rim, for moves.js M.hold (its own frame: local): the wrists (wheelLocal), each
+// palm toward the wheel's middle, the fingers forward over the rim, the elbows down and out; `share`: each hand's part
+// (getting on, the right hand reaches for it first)
+export function wheelHold(chair, t = 0, seed = 0, share = [1, 1]) {
+  const [L, R] = wheelLocal(chair, t, seed);
+  return { local: true, hands: [L, R], palms: [[-1, -0.2, 0], [1, -0.2, 0]], fingers: [[0, 0.45, 1], [0, 0.45, 1]], elbows: [[0.6, -1, -0.4], [-0.6, -1, -0.4]], share };
 }

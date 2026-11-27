@@ -17,8 +17,9 @@
 export const SIT = {
   pre: 0.24,          // (m in front of the seat's middle: where they stand, their back to it, before they sit: their
                       // shins just clear of a chair's cushion, 0.14 put them through it)
-  preTable: 0.15,     // (the same at a stool, its table's edge 0.3 m in front of it)
-  round: 0.46,        // (m out to a stool's side, walked to first when they come from behind it)
+  preTable: 0.2,      // (the same at a stool, its table's edge 0.3 m in front of it)
+  round: 0.52,        // (m out to a stool's side, walked to first when they come from behind it, ahead of its middle by
+  aside: 0.3,         // this much: so the walk on round in front of it keeps their legs off it)
   speed: 0.55,        // (m/s stepping back or across)
   turn: 3.2,          // (radians a second turning on the spot)
   lower: 1.05, rise: 0.95,     // (s: lowering onto the seat, rising off it)
@@ -43,7 +44,7 @@ export function seatSteps(S) {
   const turnTo = (at, from, to) => down.push({ move: 'turn', to: at, heading: to, secs: Math.max(SIT.least, from == null ? 0.5 : Math.abs(wrap(to - from)) / SIT.turn) });
   let at = stand, hd = null;
   // (from behind the seat: round to its side first, walking)
-  if (behind) { const s = across >= 0 ? 1 : -1; hd = walkTo(at, [seat[0] + left[0] * s * SIT.round + f[0] * 0.1, stand[1], seat[2] + left[2] * s * SIT.round + f[2] * 0.1]); at = down[down.length - 1].to; }
+  if (behind) { const s = across >= 0 ? 1 : -1; hd = walkTo(at, [seat[0] + left[0] * s * SIT.round + f[0] * SIT.aside, stand[1], seat[2] + left[2] * s * SIT.round + f[2] * SIT.aside]); at = down[down.length - 1].to; }
   const d = sub(pre, at), fa = d[0] * f[0] + d[2] * f[2], la = d[0] * left[0] + d[2] * left[2];
   if (fa < 0 && Math.abs(fa) >= Math.abs(la)) {
     // (straight behind them, a bench's: turned to face the way it faces, a step back to it)
@@ -84,12 +85,15 @@ export function leanOf(step, u) {
 // turned to face the way they will walk). They used to rise up and across already sitting, their legs through its side.
 //   mountAt(k, on, floorY, seatY) -> { turn, across (0 to 1 of the way from beside it to the seat), y (their root's
 //   height), clip ('stand' | 'walk' | 'sit'), lean (radians) }   k: 0 to 1 through getting on (on) or off (!on)
-export const MOUNT = { turn: 0.25, climb: 0.68, deck: 0.37, lean: [0.38, 0.5] };
+export const MOUNT = { turn: 0.25, climb: 0.68, deck: 0.37, step: 0.5, lean: [0.38, 0.5], climbLean: 0.32 };
 const ease2 = (u) => { const v = Math.max(0, Math.min(1, u)); return v * v * (3 - 2 * v); };
 export function mountAt(k, on, floorY, seatY) {
   const q = on ? k : 1 - k, top = seatY + MOUNT.deck;
   if (q < MOUNT.turn) return { turn: ease2(q / MOUNT.turn), across: 0, y: floorY, clip: 'stand', lean: 0 };
-  if (q < MOUNT.climb) { const a = ease2((q - MOUNT.turn) / (MOUNT.climb - MOUNT.turn)); return { turn: 1, across: a, y: floorY + (top - floorY) * a, clip: 'walk', lean: 0.1 * Math.sin(a * Math.PI) }; }
+  // (a step up by its side, low and leaning in, a hand to the wheel: never stood up tall on top of it; MOUNT.step of the
+  // way from the floor to standing on its deck)
+  const low = floorY + (top - floorY) * MOUNT.step;
+  if (q < MOUNT.climb) { const a = ease2((q - MOUNT.turn) / (MOUNT.climb - MOUNT.turn)); return { turn: 1, across: a, y: floorY + (low - floorY) * Math.sin(a * Math.PI / 2), clip: 'walk', lean: MOUNT.climbLean * Math.sin(Math.min(1, a * 1.5) * Math.PI / 2), hand: Math.max(0, (a - 0.35) / 0.65) }; }
   const u = ease2((q - MOUNT.climb) / (1 - MOUNT.climb));
-  return { turn: 1, across: 1, y: top - MOUNT.deck * u, clip: on ? 'sit' : 'stand', lean: MOUNT.lean[on ? 0 : 1] * Math.sin(u * Math.PI) };
+  return { turn: 1, across: 1, y: low + (seatY - low) * u, clip: on ? 'sit' : 'stand', lean: MOUNT.climbLean * (1 - u) + MOUNT.lean[on ? 0 : 1] * Math.sin(u * Math.PI) * 0.5, hand: 1 };
 }

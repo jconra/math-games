@@ -63,8 +63,10 @@ import { makeDrive, worldOf, BOX_PLACES, boxPlace, HAND } from '../kit/forkliftd
 import { SLOT, LOAD } from '../kit/places-plan.js';
 import { makeLoader } from '../kit/forkliftloader.js';
 import { mountAt } from './seatsteps.js';
-import { wheelLocal, FORKLIFT_WHEEL } from './atwork.js';
+import { wheelHold, FORKLIFT_WHEEL } from './atwork.js';
 
+// (the hands round the wheel for moves.js: src/atwork.js wheelHold, in the person's own frame)
+const holdOf = (M, H) => { const V = (a) => (a ? new THREE.Vector3(...a) : null); M.hold = { local: true, hands: H.hands.map(V), palms: H.palms.map(V), fingers: H.fingers.map(V), elbows: H.elbows.map(V), share: H.share }; };
 const KEY = 'cargo:forklift';
 // its shine: the room's own picture of itself, this much (the kit's painted parts have 1.25: kit/materials.js, as the
 // station sets them)
@@ -300,7 +302,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     if (P.moves) {
       const seated = on && k >= 1;
       P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m.lean;
-      if (seated) { const L = wheelLocal(RIDE.chair, clock, P.id.length), hd = P.moves.hold && P.moves.hold.local ? P.moves.hold : (P.moves.hold = { local: true, hands: [new THREE.Vector3(), new THREE.Vector3()] }); hd.hands[0].fromArray(L[0]); hd.hands[1].fromArray(L[1]); } else P.moves.hold = null;
+      // (seated, both hands round its wheel; climbing on or off, the right hand on it as they go)
+      if (seated || m.hand > 0) holdOf(P.moves, wheelHold(RIDE.chair, clock, P.id.length, seated ? [1, 1] : [0, m.hand])); else P.moves.hold = null;
     }
     return pp;
   }

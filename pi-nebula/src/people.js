@@ -1069,7 +1069,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const m = st.move;
     if (m === 'lower') play(P, CLIPS.sit, { fade: st.secs * 0.85 });
     else if (m === 'rise') play(P, STAND, { fade: st.secs * 0.8 });
-    else play(P, CLIPS.walk, { speed: m === 'back' ? -0.6 : m === 'turn' ? 0.45 : 0.65, fade: 0.2 });
+    // (a step back to a seat taken as a shuffle on the standing clip: the walk's swinging legs went through the bench)
+    else if (m === 'back') play(P, STAND, { fade: 0.2 });
+    else play(P, CLIPS.walk, { speed: m === 'turn' ? 0.45 : 0.65, fade: 0.2 });
     a.seatLean = leanOf(st, u);
     if (u < 1) return;
     a.si++; a.st = 0; a.sFrom.copy(P.pos); a.sHead = P.heading;

@@ -32,7 +32,10 @@ import { ensureCss as craneCss } from './cranedrive.js';
 import { STORE } from '../kit/places-plan.js';
 import { RIDE } from './cargoforklift.js';
 import { mountAt } from './seatsteps.js';
-import { wheelLocal, FORKLIFT_WHEEL } from './atwork.js';
+import { wheelHold, FORKLIFT_WHEEL } from './atwork.js';
+// (the hands round the wheel for moves.js: src/atwork.js wheelHold, in the person's own frame)
+const holdOf = (M, H) => { const V = (a) => (a ? new THREE.Vector3(...a) : null); M.hold = { local: true, hands: H.hands.map(V), palms: H.palms.map(V), fingers: H.fingers.map(V), elbows: H.elbows.map(V), share: H.share }; };
+
 import { HAND } from '../kit/forkliftdrive.js';
 
 const CSS = new URL('./cargodrive.css', import.meta.url).href;
@@ -188,7 +191,8 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
     if (P.moves) {
       const seated = phase === 'drive' || (phase === 'on' && t >= ON.on);
       P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m ? m.lean : 0;
-      if (seated) { const L = wheelLocal(RIDE.chair, wheelT += 1 / 60, 3), hd = P.moves.hold && P.moves.hold.local ? P.moves.hold : (P.moves.hold = { local: true, hands: [new THREE.Vector3(), new THREE.Vector3()] }); hd.hands[0].fromArray(L[0]); hd.hands[1].fromArray(L[1]); } else P.moves.hold = null;
+      // (climbing on or off, the right hand on it as they go)
+      if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT += 1 / 60, 3, seated ? [1, 1] : [0, m.hand])); else P.moves.hold = null;
     }
     P.pos.set(x, STORE.floor, z); P.heading = h;
     P.c.root.position.set(x, y, z); P.c.root.quaternion.copy(_q.setFromAxisAngle(UP, h));

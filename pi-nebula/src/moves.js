@@ -187,8 +187,11 @@ export function addMoves(c) {
       // the hand flat on the bed: its palm down, the fingers ahead and a little out (pointed out past a narrow bed's
       // edge, the fingers curled down over it)
       const palm = M.palm && M.palm[s]; if (!palm) continue;
-      if (D.fingers) _hf.copy(D.fingers[i]).setY(0).normalize(); else _hf.copy(D.ahead).addScaledVector(_tx, sg * 0.3).setY(0).normalize();
-      _hd.set(0, -1, 0).addScaledVector(_hf, -_hf.y).normalize();
+      // (a hand laid flat on a top: palm down, the fingers ahead; D.palms: each palm's own way, against a face or round
+      // a rim, the fingers along D.fingers as given)
+      const pd = D.palms && D.palms[i];
+      if (D.fingers) { _hf.copy(D.fingers[i]); if (!pd) _hf.setY(0); _hf.normalize(); } else _hf.copy(D.ahead).addScaledVector(_tx, sg * 0.3).setY(0).normalize();
+      if (pd) { _hd.copy(pd).addScaledVector(_hf, -_hf.dot(pd)).normalize(); } else _hd.set(0, -1, 0).addScaledVector(_hf, -_hf.y).normalize();
       _ma.makeBasis(_ha.set(0, 1, 0), palm, _hb.crossVectors(_ha, palm));
       _mb.makeBasis(_hf, _hd, _hc.crossVectors(_hf, _hd));
       _qa.setFromRotationMatrix(_mb.multiply(_ma.transpose()));
@@ -203,10 +206,17 @@ export function addMoves(c) {
   // hand reached to its place, laid flat, palm down; `k` of the way ──
   // (D.local: the hands' places given in the person's own frame from their root (x their left, y up, z ahead), so they
   // go with the person wherever the root is put after the game's own update: a seat on a moving machine)
-  const _hold = { hands: [null, null], elbows: null, fingers: null, ahead: new THREE.Vector3(), arms: 1, armsLR: null }, _lh = [new THREE.Vector3(), new THREE.Vector3()], _rp = new THREE.Vector3();
+  const _hold = { hands: [null, null], elbows: null, fingers: null, palms: null, ahead: new THREE.Vector3(), arms: 1, armsLR: null }, _lh = [new THREE.Vector3(), new THREE.Vector3()], _rp = new THREE.Vector3();
+  const _lv = [[new THREE.Vector3(), new THREE.Vector3()], [new THREE.Vector3(), new THREE.Vector3()], [new THREE.Vector3(), new THREE.Vector3()]];
   function holdOn(D, k) {
-    _hold.hands = D.hands; _hold.elbows = D.elbows || null; _hold.fingers = D.fingers || null;
-    if (D.local) { c.root.getWorldPosition(_rp); _hold.hands = D.hands.map((h, i) => (h ? _lh[i].copy(h).applyQuaternion(_rq).add(_rp) : null)); }
+    _hold.hands = D.hands; _hold.elbows = D.elbows || null; _hold.fingers = D.fingers || null; _hold.palms = D.palms || null;
+    if (D.local) {
+      // (each place and way given in the person's own frame: into the world)
+      c.root.getWorldPosition(_rp); _hold.hands = D.hands.map((h, i) => (h ? _lh[i].copy(h).applyQuaternion(_rq).add(_rp) : null));
+      if (D.elbows) _hold.elbows = D.elbows.map((v, i) => _lv[0][i].copy(v).applyQuaternion(_rq));
+      if (D.fingers) _hold.fingers = D.fingers.map((v, i) => _lv[1][i].copy(v).applyQuaternion(_rq));
+      if (D.palms) _hold.palms = D.palms.map((v, i) => _lv[2][i].copy(v).applyQuaternion(_rq));
+    }
     _hold.ahead.set(0, 0, 1).applyQuaternion(_rq); _hold.arms = k; _hold.armsLR = D.share ? [D.share[0] * k, D.share[1] * k] : null;
     handsOn(_hold);
   }
