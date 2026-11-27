@@ -933,7 +933,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // (a hold settled at work: on for a second and more, its bow and step in eased in; not one being taken up or let go)
       P.holdOn = P.moves.hold && P.moves.holdNow > 0.9 ? (P.holdOn || 0) + adt : 0;
       const short = reachShort(P.holdOn, P.moves.holdShort || 0);
-      if (short > 0) {
+      // (a desk's sitter whose own arm does not reach the desk from the chair where it stands (the control room's radio
+      // desk for Rhea's body: the chair is the station file's, not moved): their hands as the game has them, on their
+      // lap; said once, and counted apart from the alarm (alarms.deskLetGo): an expected case, not a fault)
+      if (short > 0 && P.act && P.act.kind === 'sit' && P.act.onWork) {
+        alarms.deskLetGo = (alarms.deskLetGo || 0) + 1;
+        if (!alarms.seen['deskLetGo' + P.id]) { alarms.seen['deskLetGo' + P.id] = 1; console.info('people: ' + P.id + "'s arms do not reach the desk from " + (P.act.spot.name || 'the chair') + ' (' + short.toFixed(2) + ' m): the hands on the lap'); }
+        P.act.onWork = null; P.moves.hold = null; P.holdOn = 0;
+      } else if (short > 0) {
         const where = (P.act && (P.act.step && P.act.step.do || P.act.kind)) || '-', key = P.id + ' ' + where;
         if (!P.outOfReach) alarm('outOfReach', P, 'a hand ' + short.toFixed(2) + ' m out of reach at ' + where);
         alarms.reach[key] = Math.max(alarms.reach[key] || 0, +short.toFixed(3));
