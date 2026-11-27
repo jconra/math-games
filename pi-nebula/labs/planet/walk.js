@@ -65,7 +65,7 @@ export function makeWalkLab({ LAB, scene, camera, canvas, renderer, quality, lab
     const used = new Set(L.podPlan.pods.map((p) => p.look)), mine = LOOKS.filter((l) => !/^android/.test(l.id)).find((l, k) => !used.has(k)) || LOOKS[0];
     const F = await makeOnFoot({ planet, scene, camera, lib, recipe: recipeOf({ id: mine.id }, lib), wreck: L.wreck, pods: L.pods, medic });
     F.player.c.root.visible = false;
-    const rescued = makeRescued({ pods: L.pods, medic, walls: F.walls, scene });
+    const rescued = makeRescued({ pods: L.pods, medic, walls: F.walls, scene, sunAt: planet.ground.sunAt });
     if (lab().planet !== planet) { medic.dispose(); F.dispose(); rescued.dispose(); return null; }
     // (the people's shadows on the ground, as in the game: src/planet/groundshadow.js)
     const shades = makePeopleShadows({ ground: planet.ground });
