@@ -123,6 +123,8 @@ vec3 hazeSky(vec3 p) { vec3 d = normalize(p - cameraPosition); return skyAt(came
 
 // THE ROCKS' LOOK (two critics: plain faceted lumps in the ground's own colour): a shade darker than the rock the ground
 // is painted with, each its own, and a surface of their own
+// (the landing place's plants' own share, over a layer's most)
+const PAD_SHARE = 0.35;
 export const ROCK_LOOK = { dark: 0.2, shade: [0.75, 0.35] };
 const STONE_GLSL = `{
   vec3 q = vPlace * 2.7; vec3 i = floor(q), t = fract(q); t = t * t * (3.0 - 2.0 * t);
@@ -194,16 +196,18 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   const stats = { rocks: 0, plants: 0, tris: 0, buildMs: 0, layers: 0 };
   // a layer: one InstancedMesh for each of its shapes, laid out round the camera out to `reach` metres
   function layer({ name, shapes, material, reach, most, lay }) {
-    const meshes = shapes.map((g) => { const m = new THREE.InstancedMesh(g, material, most); m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); return m; });
+    const padMost = Math.round(most * PAD_SHARE), meshes = shapes.map((g) => { const m = new THREE.InstancedMesh(g, material, most + padMost); m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); return m; });
     for (const m of meshes) m.setColorAt(0, col.set(1, 1, 1));
-    const L = { name, meshes, reach, most, lay, order: ringOrder(reach), tris: shapes.map((g) => (g.index ? g.index.count : g.attributes.position.count) / 3), count: 0 };
+    const L = { name, meshes, reach, most, padMost, padPlaced: 0, lay, order: ringOrder(reach), tris: shapes.map((g) => (g.index ? g.index.count : g.attributes.position.count) / 3), count: 0 };
     layers.push(L); return L;
   }
   // put an instance in a layer's shape s
   // (the layer's own number is for all its shapes together: past it, the furthest are left out)
-  const put = (L, s, x, y, z, scale, yaw, tilt, shade) => {
-    const m = L.meshes[s]; if (L.placed >= L.most) return false;
-    L.placed++;
+  // (pad: one on the landing place, from its own share: so the landing place's plants never take the place of the wild
+  // ones further off, which are laid out after them, nearest first)
+  const put = (L, s, x, y, z, scale, yaw, tilt, shade, pad = false) => {
+    const m = L.meshes[s];
+    if (pad) { if (L.padPlaced >= L.padMost) return false; L.padPlaced++; } else { if (L.placed >= L.most) return false; L.placed++; }
     dummy.position.set(x, y, z); dummy.rotation.set(tilt * Math.cos(yaw * 3), yaw, tilt * Math.sin(yaw * 2)); dummy.scale.set(scale, scale, scale); dummy.updateMatrix();
     m.setMatrixAt(m.count, dummy.matrix); m.setColorAt(m.count, shade); m.count++; return true;
   };
@@ -296,7 +300,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
             // (the tall ones keep off the landing place, as before: a person walking there would have the camera in them)
             if (hgt > CLEARING.tall && land.landingAt(x, z) > CLEAR) continue;
             col.setRGB(1, 1, 1).multiplyScalar(0.85 + 0.3 * hash2(wi, wj + e, 13 + q));
-            if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col)) break;
+            if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col, pad && land.landingAt(x, z) > CLEAR)) break;
           }
         }
       };
@@ -329,7 +333,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     stats.rocks = stats.plants = stats.tris = 0;
     for (const L of layers) {
       for (const m of L.meshes) m.count = 0;
-      L.placed = 0;
+      L.placed = 0; L.padPlaced = 0;
       for (const [di, dj] of L.order) {
         const ci = ci0 + di, cj = cj0 + dj, wi = ((ci % wrapN) + wrapN) % wrapN, wj = ((cj % wrapN) + wrapN) % wrapN;
         L.lay(L, -P / 2 + (ci + 0.5) * CELL, -P / 2 + (cj + 0.5) * CELL, ci, cj, wi, wj);
