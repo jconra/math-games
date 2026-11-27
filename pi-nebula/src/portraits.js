@@ -20,11 +20,14 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeCrew, SIZES as HEIGHTS } from '../kit/crew.js';
 import { LOOKS, lookById, recipeOf } from './looks.js';
 import { isMade, keyOf } from './maker.js';
+import { addMoves } from './moves.js';
 
 // the pictures' sizes (the title shows a face at 44 to 110 px and a body at up to about 270 px tall: these are about
 // twice that, for sharp screens)
 export const SIZES = { face: [224, 224], body: [300, 540] };
 export const POSE = { clip: 'Stand_Listen', at: 0.6 };
+// (stood at rest as the game's people stand, moves.js THE STANCE: the weight on one leg, held still for the picture)
+function atRest(c) { const M = addMoves(c); M.stand = 1; M.standNow = 1; M.sideNext = Infinity; return c; }
 const OVER = 2;
 const KEEP = 'calc-station.looks.pictures';     // (the last visit's pictures, in this browser)
 
@@ -66,7 +69,7 @@ const _h = new THREE.Vector3(), _t = new THREE.Vector3();
 // the maker's window's person, stands aside meanwhile)
 async function draw(lib, recipe, kinds, pose = null, quality = 0.9) {
   const S = openStudio(), stand = { ...POSE, ...(pose || {}) };
-  const c = await makeCrew(lib, recipe);
+  const c = atRest(await makeCrew(lib, recipe));
   S.scene.add(c.root);
   c.play(stand.clip, { fade: 0 }); c.update(0); c.update(stand.at);
   const other = held && held.c.root;
@@ -298,7 +301,7 @@ function standFor(recipe, still = null) {
     const pk = pkOf(recipe);
     if (still && !still()) return null;
     if (!held || held.pk !== pk) {
-      const c = await makeCrew(lib, recipe), S = openStudio();
+      const c = atRest(await makeCrew(lib, recipe)), S = openStudio();
       if (held) { S.scene.remove(held.c.root); held.c.dispose(); }
       held = { pk, c, frame: null }; S.scene.add(c.root);
       c.play(POSE.clip, { fade: 0 }); c.update(0);

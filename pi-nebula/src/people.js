@@ -895,6 +895,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const s2 = damp(P.smile.now, want, 3, P.animDt);
         if (Math.abs(s2 - P.smile.now) > 0.01 || (s2 !== P.smile.now && Math.abs(s2 - want) < 0.01)) { P.smile.now = Math.abs(s2 - want) < 0.01 ? want : s2; c.setFace({ ...(c.recipe.face || {}), smile: P.smile.now }); }
       }
+      bodyMoves(P);
       c.update(P.animDt); P.animDt = 0;
     }
     bubbles.show(!!player); bubbles.update(dt);
@@ -1050,6 +1051,14 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // whoever comes up)
     if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
     if (a.t > a.len && !(P.cap && P.cap.busy)) next(P);
+  }
+
+  // (each frame a person is drawn: the stance at rest, for moves.js)
+  function bodyMoves(P) {
+    const a = P.act, M = P.moves, seated = !!(a && ['sat', 'sitting', 'rising'].includes(a.phase));
+    M.stand = !P.walking && !P.pose && !seated && P.clip === STAND ? 1 : 0;
+    // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
+    M.lean = lean;
   }
 
   // ── MEET: a captain gone to their ship to wait for the player (the top of this file) ─────────────────────────

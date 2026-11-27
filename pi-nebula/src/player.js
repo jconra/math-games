@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { makeCrew } from '../kit/crew.js';
 import { PASS, roomAt, roomFor, sideOn } from './passing.js';
+import { addMoves } from './moves.js';
 
 // m/s; m/s each second; radians a second; m kept off another person, middle to middle (passing.js PASS.apart: the one
 // size of a body against another, everyone's, so the player gets by people where they get by each other; it was 0.6)
@@ -42,7 +43,10 @@ export function shine(c, env) {
 export async function makePlayer({ lib, recipe, walls, scene }) {
   const c = await makeCrew(lib, recipe);
   scene.add(c.root);
-  const P = { c, pos: new THREE.Vector3(), heading: 0, speed: 0, want: 0, drawnY: 0, clip: '', side: 0, sideAim: 0 };
+  // (the station people's own small moves, moves.js: standing at rest, THE STANCE, the weight on one leg and over to
+  // the other now and then; a hold of the hands, on Cargo's forklift its wheel: src/cargodrive.js)
+  c.play(STAND, { fade: 0 }); c.update(0);
+  const P = { c, pos: new THREE.Vector3(), heading: 0, speed: 0, want: 0, drawnY: 0, clip: STAND, side: 0, sideAim: 0, moves: addMoves(c) };
   const play = (name, speed = 1) => { if (P.clip !== name) { c.play(name, { fade: 0.25, speed }); P.clip = name; } else c.play(name, { speed }); };
 
   P.place = (feet, heading = 0) => {
@@ -122,6 +126,7 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     else if (P.speed > 2.6) play('Run', Math.max(0.6, Math.min(1.6, P.speed / c.stride.Run)));
     else if (P.speed > 0.15) play('Walk', Math.max(0.5, Math.min(1.8, P.speed / c.stride.Walk)));
     else play(STAND);
+    P.moves.stand = !clip && P.clip === STAND ? 1 : 0;
     c.update(dt);
   };
   P.dispose = () => { scene.remove(c.root); c.dispose(); };

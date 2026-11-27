@@ -43,6 +43,13 @@ const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 // THE SIZES (radians): the head's turn toward what it looks at, at most, and how much of it the neck takes; the lean;
 // a nod; the arms' gestures (the upper arm forward and out, the elbow bent, the palm turned up); a beat
 export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.045, nod: 0.17, beat: 0.07, rate: 5 };
+// THE STANCE AT REST (M.stand, 0 to 1: how much of it is worn; the game's maker, 2026-11-26, of two crew members
+// standing: "They seem kind of awkward just standing there"). Someone standing about puts their weight on one leg: the
+// hips go across over that foot (`shift`, m) and a little down (`drop`), the hip over it rises (`roll`, radians) and
+// the shoulders tip the other way (`chest`); the other knee eases, its foot a little ahead (`free`, m). Both feet stay
+// where the clip puts them (each leg bent to its own foot). Now and then (every `every` seconds, each person their own)
+// the weight goes over onto the other leg, taking `ease` seconds; now and then (`even` of the times) both legs a while
+export const STANCE = { shift: 0.04, drop: 0.02, roll: 0.07, chest: 0.04, free: 0.05, every: [5, 13], even: 0.2, ease: 1.1 };
 // (a speaker's gestures: [upper arm forward, upper arm out, elbow bent, palm up] for the left and the right arm)
 const GESTURES = [
   { L: [0, 0, 0, 0], R: [0.22, 0.05, 1.15, 1.1], w: 3 },          // the right hand explains
@@ -75,9 +82,11 @@ function turnWorld(bone, axis, angle) {
 export function addMoves(c) {
   const B = c.bones, person = c.person;
   const M = {
-    look: null, talk: null, sitting: false,
+    look: null, talk: null, sitting: false, stand: 0, lean: 0, hold: null,
     // (now: what is worn this moment; each eased toward what is wanted)
     yaw: 0, pitch: 0, sway: 0, swayT: Math.random() * 20, swayEvery: rnd(5, 8), nod: 0, nodT: rnd(1, 3), nodLeft: 0,
+    // (THE STANCE: how much is worn; which leg the weight is on, +1 their left, -1 their right, 0 both; when it changes)
+    standNow: 0, side: 0, sideWant: Math.random() < 0.5 ? 1 : -1, sideNext: rnd(0.5, STANCE.every[1]), leanNow: 0, holdNow: 0,
     arms: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, want: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, nextGesture: 0, beatT: 0, t: 0,
   };
   const orig = person.update.bind(person);
@@ -108,7 +117,8 @@ export function addMoves(c) {
       M.palm[s] = new THREE.Vector3(...best);
     }
   }
-  const still = () => !M.look && !M.talk && !M.bed && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
+  const still = () => !M.look && !M.talk && !M.bed && !M.stand && M.standNow < 0.002 && !M.lean && Math.abs(M.leanNow) < 0.002 && !M.hold && M.holdNow < 0.002
+    && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
     && M.arms.L.every((v) => v < 0.002) && M.arms.R.every((v) => v < 0.002);
 
   // ── ON A BED (M.bed): the whole person moved so the hip joints' middle is where it is wanted, then the legs, the feet
@@ -163,7 +173,7 @@ export function addMoves(c) {
     c.root.updateMatrixWorld(true);
     _tx.set(1, 0, 0).applyQuaternion(_rq);      // (their left)
     for (const [i, s, sg] of [[0, 'L', 1], [1, 'R', -1]]) {
-      const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s]; if (!ua || !la || !wr) continue;
+      const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s]; if (!ua || !la || !wr || !D.hands[i]) continue;
       const sh = ua.getWorldPosition(_h).clone(), el0 = la.getWorldPosition(_k);
       if (D.elbows) _pole.copy(D.elbows[i]); else _pole.copy(D.ahead).multiplyScalar(-1).addScaledVector(_tx, sg * 0.7).add(_ty.set(0, -0.25, 0));
       const ik = twoBone(arr(sh), arr(D.hands[i]), arr(_pole), M.body.u, M.body.f);
@@ -189,6 +199,60 @@ export function addMoves(c) {
     }
   }
   const _hf = new THREE.Vector3(), _hd = new THREE.Vector3(), _ha = new THREE.Vector3(), _hb = new THREE.Vector3(), _hc = new THREE.Vector3(), _ma = new THREE.Matrix4(), _mb = new THREE.Matrix4();
+  // ── HANDS ON THE WORK (M.hold: { hands: [left, right] world points or null, elbows, fingers (world ways, each a pair, or
+  // left out: the elbows behind and out, the fingers ahead), share: [left, right] how much of each }): as on a bed, each
+  // hand reached to its place, laid flat, palm down; `k` of the way ──
+  // (D.local: the hands' places given in the person's own frame from their root (x their left, y up, z ahead), so they
+  // go with the person wherever the root is put after the game's own update: a seat on a moving machine)
+  const _hold = { hands: [null, null], elbows: null, fingers: null, ahead: new THREE.Vector3(), arms: 1, armsLR: null }, _lh = [new THREE.Vector3(), new THREE.Vector3()], _rp = new THREE.Vector3();
+  function holdOn(D, k) {
+    _hold.hands = D.hands; _hold.elbows = D.elbows || null; _hold.fingers = D.fingers || null;
+    if (D.local) { c.root.getWorldPosition(_rp); _hold.hands = D.hands.map((h, i) => (h ? _lh[i].copy(h).applyQuaternion(_rq).add(_rp) : null)); }
+    _hold.ahead.set(0, 0, 1).applyQuaternion(_rq); _hold.arms = k; _hold.armsLR = D.share ? [D.share[0] * k, D.share[1] * k] : null;
+    handsOn(_hold);
+  }
+  // ── THE STANCE AT REST (STANCE, above): the weight over one leg, both feet where the clip has them ──
+  const _feet = [new THREE.Vector3(), new THREE.Vector3()], _fw = new THREE.Vector3(), _lf = new THREE.Vector3(), _dn = new THREE.Vector3(0, -1, 0);
+  function stance(dt) {
+    // (when the weight goes over: now and then, each their own; from both legs to one, from one to the other or to both)
+    M.sideNext -= dt;
+    if (M.sideNext <= 0) {
+      M.sideWant = M.sideWant === 0 ? (Math.random() < 0.5 ? 1 : -1) : Math.random() < STANCE.even ? 0 : -M.sideWant;
+      M.sideNext = rnd(STANCE.every[0], STANCE.every[1]) * (M.sideWant === 0 ? 0.5 : 1);
+      M.sideFrom = M.side; M.sideU = 0;
+    }
+    M.sideU = Math.min(1, (M.sideU ?? 1) + dt / STANCE.ease);
+    M.side = (M.sideFrom ?? M.sideWant) + (M.sideWant - (M.sideFrom ?? M.sideWant)) * M.sideU * M.sideU * (3 - 2 * M.sideU);
+    const w = M.side * M.standNow, aw = Math.abs(w), H = B.Hips;
+    if (aw < 1e-3 || !H || !H.parent || !B.UpperLegL || !B.UpperLegR || !B.LowerLegL || !B.LowerLegR) return;
+    _fw.set(0, 0, 1).applyQuaternion(_rq); _lf.set(1, 0, 0).applyQuaternion(_rq);
+    // each foot's root as the clip leaves it (the crew kit puts the foot at its shin's end: along the shin, its length)
+    for (const [i, s] of [[0, 'L'], [1, 'R']]) {
+      const L = B['LowerLeg' + s]; L.updateWorldMatrix(true, false);
+      L.getWorldPosition(_feet[i]).addScaledVector(_v1.setFromMatrixColumn(L.matrixWorld, 1).normalize(), M.body.b);
+    }
+    // (the free leg's foot a little ahead: weight on the left (w > 0), the right foot)
+    _feet[w > 0 ? 1 : 0].addScaledVector(_fw, STANCE.free * aw);
+    // the hips across over the weight leg and a little down, the hip over it up; the body above turned back upright and
+    // on past it, so the shoulders tip the other way
+    H.getWorldPosition(_v2).addScaledVector(_lf, w * STANCE.shift).addScaledVector(_dn, STANCE.drop * aw);
+    H.parent.updateWorldMatrix(true, false); H.position.copy(H.parent.worldToLocal(_v2));
+    turn(H, Z, w * STANCE.roll, _rq);
+    H.updateWorldMatrix(false, true);
+    turn(B.Abdomen, Z, -w * STANCE.roll * 0.6, _rq); turn(B.Chest, Z, -w * (STANCE.roll * 0.4 + STANCE.chest), _rq);
+    // each leg bent so its foot stays where it was, the knee ahead
+    for (const [i, s, sg] of [[0, 'L', 1], [1, 'R', -1]]) {
+      const U = B['UpperLeg' + s], L = B['LowerLeg' + s];
+      const hip = U.getWorldPosition(_h), knee0 = L.getWorldPosition(_k);
+      _pole.copy(_fw).addScaledVector(_lf, sg * 0.12);
+      const ik = twoBone(arr(hip), arr(_feet[i]), arr(_pole), M.body.a, M.body.b);
+      aim(U, _v1.subVectors(knee0, hip), _v2.set(ik.mid[0] - hip.x, ik.mid[1] - hip.y, ik.mid[2] - hip.z), 1);
+      U.updateWorldMatrix(false, true);
+      const kn = L.getWorldPosition(_k); L.updateWorldMatrix(true, false);
+      aim(L, _v1.setFromMatrixColumn(L.matrixWorld, 1), _v2.set(ik.end[0] - kn.x, ik.end[1] - kn.y, ik.end[2] - kn.z), 1);
+      L.updateWorldMatrix(false, true);
+    }
+  }
   function lay(dt) {
     M.t += dt;
     if (still()) { M.yaw = M.pitch = M.sway = 0; M.lastTalk = M.talk; return; }      // (nothing to lay on: costs nothing)
@@ -196,6 +260,12 @@ export function addMoves(c) {
     c.root.getWorldQuaternion(_rq);
     // (on a bed: the person put where they are, first, the legs bent to their places)
     if (M.bed) onBed(M.bed);
+    // (standing at rest: the weight over one leg, THE STANCE; eased in and out as they come to stand and set off)
+    M.standNow = damp(M.standNow, M.stand ? 1 : 0, 5, dt);
+    if (M.standNow > 0.002 && !M.bed) stance(dt); else if (M.standNow <= 0.002) M.standNow = 0;
+    // (leaning in over the work, or forward as they sit down and get up: M.lean, radians; eased)
+    M.leanNow = damp(M.leanNow, M.lean || 0, 6, dt); if (Math.abs(M.leanNow) < 0.002 && !M.lean) M.leanNow = 0;
+    if (M.leanNow) { turn(B.Abdomen, X, M.leanNow * 0.45, _rq); turn(B.Chest, X, M.leanNow * 0.55, _rq); }
     // the head toward what it looks at (yaw and a little pitch, in the person's own frame), the neck taking its share
     let wy = 0, wp = 0;
     if (M.look && B.Head) {
@@ -272,6 +342,10 @@ export function addMoves(c) {
     }
     // (on a bed: the hands to their places, last, once everything above the hips is where it goes)
     if (M.bed && M.bed.hands && M.bed.arms > 0.001) handsOn(M.bed);
+    // (HANDS ON THE WORK, M.hold: each hand to its place, last; eased on and off)
+    M.holdNow = damp(M.holdNow, M.hold ? 1 : 0, 6, dt); if (M.holdNow < 0.002 && !M.hold) M.holdNow = 0;
+    c.armsOutK = 1 - M.holdNow;      // (the crew kit's ARMS OUT let go while they hold: the hands are where they go)
+    if (M.holdNow && (M.hold || M.lastHold)) { const D = M.hold || M.lastHold; M.lastHold = D; holdOn(D, M.holdNow); }
     c.root.updateMatrixWorld(true);
   }
   return M;

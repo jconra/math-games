@@ -3859,9 +3859,12 @@ export async function makeCrew(lib, recipe, { far = false } = {}) {
       armQ[s] = ua.quaternion.clone();
       _d.subVectors(la.getWorldPosition(_d), ua.getWorldPosition(_ax)).normalize();
       const down = new THREE.Vector3(0, -1, 0).applyQuaternion(_rq), w = Math.max(0, _d.dot(down)) ** 2;
-      if (w <= 0 || !armsNow) continue;
+      // (c.armsOutK: how much of it is worn just now, 1 as ever; 0 while the hands are laid on something by a move of the
+      // game's own, src/moves.js HANDS ON THE WORK, which put them there already)
+      const k = c.armsOutK ?? 1;
+      if (w <= 0 || !armsNow || !(k > 0)) continue;
       _ax.set(0, 0, 1).applyQuaternion(_rq).applyQuaternion(ua.parent.getWorldQuaternion(_pq).invert());
-      ua.quaternion.premultiply(_q.setFromAxisAngle(_ax, armsNow * sg * w));
+      ua.quaternion.premultiply(_q.setFromAxisAngle(_ax, armsNow * sg * w * Math.min(1, k)));
     }
     person.root.updateMatrixWorld(true);
   }
