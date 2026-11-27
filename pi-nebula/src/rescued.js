@@ -87,7 +87,7 @@ function blend(a, b, k) {
   return out;
 }
 
-export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = () => false, crew: crew0 = () => [], env = null }) {
+export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = () => false, crew: crew0 = () => [], env = null, sunAt = null }) {
   // (the places, in the game's maker's order: the patient beds, the crew room's bunk and bed, the lab's bench, the stools;
   // busy(id): a place someone else aboard is in (the crew aboard, src/aboard.js), passed over; crew(): where the crew
   // aboard stand just now, in the world, walked round as the rescued walk round each other)
@@ -306,7 +306,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
       const r = walkOn(T, dt, pl, crewNow);
       if (r) aboardAgain();
     }
-    if (T.fig.light) T.fig.light.to(T.phase === 'done' || ship.inside(T.pos) ? 1 : 0, dt);
+    if (T.fig.light) { T.fig.light.to(T.phase === 'done' || ship.inside(T.pos) ? 1 : 0, dt); if (sunAt && T.fig.light.sunlit) T.fig.light.sunlit(sunAt(T.pos.x, T.pos.z), dt); }
     if (T.phase !== 'done') T.c.update(dt);
   }
 
@@ -394,7 +394,7 @@ export function makeRescued({ pods: pods0, medic, walls: walls0, scene, busy = (
           if (r) { stopWay(R); R.phase = 'out'; play(R, STAND, 0.3); }
         }
       } else if (R.phase === 'out' || R.phase === 'standing') { R.drawnY = damp(R.drawnY, R.pos.y, 18, dt); stand(R); }
-      if (R.light && !riding && !atHome) R.light.to(ship.inside(R.pos) ? 1 : 0, dt);
+      if (R.light && !riding && !atHome) { R.light.to(ship.inside(R.pos) ? 1 : 0, dt); if (sunAt) R.light.sunlit(sunAt(R.pos.x, R.pos.z), dt); }
       // drawn near or far (the crew kit's far copy beyond RESCUED.far from the camera)
       if (eye) R.S.setFar(R.c.root.position.distanceTo(eye) > RESCUED.far);
       R.c.update(dt);

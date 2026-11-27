@@ -27,11 +27,25 @@
 import * as THREE from 'three';
 import { lookOff } from './kinds.js';
 
-// the picture: its size (pixels across) per quality tier; how much ground it covers (half its width, metres): `near`
-// standing on the ground, more the higher the camera is (`per` metres for each metre up), at most `far`; the softening
-// (metres: about how far the edge of a shadow is spread); how much of the sky's light a shadow takes as well as the sun's;
-// and the softened picture's edge brought back to full darkness inside (edge: from, to)
-export const SHADOW_PIC = { size: { low: 512, medium: 1024, high: 1024 }, near: 30, per: 1.6, far: 220, soft: 0.05, sky: 0.5, edge: [0.06, 0.45] };
+// THE TWO PICTURES, and what each quality level pays (the game's maker's standing rule: a costly feature is gated by the
+// quality tier). NEAR: round the camera, a fixed width (so its pixels never change size and its edges never crawl),
+// drawn every frame: the people always; the rocks and plants (and on the best quality the near trees) only from medium
+// up, and only those inside it (the cover hands it a short list: src/planet/cover.js). Off while the camera is high
+// over the ground (nobody is out on foot then). SITE: the big things (the wreck, the pods, the Medic set down), over the
+// whole site at once, whatever the distance from the camera (as their own shadows were drawn before), drawn again only
+// when one of them has moved. Per level: size (pixels across), half (metres), softened (two passes) or not.
+//   low:    near 256, 10 m, not softened, the people only   (fill 65 k pixels a frame)
+//   medium: near 512, 16 m, softened, people, rocks, plants (fill 786 k pixels a frame: three passes)
+//   high:   near 1024, 24 m, softened, and the near trees    (fill 3.1 M pixels a frame)
+//   site:   512 on low, 1024 above, round the site's things plus `siteMargin` metres; only when something there moves
+// soft: about how far a shadow's edge is spread (metres); sky: how much of the sky's light a shadow takes as well as the
+// sun's (where the sun reaches; in the land's own shade a shadow takes nothing: there is no second shadow); dark: how
+// dark each kind of caster's shadow is (a pebble's or a tuft's lighter than a ship's or a person's)
+export const SHADOW_PIC = {
+  near: { low: { size: 256, half: 10, soft: false, cover: false, trees: false }, medium: { size: 512, half: 16, soft: true, cover: true, trees: false }, high: { size: 1024, half: 24, soft: true, cover: true, trees: true } },
+  site: { low: 512, medium: 1024, high: 1024 }, siteMargin: 60, siteMost: 150, high: 2.5,
+  soft: 0.05, sky: 0.5, dark: { big: 1, person: 1, rock: 0.5, plant: 0.45, tree: 0.6 },
+};
 // (kept for the station's own marks: the stencil the ground and what casts once used, src/planet/ground.js)
 export const GROUND_SHADOW = { lift: 0.06, people: 0.03, air: 0.5, bare: 0.7 };
 const mark = (mat, ref) => { mat.stencilWrite = true; mat.stencilRef = ref; mat.stencilFunc = THREE.AlwaysStencilFunc; mat.stencilZPass = THREE.ReplaceStencilOp; mat.stencilFail = THREE.KeepStencilOp; mat.stencilZFail = THREE.KeepStencilOp; return mat; };
@@ -85,11 +99,12 @@ const CASTER_FRAG = /* glsl */`
 #ifdef CUT
 uniform sampler2D uMap; varying vec2 vUv;
 #endif
+uniform float uStrength;
 void main() {
   #ifdef CUT
   if (texture2D(uMap, vUv).a < 0.5) discard;
   #endif
-  gl_FragColor = vec4(1.0);
+  gl_FragColor = vec4(uStrength, uStrength, uStrength, 1.0);
 }`;
 // the softening: nine taps one way, then the other
 const BLUR_FRAG = /* glsl */`
@@ -102,36 +117,38 @@ void main() {
 }`;
 
 export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium' }) {
-  const N = SHADOW_PIC.size[quality] || SHADOW_PIC.size.medium, GU = ground.U, sun = shadowSun(sunDir);
+  const NQ = SHADOW_PIC.near[quality] || SHADOW_PIC.near.medium, GU = ground.U, sun = shadowSun(sunDir);
   const rtOpts = { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false };
-  const raw = new THREE.WebGLRenderTarget(N, N, rtOpts), half = new THREE.WebGLRenderTarget(N, N, rtOpts), done = new THREE.WebGLRenderTarget(N, N, rtOpts);
-  const box = new THREE.Vector4(0, 0, SHADOW_PIC.near, 0);
-  const U = { uShadow: { value: done.texture }, uShadowBox: { value: box } };
-  const scene = new THREE.Scene(), cam = new THREE.Camera();
-  scene.matrixWorldAutoUpdate = false;
-  const mats = new Map();
-  const matFor = ({ curved = false, map = null, reach = 0 }) => {
-    const key = (curved ? 'c' : '') + (map ? 'm' + map.uuid : '') + (reach ? 'r' + reach : '');
-    let m = mats.get(key);
+  const cam = new THREE.Camera();
+  // one picture: its own scene of twins, its box (x, z, half, on), its targets (one, or three when softened)
+  function picture(N, soft) {
+    const raw = new THREE.WebGLRenderTarget(N, N, rtOpts), half = soft ? new THREE.WebGLRenderTarget(N, N, rtOpts) : null, done = soft ? new THREE.WebGLRenderTarget(N, N, rtOpts) : raw;
+    const scene = new THREE.Scene(); scene.matrixWorldAutoUpdate = false;
+    return { N, soft, raw, half, done, scene, box: new THREE.Vector4(0, 0, 1, 0), mats: new Map(), casters: new Set(), sig: '', draws: 0, bounds: null };
+  }
+  const near = picture(NQ.size, NQ.soft), site = picture(SHADOW_PIC.site[quality] || 1024, true);
+  const U = { uShadow: { value: near.done.texture }, uShadowBox: { value: near.box }, uShadowSite: { value: site.done.texture }, uShadowSiteBox: { value: site.box } };
+  const matFor = (P, { curved = false, map = null, reach = 0, dark = 1 }) => {
+    const key = (curved ? 'c' : '') + (map ? 'm' + map.uuid : '') + (reach ? 'r' + reach : '') + 'd' + dark;
+    let m = P.mats.get(key);
     if (!m) {
       const defines = {}; if (curved) defines.CURVED = 1; if (map) defines.CUT = 1; if (reach) defines.REACH = 1;
+      // (each spot keeps the darkest of what falls on it: one whole shape however many parts overlap)
       m = new THREE.ShaderMaterial({
-        name: 'ground shadow picture', defines, side: THREE.DoubleSide, depthTest: false, depthWrite: false, blending: THREE.NoBlending,
-        uniforms: { uH: GU.uH, uN: GU.uN, uT: GU.uT, uP: GU.uP, uCam: GU.uCam, uCurve: GU.uCurve, uSun: { value: sun }, uBox: { value: box }, uReach: { value: reach }, uMap: { value: map } },
+        name: 'ground shadow picture', defines, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+        blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+        uniforms: { uH: GU.uH, uN: GU.uN, uT: GU.uT, uP: GU.uP, uCam: GU.uCam, uCurve: GU.uCurve, uSun: { value: sun }, uBox: { value: P.box }, uReach: { value: reach }, uMap: { value: map }, uStrength: { value: dark } },
         vertexShader: CASTER_VERT, fragmentShader: CASTER_FRAG,
       });
-      mats.set(key, m);
+      P.mats.set(key, m);
     }
     return m;
   };
-  const quadMat = (src, step) => new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { uSrc: { value: src }, uStep: { value: step } },
+  const blur = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { uSrc: { value: null }, uStep: { value: new THREE.Vector2() } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: BLUR_FRAG });
-  const blurH = quadMat(raw.texture, new THREE.Vector2(1 / N, 0)), blurV = quadMat(half.texture, new THREE.Vector2(0, 1 / N));
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurH); quad.frustumCulled = false;
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blur); quad.frustumCulled = false;
   const quadScene = new THREE.Scene(); quadScene.add(quad);
 
-  // the casters: a twin of each mesh in the picture's own scene, sharing its triangles, put where it is each frame
-  const casters = new Set();
   const seen = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
   function twinOf(o, mat) {
     let t;
@@ -141,52 +158,80 @@ export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium'
     t.matrixAutoUpdate = false; t.frustumCulled = false; t.name = o.name + ':shadow';
     return t;
   }
-  function add(root, { curved = false, map = null, reach = 0, test = null } = {}) {
-    const pairs = [], mat = matFor({ curved, map, reach });
-    root.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.groundShadow && (!test || test(o))) { const t = twinOf(o, o.userData.shadowMap ? matFor({ curved, map: o.userData.shadowMap, reach }) : mat); scene.add(t); pairs.push({ from: o, twin: t }); } });
-    const C = { root, pairs, on: true };
-    casters.add(C);
-    return { count: pairs.length, show(on) { C.on = !!on; }, dispose() { for (const p of pairs) p.twin.removeFromParent(); casters.delete(C); } };
+  const none = { count: 0, show() {}, dispose() {} };
+  // kind: 'big' (the site picture), 'person', 'rock', 'plant', 'tree' (the near one; rocks, plants and trees only on a
+  // level that draws them)
+  const wants = (kind) => (kind === 'rock' || kind === 'plant' ? NQ.cover : kind === 'tree' ? NQ.trees : true);
+  function add(root, { kind = 'big', curved = false, map = null, reach = 0, test = null } = {}) {
+    if (!wants(kind)) return none;
+    const P = kind === 'big' ? site : near, C = { root, pairs: [], on: true, curved }, dark = SHADOW_PIC.dark[kind] ?? 1;
+    root.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.groundShadow && (!test || test(o))) { const t = twinOf(o, matFor(P, { curved, map, reach, dark })); P.scene.add(t); C.pairs.push({ from: o, twin: t }); } });
+    P.casters.add(C); if (P === site) { site.bounds = null; site.sig = ''; }
+    return { count: C.pairs.length, show(on) { C.on = !!on; }, dispose() { for (const p of C.pairs) p.twin.removeFromParent(); P.casters.delete(C); if (P === site) { site.bounds = null; site.sig = ''; } } };
   }
-  const stats = { casters: 0, draws: 0, size: N, half: 0 };
-  const _p = new THREE.Vector3();
-  const off = lookOff('shadows');
-  function update(camera) {
-    if (off) { box.w = 0; return; }
-    // where the picture is: round the camera's foot, wider the higher it is; its middle moved a whole pixel at a time
-    const up = Math.max(0, GU.uCamUp ? GU.uCamUp.value : 0);
-    const h = Math.min(SHADOW_PIC.far, SHADOW_PIC.near + up * SHADOW_PIC.per), px = (2 * h) / N;
-    camera.getWorldPosition(_p);
-    box.set(Math.round(_p.x / px) * px, Math.round(_p.z / px) * px, h, 1);
-    stats.half = +h.toFixed(1);
-    // each twin where its own is now, shown as it is
-    let draws = 0, n = 0;
-    for (const C of casters) {
+  // each twin where its own is now, shown as it is; for the site a short signature of where they all are (drawn again
+  // only when it changes; the curve's lowering, which follows the camera, left out of it)
+  function follow(P) {
+    let draws = 0, sig = '';
+    for (const C of P.casters) {
       const rootOn = C.on && seen(C.root);
-      if (rootOn) { C.root.updateMatrixWorld(true); n++; }
+      if (rootOn) C.root.updateMatrixWorld(true);
       for (const { from, twin } of C.pairs) {
         twin.visible = rootOn && seen(from) && (!from.isInstancedMesh || from.count > 0);
         if (!twin.visible) continue;
         if (twin.geometry !== from.geometry) twin.geometry = from.geometry;
         if (from.isInstancedMesh) twin.count = from.count;
         if (!from.isSkinnedMesh) twin.matrixWorld.copy(from.matrixWorld);
+        if (P === site) { const e = twin.matrixWorld.elements; sig += (e[0] + e[2] + e[8] + e[10] + e[12] * 3 + e[14] * 7 + (C.curved ? 0 : e[13] * 5)).toFixed(3) + ','; }
         draws++;
       }
     }
-    stats.casters = n; stats.draws = draws;
-    // the picture: marked, then softened (how many pixels the softening spreads, by how much ground a pixel is)
+    P.draws = draws;
+    return sig;
+  }
+  function draw(P) {
     const was = renderer.getRenderTarget(), ac = renderer.autoClear, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(), tm = renderer.toneMapping;
     renderer.autoClear = true; renderer.setClearColor(0x000000, 0); renderer.toneMapping = THREE.NoToneMapping;
-    renderer.setRenderTarget(raw); renderer.render(scene, cam);
-    const k = Math.max(0.6, Math.min(4, SHADOW_PIC.soft / px / 2.2));
-    blurH.uniforms.uStep.value.set(k / N, 0); blurV.uniforms.uStep.value.set(0, k / N);
-    quad.material = blurH; renderer.setRenderTarget(half); renderer.render(quadScene, cam);
-    quad.material = blurV; renderer.setRenderTarget(done); renderer.render(quadScene, cam);
+    renderer.setRenderTarget(P.raw); renderer.render(P.scene, cam);
+    if (P.soft) {
+      const px = (2 * P.box.z) / P.N, k = Math.max(0.6, Math.min(3, SHADOW_PIC.soft / px / 2.2)) / P.N;
+      blur.uniforms.uSrc.value = P.raw.texture; blur.uniforms.uStep.value.set(k, 0); renderer.setRenderTarget(P.half); renderer.render(quadScene, cam);
+      blur.uniforms.uSrc.value = P.half.texture; blur.uniforms.uStep.value.set(0, k); renderer.setRenderTarget(P.done); renderer.render(quadScene, cam);
+    }
     renderer.setRenderTarget(was); renderer.autoClear = ac; renderer.setClearColor(cc, ca); renderer.toneMapping = tm;
   }
+  const stats = { quality, near: NQ.size, nearHalf: NQ.half, site: site.N, siteHalf: 0, nearDraws: 0, siteDraws: 0, siteDrawn: 0, fill: 0 };
+  const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+  const off = lookOff('shadows');
+  // EACH FRAME, after everything that casts has moved (src/rescue.js late(): last of all; src/planet/planet.js otherwise)
+  function update(camera) {
+    stats.fill = 0;
+    if (off) { near.box.w = 0; site.box.w = 0; return; }
+    // the site: round its things, as they stand (worked out again when one is added or taken away)
+    if (site.casters.size) {
+      const sig = follow(site);
+      if (!site.bounds) {
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (const C of site.casters) for (const { from } of C.pairs) { from.getWorldPosition(_q); x0 = Math.min(x0, _q.x); x1 = Math.max(x1, _q.x); z0 = Math.min(z0, _q.z); z1 = Math.max(z1, _q.z); }
+        if (x0 < Infinity) { const h = Math.min(SHADOW_PIC.siteMost, Math.max(x1 - x0, z1 - z0) / 2 + SHADOW_PIC.siteMargin); site.bounds = true; site.box.set((x0 + x1) / 2, (z0 + z1) / 2, h, 1); stats.siteHalf = Math.round(h); }
+      }
+      if (site.bounds && sig !== site.sig) { site.sig = sig; draw(site); stats.siteDrawn++; stats.fill += site.N * site.N * 3; }
+      stats.siteDraws = site.draws;
+    } else site.box.w = 0;
+    // near the camera: a fixed width, its middle moved a whole pixel at a time; none while the camera is high up
+    const up = GU.uCamUp ? GU.uCamUp.value : 0;
+    if (up > NQ.half * SHADOW_PIC.high || !near.casters.size) { near.box.w = 0; stats.nearDraws = 0; return; }
+    const px = (2 * NQ.half) / near.N;
+    camera.getWorldPosition(_p);
+    near.box.set(Math.round(_p.x / px) * px, Math.round(_p.z / px) * px, NQ.half, 1);
+    follow(near); stats.nearDraws = near.draws;
+    draw(near); stats.fill += near.N * near.N * (near.soft ? 3 : 1);
+  }
+  // how far from the camera the near picture can reach (the cover's short list of what casts into it; 0: none)
+  const nearReach = () => (NQ.cover ? NQ.half * 1.5 : 0);
   return {
-    U, add, update, stats, sun,
-    dispose() { for (const C of [...casters]) for (const p of C.pairs) p.twin.removeFromParent(); casters.clear(); for (const m of mats.values()) m.dispose(); blurH.dispose(); blurV.dispose(); quad.geometry.dispose(); raw.dispose(); half.dispose(); done.dispose(); },
+    U, add, update, stats, sun, nearReach, quality,
+    dispose() { for (const P of [near, site]) { for (const C of [...P.casters]) for (const p of C.pairs) p.twin.removeFromParent(); P.casters.clear(); for (const m of P.mats.values()) m.dispose(); P.raw.dispose(); if (P.half) P.half.dispose(); if (P.done !== P.raw) P.done.dispose(); } blur.dispose(); quad.geometry.dispose(); },
   };
 }
 
@@ -203,7 +248,7 @@ export function makePeopleShadows({ ground }) {
     for (const [c, H] of made) if (!now.has(c)) { H.dispose(); made.delete(c); }
     draws = 0;
     for (const c of now) {
-      let H = made.get(c); if (!H) { H = S.add(c.root, { test: (o) => !SKIP.has(o.material && o.material.name) }); made.set(c, H); }
+      let H = made.get(c); if (!H) { H = S.add(c.root, { kind: 'person', test: (o) => !SKIP.has(o.material && o.material.name) }); made.set(c, H); }
       const on = !(hide && hide(c.root.getWorldPosition(_at)));
       H.show(on); if (on) draws += H.count;
     }

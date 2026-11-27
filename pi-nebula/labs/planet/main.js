@@ -364,8 +364,9 @@ function frame(dt) {
   if (!planet) return;
   // (on foot, the camera is the walk's: ./walk.js; the Medic set down and the rescued go on whichever)
   if (flown) { flown.update(dt); flown.aim(camera, dt); walk.frame(dt); } else if (!walk.frame(dt)) fly(dt);
-  planet.update(camera, dt);
+  planet.update(camera, dt, { shadows: false });
   if (pods) pods.update(camera, dt);
+  planet.drawShadows(camera);
   if (reach) reach.update();
   if (search) search.update(camera, dt, flown ? { ahead: flown.nose() } : {});
   renderer.info.reset();
@@ -393,7 +394,7 @@ LAB.bench = (frames = 90) => {
   const gl = renderer.getContext(), px = new Uint8Array(4), times = [];
   for (let k = 0; k < frames + 10; k++) {
     const t = performance.now();
-    planet.update(camera, 1 / 60); if (pods) pods.update(camera, 1 / 60); renderer.info.reset(); renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    planet.update(camera, 1 / 60, { shadows: false }); if (pods) pods.update(camera, 1 / 60); planet.drawShadows(camera); renderer.info.reset(); renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     if (k >= 10) times.push(performance.now() - t);
   }
   times.sort((a, b) => a - b);

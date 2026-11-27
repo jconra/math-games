@@ -15,6 +15,9 @@ import * as THREE from 'three';
 import { shine } from '../player.js';
 
 export const INSIDE_FILL = { sky: 0xdde2e8, ground: 0x5d6065, power: 0.75 };
+// in the land's own shade (the moon's crater wall), how much of the sun a person still gets: a floor of light, the same
+// for everyone out there, so a person standing in the shade can be seen (round 2's critics: a black shape in a black field)
+export const PEOPLE_SHADE = 0.3;
 export const FILL_UNIFORMS = () => ({ uFillSky: { value: new THREE.Color(INSIDE_FILL.sky).multiplyScalar(INSIDE_FILL.power) }, uFillGround: { value: new THREE.Color(INSIDE_FILL.ground).multiplyScalar(INSIDE_FILL.power) } });
 
 // the planet's sun off by `sun` (a GLSL float: how much of it is kept off), its sky's light toward the station's fill
@@ -53,7 +56,7 @@ export function peopleLight(c, env = null) {
     },
     to(k, dt) { L.set(k + (k0 - k) * Math.exp(-8 * dt)); },
     // (outside, how much of the sun reaches where they stand: in the land's own shade, none)
-    sunlit(v, dt = 1) { U.uOutSun.value = v + (U.uOutSun.value - v) * Math.exp(-8 * dt); },
+    sunlit(v, dt = 1) { v = PEOPLE_SHADE + (1 - PEOPLE_SHADE) * v; U.uOutSun.value = v + (U.uOutSun.value - v) * Math.exp(-8 * dt); },
     get k() { return k0; },
   };
   return L;

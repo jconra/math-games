@@ -194,10 +194,10 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4(w.x, h - d2 * uCurve, w.y, 1.0);
 }`;
 const GROUND_FRAG = /* glsl */`
-uniform sampler2D uNM, uL, uDetail, uShadow, uGrit;
-uniform vec4 uGritK;
+uniform sampler2D uNM, uL, uDetail, uShadow, uShadowSite, uGrit;
+uniform vec4 uGritK, uGritTurn;
 const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
-uniform vec4 uShadowBox;
+uniform vec4 uShadowBox, uShadowSiteBox;
 uniform float uN, uP;
 uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
 uniform float uAmbPow, uAir, uFine, uBands, uTreeFar, uBare;
@@ -263,17 +263,19 @@ void main() {
   float ndl = max(dot(n, uSunDir), 0.0);
   // THE SHADOWS of what stands on the ground (src/planet/groundshadow.js): the sun's light taken away there, as behind a
   // hill, and some of the sky's too where the sun reaches (in the land's own shade there is no second shadow)
+  // (two pictures: the near one round the camera, the site's for the big things at any distance; each spot the darker;
+  // read as drawn, so a shadow is no wider than what casts it, its edge soft by a few centimetres)
   float sh = 0.0;
   { vec2 su = (vXZ - uShadowBox.xy) / uShadowBox.z; float e = max(abs(su.x), abs(su.y));
-    // (the softened picture brought back to full darkness inside a shape, so a thin leg's shadow is as dark as a ship's
-    // and only the edge is soft: the same shadow for everything)
-    if (e < 1.0) sh = smoothstep(${SHADOW_PIC.edge[0].toFixed(2)}, ${SHADOW_PIC.edge[1].toFixed(2)}, texture2D(uShadow, su * 0.5 + 0.5).r) * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
-  // (in the land's own shade there is no sun to take away: there a shadow takes the sky's light, so a person standing in
-  // the moon's crater shade still has hers, black on the nearly black ground)
-  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - sh * mix(1.0, SHADOW_SKY, L.r)));
+    if (e < 1.0) sh = texture2D(uShadow, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
+  { vec2 su = (vXZ - uShadowSiteBox.xy) / uShadowSiteBox.z; float e = max(abs(su.x), abs(su.y));
+    if (e < 1.0) sh = max(sh, texture2D(uShadowSite, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.9, 1.0, e)) * uShadowSiteBox.w); }
+  sh = min(1.0, sh * 1.15);
+  // (the sky's part only where the sun reaches: in the land's own shade a shadow takes nothing, no second shadow)
+  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh * L.r));
   #ifdef AIR
   // the haze: the sky behind, more of it the further off and the lower down
-  col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), hazeAmt(cameraPosition, vWorld));
+  col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), max(hazeAmt(cameraPosition, vWorld), horizonAmt(cameraPosition, vWorld)));
   #endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -382,7 +384,6 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     const up = Math.max(0.5, camera.position.y - land.heightAt(camera.position.x, camera.position.z));
     U.uCam.value.copy(camera.position); U.uCamUp.value = up;
     select(camera, up);
-    shadows.update(camera);
   };
   stats.buildMs = Math.round(performance.now() - t0);
   return {

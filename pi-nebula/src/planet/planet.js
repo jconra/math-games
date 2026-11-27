@@ -5,7 +5,7 @@
 //
 //   const land = await makeLandAsync(seed, kind)            the ground's numbers, made away from the page
 //   const planet = await makePlanet({ renderer, scene, land, quality })
-//   planet.update(camera, dt) each frame; planet.relayNow(camera) after the camera jumps;  planet.dispose()
+//   planet.update(camera, dt, { shadows }) each frame (shadows false: planet.drawShadows(camera) after the rest has moved); planet.relayNow(camera) after the camera jumps;  planet.dispose()
 //   planet.land, planet.ground, planet.cover, planet.trees, planet.sky, planet.exposure (for the renderer), planet.stats
 //
 // THE SKY: no air (the moon), the game's own sky (world/sky.js: the ringed planet, the nebulae, the stars) and its
@@ -79,14 +79,18 @@ export async function makePlanet({ renderer, scene, land, quality = 'medium' }) 
   let clock = 0;
   return {
     land, ground, cover, trees, sky, dome, stats, sunDir, exposure: P.exposure,
-    update(camera, dt) {
+    // (shadows: false when the caller moves more things after this and draws the shadows itself, last: drawShadows)
+    update(camera, dt, { shadows = true } = {}) {
       clock += dt;
       ground.update(camera);
       cover.update(camera, dt);
       if (trees) trees.update(camera);
       if (sky) sky.update(dt);
       if (dome) dome.update(camera, dt);
+      if (shadows) ground.shadows.update(camera);
     },
+    // the shadows' pictures, after everything that casts has moved this frame (src/planet/groundshadow.js)
+    drawShadows(camera) { ground.shadows.update(camera); },
     // (lays out the rocks, plants and near trees round the camera now, after a jump)
     relayNow(camera) { cover.relayNow(camera); if (trees) trees.relayNow(camera); },
     dispose() { for (const p of parts) scene.remove(p); ground.dispose(); cover.dispose(); if (trees) trees.dispose(); if (sky) sky.dispose(); if (dome) { dome.mesh.geometry.dispose(); dome.mesh.material.dispose(); } },

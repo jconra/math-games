@@ -307,8 +307,22 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
 
   // ── their shadows on the ground (src/planet/groundshadow.js): every rock, plant and flower casts, its leaves cut out
   // of their picture as they are drawn ──
-  const shades = [];
-  if (ground.shadows && !lookOff('plantShadows')) for (const L of layers) for (const m of L.meshes) shades.push(ground.shadows.add(m, { reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
+  // (only those near enough to fall inside the near shadow picture, a short list of each mesh's made at every relay;
+  // none at all on a level whose picture has none: src/planet/groundshadow.js)
+  const shades = [], shadowCopies = [], shadowReach = ground.shadows && !lookOff('plantShadows') ? ground.shadows.nearReach() : 0;
+  if (shadowReach > 0) for (const L of layers) for (const m of L.meshes) {
+    const copy = new THREE.InstancedMesh(m.geometry, m.material, m.instanceMatrix.count); copy.count = 0; copy.frustumCulled = false; copy.name = m.name;
+    shadowCopies.push({ m, copy });
+    shades.push(ground.shadows.add(copy, { kind: /plant/.test(L.name) ? 'plant' : 'rock', reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
+  }
+  function shortList(cx, cz) {
+    const R = shadowReach + CELL * 1.5 + 2, R2 = R * R;
+    for (const { m, copy } of shadowCopies) {
+      const a = m.instanceMatrix.array, b = copy.instanceMatrix.array; let k = 0;
+      for (let i = 0; i < m.count; i++) { const dx = a[i * 16 + 12] - cx, dz = a[i * 16 + 14] - cz; if (dx * dx + dz * dz > R2) continue; for (let e = 0; e < 16; e++) b[k * 16 + e] = a[i * 16 + e]; k++; }
+      copy.count = k; copy.instanceMatrix.needsUpdate = true;
+    }
+  }
 
   // ── laid out round the camera ──────────────────────────────────────────────────────────────────────────────────
   let lastX = Infinity, lastZ = Infinity;
@@ -325,6 +339,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       let n = 0; L.meshes.forEach((m, s) => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; n += m.count; stats.tris += m.count * L.tris[s]; });
       L.count = n; if (/plant/.test(L.name)) stats.plants += n; else stats.rocks += n;
     }
+    if (shadowCopies.length) shortList(cx, cz);
   }
   stats.layers = layers.length;
   stats.buildMs = Math.round(performance.now() - t0);

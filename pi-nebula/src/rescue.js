@@ -189,7 +189,7 @@ export function makeSite(ctx, opts = {}) {
       F.player.c.root.visible = false;
       // (the people's shadows on the ground out here, as the wreck's and the pods': src/planet/groundshadow.js)
       shades = makePeopleShadows({ ground: planet.ground });
-      rescued = makeRescued({ pods, medic, walls: F.walls, scene: carrier, busy: (id) => !!(opts.busy && opts.busy(id)), crew: () => (opts.crewAt ? opts.crewAt() : []) });
+      rescued = makeRescued({ pods, medic, walls: F.walls, scene: carrier, sunAt: planet.ground.sunAt, busy: (id) => !!(opts.busy && opts.busy(id)), crew: () => (opts.crewAt ? opts.crewAt() : []) });
       st.times.ground = Math.round(performance.now() - t0);
       st.groundReady = true;
     } catch (e) { console.error('rescue: the ground to walk on could not be made', e); st.groundFailed = true; }
@@ -489,7 +489,7 @@ export function makeSite(ctx, opts = {}) {
     late(dt = 1 / 60) {
       if (!fl || st.closed) return;
       const c = W.camera; if (c.far !== SITE.far) { c.far = SITE.far; c.updateProjectionMatrix(); }
-      planet.update(c, dt); if (pods) pods.update(c, dt);
+      planet.update(c, dt, { shadows: false }); if (pods) pods.update(c, dt);
       if (search) { _v.set(1, 0, 0).applyQuaternion(_q.fromArray(fl.S.q)); search.update(c, dt, { ahead: [_v.x, _v.z] }); }
       if (medic && (st.swapped || st.drawn)) {
         // (its cabin's doors open for whoever is nearest each: on foot out here, the rescued, and anyone on foot in the
@@ -506,6 +506,8 @@ export function makeSite(ctx, opts = {}) {
       // (whoever is out on the ground casts a shadow there: the crew member, the rescued, her paramedic; inside the
       // Medic its hull's shadow is theirs)
       if (shades) shades.sync(st.swapped ? [F ? F.player.c : null, ...(pods ? pods.pods.map((p) => p.sleeper && p.sleeper.c) : []), st.para && !st.para.done ? st.paraC : null] : [], medic ? medic.inside : null);
+      // (the shadows last, after everything that casts them has moved this frame)
+      planet.drawShadows(c);
     },
     // THE FLIGHT HOME: the rescued kept as they are, where they settled (src/rescued.js ride: theirs from here on, drawn
     // where the ship is by whoever takes them: src/trip.js); the planet and the Medic set down are put away without them
