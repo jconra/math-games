@@ -223,13 +223,13 @@ export function viewTurn(cam, dx, dy = 0, H = HANDS) {
 // THE SWIPE'S SPEED AND ITS GLIDE (the game's maker: "It also shouldn't take several swipes to move around ... the
 // swipes were speed based. So it swipes more the faster you swipe, and maybe even glides to a stop"). A drag slower
 // than SPIN.slow px a second turns the view one to one; faster, by up to SPIN.most times as much. Lifted while still
-// moving (the last move under SPIN.fresh ms before the lift), the view glides on at the swipe's speed and slows to a
-// stop (SPIN.friction a second); a new touch stops it at once.
+// moving (the last move under SPIN.fresh ms before the lift), the view glides on at the swipe's speed (no faster than
+// SPIN.fastest px a second) and slows to a stop (SPIN.friction a second); a new touch stops it at once.
 //   const W = makeSpin()
 //   W.drag(dx, ms) -> the pixels to turn by for a move of dx px, ms after the last one
 //   W.release(ms)  the finger lifted, ms after its last move     W.stop()   a touch: the glide ends
 //   W.step(dt)     -> the pixels to turn by this frame of the glide (0 when there is none)
-export const SPIN = { slow: 600, gain: 1 / 900, most: 3, fresh: 90, friction: 3.5, least: 40 };
+export const SPIN = { slow: 600, gain: 1 / 1500, most: 2, fresh: 90, friction: 6, least: 40, fastest: 1500 };
 export function makeSpin(S = SPIN) {
   let v = 0, gliding = false;
   return {
@@ -238,7 +238,7 @@ export function makeSpin(S = SPIN) {
       const px = dx * g; v = v * 0.4 + (px / sec) * 0.6; gliding = false;
       return px;
     },
-    release(ms) { gliding = ms <= S.fresh && Math.abs(v) > S.least; if (!gliding) v = 0; },
+    release(ms) { v = Math.max(-S.fastest, Math.min(S.fastest, v)); gliding = ms <= S.fresh && Math.abs(v) > S.least; if (!gliding) v = 0; },
     stop() { gliding = false; v = 0; },
     step(dt) {
       if (!gliding) return 0;

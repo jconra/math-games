@@ -333,12 +333,12 @@ test('index.js: the turn written only from the drag; no tilt from a finger; the 
   assert.equal((src.match(/canTap\(b, /g) || []).length, 3, 'the click targets, the balls on the screen and the record of where they were');
 });
 
-test('a swipe\'s speed: slow is one to one, faster turns further (up to 3 times); let go while moving, it glides to a stop', () => {
+test('a swipe\'s speed: slow is one to one, faster turns further (up to twice); let go while moving, it glides to a stop', () => {
   const W = makeSpin();
   assert.equal(W.drag(10, 50), 10, '200 px a second: one to one');
   assert.equal(W.drag(30, 50), 30, '600 px a second: one to one');
   const f = W.drag(60, 50); assert.ok(f > 60 && f < 180, `1200 px a second: further (${f})`);
-  assert.equal(makeSpin().drag(400, 50), 400 * SPIN.most, 'never more than 3 times');
+  assert.equal(makeSpin().drag(400, 50), 400 * SPIN.most, 'never more than twice');
   // the glide: let go at once after a quick move, it goes on the same way and slows to a stop
   const G = makeSpin(); G.drag(60, 16); G.release(20);
   let total = 0, n = 0, last = Infinity; while (G.gliding && n < 600) { const px = G.step(1 / 60); assert.ok(px > 0 && px <= last + 1e-9, 'the same way, slowing'); last = px; total += px; n++; }
