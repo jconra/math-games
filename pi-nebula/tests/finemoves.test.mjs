@@ -41,9 +41,14 @@ test('a turn on the spot bigger than a small one is stepped round, the legs walk
   assert.deepEqual(turnStep(0.02, true), { stepping: true, clip: 'stand' });
 });
 
-test('a desk chair\'s sitter sits forward of its middle, nearer the desk', () => {
+test('a desk chair\'s sitter sits forward of its middle, nearer the desk; stood first in front of the chair itself', () => {
   assert.ok(DESK_SIT > 0.08 && DESK_SIT < 0.2);
-  assert.deepEqual(deskSeat([1, 0.5, 2], [0, 0, 1]), [1, 0.5, 2 + DESK_SIT]);
+  const seat = deskSeat([1, 0.5, 2], [0, 0, 1]);
+  assert.deepEqual(seat, [1, 0.5, 2 + DESK_SIT]);
+  // (people.js gives a desk seat pre = SIT.pre - DESK_SIT: where they stand is where it was before they sat forward)
+  const { down } = seatSteps({ seat, heading: 0, pos: [1.6, 0, 2 + DESK_SIT], pre: SIT.pre - DESK_SIT });
+  const before = down[down.length - 2].to;
+  assert.ok(Math.abs(before[2] - (2 + SIT.pre)) < 1e-9, JSON.stringify(before));
 });
 
 test('the way round a stool: the side kept clear of what is there; neither clear, straight to its front', () => {

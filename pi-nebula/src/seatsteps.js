@@ -7,7 +7,9 @@
 //     seat: { seat: [x, y, z] (where they sit), heading (the way they face sitting), pos: [x, y, z] (where they stand
 //            to sit down: in front of a bench, beside a desk chair, behind a stool), round: which side of a stool
 //            they go round, +1 their left as they sit, -1 their right, 0 neither (straight to the spot in front of it);
-//            people.js tries each against the walls and the furniture there (roundAt) and keeps a clear one }
+//            people.js tries each against the walls and the furniture there (roundAt) and keeps a clear one; pre: how
+//            far in front of where they sit they stand first, in place of SIT's (a desk chair's sitter sits forward of
+//            the chair's middle, so they stand where they would in front of the chair itself, clear of its desk) }
 //     step: { move, to: [x, y, z], heading, secs }   move: 'walk' (forward, facing `heading`), 'back' (stepping
 //            backward), 'turn' (on the spot, stepping round), 'lower' (onto the seat), 'rise' (up off it)
 //     (and pre: where they stand just in front of it)
@@ -45,7 +47,7 @@ export function seatSteps(S) {
   const f = [Math.sin(h), 0, Math.cos(h)], left = [Math.cos(h), 0, -Math.sin(h)];
   const v = sub(stand, seat), along = v[0] * f[0] + v[2] * f[2], across = v[0] * left[0] + v[2] * left[2];
   // (a stool, come to from behind: its table just in front of it, so they stand nearer it)
-  const behind = along < -0.1, k = behind ? SIT.preTable : SIT.pre;
+  const behind = along < -0.1, k = S.pre != null ? S.pre : behind ? SIT.preTable : SIT.pre;
   const pre = [seat[0] + f[0] * k, stand[1], seat[2] + f[2] * k];
   const down = [], legs = [];
   const walkTo = (from, to) => { const hw = Math.atan2(to[0] - from[0], to[2] - from[2]); down.push({ move: 'walk', to, heading: hw, secs: Math.max(SIT.least, dist(from, to) / SIT.speed) }); legs.push(['walk', from, to]); return hw; };

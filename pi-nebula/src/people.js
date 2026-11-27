@@ -73,8 +73,8 @@ import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, SEAT_APART, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
-import { seatSteps, leanOf, roundAt } from './seatsteps.js';
-import { fineFor, turnStep, deskSeat } from './finemoves.js';
+import { seatSteps, leanOf, roundAt, SIT } from './seatsteps.js';
+import { fineFor, turnStep, deskSeat, DESK_SIT } from './finemoves.js';
 import { surfaceAhead, handsAt, WORK_OF, WORK_AT, SCAN_HOLD } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
@@ -455,6 +455,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         }
         if (!ap) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
         const seat = { name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, desk: !!s.beside, table: s.table, who: null, bad: 0 };
+        // (a desk chair's sitter sits DESK_SIT forward of its middle: stood first in front of the chair itself, as before,
+        // clear of the desk's top; then lowered onto its front)
+        if (s.beside) seat.pre = SIT.pre - DESK_SIT;
         // (a stool, come to from behind: round by whichever of its sides is clear of the walls and the furniture there,
         // all the way round to the spot in front of it; the review, 2026-11-27: at the smelter control room's long table
         // the way round went through its top. Neither clear: straight to the spot in front, as listed in missing)
