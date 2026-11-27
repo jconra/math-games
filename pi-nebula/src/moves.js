@@ -270,6 +270,8 @@ export function addMoves(c) {
     // (on a bed: the person put where they are, first, the legs bent to their places)
     if (M.bed) onBed(M.bed);
     // (standing at rest: the weight over one leg, THE STANCE; eased in and out as they come to stand and set off)
+    // (M.snap: just come into view: worn at once, never eased in where the player sees it)
+    if (M.snap) { M.snap = false; M.standNow = M.stand ? 1 : 0; M.leanNow = M.lean || 0; M.holdNow = M.hold ? 1 : 0; }
     M.standNow = damp(M.standNow, M.stand ? 1 : 0, 5, dt);
     if (M.standNow > 0.002 && !M.bed) stance(dt); else if (M.standNow <= 0.002) M.standNow = 0;
     // (leaning in over the work, or forward as they sit down and get up: M.lean, radians; eased)

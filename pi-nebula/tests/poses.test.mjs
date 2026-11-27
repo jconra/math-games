@@ -96,7 +96,7 @@ test('hands on the work land on its top, within an arm\'s reach of where they st
       assert.ok(h[2] >= f.d - 1e-9 && h[2] < f.d + 0.3, `${kind}: past its near edge, not far in (${h[2].toFixed(3)})`);
     }
     assert.ok(hands[0][0] > hands[1][0], `${kind}: the left hand on their left`);
-    assert.ok(lean > 0 && lean < 0.5, kind + ': leaning in a little');
+    assert.ok(lean > 0 && lean < 0.6, kind + ': leaning in, not folded over');
   }
   // (the forklift's wheel: both hands on its rim, one each side, its own radius from its middle)
   const [L, R] = wheelLocal(0.53), W = FORKLIFT_WHEEL, c = [0, 0.53 + W.up, W.ahead];

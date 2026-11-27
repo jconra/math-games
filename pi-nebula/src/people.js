@@ -873,6 +873,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const step = far < LIFE.near ? 1 : far < LIFE.mid ? 2 : 4;
       // (just come into view: posed at once, never shown as they were when last seen)
       if (!P.fresh && (frame + P.id.length) % step !== 0) continue;
+      if (P.fresh) P.moves.snap = true;      // (and their own small moves worn at once too: moves.js M.snap)
       P.fresh = false;
       // eyes (and the head) on a player who comes near, or on whoever they are talking to, or a captain's on the player
       const tk = P.act && P.act.kind === 'talk' && P.act.phase === 'do' && P.act.spot.talk.who[1 - P.act.spot.i];
@@ -885,7 +886,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (lying) look = P.bed && P.bed.look ? near.copy(P.bed.look) : null;
       // (the medic at the scanner: on the controls while working them, else on the patient; the patient, at the bed's
       // foot, on the medic)
-      else if (scanning && P.act.kind === 'scanMedic') look = P.act.work > 0 ? near.copy(SCAN.panel) : scanning.patient && scanning.patient.inScene ? headAt(scanning.patient, near) : null;
+      // (her hands on its controls, MEDIC AT THE SCREEN below: her eyes on them, now and then on the patient)
+      else if (scanning && P.act.kind === 'scanMedic') look = P.act.work > 0 || (clock + (P.order || 0)) % 6 > 2.2 || !(scanning.patient && scanning.patient.inScene) ? near.copy(SCAN.panel) : headAt(scanning.patient, near);
       else if (scanning && (P.act.phase === 'ready' || P.act.phase === 'bye') && scanning.medic && scanning.medic.inScene) look = headAt(scanning.medic, near);
       else if (P.act && P.act.watch && P.act.watch(near)) look = near;      // (SENT to watch something: their eyes and head on it)
       else if (player && player.pos.distanceTo(P.pos) < FRIENDLY.look && (P.cap?.busy || !(tk || ck) || player.pos.distanceTo(P.pos) < 2.4)) look = near.copy(player.pos).setY(player.pos.y + 1.55 * ((player.c && player.c.size) || 1));
@@ -1087,7 +1089,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // the forge's console stands in a piece drawn apart from the walls' own floors, kit/forge.js thermalConsole, its
   // north end 0.5 m ahead of the smelter's spot (clear of the player's job's ring), its top 0.95 m up; he leans in)
   const WORK_OF = { [CLIPS.polish]: { kind: 'wipe', lo: 0.75, hi: 1.15, to: 0.9 }, [CLIPS.forge]: { kind: 'panel', lo: 0.7, hi: 1.2, to: 1.0, edge: [0.5, 0.95], lean: 0.42, apart: 0.3 } };
+  // (by the place: a hangar's fuel pump, its face 0.45 m in front of its spot (life.js SPOTS.pump, kit/hangar.js): its
+  // screen's middle and corners at 1.12 m, its three buttons at 0.7 m, [across, up])
+  const WORK_AT = { pump: { kind: 'face', face: 0.45, points: [[0, 1.12], [-0.12, 1.14], [0.12, 1.1], [-0.12, 0.7], [0, 0.7], [0.12, 0.7]] } };
   function workOf(P, a) {
+    const g = a.step && a.step.do ? parse(a.step).group : null, F = a.kind !== 'sit' && WORK_AT[g];
+    if (F) { const h = a.spot.heading ?? P.heading; return { kind: F.kind, at: [P.pos.x + Math.sin(h) * F.face, P.pos.y, P.pos.z + Math.cos(h) * F.face], heading: h, points: F.points, seed: Math.random() * 100 }; }
     const k = a.kind === 'sit' ? (a.spot.desk ? { kind: 'desk', lo: 0.6, hi: 0.95, to: 1.0, from: 0.3 } : null) : WORK_OF[a.clip] || null;
     if (!k) return null;
     const at = a.kind === 'sit' ? a.spot.seat : P.pos, h = a.kind === 'sit' ? a.spot.heading : a.spot.heading ?? P.heading;
@@ -1102,13 +1109,18 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     M.stand = !P.walking && !P.pose && !seated && P.clip === STAND ? 1 : 0;
     // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
     if (a && a.kind === 'drive' && P.pose) return;
-    const w = a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
+    // (MEDIC AT THE SCREEN: the medic running a scan, at the pedestal's screen and turned to it, her hands on its top)
+    if (a && a.kind === 'scanMedic' && a.phase === 'do' && SCAN && SCAN.busy && Math.abs(wrap((a.spot.heading ?? P.heading) - P.heading)) < 0.3) {
+      if (!a.atPanel) a.atPanel = { kind: 'panel', at: [SCAN.panel.x, SCAN.panel.y, SCAN.panel.z], heading: a.spot.heading ?? P.heading, apart: 0.3, lean: 0.22, seed: Math.random() * 100 };
+    } else if (a && a.atPanel) a.atPanel = null;
+    const w = a && a.atPanel ? a.atPanel : a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
     let lean = seated ? a.seatLean || 0 : 0;
     if (w) {
-      const H = handsAt(w.kind, w, a.t, w.seed);
-      _hw[0].fromArray(H.hands[0]); _hw[1].fromArray(H.hands[1]);
-      M.hold = M.hold || { hands: [_hw[0].clone(), _hw[1].clone()] };
-      M.hold.hands[0].copy(_hw[0]); M.hold.hands[1].copy(_hw[1]);
+      const H = handsAt(w.kind, w, a.t, w.seed), D = M.hold || (M.hold = { hands: [new THREE.Vector3(), new THREE.Vector3()], palms: null, fingers: null, share: null });
+      for (const i of [0, 1]) { if (H.hands[i]) { D.hands[i] = D.hands[i] || new THREE.Vector3(); D.hands[i].fromArray(H.hands[i]); } else D.hands[i] = null; }
+      D.palms = H.palms ? H.palms.map((v) => (v ? new THREE.Vector3(...v) : null)) : null;
+      D.fingers = H.fingers ? H.fingers.map((v) => (v ? new THREE.Vector3(...v) : null)) : null;
+      D.share = H.share || null;
       lean = Math.max(lean, H.lean);
     } else M.hold = null;
     M.lean = lean;
@@ -1480,7 +1492,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     }
     if (S.over && !said.done) { said.done = clock; a.work = Math.min(a.work, 0); scanSay(P, 'done'); }
     if (ph === 'bye' && !said.thanks) { said.thanks = clock; scanSay(pt, 'thanks'); }
-    play(P, a.work > 0 ? CLIPS.reach : STAND);
+    play(P, STAND);      // (her hands on the screen's controls: MEDIC AT THE SCREEN, bodyMoves)
     if (a.t > 240) next(P);       // (a scan that never came: on with the day)
   }
   // (a word at the scanner, in a bubble: SCAN_TALK; the medic's hands move as they say it)

@@ -117,7 +117,9 @@ export const SPOTS = {
   // (shipSpots' places: its tail, its far side, its nose, its near side, its tail again), and the hangar's fuel pump,
   // in front of its screen and buttons
   shipRound: [[0.27, 0.41], [0.41, 0.17], [0.77, 0.5], [0.52, 0.86], [0.27, 0.59]].map((at) => ({ room: 'hangar', at })),
-  pump: [{ piece: 'fuel', variant: 'pump', room: 'hangar', local: [0, 0, 0.9], face: [0, -1] }],
+  // (square in front of its face, 0.45 m off it, a hand to its screen or its buttons: people.js WORK_AT; two critics,
+  // 2026-11-26, saw his reach wave an open hand in the air over its top)
+  pump: [{ piece: 'fuel', variant: 'pump', room: 'hangar', local: [0, 0, 0.75], face: [0, -1] }],
   minerMechanic: [{ room: 'hangar-miner', at: [0.285, 0.43], face: [1, 0.08] }, { room: 'hangar-miner', at: [0.285, 0.57], face: [1, -0.08] }],
   // the smelter: at the north end of the forge's own console (kit/forge.js: east of the two towers; its front is the
   // player's Smelter job's place, so he keeps clear of it), the pours on his right, his hands on its top; its store, its
@@ -262,7 +264,7 @@ export const ROSTER = [
   // (Jon, round the parked ship and at its fuel pump, in the engineer's purple: the game's maker, JOB1-2 B;
   // kit/positions.js's colour. No hammering: he has no tool in his hand, SPOTS.shipRound above)
   { id: 'mechanic', name: 'Jon', look: { suit: 'atlantis1', head: 't8', hair: 'buzz', colours: { job: 'hauler', uniform: POSITIONS.engineer.colour, skin: '#a66d45', hair: '#17110d' }, size: 1.07 }, voice: 'om', rate: 1.0,
-    day: [{ do: 'walk:shipRound' }, { do: 'stand:pump', clip: 'reach', for: T(15, 30) }, { do: 'stand:ship', for: T(15, 30), p: 0.6 }, { do: 'walk:shipRound', p: 0.6 }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach', p: 0.5 }, { do: 'stand:pump', clip: 'reach', for: T(10, 20), p: 0.5 }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
+    day: [{ do: 'walk:shipRound' }, { do: 'stand:pump', for: T(15, 30) }, { do: 'stand:ship', for: T(15, 30), p: 0.6 }, { do: 'walk:shipRound', p: 0.6 }, { do: 'stand:hangar', for: T(15, 30), clip: 'reach', p: 0.5 }, { do: 'stand:pump', for: T(10, 20), p: 0.5 }, { do: 'sit:cafe', for: T(120, 240), p: 0.35 }] },
   { id: 'crew-ada', name: 'Ada', look: { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } }, voice: 'yw', rate: 1.03,
     day: [{ do: 'stand:ship', for: T(20, 45), clip: 'reach', p: 0.7 }, { do: 'stand:quarters', for: T(10, 25) }, { do: 'stand:counter', for: T(6, 12) }, { do: 'sit:cafe', for: T(140, 280) }, { do: 'talk:terminal', for: T(25, 50) }, { do: 'stand:hangar', for: T(25, 50) }, { do: 'stand:lockers', for: T(8, 16), clip: 'reach' }] },
   { id: 'miner-oso', name: 'Oso', look: { suit: 'smelter', head: 't6', hair: 'curlyShort', colours: { job: 'miner', skin: '#663b22', hair: '#17110d' } }, voice: 'ym', rate: 0.97,
