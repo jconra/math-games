@@ -38,7 +38,10 @@ test('every row has the same number of choices, each with its patch and its note
 test('every patch the music can play is in the copy synced from the Sound Lab, and only through it', () => {
   const first = read('src/audio/patch.js').split('\n')[0];
   assert.match(first, /MADE BY THE SOUND LAB/);
-  assert.equal(TECHNO_PATCHES, PATCH_PRESETS);
+  // (the music's patches are the copy's MUSIC group, the very same objects; its other sounds are not the music's)
+  const music = Object.entries(PATCH_PRESETS).filter(([, p]) => p.group === 'MUSIC');
+  assert.deepEqual(Object.keys(TECHNO_PATCHES), music.map(([k]) => k));
+  for (const [k, p] of music) assert.equal(TECHNO_PATCHES[k], p, k);
   const all = [...Object.values(DRUMS).flatMap((d) => Object.values(d)), ...Object.values(INSTRUMENTS).flatMap((i) => Object.values(i))];
   for (const k of all) assert.ok(PATCH_PRESETS[k], k + ' is in src/audio/patch.js');
   for (const k of Object.keys(ROOT)) assert.ok(PATCH_PRESETS[k], k);

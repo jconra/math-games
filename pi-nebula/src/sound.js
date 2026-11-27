@@ -14,6 +14,16 @@
 //   sound.alarm({ at, volume, near, far, group, notes, beat })   -> { stop() } | null (as play). A sound made here, with
 //       no file: an alarm of two notes, turn and turn about (`notes` in Hz, `beat` seconds each), until it is stopped.
 //       The game's maker (2026-11-18, of the Miner flown into another ship's hangar): "you would hear an alarm".
+//   sound.patch(name, { at, volume, group, near, far, fade, values, most })   -> { stop(fade), set(id, v), volume(v),
+//       move(at) } | null (as play). A SOUND LAB PATCH, by its name, played with the Sound Lab's engine (the game's copy,
+//       src/audio/patch.js, made by the lab's sync script; the names: src/sounds.js). Into a volume group ('effects'
+//       unless given), from a point in the world when `at` is given (softer with distance as a clip is; move(at) as it
+//       goes), under the HUD's volume and mute, nothing before the first touch. fade: seconds it takes to come in;
+//       values: { id: v } its value nodes (an engine's 'rpm') as it starts; set(id, v) moves one while it plays (eased by
+//       the engine over 50 ms); most: seconds after which it is stopped whatever happens (a drone that must not run on).
+//       A patch with an envelope ends by itself; one without (an engine) plays until stop(fade). A name not in the copy
+//       is said once, loudly, on the console, and nothing plays.
+//   sound.audible()                  sound can be heard just now: touched, running, not muted, the volume up
 //   sound.ears(camera)               each frame: where the ears are (the camera, its way and its up)
 //   sound.volume, sound.muted        as saved in this browser (0..1, 0.8 at first; not muted); setVolume(v), setMuted(m)
 //   sound.has(name), sound.length(name)   a sound fetched and made ready to play; how long it lasts (s; 0 if not)
@@ -54,8 +64,10 @@ function makeSound() {
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     S.ready = true;
     for (const name of bytes.keys()) decode(name);
+    engineNow();
   }
-  for (const ev of ['pointerdown', 'keydown', 'touchend']) addEventListener(ev, wake, { capture: true, passive: true });
+  // (no page, as in node's tests of the files that play sounds: nothing ever wakes, and nothing plays)
+  if (typeof addEventListener === 'function') for (const ev of ['pointerdown', 'keydown', 'touchend']) addEventListener(ev, wake, { capture: true, passive: true });
 
   S.load = (name, url) => {
     if (bytes.has(name)) return Promise.resolve();
@@ -83,9 +95,57 @@ function makeSound() {
     if (!at) return node;
     const p = ctx.createPanner();
     p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = near; p.maxDistance = far; p.rolloffFactor = 1.3;
-    if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z);
+    put(p, at);
     node.connect(p); return p;
   }
+  const put = (p, at) => { if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z); };
+  // A SOUND LAB PATCH (sound.patch, above). The engine is fetched once, at the first touch (it is the same file the
+  // music plays with); asked for before it is in, nothing plays (an engine asks again next frame; a chime is let go).
+  let E = null, loading = null;
+  const told = new Set();
+  function engineNow() {
+    if (E || loading) return E;
+    loading = import('./audio/patch.js').then((m) => { E = m; }, (e) => { console.error('sound: the Sound Lab\'s engine (src/audio/patch.js) did not load, so no patch can play', e); });
+    return E;
+  }
+  // (a patch with some of its value nodes set as it starts: a copy, made once a start)
+  const withValues = (P, values) => ({ ...P, nodes: P.nodes.map((n) => (n.type === 'value' && n.id in values ? { ...n, value: values[n.id] } : n)) });
+  S.audible = () => !!ctx && ctx.state === 'running' && level() > 0;
+  S.patch = (name, { at = null, volume = 1, group = 'effects', near = 1.5, far = 28, fade = 0, values = null, most = 0 } = {}) => {
+    if (!ctx || ctx.state !== 'running' || !level()) return null;
+    const lib = engineNow(); if (!lib) return null;
+    const P = lib.PATCH_PRESETS[name];
+    if (!P) {
+      if (!told.has(name)) { told.add(name); console.error(`sound.patch: no Sound Lab patch '${name}' in src/audio/patch.js (sync it from the lab: node tools/sync.mjs pi-nebula <this file>)`); }
+      return null;
+    }
+    const gr = groups[group] ? group : 'effects', t = ctx.currentTime, g = ctx.createGain(), vol = Math.max(0, volume);
+    if (fade > 0) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + fade); } else g.gain.value = vol;
+    const pan = at ? placed(g, at, near, far) : null;
+    (pan || g).connect(groups[gr]);
+    let over = false, timer = 0;
+    // (done: no longer counted; its own nodes let go a moment after its sound has gone)
+    const done = (after) => {
+      if (over) return; over = true; sounding[gr]--; if (timer) { clearTimeout(timer); timer = 0; }
+      setTimeout(() => { try { g.disconnect(); if (pan) pan.disconnect(); } catch (e) { /* gone already */ } }, after * 1000);
+    };
+    const v = E.playPatch(ctx, null, g, null, values ? withValues(P, values) : P, () => done(0.2));
+    S.played++; sounding[gr] = (sounding[gr] || 0) + 1;
+    const h = {
+      stop(f = 0.05) {
+        if (over) return;
+        const e = ctx.currentTime, k = Math.max(0.01, f);
+        try { g.gain.cancelScheduledValues(e); g.gain.setValueAtTime(g.gain.value, e); g.gain.linearRampToValueAtTime(0, e + k); } catch (x) { /* */ }
+        v.stop(k / 3); done(k * 2 + 0.3);
+      },
+      set(id, x) { if (!over) v.setValue(id, x); },
+      volume(x) { if (!over) g.gain.setTargetAtTime(Math.max(0, x), ctx.currentTime, 0.04); },
+      move(p) { if (!over && pan && p) put(pan, p); },
+      get on() { return !over; },
+    };
+    if (most > 0) timer = setTimeout(() => h.stop(0.3), most * 1000);
+    return h;
+  };
   // AN ALARM, MADE HERE (no sound file): two notes, turn and turn about, for as long as it is wanted. The game's maker
   // (2026-11-18, of the Miner flown into another ship's hangar): "you would hear an alarm".
   S.alarm = ({ at = null, volume = 0.5, group = 'effects', near = 10, far = 140, notes = [640, 480], beat = 0.42 } = {}) => {

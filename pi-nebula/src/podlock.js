@@ -31,6 +31,8 @@ import { THINGS, THING_SVG } from '../../mathwood-valley/src/lockbox/kbox.js';
 import { openLongWork } from '../../mathwood-valley/src/ui/longwork.js';
 import { openOwnSum } from '../../mathwood-valley/src/ui/ownsum.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
+import { sound } from './sound.js';
+import { SOUNDS, LEVEL } from './sounds.js';
 
 const CSS = new URL('./podlock.css', import.meta.url).href;
 
@@ -126,7 +128,8 @@ export function openPodLock(root = document.body, { rider = null, pod = {}, onOp
     saveRider: (r) => { if (typeof saveRider === 'function') saveRider(r); },
     workOut: () => { closeSheet(); const s = handle.workSum(); if (s) openWork(s); else openOwn(); },
     toolsOpen: () => !!sheet && !!document.querySelector('.bml:not(.is-out), .bmo.is-on'),
-    onBox: (res) => { if (res.solved && !opened) { opened = true; try { onOpen(res); } catch (e) { console.error(e); } } },
+    // (a lock opened: its sums done right, the chime for a right answer, as a card's: src/sounds.js)
+    onBox: (res) => { if (res.solved && !opened) { opened = true; sound.patch(SOUNDS.chime, { volume: LEVEL.chime }); try { onOpen(res); } catch (e) { console.error(e); } } },
     onDone: (totals) => { closeSheet(); try { onClose(totals); } catch (e) { console.error(e); } },
   });
   return { el: handle.el, handle, close: () => handle.close() };

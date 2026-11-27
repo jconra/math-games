@@ -29,8 +29,14 @@
 //   H.update(dt)             each frame;  H.place(camera, M)   just before the picture: M, the ship's own frame in the
 //                            world (x to port, y up, z to its nose), is which way "ahead" is
 //   H.on, H.jump (the plain state), H.state(), H.dispose()
+//
+// HEARD (SOUNDS 1): three Sound Lab patches (src/sounds.js SOUNDS.jump) at the jump's own moments: the tear as it opens
+// (its length the rip's and the plunge's, JUMP), the colours all round from 'shut' until 'open' (a drone, stopped
+// there, or when the jump is put away), the far end opening from 'open'. From everywhere: the wormhole is round the eye.
 import * as THREE from 'three';
-import { makeJump, stepJump, edgeOf } from './wormplan.js';
+import { makeJump, stepJump, edgeOf, JUMP } from './wormplan.js';
+import { sound } from './sound.js';
+import { SOUNDS, LEVEL } from './sounds.js';
 
 export const HOLE = { r: 70, flow: 1.9, gain: 1.0 };      // the ball's size (m), how fast the walls stream by, how bright
 
@@ -105,9 +111,15 @@ export function makeWormhole({ scene, quality = 'high', rand = Math.random } = {
   ball.name = 'the wormhole'; ball.frustumCulled = false; ball.visible = false; ball.matrixAutoUpdate = false; scene.add(ball);
   let J = null, on = null, clock = 0;
   const none = () => { VEIL.uVeil.value.set(0, 0, 1, 0); ball.visible = false; };
+  // (the jump heard: the tear, the colours' drone (never left running: stopped at 'open', on stop() and on dispose(),
+  // and in any case after the longest the colours can last), the far end)
+  let tearH = null, tunnelH = null;
+  const hush = () => { if (tearH) { tearH.stop(0.15); tearH = null; } if (tunnelH) { tunnelH.stop(0.3); tunnelH = null; } };
+  const tunnelOn = () => { if (!tunnelH) tunnelH = sound.patch(SOUNDS.jump.tunnel, { volume: LEVEL.jump, fade: 0.15, most: JUMP.most + JUMP.open + 2 }); };
   function start(cb, tunnel) {
+    hush();
     J = makeJump(rand); on = cb || {}; clock = 0;
-    if (tunnel) { J.phase = 'tunnel'; J.shut = true; }
+    if (tunnel) { J.phase = 'tunnel'; J.shut = true; tunnelOn(); } else tearH = sound.patch(SOUNDS.jump.tear, { volume: LEVEL.jump });
     mat.uniforms.uHue.value = J.look.hue; mat.uniforms.uSwirl.value = J.look.swirl;
     ball.visible = true; edge();
   }
@@ -126,6 +138,7 @@ export function makeWormhole({ scene, quality = 'high', rand = Math.random } = {
       if (!J || J.phase === 'done') return;
       clock += dt;
       for (const ev of stepJump(J, dt, on.ready ? !!on.ready() : true)) {
+        if (ev === 'shut') { tearH = null; tunnelOn(); } else if (ev === 'open') { if (tunnelH) { tunnelH.stop(0.3); tunnelH = null; } sound.patch(SOUNDS.jump.open, { volume: LEVEL.jump }); }
         if (ev === 'shut' && on.onShut) on.onShut(); else if (ev === 'open' && on.onOpen) on.onOpen(); else if (ev === 'done' && on.onDone) on.onDone();
         if (!J) return;
       }
@@ -138,9 +151,9 @@ export function makeWormhole({ scene, quality = 'high', rand = Math.random } = {
       if (M) { const e = M.elements; VEIL.uVeilR.value.set(-e[0], -e[1], -e[2]).normalize(); VEIL.uVeilU.value.set(e[4], e[5], e[6]).normalize(); VEIL.uVeilA.value.set(e[8], e[9], e[10]).normalize(); }
     },
     // (put away at once: a run given up in the middle of a jump)
-    stop() { J = null; none(); },
+    stop() { J = null; none(); hush(); },
     state: () => (J ? { phase: J.phase, t: +J.t.toFixed(2), clock: +J.clock.toFixed(2), shut: J.shut, edge: edgeOf(J), look: { ...J.look } } : null),
-    dispose() { none(); scene.remove(ball); ball.geometry.dispose(); mat.dispose(); },
+    dispose() { none(); hush(); scene.remove(ball); ball.geometry.dispose(); mat.dispose(); },
   };
   return api;
 }

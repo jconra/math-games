@@ -1,0 +1,170 @@
+// THE GAME'S OWN SOUNDS (SOUNDS 1): the ships' engines, the jump and the chime, Sound Lab patches played by the game's
+// one sound player. Checked by what they do: the engines' RPMs from a ship flown with the real flight model, which
+// engines sound (the nearest few, by quality), and the sound player itself on a stand-in for the browser's audio (it
+// counts what is made and started), before and after the player's first touch, muted, and asked for a name not there.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as M from '../src/flymodel.js';
+import { JUMP } from '../src/wormplan.js';
+import { SOUNDS, LEVEL, ENGINE, rpmOf, rpmOfSpeed, easeRpm, nearest, mostFor } from '../src/sounds.js';
+import { makeEngines } from '../src/engines.js';
+import { PATCH_PRESETS, patchAutoStopTime } from '../src/audio/patch.js';
+
+const DT = 1 / 60;
+const keys = (...k) => M.controlsOf(new Set(k));
+const hold = (S, secs, k) => { const c = keys(...k), out = []; for (let t = 0; t < secs - 1e-9; t += DT) { M.stepShip(S, c, DT, null); out.push(rpmOf(S)); } return out; };
+
+test('every sound the game asks for is a patch in the copy synced from the Sound Lab, of the right kind', () => {
+  const names = [SOUNDS.engine, SOUNDS.chime, ...Object.values(SOUNDS.jump)];
+  for (const n of names) { assert.ok(PATCH_PRESETS[n], n + ' is in src/audio/patch.js'); assert.equal(PATCH_PRESETS[n].project, 'pi-nebula', n); }
+  // the engine (each take): a drone that plays until it is stopped, with the one RPMs number the game moves
+  for (const k of ['A', 'B', 'C']) {
+    const P = PATCH_PRESETS['SHIP — ENGINE ' + k];
+    assert.equal(P.group, 'SHIPS'); assert.equal(patchAutoStopTime(P), null, k + ': no envelope, it runs until stopped');
+    const rpm = P.nodes.find((n) => n.id === 'rpm'); assert.equal(rpm.type, 'value');
+    // (pitch, throb and brightness all follow it, as the Lurcher's do)
+    const from = P.cables.filter((c) => c.from === 'rpm').map((c) => c.to);
+    const ports = P.cables.filter((c) => from.includes(c.from)).map((c) => c.port).sort();
+    assert.deepEqual(ports, ['freq', 'freq', 'freq'], k + ': into the pitch, the throb\'s speed and the tone');
+  }
+  // the jump's moments: the tear and the far end end by themselves, the tear about when the colours are all round;
+  // the colours' drone plays until it is stopped (src/wormhole.js stops it as the far end opens)
+  const tearEnd = patchAutoStopTime(PATCH_PRESETS[SOUNDS.jump.tear]) - 0.2;
+  assert.ok(Math.abs(tearEnd - (JUMP.rip + JUMP.plunge)) < 0.3, `the tear lasts ${tearEnd.toFixed(2)} s, the rip and the plunge ${JUMP.rip + JUMP.plunge} s`);
+  assert.equal(patchAutoStopTime(PATCH_PRESETS[SOUNDS.jump.tunnel]), null);
+  assert.ok(patchAutoStopTime(PATCH_PRESETS[SOUNDS.jump.open]) - 0.2 <= JUMP.open + 0.4);
+  // the chime, both takes: short
+  for (const k of ['A', 'B']) assert.ok(patchAutoStopTime(PATCH_PRESETS['CHIME — RIGHT ' + k]) < 1, k);
+});
+
+test('the RPMs of a flown ship follow what it is doing, eased, from the real flight model', () => {
+  const S = M.makeShip();
+  assert.equal(S.power, false); assert.equal(rpmOf(S), 0, 'parked, the power off: nothing');
+  // power on, still on the floor: idling (and the flight model's idle is the one src/sounds.js counts from)
+  S.power = true; hold(S, 3, []);
+  assert.ok(Math.abs(S.engine - ENGINE.idle) < 1e-3, 'S.engine idles at ' + S.engine); assert.equal(rpmOf(S), 0);
+  // lifting off: held up, working
+  const up = hold(S, 1.2, ['up']);
+  assert.equal(S.landed, false); assert.ok(up[up.length - 1] >= ENGINE.aloft, 'aloft');
+  // forward held: up toward full, and down again let go
+  const go = hold(S, 4, ['forward']), back = hold(S, 4, []);
+  assert.ok(go[go.length - 1] > 0.9, 'full: ' + go[go.length - 1]);
+  assert.ok(back[back.length - 1] < 0.3, 'let go: ' + back[back.length - 1]);
+  // never a jump: from one frame to the next it moves little (the flight model eases its throttle)
+  const all = [...up, ...go, ...back]; let most = 0;
+  for (let i = 1; i < all.length; i++) most = Math.max(most, Math.abs(all[i] - all[i - 1]));
+  assert.ok(most < 0.06, 'the most it moved in a frame: ' + most.toFixed(3));
+  // and the game eases it again on top: never faster than ENGINE.rise a second, whatever is asked
+  let r = 0, t = 0; while (r < 1) { const n = easeRpm(r, 1, DT); assert.ok(n - r <= ENGINE.rise * DT + 1e-12); r = n; t += DT; }
+  assert.ok(t >= 1 / ENGINE.rise - DT);
+  // a ship moving by itself: by its speed
+  assert.equal(rpmOfSpeed(0), ENGINE.aloft); assert.equal(rpmOfSpeed(ENGINE.fast * 3), 1); assert.ok(rpmOfSpeed(10) > rpmOfSpeed(5));
+});
+
+test('which engines sound: the nearest few, as many as the quality level allows, the flown ship among them', () => {
+  assert.ok(mostFor('low') < mostFor('medium') && mostFor('medium') < mostFor('high'));
+  const list = [{ d: 30 }, { d: 0 }, { d: 300 }, { d: 9 }, { d: 60 }, { d: 15 }], out = [];
+  assert.deepEqual(nearest(list, mostFor('low'), out).map((e) => e.d), [0, 9]);
+  assert.deepEqual(nearest(list, mostFor('high'), out).map((e) => e.d), [0, 9, 15, 30]);
+  assert.deepEqual(nearest(list, 10, out).map((e) => e.d), [0, 9, 15, 30, 60], 'never one past ENGINE.far');
+});
+
+// a stand-in for the game's sound player: what was started, where, its RPMs as sent, whether it was stopped
+function fakeSound() {
+  const started = [];
+  const F = {
+    on: true, started,
+    audible: () => F.on,
+    patch(name, o) { const h = { name, at: o.at ? { ...o.at } : null, rpm: [o.values.rpm], stopped: false, set(id, v) { this.rpm.push(v); }, move(p) { this.at = { ...p }; }, stop() { this.stopped = true; } }; started.push(h); return h; },
+    live: () => started.filter((h) => !h.stopped),
+  };
+  return F;
+}
+test('the engines in play: the nearest by quality, the others let go; none left running', () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = M.makeShip(), ears = { x: 0, y: 0, z: 0 };
+  S.power = true;
+  const ships = [5, 12, 40, 70].map((x, i) => ({ key: 'other' + i, x }));
+  const frame = (q = 'low') => { E.own(S); for (const s of ships) E.other(s.key, s.x, 0, s.z || 0); E.update(DT, ears, q); };
+  frame();
+  assert.equal(snd.live().length, 2, 'low: two'); assert.deepEqual(snd.live().map((h) => h.name), [SOUNDS.engine, SOUNDS.engine]);
+  assert.equal(snd.live().filter((h) => !h.at).length, 1, 'the flown ship\'s from everywhere; the other\'s from where it is');
+  assert.equal(snd.live().find((h) => h.at).at.x, 5, 'the nearest other');
+  frame('high'); assert.equal(snd.live().length, 4, 'high: four');
+  // one comes nearer than the rest: it is heard, the farthest let go
+  ships[3].x = 3; frame('low');
+  assert.equal(snd.live().length, 2); assert.equal(snd.live().find((h) => h.at).at.x, 3);
+  // a ship moving fast (round the ears, 3 m off, at 20 m/s): its RPMs climb toward full, never by more than ENGINE.rise a
+  // second
+  for (let i = 1; i <= 90; i++) { const a = i * DT * 20 / 3; ships[3].x = 3 * Math.cos(a); ships[3].z = 3 * Math.sin(a); frame('low'); }
+  const h = snd.live().find((x) => x.at); let most = 0;
+  for (let i = 1; i < h.rpm.length; i++) most = Math.max(most, h.rpm[i] - h.rpm[i - 1]);
+  assert.ok(h.rpm[h.rpm.length - 1] > 0.6, 'speeding: ' + h.rpm[h.rpm.length - 1]); assert.ok(most <= ENGINE.rise * DT + 1e-9);
+  // nobody asks any more (the ships put away, the run over): all of them stop by themselves, soon
+  for (let t = 0; t < ENGINE.linger + 0.1; t += DT) E.update(DT, ears, 'low');
+  assert.equal(snd.live().length, 0, 'none left running');
+  // muted (or the volume right down): nothing runs at all, and it comes back after
+  frame(); assert.ok(snd.live().length > 0); snd.on = false; frame(); assert.equal(snd.live().length, 0);
+  snd.on = true; frame(); assert.equal(snd.live().length, 2);
+  // the power off: the flown ship's engine stops
+  S.power = false; for (let t = 0; t < ENGINE.linger + 0.1; t += DT) frame('low');
+  assert.ok(snd.live().every((x) => x.at), 'only the others\' now');
+});
+
+// ── the sound player itself, on a stand-in for the browser's Web Audio (it counts what is made and started) ──
+function fakeAudio() {
+  const made = { osc: 0, started: 0, stopped: 0, nodes: 0 };
+  const param = (v = 0) => ({ value: v, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} });
+  const node = (extra = {}) => { made.nodes++; return { connect(d) { return d; }, disconnect() {}, ...extra }; };
+  const source = (extra) => node({ start() { made.started++; }, stop() { made.stopped++; }, ...extra });
+  class AC {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.sampleRate = 48000; this.destination = node(); this.listener = {}; }
+    resume() { return Promise.resolve(); }
+    createGain() { return node({ gain: param(1) }); }
+    createOscillator() { made.osc++; return source({ type: 'sine', frequency: param(440), detune: param(0), setPeriodicWave() {} }); }
+    createConstantSource() { return source({ offset: param(1) }); }
+    createBufferSource() { return source({ buffer: null, loop: false, playbackRate: param(1) }); }
+    createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
+    createBiquadFilter() { return node({ type: 'lowpass', frequency: param(350), Q: param(1) }); }
+    createPanner() { return node({ positionX: param(), positionY: param(), positionZ: param() }); }
+    createWaveShaper() { return node({ curve: null }); }
+    createDelay() { return node({ delayTime: param() }); }
+    createConvolver() { return node({ buffer: null }); }
+    decodeAudioData() {}
+  }
+  return { AC, made };
+}
+test('the sound player plays a Sound Lab patch by its name: nothing before the first touch, none muted, none unknown', async () => {
+  const { AC, made } = fakeAudio(), on = {}, errors = [];
+  const keep = { addEventListener: globalThis.addEventListener, window: globalThis.window, error: console.error };
+  globalThis.addEventListener = (ev, fn) => { on[ev] = fn; };
+  globalThis.window = { AudioContext: AC };
+  console.error = (...a) => errors.push(a.join(' '));
+  try {
+    const { sound } = await import('../src/sound.js?player-test');
+    // before the player has touched the page: nothing is made, nothing plays
+    assert.equal(sound.patch(SOUNDS.chime), null); assert.equal(sound.audible(), false); assert.equal(made.nodes, 0);
+    on.pointerdown();
+    await new Promise((r) => setTimeout(r, 50));      // (the engine is fetched at the first touch)
+    assert.equal(sound.audible(), true);
+    // the engine: its oscillators made and started, a handle to move its RPMs and to stop it
+    const h = sound.patch(SOUNDS.engine, { volume: LEVEL.engine, values: { rpm: 0.3 }, fade: 0.4 });
+    assert.ok(h && h.on); assert.ok(made.osc >= 3, 'its oscillators'); assert.ok(made.started >= made.osc);
+    assert.equal(sound.playing('effects'), 1, 'counted in its group');
+    h.set('rpm', 0.8); h.stop(0.5);
+    assert.ok(made.stopped >= made.osc, 'every oscillator stopped'); assert.equal(h.on, false); assert.equal(sound.playing('effects'), 0);
+    // placed in the world: a panner, moved as it goes
+    const p = sound.patch(SOUNDS.engine, { at: { x: 1, y: 2, z: 3 } }); assert.ok(p); p.move({ x: 4, y: 5, z: 6 }); p.stop();
+    // a drone told the most it may run is stopped then whatever happens
+    const n0 = made.stopped, d = sound.patch(SOUNDS.jump.tunnel, { most: 0.05 });
+    await new Promise((r) => setTimeout(r, 120));
+    assert.equal(d.on, false); assert.ok(made.stopped > n0);
+    // a name that is not there: nothing plays, and it is said (once)
+    assert.equal(sound.patch('NO — SUCH SOUND'), null); assert.equal(sound.patch('NO — SUCH SOUND'), null);
+    assert.equal(errors.filter((e) => e.includes('NO — SUCH SOUND')).length, 1);
+    // muted, or the volume right down: nothing
+    sound.setMuted(true); assert.equal(sound.patch(SOUNDS.chime), null); assert.equal(sound.audible(), false);
+    sound.setMuted(false); sound.setVolume(0); assert.equal(sound.patch(SOUNDS.chime), null);
+  } finally {
+    globalThis.addEventListener = keep.addEventListener; globalThis.window = keep.window; console.error = keep.error;
+  }
+});

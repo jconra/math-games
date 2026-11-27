@@ -103,6 +103,7 @@ import { SHIPS as BOARDED } from './boarding.js';
 import { CAN_TONNES } from './jobs/smelter.js';
 import { toGrid } from './jobs/crane.js';
 import { WALL_CAM, grabCam } from './craneview.js';
+import { engines } from './engines.js';
 
 export const RULES = {
   margin: 0.9,      // how far beyond the canister's own patch of floor a person stops it (metres)
@@ -346,6 +347,8 @@ export function makeCrane({ W, walls, boarding = null }) {
         if (flightFx()) {
           const m = motionAt(k);
           flight.update(dt, { acc: m.acc, spin: m.spin, hold: m.hold, engine: FLIGHT.idle, heat: 1 });
+          // (its engine heard from where it is, coming in: src/engines.js; its RPMs from its speed)
+          engines.other('miner-landing', m.x, ship.at.y + m.h + 1.5, m.z);
           air.update(dt, { x: m.x, z: m.z, height: m.h, strength: m.hold * (0.35 + 0.65 * m.down), spread: 0.85 + 0.4 * m.down });
         }
         if (k >= 1) landed();

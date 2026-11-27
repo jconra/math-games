@@ -48,6 +48,7 @@ import { startJobs } from './jobs/index.js';
 import { cargoLink } from './jobs/cargolink.js';
 import { credits } from './jobs/engine.js';
 import { sound } from './sound.js';
+import { engines } from './engines.js';
 import { soundButton } from './ui/soundbutton.js';
 import { makeGuide } from './guide.js';
 import { makeJobsBoard } from './jobsboard.js';
@@ -77,7 +78,7 @@ const HOLD = q.has('hold'), RIG = HOLD || q.has('rig');
 
 document.title = GAME_NAME;
 const canvas = document.getElementById('game');
-const GAME = window.GAME = { ready: false, mode: 'title', frames: 0, missing: [], drawn, made };
+const GAME = window.GAME = { ready: false, mode: 'title', frames: 0, missing: [], drawn, made, engines };
 const fail = (e) => { console.error(e); if (window.oops) window.oops(e); };
 
 // THE MAKER FIRST: the files of the person the title's window shows first (the chosen crew member, or the ready-made
@@ -351,6 +352,7 @@ async function boot() {
     crane.update(dt, { eyes, player: GAME.mode === 'play' && P ? P : null, people });
     mission.late();      // (out on a run: no haze between the cockpit and the rocks)
     visit.update(dt, W.camera);      // (a ship flown into another hangar: the alarm there, the parked ship where it has been shoved)
+    engines.update(dt, W.camera.position, W.quality);      // (the ships' engines, heard: every ship has moved by now, src/engines.js)
     announce.update(dt, GAME.mode === 'play' && !!P);
     // (the music: heard as the room the crew member is in, aboard a ship, or not at all off it out there; on the title,
     // as the camera's room)

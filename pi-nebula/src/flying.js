@@ -161,6 +161,7 @@ import * as M from './flymodel.js';
 import { stationJob, bayOf } from './flysolid.js';
 import { standElements } from './standing.js';
 import { sound } from './sound.js';
+import { engines } from './engines.js';
 import { SHIP_CLIPS, clipUrl } from './voices.js';
 import { makeDash, stepDash, resetDash, dashRows, dashLayout } from './dash.js';
 import { seatView } from './fleet.js';
@@ -938,6 +939,8 @@ export function startFlying(ctx, opts = {}) {
       S.padBusy = !!(hull && hull.padBusy && hull.padBusy());
       // (what it bumps into: a little of that work each frame on the pad, all that is left of it the moment it is off)
       M.stepShip(S, C, dt, S.landed ? job.run(S.power ? 12 : 6) : job.finish());
+      // (its engine heard while its power is on, its RPMs from what it is doing: src/engines.js)
+      engines.own(S);
       // THE SHIP STUCK (flymodel.js stuckStep): the pilot has held "forward" for seconds and the ship has not moved. At
       // the station that is a ship pressed against a wall or a parked ship, and nothing is said unless it touches
       // nothing at all. Out at the rocks nothing should ever hold it (a rock the claw takes is taken, any other gives

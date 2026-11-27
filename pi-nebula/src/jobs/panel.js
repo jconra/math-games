@@ -40,6 +40,8 @@
 //   pay: false: the job's cards pay nothing by themselves (the pilot's seat on a captain's run, whose share is the pay
 //   for all of it: src/trip.js); the level and the kinds of math hear them as ever.
 import * as E from './engine.js';
+import { sound } from '../sound.js';
+import { SOUNDS, LEVEL } from '../sounds.js';
 import { helpPicture, navMap, mapSpot } from './pics.js';
 import { openLongWork } from '../../../mathwood-valley/src/ui/longwork.js';
 import { workOf, sumWords } from '../../../mathwood-valley/src/math/longwork.js';
@@ -346,6 +348,7 @@ export function openPanel(root, { job, crew, live = null, pay = true, onClose = 
     if (live && typeof live === 'object') { try { (r.right ? live.right : live.wrong)?.(q, coin); } catch (e) { console.warn('Pi Nebula: the job\'s props could not take the answer', e); } }
     if (r.right) {
       busy = true;
+      sound.patch(SOUNDS.chime, { volume: LEVEL.chime });      // (the chime for a right answer: every card's, src/sounds.js)
       btn.classList.add('is-right');
       line.textContent = q.order.rightWhy || 'Right!'; line.className = 'pnj-line is-right';
       if (r.pay) fly(btn, r.pay);

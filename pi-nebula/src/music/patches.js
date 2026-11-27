@@ -14,8 +14,9 @@
 import { PATCH_PRESETS } from '../audio/patch.js';
 import { numberOf } from './song.js';
 
-// the patches by their names ('TECHNO — KICK' ...): the Sound Lab's own list for this game
-export const TECHNO_PATCHES = PATCH_PRESETS;
+// the patches by their names ('TECHNO — KICK' ...): the Sound Lab's own list for this game, its music (the patches in
+// its MUSIC group; the same objects). Its other sounds, the ships' and the effects', are src/sounds.js's.
+export const TECHNO_PATCHES = Object.fromEntries(Object.entries(PATCH_PRESETS).filter(([, p]) => p.group === 'MUSIC'));
 
 // each pitched patch's note (MIDI): the C it is written at
 export const ROOT = {

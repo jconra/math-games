@@ -26,6 +26,7 @@ import { STOPS, RIDE, stopIn, carry, choices, placeOf, words, boxPoint, outOf } 
 import { TOWER, SLOT, STORE } from '../kit/places-plan.js';
 
 import { ensureCss } from './jobs/panel.js';
+import { engines } from './engines.js';
 
 const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = new URL('./lift.css', import.meta.url).href; document.head.appendChild(css);
 // THE FLY-PAST: how long the control room waits before the first one and between them (s), how near the tower a jet
@@ -137,6 +138,7 @@ export function makeLift({ W, walls, outside = null, body = () => null, put = ()
     if (fly.t > fly.path.len) { fly.path = null; fly.jet.visible = false; fly.wait = rand(...FLYBY.every); return; }
     _a.copy(fly.path.from).addScaledVector(fly.path.dir, fly.t);
     fly.jet.position.copy(_a);
+    engines.other('fly-past', _a.x, _a.y, _a.z);      // (its engine heard from where it is: src/engines.js)
     // its nose (+x in the file) along the way it flies, banked a little toward the tower as it passes
     _q.setFromUnitVectors(_x, fly.path.dir); _r.setFromAxisAngle(_x, fly.path.bank * Math.sin(Math.PI * fly.t / fly.path.len)); fly.jet.quaternion.copy(_q).multiply(_r);
     fly.jet.visible = true;
