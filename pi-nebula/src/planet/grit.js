@@ -17,7 +17,7 @@ export const GRIT = {
   far: 26,                // metres: gone by here (a phone's lowest tier: none at all)
   scales: [1.9, 0.62],    // metres across one repeat of the picture, the two layers
   kinds: {
-    moon: [1.0, 0.25, 0.0, 0.0],
+    moon: [0.6, 0.2, 0.0, 0.0],
     meadow: [0.35, 0.15, 1.0, 0.0],
     canyon: [0.4, 0.45, 0.35, 1.0],
   },

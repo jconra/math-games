@@ -235,6 +235,9 @@ void main() {
   // THE GROUND UNDERFOOT (src/planet/grit.js): small stones, cracks, tufts and ripples, each kind its own, near the eye
   // only; two sizes of it turned against each other, and how much of each comes and goes over the ground (d1, d2)
   float nearG = (1.0 - smoothstep(${(GRIT.far * 0.45).toFixed(1)}, ${GRIT.far.toFixed(1)}, vDist)) * flatK;
+  #ifndef AIR
+  nearG *= 0.1 + 0.9 * L.r;      // (the moon's shade stays nearly black: no grain picked out in it)
+  #endif
   if (nearG > 0.001) {
     vec4 g1 = texture2D(uGrit, mat2(0.8, 0.6, -0.6, 0.8) * vXZ / ${GRIT.scales[0].toFixed(2)});
     vec4 g2 = texture2D(uGrit, mat2(0.28, -0.96, 0.96, 0.28) * vXZ / ${GRIT.scales[1].toFixed(2)} + 0.37);
