@@ -42,7 +42,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 // THE SIZES (radians): the head's turn toward what it looks at, at most, and how much of it the neck takes; the lean;
 // a nod; the arms' gestures (the upper arm forward and out, the elbow bent, the palm turned up); a beat
-export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.045, nod: 0.17, beat: 0.07, rate: 5 };
+export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.08, nod: 0.24, beat: 0.12, rate: 5, wave: 0.1 };
 // THE STANCE AT REST (M.stand, 0 to 1: how much of it is worn; the game's maker, 2026-11-26, of two crew members
 // standing: "They seem kind of awkward just standing there"). Someone standing about puts their weight on one leg: the
 // hips go across over that foot (`shift`, m) and a little down (`drop`), the hip over it rises (`roll`, radians) and
@@ -83,7 +83,7 @@ export function addMoves(c) {
   const M = {
     look: null, talk: null, sitting: false, stand: 0, lean: 0, hold: null,
     // (now: what is worn this moment; each eased toward what is wanted)
-    yaw: 0, pitch: 0, sway: 0, swayT: Math.random() * 20, swayEvery: rnd(5, 8), nod: 0, nodT: rnd(1, 3), nodLeft: 0,
+    yaw: 0, pitch: 0, sway: 0, swayT: Math.random() * 20, swayEvery: rnd(3, 5), nod: 0, nodT: rnd(1, 3), nodLeft: 0,
     // (THE STANCE: how much is worn; which leg the weight is on, +1 their left, -1 their right, 0 both; when it changes)
     standNow: 0, side: 0, sideWant: Math.random() < 0.5 ? 1 : -1, sideNext: rnd(0.5, STANCE.every[1]), leanNow: 0, holdNow: 0,
     arms: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, want: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, nextGesture: 0, beatT: 0, t: 0,
@@ -227,7 +227,7 @@ export function addMoves(c) {
     M.sideNext -= dt;
     if (M.sideNext <= 0) {
       M.sideWant = M.sideWant === 0 ? (Math.random() < 0.5 ? 1 : -1) : Math.random() < STANCE.even ? 0 : -M.sideWant;
-      M.sideNext = rnd(STANCE.every[0], STANCE.every[1]) * (M.sideWant === 0 ? 0.5 : 1);
+      M.sideNext = rnd(STANCE.every[0], STANCE.every[1]) * (M.sideWant === 0 ? 0.5 : 1) * (M.talk ? 0.45 : 1);      // (in a talk: over from one leg to the other more often)
       M.sideFrom = M.side; M.sideU = 0;
     }
     M.sideU = Math.min(1, (M.sideU ?? 1) + dt / STANCE.ease);
@@ -298,7 +298,7 @@ export function addMoves(c) {
     const swayWant = talking ? Math.sin(M.swayT / M.swayEvery * Math.PI * 2) * MOVES.lean * (M.sitting ? 0.5 : 1) : 0;
     M.sway = damp(M.sway, swayWant, 2, dt);
     M.nodT -= dt;
-    if (talking && M.nodT <= 0) { M.nodLeft = 0.55; M.nodT = M.talk === 'listen' ? rnd(1.4, 3.6) : rnd(1.8, 4.5); M.nodSize = M.talk === 'listen' ? rnd(0.7, 1) : rnd(0.35, 0.6); }
+    if (talking && M.nodT <= 0) { M.nodLeft = 0.55; M.nodT = M.talk === 'listen' ? rnd(0.9, 2.2) : rnd(1.6, 3.5); M.nodSize = M.talk === 'listen' ? rnd(0.7, 1) : rnd(0.35, 0.6); }
     let nod = 0;
     if (M.nodLeft > 0) { M.nodLeft -= dt; const u = 1 - Math.max(0, M.nodLeft) / 0.55; nod = Math.sin(u * Math.PI) * MOVES.nod * (M.nodSize || 1); }
     // the speaker's hands: a new gesture every second or so, eased into, small beats while in it; the listener's now and
@@ -311,7 +311,7 @@ export function addMoves(c) {
       if (speaking) M.nextGesture = M.t;
       else { M.want.L = GESTURES[4].L; M.want.R = GESTURES[4].R; M.listenG = false; M.nextGesture = M.t + rnd(1.5, 4); }
     }
-    if (speaking) { if (M.t > M.nextGesture) { const g = pickGesture(); M.want.L = g.L; M.want.R = g.R; M.nextGesture = M.t + rnd(0.9, 2.0); } }
+    if (speaking) { if (M.t > M.nextGesture) { const g = pickGesture(); M.want.L = g.L; M.want.R = g.R; M.nextGesture = M.t + rnd(0.6, 1.3); } }
     else if (listening) {
       if (M.t > M.nextGesture) {
         const g = M.listenG ? null : LISTEN[Math.floor(Math.random() * LISTEN.length)];
@@ -337,8 +337,11 @@ export function addMoves(c) {
     if (chin) turn(B.Neck, X, chin * 0.5, _rq);
     turn(B.Head, X, M.pitch + nod + chin * 0.5, _rq);
     for (const [s, sg] of [['L', 1], ['R', -1]]) {
-      const [fwd, out, bend, palm] = M.arms[s];
+      let [fwd, out, bend, palm] = M.arms[s];
       if (fwd + out + bend + palm < 0.003) continue;
+      // (a raised hand never held still: it moves about as they talk, each arm at its own pace)
+      const wv = MOVES.wave * Math.min(1, bend * 1.5);
+      fwd += Math.sin(M.t * 2.3 + (s === 'L' ? 0 : 1.7)) * wv * 0.8; out += Math.sin(M.t * 1.7 + (s === 'L' ? 2.1 : 0.4)) * wv * 0.6; palm += Math.sin(M.t * 2.9 + (s === 'L' ? 0.9 : 2.6)) * wv * 2;
       const ua = B['UpperArm' + s], la = B['LowerArm' + s], wr = B['Wrist' + s];
       turn(ua, X, -fwd, _rq); turn(ua, Z, out * sg, _rq);
       turn(la, X, -(bend + (s === 'R' ? beat : beat * 0.6) * Math.min(1, bend * 2)), _rq);
