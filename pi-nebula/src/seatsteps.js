@@ -6,16 +6,18 @@
 //   seatSteps(seat) -> { down: [step, ...], up: [step, ...] }
 //     seat: { seat: [x, y, z] (where they sit), heading (the way they face sitting), pos: [x, y, z] (where they stand
 //            to sit down: in front of a bench, beside a desk chair, behind a stool) }
-//     step: { move, to: [x, y, z], heading, secs }   move: 'walk' (forward), 'back' (stepping backward), 'side' (a
-//            step sideways: dir -1 to their left, 1 to their right), 'turn' (on the spot, stepping round), 'lower' (onto
-//            the seat), 'rise' (up off it)
-//   Sitting down: (a stool's, from behind it: round to its side first, walking) turned to face the way the seat faces,
-//   stepped back or across to just in front of it (SIT.pre), then lowered onto it, leaning forward. Getting up: the
-//   same backward: up off it, leaning forward, then back to where they stood the way they came.
+//     step: { move, to: [x, y, z], heading, secs }   move: 'walk' (forward, facing `heading`), 'back' (stepping
+//            backward), 'turn' (on the spot, stepping round), 'lower' (onto the seat), 'rise' (up off it)
+//     (and pre: where they stand just in front of it)
+//   Sitting down: (a stool's, from behind it: round to its side first, walking) to just in front of the seat (SIT.pre;
+//   SIT.preTable at a stool): from in front of it (a bench) turned and a step back; from beside it (a desk chair) or
+//   from its side (a stool) walked there and turned round; then lowered onto it, leaning forward. Getting up: up off it,
+//   leaning forward, then back to where they stood the way they came, turned to walk it.
 //   leanOf(step, u) -> radians the body leans forward at `u` (0 to 1) through a step (moves.js M.lean)
 export const SIT = {
   pre: 0.24,          // (m in front of the seat's middle: where they stand, their back to it, before they sit: their
                       // shins just clear of a chair's cushion, 0.14 put them through it)
+  preTable: 0.15,     // (the same at a stool, its table's edge 0.3 m in front of it)
   round: 0.46,        // (m out to a stool's side, walked to first when they come from behind it)
   speed: 0.55,        // (m/s stepping back or across)
   turn: 3.2,          // (radians a second turning on the spot)
@@ -32,38 +34,39 @@ const A = (v) => (Array.isArray(v) ? v : [v.x, v.y, v.z]);
 export function seatSteps(S) {
   const seat = A(S.seat), stand = A(S.pos), h = S.heading;
   const f = [Math.sin(h), 0, Math.cos(h)], left = [Math.cos(h), 0, -Math.sin(h)];
-  const pre = [seat[0] + f[0] * SIT.pre, stand[1], seat[2] + f[2] * SIT.pre];
   const v = sub(stand, seat), along = v[0] * f[0] + v[2] * f[2], across = v[0] * left[0] + v[2] * left[2];
-  const down = [];
+  // (a stool, come to from behind: its table just in front of it, so they stand nearer it)
+  const behind = along < -0.1, k = behind ? SIT.preTable : SIT.pre;
+  const pre = [seat[0] + f[0] * k, stand[1], seat[2] + f[2] * k];
+  const down = [], legs = [];
+  const walkTo = (from, to) => { const hw = Math.atan2(to[0] - from[0], to[2] - from[2]); down.push({ move: 'walk', to, heading: hw, secs: Math.max(SIT.least, dist(from, to) / SIT.speed) }); legs.push(['walk', from, to]); return hw; };
+  const turnTo = (at, from, to) => down.push({ move: 'turn', to: at, heading: to, secs: Math.max(SIT.least, from == null ? 0.5 : Math.abs(wrap(to - from)) / SIT.turn) });
   let at = stand, hd = null;
-  // (from behind the seat (a stool, its table in front of it): round to its side first, walking)
-  if (along < -0.1) {
-    const s = across >= 0 ? 1 : -1, side = [seat[0] + left[0] * s * SIT.round + f[0] * 0.1, stand[1], seat[2] + left[2] * s * SIT.round + f[2] * 0.1];
-    const hw = Math.atan2(side[0] - at[0], side[2] - at[2]);
-    down.push({ move: 'walk', to: side, heading: hw, secs: Math.max(SIT.least, dist(at, side) / SIT.speed) });
-    at = side; hd = hw;
-  }
-  // (turned to face the way the seat faces, stepping round)
-  down.push({ move: 'turn', to: at, heading: h, secs: Math.max(SIT.least, hd == null ? 0.5 : Math.abs(wrap(h - hd)) / SIT.turn) });
-  // (to just in front of it, their back to it: back, or across)
+  // (from behind the seat: round to its side first, walking)
+  if (behind) { const s = across >= 0 ? 1 : -1; hd = walkTo(at, [seat[0] + left[0] * s * SIT.round + f[0] * 0.1, stand[1], seat[2] + left[2] * s * SIT.round + f[2] * 0.1]); at = down[down.length - 1].to; }
   const d = sub(pre, at), fa = d[0] * f[0] + d[2] * f[2], la = d[0] * left[0] + d[2] * left[2];
-  const move = Math.abs(fa) >= Math.abs(la) ? (fa < 0 ? 'back' : 'walk') : 'side';
-  const step = { move, to: pre, heading: h, secs: Math.max(SIT.least, dist(at, pre) / SIT.speed) };
-  if (move === 'side') step.dir = la > 0 ? -1 : 1;
-  down.push(step);
-  down.push({ move: 'lower', to: [seat[0], seat[1], seat[2]], heading: h, secs: SIT.lower });
-  // getting up: the same backward
-  const up = [{ move: 'rise', to: pre, heading: h, secs: SIT.rise }];
-  for (let i = down.length - 2; i >= 0; i--) {
-    const s = down[i], from = i ? down[i - 1].to : stand;
-    if (s.move === 'turn') continue;
-    const back = { ...s, to: from };
-    if (s.move === 'back') back.move = 'walk';
-    else if (s.move === 'side') back.dir = -s.dir;
-    else if (s.move === 'walk' && i === 0 && down[0] !== step) { back.heading = Math.atan2(from[0] - s.to[0], from[2] - s.to[2]); up.push({ move: 'turn', to: s.to, heading: back.heading, secs: Math.max(SIT.least, Math.abs(wrap(back.heading - h)) / SIT.turn) }); }
-    up.push(back);
+  if (fa < 0 && Math.abs(fa) >= Math.abs(la)) {
+    // (straight behind them, a bench's: turned to face the way it faces, a step back to it)
+    turnTo(at, hd, h);
+    down.push({ move: 'back', to: pre, heading: h, secs: Math.max(SIT.least, dist(at, pre) / SIT.speed) }); legs.push(['back', at, pre]);
+  } else {
+    // (to one side or ahead, a desk chair's, a stool's: walked to, then turned round, their back to it)
+    if (dist(at, pre) > 0.03) hd = walkTo(at, pre);
+    turnTo(pre, hd, h);
   }
-  return { down, up };
+  down.push({ move: 'lower', to: [seat[0], seat[1], seat[2]], heading: h, secs: SIT.lower });
+  // getting up: up off it, then the way they came, backward: a step back taken forward, each walk turned round and walked
+  const up = [{ move: 'rise', to: pre, heading: h, secs: SIT.rise }];
+  let ha = h;
+  for (let i = legs.length - 1; i >= 0; i--) {
+    const [m, from, to] = legs[i];
+    if (m === 'back') { up.push({ move: 'walk', to: from, heading: h, secs: Math.max(SIT.least, dist(to, from) / SIT.speed) }); continue; }
+    const hb = Math.atan2(from[0] - to[0], from[2] - to[2]);
+    up.push({ move: 'turn', to, heading: hb, secs: Math.max(SIT.least, Math.abs(wrap(hb - ha)) / SIT.turn) });
+    up.push({ move: 'walk', to: from, heading: hb, secs: Math.max(SIT.least, dist(to, from) / SIT.speed) });
+    ha = hb;
+  }
+  return { down, up, pre };
 }
 
 // how far forward the body leans at u (0 to 1) through a step: lowering, most just before the seat is reached; rising,

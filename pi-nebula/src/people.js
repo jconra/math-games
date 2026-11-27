@@ -1055,10 +1055,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   }
 
   // ── SITTING DOWN AND GETTING UP (src/seatsteps.js): the seat's own steps, one after another, each eased; the clip
-  // each step plays (a slow walk, a step back, a step sideways, stepping round, sitting, standing), the body leaning
+  // each step plays (a slow walk, a step back, stepping round, sitting, standing), the body leaning
   // forward as they lower onto it and as they rise (moves.js M.lean). Getting up, nobody stands where they will step
   // back to: they wait up off the seat till it is clear ──
-  const SIDE_CLIPS = { '-1': 'Run_Left', 1: 'Run_Right' };
   function seatStep(P, a, dt, way) {
     const S = a.spot, path = (S.steps || (S.steps = seatSteps(S)))[way];
     if (a.si == null) { a.si = 0; a.st = 0; a.sFrom = P.pos.clone(); a.sHead = P.heading; }
@@ -1070,7 +1069,6 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const m = st.move;
     if (m === 'lower') play(P, CLIPS.sit, { fade: st.secs * 0.85 });
     else if (m === 'rise') play(P, STAND, { fade: st.secs * 0.8 });
-    else if (m === 'side') play(P, SIDE_CLIPS[st.dir] || CLIPS.walk, { speed: 0.45, fade: 0.2 });
     else play(P, CLIPS.walk, { speed: m === 'back' ? -0.6 : m === 'turn' ? 0.45 : 0.65, fade: 0.2 });
     a.seatLean = leanOf(st, u);
     if (u < 1) return;

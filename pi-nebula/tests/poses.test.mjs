@@ -27,18 +27,19 @@ test('sitting down: to just in front of the seat, its back to it, then lowered o
     const last = down[down.length - 1], before = down[down.length - 2];
     assert.equal(last.move, 'lower', name + ': the last step lowers them onto it');
     assert.deepEqual(last.to, S.seat, name + ': onto the seat');
-    assert.ok(Math.abs(flat(before.to, S.seat) - SIT.pre) < 1e-9, name + ': stood just in front of it first');
+    assert.ok(Math.abs(flat(before.to, S.seat) - (name === 'stool' ? SIT.preTable : SIT.pre)) < 1e-9, name + ': stood just in front of it first');
     assert.equal(before.heading, S.heading, name + ': facing the way it faces as they lower');
     assert.ok(down.every((s) => s.secs >= SIT.least), name + ': no step snapped');
     // (nothing walks through the seat: every point a step goes through is clear of it but the lowering)
     let at = S.pos;
     for (const s of down.slice(0, -1)) {
-      for (let u = 0; u <= 1; u += 0.05) { const p = [at[0] + (s.to[0] - at[0]) * u, 0, at[2] + (s.to[2] - at[2]) * u]; assert.ok(flat(p, S.seat) >= SIT.pre - 0.02, `${name}: ${s.move} passes ${flat(p, S.seat).toFixed(2)} m from the seat's middle`); }
+      for (let u = 0; u <= 1; u += 0.05) { const p = [at[0] + (s.to[0] - at[0]) * u, 0, at[2] + (s.to[2] - at[2]) * u]; assert.ok(flat(p, S.seat) >= SIT.preTable - 0.02, `${name}: ${s.move} passes ${flat(p, S.seat).toFixed(2)} m from the seat's middle`); }
       at = s.to;
     }
   }
   assert.equal(seatSteps(bench).down.find((s) => s.to !== bench.pos && s.move !== 'turn').move, 'back', 'a bench: a step back to it');
-  assert.equal(seatSteps(desk).down.find((s) => s.move !== 'turn').move, 'side', 'a desk chair: a step across to it');
+  assert.equal(seatSteps(desk).down[0].move, 'walk', 'a desk chair: walked round in front of it');
+  for (const S of [bench, desk, stool]) assert.ok([...seatSteps(S).down, ...seatSteps(S).up].every((s) => ['walk', 'back', 'turn', 'lower', 'rise'].includes(s.move)), 'never a sideways run');
   assert.equal(seatSteps(stool).down[0].move, 'walk', 'a stool from behind: round to its side first');
 });
 
