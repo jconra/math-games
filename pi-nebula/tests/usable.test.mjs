@@ -61,7 +61,7 @@ test('something over the game takes the click first: a panel up, the pointer loc
   const inp = text('../../shared/input.js'), u = text('../src/usable.js');
   assert.ok(inp.includes("canvas.addEventListener('pointerup', onUp)"));
   assert.ok(u.includes('pk.used = T.name') && u.includes('if (pk.touch || pk.used) return;'));
-  assert.ok(text('../src/friendcard.js').includes('pk.used) return;') && text('../src/jobsboard.js').includes('|| pk.used) return;'));
+  assert.ok(text('../src/friendcard.js').includes('pk.used) return;') && text('../src/jobsboard.js').includes('if (!pk.used) tapAt(pk)'));
   assert.ok(u.includes('document.pointerLockElement') && u.includes('input.enabled === false') && u.includes('input.dragging'));
 });
 

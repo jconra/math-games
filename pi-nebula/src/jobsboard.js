@@ -231,18 +231,20 @@ export function makeJobsBoard({ W, walls, input = null, usable = null, jobs, gui
     const d = _dir.copy(point).sub(W.camera.position).length(); if (d < 0.05) return true;
     return walls.reach(W.camera.position, _dir.multiplyScalar(1 / d), d) >= d - 0.35;
   };
-  if (input && input.onPick) input.onPick((pk) => {
-    if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open || pk.used) return;   // (used: the click was something else's, src/usable.js)
+  // -> true if a click there picked a row or opened the list
+  function tapAt(pk) {
+    if (!pk.hit || !pk.hit.data || !pk.hit.data.jobsBoard || !playing || open) return false;
     const F = faceAt(pk.hit);
     // (beside a screen, not on it: the list, when the player is at a board; never a row guessed at)
-    if (!F) { if (near) openFromTap(); return; }
-    if (!inSight(F, pk.hit.point)) return;
+    if (!F) { if (near) { openFromTap(); return true; } return false; }
+    if (!inSight(F, pk.hit.point)) return false;
     const i = rowAt(F, pk.hit.point), on = F.kind === 'captains' ? caps : rows;
     // (a captain with no mission to pick: their line is to read, and a click on it does nothing)
-    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) openFromTap(); else if (i != null && on[i].pick !== false) pick(on[i].id);
-    // (with a mouse, at the board, a click on a part of a screen with no row in it opens the list, as E does: src/usable.js)
-    else if (i == null && near && !pk.touch && !prompt.hidden) openFromTap();
-  });
+    if (i === -1 || (i != null && rowPx(F, pk.hit.point) < (pk.touch ? BOARD.finger : BOARD.pointer))) { openFromTap(); return true; }
+    if (i != null && on[i].pick !== false) { pick(on[i].id); return true; }
+    return false;
+  }
+  if (input && input.onPick) input.onPick((pk) => { if (!pk.used) tapAt(pk); });   // (used: the click was something else's, or the mouse's at the board: src/usable.js)
 
   // ── the prompt near the board, and the list ──────────────────────────────────────────────────────────────────
   const prompt = document.createElement('div');
@@ -339,11 +341,12 @@ export function makeJobsBoard({ W, walls, input = null, usable = null, jobs, gui
   }, true);
 
   // (a mouse: over the screens of the board walked up to (the big one: the captains' beside it too), while its prompt is
-  // up, the hand: src/usable.js; the click is the board's own, above: a row picks its job or captain, anywhere else on
-  // a screen opens the list as E does)
+  // up, the hand: src/usable.js; a click there on a row picks its job or captain as a click always has (tapAt, above),
+  // anywhere else on its screens opens the list as E does. From farther off a click on a row is as it always was)
   let nearB = null;
   const BOX = 0.03, boxesOf = (B) => faces.filter((F) => F.board === B || (!B.small && !F.board)).map((F) => ({ box: [-F.w / 2, -F.h / 2, -BOX, F.w / 2, F.h / 2, BOX], matrix: F.world }));
-  if (usable) usable.add({ name: 'jobs board', ready: () => near && !prompt.hidden && !open, shape: () => (nearB ? (nearB.boxes || (nearB.boxes = boxesOf(nearB))) : null) });
+  if (usable) usable.add({ name: 'jobs board', ready: () => near && !prompt.hidden && !open, shape: () => (nearB ? (nearB.boxes || (nearB.boxes = boxesOf(nearB))) : null),
+    use: (x, y) => { if (!tapAt({ x, y, touch: false, hit: input && input.pickAt ? input.pickAt(x, y) : null })) openList(); } });
   const _d = new THREE.Vector3();
   api.update = (dt, P, isPlaying = true) => {
     playing = isPlaying && !!P; player = P;
