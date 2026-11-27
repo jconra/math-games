@@ -22,6 +22,7 @@
 //   g.U (the shader's settings, shared with the cover's), g.stats { patches, tris, lightMs, bytes }
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
+import { GRIT, gritData } from './grit.js';
 import { takesShadows, makeShadowPicture, SHADOW_PIC } from './groundshadow.js';
 
 // the patches: the smallest is SIZE0 metres across; a patch of level L is SIZE0 * 2^L and is drawn while the camera is
@@ -79,6 +80,10 @@ function detailTexture(aniso) {
   }
   return byteTexture(data, S, aniso);
 }
+
+// the ground underfoot's picture: made once, kept for every planet after
+let gritKept = null;
+const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 
 // ── THE HAZE, shared with what stands on the ground (src/planet/cover.js) ───────────────────────────────────────
 // thick near the ground and thinning with height (halving every uHazeH * 0.69 metres up), so far hills fade into the
@@ -181,7 +186,8 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4(w.x, h - d2 * uCurve, w.y, 1.0);
 }`;
 const GROUND_FRAG = /* glsl */`
-uniform sampler2D uNM, uL, uDetail, uShadow;
+uniform sampler2D uNM, uL, uDetail, uShadow, uGrit;
+uniform vec4 uGritK;
 const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
 uniform vec4 uShadowBox;
 uniform float uN, uP;
@@ -214,6 +220,27 @@ void main() {
   base = tone > 0.0 ? mix(base, uBright, tone) : mix(base, uDark, -tone);
   base = mix(base, mix(uGrass, uGrass2, smoothstep(0.3, 0.7, d1.b)), grow * (1.0 - rock));
   base *= 0.9 + 0.2 * mix(0.5, d2.a, nearA) * (0.6 + 0.4 * rock);
+  #ifdef GRIT
+  // THE GROUND UNDERFOOT (src/planet/grit.js): small stones, cracks, tufts and ripples, each kind its own, near the eye
+  // only; two sizes of it turned against each other, and how much of each comes and goes over the ground (d1, d2)
+  float nearG = (1.0 - smoothstep(${(GRIT.far * 0.45).toFixed(1)}, ${GRIT.far.toFixed(1)}, vDist)) * flatK;
+  if (nearG > 0.001) {
+    vec4 g1 = texture2D(uGrit, mat2(0.8, 0.6, -0.6, 0.8) * vXZ / ${GRIT.scales[0].toFixed(2)});
+    vec4 g2 = texture2D(uGrit, mat2(0.28, -0.96, 0.96, 0.28) * vXZ / ${GRIT.scales[1].toFixed(2)} + 0.37);
+    float loose = (1.0 - rock) * (1.0 - grow), patchA = smoothstep(0.3, 0.7, d2.b), patchB = smoothstep(0.35, 0.65, d1.a);
+    // the stones: a shade apart from the ground, lit from one side, more on the rocky ground
+    float st = max(g1.r * (0.35 + 0.65 * patchA), g2.r * (0.5 + 0.5 * patchB)), stK = uGritK.x * min(1.0, 0.45 + rock + 0.4 * patchB) * nearG;
+    vec3 stone = mix(uRock, uDust, 0.35) * (0.45 + 1.0 * st);
+    base = mix(base, stone, stK * smoothstep(0.0, 0.08, st));
+    // the cracks: on the hard ground, thin and dark
+    base *= 1.0 - 0.45 * g1.g * uGritK.y * (0.3 + 0.7 * rock) * (1.0 - grow) * patchB * nearG;
+    // the tufts: where something grows, blades lighter and darker than the grass round them
+    float tf = max(g1.b, g2.b * 0.8) * uGritK.z * (0.25 + 0.75 * grow) * nearG;
+    base = mix(base, mix(uGrass2, uGrass, g2.a) * (0.7 + 0.6 * g1.a), tf * 0.75);
+    // the ripples: in loose sand and dust, a long gentle side and a short steep one, darker in the trough
+    base *= 1.0 + 0.22 * (g1.a - 0.5) * uGritK.w * loose * (0.5 + 0.5 * patchA) * nearG;
+  }
+  #endif
   // THE WOODS (src/planet/trees.js): the ground under the trees in their shade; and past where the trees are drawn,
   // their crowns' colour, so a far wood is still a wood
   base *= 1.0 - 0.3 * wood;
@@ -247,7 +274,7 @@ export const GROUND_QUALITY = {
 export function makeGround({ renderer, land, look, quality = 'medium', sky = null }) {
   const Q = GROUND_QUALITY[quality] || GROUND_QUALITY.medium, G = Q.grid, t0 = performance.now();
   const aniso = Math.min(Q.aniso, renderer.capabilities.getMaxAnisotropy());
-  const hTex = heightTexture(land), nmTex = byteTexture(land.NM, land.N, aniso), detail = detailTexture(aniso);
+  const hTex = heightTexture(land), nmTex = byteTexture(land.NM, land.N, aniso), detail = detailTexture(aniso), grit = byteTexture(gritPicture(), GRIT.size, aniso);
   const sunDir = new THREE.Vector3(...look.sun).normalize();
   const light = lightPass(renderer, land, hTex, sunDir, Math.min(Q.light, land.N));
   const col = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
@@ -264,6 +291,8 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     uAir: { value: look.air ? 1 : 0 }, uFine: { value: Q.fine }, uBands: { value: land.kind.bands ? 1 : 0 },
     // (the woods' colour from afar and how far the trees themselves are drawn: set by src/planet/trees.js)
     uCanopy: { value: new THREE.Color(0, 0, 0) }, uTreeFar: { value: 1e9 },
+    // (the ground underfoot, src/planet/grit.js: the kind's own stones, cracks, tufts and ripples)
+    uGrit: { value: grit }, uGritK: { value: new THREE.Vector4(...(GRIT.kinds[land.kind.id] || GRIT.kinds.moon)) },
     // (the haze as thick as the air says at the landing place's height, thinning above it)
     uHaze: { value: look.air ? look.air.haze : 0 }, uHazeH: { value: look.air ? look.air.thin || 450 : 450 }, uHazeBase: { value: land.landing.y },
   };
@@ -273,7 +302,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
   // (its spots of the picture marked as ground: the shadows are drawn there and only there, src/planet/groundshadow.js)
-  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: look.air ? { AIR: 1 } : {} }));
+  const material = takesShadows(new THREE.ShaderMaterial({ vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG, uniforms: U, defines: { ...(look.air ? { AIR: 1 } : {}), ...(Q.fine ? { GRIT: 1 } : {}) } }));
 
   // the grid: (G + 1)^2 corners, x and z in grid steps
   const pos = new Float32Array((G + 1) * (G + 1) * 3), idx = [];
@@ -336,6 +365,6 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   stats.buildMs = Math.round(performance.now() - t0);
   return {
     mesh, U, stats, update, light, shadows,
-    dispose() { shadows.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
+    dispose() { shadows.dispose(); grit.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
   };
 }
