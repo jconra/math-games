@@ -39,7 +39,8 @@ function worst(body, S, secs = 120) {
     const H = handsAt(S.kind, S, t, 3.7);
     H.hands.forEach((h, i) => {
       if (!h || (H.share && H.share[i] < 0.5)) return;
-      const sh = shoulderAt(sc(i === 0 ? B.L : B.R), sc(B.ab), sc(B.ch), H.lean), q = [h[0], h[1], h[2] - (S.stepIn || 0)];
+      // (the knees bent: everything from the hips up lower by the crouch)
+      const sh = shoulderAt(sc(i === 0 ? B.L : B.R), sc(B.ab), sc(B.ch), H.lean), q = [h[0], h[1] + (H.crouch || 0), h[2] - (S.stepIn || 0)];
       most = Math.max(most, Math.hypot(q[0] - sh[0], q[1] - sh[1], q[2] - sh[2]) / (B.arm * ARM * k));
     });
   }
@@ -54,7 +55,8 @@ test('the bodies that work at each place are the ones the roster sends there', (
   assert.ok(AT('lockers').length >= 1);
 });
 
-test('the pump: each point of its screen within reach of the mechanic, the elbow bent', () => {
+test('the pump: each point of its screen and its buttons within reach of the mechanic, the elbow bent', () => {
+  assert.ok(WORK_AT.pump.points.some((p) => p[1] < 0.8), 'its buttons too');
   for (const b of AT('pump')) { const F = WORK_AT.pump, k = worst(b, { kind: 'face', at: [0, 0, F.face], heading: 0, points: F.points, stepIn: F.stepIn }); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
 });
 test('a locker\'s handle within reach of each who goes to the lockers', () => {

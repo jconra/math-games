@@ -1191,15 +1191,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (!a.atPanel) { const h = a.spot.heading ?? P.heading, H = SCAN_HOLD; a.atPanel = { kind: 'panel', at: [SCAN.panel.x - Math.sin(h) * H.back, SCAN.panel.y + H.up, SCAN.panel.z - Math.cos(h) * H.back], heading: h, apart: H.apart, lean: H.lean, stepIn: H.stepIn, seed: Math.random() * 100 }; }
     } else if (a && a.atPanel) a.atPanel = null;
     const w = !hands ? null : a && a.atPanel ? a.atPanel : a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
-    let lean = seated ? a.seatLean || 0 : 0, bow = 0;
+    let lean = seated ? a.seatLean || 0 : 0, bow = 0, crouch = 0;
     // (a step in to the work, drawn: eased, as the last of their steps to it)
     P.stepIn = damp(P.stepIn || 0, w && w.stepIn ? w.stepIn : 0, 4, P.animDt || 0); if (P.stepIn < 1e-3 && !(w && w.stepIn)) P.stepIn = 0;
     if (w) {
       const H = handsAt(w.kind, w, a.t, w.seed);
       setHold(M, H);
-      bow = H.lean;
+      bow = H.lean; crouch = H.crouch || 0;
     } else M.hold = null;
-    M.lean = lean; M.bow = bow;
+    M.lean = lean; M.bow = bow; M.crouch = crouch;
   }
 
   // ── MEET: a captain gone to their ship to wait for the player (the top of this file) ─────────────────────────
