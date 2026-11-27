@@ -117,3 +117,13 @@ test('a "Work it out" box is solved from its last right answer, not from the end
   const now = branch.indexOf('if (si + 1 >= steps.length) solvedNow();'), later = branch.indexOf('setTimeout(');
   assert.ok(now > 0 && later > 0 && now < later, 'said before the wait, not only after it');
 });
+
+// the picker in the top strip is drawn when a "Work it out" box is made, as it is for every other box: it was left
+// as the box before had it (the wrong level's name over the box), and hidden when such a box opened a session
+test('the level picker is drawn for a "Work it out" box too', () => {
+  const src = readFileSync(new URL('../src/lockbox/panel.js', import.meta.url), 'utf8');
+  const at = src.indexOf('if (WORK_RUNG[problem.rung]) {');
+  assert.ok(at > 0);
+  const branch = src.slice(at, src.indexOf('return mountWorkBox(', at));
+  assert.match(branch.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n'), /\bshowLevel\(\);/, 'before the box\'s own page is made');
+});

@@ -565,6 +565,9 @@ export function openLockbox(root = document.body, opts = {}) {
       const more = info.from === 'loot' && typeof next !== 'function'
         ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
       rulesBtn.hidden = true;
+      // (the level picker in the top strip is drawn for this box too: it was left as the box before had it, so it
+      // named the wrong level over a "Work it out" box, and was missing when one opened a session)
+      showLevel();
       return mountWorkBox({ HOB_SVG: look.face, look }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
         where: where + more, nextLabel: () => (lastOne() ? look.finish : 'Next problem') });
     }
