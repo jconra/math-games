@@ -31,6 +31,8 @@ import * as THREE from 'three';
 import { ensureCss as craneCss } from './cranedrive.js';
 import { STORE } from '../kit/places-plan.js';
 import { RIDE } from './cargoforklift.js';
+import { mountAt } from './seatsteps.js';
+import { wheelLocal, FORKLIFT_WHEEL } from './atwork.js';
 import { HAND } from '../kit/forkliftdrive.js';
 
 const CSS = new URL('./cargodrive.css', import.meta.url).href;
@@ -96,7 +98,10 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
   // ── on and off ────────────────────────────────────────────────────────────────────────────────────────────────
   // phase: null (walking), 'on' (getting on), 'drive', 'off' (getting off); from: where they stood
   let phase = null, t = 0, from = null, to = null, near = false, playing = false, hint = '', noteT = -9, note = '', P0 = null;
-  const C = { get on() { return !!phase; }, get clip() { return phase ? (phase === 'on' && t < ON.on * 0.35) || (phase === 'off' && t > ON.off * 0.6) ? 'Stand_Listen' : SIT : null; }, pilot: null, brake: null, hint: null };
+  // (getting on and off as a person climbs onto a ride-on, src/seatsteps.js mountAt: its clip each moment)
+  const CLIP_OF = { stand: 'Stand_Listen', walk: 'Walk', sit: SIT };
+  const mount = () => (phase === 'on' ? mountAt(Math.min(1, t / ON.on), true, 0, 0) : phase === 'off' ? mountAt(Math.min(1, t / ON.off), false, 0, 0) : null);
+  const C = { get on() { return !!phase; }, get clip() { const m = mount(); return phase ? (m ? CLIP_OF[m.clip] : SIT) : null; }, pilot: null, brake: null, hint: null };
   function getOn() {
     if (phase || !P0 || !forklift.hand.take()) return false;
     if (run && run.gotOn) run.gotOn();      // (back on before Cargo's loader had climbed on: the loading is theirs again)
@@ -118,6 +123,7 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
   }
   function done(b) {
     if (P0 && b) { P0.place(b.pos, b.heading); P0.zone = null; }
+    if (P0 && P0.moves) { P0.moves.hold = null; P0.moves.lean = 0; }
     el.classList.remove('is-on'); el.hidden = true; held.up = held.down = false;
     if (W.camera.view && W.camera.view.enabled) W.camera.clearViewOffset();
     document.body.classList.remove('pcf-driving');
@@ -165,17 +171,24 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
 
   // ── the player's figure on its seat ───────────────────────────────────────────────────────────────────────────
   const UP = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion();
+  let wheelT = 0;
   function seatBody(P) {
     if (!phase) return;
     const S = forklift.hand.seat();
     let x = S.x, y = S.y, z = S.z, h = S.heading;
-    // getting on: turned to face the way it faces beside it, then up and across into the seat; getting off, back
-    const k = phase === 'on' ? Math.min(1, t / ON.on) : phase === 'off' ? 1 - Math.min(1, t / ON.off) : 1;
-    const A = phase === 'on' ? from : phase === 'off' ? to : null;
-    if (A && k < 1) {
-      const turn = ease(Math.min(1, k / RIDE.turn)), u = ease(Math.max(0, (k - RIDE.turn) / (1 - RIDE.turn))), lift = ease(Math.min(1, u * 1.5));
-      x = A.pos.x + (S.x - A.pos.x) * u; z = A.pos.z + (S.z - A.pos.z) * u; y = A.pos.y + (S.y - A.pos.y) * lift;
-      h = A.heading + wrap(S.heading - A.heading) * turn;
+    // getting on: turned to face the way it faces beside it, up and across onto it, down onto the seat leaning forward;
+    // getting off, the same the other way round (src/seatsteps.js mountAt)
+    const A = phase === 'on' ? from : phase === 'off' ? to : null, m = mount();
+    if (A && m) {
+      const u = m.across;
+      x = A.pos.x + (S.x - A.pos.x) * u; z = A.pos.z + (S.z - A.pos.z) * u; y = mountAt(phase === 'on' ? Math.min(1, t / ON.on) : Math.min(1, t / ON.off), phase === 'on', A.pos.y, S.y).y;
+      h = A.heading + wrap(S.heading - A.heading) * m.turn;
+    }
+    // (seated on it: the hands on its wheel, src/atwork.js wheelLocal, in their own frame; leaning in a little)
+    if (P.moves) {
+      const seated = phase === 'drive' || (phase === 'on' && t >= ON.on);
+      P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m ? m.lean : 0;
+      if (seated) { const L = wheelLocal(RIDE.chair, wheelT += 1 / 60, 3), hd = P.moves.hold && P.moves.hold.local ? P.moves.hold : (P.moves.hold = { local: true, hands: [new THREE.Vector3(), new THREE.Vector3()] }); hd.hands[0].fromArray(L[0]); hd.hands[1].fromArray(L[1]); } else P.moves.hold = null;
     }
     P.pos.set(x, STORE.floor, z); P.heading = h;
     P.c.root.position.set(x, y, z); P.c.root.quaternion.copy(_q.setFromAxisAngle(UP, h));

@@ -62,6 +62,8 @@ import { makeDoors } from '../kit/containerdoors.js';
 import { makeDrive, worldOf, BOX_PLACES, boxPlace, HAND } from '../kit/forkliftdrive.js';
 import { SLOT, LOAD } from '../kit/places-plan.js';
 import { makeLoader } from '../kit/forkliftloader.js';
+import { mountAt } from './seatsteps.js';
+import { wheelLocal, FORKLIFT_WHEEL } from './atwork.js';
 
 const KEY = 'cargo:forklift';
 // its shine: the room's own picture of itself, this much (the kit's painted parts have 1.25: kit/materials.js, as the
@@ -281,18 +283,25 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     return walls.snap(x, STORE.floor + 0.35, z, 0.4) || new THREE.Vector3(x, STORE.floor, z);
   }
   let spot = null;
-  // a person on its seat, as on a chair (`k` of the way from standing beside it to sitting on it): first turned, on
-  // their feet beside it, to face the way it faces; then up and across into the seat, sitting down as they go
-  const ease = (t) => t * t * (3 - 2 * t);
-  function seatPose(P, k) {
+  // a person on its seat, as on a chair (`k` of the way through getting on, or off: on false): src/seatsteps.js
+  // mountAt, as a person climbs onto a ride-on (turned to face the way it faces beside it, up and across onto it, down
+  // onto the seat leaning forward; off, the same the other way round); pp.clip ('stand', 'walk', 'sit') to play, and on
+  // it, the hands on its wheel (src/atwork.js wheelLocal: moves.js M.hold, in their own frame)
+  function seatPose(P, k, on = true) {
     const f = [Math.cos(pose.h), -Math.sin(pose.h)];
     const sx = pose.x + f[0] * TRUCK.seat.x, sz = pose.z + f[1] * TRUCK.seat.x, sy = STORE.floor + TRUCK.seat.y - RIDE.chair;
-    const b = spot.pos, turn = ease(Math.min(1, k / RIDE.turn)), u = ease(Math.max(0, (k - RIDE.turn) / (1 - RIDE.turn))), lift = ease(Math.min(1, u * 1.5));
+    const b = spot.pos, m = mountAt(k, on, b.y, sy), u = m.across;
     const pp = P.pose || (P.pose = { root: new THREE.Vector3(), q: new THREE.Quaternion() });
-    pp.root.set(b.x + (sx - b.x) * u, b.y + (sy - b.y) * lift, b.z + (sz - b.z) * u);
-    const h0 = spot.heading, h1 = pose.h + Math.PI / 2, h = h0 + wrap(h1 - h0) * turn;
+    pp.root.set(b.x + (sx - b.x) * u, m.y, b.z + (sz - b.z) * u);
+    const h0 = spot.heading, h1 = pose.h + Math.PI / 2, h = h0 + wrap(h1 - h0) * m.turn;
     pp.q.setFromAxisAngle(UP, h);
     P.pos.set(pp.root.x, STORE.floor, pp.root.z); P.heading = h;
+    pp.clip = m.clip;
+    if (P.moves) {
+      const seated = on && k >= 1;
+      P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m.lean;
+      if (seated) { const L = wheelLocal(RIDE.chair, clock, P.id.length), hd = P.moves.hold && P.moves.hold.local ? P.moves.hold : (P.moves.hold = { local: true, hands: [new THREE.Vector3(), new THREE.Vector3()] }); hd.hands[0].fromArray(L[0]); hd.hands[1].fromArray(L[1]); } else P.moves.hold = null;
+    }
     return pp;
   }
   function seatDriver(P) {
@@ -327,8 +336,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         return;
       }
       if (a.phase === 'on') {
-        const k = Math.min(1, a.t / RIDE.on); seatPose(P, k);
-        H.play(P, k > RIDE.turn + 0.05 ? H.clips.sit : H.clips.stand, { fade: 0.45 });
+        const k = Math.min(1, a.t / RIDE.on), pp = seatPose(P, k);
+        H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) { a.phase = 'ride'; a.t = 0; state = 'round'; job.li = 0; job.s = 0; job.v = 0; job.pause = 0.5; }
         return;
       }
@@ -338,10 +347,10 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         return;
       }
       if (a.phase === 'off') {
-        const k = Math.min(1, a.t / RIDE.off); seatPose(P, 1 - k);
-        H.play(P, k < 0.6 ? H.clips.sit : H.clips.stand, { fade: 0.4 });
+        const k = Math.min(1, a.t / RIDE.off), pp = seatPose(P, k, false);
+        H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) {
-          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading;
+          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
           driver = null; job = null; state = 'parked'; rest = RIDE.rest; spot = null;
           H.next(P);
         }
@@ -351,7 +360,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       if (driver !== P) return;
       if (load.states.includes(state)) { load.release(P); return; }
       finishNow(); driver = null; spot = null; rest = RIDE.rest * 0.5;
-      if (P.pose) P.pose = null; P.scripted = false;
+      if (P.pose) P.pose = null; P.scripted = false; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
     },
     // (where it is just now, for everyone walking by: its outline (kit/forkliftround.js), or null while it is not in;
     // the driver is driver())
@@ -504,8 +513,8 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         return;
       }
       if (a.phase === 'on') {
-        const k = Math.min(1, a.t / RIDE.on); seatPose(P, k);
-        H.play(P, k > RIDE.turn + 0.05 ? H.clips.sit : H.clips.stand, { fade: 0.45 });
+        const k = Math.min(1, a.t / RIDE.on), pp = seatPose(P, k);
+        H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) { a.phase = 'ride'; a.t = 0; state = 'load'; load.L = makeLoader(); load.ms = { n: 0, sum: 0, most: 0 }; }
         return;
       }
@@ -522,10 +531,10 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         return;
       }
       if (a.phase === 'off') {
-        const k = Math.min(1, a.t / RIDE.off); seatPose(P, 1 - k);
-        H.play(P, k < 0.6 ? H.clips.sit : H.clips.stand, { fade: 0.4 });
+        const k = Math.min(1, a.t / RIDE.off), pp = seatPose(P, k, false);
+        H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) {
-          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading;
+          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
           driver = null; spot = null; load.L = null;
           // (given up where it stands: left there, as a player leaves it, and back to its bay where nobody sees)
           if (hand) { hand.left = true; hand.by = null; state = 'left'; } else { state = 'parked'; rest = RIDE.rest; }

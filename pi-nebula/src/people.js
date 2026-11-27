@@ -72,6 +72,7 @@ import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
+import { seatSteps, leanOf } from './seatsteps.js';
 import { surfaceAhead, handsAt } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
@@ -498,7 +499,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (P.clip !== n) { P.c.play(n, { fade, speed }); P.clip = n; } else P.c.play(n, { speed });
   };
   // RIDES: what a machine of a room's (rides[group]) is handed to work its driver: their clips, and on with their day
-  const RIDES = { play: (P, n, o) => play(P, n, o), next: (P) => next(P), clips: { sit: CLIPS.sit, stand: STAND } };
+  const RIDES = { play: (P, n, o) => play(P, n, o), next: (P) => next(P), clips: { sit: CLIPS.sit, stand: STAND, walk: CLIPS.walk } };
 
   // ── a day ────────────────────────────────────────────────────────────────────────────────────────────────────
   // (what a step of a day asks: its kind, its group, a spot of it nobody has, claimed)
@@ -1006,14 +1007,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (Math.abs(diff) < 0.05) { a.phase = a.kind === 'scan' ? 'ready' : 'do'; a.t = 0; }
       return;
     }
-    if (a.phase === 'sitting') {
-      // onto the seat: turned to face the way it faces, moved back onto it, the clip into sitting
-      const k = Math.min(1, a.t / LIFE.sit), want = a.spot.heading, diff = wrap(want - P.heading);
-      P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), LIFE.turn * 1.5 * dt));
-      if (k > 0.25) { P.pos.lerpVectors(a.from, a.spot.seat, Math.min(1, (k - 0.25) / 0.75)); play(P, CLIPS.sit, { fade: 0.45 }); }
-      if (k >= 1) { a.phase = 'sat'; a.t = 0; stillV++; }
-      return;
-    }
+    // onto the seat as a person sits (src/seatsteps.js): turned to face the way it faces, a step back or across to just
+    // in front of it, lowered onto it leaning forward
+    if (a.phase === 'sitting') { seatStep(P, a, dt, 'down'); return; }
     // (getting up only when nobody is standing where they would step; sitting side by side with someone, a chat now
     // and then)
     if (a.phase === 'sat') {
@@ -1023,15 +1019,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body) && !(P.convo && P.convo.speaking === P)) { endTalk(P); a.phase = 'rising'; a.t = 0; }
       return;
     }
-    if (a.phase === 'rising') {
-      // (someone come to where they would stand while they get up: they get no further up till that is clear)
-      if (a.t > LIFE.sit * 0.3 && someoneAt(a.spot.pos, P, LIFE.body)) a.t = Math.max(LIFE.sit * 0.3, a.t - dt);
-      const k = Math.min(1, a.t / LIFE.sit);
-      play(P, STAND, { fade: 0.45 });
-      if (k > 0.3) P.pos.lerpVectors(a.spot.seat, a.spot.pos, Math.min(1, (k - 0.3) / 0.7));
-      if (k >= 1) { P.pos.copy(a.spot.pos); stillV++; next(P); }
-      return;
-    }
+    // up as a person gets up: leaning forward over their feet, up, and back to where they stood the way they came
+    if (a.phase === 'rising') { seatStep(P, a, dt, 'up'); return; }
     if (a.kind === 'scan') { scanPatient(P, a, dt); return; }
     if (a.kind === 'scanMedic') { scanMedic(P, a, dt); return; }
     if (a.kind === 'ward') { wardStep(P, a, dt); return; }
@@ -1059,6 +1048,32 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     if (a.t > a.len && !(P.cap && P.cap.busy)) next(P);
   }
 
+  // ── SITTING DOWN AND GETTING UP (src/seatsteps.js): the seat's own steps, one after another, each eased; the clip
+  // each step plays (a slow walk, a step back, a step sideways, stepping round, sitting, standing), the body leaning
+  // forward as they lower onto it and as they rise (moves.js M.lean). Getting up, nobody stands where they will step
+  // back to: they wait up off the seat till it is clear ──
+  const SIDE_CLIPS = { '-1': 'Run_Left', 1: 'Run_Right' };
+  function seatStep(P, a, dt, way) {
+    const S = a.spot, path = (S.steps || (S.steps = seatSteps(S)))[way];
+    if (a.si == null) { a.si = 0; a.st = 0; a.sFrom = P.pos.clone(); a.sHead = P.heading; }
+    const st = path[a.si];
+    if (!(way === 'up' && a.si > 0 && someoneAt(a.spot.pos, P, LIFE.body))) a.st += dt;
+    const u = Math.min(1, a.st / st.secs), e = ease(u);
+    P.pos.set(a.sFrom.x + (st.to[0] - a.sFrom.x) * e, a.sFrom.y + (st.to[1] - a.sFrom.y) * e, a.sFrom.z + (st.to[2] - a.sFrom.z) * e);
+    P.heading = wrap(a.sHead + wrap(st.heading - a.sHead) * (st.move === 'turn' ? e : Math.min(1, u * 3)));
+    const m = st.move;
+    if (m === 'lower') play(P, CLIPS.sit, { fade: st.secs * 0.85 });
+    else if (m === 'rise') play(P, STAND, { fade: st.secs * 0.8 });
+    else if (m === 'side') play(P, SIDE_CLIPS[st.dir] || CLIPS.walk, { speed: 0.45, fade: 0.2 });
+    else play(P, CLIPS.walk, { speed: m === 'back' ? -0.6 : m === 'turn' ? 0.45 : 0.65, fade: 0.2 });
+    a.seatLean = leanOf(st, u);
+    if (u < 1) return;
+    a.si++; a.st = 0; a.sFrom.copy(P.pos); a.sHead = P.heading;
+    if (a.si < path.length) return;
+    a.si = null; a.seatLean = 0;
+    if (way === 'down') { a.phase = 'sat'; a.t = 0; stillV++; } else { P.pos.copy(a.spot.pos); stillV++; next(P); }
+  }
+
   // ── HANDS ON THE WORK (src/atwork.js): what in front of them their hands go to, found once as they come to it ──
   // sitting at a desk (a desk chair): its top; the cook at his counter (his polishing): its top, wiped round; the
   // furnace's worker at his post (the forge's clip): the console in front of him. null: nothing found, the clip as ever
@@ -1080,8 +1095,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const a = P.act, M = P.moves, seated = !!(a && ['sat', 'sitting', 'rising'].includes(a.phase));
     M.stand = !P.walking && !P.pose && !seated && P.clip === STAND ? 1 : 0;
     // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
+    if (a && a.kind === 'drive' && P.pose) return;
     const w = a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
-    let lean = 0;
+    let lean = seated ? a.seatLean || 0 : 0;
     if (w) {
       const H = handsAt(w.kind, w, a.t, w.seed);
       _hw[0].fromArray(H.hands[0]); _hw[1].fromArray(H.hands[1]);
