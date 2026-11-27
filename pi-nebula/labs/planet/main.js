@@ -54,7 +54,7 @@ import { makePlanet, makeLandAsync } from '../../src/planet/planet.js';
 import { KINDS, kindOf, newSeed, kindById } from '../../src/planet/kinds.js';
 import { WIDTH } from '../../src/planet/land.js';
 import { CURVE } from '../../src/planet/ground.js';
-import { WRECK_SHIPS, PAINTS, wreckFor, clearUnder } from '../../src/planet/wreck.js';
+import { WRECK_SHIPS, PAINTS, wreckFor, clearUnder, clearWay } from '../../src/planet/wreck.js';
 import { makeWreck } from '../../src/planet/wreckship.js';
 import { podsPlan, footprintTris } from '../../src/planet/pods.js';
 import { makePods } from '../../src/planet/podsdraw.js';
@@ -279,6 +279,8 @@ async function build(seed, { keepView = false } = {}) {
       const all = W.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
       plan = podsPlan(land, seed, { site: W.site, tris });
       clearUnder(land, footprintTris(plan));
+      // (and the way from where the Medic sets down to the pods, as the game keeps it: src/planet/cover.js CLEARING)
+      if (plan.pods.length) clearWay(land, [land.landing.x, land.landing.z], [plan.pods.reduce((s, p) => s + p.x, 0) / plan.pods.length, plan.pods.reduce((s, p) => s + p.z, 0) / plan.pods.length]);
     }
     const tpd = performance.now();
     const tw = performance.now();

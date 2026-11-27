@@ -420,6 +420,18 @@ export function clearUnder(land, pieces, { margin = 1.5, trunk = 2.5 } = {}) {
   return { cells, trees: gone };
 }
 
+// THE WAY TO THEM KEPT CLEAR: from the ship's ramp to the pods, `half` metres either side of the line from a to b (x, z),
+// marked as under the wreck (a strip of small squares, so the marks stay along it)
+export function clearWay(land, a, b, half = 3.5) {
+  const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); if (l < 0.5) return { cells: 0, trees: 0 };
+  const ux = dx / l, uz = dz / l, nx = -uz * half, nz = ux * half, n = Math.ceil(l / 1.5), out = [];
+  for (let i = 0; i < n; i++) for (let s = -1; s < 1; s += 0.5) {
+    const t0 = (i / n) * l, t1 = ((i + 1) / n) * l, x0 = a[0] + ux * t0 + nx * s, z0 = a[1] + uz * t0 + nz * s, x1 = a[0] + ux * t1 + nx * (s + 0.5), z1 = a[1] + uz * t1 + nz * (s + 0.5);
+    out.push(x0, 0, z0, x1, 0, z0, x0, 0, z1, x1, 0, z0, x1, 0, z1, x0, 0, z1);
+  }
+  return clearUnder(land, [{ tris: Float32Array.from(out) }], { margin: 0.3, trunk: 0 });
+}
+
 // ── ANOTHER CREW'S COLOURS ───────────────────────────────────────────────────────────────────────────────────────
 // Our ships are a light skin (white to cream), graphite, black and yellow accents (each ship's PAL). A wreck from a
 // crew that isn't ours: the light skin turned to their skin colour, the yellow to their accent, the greys a shade

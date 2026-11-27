@@ -90,12 +90,17 @@ const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 // sky but the ground below stays clear from high up: how much of the sky's colour is between a point and the camera.
 // Below the landing place's height it is no thicker than there (it grew without end downhill, and lay in the valleys as
 // flat pools of the sky's colour that two critics read as spilled paint)
+// how much of the sky's colour the farthest ground takes (with air: the moon has none)
+export const HORIZON_HAZE = 0.6;
 export const HAZE_GLSL = /* glsl */`
 uniform float uHaze, uHazeH, uHazeBase;
 float hazeAmt(vec3 eye, vec3 p) {
   float d = distance(eye, p), k = 1.0 / uHazeH, h0 = max(eye.y - uHazeBase, 0.0), dh = max(p.y - uHazeBase, 0.0) - h0;
   float od = abs(dh) < 1.0 ? exp(-k * h0) : (exp(-k * h0) - exp(-k * (h0 + dh))) / (k * dh);
-  return 1.0 - exp(-uHaze * d * od);
+  // (and where the land meets the sky over the planet's curve, it melts into the sky rather than ending in a ruled
+  // line: toward the farthest ground the eye can see from its height over the landing place, more haze)
+  float edge = sqrt(2.0 * ${CURVE.toFixed(1)} * (h0 + 1.5));
+  return max(1.0 - exp(-uHaze * d * od), ${HORIZON_HAZE.toFixed(2)} * smoothstep(0.35, 1.0, d / edge));
 }
 `;
 

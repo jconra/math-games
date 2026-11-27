@@ -23,11 +23,16 @@ import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { PLANTS, PLANT_SINK } from './kinds.js';
 import { hash2 } from './noise.js';
+import { wrapD } from './land.js';
 
 const CELL = 8;
-// nothing stands on the landing place, nor within a few metres of its edge (the mark eases out over 52 m past its
+// no boulder stands on the landing place, nor within a few metres of its edge (the mark eases out over 52 m past its
 // edge: src/planet/land.js; 0.92 is about 4 m past it)
 const CLEAR = 0.92;
+// THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
+// small stones and the plants grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
+// middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js)
+export const CLEARING = { pad: 11, kept: 0.999 };
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
 export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
 
@@ -169,6 +174,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   const t0 = performance.now(), Q = COVER_QUALITY[quality] || COVER_QUALITY.medium, K = land.kind, C = K.cover, P = land.width, wrapN = P / CELL;
   const group = new THREE.Group(); group.name = 'planet:cover';
   const layers = [], dummy = new THREE.Object3D(), col = new THREE.Color();
+  const L0 = land.landing, keptClear = (x, z) => land.landingAt(x, z) > CLEARING.kept || Math.hypot(wrapD(x - L0.x, P), wrapD(z - L0.z, P)) < CLEARING.pad;
   const srgb = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const stats = { rocks: 0, plants: 0, tris: 0, buildMs: 0, layers: 0 };
   // a layer: one InstancedMesh for each of its shapes, laid out round the camera out to `reach` metres
@@ -197,7 +203,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
     const rock = land.rockAt(cx, cz), n = Math.floor((0.7 + rock * 4.5) * C.rocks.many * Q.many * 1.6 + hash2(wi, wj, 77));
     for (let q = 0; q < n; q++) {
       const x = cx + (hash2(wi, wj, 100 + q) - 0.5) * CELL, z = cz + (hash2(wi, wj, 200 + q) - 0.5) * CELL;
-      if (land.landingAt(x, z) > CLEAR) continue;
+      if (keptClear(x, z)) continue;
       const s = 0.08 + 0.45 * Math.pow(hash2(wi, wj, 300 + q), 3), y = land.heightAt(x, z) - s * 0.18;
       col.copy(rockCol).lerp(dustCol, hash2(wi, wj, 400 + q) * 0.5).multiplyScalar(0.85 + 0.3 * hash2(wi, wj, 500 + q));
       if (!put(L, q & 3, x, y, z, s, hash2(wi, wj, 600 + q) * 6.28, 0.3, col)) return;
@@ -263,7 +269,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
           for (let e = 0; e < k; e++) {
             const a = hash2(wi + e, wj, 90 + q) * 6.283, d = clumpR * Math.sqrt(hash2(wi, wj + e, 95 + q));
             const x = bx + Math.cos(a) * d, z = bz + Math.sin(a) * d;
-            if (land.growthAt(x, z) < 0.05 || land.landingAt(x, z) > CLEAR) continue;
+            if (land.growthAt(x, z) < 0.05 || keptClear(x, z)) continue;
             const hgt = PLANTS[p.k].height * p.size * (0.7 + 0.6 * hash2(wi + e, wj + q, 7)), y = land.heightAt(x, z) - PLANT_SINK[p.k] * hgt;
             col.setRGB(1, 1, 1).multiplyScalar(0.85 + 0.3 * hash2(wi, wj + e, 13 + q));
             if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col)) break;

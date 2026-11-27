@@ -85,7 +85,7 @@
 //   site.words    what is going on, for the strip along the top;  site.state();  site.close()
 import * as THREE from 'three';
 import { makePlanet, makeLandAsync } from './planet/planet.js';
-import { clearUnder, wreckFor } from './planet/wreck.js';
+import { clearUnder, clearWay, wreckFor } from './planet/wreck.js';
 import { makeWreck } from './planet/wreckship.js';
 import { podsPlan, footprintTris } from './planet/pods.js';
 import { makePods } from './planet/podsdraw.js';
@@ -148,6 +148,8 @@ export function makeSite(ctx, opts = {}) {
     const all = Wk.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
     podPlan = podsPlan(land, seed, { site: Wk.site, tris });
     clearUnder(land, footprintTris(podPlan));
+    // (and the way from where the Medic sets down to the pods: src/planet/cover.js CLEARING)
+    if (podPlan.pods.length) clearWay(land, [land.landing.x, land.landing.z], [podPlan.pods.reduce((s, p) => s + p.x, 0) / podPlan.pods.length, podPlan.pods.reduce((s, p) => s + p.z, 0) / podPlan.pods.length]);
     if (st.closed) return;
     planet = await makePlanet({ renderer: W.renderer, scene: group, land, quality: W.quality });
     if (st.closed) { planet.dispose(); return; }

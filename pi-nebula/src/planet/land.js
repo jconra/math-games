@@ -61,7 +61,9 @@ export function makeLand(seed, { kind = null, n = SAMPLES } = {}) {
     const near = 1 - Math.min(1, Math.max(0, (d - landing.flat) / landing.edge));   // (1 on the landing place, easing out)
     // (on the landing place the ground keeps its own colours, a little quieter; nothing stands on it: src/planet/cover.js)
     NM[k * 4] = b(-dx / l * 0.5 + 0.5); NM[k * 4 + 1] = b(-dz / l * 0.5 + 0.5); NM[k * 4 + 2] = b(ctx.rock[k] * (1 - near)); NM[k * 4 + 3] = b(ctx.tone[k] * (1 - 0.6 * near) * 0.5 + 0.5);
-    EX[k * 4] = b(ctx.growth[k]); EX[k * 4 + 1] = b(near); EX[k * 4 + 2] = b(Math.min(1, ctx.woods[k] * crown));
+    // (the landing place's mark tops out a step short of full: full is kept for what is cleared under the wreck, the pods
+    // and the way to them, src/planet/wreck.js clearUnder, where nothing at all stands)
+    EX[k * 4] = b(ctx.growth[k]); EX[k * 4 + 1] = Math.min(254, b(near)); EX[k * 4 + 2] = b(Math.min(1, ctx.woods[k] * crown));
     if (H[k] < minH) minH = H[k]; if (H[k] > maxH) maxH = H[k];
   }
   const trees = layTrees(ctx, K, landing);
