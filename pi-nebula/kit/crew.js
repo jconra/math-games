@@ -964,6 +964,13 @@ function relaxFingers(clips, scene, rig, moves, F = FINGERS) {
 // only its points (SEAT.fill; false: its points alone, as before), and with a hand part the sleeve's cuff is lifted too.
 export const SEAT = { clips: /^(Sit_|Stool_)/, clear: 0.004, most: 0.25, along: 0.45, side: 0.05, inner: 0.35, near: [0.04, 0.12], again: 3, fill: true };
 export const DRIVE = { clip: 'Drive', up: 0.15, apart: 0.34, forward: 0.08 };
+// THE POLISHING HANDS APART (two blind critics, 2026-11-26, of the men's work clip close up: wiping the counter, the
+// right hand went through the left forearm). Mathwood's Bar_Polish rubs the right hand round the left forearm held
+// across the body; the crew's own copy moves each hand as DRIVE moves them on the wheel (each hand's own circles kept
+// about its middle): the two POLISH.apart apart, POLISH.up lower (a counter's top) and POLISH.forward further out.
+// (The game's cook no longer plays it at his counter: his hands are laid on its top, src/atwork.js; the Crew Lab and
+// its sheets still show the clip.)
+export const POLISH = { clip: 'Bar_Polish', up: -0.12, apart: 0.42, forward: 0.16 };
 const SEAT_LEG = /^UpperLeg[LR]$/, SEAT_ARM = /^(LowerArm)([LR])$/, SEAT_HAND = /^(Wrist|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)([LR])$/;
 // (a part's points, each in the frame of the bone that carries most of it, at rest: { bone names, points (x, y, z each) };
 // pick(name): the bones whose points are kept; withTris: also its triangles whose three points are all kept, as three
@@ -1016,7 +1023,7 @@ function reachArm(B, s, T, H) {
   wr.quaternion.copy(la.getWorldQuaternion(_ik.q).invert().multiply(H)); wr.updateMatrixWorld(true);
 }
 function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE, AL = null) {
-  const which = clips.map((c, j) => (S && S.clips.test(c.name) ? 'sit' : D && c.name === D.clip ? 'drive' : null));
+  const which = clips.map((c, j) => (S && S.clips.test(c.name) ? 'sit' : D && c.name === D.clip ? 'drive' : POLISH && c.name === POLISH.clip ? 'polish' : null));
   if (!which.some(Boolean)) return clips;
   const bare = bareBones(scene); if (!bare) return clips;
   const { B, holder } = bare;
@@ -1055,7 +1062,8 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE, AL
     // (THE ARMS' LENGTH BY THE BONES: the wheel is where it was, so its middle is taken from the arms at their length
     // before they were drawn in; the shorter arms then reach out to it)
     const full = (on) => { if (!AL || AL.arm === 1) return; for (const s of ['L', 'R']) for (const n of ['LowerArm' + s, 'Wrist' + s]) if (B[n]) B[n].position.multiplyScalar(on ? 1 / AL.arm : AL.arm); holder.updateMatrixWorld(true); };
-    if (kind === 'drive') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); full(true); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); full(false); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
+    const HC = kind === 'polish' ? POLISH : D;
+    if (kind !== 'sit') { for (let k = 0; k < steps; k++) { pose((dur * k) / (steps - 1)); full(true); for (const s of ['L', 'R']) mid[s].add(B['Wrist' + s].getWorldPosition(v)); full(false); } mid.L.divideScalar(steps); mid.R.divideScalar(steps); }
     const centre = mid.L.clone().add(mid.R).multiplyScalar(0.5), side = Math.sign(B.UpperArmL.getWorldPosition(new THREE.Vector3()).x - B.UpperArmR.getWorldPosition(new THREE.Vector3()).x) || 1;
     let moved = 0;
     // (THE HAND'S MIDDLE OVER THE THIGH, below: how far out a hand is to go, at this moment of the clip)
@@ -1137,7 +1145,7 @@ function seatedArms(clips, scene, handScene, rig, moves, S = SEAT, D = DRIVE, AL
         } else {
           const sg = s === 'L' ? side : -side;
           full(true); const Wf = B['Wrist' + s].getWorldPosition(new THREE.Vector3()); full(false);
-          T = Wf.add(new THREE.Vector3(centre.x + sg * D.apart / 2 - mid[s].x, D.up, D.forward || 0));
+          T = Wf.add(new THREE.Vector3(centre.x + sg * HC.apart / 2 - mid[s].x, HC.up, HC.forward || 0));
         }
         if (T) { reachArm(B, s, T, H); moved++; }
         for (const n of ['UpperArm' + s, 'LowerArm' + s, 'Wrist' + s]) (arm[n] = arm[n] || []).push(...B[n].quaternion.toArray());

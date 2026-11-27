@@ -588,6 +588,12 @@ export function figureOf(c, { renderer = null, game = [2.6, 1.0, 0.7], paint = t
 //   armSplit      the upper arm against the forearm (joint to joint): ANSUR's shoulder point to elbow over elbow to
 //                 wrist is 1.18 to 1.37; the least here 1.05 (RULE: the shoulder JOINT lies some 3.5 cm under the
 //                 shoulder point the survey measures from).
+//                 (WHY IT READS 1.14 ON EVERY FIGURE, two critics asked, 2026-11-26: it is read off the bones, and it
+//                 is true of every figure. Every outfit is put on one of the two Mathwood skeletons, whose upper arm and
+//                 forearm stand in the same ratio, and THE ARMS' LENGTH BY THE BONES draws both in by the one number, so
+//                 every arm, the android's too, bends at the same share of its length: its elbow is where its bone's
+//                 joint is, whatever its sleeve looks like. An outfit's own elbow could only differ if it were given a
+//                 skeleton of its own. Kept as a check that nothing else moves the elbow along the arm.)
 //   fingertips    where the fingertips reach on the thigh: 0 at the knee, 1 at the crotch (CANON: mid thigh): ANSUR.
 //   fingertipHeight  the fingertips' height over the whole height (for an outfit whose crotch a coat hides): ANSUR.
 //   hand          the hand's length over the whole height: ANSUR (CANON: the face's length).
