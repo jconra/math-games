@@ -43,7 +43,8 @@ function rockShapes(detail) {
     const g = new THREE.IcosahedronGeometry(1, detail), p = g.attributes.position, seen = new Map();
     for (let k = 0; k < p.count; k++) {
       const key = p.getX(k).toFixed(3) + ',' + p.getY(k).toFixed(3) + ',' + p.getZ(k).toFixed(3);   // (shared corners move together, so the rock stays closed)
-      if (!seen.has(key)) seen.set(key, 0.72 + 0.5 * hash2(k * 7 + v * 131, seen.size * 13 + v, 5));
+      // (a lump: a slow swell over it and a little roughness, rather than every corner its own: those were plain facets)
+      if (!seen.has(key)) { const x = p.getX(k), y = p.getY(k), z = p.getZ(k); seen.set(key, 0.82 + 0.16 * Math.sin(x * 2.3 + v * 1.7) * Math.cos(z * 1.9 - y * 1.3 + v) + 0.1 * Math.sin((x + z) * 3.1 + v * 2.2) + 0.12 * (hash2(k * 7 + v * 131, seen.size * 13 + v, 5) - 0.5)); }
       const f = seen.get(key); p.setXYZ(k, p.getX(k) * f * (1 + 0.25 * v / 3), p.getY(k) * f * (0.5 + 0.08 * v), p.getZ(k) * f);
     }
     g.computeVertexNormals();
@@ -121,11 +122,24 @@ export const turnOf = (lf) => ({ hue: (lf.hue - LEAF_HUE) * Math.PI / 180, sat: 
 export const HAZE_SKY_GLSL = /* glsl */`
 vec3 hazeSky(vec3 p) { vec3 d = normalize(p - cameraPosition); return skyAt(cameraPosition, normalize(vec3(d.x, min(d.y, 0.0) - 0.001, d.z))); }`;
 
+// THE ROCKS' LOOK (two critics: plain faceted lumps in the ground's own colour): a shade darker than the rock the ground
+// is painted with, each its own, and a surface of their own
+export const ROCK_LOOK = { dark: 0.35, shade: [0.62, 0.38] };
+const STONE_GLSL = `{
+  vec3 q = vPlace * 2.7; vec3 i = floor(q), t = fract(q); t = t * t * (3.0 - 2.0 * t);
+  #define H3(o) fract(sin(dot(i + o, vec3(12.99, 78.23, 37.71))) * 43758.55)
+  float a = mix(mix(mix(H3(vec3(0, 0, 0)), H3(vec3(1, 0, 0)), t.x), mix(H3(vec3(0, 1, 0)), H3(vec3(1, 1, 0)), t.x), t.y),
+                mix(mix(H3(vec3(0, 0, 1)), H3(vec3(1, 0, 1)), t.x), mix(H3(vec3(0, 1, 1)), H3(vec3(1, 1, 1)), t.x), t.y), t.z);
+  vec3 q2 = vPlace * 11.0; float b = fract(sin(dot(floor(q2), vec3(7.13, 157.1, 113.7))) * 4375.85);
+  diffuseColor.rgb *= 0.72 + 0.45 * a + 0.16 * (b - 0.5);
+  #undef H3
+}`;
+
 // ── the shared shader changes: where it stands on the light picture, the curve, the fade at its edge, the haze ───
 // plant: recoloured ({ hue, sat, light, sway, clock } as uniforms); fade: a dithered fade by its own iFade (0..1), for
 // the trees' crossfade with their far pictures; soften (0..1): its normals bent this far toward up (the Terrain Lab's
 // trees' leaves, so the half of them facing away from the sun don't read as black)
-export function onGround(material, { ground, sky, reach, plant = null, fade = false, soften = 0 }) {
+export function onGround(material, { ground, sky, reach, plant = null, fade = false, soften = 0, stone = false }) {
   const U = ground.U;
   material.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uL: U.uL, uP: U.uP, uN: U.uN, uCam: U.uCam, uCurve: U.uCurve, uHaze: U.uHaze, uHazeH: U.uHazeH, uHazeBase: U.uHazeBase, uReach: { value: reach }, uClock: plant ? plant.clock : { value: 0 } });
@@ -152,6 +166,8 @@ export function onGround(material, { ground, sky, reach, plant = null, fade = fa
     if (plant || soften) f = f.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
       + (soften ? `\nnormal = normalize(mix(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), ${soften.toFixed(2)}));` : ''));
     if (plant) f = f.replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = planetTurn(diffuseColor.rgb, uHue, uSat, uLight);');
+    // (a stone's own surface: mottled and pitted at two sizes, by where on it each point is)
+    if (stone) f = f.replace('#include <color_fragment>', '#include <color_fragment>\n' + STONE_GLSL);
     // (the far one's complement: where this one is drawn the far picture isn't, so in the crossfade every pixel is one or the other)
     if (fade) f = f.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{ float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (vFade < dither) discard; }');
     // the haze, mixed in as the ground and the sky mix theirs: before the colours are turned into the screen's
@@ -159,7 +175,7 @@ export function onGround(material, { ground, sky, reach, plant = null, fade = fa
     if (sky) f = f.replace('void main() {', HAZE_SKY_GLSL + '\nvoid main() {');
     sh.fragmentShader = f;
   };
-  material.customProgramCacheKey = () => 'planet-cover-2' + (plant ? '-plant' : '') + (sky ? '-air' : '') + (fade ? '-fade' : '') + (soften ? '-s' + soften : '');
+  material.customProgramCacheKey = () => 'planet-cover-2' + (plant ? '-plant' : '') + (sky ? '-air' : '') + (fade ? '-fade' : '') + (soften ? '-s' + soften : '') + (stone ? '-stone' : '');
   return material;
 }
 
@@ -194,10 +210,11 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   };
 
   // ── the rocks ──────────────────────────────────────────────────────────────────────────────────────────────────
-  const rockShapesG = rockShapes(Q.detail), rockCol = srgb(look.rock), dustCol = srgb(look.dust);
+  // (the boulders rounder on the best quality: four times the triangles, a few hundred of them near the camera)
+  const rockShapesG = rockShapes(Q.detail), boulderShapesG = Q.detail && quality === 'high' ? rockShapes(2) : rockShapesG, rockCol = srgb(look.rock), dustCol = srgb(look.dust), darkCol = srgb(look.dark || look.rock);
   const stoneReach = 70 * Q.reach, boulderReach = 260 * Q.reach;
-  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach });
-  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach });
+  const rockMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: stoneReach, stone: true });
+  const boulderMat = onGround(new THREE.MeshLambertMaterial({ vertexColors: true }), { ground, sky, reach: boulderReach, stone: true });
   // small stones: everywhere a few, more where it is rocky
   const stones = layer({ name: 'stones', shapes: rockShapesG, material: rockMat, reach: stoneReach, most: Math.round(2200 * Q.many), lay: (L, cx, cz, ci, cj, wi, wj) => {
     const rock = land.rockAt(cx, cz), n = Math.floor((0.7 + rock * 4.5) * C.rocks.many * Q.many * 1.6 + hash2(wi, wj, 77));
@@ -205,7 +222,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       const x = cx + (hash2(wi, wj, 100 + q) - 0.5) * CELL, z = cz + (hash2(wi, wj, 200 + q) - 0.5) * CELL;
       if (keptClear(x, z)) continue;
       const s = 0.08 + 0.45 * Math.pow(hash2(wi, wj, 300 + q), 3), y = land.heightAt(x, z) - s * 0.18;
-      col.copy(rockCol).lerp(dustCol, hash2(wi, wj, 400 + q) * 0.5).multiplyScalar(0.85 + 0.3 * hash2(wi, wj, 500 + q));
+      col.copy(rockCol).lerp(darkCol, ROCK_LOOK.dark).lerp(dustCol, hash2(wi, wj, 400 + q) * 0.3).multiplyScalar(ROCK_LOOK.shade[0] + ROCK_LOOK.shade[1] * hash2(wi, wj, 500 + q));
       if (!put(L, q & 3, x, y, z, s, hash2(wi, wj, 600 + q) * 6.28, 0.3, col)) return;
     }
   } });
@@ -223,7 +240,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       boulderAt.get(key).push([x + P / 2 - ii * CELL, z + P / 2 - jj * CELL, Math.min(size, 3.2), q]);
     }
   }
-  const boulders = layer({ name: 'boulders', shapes: rockShapesG, material: boulderMat, reach: boulderReach, most: Math.round(1400 * Q.many), lay: (L, cx, cz, ci, cj, wi, wj) => {
+  const boulders = layer({ name: 'boulders', shapes: boulderShapesG, material: boulderMat, reach: boulderReach, most: Math.round(1400 * Q.many), lay: (L, cx, cz, ci, cj, wi, wj) => {
     const x0 = cx - CELL / 2, z0 = cz - CELL / 2, list = (boulderAt.get(wi + ',' + wj) || []).slice();
     const rock = land.rockAt(cx, cz);
     // (the rocky ground's own, now and then)
@@ -232,7 +249,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       const x = x0 + ox, z = z0 + oz;
       if (land.landingAt(x, z) > CLEAR) continue;
       const y = land.heightAt(x, z) - s * 0.22;
-      col.copy(rockCol).multiplyScalar(0.8 + 0.35 * hash2(wi + q, wj, 31));
+      col.copy(rockCol).lerp(darkCol, ROCK_LOOK.dark).multiplyScalar(ROCK_LOOK.shade[0] + ROCK_LOOK.shade[1] * hash2(wi + q, wj, 31));
       if (!put(L, (q + wi) & 3, x, y, z, s, hash2(wi, wj + q, 32) * 6.28, 0.25, col)) return;
     }
   } });
@@ -310,6 +327,6 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       if (Math.hypot(x - lastX, z - lastZ) > CELL * 1.5) { lastX = x; lastZ = z; relay(x, z); }
     },
     relayNow(camera) { lastX = camera.position.x; lastZ = camera.position.z; relay(lastX, lastZ); },
-    dispose() { for (const s of shades) s.dispose(); for (const L of layers) for (const m of L.meshes) { m.dispose(); } for (const g of rockShapesG) g.dispose(); rockMat.dispose(); boulderMat.dispose(); for (const m of plantMats) m.dispose(); },
+    dispose() { for (const s of shades) s.dispose(); for (const L of layers) for (const m of L.meshes) { m.dispose(); } for (const g of new Set([...rockShapesG, ...boulderShapesG])) g.dispose(); rockMat.dispose(); boulderMat.dispose(); for (const m of plantMats) m.dispose(); },
   };
 }
