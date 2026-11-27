@@ -155,6 +155,13 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
   const site = wreckSite(land, seed), placed = settle(parts, land, site, plan);
   const world = placed.mats.map((m, k) => { const M = new THREE.Matrix4().fromArray(m), P = parts[k].pts, out = new Float32Array(P.length), v = new THREE.Vector3(); for (let i = 0; i < P.length; i += 3) { v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(M); out[i] = v.x; out[i + 1] = v.y; out[i + 2] = v.z; } return { tris: out }; });
   const cleared = clearUnder(land, world);
+  // (where the pods go is planned from the pieces as main laid them, before they toppled and dug in: the same seed, the
+  // same pods and walks as before; src/planet/wreck.js settle's main)
+  const forPods = (() => {
+    const T = placed.main.mats.map((m, k) => { const M = new THREE.Matrix4().fromArray(m), P = parts[k].pts, out = new Float32Array(P.length), v = new THREE.Vector3(); for (let i = 0; i < P.length; i += 3) { v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(M); out[i] = v.x; out[i + 1] = v.y; out[i + 2] = v.z; } return out; });
+    const n = T.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of T) { tris.set(a, o); o += a.length; }
+    return { site: placed.main.site, tris };
+  })();
   const tPlace = performance.now();
 
   const group = new THREE.Group(); group.name = 'planet:wreck';
@@ -163,7 +170,7 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
   const geos = [], materials = [];
   let skinGeos = [];
   const W = {
-    ship, plan, site: placed.site, placed, group, stats, paintId: null, world, shades: [],
+    ship, plan, site: placed.site, placed, group, stats, paintId: null, world, forPods, shades: [],
     draw({ scene, ground, sky = null, sunDir = null, paint = null }) {
       const td = performance.now();
       const shadow = !!(sunDir && ground.shadows);

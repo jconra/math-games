@@ -146,8 +146,7 @@ export function makeSite(ctx, opts = {}) {
     if (st.closed) return;
     const pick = wreckFor(seed), podFile = loadPod().catch((e) => { console.error('rescue: the stasis pod did not come', e); return null; });
     const Wk = await makeWreck({ land, ship: pick.ship, pieces: pick.pieces });
-    const all = Wk.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
-    podPlan = podsPlan(land, seed, { site: Wk.site, tris });
+    podPlan = podsPlan(land, seed, Wk.forPods);
     clearUnder(land, footprintTris(podPlan));
     // (and the way from where the Medic sets down to each pod: src/planet/cover.js CLEARING; again from its real ramp
     // foot once it is down: swap())

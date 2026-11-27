@@ -325,7 +325,9 @@ export function settle(parts, land, site, plan) {
     }
     return M;
   };
-  const place = (gap, full) => parts.map((p, k) => {
+  // (main: as the game had it before the pieces toppled and dug in, kept for where the pods go: the same seed, the same
+  // pods, the same walks as before; the review)
+  const place = (S, gap, full, main = false) => parts.map((p, k) => {
     const P = plan.poses[k], [px, py, pz] = p.pivot, along = (k - (n - 1) / 2) * gap;
     // in the ship's frame: turned about its middle, slid; then onto the site
     const local = mul(tr(px + P.side, py, pz + along), mul(rotY(P.yaw), mul(rotX(P.pitch), mul(rotZ(P.roll), tr(-px, -py, -pz)))));
@@ -336,33 +338,36 @@ export function settle(parts, land, site, plan) {
     for (let i = 0; i < sp.length; i += 3) { const q = apply(M, sp[i], sp[i + 1], sp[i + 2]); x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[2]); }
     const nrm = groundPlane(land, x0, x1, z0, z1), ang = Math.min(WRECK.tilt, Math.acos(Math.min(1, nrm[1])));
     if (ang > 1e-4) M = mul(tr(w[0], w[1], w[2]), mul(axisAngle(nrm[2], 0, -nrm[0], ang), mul(tr(-w[0], -w[1], -w[2]), M)));
-    M = topple(rest(M, k), k);
+    M = main ? rest(M, k) : topple(rest(M, k), k);
     // lowered: its lowest point (against the ground under each point) the plan's sink in the ground, and deeper still
     // if what it would rest on is not under its middle even so (dug in rather than balanced: up to WRECK.dig more)
     let low = Infinity; const pts = full ? p.pts : many[k];
     for (let i = 0; i < pts.length; i += 3) { const q = apply(M, pts[i], pts[i + 1], pts[i + 2]), d = q[1] - land.heightAt(q[0], q[2]); if (d < low) low = d; }
-    let e = 0; while (e < WRECK.dig && standing(M, k, WRECK.touch + e) < standOf[k]) e += 0.05;
-    deeper[k] = +e.toFixed(2);
+    let e = 0; if (!main) { while (e < WRECK.dig && standing(M, k, WRECK.touch + e) < standOf[k]) e += 0.05; deeper[k] = +e.toFixed(2); }
     return mul(tr(0, -low - P.sink - e, 0), M);
   });
   const pointsOf = (M, k) => { const s = sample[k], out = []; for (let i = 0; i < s.length; i += 3) out.push(apply(M, s[i], s[i + 1], s[i + 2])); return out; };
-  let gap = plan.gap || 3, mats = null;
-  for (let tries = 0; tries < 60; tries++) {
-    mats = place(gap, false);
-    const W = mats.map((M, k) => pointsOf(M, k));
-    // (apart: the least distance between two pieces' points)
-    let near = Infinity;
-    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (const p of W[a]) for (const q of W[b]) { const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; if (d < near) near = d; }
-    // (off the landing place: the nearest point to its middle, across the ground)
-    let inner = Infinity; for (const P of W) for (const p of P) inner = Math.min(inner, Math.hypot(wrapD(p[0] - L.x), wrapD(p[2] - L.z)));
-    if (inner < L.flat + 2) { const out = L.flat + 2 - inner + 0.5; S.x += Math.sin(S.a) * out; S.z += Math.cos(S.a) * out; S.dist += out; continue; }
-    if (Math.sqrt(near) >= WRECK.apart) break;
-    gap += 0.5;
-  }
-  mats = place(gap, true);
+  const lay = (S, main) => {
+    let gap = plan.gap || 3, mats = null;
+    for (let tries = 0; tries < 60; tries++) {
+      mats = place(S, gap, false, main);
+      const W = mats.map((M, k) => pointsOf(M, k));
+      // (apart: the least distance between two pieces' points)
+      let near = Infinity;
+      for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (const p of W[a]) for (const q of W[b]) { const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; if (d < near) near = d; }
+      // (off the landing place: the nearest point to its middle, across the ground)
+      let inner = Infinity; for (const P of W) for (const p of P) inner = Math.min(inner, Math.hypot(wrapD(p[0] - L.x), wrapD(p[2] - L.z)));
+      if (inner < L.flat + 2) { const out = L.flat + 2 - inner + 0.5; S.x += Math.sin(S.a) * out; S.z += Math.cos(S.a) * out; S.dist += out; continue; }
+      if (Math.sqrt(near) >= WRECK.apart) break;
+      gap += 0.5;
+    }
+    return { gap, mats: place(S, gap, true, main) };
+  };
+  const was = { ...S }, first = lay(S, false), mats = first.mats, gap = first.gap, mainSite = { ...was }, mainMats = lay(mainSite, true).mats;
+  mainSite.y = land.heightAt(mainSite.x, mainSite.z);
   const low = mats.map((M, k) => { let lo = Infinity; const pts = parts[k].pts; for (let i = 0; i < pts.length; i += 3) { const q = apply(M, pts[i], pts[i + 1], pts[i + 2]); lo = Math.min(lo, q[1] - land.heightAt(q[0], q[2])); } return +lo.toFixed(3); });
   S.y = land.heightAt(S.x, S.z);
-  return { mats, gap, site: S, low, deeper: deeper.slice() };
+  return { mats, gap, site: S, low, deeper: deeper.slice(), main: { mats: mainMats, site: mainSite } };
 }
 // how far a piece's own up leans from the sky's (radians)
 const leanOf = (M) => Math.acos(Math.min(1, M[5] / Math.hypot(M[4], M[5], M[6])));

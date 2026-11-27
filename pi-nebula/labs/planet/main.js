@@ -276,8 +276,7 @@ async function build(seed, { keepView = false } = {}) {
     // the pods beside it: where they lie, and the ground under them cleared (before the planet is drawn, as the wreck's)
     let plan = null; const tp = performance.now();
     if (W) {
-      const all = W.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
-      plan = podsPlan(land, seed, { site: W.site, tris });
+      plan = podsPlan(land, seed, W.forPods);
       clearUnder(land, footprintTris(plan));
       // (and the way from where the Medic sets down to the pods, as the game keeps it: src/planet/cover.js CLEARING)
       for (const p of plan.pods) clearWay(land, [land.landing.x, land.landing.z], [p.x, p.z]);
