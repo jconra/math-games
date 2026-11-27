@@ -10,13 +10,16 @@
 //   const L = peopleLight(c, env)   a crew kit person's materials made to take it (once; made again on their next
 //                                   drawing); env: the cabin's picture of itself (boarding's s.cabin.env), or none
 //   L.set(k)                    k: 0 outside .. 1 inside (a step at a time: L.to(k, dt) eases there)
-//   L.sunlit(v, dt)             outside: how much of the planet's sun reaches them (0 in the land's own shade .. 1)
+//   L.sunlit(v, dt, airless)    outside: how much of the planet's sun reaches them (0 in the land's own shade .. 1);
+//                               airless: a world with no air (the moon), where the shade keeps PEOPLE_SHADE of it
 import * as THREE from 'three';
 import { shine } from '../player.js';
 
 export const INSIDE_FILL = { sky: 0xdde2e8, ground: 0x5d6065, power: 0.75 };
 // in the land's own shade (the moon's crater wall), how much of the sun a person still gets: a floor of light, the same
-// for everyone out there, so a person standing in the shade can be seen (round 2's critics: a black shape in a black field)
+// for everyone out there, so a person standing in the shade can be seen (round 2's critics: a black shape in a black field);
+// only where there is no air: with air the sky lights them as it lights the ground (the review: on a world with air
+// a person in a hill's shade came out about twice as bright as the ground beside them)
 export const PEOPLE_SHADE = 0.3;
 export const FILL_UNIFORMS = () => ({ uFillSky: { value: new THREE.Color(INSIDE_FILL.sky).multiplyScalar(INSIDE_FILL.power) }, uFillGround: { value: new THREE.Color(INSIDE_FILL.ground).multiplyScalar(INSIDE_FILL.power) } });
 
@@ -56,7 +59,7 @@ export function peopleLight(c, env = null) {
     },
     to(k, dt) { L.set(k + (k0 - k) * Math.exp(-8 * dt)); },
     // (outside, how much of the sun reaches where they stand: in the land's own shade, none)
-    sunlit(v, dt = 1) { v = PEOPLE_SHADE + (1 - PEOPLE_SHADE) * v; U.uOutSun.value = v + (U.uOutSun.value - v) * Math.exp(-8 * dt); },
+    sunlit(v, dt = 1, airless = true) { if (airless) v = PEOPLE_SHADE + (1 - PEOPLE_SHADE) * v; U.uOutSun.value = v + (U.uOutSun.value - v) * Math.exp(-8 * dt); },
     get k() { return k0; },
   };
   return L;

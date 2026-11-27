@@ -116,8 +116,9 @@ const MOON = {
       // no air, so the shadows are dark but for a little light off the ringed planet (from the game's sky, its +z): the
       // game's maker's "long, nearly black shadows" (PLAN1-1); nearly black, not empty (two critics: at 0.2 the shaded
       // ground was pure black, the player standing on nothing): the faintest grey of the craters and stones still seen;
-      // a grey light, no colour cast (at 0.45 and blue the critics of round 1 saw navy, not nearly black)
-      ambient: { sky: [0.44, 0.45, 0.47], ground: [0.06, 0.06, 0.06], power: MOON_SHADE },
+      // a dark blue-grey light of its own (at 0.45 and blue the critics of round 1 saw navy; grey, round 3's saw dead
+      // black, her shadow gone on it): about what main showed, a touch lighter, so a shadow can be seen on it
+      ambient: { sky: [0.38, 0.44, 0.54], ground: [0.06, 0.06, 0.07], power: MOON_SHADE },
       air: null, exposure: 0.95,
     };
   },

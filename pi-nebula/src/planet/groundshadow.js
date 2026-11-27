@@ -39,12 +39,14 @@ import { lookOff } from './kinds.js';
 //   high:   near 1024, 24 m, softened, and the near trees    (fill 3.1 M pixels a frame)
 //   site:   512 on low, 1024 above, round the site's things plus `siteMargin` metres; only when something there moves
 // soft: about how far a shadow's edge is spread (metres); sky: how much of the sky's light a shadow takes as well as the
-// sun's (where the sun reaches; in the land's own shade a shadow takes nothing: there is no second shadow); dark: how
+// sun's (where the sun reaches; in the land's own shade a shadow takes nothing: there is no second shadow); shade: on a
+// world with no air, how much of the shade's own faint light a shadow takes there (round 3's critics: her shadow gone on
+// the moon's shaded ground, the pods and rocks there ghosts; main's shadow darkened it); dark: how
 // dark each kind of caster's shadow is (a pebble's or a tuft's lighter than a ship's or a person's)
 export const SHADOW_PIC = {
   near: { low: { size: 256, half: 10, soft: false, cover: false, trees: false }, medium: { size: 512, half: 16, soft: true, cover: true, trees: false }, high: { size: 1024, half: 24, soft: true, cover: true, trees: true } },
   site: { low: 512, medium: 1024, high: 1024 }, siteMargin: 60, siteMost: 150, high: 2.5,
-  soft: 0.05, sky: 0.5, dark: { big: 1, person: 1, rock: 0.5, plant: 0.45, tree: 0.6 },
+  soft: 0.05, sky: 0.5, shade: 0.75, dark: { big: 1, person: 1, rock: 0.5, plant: 0.45, tree: 0.6 },
 };
 // (kept for the station's own marks: the stencil the ground and what casts once used, src/planet/ground.js)
 export const GROUND_SHADOW = { lift: 0.06, people: 0.03, air: 0.5, bare: 0.7 };

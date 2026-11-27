@@ -203,6 +203,7 @@ const GROUND_FRAG = /* glsl */`
 uniform sampler2D uNM, uL, uDetail, uShadow, uShadowSite, uGrit;
 uniform vec4 uGritK, uGritTurn;
 const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
+const float SHADOW_SHADE = ${SHADOW_PIC.shade.toFixed(2)};
 uniform vec4 uShadowBox, uShadowSiteBox;
 uniform float uN, uP;
 uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
@@ -279,8 +280,14 @@ void main() {
   { vec2 su = (vXZ - uShadowSiteBox.xy) / uShadowSiteBox.z; float e = max(abs(su.x), abs(su.y));
     if (e < 1.0) sh = max(sh, texture2D(uShadowSite, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.9, 1.0, e)) * uShadowSiteBox.w); }
   sh = min(1.0, sh * 1.15);
-  // (the sky's part only where the sun reaches: in the land's own shade a shadow takes nothing, no second shadow)
-  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh * L.r));
+  // (the sky's part only where the sun reaches: in the land's own shade a shadow takes nothing, no second shadow; but
+  // with no air the shade's faint light is all there is, and a shadow takes most of it, so hers is seen on the moon)
+  #ifdef AIR
+  float skyTake = SHADOW_SKY * L.r;
+  #else
+  float skyTake = mix(SHADOW_SHADE, SHADOW_SKY, L.r);
+  #endif
+  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - skyTake * sh));
   #ifdef AIR
   // the haze: the sky behind, more of it the further off and the lower down
   col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), max(hazeAmt(cameraPosition, vWorld), horizonAmt(cameraPosition, vWorld)));
@@ -332,6 +339,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
   const LN = light.rt.width, sunPx = new Uint8Array(LN * LN * 4);
   try { renderer.readRenderTargetPixels(light.rt, 0, 0, LN, LN, sunPx); } catch (e) { sunPx.fill(255); }
   const sunAt = (x, z) => { const P = land.width, u = (x + 0.5 * P) / P + 0.5 / land.N, v = (z + 0.5 * P) / P + 0.5 / land.N, i = ((Math.floor(u * LN) % LN) + LN) % LN, j = ((Math.floor(v * LN) % LN) + LN) % LN; return sunPx[(j * LN + i) * 4] / 255; };
+  sunAt.airless = !look.air;      // (src/planet/inside.js: the people's floor of light is the airless worlds')
   Object.assign(U, shadows.U);
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);

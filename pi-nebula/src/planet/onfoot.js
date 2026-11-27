@@ -86,7 +86,7 @@ export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = n
   function put(feet, heading = 0) {
     const s = walls.snap(feet.x, feet.y + 0.5, feet.z, 2.5) || feet.clone();
     player.place(s, heading); chase.snap(player.pos, heading);
-    if (light) { light.set(medic.inside(player.pos) ? 1 : 0); if (planet.ground.sunAt) light.sunlit(planet.ground.sunAt(player.pos.x, player.pos.z)); }
+    if (light) { light.set(medic.inside(player.pos) ? 1 : 0); if (planet.ground.sunAt) light.sunlit(planet.ground.sunAt(player.pos.x, player.pos.z), 1, planet.ground.sunAt.airless); }
     player.c.update(0.5);      // (the standing clip faded all the way in: no first frame with the arms out)
     rocksIn(player.pos);
   }
@@ -94,7 +94,7 @@ export async function makeOnFoot({ planet, scene, camera, lib, recipe, wreck = n
   function update(dt, { move = null, run = false, look = null, zoom = 0, others = [] } = {}) {
     if (!rocksAt || Math.hypot(player.pos.x - rocksAt.x, player.pos.z - rocksAt.z) > ONFOOT.again) rocksIn(player.pos);
     player.update(dt, { move, run, yaw: chase.yaw, others });
-    if (light) { light.to(medic.inside(player.pos) ? 1 : 0, dt); if (planet.ground.sunAt) light.sunlit(planet.ground.sunAt(player.pos.x, player.pos.z), dt); }
+    if (light) { light.to(medic.inside(player.pos) ? 1 : 0, dt); if (planet.ground.sunAt) light.sunlit(planet.ground.sunAt(player.pos.x, player.pos.z), dt, planet.ground.sunAt.airless); }
     chase.update(dt, { feet: player.pos, heading: player.heading, speed: player.speed, look: look || { dx: 0, dy: 0 }, zoom });
     // (never under the ground: lifted over it, still looking at the head)
     const g = ground(camera.position.x, camera.position.z) + ONFOOT.cam;
