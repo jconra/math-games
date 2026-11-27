@@ -9,8 +9,8 @@
 //   the canopy     buildPanes: named panes through named corners on the mesh's canopy, their borders as straight
 //                  spars; spar: the one black bar placed along every border; drawCanopy: the glass and its spars
 //   the cockpit    cockpitTub: dark walls from the canopy's outline down to its floor, so no gap shows the sky
-//   the gear       legLeaves (a leg's strut and foot as kit door leaves), wellDoors, bayDoors and bayPod (a gear pod
-//                  and its folding doors), wellWalls, gearStep (legs then doors, in turn)
+//   the gear       teleLeg (a telescoping leg as kit door leaves: its tubes and foot), slideDoors (a well's two doors,
+//                  cut from the skin, sliding), wellWalls, gearStep (legs then doors, in turn: gear-plan.js), tube
 //   leaves         poseLeaf: a leaf set by hand (a turn, a spin), as the kit's layout code sets it, and more
 //   the throttle   THROTTLE, ENGINE, setThrottle: how hard the engines run, 0 to 1
 //   the grime      grimeMaterials: the kit's painted material with dirt laid over the clean paint by one amount
@@ -21,6 +21,7 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part, placeInto } from '../shipparts/place.js';
 import { U as KU, kitTextures, spinVertex } from '../materials.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
+import { telescope, doorSlide, gearOrder, LEG, TUBE_STEP } from './gear-plan.js';
 
 export const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -386,32 +387,74 @@ export function cockpitTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf,
   return hull2;
 }
 
-// ── THE GEAR ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// a leg's data (a GEAR entry: its mesh, the foot's flags, its fold) as the strut's and the foot's faces, mirrored for
-// starboard, with its hinge and ankle placed and its turns in radians
-export function legMesh(G, Q, mirror) {
-  const M = decodeMesh(G, Q), foot = new Uint8Array(bytes(G.foot)), F = G.fold;
-  const P = (i) => { const v = at(M, i); if (mirror) v.x = -v.x; return v; };
-  const out = { strut: [], foot: [] };
-  for (let t = 0; t < M.tris.length / 3; t++) {
-    let tri = [0, 1, 2].map((k) => P(M.tris[t * 3 + k])); if (mirror) tri = [tri[0], tri[2], tri[1]];
-    const n = tnorm(tri); if (n.lengthSq() < 1e-14) continue;
-    (foot[t] ? out.foot : out.strut).push({ tri, n: n.normalize() });
+// ── THE GEAR (kit/ships/gear-plan.js: the plan, the telescope's and the doors' numbers, the order they move in) ────────
+// A TELESCOPING LEG (gear-plan.js telescope): nested tubes, each an eight-sided tube with a darker collar round its foot,
+// over a broad foot (a hub and a pad with 45-degree edges, its sole rubber), as leaves of one kit door ('gear', 0 down,
+// 1 up): tube k slides up its `rise` as the leg goes up, the foot its own. L: the leg's plan (at, top, belly, r, pad);
+// floor: the ground in the ship's frame; key: the leaves' name stem ('eb'); which: the variant; paint: { tube, collar,
+// hub, pad, sole }
+const OCT = Array.from({ length: 8 }, (_, i) => (i + 0.5) * PI / 4);
+// an eight-sided upright tube about (cx, cz) from y0 to y1, radius r (its flats facing along the ship and across it),
+// with its ends shut
+export function tube(acc, cx, cz, y0, y1, r, surf, dk, ends = true) {
+  const P = (a, y) => V3(cx + r * Math.cos(a), y, cz + r * Math.sin(a));
+  for (let i = 0; i < 8; i++) {
+    const a = OCT[i], b = OCT[(i + 1) % 8], m = (a + b) / 2;
+    acc.poly([P(a, y0), P(b, y0), P(b, y1), P(a, y1)].map(dk), V3(Math.cos(m), 0, Math.sin(m)), surf, 'solid', 99);
   }
-  const m = mirror ? -1 : 1, H = V3(m * F.hinge[0], F.hinge[1], F.hinge[2]), A = V3(m * F.ankle[0], F.ankle[1], F.ankle[2]);
-  // (mirrored, a turn about z goes the other way; about x, the same)
-  const sg = mirror && F.axis[2] ? -1 : 1;
-  return { ...out, H, A, axis: F.axis, a1: sg * F.a1 * PI / 180, a2: sg * F.a2 * PI / 180, slide: F.slide ? [m * F.slide[0], F.slide[1], F.slide[2]] : [0, 0, 0] };
+  if (ends) for (const [y, ny] of [[y1, 1], [y0, -1]]) acc.poly(OCT.map((a) => dk(P(a, y))), V3(0, ny, 0), surf, 'solid', 99);
 }
-// a leg as two leaves of one kit door: the strut turns a1 about its hinge, the foot a2 more about its ankle. key: the
-// leaves' name stem ('eb'); paint(f, isFoot): a face's surface; door: the door's id; tf: the leaves' geometry moved (a
-// point in the ship's frame to where it is drawn: scale, shift), if any
-export function legLeaves(p, G, { key, which, dk, paint, door = 'gear', speed, tf = (v) => v }) {
-  const h1 = { at: dk(tf(G.H)).toArray(), axis: G.axis, angle: G.a1 };
-  const draw = (list, isFoot) => (lp) => { const acc = new Acc(); for (const f of list) acc.tris([f.tri.map((v) => dk(tf(v)))], f.n, paint(f, isFoot)); acc.flush(lp); };
-  p.leaf(`${key}:strut:${which}`, draw(G.strut, false), { door, hinge: h1, slide: G.slide });
-  p.leaf(`${key}:foot:${which}`, draw(G.foot, true), { door, hinge: [h1, { at: dk(tf(G.A)).toArray(), axis: G.axis, angle: G.a2 }], slide: G.slide });
-  p.door(door, [0, dk(V3(0, 0, 0)).y, 0], 0, speed);
+// a slab from y0 to y1 over the rectangle [hx, hz] about (cx, cz), its top edges cut back at 45 degrees by `bevel`
+function bevelSlab(acc, cx, cz, y0, y1, hx, hz, bevel, side, top, bottom, dk) {
+  const ym = y1 - bevel, R = (h, k, y) => [V3(cx - h, y, cz - k), V3(cx + h, y, cz - k), V3(cx + h, y, cz + k), V3(cx - h, y, cz + k)];
+  const lo = R(hx, hz, y0), mid = R(hx, hz, ym), hi = R(hx - bevel, hz - bevel, y1);
+  const sides = [V3(0, 0, -1), V3(1, 0, 0), V3(0, 0, 1), V3(-1, 0, 0)];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4, n = sides[i];
+    acc.poly([lo[i], lo[j], mid[j], mid[i]].map(dk), n, side, 'solid', 99);
+    acc.poly([mid[i], mid[j], hi[j], hi[i]].map(dk), n.clone().add(V3(0, 1, 0)).normalize(), side, 'solid', 99);
+  }
+  acc.poly(hi.map(dk), V3(0, 1, 0), top, 'solid', 99);
+  acc.poly(lo.map(dk), V3(0, -1, 0), bottom, 'solid', 99);
+}
+export function teleLeg(p, L, { floor, key, which, dk, paint, speed }) {
+  const T = telescope({ top: L.top, belly: L.belly, floor }), [cx, cz] = L.at;
+  T.tubes.forEach((tb, k) => {
+    const r = L.r - TUBE_STEP * k;
+    p.leaf(`${key}:leg tube ${k}:${which}`, (lp) => {
+      const acc = new Acc();
+      tube(acc, cx, cz, tb.y0 + 0.06, tb.y1, r, paint.tube, dk);
+      tube(acc, cx, cz, tb.y0, tb.y0 + 0.06, r + 0.022, paint.collar, dk);   // (its collar)
+      acc.flush(lp);
+    }, { door: 'gear', slide: [0, tb.rise, 0] });
+  });
+  const F = T.foot, rl = L.r - TUBE_STEP * (T.n - 1), [px, pz] = L.pad;
+  p.leaf(`${key}:leg foot:${which}`, (lp) => {
+    const acc = new Acc();
+    tube(acc, cx, cz, F.y0 + LEG.pad, F.y1, rl + 0.03, paint.hub, dk);   // (the hub the last tube stands in)
+    bevelSlab(acc, cx, cz, F.y0, F.y0 + LEG.pad, px / 2, pz / 2, 0.025, paint.pad, paint.pad, paint.sole, dk);
+    acc.flush(lp);
+  }, { door: 'gear', slide: [0, F.rise, 0] });
+  p.door('gear', [cx, dk(V3(0, floor, 0)).y, cz], 0, speed);
+  return p;
+}
+// A WELL'S SLIDING DOORS: the skin cut out of it (the hull rig's DOORS: two halves), flush in the hull when shut; each
+// slides open (gear-plan.js doorSlide) as a leaf of the kit door 'doors' (here 0 open, 1 shut: it stands at its slid
+// place and slides back by the same). paint(P, n): its outer face's surface; inner: its inside (3 cm in)
+export function slideDoors(p, halves, { key, which, paint, inner, dk, speed }) {
+  halves.forEach((H, i) => {
+    const S = doorSlide(H);
+    p.leaf(`${key}:well door:${which}:${i}`, (lp) => {
+      const acc = new Acc();
+      for (const poly of H.polys) {
+        const P = poly.map((q) => V3(...q)), n = tnorm(P.slice(0, 3)).normalize(); if (n.y > 0) n.negate();
+        acc.poly(P.map(dk), n, paint(P, n), 'solid', 99);
+        acc.poly(P.map((v) => dk(v.clone().addScaledVector(n, -0.03))).reverse(), n.clone().negate(), inner, 'solid', 99);
+      }
+      acc.flush(lp);
+    }, { at: S, door: 'doors', slide: S.map((v) => -v) });
+  });
+  p.door('doors', [0, dk(V3(0, 0, 0)).y, 0], 0, speed);
   return p;
 }
 // turning about a line (a point on it and its direction), as a matrix; a matrix as a leaf's pose
@@ -420,29 +463,6 @@ export const leafPose = (M) => { const q = new THREE.Quaternion(), pos = new THR
 // (a panel: its outer face painted (paint(P, n)), its inner face dark, 3 cm in; P in the ship's frame, n its outward
 // normal)
 export const panel = (acc, P, n, paint, inner, dk) => { acc.poly(P.map(dk), n, paint(P, n), 'solid', 99); acc.poly(P.map((v) => dk(v.clone().addScaledVector(n, -0.03))).reverse(), n.clone().negate(), inner, 'solid', 99); };
-// a well's doors: the belly's skin cut out of it, each half a list of convex polygons hinged at two points on the
-// well's edge; each hangs open (`open` radians, down) while the gear is down and shuts flush into the belly when it is
-// up. paint(P, n): the outer face's surface. (The door 'doors': open = shut, here: t 1 is shut.)
-export function wellDoors(p, halves, { key, which, open, paint, inner, dk }) {
-  halves.forEach((half, i) => {
-    const a = dk(V3(...half.hinge[0])), b = dk(V3(...half.hinge[1])), axis = b.clone().sub(a).normalize();
-    // (which way is down: turn so the half's middle drops)
-    const mid = dk(half.polys.flat().reduce((t, q) => t.add(V3(...q)), V3(0, 0, 0)).multiplyScalar(1 / half.polys.flat().length));
-    const R = (ang) => new THREE.Matrix4().makeTranslation(a.x, a.y, a.z).multiply(new THREE.Matrix4().makeRotationAxis(axis, ang)).multiply(new THREE.Matrix4().makeTranslation(-a.x, -a.y, -a.z));
-    const o = mid.clone().applyMatrix4(R(open)).y < mid.clone().applyMatrix4(R(-open)).y ? open : -open;
-    const base = R(o), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(); base.decompose(pos, q, scl);
-    const e = new THREE.Euler().setFromQuaternion(q);
-    p.leaf(`${key}:well door:${which}:${i}`, (lp) => {
-      const acc = new Acc();
-      for (const poly of half.polys) {
-        const P = poly.map((q2) => V3(...q2)), n = tnorm(P.slice(0, 3)).normalize(); if (n.y > 0) n.negate();
-        acc.poly(P.map(dk), n, paint(P, n), 'solid', 99);
-        acc.poly(P.map((v) => dk(v.clone().addScaledVector(n, -0.03))).reverse(), n.clone().negate(), inner, 'solid', 99);
-      }
-      acc.flush(lp);
-    }, { at: pos.toArray(), rot: [e.x, e.y, e.z], door: 'doors', hinge: { at: a.toArray(), axis: axis.toArray(), angle: -o } });
-  });
-}
 // A GEAR POD (a bay): B { x [inboard, outboard] (port side's |x|), z [aft, fore], belly [y at the aft and fore ends:
 // the doors' plane], wallTop (the pod's side up to here), ceil (inside, under the deck, as far out as step), step,
 // roof (out to the pod's side), axle [x, y] (the strut's turning point), strip (optional: the low strip of its side, a
@@ -509,8 +529,7 @@ export function wellWalls(acc, W, { dark, dk }) {
 // runs 0 open to 1 shut.)
 export function gearStep(built, up, dt, updateDoors, legsPiece = 'ebGear', doorsPiece = 'ebGearDoors') {
   const legs = built.doors.filter((D) => D.piece === legsPiece), doors = built.doors.filter((D) => D.piece === doorsPiece), eye = new THREE.Vector3();
-  if (up) { const m = updateDoors(legs, eye, dt, 'open'); return legs.every((D) => D.t >= 1) ? updateDoors(doors, eye, dt, 'open') || m : m; }
-  const m = updateDoors(doors, eye, dt, 'shut'); return doors.every((D) => D.t <= 0) ? updateDoors(legs, eye, dt, 'shut') || m : m;
+  return gearOrder(legs, doors, up, (list, mode) => updateDoors(list, eye, dt, mode));
 }
 // A LEAF SET BY HAND, as the kit's layout code sets one (kit/layout.js setLeaf: placed by M, slid, each hinge in turn
 // by its angle times the eased t, then its base), with `extra` (a matrix in the leaf's own frame, before its base: a

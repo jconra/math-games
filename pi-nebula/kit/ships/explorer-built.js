@@ -1,6 +1,6 @@
 // EXPLORER C, BUILT: the ship's own parts, on the 3,000-triangle smart mesh made from the game's maker's picture. The
 // hull is that mesh as it is (cleaned only where it had to be: its data is explorer-built.hull.js, made by the rig
-// ~/pw/space-math/rigs/explorer-built/makehull.mjs); its landing legs are cut from the 8,000-triangle one. Everything
+// ~/pw/space-math/rigs/gear-2/explorer-rig/makehull.mjs, which also cuts its gear wells). Everything
 // is painted in flat colours from a small palette, face by face, by the rules below (so every colour line falls on an
 // edge of the model), and a grime material (grimeMaterials, at the end) adds the dirt over that clean base.
 // The ship itself is the layout file kit/rooms/ship-explorer-built.json; these are the catalog pieces it names
@@ -22,10 +22,10 @@
 //   ebAirstair   'port'      the airstair door: hinged at its foot, its outside the hull's skin carried across the
 //                            pocket (flush with the hull when shut), its steps set down into it between two side
 //                            beams; it swings out and down toward the ground as someone comes near (a kit door)
-//   ebGear       'nose' / 'port' / 'starboard'   a landing leg (its strut, and its foot, which turns at the ankle as it
-//                            folds into its well): kit door leaves on hinges, door 'gear' (no one opens it by walking
-//                            up: the game, or the lab's Gear up / down, moves it)
-//   ebGearDoors  'nose' / 'port' / 'starboard'   a well's two doors: the belly skin cut out of it, hinged at its edges
+//   ebGear       'nose' / 'port' / 'starboard'   a landing leg: a slim telescope (its tubes and its foot, which slide up
+//                            into one another as it folds into its well: gear-plan.js), kit door leaves, door 'gear' (no
+//                            one opens it by walking up: the game, or the lab's Gear up / down, moves it)
+//   ebGearDoors  'nose' / 'port' / 'starboard'   a well's two doors: the skin cut out of it, sliding apart to open
 //   ebWells      'wells'     the three wells' walls and ceilings
 //   ebCockpit    'two seats' the cockpit: two bucket seats side by side, the throttle pedestal between them, the
 //                            dashboard and side consoles, under the canopy, in its tub (floor, walls up to the sill,
@@ -37,7 +37,8 @@ import { Acc } from '../shipparts/outside/facet.js';
 import { part } from '../shipparts/place.js';
 import { GLOW_SHIP } from '../shipparts/palette.js';
 import { SURF } from '../materials.js';
-import { HULL, GEAR, DOORS, WELLS, JAMBS, DOOR, DOORSKIN, PARTS, Q } from './explorer-built.hull.js';
+import { HULL, DOORS, WELLS, JAMBS, DOOR, DOORSKIN, PARTS, Q } from './explorer-built.hull.js';
+import { LEGS as GEAR_PLAN } from './gear-plan.js';
 import * as C from './built-common.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
@@ -795,42 +796,29 @@ function ebAirstair(p) {
 }
 
 // ── THE LANDING GEAR ────────────────────────────────────────────────────────────────────────────────────────────────
-// each leg, from the 8k: its strut and its foot as two leaves of one kit door ('gear'): as it opens (gear up), the
-// strut turns a1 about its hinge, the foot a2 more about its ankle, so the leg folds into its well (the nose leg's hinge
-// is only the centre of its turn, over its top: it swings up and forward). Starboard's is the
-// port one mirrored. The well's doors (ebGearDoors) are another door ('gear doors'); the game, or the lab, moves the two
-// in turn (gearStep)
+// The game's maker, 2026-11-26, of the old gear's pods under the hull's sides: "The ship would look a lot better if
+// none of this was here and you could just see the landing gear. We should just have doors that slide in place. Its
+// fine if the landing gear is kind of magic and folds into itself." So three slim telescoping legs (gear-plan.js
+// LEGS.explorer: the nose leg under the cockpit, the aft two under the hull's sides, where the old ones stood), each
+// folding into itself up into its well, and each well shut by two doors cut from the hull's own skin that slide apart
+// to let it down (built-common.js teleLeg, slideDoors). The legs are the door 'gear' (1 up), the doors 'doors' (1
+// shut); gearStep moves them in turn (up: the legs, then the doors; down: the doors, then the legs).
 export const GEAR_SPEED = 0.42, GEAR_DOOR_SPEED = 0.9;
-const legMesh = (name, mirror) => C.legMesh(GEAR[name], Q, mirror);
+const LEGS = GEAR_PLAN.explorer;
 function ebGear(p, which) {
-  const G = legMesh(which === 'nose' ? 'nose' : 'aft', which === 'starboard');
-  // (the strut light metal, its housing's flat faces dark; the foot dark, its pad's sole rubber)
-  const paint = (f, isFoot) => (isFoot ? (f.n.y < -0.9 ? PAL.rubber : PAL.trim) : Math.abs(f.n.y) > 0.85 ? PAL.trim : PAL.metal);
-  return C.legLeaves(p, G, { key: 'eb', which, dk, paint, door: 'gear', speed: GEAR_SPEED });
+  // (its tubes light metal, their collars, the hub and the pad dark, the sole rubber)
+  const paint = { tube: PAL.metal, collar: PAL.trim, hub: PAL.trim, pad: PAL.trim, sole: PAL.rubber };
+  return C.teleLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint, speed: GEAR_SPEED });
 }
-// THE WELLS' DOORS: the nose's, the belly's skin cut out of its well, in two halves; each hangs open (down) while the
-// gear is down and shuts flush into the belly when it is up. The aft bays' (built-common.js bayDoors): the pod's bottom
-// in fore and aft halves, each folding in two as it opens (and, if the bay's spec gives a `strip`, the low strip of its
-// side, a flap that swings out and up). (The door 'gear doors': open = shut, here: t 1 is shut.)
-const DOOR_OPEN = 1.75;   // (radians: how far they hang: past straight down, leaning out, clear of the leg as it swings)
-// (a face on the hull's lower band, painted by the hull's own rules)
+// THE WELLS' DOORS: each well's two halves of skin, painted as the hull there by its own rules (a face on its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
-const lowerPaint = (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.trim);
 function ebGearDoors(p, which) {
-  if (WELLS[which].bay) C.bayDoors(p, which, WELLS[which].bay, { key: 'eb', paint: lowerPaint, inner: PAL.trim, dk });
-  else C.wellDoors(p, DOORS[which], { key: 'eb', which, open: DOOR_OPEN, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk });
-  p.door('doors', [0, -DECK, 0], 0, GEAR_DOOR_SPEED);
-  return p;
+  return C.slideDoors(p, DOORS[which], { key: 'eb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.trim, dk, speed: GEAR_DOOR_SPEED });
 }
-// THE WELLS: the nose's, dark walls standing on its rim up to its ceiling, and the ceiling. The aft bays (built-common.js
-// bayPod): the gear pod's outside (its side over the flap and its ends, painted as the lower hull), the bay's inside dark
-// (the inner wall, the ceiling under the deck, the step and the roof over the pod) and the axle the strut turns on.
+// THE WELLS: dark walls standing on each well's rim up to its top, and the top
 function ebWells(p) {
   const acc = new Acc();
-  for (const W of Object.values(WELLS)) {
-    if (W.bay) C.bayPod(acc, W.bay, { paint: lowerPaint, dark: PAL.trim, metal: PAL.metal, dk });
-    else C.wellWalls(acc, W, { dark: PAL.trim, dk });
-  }
+  for (const W of Object.values(WELLS)) C.wellWalls(acc, W, { dark: PAL.trim, dk });
   return acc.flush(p);
 }
 // MOVING THE GEAR (the game, or the lab): up folds the legs, then shuts the wells' doors; down opens the doors, then
