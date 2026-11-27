@@ -65,9 +65,10 @@ const at = (ctx, F, x, z) => { const { N, P, T } = ctx, i = Math.round((x + P / 
 export const lookOff = (k) => !!(globalThis.PLANET_LOOK_OFF && globalThis.PLANET_LOOK_OFF[k]);
 
 // THE CANYONS' DARK PATCHES on the sand and the slopes: how strong (two critics read them, at 0.7, as dark smudges and
-// stains on the far hillsides that do not follow the sun); and how far the steps' cliffs are softened (samples: at one,
-// their rims seen from the ship were torn into teeth)
-export const CANYON_PATCH = 0.35, CANYON_SOFT = 2;
+// stains on the far hillsides that do not follow the sun); and how far the steps' cliffs are softened (samples: at two,
+// tried for the rims' teeth seen from the ship, the land itself changed: the landing places moved, and G's came down on
+// a bare stretch away from its plants; so one, as before)
+export const CANYON_PATCH = 0.35, CANYON_SOFT = 1;
 // THE MOON'S SHADE: how much light its shadows get, off the ringed planet (see the moon's palette)
 export const MOON_SHADE = 0.25;
 // THE MEADOWS' BARE EARTH: how ragged its edge is (see the meadow's paint)
