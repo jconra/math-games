@@ -25,6 +25,12 @@ test('the camera\'s own space: within kneeIn of where the ship came down nothing
   land.start = { x: 510, z: 0 };
   assert.equal(kneeCap(land, -510, 0), CLEARING.knee);
   assert.ok(CLEARING.knee <= 0.55, 'her knee');
+  // (and along the walks from the ramp's foot to each pod)
+  land.start = { x: 0, z: 0 }; land.walks = [[0, 0, 100, 0]];
+  assert.equal(kneeCap(land, 80, CLEARING.kneeWalk - 0.5), CLEARING.knee);
+  assert.ok(kneeCap(land, 80, (CLEARING.kneeWalk + CLEARING.kneeWalkOut) / 2) > CLEARING.knee);
+  assert.equal(kneeCap(land, 80, CLEARING.kneeWalkOut + 0.5), Infinity);
+  assert.equal(kneeCap(land, 130, 0), Infinity);
 });
 
 const buf = (s) => { const b = Buffer.from(s, 'base64'), u = new Uint8Array(b.length); u.set(b); return u.buffer; };

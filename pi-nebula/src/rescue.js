@@ -300,6 +300,7 @@ export function makeSite(ctx, opts = {}) {
     clearDisc(land, st.stand.x, st.stand.z, CLEARING.pad);
     land.start = { x: st.stand.x, z: st.stand.z };
     for (const p of podPlan.pods) clearWay(land, [medic.foot.x, medic.foot.z], [p.x, p.z]);
+    land.walks = podPlan.pods.map((p) => [medic.foot.x, medic.foot.z, p.x, p.z]);
     planet.relayNow(W.camera);
     if (!st.skipAll) medic.ramp(1);
     kept.alone = W.alone; W.alone = []; boarding.hold(S.id, true);
