@@ -20,24 +20,37 @@
 //       as it moves, shows and hides; curved: its own place carries the planet's curve already (the pods', the Medic's);
 //       map: its leaves are cut out of a picture (the plants', the trees'); reach: shrinks away as the cover's do
 //       -> { count, show(on), dispose() }
-//   S.update(camera)   each frame, before the picture is drawn (src/planet/ground.js update)
-//   S.U                { uShadow, uShadowBox } for the ground's shader;  S.stats { casters, draws, size, half }
+//   S.update(camera)   each frame, after everything that casts has moved (src/planet/planet.js drawShadows)
+//   S.U                the three pictures and their boxes for the ground's shader (SHADOW_READ_GLSL reads one)
+//   S.wants(kind)      whether this level draws that kind at all;  S.nearReach() the near picture's half (0: no cover)
+//   S.stats { near, site, people, siteHalf, nearDraws, siteDraws, siteDrawn, peopleDrawn, fill }
 //
 //   const P = makePeopleShadows({ ground })      the people: P.sync(people, hide) each frame (as before), P.stats(), P.dispose()
 import * as THREE from 'three';
 import { lookOff } from './kinds.js';
 
-// THE TWO PICTURES, and what each quality level pays (the game's maker's standing rule: a costly feature is gated by the
-// quality tier). NEAR: round the camera, a fixed width (so its pixels never change size and its edges never crawl),
-// drawn every frame: the people always; the rocks and plants (and on the best quality the near trees) only from medium
-// up, and only those inside it (the cover hands it a short list: src/planet/cover.js). Off while the camera is high
-// over the ground (nobody is out on foot then). SITE: the big things (the wreck, the pods, the Medic set down), over the
-// whole site at once, whatever the distance from the camera (as their own shadows were drawn before), drawn again only
-// when one of them has moved. Per level: size (pixels across), half (metres), softened (two passes) or not.
-//   low:    near 256, 10 m, not softened, the people only   (fill 65 k pixels a frame)
-//   medium: near 512, 16 m, softened, people, rocks, plants (fill 786 k pixels a frame: three passes)
-//   high:   near 1024, 24 m, softened, and the near trees    (fill 3.1 M pixels a frame)
+// THE THREE PICTURES, and what each quality level pays (the game's maker's standing rule: a costly feature is gated by
+// the quality tier). NEAR: round the camera, a fixed width (so its pixels never change size and its edges never crawl),
+// drawn every frame while someone is on foot (the camera within `foot` metres of the ground; none from the ship, however
+// low): the people always; the rocks and plants (and on the best quality the near trees) only from medium up, and only
+// those whose shadow can fall inside it (the cover hands it a short list: src/planet/cover.js). SITE: the big things (the
+// wreck, the pods, the Medic set down), over the whole site at once, whatever the distance from the camera, drawn again
+// whenever any of them has moved by any measure (its place, its height, its turn, a door leaf or a lid) and its box then
+// set round where they really stand. PEOPLE: a person's shadow at any distance, as on main (round 3's review: they ended
+// at the near picture's edge): the people alone over the site's box, coarser, one pass, drawn only while someone is out
+// past the near picture's middle (or the near picture is off); the ground takes the near one's where it reaches.
+// Per level: size (pixels across), half (metres), softened (two passes) or not.
+//   low:    near 256, 10 m, not softened, the people only   (fill 65 k pixels a frame on foot)
+//   medium: near 512, 16 m, softened, people, rocks, plants (fill 786 k pixels a frame on foot: three passes)
+//   high:   near 1024, 24 m, softened, and the near trees    (fill 3.1 M pixels a frame on foot)
 //   site:   512 on low, 1024 above, round the site's things plus `siteMargin` metres; only when something there moves
+//   people: 256 on low, 512 above, over the site's box; only while someone is out beyond the near picture
+// A SHAPE, NOT A STAIN (round 3's critics: the landed ship's shadow a smudge, hers a lump): each picture keeps what is
+// covered (red) apart from how dark (green); the softening smooths the pixels' steps, and the ground then cuts the edge
+// sharp again where the covered part crosses `edge`, so a shadow keeps its caster's outline, soft by a few centimetres.
+// CONTACT: under a person's feet and along a big thing's foot, what is lower than `contact` metres over the ground is
+// marked once more straight down (a soft dark patch under the shoes, a dark line where a pod meets the ground: the
+// critics' "floating" shadow on a phone), `contactDark` as dark.
 // soft: about how far a shadow's edge is spread (metres); sky: how much of the sky's light a shadow takes as well as the
 // sun's (where the sun reaches; in the land's own shade a shadow takes nothing: there is no second shadow); shade: on a
 // world with no air, how much of the shade's own faint light a shadow takes there (round 3's critics: her shadow gone on
@@ -45,7 +58,8 @@ import { lookOff } from './kinds.js';
 // dark each kind of caster's shadow is (a pebble's or a tuft's lighter than a ship's or a person's)
 export const SHADOW_PIC = {
   near: { low: { size: 256, half: 10, soft: false, cover: false, trees: false }, medium: { size: 512, half: 16, soft: true, cover: true, trees: false }, high: { size: 1024, half: 24, soft: true, cover: true, trees: true } },
-  site: { low: 512, medium: 1024, high: 1024 }, siteMargin: 60, siteMost: 150, high: 2.5,
+  site: { low: 512, medium: 1024, high: 1024 }, siteMargin: 60, siteMost: 150, people: { low: 256, medium: 512, high: 512 }, foot: 8,
+  edge: [0.12, 0.62], contact: { big: 0.45, person: 0.3 }, contactDark: 0.6,
   soft: 0.05, sky: 0.5, shade: 0.75, dark: { big: 1, person: 1, rock: 0.5, plant: 0.45, tree: 0.6 },
 };
 // (kept for the station's own marks: the stencil the ground and what casts once used, src/planet/ground.js)
@@ -70,6 +84,9 @@ uniform highp sampler2D uH; uniform float uN, uT, uP, uCurve, uReach; uniform ve
 #ifdef CUT
 varying vec2 vUv;
 #endif
+#ifdef CONTACT
+varying float vAbove;
+#endif
 float hAt(vec2 w) {
   vec2 q = (w + 0.5 * uP) / uT, f = floor(q), t = q - f; ivec2 i = ivec2(f), m = ivec2(int(uN) - 1);
   float a = texelFetch(uH, i & m, 0).r, b = texelFetch(uH, (i + ivec2(1, 0)) & m, 0).r, c = texelFetch(uH, (i + ivec2(0, 1)) & m, 0).r, d = texelFetch(uH, (i + ivec2(1, 1)) & m, 0).r;
@@ -93,29 +110,47 @@ void main() {
   #ifdef CURVED
     vec2 d0 = w.xz - uCam.xz; w.y += dot(d0, d0) * uCurve;
   #endif
+  #ifdef CONTACT
+  // (straight down: what is low over the ground marks the ground just under it)
+  vAbove = w.y - hAt(w.xz); vec3 p = w;
+  #else
   float g = hAt(w.xz); vec3 p = w - uSun * max(0.0, w.y - g) / uSun.y;
   g = hAt(p.xz); p = w - uSun * max(0.0, w.y - g) / uSun.y;
+  #endif
   gl_Position = vec4((p.xz - uBox.xy) / uBox.z, 0.0, 1.0);
 }`;
 const CASTER_FRAG = /* glsl */`
 #ifdef CUT
 uniform sampler2D uMap; varying vec2 vUv;
 #endif
+#ifdef CONTACT
+uniform float uContact; varying float vAbove;
+#endif
 uniform float uStrength;
 void main() {
   #ifdef CUT
   if (texture2D(uMap, vUv).a < 0.5) discard;
   #endif
-  gl_FragColor = vec4(uStrength, uStrength, uStrength, 1.0);
+  #ifdef CONTACT
+  if (vAbove > uContact) discard;
+  #endif
+  // (covered, how dark)
+  gl_FragColor = vec4(1.0, uStrength, 0.0, 1.0);
 }`;
-// the softening: nine taps one way, then the other
+// the softening: nine taps one way, then the other (both the covered and the how-dark)
 const BLUR_FRAG = /* glsl */`
 uniform sampler2D uSrc; uniform vec2 uStep; varying vec2 vUv;
 void main() {
-  float s = texture2D(uSrc, vUv).r * 0.2270270270;
-  s += (texture2D(uSrc, vUv + uStep * 1.3846153846).r + texture2D(uSrc, vUv - uStep * 1.3846153846).r) * 0.3162162162;
-  s += (texture2D(uSrc, vUv + uStep * 3.2307692308).r + texture2D(uSrc, vUv - uStep * 3.2307692308).r) * 0.0702702703;
-  gl_FragColor = vec4(s, s, s, 1.0);
+  vec2 s = texture2D(uSrc, vUv).rg * 0.2270270270;
+  s += (texture2D(uSrc, vUv + uStep * 1.3846153846).rg + texture2D(uSrc, vUv - uStep * 1.3846153846).rg) * 0.3162162162;
+  s += (texture2D(uSrc, vUv + uStep * 3.2307692308).rg + texture2D(uSrc, vUv - uStep * 3.2307692308).rg) * 0.0702702703;
+  gl_FragColor = vec4(s, 0.0, 1.0);
+}`;
+// how the ground reads one picture (src/planet/ground.js): the covered part cut sharp at `edge`, times how dark
+export const SHADOW_READ_GLSL = /* glsl */`
+float shadowRead(sampler2D t, vec2 uv) {
+  vec2 v = texture2D(t, uv).rg;
+  return smoothstep(${SHADOW_PIC.edge[0].toFixed(2)}, ${SHADOW_PIC.edge[1].toFixed(2)}, v.r) * min(1.0, v.g / max(v.r, 0.004));
 }`;
 
 export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium' }) {
@@ -126,20 +161,20 @@ export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium'
   function picture(N, soft) {
     const raw = new THREE.WebGLRenderTarget(N, N, rtOpts), half = soft ? new THREE.WebGLRenderTarget(N, N, rtOpts) : null, done = soft ? new THREE.WebGLRenderTarget(N, N, rtOpts) : raw;
     const scene = new THREE.Scene(); scene.matrixWorldAutoUpdate = false;
-    return { N, soft, raw, half, done, scene, box: new THREE.Vector4(0, 0, 1, 0), mats: new Map(), casters: new Set(), sig: '', draws: 0, bounds: null };
+    return { N, soft, raw, half, done, scene, box: new THREE.Vector4(0, 0, 1, 0), mats: new Map(), casters: new Set(), draws: 0, stale: true };
   }
-  const near = picture(NQ.size, NQ.soft), site = picture(SHADOW_PIC.site[quality] || 1024, true);
-  const U = { uShadow: { value: near.done.texture }, uShadowBox: { value: near.box }, uShadowSite: { value: site.done.texture }, uShadowSiteBox: { value: site.box } };
-  const matFor = (P, { curved = false, map = null, reach = 0, dark = 1 }) => {
-    const key = (curved ? 'c' : '') + (map ? 'm' + map.uuid : '') + (reach ? 'r' + reach : '') + 'd' + dark;
+  const near = picture(NQ.size, NQ.soft), site = picture(SHADOW_PIC.site[quality] || 1024, true), people = picture(SHADOW_PIC.people[quality] || 512, false);
+  const U = { uShadow: { value: near.done.texture }, uShadowBox: { value: near.box }, uShadowSite: { value: site.done.texture }, uShadowSiteBox: { value: site.box }, uShadowPeople: { value: people.done.texture }, uShadowPeopleBox: { value: people.box } };
+  const matFor = (P, { curved = false, map = null, reach = 0, dark = 1, contact = 0 }) => {
+    const key = (curved ? 'c' : '') + (map ? 'm' + map.uuid : '') + (reach ? 'r' + reach : '') + 'd' + dark + (contact ? 'k' + contact : '');
     let m = P.mats.get(key);
     if (!m) {
-      const defines = {}; if (curved) defines.CURVED = 1; if (map) defines.CUT = 1; if (reach) defines.REACH = 1;
-      // (each spot keeps the darkest of what falls on it: one whole shape however many parts overlap)
+      const defines = {}; if (curved) defines.CURVED = 1; if (map) defines.CUT = 1; if (reach) defines.REACH = 1; if (contact) defines.CONTACT = 1;
+      // (each spot keeps the most of what falls on it: one whole shape however many parts overlap)
       m = new THREE.ShaderMaterial({
         name: 'ground shadow picture', defines, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
         blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
-        uniforms: { uH: GU.uH, uN: GU.uN, uT: GU.uT, uP: GU.uP, uCam: GU.uCam, uCurve: GU.uCurve, uSun: { value: sun }, uBox: { value: P.box }, uReach: { value: reach }, uMap: { value: map }, uStrength: { value: dark } },
+        uniforms: { uH: GU.uH, uN: GU.uN, uT: GU.uT, uP: GU.uP, uCam: GU.uCam, uCurve: GU.uCurve, uSun: { value: sun }, uBox: { value: P.box }, uReach: { value: reach }, uMap: { value: map }, uStrength: { value: contact ? dark * SHADOW_PIC.contactDark : dark }, uContact: { value: contact } },
         vertexShader: CASTER_VERT, fragmentShader: CASTER_FRAG,
       });
       P.mats.set(key, m);
@@ -161,38 +196,67 @@ export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium'
     return t;
   }
   const none = { count: 0, show() {}, dispose() {} };
-  // kind: 'big' (the site picture), 'person', 'rock', 'plant', 'tree' (the near one; rocks, plants and trees only on a
-  // level that draws them)
+  // kind: 'big' (the site picture), 'person' (the near one and the people's), 'rock', 'plant', 'tree' (the near one;
+  // rocks, plants and trees only on a level that draws them)
   const wants = (kind) => (kind === 'rock' || kind === 'plant' ? NQ.cover : kind === 'tree' ? NQ.trees : true);
   function add(root, { kind = 'big', curved = false, map = null, reach = 0, test = null } = {}) {
     if (!wants(kind)) return none;
-    const P = kind === 'big' ? site : near, C = { root, pairs: [], on: true, curved }, dark = SHADOW_PIC.dark[kind] ?? 1;
-    root.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.groundShadow && (!test || test(o))) { const t = twinOf(o, matFor(P, { curved, map, reach, dark })); P.scene.add(t); C.pairs.push({ from: o, twin: t }); } });
-    P.casters.add(C); if (P === site) { site.bounds = null; site.sig = ''; }
-    return { count: C.pairs.length, show(on) { C.on = !!on; }, dispose() { for (const p of C.pairs) p.twin.removeFromParent(); P.casters.delete(C); if (P === site) { site.bounds = null; site.sig = ''; } } };
+    const dark = SHADOW_PIC.dark[kind] ?? 1, contact = SHADOW_PIC.contact[kind] || 0;
+    const Cs = (kind === 'big' ? [site] : kind === 'person' ? [near, people] : [near]).map((P) => {
+      const C = { P, root, pairs: [], on: true, curved };
+      root.traverse((o) => {
+        if (!o.isMesh || !o.geometry || o.userData.groundShadow || (test && !test(o))) return;
+        const twins = [twinOf(o, matFor(P, { curved, map, reach, dark }))];
+        if (contact) twins.push(twinOf(o, matFor(P, { curved, map, reach, dark, contact })));
+        for (const t of twins) P.scene.add(t);
+        C.pairs.push({ from: o, twins, last: P === site ? new Float32Array(16) : null, was: false, ver: -1, n: -1 });
+      });
+      P.casters.add(C); P.stale = true;
+      return C;
+    });
+    return {
+      count: Cs[0].pairs.length,
+      show(on) { for (const C of Cs) { if (C.on !== !!on) C.P.stale = true; C.on = !!on; } },
+      dispose() { for (const C of Cs) { for (const p of C.pairs) for (const t of p.twins) t.removeFromParent(); C.P.casters.delete(C); C.P.stale = true; } },
+    };
   }
-  // each twin where its own is now, shown as it is; for the site a short signature of where they all are (drawn again
-  // only when it changes; the curve's lowering, which follows the camera, left out of it)
+  // each twin where its own is now, shown as it is. For the site: has anything moved since it was last drawn, by any
+  // measure (every number of its place; a lid's or a door leaf's own places; shown or hidden)? Numbers compared, nothing
+  // made: the curve's lowering, which follows the camera, taken back out of a curved thing's height first
+  const MOVED = 0.002;
   function follow(P) {
-    let draws = 0, sig = '';
+    let draws = 0, moved = false;
+    const cx = GU.uCam.value.x, cz = GU.uCam.value.z, curve = GU.uCurve.value;
     for (const C of P.casters) {
       const rootOn = C.on && seen(C.root);
       if (rootOn) C.root.updateMatrixWorld(true);
-      for (const { from, twin } of C.pairs) {
-        twin.visible = rootOn && seen(from) && (!from.isInstancedMesh || from.count > 0);
-        if (!twin.visible) continue;
-        if (twin.geometry !== from.geometry) twin.geometry = from.geometry;
-        if (from.isInstancedMesh) twin.count = from.count;
-        if (!from.isSkinnedMesh) twin.matrixWorld.copy(from.matrixWorld);
-        if (P === site) { const e = twin.matrixWorld.elements; sig += (e[0] + e[2] + e[8] + e[10] + e[12] * 3 + e[14] * 7 + (C.curved ? 0 : e[13] * 5)).toFixed(3) + ','; }
+      for (const p of C.pairs) {
+        const { from, twins } = p, on = rootOn && seen(from) && (!from.isInstancedMesh || from.count > 0);
+        for (const t of twins) t.visible = on;
+        if (p.last) {
+          if (on !== p.was) { p.was = on; moved = true; }
+          if (on && from.isInstancedMesh && (from.instanceMatrix.version !== p.ver || from.count !== p.n)) { p.ver = from.instanceMatrix.version; p.n = from.count; moved = true; }
+        }
+        if (!on) continue;
+        for (const t of twins) {
+          if (t.geometry !== from.geometry) { t.geometry = from.geometry; moved = true; }
+          if (from.isInstancedMesh) t.count = from.count;
+          if (!from.isSkinnedMesh) t.matrixWorld.copy(from.matrixWorld);
+        }
+        if (p.last) {
+          const e = from.matrixWorld.elements, l = p.last, dx = e[12] - cx, dz = e[14] - cz, y = C.curved ? e[13] + (dx * dx + dz * dz) * curve : e[13];
+          for (let i = 0; i < 16; i++) { const v = i === 13 ? y : e[i]; if (Math.abs(v - l[i]) > MOVED) { moved = true; l[i] = v; } }
+        }
         draws++;
       }
     }
     P.draws = draws;
-    return sig;
+    return moved;
   }
+  const clear = new THREE.Color();
   function draw(P) {
-    const was = renderer.getRenderTarget(), ac = renderer.autoClear, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(), tm = renderer.toneMapping;
+    const was = renderer.getRenderTarget(), ac = renderer.autoClear, ca = renderer.getClearAlpha(), tm = renderer.toneMapping;
+    renderer.getClearColor(clear);
     renderer.autoClear = true; renderer.setClearColor(0x000000, 0); renderer.toneMapping = THREE.NoToneMapping;
     renderer.setRenderTarget(P.raw); renderer.render(P.scene, cam);
     if (P.soft) {
@@ -200,40 +264,57 @@ export function makeShadowPicture({ renderer, ground, sunDir, quality = 'medium'
       blur.uniforms.uSrc.value = P.raw.texture; blur.uniforms.uStep.value.set(k, 0); renderer.setRenderTarget(P.half); renderer.render(quadScene, cam);
       blur.uniforms.uSrc.value = P.half.texture; blur.uniforms.uStep.value.set(0, k); renderer.setRenderTarget(P.done); renderer.render(quadScene, cam);
     }
-    renderer.setRenderTarget(was); renderer.autoClear = ac; renderer.setClearColor(cc, ca); renderer.toneMapping = tm;
+    renderer.setRenderTarget(was); renderer.autoClear = ac; renderer.setClearColor(clear, ca); renderer.toneMapping = tm;
   }
-  const stats = { quality, near: NQ.size, nearHalf: NQ.half, site: site.N, siteHalf: 0, nearDraws: 0, siteDraws: 0, siteDrawn: 0, fill: 0 };
+  const stats = { quality, near: NQ.size, nearHalf: NQ.half, site: site.N, siteHalf: 0, people: people.N, nearDraws: 0, siteDraws: 0, siteDrawn: 0, peopleDrawn: 0, fill: 0 };
   const _p = new THREE.Vector3(), _q = new THREE.Vector3();
   const off = lookOff('shadows');
+  // the site's box: round where its things stand now (each shown piece's own place)
+  function siteBox() {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const C of site.casters) for (const { from, was } of C.pairs) { if (!was) continue; const e = from.matrixWorld.elements; x0 = Math.min(x0, e[12]); x1 = Math.max(x1, e[12]); z0 = Math.min(z0, e[14]); z1 = Math.max(z1, e[14]); }
+    if (x0 === Infinity) { site.box.w = 0; return false; }
+    const h = Math.min(SHADOW_PIC.siteMost, Math.max(x1 - x0, z1 - z0) / 2 + SHADOW_PIC.siteMargin);
+    site.box.set((x0 + x1) / 2, (z0 + z1) / 2, h, 1); stats.siteHalf = Math.round(h); return true;
+  }
   // EACH FRAME, after everything that casts has moved (src/rescue.js late(): last of all; src/planet/planet.js otherwise)
   function update(camera) {
     stats.fill = 0;
-    if (off) { near.box.w = 0; site.box.w = 0; return; }
-    // the site: round its things, as they stand (worked out again when one is added or taken away)
+    if (off) { near.box.w = 0; site.box.w = 0; people.box.w = 0; return; }
+    // the site: drawn again whenever anything in it has moved
     if (site.casters.size) {
-      const sig = follow(site);
-      if (!site.bounds) {
-        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-        for (const C of site.casters) for (const { from } of C.pairs) { from.getWorldPosition(_q); x0 = Math.min(x0, _q.x); x1 = Math.max(x1, _q.x); z0 = Math.min(z0, _q.z); z1 = Math.max(z1, _q.z); }
-        if (x0 < Infinity) { const h = Math.min(SHADOW_PIC.siteMost, Math.max(x1 - x0, z1 - z0) / 2 + SHADOW_PIC.siteMargin); site.bounds = true; site.box.set((x0 + x1) / 2, (z0 + z1) / 2, h, 1); stats.siteHalf = Math.round(h); }
-      }
-      if (site.bounds && sig !== site.sig) { site.sig = sig; draw(site); stats.siteDrawn++; stats.fill += site.N * site.N * 3; }
+      const moved = follow(site);
+      if (moved || site.stale) { site.stale = false; if (siteBox()) { draw(site); stats.siteDrawn++; stats.fill += site.N * site.N * 3; } }
       stats.siteDraws = site.draws;
     } else site.box.w = 0;
-    // near the camera: a fixed width, its middle moved a whole pixel at a time; none while the camera is high up
-    const up = GU.uCamUp ? GU.uCamUp.value : 0;
-    if (up > NQ.half * SHADOW_PIC.high || !near.casters.size) { near.box.w = 0; stats.nearDraws = 0; return; }
-    const px = (2 * NQ.half) / near.N;
+    // near the camera: a fixed width, its middle moved a whole pixel at a time; only while someone is on foot (the
+    // camera near the ground)
+    const up = GU.uCamUp ? GU.uCamUp.value : 0, nearOn = up <= SHADOW_PIC.foot && near.casters.size > 0;
     camera.getWorldPosition(_p);
-    near.box.set(Math.round(_p.x / px) * px, Math.round(_p.z / px) * px, NQ.half, 1);
-    follow(near); stats.nearDraws = near.draws;
-    draw(near); stats.fill += near.N * near.N * (near.soft ? 3 : 1);
+    if (nearOn) {
+      const px = (2 * NQ.half) / near.N;
+      near.box.set(Math.round(_p.x / px) * px, Math.round(_p.z / px) * px, NQ.half, 1);
+      follow(near); stats.nearDraws = near.draws;
+      draw(near); stats.fill += near.N * near.N * (near.soft ? 3 : 1);
+    } else { near.box.w = 0; stats.nearDraws = 0; }
+    // the people at any distance: only while one of them is out past the near picture's middle
+    let out = false;
+    for (const C of people.casters) {
+      if (!C.on || !seen(C.root)) continue;
+      C.root.getWorldPosition(_q);
+      if (!nearOn || Math.max(Math.abs(_q.x - near.box.x), Math.abs(_q.z - near.box.y)) > NQ.half * 0.6) { out = true; break; }
+    }
+    if (out) {
+      if (site.box.w > 0) people.box.copy(site.box);
+      else people.box.set(_p.x, _p.z, SHADOW_PIC.siteMargin * 1.5, 1);
+      follow(people); draw(people); stats.peopleDrawn++; stats.fill += people.N * people.N;
+    } else people.box.w = 0;
   }
-  // how far from the camera the near picture can reach (the cover's short list of what casts into it; 0: none)
-  const nearReach = () => (NQ.cover ? NQ.half * 1.5 : 0);
+  // how far from the camera the near picture reaches (the cover's short list of what casts into it; 0: none drawn)
+  const nearReach = () => (NQ.cover ? NQ.half : 0);
   return {
-    U, add, update, stats, sun, nearReach, quality,
-    dispose() { for (const P of [near, site]) { for (const C of [...P.casters]) for (const p of C.pairs) p.twin.removeFromParent(); P.casters.clear(); for (const m of P.mats.values()) m.dispose(); P.raw.dispose(); if (P.half) P.half.dispose(); if (P.done !== P.raw) P.done.dispose(); } blur.dispose(); quad.geometry.dispose(); },
+    U, add, update, stats, sun, nearReach, wants, quality,
+    dispose() { for (const P of [near, site, people]) { for (const C of [...P.casters]) for (const p of C.pairs) for (const t of p.twins) t.removeFromParent(); P.casters.clear(); for (const m of P.mats.values()) m.dispose(); P.raw.dispose(); if (P.half) P.half.dispose(); if (P.done !== P.raw) P.done.dispose(); } blur.dispose(); quad.geometry.dispose(); },
   };
 }
 

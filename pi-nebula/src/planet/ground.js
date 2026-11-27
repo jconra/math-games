@@ -24,7 +24,7 @@ import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
 import { GRIT, gritData } from './grit.js';
 import { lookOff } from './kinds.js';
-import { takesShadows, makeShadowPicture, SHADOW_PIC } from './groundshadow.js';
+import { takesShadows, makeShadowPicture, SHADOW_PIC, SHADOW_READ_GLSL } from './groundshadow.js';
 
 // the patches: the smallest is SIZE0 metres across; a patch of level L is SIZE0 * 2^L and is drawn while the camera is
 // within RANGE times its size (a bigger one beyond). RANGE and MORPH keep every meeting of two sizes gap-free (see the
@@ -200,11 +200,12 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4(w.x, h - d2 * uCurve, w.y, 1.0);
 }`;
 const GROUND_FRAG = /* glsl */`
-uniform sampler2D uNM, uL, uDetail, uShadow, uShadowSite, uGrit;
+uniform sampler2D uNM, uL, uDetail, uShadow, uShadowSite, uShadowPeople, uGrit;
 uniform vec4 uGritK, uGritTurn;
 const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
 const float SHADOW_SHADE = ${SHADOW_PIC.shade.toFixed(2)};
-uniform vec4 uShadowBox, uShadowSiteBox;
+uniform vec4 uShadowBox, uShadowSiteBox, uShadowPeopleBox;
+${SHADOW_READ_GLSL}
 uniform float uN, uP;
 uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
 uniform float uAmbPow, uAir, uFine, uBands, uTreeFar, uBare;
@@ -274,14 +275,16 @@ void main() {
   float ndl = max(dot(n, uSunDir), 0.0);
   // THE SHADOWS of what stands on the ground (src/planet/groundshadow.js): the sun's light taken away there, as behind a
   // hill, and some of the sky's too where the sun reaches (in the land's own shade there is no second shadow)
-  // (two pictures: the near one round the camera, the site's for the big things at any distance; each spot the darker;
-  // read as drawn, so a shadow is no wider than what casts it, its edge soft by a few centimetres)
-  float sh = 0.0;
+  // (three pictures: the near one round the camera, the site's for the big things at any distance, the people's beyond
+  // the near one; each spot the darker; each cut sharp at its caster's outline, so a shadow keeps its shape)
+  float sh = 0.0, wn = 0.0;
   { vec2 su = (vXZ - uShadowBox.xy) / uShadowBox.z; float e = max(abs(su.x), abs(su.y));
-    if (e < 1.0) sh = texture2D(uShadow, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
+    if (e < 1.0 && uShadowBox.w > 0.0) { wn = 1.0 - smoothstep(0.85, 1.0, e); sh = shadowRead(uShadow, su * 0.5 + 0.5) * wn; } }
+  { vec2 su = (vXZ - uShadowPeopleBox.xy) / uShadowPeopleBox.z; float e = max(abs(su.x), abs(su.y));
+    if (e < 1.0 && uShadowPeopleBox.w > 0.0) sh += shadowRead(uShadowPeople, su * 0.5 + 0.5) * (1.0 - smoothstep(0.9, 1.0, e)) * (1.0 - wn); }
   { vec2 su = (vXZ - uShadowSiteBox.xy) / uShadowSiteBox.z; float e = max(abs(su.x), abs(su.y));
-    if (e < 1.0) sh = max(sh, texture2D(uShadowSite, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.9, 1.0, e)) * uShadowSiteBox.w); }
-  sh = min(1.0, sh * 1.15);
+    if (e < 1.0 && uShadowSiteBox.w > 0.0) sh = max(sh, shadowRead(uShadowSite, su * 0.5 + 0.5) * (1.0 - smoothstep(0.9, 1.0, e))); }
+  sh = min(1.0, sh);
   // (the sky's part only where the sun reaches: in the land's own shade a shadow takes nothing, no second shadow; but
   // with no air the shade's faint light is all there is, and a shadow takes most of it, so hers is seen on the moon)
   #ifdef AIR

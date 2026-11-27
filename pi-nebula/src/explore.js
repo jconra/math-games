@@ -78,8 +78,7 @@ export function makePlace(ctx, opts = {}) {
         // (the rescue run's own crashed ship and stasis pods: the same pieces in the same order as src/rescue.js)
         pick = wreckFor(seed); podFile = loadPod().catch((e) => { console.error('explore: the stasis pod did not come', e); return null; });
         Wk = await makeWreck({ land, ship: pick.ship, pieces: pick.pieces });
-        const all = Wk.world.map((w) => w.tris), n = all.reduce((s, a) => s + a.length, 0), tris = new Float32Array(n); let o = 0; for (const a of all) { tris.set(a, o); o += a.length; }
-        plan = podsPlan(land, seed, { site: Wk.site, tris });
+        plan = podsPlan(land, seed, Wk.forPods);
         clearUnder(land, footprintTris(plan));
       }
       if (st.closed) return;
@@ -229,9 +228,11 @@ export function makePlace(ctx, opts = {}) {
     late(dt = 1 / 60) {
       if (!ship.fl || st.closed) return;
       const c = W.camera; if (c.far !== PLACE.far) { c.far = PLACE.far; c.updateProjectionMatrix(); }
-      if (planet) planet.update(c, dt); if (pods) pods.update(c, dt);
+      if (planet) planet.update(c, dt, { shadows: false }); if (pods) pods.update(c, dt);
       if (guide) guide.update(c, dt, {});
       if (art) art.update(dt); if (field) field.update(dt);
+      // (the shadows' pictures last, after everything that casts has moved: src/planet/groundshadow.js)
+      if (planet) planet.drawShadows(c);
     },
     state: () => ({ phase: st.phase, t: +st.t.toFixed(2), ready: st.ready, failed: st.failed, seed, where: place.where, kind: land ? land.kind.id : place.show, show: place.show || null, lit: st.lit,
       wreck: wreck ? wreck.ship : null, pods: pods ? pods.pods.length : 0, artifact: !!art, field: field ? field.rocks : 0, station: !!station, lap: +st.lap.toFixed(3),
