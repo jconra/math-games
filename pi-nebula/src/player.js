@@ -40,7 +40,7 @@ export function shine(c, env) {
   });
 }
 
-export async function makePlayer({ lib, recipe, walls, scene }) {
+export async function makePlayer({ lib, recipe, walls, scene, low = false }) {
   const c = await makeCrew(lib, recipe);
   scene.add(c.root);
   // (the station people's own small moves, moves.js: standing at rest, THE STANCE, the weight on one leg and over to
@@ -126,7 +126,7 @@ export async function makePlayer({ lib, recipe, walls, scene }) {
     else if (P.speed > 2.6) play('Run', Math.max(0.6, Math.min(1.6, P.speed / c.stride.Run)));
     else if (P.speed > 0.15) play('Walk', Math.max(0.5, Math.min(1.8, P.speed / c.stride.Walk)));
     else play(STAND);
-    P.moves.stand = !clip && P.clip === STAND ? 1 : 0;
+    P.moves.stand = !low && !clip && P.clip === STAND ? 1 : 0;      // (not on the low picture quality: people.js bodyMoves)
     c.update(dt);
   };
   P.dispose = () => { scene.remove(c.root); c.dispose(); };

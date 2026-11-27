@@ -5,7 +5,9 @@
 //
 //   seatSteps(seat) -> { down: [step, ...], up: [step, ...] }
 //     seat: { seat: [x, y, z] (where they sit), heading (the way they face sitting), pos: [x, y, z] (where they stand
-//            to sit down: in front of a bench, beside a desk chair, behind a stool) }
+//            to sit down: in front of a bench, beside a desk chair, behind a stool), round: which side of a stool
+//            they go round, +1 their left as they sit, -1 their right, 0 neither (straight to the spot in front of it);
+//            people.js tries each against the walls and the furniture there (roundAt) and keeps a clear one }
 //     step: { move, to: [x, y, z], heading, secs }   move: 'walk' (forward, facing `heading`), 'back' (stepping
 //            backward), 'turn' (on the spot, stepping round), 'lower' (onto the seat), 'rise' (up off it)
 //     (and pre: where they stand just in front of it)
@@ -32,6 +34,12 @@ const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[2] - q[2]);
 const A = (v) => (Array.isArray(v) ? v : [v.x, v.y, v.z]);
 
+// the point at a stool's side they walk round by, on side s (+1 their left as they sit, -1 their right)
+export function roundAt(S, s) {
+  const seat = A(S.seat), h = S.heading, f = [Math.sin(h), 0, Math.cos(h)], left = [Math.cos(h), 0, -Math.sin(h)];
+  return [seat[0] + left[0] * s * SIT.round + f[0] * SIT.aside, A(S.pos)[1], seat[2] + left[2] * s * SIT.round + f[2] * SIT.aside];
+}
+
 export function seatSteps(S) {
   const seat = A(S.seat), stand = A(S.pos), h = S.heading;
   const f = [Math.sin(h), 0, Math.cos(h)], left = [Math.cos(h), 0, -Math.sin(h)];
@@ -44,7 +52,8 @@ export function seatSteps(S) {
   const turnTo = (at, from, to) => down.push({ move: 'turn', to: at, heading: to, secs: Math.max(SIT.least, from == null ? 0.5 : Math.abs(wrap(to - from)) / SIT.turn) });
   let at = stand, hd = null;
   // (from behind the seat: round to its side first, walking)
-  if (behind) { const s = across >= 0 ? 1 : -1; hd = walkTo(at, [seat[0] + left[0] * s * SIT.round + f[0] * SIT.aside, stand[1], seat[2] + left[2] * s * SIT.round + f[2] * SIT.aside]); at = down[down.length - 1].to; }
+  const s = S.round != null ? S.round : across >= 0 ? 1 : -1;
+  if (behind && s) { hd = walkTo(at, roundAt(S, s)); at = down[down.length - 1].to; }
   const d = sub(pre, at), fa = d[0] * f[0] + d[2] * f[2], la = d[0] * left[0] + d[2] * left[2];
   if (fa < 0 && Math.abs(fa) >= Math.abs(la)) {
     // (straight behind them, a bench's: turned to face the way it faces, a step back to it)

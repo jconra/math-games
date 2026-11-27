@@ -463,9 +463,14 @@ test('the smelter job stands at the forge\'s console in the smelter\'s hall, the
   const far = Math.hypot(pour[0] - V.at[0], pour[2] - V.at[2]); assert.ok(far > 3 && far < 8, String(far));
   // the station's people keep their spots by the forge: the smelter's by the console's south end (life.js forgeConsole)
   // and the forge's middle are clear of the job's ring and the margin people keep (people.js KEEP_OFF: 0.8 m and 0.3)
-  // (a spot in the forge's own frame, life.js's smelter at its console's north end: its middle on the hall's middle)
+  // (a spot in the forge's own frame, life.js's smelter at its console's north end: placed by the forge piece's own
+  // cell, offset and quarter turns, as kit/grid.js placeMatrix places it)
+  const forgePc = hall.pieces.find((p) => p.piece === 'forge'), th = (((forgePc.turn || 0) % 4) + 4) % 4 * Math.PI / 2;
+  const rotY = (v) => [v[0] * Math.cos(th) + v[2] * Math.sin(th), v[1], -v[0] * Math.sin(th) + v[2] * Math.cos(th)];
+  const fo = rotY(forgePc.off || [0, 0, 0]), forgeAt = [forgePc.cell[0] * 2 + fo[0], 0, forgePc.cell[1] * 2 + fo[2]];
   for (const s of [...SPOTS.forge, ...SPOTS.forgeConsole]) {
-    const x = s.at ? box.x[0] + (box.x[1] - box.x[0]) * s.at[0] : (box.x[0] + box.x[1]) / 2 + s.local[0], z = s.at ? box.z[0] + (box.z[1] - box.z[0]) * s.at[1] : (box.z[0] + box.z[1]) / 2 + s.local[2];
+    const lr = s.local ? rotY(s.local) : null;
+    const x = s.at ? box.x[0] + (box.x[1] - box.x[0]) * s.at[0] : forgeAt[0] + lr[0], z = s.at ? box.z[0] + (box.z[1] - box.z[0]) * s.at[1] : forgeAt[2] + lr[2];
     assert.ok(Math.hypot(x - at[0], z - at[2]) > 0.8 + 0.3 + 0.5, `the people's spot at ${x}, ${z} is on the job's ring`);
   }
   // the pay desk and its places are gone from the control room; the crane's chair is still there

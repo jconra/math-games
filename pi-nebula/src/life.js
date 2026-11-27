@@ -125,7 +125,9 @@ export const SPOTS = {
   // player's Smelter job's place, so he keeps clear of it), the pours on his right, his hands on its top; its store, its
   // lobby. (Two blind critics, 2026-11-26: he stood in the hall's middle wringing his hands, the furnaces at his side
   // and behind him; src/atwork.js, people.js HANDS ON THE WORK)
-  forge: [{ piece: 'forge', room: 'smelter-hall', local: [4.2, 0, -3.05], face: [0, 1] }],
+  // (2026-11-27, the review: square to the middle of the console's end (its band, x 4.17 to 4.79), not to its tall
+  // screen housing's corner, where his right hand went into it)
+  forge: [{ piece: 'forge', room: 'smelter-hall', local: [4.45, 0, -3.05], face: [0, 1] }],
   forgeConsole: [{ room: 'smelter-hall', at: [0.82, 0.62], face: [1, 0] }],
   store: [{ piece: 'crate', variant: 'stack', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }, { piece: 'crate', variant: 'cart', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }],
   lobby: [{ room: 'smelter-lobby', at: [0.3, 0.35], face: [1, 0] }],

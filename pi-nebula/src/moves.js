@@ -19,6 +19,10 @@
 //                                  elbow toward `elbows`, laid flat, palm down, its fingers along `fingers`; the chin
 //                                  brought down `chin` (rad); `legs` how much of the legs is worn over the clip's (0: the
 //                                  clip's own legs)
+//   M.bow = radians                bowed over the work the hands are on (taken low in the back: atwork.js REACH)
+//   M.holdShort                    (read) how far past the arm's whole length the farther hand's place of M.hold was
+//                                  this frame, m (above 0: out of reach, the arm straight and the hand short of it;
+//                                  people.js counts it as an alarm, alarms.outOfReach)
 //   M.body                         the person's own measures, taken once standing: { a thigh, b shin (hip, knee, the
 //                                  foot's root, m), w half the hips' width, hs the hip joints' height, u upper arm, f
 //                                  forearm, t the trunk (the hip joints' middle to the head's bone) }
@@ -35,6 +39,9 @@
 // the shortest way from where the clip has it (hip and knee bending about the leg's own hinge, as the clip's do).
 import * as THREE from 'three';
 import { twoBone, footWay } from './onbed.js';
+import { REACH } from './atwork.js';
+import { STANCE, nextStance } from './finemoves.js';
+export { STANCE };
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion(), _a = new THREE.Vector3(), _p = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -49,7 +56,7 @@ export const MOVES = { turn: 0.85, up: 0.3, neck: 0.4, lean: 0.08, nod: 0.24, be
 // the shoulders tip the other way (`chest`); the other knee eases, its foot a little ahead (`free`, m). Both feet stay
 // where the clip puts them (each leg bent to its own foot). Now and then (every `every` seconds, each person their own)
 // the weight goes over onto the other leg, taking `ease` seconds; now and then (`even` of the times) both legs a while
-export const STANCE = { shift: 0.04, drop: 0.02, roll: 0.07, chest: 0.04, free: 0.05, every: [5, 13], even: 0.2, ease: 1.1 };
+// (its numbers and its timing: src/finemoves.js STANCE, nextStance)
 // (a speaker's gestures: [upper arm forward, upper arm out, elbow bent, palm up] for the left and the right arm)
 const GESTURES = [
   { L: [0, 0, 0, 0], R: [0.22, 0.05, 1.15, 1.1], w: 3 },          // the right hand explains
@@ -78,6 +85,22 @@ function turnWorld(bone, axis, angle) {
   bone.quaternion.premultiply(_q.setFromAxisAngle(_a, angle));
 }
 
+// HOLD INTO ONE RECORD: M.hold set from a hold of plain [x, y, z] arrays (src/atwork.js handsAt, wheelHold), copied into
+// vectors kept on the person, so a hold laid each frame makes nothing new; null entries kept null
+const _VK = ['hands', 'palms', 'fingers', 'elbows'];
+export function setHold(M, H) {
+  const R = M.holdRec || (M.holdRec = { keep: Object.fromEntries(_VK.map((k) => [k, [new THREE.Vector3(), new THREE.Vector3()]])), hands: [null, null], palms: [null, null], fingers: [null, null], elbows: [null, null], share: [1, 1], local: false });
+  for (const k of _VK) {
+    if (!H[k]) { if (k === 'hands') R.hands[0] = R.hands[1] = null; else R[k] = null; continue; }
+    if (k !== 'hands' && !R[k]) R[k] = [null, null];
+    for (const i of [0, 1]) R[k][i] = H[k][i] ? R.keep[k][i].fromArray(H[k][i]) : null;
+  }
+  R.local = !!H.local;
+  if (H.share) { R.share = R.share || [1, 1]; R.share[0] = H.share[0]; R.share[1] = H.share[1]; } else R.share = null;
+  M.hold = R;
+  return R;
+}
+
 export function addMoves(c) {
   const B = c.bones, person = c.person;
   const M = {
@@ -85,7 +108,7 @@ export function addMoves(c) {
     // (now: what is worn this moment; each eased toward what is wanted)
     yaw: 0, pitch: 0, sway: 0, swayT: Math.random() * 20, swayEvery: rnd(3, 5), nod: 0, nodT: rnd(1, 3), nodLeft: 0,
     // (THE STANCE: how much is worn; which leg the weight is on, +1 their left, -1 their right, 0 both; when it changes)
-    standNow: 0, side: 0, sideWant: Math.random() < 0.5 ? 1 : -1, sideNext: rnd(0.5, STANCE.every[1]), leanNow: 0, holdNow: 0,
+    standNow: 0, side: 0, sideWant: Math.random() < 0.5 ? 1 : -1, sideNext: rnd(0.5, STANCE.every[1]), leanNow: 0, bow: 0, bowNow: 0, holdNow: 0, short: 0, holdShort: 0,
     arms: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, want: { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, nextGesture: 0, beatT: 0, t: 0,
   };
   const orig = person.update.bind(person);
@@ -116,7 +139,7 @@ export function addMoves(c) {
       M.palm[s] = new THREE.Vector3(...best);
     }
   }
-  const still = () => !M.look && !M.talk && !M.bed && !M.stand && M.standNow < 0.002 && !M.lean && Math.abs(M.leanNow) < 0.002 && !M.hold && M.holdNow < 0.002
+  const still = () => !M.look && !M.talk && !M.bed && !M.stand && M.standNow < 0.002 && !M.lean && Math.abs(M.leanNow) < 0.002 && !M.bow && Math.abs(M.bowNow) < 0.002 && !M.hold && M.holdNow < 0.002
     && Math.abs(M.yaw) < 0.002 && Math.abs(M.pitch) < 0.002 && Math.abs(M.sway) < 1e-4 && M.nodLeft <= 0
     && M.arms.L.every((v) => v < 0.002) && M.arms.R.every((v) => v < 0.002);
 
@@ -179,6 +202,8 @@ export function addMoves(c) {
       // (each arm's own share, when one hand goes to the bed a moment before the other)
       const share = D.armsLR ? D.armsLR[i] : D.arms;
       if (!(share > 0.001)) continue;
+      // (OUT OF REACH: how far past the arm's whole length its place is, m, the worse arm; people.js counts it, loud)
+      if (share > 0.5) M.short = Math.max(M.short, sh.distanceTo(D.hands[i]) - (M.body.u + M.body.f));
       aim(ua, _v1.subVectors(el0, sh), _v2.set(ik.mid[0] - sh.x, ik.mid[1] - sh.y, ik.mid[2] - sh.z), share);
       ua.updateWorldMatrix(false, true);
       const el = la.getWorldPosition(_k).clone(), w0 = wr.getWorldPosition(_v1);
@@ -218,7 +243,7 @@ export function addMoves(c) {
       if (D.palms) _hold.palms = D.palms.map((v, i) => _lv[2][i].copy(v).applyQuaternion(_rq));
     }
     _hold.ahead.set(0, 0, 1).applyQuaternion(_rq); _hold.arms = k; _hold.armsLR = D.share ? [D.share[0] * k, D.share[1] * k] : null;
-    handsOn(_hold);
+    M.short = 0; handsOn(_hold); M.holdShort = M.short;
   }
   // ── THE STANCE AT REST (STANCE, above): the weight over one leg, both feet where the clip has them ──
   const _feet = [new THREE.Vector3(), new THREE.Vector3()], _fw = new THREE.Vector3(), _lf = new THREE.Vector3(), _dn = new THREE.Vector3(0, -1, 0);
@@ -226,8 +251,7 @@ export function addMoves(c) {
     // (when the weight goes over: now and then, each their own; from both legs to one, from one to the other or to both)
     M.sideNext -= dt;
     if (M.sideNext <= 0) {
-      M.sideWant = M.sideWant === 0 ? (Math.random() < 0.5 ? 1 : -1) : Math.random() < STANCE.even ? 0 : -M.sideWant;
-      M.sideNext = rnd(STANCE.every[0], STANCE.every[1]) * (M.sideWant === 0 ? 0.5 : 1) * (M.talk ? 0.45 : 1);      // (in a talk: over from one leg to the other more often)
+      const n = nextStance(M.sideWant, !!M.talk); M.sideWant = n.want; M.sideNext = n.after;
       M.sideFrom = M.side; M.sideU = 0;
     }
     M.sideU = Math.min(1, (M.sideU ?? 1) + dt / STANCE.ease);
@@ -271,12 +295,16 @@ export function addMoves(c) {
     if (M.bed) onBed(M.bed);
     // (standing at rest: the weight over one leg, THE STANCE; eased in and out as they come to stand and set off)
     // (M.snap: just come into view: worn at once, never eased in where the player sees it)
-    if (M.snap) { M.snap = false; M.standNow = M.stand ? 1 : 0; M.leanNow = M.lean || 0; M.holdNow = M.hold ? 1 : 0; }
+    if (M.snap) { M.snap = false; M.standNow = M.stand ? 1 : 0; M.leanNow = M.lean || 0; M.bowNow = M.bow || 0; M.holdNow = M.hold ? 1 : 0; }
     M.standNow = damp(M.standNow, M.stand ? 1 : 0, 5, dt);
     if (M.standNow > 0.002 && !M.bed) stance(dt); else if (M.standNow <= 0.002) M.standNow = 0;
     // (leaning in over the work, or forward as they sit down and get up: M.lean, radians; eased)
     M.leanNow = damp(M.leanNow, M.lean || 0, 6, dt); if (Math.abs(M.leanNow) < 0.002 && !M.lean) M.leanNow = 0;
     if (M.leanNow) { turn(B.Abdomen, X, M.leanNow * 0.45, _rq); turn(B.Chest, X, M.leanNow * 0.55, _rq); }
+    // (bowed over the work their hands are on: M.bow, radians, taken low in the back, at the abdomen most (atwork.js
+    // REACH, as the reach of each hold is worked out), so the shoulders come down and forward to it)
+    M.bowNow = damp(M.bowNow, M.bow || 0, 5, dt); if (Math.abs(M.bowNow) < 0.002 && !M.bow) M.bowNow = 0;
+    if (M.bowNow) { turn(B.Abdomen, X, M.bowNow * REACH.abdomen, _rq); turn(B.Chest, X, M.bowNow * REACH.chest, _rq); }
     // the head toward what it looks at (yaw and a little pitch, in the person's own frame), the neck taking its share
     let wy = 0, wp = 0;
     if (M.look && B.Head) {
@@ -360,7 +388,7 @@ export function addMoves(c) {
     // (HANDS ON THE WORK, M.hold: each hand to its place, last; eased on and off)
     M.holdNow = damp(M.holdNow, M.hold ? 1 : 0, 6, dt); if (M.holdNow < 0.002 && !M.hold) M.holdNow = 0;
     c.armsOutK = 1 - M.holdNow;      // (the crew kit's ARMS OUT let go while they hold: the hands are where they go)
-    if (M.holdNow && (M.hold || M.lastHold)) { const D = M.hold || M.lastHold; M.lastHold = D; holdOn(D, M.holdNow); }
+    if (M.holdNow && (M.hold || M.lastHold)) { const D = M.hold || M.lastHold; M.lastHold = D; holdOn(D, M.holdNow); } else M.holdShort = 0;
     c.root.updateMatrixWorld(true);
   }
   return M;

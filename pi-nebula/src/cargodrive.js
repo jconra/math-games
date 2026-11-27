@@ -33,8 +33,9 @@ import { STORE } from '../kit/places-plan.js';
 import { RIDE } from './cargoforklift.js';
 import { mountAt } from './seatsteps.js';
 import { wheelHold, FORKLIFT_WHEEL } from './atwork.js';
+import { setHold } from './moves.js';
 // (the hands round the wheel for moves.js: src/atwork.js wheelHold, in the person's own frame)
-const holdOf = (M, H) => { const V = (a) => (a ? new THREE.Vector3(...a) : null); M.hold = { local: true, hands: H.hands.map(V), palms: H.palms.map(V), fingers: H.fingers.map(V), elbows: H.elbows.map(V), share: H.share }; };
+const holdOf = (M, H) => setHold(M, H);
 
 import { HAND } from '../kit/forkliftdrive.js';
 
@@ -174,7 +175,9 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
 
   // ── the player's figure on its seat ───────────────────────────────────────────────────────────────────────────
   const UP = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion();
+  // (the hands' easing round the wheel by the game's own time, update's dt: the same at 30, 60 and 120 frames a second)
   let wheelT = 0;
+  const wheelOut = {};
   function seatBody(P) {
     if (!phase) return;
     const S = forklift.hand.seat();
@@ -192,7 +195,7 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
       const seated = phase === 'drive' || (phase === 'on' && t >= ON.on);
       P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m ? m.lean : 0;
       // (climbing on or off, the right hand on it as they go)
-      if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT += 1 / 60, 3, seated ? [1, 1] : [0, m.hand])); else P.moves.hold = null;
+      if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT, 3, seated ? [1, 1] : [0, m.hand], wheelOut)); else P.moves.hold = null;
     }
     P.pos.set(x, STORE.floor, z); P.heading = h;
     P.c.root.position.set(x, y, z); P.c.root.quaternion.copy(_q.setFromAxisAngle(UP, h));
@@ -202,7 +205,7 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
   // (everyone else on Cargo's floor: its people, for it to stop for)
   const feet = () => { const pp = people(); return pp ? pp.list.filter((q) => q.home === 'store' && !q.hidden && !q.away).map((q) => q.pos) : []; };
   function update(dt, P, isPlaying, { inLift = false } = {}) {
-    playing = isPlaying; P0 = P;
+    playing = isPlaying; P0 = P; wheelT += dt;
     // (shown once the player is free to look about: never in a lift box, it waits for them to step out of it)
     const line = run && run.line ? run.line() : null;
     if (line && line !== readyShown && isPlaying && !inLift) { readyShown = line; readyT = 0; ready.querySelector('b').textContent = line.title || 'The Hauler is loaded'; ready.querySelector('span').textContent = line.words; ready.hidden = false; }
