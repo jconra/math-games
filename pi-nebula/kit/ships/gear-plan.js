@@ -189,10 +189,10 @@ export const LEGS = {
       stow: { a: [0, 1.47, 5.23], b: [0, 1.47, 3.91] }, top: 1.68, well: [0.27, 0.27, 1.27, 1.17], door: { apart: true },
       braces: [{ name: 'fore', from: [0, 1.431, 5.193], r: 0.11 }, { name: 'aft', from: [0, 1.272, 3.115], r: 0.11 }] },
     port: { at: [2.42, -3.85], belly: 2.15, splay: 0.9, r: 0.3, pad: [0.8, 1.4], knee: 0.62, padLevel: true,
-      stow: { a: [2.43, 3.55, -3.98], b: [2.48, 2.55, -4.5], via: { b: [[0.45, [2.48, 1.3, -4.2]]] } }, top: 3.7, well: [0.35, 0.53, 1.35, 1.28], door: { toward: [0, -1], stay: [[1, 2], [1, 4], [1, 6], [1, 7], [1, 8], [1, 10]] },
+      stow: { a: [2.43, 3.55, -3.98], b: [2.48, 2.55, -4.5], via: { b: [[0.45, [2.48, 1.3, -4.2]]] } }, top: 3.7, well: [0.35, 0.53, 1.35, 1.28], door: { toward: [0, -1], stay: [[1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8], [1, 10]] },
       braces: [{ name: 'in', from: [1.874, 1.419, -3.735], face: [0.6, -0.796, -0.078], r: 0.2, via: [[0.4, [2.27, 1.73, -3.735]]], to: [2.36, 2.9, -3.9] },
         { name: 'fore', from: [2.404, 1.592, -2.195], face: [0.647, -0.762, 0.029], r: 0.2, via: [[0.4, [2.3, 1.4, -2.8]], [0.7, [2.38, 1.6, -3.75]]], to: [2.38, 2.9, -3.75] }],
-      starboard: { top: 3.83, well: [0.35, 0.61, 1.35, 1.28], door: { toward: [0, 1], stay: [[0, 3], [0, 4], [0, 6], [0, 8], [0, 9], [0, 11], [0, 12]] } } },
+      starboard: { top: 3.83, well: [0.35, 0.61, 1.35, 1.28], door: { toward: [0, 1], stay: [[0, 0], [0, 3], [0, 4], [0, 6], [0, 7], [0, 8], [0, 9], [0, 11], [0, 12]] } } },
   }) },
   // the Miner: a pair under the cockpit's sides, their wells between the cockpit's lining and the hull's sides, long
   // along the ship, braced from their ends (the starboard cheek is narrower: 48 cm at the well's top from the lining to
