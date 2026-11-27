@@ -53,6 +53,7 @@
 import * as THREE from 'three';
 import { makeVoxels, makeVoxelsSoon } from '../kit/bake.js';
 import { frameOf } from './standing.js';
+import { makeSlide, NUDGE } from './slide.js';
 
 export const BODY = {
   r: 0.28,                       // a person's half width (m)
@@ -64,8 +65,8 @@ export const BODY = {
   doorOpen: 0.55,                // a door lets a person through once it is this far open (0 shut .. 1 open)
 };
 const FC = 0.5;                  // the floors' squares (m)
-// a person walking head on into a door's frame is eased sideways into the opening, up to `most` (m), in steps of `step`
-export const NUDGE = { most: 0.24, step: 0.02 };
+// (a step that meets a wall, slid along it, and a person eased sideways into a door's opening: src/slide.js)
+export { NUDGE };
 
 // THE WALLS' VOXELS AHEAD (2026-11-26, THE MAKER WHILE THE GAME LOADS): the station's and its rooms-apart's voxels,
 // made a piece at a time (bake.js makeVoxelsSoon) with the page given its turn between, then handed to makeWalls as
@@ -193,21 +194,8 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
     if (f === null || !free(x, f, z, r, doorsOpen)) return false;
     pos.x = x; pos.z = z; pos.y = f; return true;
   }
-  // (the step taken from a point a little to either side, nearest first, up to NUDGE away: the person moved there)
-  // (sideways a small step at a time, as a person would shuffle: never through anything)
-  const _n = [new THREE.Vector3(), new THREE.Vector3()], _f = new THREE.Vector3();
-  function nudge(pos, sx, sz, r, doorsOpen) {
-    const L = Math.hypot(sx, sz), px = -sz / L * NUDGE.step, pz = sx / L * NUDGE.step, open = [true, true];
-    _n[0].copy(pos); _n[1].copy(pos);
-    for (let k = 1; k * NUDGE.step <= NUDGE.most + 1e-6; k++) for (let i = 0; i < 2; i++) {
-      if (!open[i]) continue;
-      const sg = i ? -1 : 1;
-      if (!tryStep(_n[i], px * sg, pz * sg, r, doorsOpen)) { open[i] = false; continue; }
-      _f.copy(_n[i]);
-      if (tryStep(_f, sx, sz, r, doorsOpen)) { pos.copy(_f); return true; }
-    }
-    return false;
-  }
+  // (a step that went nowhere: slid along the walls, or eased sideways into a door's opening: src/slide.js)
+  const blocked = makeSlide(tryStep, BODY.stride);
   // doorsOpen: walk as if every door that can open were open (for working out a way)
   // (the frame of a part stood somewhere else that a person is in or beside, if any: `turned` says whether any part is)
   let turned = false;
@@ -223,34 +211,8 @@ export function makeWalls(built, { voxel = 0.1, portals = null, apart = [], grou
     const n = Math.max(1, Math.ceil(dist / BODY.stride)), sx = dx / n, sz = dz / n, x0 = pos.x, z0 = pos.z;
     for (let i = 0; i < n; i++) {
       if (tryStep(pos, sx, sz, r, doorsOpen)) continue;
-      // a wall: slide along it (the station's walls run along x and z; in a part stood somewhere else, a ship set down
-      // crooked, they run along that part's own two ways, so a person slides along its cabin's walls as ever)
-      const fr = turned ? frameAt(pos) : null;
-      // (the step's two parts, along the walls' own two ways)
-      let ax = sx, az = 0, bx = 0, bz = sz;
-      if (fr) { const l0 = fr.c * sx - fr.s * sz, l1 = fr.s * sx + fr.c * sz; ax = fr.c * l0; az = -fr.s * l0; bx = fr.s * l1; bz = fr.c * l1; }
-      const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
-      const a = la > 1e-6 && tryStep(pos, ax, az, r, doorsOpen), b = lb > 1e-6 && tryStep(pos, bx, bz, r, doorsOpen);
-      const L = Math.hypot(sx, sz), crawl = L < BODY.stride - 1e-6;
-      // (one part taken, a slide along a wall. But if the part that went nowhere is the greater one, it may be a sliver
-      // across their way that stopped it, below: that part tried again a stride long, once the slide is taken)
-      if (a || b) { if (crawl && !b && lb > la) tryStep(pos, bx / lb * BODY.stride, bz / lb * BODY.stride, r, doorsOpen); else if (crawl && !a && la > lb) tryStep(pos, ax / la * BODY.stride, az / la * BODY.stride, r, doorsOpen); continue; }
-      // A SLIVER, STEPPED OVER. A strip a few centimetres across where a body may not stand, or no floor is found (the
-      // edge of a riser where one floor ends and the next begins; the corner of a cabinet's end, felt only where it falls
-      // on one of the eight points a body is felt at), is crossed by a walking step without knowing. But someone held
-      // up a moment walks on at a crawl, a few millimetres a frame, and such a step lands in the strip every time: they
-      // stood there for good with the key held (the Medic: at the step up into its cockpit, and beside its bay's door,
-      // by a cabinet's end, coming from the top of its port ramp; rigs/rescue-8/lab.cjs --mode=door, RESCUE_8.md). So a
-      // step that goes nowhere is tried again a stride long: the way they push, then along the wall they slide on. It
-      // lands only where a body may stand, as any step (nothing a body cannot pass is passed)
-      if (crawl) {
-        const k = BODY.stride / L;
-        if (tryStep(pos, sx * k, sz * k, r, doorsOpen)) continue;
-        if (la >= lb ? la > 1e-6 && tryStep(pos, ax / la * BODY.stride, az / la * BODY.stride, r, doorsOpen) : lb > 1e-6 && tryStep(pos, bx / lb * BODY.stride, bz / lb * BODY.stride, r, doorsOpen)) continue;
-      }
-      // head on into a door's frame, a little off its middle: eased sideways into the opening (a narrow ship's door
-      // needs a person lined up within a hand's width, too fine for a thumb on a stick)
-      if (!nudge(pos, sx, sz, r, doorsOpen)) break;
+      // a wall: slid along it, or eased sideways into a door's opening (src/slide.js); else no way on
+      if (!blocked(pos, sx, sz, turned ? frameAt(pos) : null, r, doorsOpen)) break;
     }
     return Math.hypot(pos.x - x0, pos.z - z0);
   }
