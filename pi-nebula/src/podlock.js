@@ -128,8 +128,9 @@ export function openPodLock(root = document.body, { rider = null, pod = {}, onOp
     saveRider: (r) => { if (typeof saveRider === 'function') saveRider(r); },
     workOut: () => { closeSheet(); const s = handle.workSum(); if (s) openWork(s); else openOwn(); },
     toolsOpen: () => !!sheet && !!document.querySelector('.bml:not(.is-out), .bmo.is-on'),
-    // (a lock opened: its sums done right, the chime for a right answer, as a card's: src/sounds.js)
-    onBox: (res) => { if (res.solved && !opened) { opened = true; sound.patch(SOUNDS.chime, { volume: LEVEL.chime }); try { onOpen(res); } catch (e) { console.error(e); } } },
+    // (the lock's last answer judged right: the chime for a right answer, as a card's, at that moment: src/sounds.js)
+    onSolved: () => sound.patch(SOUNDS.chime, { volume: LEVEL.chime }),
+    onBox: (res) => { if (res.solved && !opened) { opened = true; try { onOpen(res); } catch (e) { console.error(e); } } },
     onDone: (totals) => { closeSheet(); try { onClose(totals); } catch (e) { console.error(e); } },
   });
   return { el: handle.el, handle, close: () => handle.close() };

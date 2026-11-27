@@ -22,7 +22,11 @@
 //       values: { id: v } its value nodes (an engine's 'rpm') as it starts; set(id, v) moves one while it plays (eased by
 //       the engine over 50 ms); most: seconds after which it is stopped whatever happens (a drone that must not run on).
 //       A patch with an envelope ends by itself; one without (an engine) plays until stop(fade). A name not in the copy
-//       is said once, loudly, on the console, and nothing plays.
+//       is said once, loudly, on the console, and nothing plays; so is any failure of the engine itself: sound.patch
+//       never throws (a card or a pod's lock calls it in the middle of its own work). THE PAGE HIDDEN (another tab, the
+//       phone's home screen): every patch playing that has no end of its own (an engine, the jump's hum) is stopped at
+//       once, and none starts while it is hidden; whoever wanted it asks again on the first frame back (the music rests
+//       there too: src/music/game.js).
 //   sound.audible()                  sound can be heard just now: touched, running, not muted, the volume up
 //   sound.ears(camera)               each frame: where the ears are (the camera, its way and its up)
 //   sound.volume, sound.muted        as saved in this browser (0..1, 0.8 at first; not muted); setVolume(v), setMuted(m)
@@ -102,7 +106,10 @@ function makeSound() {
   // A SOUND LAB PATCH (sound.patch, above). The engine is fetched once, at the first touch (it is the same file the
   // music plays with); asked for before it is in, nothing plays (an engine asks again next frame; a chime is let go).
   let E = null, loading = null;
-  const told = new Set();
+  const told = new Set(), drones = new Set();
+  const hidden = () => typeof document !== 'undefined' && !!document.hidden;
+  const loud = (key, ...msg) => { if (!told.has(key)) { told.add(key); console.error(...msg); } };
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', () => { if (document.hidden) for (const h of [...drones]) h.stop(0.05); });
   function engineNow() {
     if (E || loading) return E;
     loading = import('./audio/patch.js').then((m) => { E = m; }, (e) => { console.error('sound: the Sound Lab\'s engine (src/audio/patch.js) did not load, so no patch can play', e); });
@@ -115,28 +122,36 @@ function makeSound() {
     if (!ctx || ctx.state !== 'running' || !level()) return null;
     const lib = engineNow(); if (!lib) return null;
     const P = lib.PATCH_PRESETS[name];
-    if (!P) {
-      if (!told.has(name)) { told.add(name); console.error(`sound.patch: no Sound Lab patch '${name}' in src/audio/patch.js (sync it from the lab: node tools/sync.mjs pi-nebula <this file>)`); }
-      return null;
-    }
-    const gr = groups[group] ? group : 'effects', t = ctx.currentTime, g = ctx.createGain(), vol = Math.max(0, volume);
-    if (fade > 0) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + fade); } else g.gain.value = vol;
-    const pan = at ? placed(g, at, near, far) : null;
-    (pan || g).connect(groups[gr]);
-    let over = false, timer = 0;
+    if (!P) { loud(name, `sound.patch: no Sound Lab patch '${name}' in src/audio/patch.js (sync it from the lab: node tools/sync.mjs pi-nebula <this file>)`); return null; }
+    const drone = lib.patchAutoStopTime(P) == null;
+    if (drone && hidden()) return null;
+    const gr = groups[group] ? group : 'effects';
+    let g = null, pan = null, v = null, over = false, timer = 0, h = null;
     // (done: no longer counted; its own nodes let go a moment after its sound has gone)
     const done = (after) => {
-      if (over) return; over = true; sounding[gr]--; if (timer) { clearTimeout(timer); timer = 0; }
+      if (over) return; over = true; sounding[gr]--; drones.delete(h); if (timer) { clearTimeout(timer); timer = 0; }
       setTimeout(() => { try { g.disconnect(); if (pan) pan.disconnect(); } catch (e) { /* gone already */ } }, after * 1000);
     };
-    const v = E.playPatch(ctx, null, g, null, values ? withValues(P, values) : P, () => done(0.2));
+    try {
+      const t = ctx.currentTime, vol = Math.max(0, volume);
+      g = ctx.createGain();
+      if (fade > 0) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + fade); } else g.gain.value = vol;
+      pan = at ? placed(g, at, near, far) : null;
+      (pan || g).connect(groups[gr]);
+      v = E.playPatch(ctx, null, g, null, values ? withValues(P, values) : P, () => done(0.2));
+    } catch (e) {
+      loud('play:' + name, `sound.patch: '${name}' could not be played; the game goes on without it`, e);
+      try { if (v) v.stop(0.01); if (g) g.disconnect(); if (pan) pan.disconnect(); } catch (x) { /* */ }
+      return null;
+    }
     S.played++; sounding[gr] = (sounding[gr] || 0) + 1;
-    const h = {
+    h = {
       stop(f = 0.05) {
         if (over) return;
         const e = ctx.currentTime, k = Math.max(0.01, f);
         try { g.gain.cancelScheduledValues(e); g.gain.setValueAtTime(g.gain.value, e); g.gain.linearRampToValueAtTime(0, e + k); } catch (x) { /* */ }
-        v.stop(k / 3); done(k * 2 + 0.3);
+        try { v.stop(k / 3); } catch (x) { /* */ }
+        done(k * 2 + 0.3);
       },
       set(id, x) { if (!over) v.setValue(id, x); },
       volume(x) { if (!over) g.gain.setTargetAtTime(Math.max(0, x), ctx.currentTime, 0.04); },
@@ -144,6 +159,7 @@ function makeSound() {
       get on() { return !over; },
     };
     if (most > 0) timer = setTimeout(() => h.stop(0.3), most * 1000);
+    if (drone) drones.add(h);
     return h;
   };
   // AN ALARM, MADE HERE (no sound file): two notes, turn and turn about, for as long as it is wanted. The game's maker

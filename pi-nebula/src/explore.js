@@ -40,6 +40,7 @@ import { makeWreckGuide } from './planet/guide.js';
 import { rng, subSeed } from './planet/noise.js';
 import { ORE } from './jobs/smelter.js';
 import { makeFarShip } from './farship.js';
+import { engines } from './engines.js';
 
 // THE NUMBERS (m, s):
 //   arrive   out of the wormhole: how far from what it comes to look at, how high over it, at least how high over the
@@ -214,6 +215,7 @@ export function makePlace(ctx, opts = {}) {
         if (base) { at.p.copy(base); at.p.y += Math.sin(st.t * 1.6) * 0.12; }
       }
       put(dt);
+      engines.own(ship.fl.S);      // (the Explorer's engine, moved here by the run: src/engines.js)
     },
     aim(camera, dt) {
       if (!ship.fl || st.closed) return;

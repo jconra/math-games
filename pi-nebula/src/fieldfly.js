@@ -47,6 +47,7 @@
 //   FF.fl (the flying), FF.matrix (the ship's kit frame in the world), FF.state(), FF.close()
 import * as THREE from 'three';
 import { FIELD, rockNear, rockSolid } from './flymodel.js';
+import { engines } from './engines.js';
 
 // the ship's kit frame (x to port, y up, z to its nose) in the flight model's own [ahead, up, right]
 const KIT = new THREE.Matrix4().makeRotationY(Math.PI / 2);
@@ -113,7 +114,8 @@ export function makeFieldFlying({ W, drill, startFlying, pilot = false, flier = 
       // (on their feet, or a part skipped), the ship is the drill's view's to move)
       if (byCrew && mode === 'ride' && byCrew.hand() && drill.stage === 'look' && drill.crew.mark != null && drill.hand(true)) { const at = poseNow(); fl.put(at.p, at.q); fl.lock(false); mode = 'hand'; }
       else if (byCrew && mode === 'hand' && !byCrew.hand()) api.ride();
-      if (mode === 'seat' || mode === 'hand') fl.update(dt);
+      // (the flying put away while the drill's view or its ride moves the ship: its engine still heard, src/engines.js)
+      if (mode === 'seat' || mode === 'hand') fl.update(dt); else engines.own(fl.S);
       // (flown up to a rock: the claw takes it, and the drill's task is on with that rock; the crew's driller takes only
       // the rock they marked, and the ship is watched from where the eye is)
       if (mode === 'hand') {

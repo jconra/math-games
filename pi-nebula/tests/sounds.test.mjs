@@ -5,8 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../src/flymodel.js';
-import { JUMP } from '../src/wormplan.js';
-import { SOUNDS, LEVEL, ENGINE, rpmOf, rpmOfSpeed, easeRpm, nearest, mostFor } from '../src/sounds.js';
+import { JUMP, makeJump, stepJump } from '../src/wormplan.js';
+import { SOUNDS, LEVEL, ENGINE, rpmOf, rpmOfSpeed, easeRpm, nearest, mostFor, makeJumpSound } from '../src/sounds.js';
 import { makeEngines } from '../src/engines.js';
 import { PATCH_PRESETS, patchAutoStopTime } from '../src/audio/patch.js';
 
@@ -18,7 +18,7 @@ test('every sound the game asks for is a patch in the copy synced from the Sound
   const names = [SOUNDS.engine, SOUNDS.chime, ...Object.values(SOUNDS.jump)];
   for (const n of names) { assert.ok(PATCH_PRESETS[n], n + ' is in src/audio/patch.js'); assert.equal(PATCH_PRESETS[n].project, 'pi-nebula', n); }
   // the engine (each take): a drone that plays until it is stopped, with the one RPMs number the game moves
-  for (const k of ['A', 'B', 'C']) {
+  for (const k of ['A', 'B', 'C', 'D']) {
     const P = PATCH_PRESETS['SHIP — ENGINE ' + k];
     assert.equal(P.group, 'SHIPS'); assert.equal(patchAutoStopTime(P), null, k + ': no envelope, it runs until stopped');
     const rpm = P.nodes.find((n) => n.id === 'rpm'); assert.equal(rpm.type, 'value');
@@ -75,7 +75,7 @@ function fakeSound() {
   const F = {
     on: true, started,
     audible: () => F.on,
-    patch(name, o) { const h = { name, at: o.at ? { ...o.at } : null, rpm: [o.values.rpm], stopped: false, set(id, v) { this.rpm.push(v); }, move(p) { this.at = { ...p }; }, stop() { this.stopped = true; } }; started.push(h); return h; },
+    patch(name, o = {}) { const h = { name, o, at: o.at ? { ...o.at } : null, rpm: [o.values ? o.values.rpm : null], stopped: false, get on() { return !this.stopped; }, set(id, v) { this.rpm.push(v); }, move(p) { this.at = { ...p }; }, stop() { this.stopped = true; } }; started.push(h); return h; },
     live: () => started.filter((h) => !h.stopped),
   };
   return F;
@@ -134,10 +134,11 @@ function fakeAudio() {
   return { AC, made };
 }
 test('the sound player plays a Sound Lab patch by its name: nothing before the first touch, none muted, none unknown', async () => {
-  const { AC, made } = fakeAudio(), on = {}, errors = [];
-  const keep = { addEventListener: globalThis.addEventListener, window: globalThis.window, error: console.error };
+  const { AC, made } = fakeAudio(), on = {}, errors = [], page = { hidden: false, on: {} };
+  const keep = { addEventListener: globalThis.addEventListener, window: globalThis.window, error: console.error, document: globalThis.document };
   globalThis.addEventListener = (ev, fn) => { on[ev] = fn; };
   globalThis.window = { AudioContext: AC };
+  globalThis.document = { get hidden() { return page.hidden; }, addEventListener: (ev, fn) => { page.on[ev] = fn; } };
   console.error = (...a) => errors.push(a.join(' '));
   try {
     const { sound } = await import('../src/sound.js?player-test');
@@ -161,10 +162,90 @@ test('the sound player plays a Sound Lab patch by its name: nothing before the f
     // a name that is not there: nothing plays, and it is said (once)
     assert.equal(sound.patch('NO — SUCH SOUND'), null); assert.equal(sound.patch('NO — SUCH SOUND'), null);
     assert.equal(errors.filter((e) => e.includes('NO — SUCH SOUND')).length, 1);
+    // THE PAGE HIDDEN: an engine and the jump's hum (no end of their own) stop at once; a chime plays its little out;
+    // none starts while hidden; back, they play again when asked
+    const eng = sound.patch(SOUNDS.engine, { values: { rpm: 0.2 } }), hum = sound.patch(SOUNDS.jump.tunnel), ding = sound.patch(SOUNDS.chime);
+    page.hidden = true; page.on.visibilitychange();
+    assert.equal(eng.on, false); assert.equal(hum.on, false); assert.equal(ding.on, true, 'the chime ends by itself');
+    assert.equal(sound.patch(SOUNDS.engine), null, 'no engine starts while hidden');
+    page.hidden = false; page.on.visibilitychange();
+    const back = sound.patch(SOUNDS.engine); assert.ok(back && back.on); back.stop(); ding.stop();
     // muted, or the volume right down: nothing
     sound.setMuted(true); assert.equal(sound.patch(SOUNDS.chime), null); assert.equal(sound.audible(), false);
     sound.setMuted(false); sound.setVolume(0); assert.equal(sound.patch(SOUNDS.chime), null);
   } finally {
+    globalThis.addEventListener = keep.addEventListener; globalThis.window = keep.window; console.error = keep.error; globalThis.document = keep.document;
+  }
+});
+
+test('the sound player never throws: an engine that fails is said once, and the game goes on', async () => {
+  const { AC } = fakeAudio(), on = {}, errors = [];
+  class Broken extends AC { createConstantSource() { throw new Error('no ConstantSourceNode here'); } }
+  const keep = { addEventListener: globalThis.addEventListener, window: globalThis.window, error: console.error };
+  globalThis.addEventListener = (ev, fn) => { on[ev] = fn; };
+  globalThis.window = { AudioContext: Broken };
+  console.error = (...a) => errors.push(a.join(' '));
+  try {
+    const { sound } = await import('../src/sound.js?broken-test');
+    on.pointerdown(); await new Promise((r) => setTimeout(r, 50));
+    let h = 'not asked';
+    assert.doesNotThrow(() => { h = sound.patch(SOUNDS.chime); sound.patch(SOUNDS.chime); });
+    assert.equal(h, null); assert.equal(errors.filter((e) => e.includes(SOUNDS.chime)).length, 1, 'said once');
+    assert.equal(sound.playing('effects'), 0);
+  } finally {
     globalThis.addEventListener = keep.addEventListener; globalThis.window = keep.window; console.error = keep.error;
   }
+});
+
+test('the jump heard at the wormhole\'s own moments, in the game\'s own time', () => {
+  const snd = fakeSound(), names = () => snd.started.map((h) => h.name);
+  const run = (J, H, secs, ready = () => true) => { for (let t = 0; t < secs; t += DT) { for (const ev of stepJump(J, DT, ready())) H.event(ev); H.step(J); } };
+  // a whole jump: the tear once, the hum from the colours all round until the far end opens, the far end once
+  let H = makeJumpSound(snd), J = makeJump(() => 0.5); H.begin();
+  run(J, H, JUMP.rip + JUMP.plunge - 0.05);
+  assert.deepEqual(names(), [SOUNDS.jump.tear]);
+  run(J, H, 0.2); assert.deepEqual(names(), [SOUNDS.jump.tear, SOUNDS.jump.tunnel]); assert.ok(H.humming);
+  run(J, H, JUMP.least + JUMP.open + 0.3);
+  assert.deepEqual(names(), [SOUNDS.jump.tear, SOUNDS.jump.tunnel, SOUNDS.jump.open]); assert.equal(H.humming, false);
+  assert.ok(snd.started[1].stopped, 'the hum stopped at the far end');
+  // a long tunnel (the place ahead slow): the hum lasts as long as the colours in game time, and if anything stops it
+  // (the page hidden) it comes back while they last
+  snd.started.length = 0; H = makeJumpSound(snd); J = makeJump(() => 0.5); H.begin();
+  run(J, H, JUMP.rip + JUMP.plunge + 10, () => false);
+  assert.equal(J.phase, 'tunnel'); assert.ok(H.humming, 'humming 10 s into the colours');
+  snd.started.find((h) => h.name === SOUNDS.jump.tunnel).stop();
+  run(J, H, DT * 2, () => false); assert.ok(H.humming, 'back');
+  assert.ok(snd.started.filter((h) => h.name === SOUNDS.jump.tunnel).every((h) => (h.o.most || 0) > JUMP.most * 2), 'its wall-clock guard is only a last guard');
+  // put away in the middle, and two jumps back to back: nothing of the one before is left sounding
+  H.hush(); assert.equal(snd.live().filter((h) => h.name === SOUNDS.jump.tunnel).length, 0, 'no hum left');
+  snd.started.length = 0; H.begin(); H.begin();
+  assert.equal(snd.live().length, 1); assert.equal(snd.live()[0].name, SOUNDS.jump.tear);
+  H.begin(true); assert.deepEqual(snd.live().map((h) => h.name), [SOUNDS.jump.tunnel], 'begun in the colours: the hum at once');
+  H.hush();
+});
+
+test('the ship of a run is heard through every part of it, moved by the flight model or by the run itself', () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = M.makeShip(), ears = { x: 0, y: 0, z: 0 };
+  // a rescue's parts after the pilot's own flying: flown down by the run (the flight model still), the hover, set down
+  // and standing, the lift and the climb, held above; the run puts the ship where it is each frame (M.place)
+  const p = [0, 300, 0]; M.place(S, p);
+  const part = (secs, vy, vx, standing = false) => { const rpm = []; for (let t = 0; t < secs; t += DT) { p[0] += vx * DT; p[1] += vy * DT; M.place(S, p); E.own(S, standing); E.update(DT, ears, 'low'); rpm.push(snd.live()[0] ? snd.live()[0].rpm.at(-1) : null); } return rpm; };
+  const down = part(6, -20, 15), hover = part(4, 0, 0), stand = part(4, 0, 0, true), lift = part(3, 8, 0), above = part(4, 0, 0);
+  assert.equal(snd.started.length, 1, 'one engine all the way through, never stopped and started again');
+  assert.ok([...down, ...hover, ...stand, ...lift, ...above].every((r) => r != null), 'sounding in every part');
+  assert.ok(down.at(-1) > 0.8, 'flown down at speed: ' + down.at(-1));
+  assert.ok(Math.abs(hover.at(-1) - ENGINE.aloft) < 0.05, 'the hover: held up');
+  assert.ok(stand.at(-1) < 0.05, 'standing on the ground: idling');
+  assert.ok(lift.at(-1) > above.at(-1), 'the climb works harder than holding above');
+  // the run's own leap from one place to another (the ship put at the far place) is not a speed
+  p[0] += 5000; part(DT, 0, 0); assert.ok(snd.live()[0].rpm.at(-1) < 0.5);
+  E.update(1, ears, 'low');
+});
+
+test('the watchdog: if the engines\' update stops coming (the game\'s loop gone), every engine stops', async () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = M.makeShip();
+  S.power = true; E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');
+  assert.equal(snd.live().length, 1);
+  await new Promise((r) => setTimeout(r, ENGINE.watchdog * 1000 + 500));
+  assert.equal(snd.live().length, 0, 'stopped with no update for ' + ENGINE.watchdog + ' s');
 });

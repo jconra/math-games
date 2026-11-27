@@ -43,8 +43,9 @@ test('every patch the music can play is in the copy synced from the Sound Lab, a
   assert.deepEqual(Object.keys(TECHNO_PATCHES), music.map(([k]) => k));
   for (const [k, p] of music) assert.equal(TECHNO_PATCHES[k], p, k);
   const all = [...Object.values(DRUMS).flatMap((d) => Object.values(d)), ...Object.values(INSTRUMENTS).flatMap((i) => Object.values(i))];
-  for (const k of all) assert.ok(PATCH_PRESETS[k], k + ' is in src/audio/patch.js');
-  for (const k of Object.keys(ROOT)) assert.ok(PATCH_PRESETS[k], k);
+  // (what the music looks up: its own list, the copy's MUSIC group)
+  for (const k of all) assert.ok(TECHNO_PATCHES[k], k + ' is in src/audio/patch.js, in its MUSIC group');
+  for (const k of Object.keys(ROOT)) assert.ok(TECHNO_PATCHES[k], k);
   assert.ok(!all.includes('TECHNO — ROLLING BASS') && !ROOT['TECHNO — ROLLING BASS'], 'nothing plays the rolling bass sound any more');
   assert.ok(!partOf('bass').choices.some((c) => c.id === 'rolling'));
   // a new patch is as lean as a part of the music needs: a pad holds three or four notes at once

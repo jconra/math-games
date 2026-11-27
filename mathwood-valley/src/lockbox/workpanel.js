@@ -367,7 +367,10 @@ export function mountWorkBox(kit, ctx) {
     renderTop();
   }
 
-  function solvedNow() { solved = true; if (!boxTime) boxTime = boxClock.stop(); }
+  function solvedNow() {
+    if (!solved && opts.onSolved) { try { opts.onSolved(); } catch (e) { console.error(e); } }   // (once a box: panel.js opts.onSolved)
+    solved = true; if (!boxTime) boxTime = boxClock.stop();
+  }
 
   // ----- the review: the whole working, line under line, and one button -----
   function review() {

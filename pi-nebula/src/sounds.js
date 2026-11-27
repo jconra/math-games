@@ -16,12 +16,15 @@
 //   nearest(list, n, out)    of engines that could sound ({ d: metres from the ears }), the n nearest within ENGINE.far,
 //                 the ship flown first (d 0); `out` filled and returned, nothing made (it runs every frame)
 import { FEEL } from './flymodel.js';
+import { JUMP } from './wormplan.js';
 
 export const SOUNDS = {
   // the game's maker (2026-11-27): "For engine noises. We could use something that sounds like the lurcher engine (but
-  // maybe softer)". Three takes in the lab (A the Lurcher's own sound, quieter; B rounder; C a slower throb), for him to
-  // choose by ear; A until he does.
-  engine: 'SHIP — ENGINE A',
+  // maybe softer)". Four takes in the lab, for him to choose by ear: A the Lurcher's own sound, quieter; B rounder; C a
+  // gentler, slower throb; D the Lurcher's own sound, quieter, its tone opened so a phone's own speaker plays it (A, B
+  // and C are nearly all below 300 Hz, lower than a phone's speaker goes, and he plays on his phone). D until he
+  // chooses.
+  engine: 'SHIP — ENGINE D',
   // the wormhole's moments (src/wormplan.js JUMP): the tear opening and coming over the ship; the colours all round,
   // for as long as they last; the far end opening
   jump: { tear: 'JUMP — TEAR', tunnel: 'JUMP — TUNNEL', open: 'JUMP — OPEN' },
@@ -31,9 +34,9 @@ export const SOUNDS = {
 
 // HOW LOUD (measured from renders, ~/pw/space-math/SOUNDS_1_PI_NEBULA.md): with the HUD's volume as it starts (0.8), a
 // voice clip speaks at about -23 dB and the station's music plays at about -29 dB; the engine at 0.27 sits at about
-// -34 dB, 11 dB under a voice and 5 dB under the music, nearly all of it below 600 Hz where a voice has little, so a
-// person speaking stays clear over it with nothing turned down. The jump at -27 dB in all (its loudest moment, the
-// colours all round, -28 dB); a chime at about -27 dB over its first 0.3 s.
+// -34 dB, 11 dB under a voice and 5 dB under the music, so a person speaking stays clear over it with nothing turned
+// down. The jump at about -30 dB in all (its loudest stretch, the colours all round, -28 dB); a chime at about -29 dB
+// (A) and -26 dB (B) over its first 0.3 s.
 export const LEVEL = { engine: 0.27, jump: 1, chime: 0.8 };
 
 export const ENGINE = {
@@ -41,6 +44,8 @@ export const ENGINE = {
   fadeIn: 0.4, fadeOut: 0.5,     // s: an engine starts and stops softly (never a click)
   rise: 1.2, fall: 0.8,          // the most the RPMs move in a second, up and down (with the engine's own 50 ms glide)
   linger: 0.25,                  // s: an engine nobody has asked for in this long is stopped (a ship put away, a run given up)
+  watchdog: 1,                   // s: no update of the engines at all in this long (the game's loop gone): every engine stopped
+  leap: 50,                      // m: a ship moved further than this in one frame was put somewhere, not flown: no speed from it
   idle: 0.15,                    // the flight model's own idle (src/flymodel.js stepShip: S.engine eases to it, power on)
   aloft: 0.2,                    // the RPMs of a ship held up off the floor, going nowhere
   fast: 25,                      // m/s: a ship that moves by itself at this speed or more is at full RPMs
@@ -60,7 +65,8 @@ export function rpmOf(S) {
   const climb = clamp01(Math.abs(S.v[1]) / FEEL.speed.up);
   return Math.max(ENGINE.aloft, throttle, ENGINE.aloft + (1 - ENGINE.aloft) * 0.5 * climb);
 }
-// a ship that moves by itself: held up at least ENGINE.aloft, at full by ENGINE.fast m/s
+// a ship that moves by itself (or a flown ship moved by a scripted part of a run, its flight model still, its own speed
+// zero): held up at least ENGINE.aloft, at full by ENGINE.fast m/s
 export const rpmOfSpeed = (v) => ENGINE.aloft + (1 - ENGINE.aloft) * clamp01((+v || 0) / ENGINE.fast);
 
 // the RPMs eased toward what is wanted: never a jump in pitch, whatever the number asked for does
@@ -79,3 +85,32 @@ export function nearest(list, n, out) {
   return out;
 }
 export const mostFor = (quality) => ENGINE.most[quality] ?? ENGINE.most.medium;
+
+// THE JUMP, HEARD (src/wormhole.js): the three patches at the wormhole's own moments, in the game's own time.
+//   const J = makeJumpSound(sound)    (the game's sound player, or a stand-in)
+//   J.begin(tunnel)   a jump begins: the tear (tunnel: begun in the colours, as the Drill Lab's arrival: the hum at once)
+//   J.event(ev)       'shut' (the hum), 'open' (the hum stops, the far end opens)
+//   J.step(jump)      each frame with the jump's plain state (src/wormplan.js): while the colours are all round the hum
+//                     sounds, started again if anything stopped it (a hidden page, its own last guard); it ends with
+//                     the colours: at 'open', or once they are past the longest they can last, in the game's own time
+//   J.hush()          everything stopped (the jump put away)
+export function makeJumpSound(sound) {
+  let tear = null, hum = null;
+  const humOff = (f = 0.3) => { if (hum) { hum.stop(f); hum = null; } };
+  // (its wall-clock `most`, 120 s, is only the last guard against a hum left behind: the colours' own end is game time)
+  const humOn = () => { if (!hum || !hum.on) hum = sound.patch(SOUNDS.jump.tunnel, { volume: LEVEL.jump, fade: 0.15, most: 120 }); };
+  const J = {
+    hush() { if (tear) { tear.stop(0.15); tear = null; } humOff(); },
+    begin(tunnel = false) { J.hush(); if (tunnel) humOn(); else tear = sound.patch(SOUNDS.jump.tear, { volume: LEVEL.jump }); },
+    event(ev) {
+      if (ev === 'shut') { tear = null; humOn(); }
+      else if (ev === 'open') { humOff(); sound.patch(SOUNDS.jump.open, { volume: LEVEL.jump }); }
+    },
+    step(jump) {
+      if (!jump || jump.phase !== 'tunnel') return;
+      if (jump.t > JUMP.most + 1) humOff(); else humOn();
+    },
+    get humming() { return !!(hum && hum.on); },
+  };
+  return J;
+}

@@ -92,6 +92,7 @@ import { makePods } from './planet/podsdraw.js';
 import { SLEEPERS } from './sleeper.js';
 import { loadPod } from '../kit/stasispod.js';
 import { facing, gearOverGround } from './flymodel.js';
+import { engines } from './engines.js';
 import { planetPad, groundSolid, planDown, padNose } from './planet/landing.js';
 import { makeSearch } from './planet/search.js';
 import { makeMedicDown } from './planet/medicdown.js';
@@ -453,6 +454,9 @@ export function makeSite(ctx, opts = {}) {
         const base = P === 'up' ? at.up : at.from; if (P === 'up' || !iPilot) { at.p.copy(base); at.p.y += Math.sin(st.t * 1.6) * 0.12; }
         put();
       }
+      // (the Medic's engine through every part here: the flight model's own while the pilot flies it (fl.update tells
+      // it), the run's own otherwise; idling while it stands on the ground: src/engines.js)
+      if (!(P === 'fly' && iPilot)) engines.own(fl.S, P === 'pods' || P === 'wait' || P === 'board');
       st.words = WORDS[st.phase] ? WORDS[st.phase](who) : '';
       // (the order they take their places in: the ward's at home)
       if (rescued && rescued.placed > st.came.length) for (const R of rescued.list) if (['lying', 'perched', 'sit', 'standing'].includes(R.phase) && !st.came.includes(R.i)) st.came.push(R.i);

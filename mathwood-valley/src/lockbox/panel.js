@@ -8,6 +8,8 @@
 //          menu's skip; false for a store order's equation, a box already opening or one already solved: keep.js) }
 //   opts.workOut(): "Work it out" in the top strip (the game's tools, src/ui/tools.js: the HUD is under the box);
 //   opts.toolsOpen(): a tool is up over the box (the box hears no keys meanwhile)
+//   opts.onSolved(): (optional) the moment a box's last answer is judged right, once a box (Pi Nebula's chime for a
+//                   right answer, pi-nebula/src/podlock.js); a throw from it is logged and the box goes on
 //   onBox(result)   (optional) runs as each box finishes, solved or set aside: the caller pays the gold and records
 //                   it right then (save.js earn + recordLockbox), so gold is saved the moment it is earned. It may
 //                   return { newTitle, badge } for the panel to show on the coin animation.
@@ -584,7 +586,11 @@ export function openLockbox(root = document.body, opts = {}) {
     // the time this box takes until it is solved (a sit-down answer: src/math/skill.js), and what its parts said
     const boxClock = answerTimer();
     let boxTime = null;
-    const solvedNow = () => { if (!boxTime) boxTime = boxClock.stop(); };
+    let solvedTold = false;
+    const solvedNow = () => {
+      if (!boxTime) boxTime = boxClock.stop();
+      if (!solvedTold && opts.onSolved) { solvedTold = true; try { opts.onSolved(); } catch (e) { console.error(e); } }
+    };
     let partsAsked = 0, xSlips = 0, numSlips = 0, negSlips = 0, away = false;
     // what the inequality mode adds to the shared flow (null on an equation box)
     const IB = ineqMode ? {
