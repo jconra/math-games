@@ -1095,7 +1095,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const WORK_OF = { [CLIPS.polish]: { kind: 'wipe', lo: 0.75, hi: 1.15, to: 0.9 }, [CLIPS.forge]: { kind: 'panel', lo: 0.7, hi: 1.2, to: 1.0, edge: [0.5, 0.95], lean: 0.42, apart: 0.3 } };
   // (by the place: a hangar's fuel pump, its face 0.45 m in front of its spot (life.js SPOTS.pump, kit/hangar.js): its
   // screen's middle and corners at 1.12 m, its three buttons at 0.7 m, [across, up])
-  const WORK_AT = { pump: { kind: 'face', face: 0.45, points: [[0, 1.12], [-0.12, 1.14], [0.12, 1.1], [-0.12, 0.7], [0, 0.7], [0.12, 0.7]] } };
+  // A wall locker (kit/shell.js 'locker': a cabinet standing out from the wall, its front 0.2 m in front of its spot,
+  // its door's handle 0.3 m to their right, 0.9 to 1.16 m up): the hand on the handle (the reach clip's hand went over
+  // it, into the door, or waved short of it: a critic, 2026-11-27)
+  const WORK_AT = { pump: { kind: 'face', face: 0.45, points: [[0, 1.12], [-0.12, 1.14], [0.12, 1.1], [-0.12, 0.7], [0, 0.7], [0.12, 0.7]] }, lockers: { kind: 'face', face: 0.2, points: [[0.295, 1.0], [0.295, 1.06]] } };
   function workOf(P, a) {
     const g = a.step && a.step.do ? parse(a.step).group : null, F = a.kind !== 'sit' && WORK_AT[g];
     if (F) { const h = a.spot.heading ?? P.heading; return { kind: F.kind, at: [P.pos.x + Math.sin(h) * F.face, P.pos.y, P.pos.z + Math.cos(h) * F.face], heading: h, points: F.points, seed: Math.random() * 100 }; }
