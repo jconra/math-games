@@ -852,6 +852,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     update, control, aim, close,
     pickBall, throwAt: (gi) => throwAt(gi), choose: (i) => { choice = i; startRound(); },
     aimAt: (x, y) => targetAt(x, y), placeAt: (x, z) => { placeReq = [x, z]; },
+    putBall: (id, x, z) => { const b = G.balls.find((q) => q.id === id); if (!b) return false; b.p = [x, PHYS.r, z]; b.v = [0, 0, 0]; b.w = [0, 0, 0]; b.mode = 'rest'; return true; },   // (a rig's: a ball laid at rest on a spot)
     faceTo: (y) => { viewTurn(cam, wrapA(cam.yaw - y) / HANDS.turn, 0); aimUI.mouse = null; },   // (a rig's: the turn set as by a drag)
     hands: HANDS, front: FRONT, cams: MBCAM,   // (for the rigs and the films of the game's maker's questions)
     get phase() { return phase; },
