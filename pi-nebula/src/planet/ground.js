@@ -91,6 +91,8 @@ const gritPicture = () => gritKept || (gritKept = gritData(GRIT.size));
 // sky but the ground below stays clear from high up: how much of the sky's colour is between a point and the camera.
 // Below the landing place's height it is no thicker than there (it grew without end downhill, and lay in the valleys as
 // flat pools of the sky's colour that two critics read as spilled paint)
+// how much bare rock (and on the meadows, bare earth: uBare) is mottled at every distance
+const ROCK_MOTTLE = 0.8;
 // how much of the sky's colour the farthest ground takes (with air: the moon has none)
 export const HORIZON_HAZE = 0.6;
 export const HAZE_GLSL = /* glsl */`
@@ -198,7 +200,7 @@ const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
 uniform vec4 uShadowBox;
 uniform float uN, uP;
 uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
-uniform float uAmbPow, uAir, uFine, uBands, uTreeFar;
+uniform float uAmbPow, uAir, uFine, uBands, uTreeFar, uBare;
 varying vec2 vXZ; varying vec3 vWorld; varying float vDist;
 #ifdef AIR
 ${SKY_GLSL}
@@ -226,6 +228,9 @@ void main() {
   base = tone > 0.0 ? mix(base, uBright, tone) : mix(base, uDark, -tone);
   base = mix(base, mix(uGrass, uGrass2, smoothstep(0.3, 0.7, d1.b)), grow * (1.0 - rock));
   base *= 0.9 + 0.2 * mix(0.5, d2.a, nearA) * (0.6 + 0.4 * rock);
+  // (bare earth and rock mottled at every distance, in patches a few tens of metres across: plain, the meadows' bare
+  // earth lay in the land seen from the ship as flat pools of one colour, D's lilac pools, two critics: "spilled paint")
+  base *= mix(1.0, (0.7 + 0.55 * d1.b) * (0.85 + 0.3 * d1.a), max(rock, uBare * (1.0 - grow)) * ${ROCK_MOTTLE.toFixed(2)});
   #ifdef GRIT
   // THE GROUND UNDERFOOT (src/planet/grit.js): small stones, cracks, tufts and ripples, each kind its own, near the eye
   // only; two sizes of it turned against each other, and how much of each comes and goes over the ground (d1, d2)
@@ -294,7 +299,7 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     uAmbSky: { value: col(look.ambient.sky) }, uAmbGround: { value: col(look.ambient.ground) }, uAmbPow: { value: look.ambient.power },
     uDust: { value: col(look.dust) }, uRock: { value: col(look.rock) }, uBright: { value: col(look.bright) }, uDark: { value: col(look.dark) },
     uGrass: { value: col(look.grass || look.dust) }, uGrass2: { value: col(look.grass2 || look.dust) },
-    uAir: { value: look.air ? 1 : 0 }, uFine: { value: Q.fine }, uBands: { value: land.kind.bands ? 1 : 0 },
+    uAir: { value: look.air ? 1 : 0 }, uBare: { value: land.kind.id === 'meadow' ? 1 : 0 }, uFine: { value: Q.fine }, uBands: { value: land.kind.bands ? 1 : 0 },
     // (the woods' colour from afar and how far the trees themselves are drawn: set by src/planet/trees.js)
     uCanopy: { value: new THREE.Color(0, 0, 0) }, uTreeFar: { value: 1e9 },
     // (the ground underfoot, src/planet/grit.js: the kind's own stones, cracks, tufts and ripples)
