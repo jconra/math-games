@@ -115,6 +115,9 @@ export const LIFE = {
 };
 // (s: a seat or a talking spot no way could be found to twice is let be this long, then tried again)
 const BAD_FOR = 240;
+// (m: how far ahead of a desk sitter's seat a desk's edge is reached with the elbows bent, bowed over it: Cargo's
+// shipping desk, 0.45, measured in the game)
+const DESK_REACH = 0.45;
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
 export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
@@ -1170,7 +1173,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const at = a.kind === 'sit' ? a.spot.seat : P.pos, h = a.kind === 'sit' ? a.spot.heading : a.spot.heading ?? P.heading;
     const f = surfaceAhead((x, z, top, drop) => walls.floorAt(x, z, top, drop), [at.x, at.y, at.z], h, { from: k.from ?? 0.15, to: k.to, lo: k.lo, hi: k.hi }) || (k.edge ? { d: k.edge[0], y: at.y + k.edge[1] } : null);
     if (!f) { alarms.noWork = (alarms.noWork || 0) + 1; return null; }
-    return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean: k.lean, apart: k.apart, tilt: k.tilt || 0, stepIn: k.stepIn || 0 };
+    // (a desk whose edge stands further off than a sitter's arm reaches it bowed, DESK_REACH: the sitter on the front
+    // of the seat, drawn forward that much more, at most 0.2 m: the review's measure, the control room's radio desk 8 to
+    // 10 cm out of reach)
+    const stepIn = a.kind === 'sit' ? Math.max(0, Math.min(0.2, f.d - DESK_REACH)) : k.stepIn || 0;
+    return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean: k.lean, apart: k.apart, tilt: k.tilt || 0, stepIn };
   }
   // (each frame a person is drawn: the stance at rest, the lean, the hands on the work, for moves.js)
   const _hw = [new THREE.Vector3(), new THREE.Vector3()];

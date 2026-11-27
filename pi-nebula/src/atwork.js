@@ -129,8 +129,10 @@ export function handsAt(kind, S, t, seed = 0) {
 
 // CARGO'S FORKLIFT'S STEERING WHEEL, read off the game's maker's own file (assets/cargo/forklift.glb, its points over
 // and in front of the seat): its middle this far ahead of the seat's middle and up over the seat's cushion (m), its
-// rim's radius (m), its top tipped forward from straight up (radians: the wheel lies back toward the driver)
-export const FORKLIFT_WHEEL = { ahead: 0.505, up: 0.242, r: 0.147, tilt: 0.96, lean: 0.3, at: 1.85 };
+// rim's radius (m), its top tipped forward from straight up (radians: the wheel lies back toward the driver); bow: how far
+// the seated driver bows to it (moves.js M.bow: measured in the game, the hands fell 5 to 7.5 cm short of the rim with
+// the old lean of 0.3 taken high in the back)
+export const FORKLIFT_WHEEL = { ahead: 0.505, up: 0.242, r: 0.147, tilt: 0.96, lean: 0.3, bow: 0.5, at: 1.85 };
 // the two wrists on it, in the driver's own frame (x their left, y up, z ahead; from their root, where the forklift
 // seats them: `chair` m under the cushion's top), [left, right], a little forward of a quarter past nine and a quarter
 // to three, easing round a little as they steer

@@ -302,7 +302,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
     pp.clip = m.clip;
     if (P.moves) {
       const seated = on && k >= 1;
-      P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m.lean;
+      P.moves.lean = seated ? 0 : m.lean; P.moves.bow = seated ? FORKLIFT_WHEEL.bow : 0;      // (seated: bowed to the wheel, low in the back)
       // (seated, both hands round its wheel; climbing on or off, the right hand on it as they go)
       if (seated || m.hand > 0) holdOf(P.moves, wheelHold(RIDE.chair, clock, P.id.length, seated ? [1, 1] : [0, m.hand], wheelOut)); else P.moves.hold = null;
     }
@@ -354,7 +354,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         const k = Math.min(1, a.t / RIDE.off), pp = seatPose(P, k, false);
         H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) {
-          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
+          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; P.moves.bow = 0; }
           driver = null; job = null; state = 'parked'; rest = RIDE.rest; spot = null;
           H.next(P);
         }
@@ -364,7 +364,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       if (driver !== P) return;
       if (load.states.includes(state)) { load.release(P); return; }
       finishNow(); driver = null; spot = null; rest = RIDE.rest * 0.5;
-      if (P.pose) P.pose = null; P.scripted = false; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
+      if (P.pose) P.pose = null; P.scripted = false; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; P.moves.bow = 0; }
     },
     // (where it is just now, for everyone walking by: its outline (kit/forkliftround.js), or null while it is not in;
     // the driver is driver())
@@ -538,7 +538,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
         const k = Math.min(1, a.t / RIDE.off), pp = seatPose(P, k, false);
         H.play(P, H.clips[pp.clip], { fade: 0.4, speed: pp.clip === 'walk' ? 0.6 : 1 });
         if (k >= 1) {
-          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; }
+          P.pose = null; P.scripted = false; P.pos.copy(spot.pos); P.heading = spot.heading; if (P.moves) { P.moves.hold = null; P.moves.lean = 0; P.moves.bow = 0; }
           driver = null; spot = null; load.L = null;
           // (given up where it stands: left there, as a player leaves it, and back to its bay where nobody sees)
           if (hand) { hand.left = true; hand.by = null; state = 'left'; } else { state = 'parked'; rest = RIDE.rest; }

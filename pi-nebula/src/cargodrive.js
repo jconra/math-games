@@ -127,7 +127,7 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
   }
   function done(b) {
     if (P0 && b) { P0.place(b.pos, b.heading); P0.zone = null; }
-    if (P0 && P0.moves) { P0.moves.hold = null; P0.moves.lean = 0; }
+    if (P0 && P0.moves) { P0.moves.hold = null; P0.moves.lean = 0; P0.moves.bow = 0; }
     el.classList.remove('is-on'); el.hidden = true; held.up = held.down = false;
     if (W.camera.view && W.camera.view.enabled) W.camera.clearViewOffset();
     document.body.classList.remove('pcf-driving');
@@ -193,8 +193,11 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
     // (seated on it: the hands on its wheel, src/atwork.js wheelLocal, in their own frame; leaning in a little)
     if (P.moves) {
       const seated = phase === 'drive' || (phase === 'on' && t >= ON.on);
-      P.moves.lean = seated ? FORKLIFT_WHEEL.lean : m ? m.lean : 0;
+      P.moves.lean = seated ? 0 : m ? m.lean : 0; P.moves.bow = seated ? FORKLIFT_WHEEL.bow : 0;      // (seated: bowed to the wheel, low in the back)
       // (climbing on or off, the right hand on it as they go)
+      // (OUT OF REACH, as people.js counts the station's: the player's hands short of the wheel, loud, once a ride)
+      if (seated && (P.moves.holdShort || 0) > 0.02 && !C.shortSaid) { C.shortSaid = true; C.outOfReach = (C.outOfReach || 0) + 1; console.warn('cargo: the player\'s hands ' + P.moves.holdShort.toFixed(2) + ' m short of the wheel'); }
+      if (!seated) C.shortSaid = false;
       if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT, 3, seated ? [1, 1] : [0, m.hand], wheelOut)); else P.moves.hold = null;
     }
     P.pos.set(x, STORE.floor, z); P.heading = h;
