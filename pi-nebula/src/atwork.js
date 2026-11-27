@@ -20,7 +20,7 @@
 //               up to a point of it, tapping, then down a while; -> also share (each hand's part), palms, fingers,
 //               crouch (m: the knees bent to a low point)
 //     (S.apart, S.lean: the work's own, in place of WORK's: a narrow top, one reached across to; S.tilt: its top
-//     rising to their right, m a metre)
+//     rising to their right, m a metre; S.in: how far in past its edge the hands go, in place of WORK's)
 //   wheelLocal(chair, t, seed)   the two wrists on Cargo's forklift's steering wheel, in the driver's own frame
 export const WORK = {
   desk: { in: 0.04, apart: 0.36, lean: 0.45, tap: 0.012, along: 0.12 },
@@ -122,8 +122,9 @@ export function handsAt(kind, S, t, seed = 0) {
   }
   const g = along(t, seed), half = (S.apart || K.apart) / 2;
   const tp = K.tap || 0.008, tapL = Math.max(0, Math.sin(t * 9 + seed)) * tp, tapR = Math.max(0, Math.sin(t * 8.3 + seed * 1.7)) * tp;
-  const L = on(-half + (g.side < 0 ? g.u * K.along : 0) + wander(t, seed) * 0.01, K.in + wander(t, seed + 1) * 0.01, 0.012 + tapL);
-  const R = on(half + (g.side > 0 ? g.u * K.along : 0) + wander(t, seed + 2) * 0.01, K.in + wander(t, seed + 3) * 0.01, 0.012 + tapR);
+  const IN = S.in ?? K.in;
+  const L = on(-half + (g.side < 0 ? g.u * K.along : 0) + wander(t, seed) * 0.01, IN + wander(t, seed + 1) * 0.01, 0.012 + tapL);
+  const R = on(half + (g.side > 0 ? g.u * K.along : 0) + wander(t, seed + 2) * 0.01, IN + wander(t, seed + 3) * 0.01, 0.012 + tapR);
   return { hands: [L, R], lean: S.lean || K.lean };
 }
 
