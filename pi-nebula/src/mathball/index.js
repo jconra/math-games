@@ -52,7 +52,7 @@ import { shine } from '../player.js';
 import { makeSound } from './sound.js';
 import { keepBest, bestWords } from './best.js';
 import { happened } from '../announce.js';
-import { pose, standBack } from './camera.js';
+import { frame, place } from './camera.js';
 import { makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, HANDS } from './hands.js';
 
 const MID = COURT.mid;
@@ -74,18 +74,17 @@ export const OPPONENTS = [
 // as the one to play, in their own look, at their own skill; the three above stay for a player who just walks in)
 const skillWords = (o) => `Mathball skill ${o.skill}`;
 const FALLBACK_LOOK = { suit: 'atlantis2', head: 't3', hair: 'ponytail', colours: { job: 'explorer', uniform: '#6e28b2', skin: '#e8bf9f', hair: '#6b4127' } };
-// THE CAMERA (camera.js pose): behind the player and above, looking down the court at one resting height that never
-// changes by itself (raise above lookY), the same with a ball in hand or without; the player's up-and-down drag tilts
-// where it looks (tiltY metres either way) and it stays there. Its turn is the player's own (a drag: hands.js
-// HANDS.turn, radians a pixel), and nothing turns it by itself. raise, rise and tiltY are the sum's (camera.js): from
-// the start spot, the middle and under a goal, on the three screens, the far goals clear of the top bar and the floor
-// on the screen from at most 1.75 m ahead of the player's feet
+// THE CAMERA (camera.js): behind the player and above, looking down the court (a phone held upright sees a narrow
+// strip, so it stands further back and higher, looking more steeply down). Up and down it is main's, exactly (the look
+// raised with a ball in hand, the rise against a wall, the mouse's drag up and down); its TURN is the player's own (a
+// drag sideways: hands.js HANDS.turn, radians a pixel), and nothing turns it by itself
 export const MBCAM = {
-  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, raise: 1.6, rise: 0, tiltY: 2.6 },
-  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, raise: 2.6, rise: 0.4, tiltY: 1.5 },
+  // (holdUp: how much higher it looks with a ball in hand, so the far end's two goal signs come down the screen, clear
+  // of the score at the top)
+  wide: { dist: 4.3, height: 3.5, ahead: 2.8, lookY: 0.45, fov: 62, holdUp: 1.1 },
+  tall: { dist: 5.0, height: 5.0, ahead: 3.4, lookY: -0.25, fov: 76, holdUp: 2.2 },
   under: 0.7,                     // m it always stays under the ceiling (above it, nothing is drawn: a black screen)
-  wall: 0.4,                      // m it keeps inside the court's walls: nearer, it comes in toward the player along its own line (never sideways: that would turn the view)
-  follow: 6,                      // how quickly it follows the player's place (1/s)
+  ease: 6,                        // how quickly it follows (1/s): main's
 };
 // AIMING ONLY IN FRONT (aimNow): radians from the way the camera looks. A spot or a goal within `arc` shows its arc (a
 // spot on the floor or a wall only a step or less from the player, `near`, none: an arc to their own feet led nowhere).
@@ -309,7 +308,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     }
     const r = hands.move(e.pointerId, e.clientX, e.clientY, stamp(e)); if (!r) return;
     // (the player's own drag: the only thing that turns the view; it ends a goal button's turn, and the throw waiting on it)
-    if (r.turn && !paused && !closed) { viewTurn(cam, r.turn[0], r.turn[1]); cam.byHand++; oneTurn = null; pending = null; }
+    if (r.turn && !paused && !closed) { viewTurn(cam, r.turn[0], e.pointerType === 'mouse' ? r.turn[1] : 0); cam.byHand++; oneTurn = null; pending = null; }
     if (r.aim) aimUI.touch = { x: r.aim[0], y: r.aim[1] };
   };
   const onUp = (e) => {
@@ -368,7 +367,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     }
     // (the goal just beside the tap, found with no ball able to hide it; and, for the mouse, a spot a click throws to)
     const goalBy = goalBeside(p.x, p.y, touch);
-    let spot = false; if (held && !touch) { const T = targetAt(p.x, p.y); spot = !!(T && T.at); }
+    // (the mouse, a ball in hand: a click on the floor, even just beside a ball, throws there; balls play no part)
+    let spot = false; if (held && !touch) { const T = targetAt(p.x, p.y, false); spot = !!(T && T.at); }
     const exact = d.ball != null && (!held || d.ball !== held.id) ? d.ball : null;
     const what = chooseTap({
       held: !!held, touch,
@@ -380,7 +380,7 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     if (!what) return false;
     if (what.pick != null) return pickBall(what.pick);
     if (what.throw != null) { throwAt(what.throw, 'court'); return true; }
-    if (what.toss) return commitAim(targetAt(p.x, p.y));
+    if (what.toss) return commitAim(targetAt(p.x, p.y, false));
     if (what.say) say(press('a ball first, then a goal'), 2.5);
     return false;
   }
@@ -395,8 +395,6 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   goalsEl.addEventListener('pointerdown', onButtonDown); addEventListener('pointerup', onButtonUp); addEventListener('pointercancel', onButtonUp);
 
   const aimRay = new THREE.Raycaster(), aimNdc = new THREE.Vector2();
-  // what a point on the page aims at: { goal } (its box, or the floor just in front of its mouth), { at, hit } (a spot on
-  // the floor, or on a wall at a height a throw reaches), { ball } (another ball: a click there picks it), or null
   // THE GOAL BESIDE A POINT, with no ball able to hide it (a ball come to rest at a goal's mouth): the floor at a goal's
   // mouth under the point (in front of the view), else a goal's box on the screen padded as the shared input pads a
   // near miss; null if neither
@@ -428,10 +426,13 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     }
     return best;
   }
-  function targetAt(x, y) {
+  // what a point on the page aims at (balls false: looking past any ball): { goal } (its box, or the floor just in
+  // front of its mouth), { at, hit } (a spot on the floor, or on a wall at a height a throw reaches), { ball } (another
+  // ball: a click there picks it), or null
+  function targetAt(x, y, balls = true) {
     const hit = input.pickAt(x, y), d = hit && hit.data, held = G.you.holding;
     if (d && d.goal != null) return { goal: d.goal };
-    if (d && d.ball != null && (!held || d.ball !== held.id)) return { ball: d.ball };
+    if (balls && d && d.ball != null && (!held || d.ball !== held.id)) return { ball: d.ball };
     const r = canvas.getBoundingClientRect();
     aimNdc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
     aimRay.setFromCamera(aimNdc, W.camera);
@@ -507,9 +508,11 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   const ballTargets = new Map();
   function syncTargets() {
-    // (every ball on the court is something a click can pick; the goals' boxes always are)
+    // (every ball that can be picked up is something a tap can hit: never one flying to a goal, just scored, fading, or
+    // in either player's hands, which would only hide a goal behind it; the goals' boxes always are)
     const live = new Set();
     for (const b of G.balls) {
+      if (b.fading || !['air', 'roll', 'rest', 'turn'].includes(b.mode)) continue;
       const m = view.ballMesh(b.id); if (!m) continue; live.add(b.id);
       // (a new round's ball with an old round's number: its own mesh, never the old one's)
       const had = ballTargets.get(b.id); if (had && had.m !== m) { had.off(); ballTargets.delete(b.id); }
@@ -560,10 +563,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   }
   // the foot of the top bar (the score and the credits): a goal under it is not in view
   const topBar = () => { const t = $('.mbl-top'); return t && !t.hidden ? t.getBoundingClientRect().bottom : 0; };
-  // A GOAL IN VIEW: its mouth on the screen, across and up and down, clear of the top bar (an arc for it shows, the
-  // line after a pick-up and the goal buttons go by it)
+  // A GOAL IN VIEW, by the screen alone: its mouth drawn on the screen, across and up and down, under the top bar as
+  // the page has it now (an arc for it shows, the line after a pick-up and the goal buttons go by it)
   const seen = (gi) => {
-    const a = GOALS[gi].aim; if (offFront(a) > FRONT.arc || across(a) > 1) return false;
+    const a = GOALS[gi].aim; if (across(a) > 1) return false;
     const y = downPage(a); return y != null && y >= topBar() && y <= canvas.getBoundingClientRect().bottom;
   };
   // (pending: a goal button's throw waiting for its turn; oneTurn: the goal that turn faces, until it does or a drag)
@@ -571,10 +574,10 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
   const seenBalls = []; let clock = 0;   // (where each free ball was in the court this last moment, HANDS.past s: tapAt)
 
   // ── each frame ─────────────────────────────────────────────────────────────────────────────────────────────────
-  // (yaw: the view's turn, which only a drag changes (hands.js viewTurn) and a goal button's one turn (turnToward);
-  // lift: its tilt, a drag up or down; feet: the player's place, followed smoothly; push: how far in from behind the
-  // player the walls bring it)
-  const cam = { yaw: Math.PI, lift: 0, feet: new THREE.Vector3(), push: 0, fresh: true, blend: 1, from: null, fromLook: null, byHand: 0 };   // (byHand: drags taken, for the rigs)
+  // (yaw: the view's turn, which only a drag sideways changes (hands.js viewTurn) and a goal button's one turn
+  // (turnToward); lift: the mouse's drag up and down, as on main; feet: the player's place, followed smoothly; f: main's
+  // framing numbers, eased)
+  const cam = { yaw: Math.PI, lift: 0, feet: new THREE.Vector3(), f: null, fresh: true, blend: 1, from: null, fromLook: null, byHand: 0 };   // (byHand: drags taken, for the rigs)
   let lastCam = new THREE.Vector3(MID[0], 3, MID[2] + 8);
   const youNow = { x: 0, z: 0, vx: 0, vz: 0, heading: 0 }, prev = new THREE.Vector3();
   let throwT = -1, goalsShown = false, endT = 0, askedBall = false, liftedP = null, askAt = 0, lookedRound = false, unseenFor = 0;
@@ -791,15 +794,16 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     const C = tall() ? MBCAM.tall : MBCAM.wide;
     // (a goal's button pressed for a goal out of the way: the view turns to it once; done, or a drag, ends it)
     if (oneTurn != null) { const g = GOALS[oneTurn].aim; if (turnToward(cam, Math.atan2(g[0] - youNow.x, g[2] - youNow.z), FRONT.rate, dt)) oneTurn = null; }
-    const k = 1 - Math.exp(-MBCAM.follow * dt);
+    // (main's framing, eased as main eased its camera (MBCAM.ease): the player's place, how far back, the walls' push,
+    // the height, the look's height; the way it looks across the floor is cam.yaw exactly, every frame)
+    const k = 1 - Math.exp(-MBCAM.ease * dt);
     if (cam.fresh) cam.feet.set(MID[0] + youNow.x, 0, MID[2] + youNow.z);
     else cam.feet.lerp(_d.set(MID[0] + youNow.x, 0, MID[2] + youNow.z), k);
-    const feet = cam.feet;
-    // (kept inside the court: near a wall it comes in toward the player along its own line; it comes in at once and
-    // goes back out smoothly, to exactly where it was)
-    const push = C.dist - standBack(C, feet.x - MID[0], feet.z - MID[2], cam.yaw, MBCAM.wall);
-    cam.push = Math.max(push, damp(cam.push, push, 3, dt));
-    const P = pose(C, feet.x - MID[0], feet.z - MID[2], cam.yaw, cam.lift, cam.push, MBCAM.under);
+    const feet = cam.feet, x = feet.x - MID[0], z = feet.z - MID[2];
+    const F = frame(C, x, z, cam.yaw, cam.lift, !!G.you.holding, MBCAM.under);
+    if (!cam.f) cam.f = { back: F.back, shift: F.shift.slice(), ay: F.ay, ly: F.ly };
+    else { const e = cam.f; e.back += (F.back - e.back) * k; e.shift[0] += (F.shift[0] - e.shift[0]) * k; e.shift[1] += (F.shift[1] - e.shift[1]) * k; e.ay += (F.ay - e.ay) * k; e.ly += (F.ly - e.ly) * k; }
+    const P = place(C, x, z, cam.yaw, cam.f);
     _w.set(MID[0] + P.eye[0], P.eye[1], MID[2] + P.eye[2]); _l.set(MID[0] + P.look[0], P.look[1], MID[2] + P.look[2]);
     // (as the game opens: from where the station's camera was, over most of a second)
     if (cam.fresh) { cam.from = camera.position.clone(); cam.fromLook = camera.position.clone().add(camera.getWorldDirection(_d).multiplyScalar(4)); cam.blend = 0; cam.fresh = false; }
@@ -859,7 +863,8 @@ export function openMathball({ W, walls, input, crew, lib, job, people = () => n
     update, control, aim, close,
     pickBall, throwAt: (gi) => throwAt(gi), choose: (i) => { choice = i; startRound(); },
     aimAt: (x, y) => targetAt(x, y), placeAt: (x, z) => { placeReq = [x, z]; },
-    hands: HANDS, front: FRONT,   // (for the rigs and the film of the game's maker's questions: the two switches)
+    faceTo: (y) => { viewTurn(cam, wrapA(cam.yaw - y) / HANDS.turn, 0); aimUI.mouse = null; },   // (a rig's: the turn set as by a drag)
+    hands: HANDS, front: FRONT, cams: MBCAM,   // (for the rigs and the films of the game's maker's questions)
     get phase() { return phase; },
     state: () => ({
       phase, paused, t: +G.t.toFixed(2), set: set && set.key, level: level && level.id, score: { ...G.score }, tries: { ...G.tries }, earned, other: other && other.name, otherSkill: other ? other.skill : null, challenge: ch ? ch.id : null, otherMode: G.other.mode,

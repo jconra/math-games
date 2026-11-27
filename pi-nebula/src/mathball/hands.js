@@ -169,11 +169,13 @@ export function chooseTap({ held = false, touch = true, underIn = null, under = 
   return null;
 }
 
-// THE VIEW'S TURN. viewTurn: the player's own drag (dx, dy: pixels). turnToward: a goal button's one turn (index.js,
-// FRONT.buttonTurns), at `rate` radians a second; true once it faces `want`. Nothing else changes cam.yaw.
+// THE VIEW'S TURN. viewTurn: the player's own drag (dx, dy: pixels): dx turns it; dy (the mouse's only: a finger's drag
+// turns the view sideways and never tilts it) brings the camera nearer and higher or further and lower, as on main.
+// turnToward: a goal button's one turn (index.js, FRONT.buttonTurns), at `rate` radians a second; true once it faces
+// `want`. Nothing else changes cam.yaw.
 export function viewTurn(cam, dx, dy = 0, H = HANDS) {
   cam.yaw = wrapA(cam.yaw - dx * H.turn);
-  cam.lift = Math.max(-1, Math.min(1, (cam.lift || 0) + dy * H.lift));
+  cam.lift = Math.max(-1, Math.min(1.6, (cam.lift || 0) + dy * H.lift));   // (main's limits)
 }
 export function turnToward(cam, want, rate, dt) {
   const d = wrapA(want - cam.yaw);

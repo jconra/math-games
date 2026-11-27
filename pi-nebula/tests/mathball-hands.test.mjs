@@ -153,34 +153,36 @@ test('inside two overlapping discs, the nearer ball (drawn on top) is the one ta
   assert.equal(underAt(142, 300, [near, far], 16), 'far', 'past the near ball\'s edge, inside only the far one');
 });
 
-// THE CAMERA'S SUM (camera.js, the court's numbers): from the start spot, the middle and under a goal, facing the far
-// goals, on the three screens, nothing dragged: the far goals' signs and mouths clear of the top bar, and the floor
-// on the screen from no more than 1.75 m ahead of the feet. (The top bar's foot: 92 px on an upright phone, 78 px on
-// the others, from mathball.css; the goal buttons: from 750 px down on an upright phone.)
-test('the resting tilt keeps the far goals and the floor ahead on the screen, on the three screens', async () => {
+// THE CAMERA IS MAIN'S UP AND DOWN (camera.js): its place, its height, the height it looks at (raised with a ball in
+// hand), the rise against a wall and the mouse's tilt are main's own sums; only its look across the floor is yaw
+// exactly (main's, pushed sideways by a wall, looked at the same point and so turned the view a little)
+test('the camera is main\'s up and down, exactly; its turn is the hand\'s', async () => {
   const { pose, onScreen } = await import('../src/mathball/camera.js');
   const { MBCAM } = await readCam();
-  const { GOALS } = await import('../src/mathball/court.js');
-  const G = Object.fromEntries(GOALS.map((g) => [g.key, g])), underGoal = (k) => [G[k].mid[0] + G[k].n[0] * 1.2, G[k].mid[1] + G[k].n[1] * 1.2];
-  const shapes = [['phone', 400, 860, MBCAM.tall, 92, 750], ['side', 860, 400, MBCAM.wide, 78, 395], ['wide', 1280, 720, MBCAM.wide, 78, 715]];
-  const places = [[[0, 6.3], 'NW'], [[0, 6.3], 'NE'], [[0, -6.3], 'SE'], [[0, 0], 'NE'], [[0, 0], 'SW'], [underGoal('SE'), 'NE'], [underGoal('NW'), 'SW'], [[0, 7.5], 'NE']];
-  for (const [name, Wd, Ht, C, top, bottom] of shapes) for (const [[x, z], gk] of places) {
-    const g = G[gk], yaw = Math.atan2(g.aim[0] - x, g.aim[2] - z), P = pose(C, x, z, yaw, 0);
-    const sign = onScreen([g.mid[0] + g.n[0] * 0.2, 2.67, g.mid[1] + g.n[1] * 0.2], P, C.fov, Wd, Ht), mouth = onScreen([g.mid[0], 0, g.mid[1]], P, C.fov, Wd, Ht);
-    assert.ok(sign && sign[1] >= top, `${name} at ${x},${z} facing ${gk}: the sign under the top bar (${sign && Math.round(sign[1])})`);
-    assert.ok(mouth && mouth[1] <= Ht, `${name}: the mouth on the screen`);
-    const at = (a) => onScreen([x + Math.sin(yaw) * a, 0, z + Math.cos(yaw) * a], P, C.fov, Wd, Ht);
-    const f = at(1.75), f6 = at(6);
-    if (z === 7.5) continue;   // (beyond the start spot, toward the wall: only the far goals are promised)
-    assert.ok(f && f[1] <= bottom, `${name} at ${x},${z}: the floor 1.75 m ahead above the screen's foot (${f && Math.round(f[1])})`);
-    assert.ok(f6 && f6[1] >= top, `${name}: the floor 6 m ahead under the top bar`);
-    // (the player's own drag reaches the feet, down, and stays inside the court's ceiling)
-    const Pd = pose(C, x, z, yaw, -1), feet = onScreen([x, 0, z], Pd, C.fov, Wd, Ht);
-    assert.ok(feet && feet[1] <= Ht, `${name} at ${x},${z}: a drag down shows the feet (${feet && Math.round(feet[1])})`);
+  const { COURT, clampIn } = await import('../src/mathball/court.js');
+  // main's own camera, line for line (main's index.js aim(), 65bc920)
+  const mainPose = (C, x, z, yaw, lift, holding) => {
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    let ax = x - fx * C.dist * (1 - lift * 0.12), az = z - fz * C.dist * (1 - lift * 0.12), ay = C.height + lift * 0.9;
+    const [cx, cz] = clampIn(ax, az, 0.4), pushed = Math.hypot(cx - ax, cz - az);
+    ay = Math.min(ay + pushed * 0.5, COURT.height - 0.7);
+    return { eye: [cx, ay, cz], look: [x + fx * C.ahead, C.lookY + (holding ? C.holdUp : 0), z + fz * C.ahead] };
+  };
+  let n = 0, along = 0;
+  for (const C of [MBCAM.tall, MBCAM.wide]) for (let x = -4; x <= 4; x += 1) for (let z = -8; z <= 8; z += 1) for (let k = 0; k < 8; k++) for (const lift of [0, -1, 1.6]) for (const holding of [false, true]) {
+    const yaw = k * Math.PI / 4 + 0.1, P = pose(C, x, z, yaw, lift, holding), Q = mainPose(C, x, z, yaw, lift, holding);
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(P.eye[i] - Q.eye[i]) < 1e-9, 'the eye is main\'s');
+    assert.ok(Math.abs(P.look[1] - Q.look[1]) < 1e-9, 'the height it looks at is main\'s (raised with a ball in hand)');
+    const d = Math.atan2(P.look[0] - P.eye[0], P.look[2] - P.eye[2]); assert.ok(Math.abs(Math.atan2(Math.sin(d - yaw), Math.cos(d - yaw))) < 1e-9, 'it looks along yaw exactly');
+    n++;
+    // where main was not pushed sideways by a wall, the look point is main's, so every row on the screen is main's
+    const side = Math.hypot(P.look[0] - Q.look[0], P.look[2] - Q.look[2]);
+    if (side < 1e-9) { along++; for (const pt of [[0, 0, -7], [2, 1.4, -5], [x, 0, z], [x, 1.7, z]]) { const a = onScreen(pt, P, C.fov, 400, 860), b = onScreen(pt, Q, C.fov, 400, 860); if (a && b) assert.ok(Math.abs(a[1] - b[1]) < 1e-6); } }
   }
-  // the tilt is the same with a ball in hand and without, and the camera's height near a wall never changes the look
-  const a = pose(MBCAM.tall, 0, 6.3, Math.PI, 0), b = pose(MBCAM.tall, 0, 6.3, Math.PI, 0, 0);
-  assert.equal(a.look[1], b.look[1]);
+  assert.ok(n > 3000 && along > n / 2);
+  // a ball in hand raises the look by main's holdUp: 2.2 m upright, 1.1 m otherwise
+  assert.equal(MBCAM.tall.holdUp, 2.2); assert.equal(MBCAM.wide.holdUp, 1.1);
+  assert.ok(Math.abs(pose(MBCAM.tall, 0, 0, 0, 0, true).look[1] - pose(MBCAM.tall, 0, 0, 0, 0, false).look[1] - 2.2) < 1e-9);
 });
 // (index.js imports three, which node has not: its MBCAM is read from the file's text)
 async function readCam() {
@@ -189,10 +191,17 @@ async function readCam() {
   return { MBCAM: Function('"use strict"; return (' + m[1].replace(/\/\/[^\n]*/g, '') + ')')() };
 }
 
+test('a finger\'s drag turns the view and never tilts it; the mouse\'s drag up and down as main\'s', () => {
+  const cam = { yaw: 0, lift: 0 };
+  viewTurn(cam, 50, 0); assert.equal(cam.lift, 0, 'a finger: index.js passes no up and down');
+  viewTurn(cam, 0, 100); assert.ok(Math.abs(cam.lift - 0.6) < 1e-9, 'the mouse: 0.006 a pixel, a drag down raises it, as main');
+  viewTurn(cam, 0, 1e4); assert.equal(cam.lift, 1.6); viewTurn(cam, 0, -1e5); assert.equal(cam.lift, -1, 'main\'s limits');
+});
+
 test('the view turns only by viewTurn (a drag) and turnToward (a goal button\'s one turn); walking pushes as the view looks', () => {
   const cam = { yaw: 1, lift: 0 };
   viewTurn(cam, 100); assert.ok(Math.abs(cam.yaw - (1 - 100 * HANDS.turn)) < 1e-9);
-  viewTurn(cam, 0, 50); assert.ok(cam.lift > 0); assert.ok(Math.abs(cam.yaw - (1 - 100 * HANDS.turn)) < 1e-9, 'a drag up or down tilts, never turns');
+  viewTurn(cam, 0, 50); assert.ok(cam.lift > 0); assert.ok(Math.abs(cam.yaw - (1 - 100 * HANDS.turn)) < 1e-9, 'the mouse\'s drag up or down tilts, never turns');
   const c2 = { yaw: 0 }; let n = 0; while (!turnToward(c2, Math.PI * 0.9, 6.5, 1 / 30) && n < 200) n++;
   assert.ok(n < 20); assert.ok(Math.abs(c2.yaw - Math.PI * 0.9) < 1e-3);
   const p = pushFor(0, 1, 0); assert.ok(Math.abs(p.y - 1) < 1e-9 && Math.abs(p.x) < 1e-9);
@@ -200,13 +209,17 @@ test('the view turns only by viewTurn (a drag) and turnToward (a goal button\'s 
 });
 
 // LOUD ALARM: the game's controller (it needs a page, so node cannot run it) changes the view's turn and tilt nowhere
-// but through hands.js; the old swings and the tilt on a pick-up are gone; the one goal-button turn is started only
+// but through hands.js; the old swings are gone; a finger never tilts it; the one goal-button turn is started only
 // by a goal button's throw under FRONT.buttonTurns; a tap's rules are hands.js chooseTap's
-test('index.js: nothing turns or tilts the view by itself', () => {
+test('index.js: nothing turns the view by itself; a finger never tilts it; the tap targets and "in view"', () => {
   const src = readFileSync(new URL('../src/mathball/index.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
   assert.equal((src.match(/cam\.yaw\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.yaw is written only by viewTurn / turnToward');
   assert.equal((src.match(/cam\.lift\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.lift (the tilt) only by viewTurn');
-  assert.ok(!/MBCAM\.(swing|after|turn)\b/.test(src) && !/holdUp/.test(src), 'the swings and the tilt on a pick-up are gone');
+  assert.ok(!/MBCAM\.(swing|after|turn)\b/.test(src), 'the swings are gone');
+  assert.ok(/viewTurn\(cam, r\.turn\[0\], e\.pointerType === 'mouse' \? r\.turn\[1\] : 0\)/.test(src), 'a finger\'s drag never tilts the view');
+  assert.ok(/if \(b\.fading \|\| !\['air', 'roll', 'rest', 'turn'\]\.includes\(b\.mode\)\) continue;\s*const m = view\.ballMesh/.test(src), 'only a ball that can be picked is a tap target');
+  assert.ok(!/const seen = [^;]*offFront/.test(src.replace(/\n/g, ' ').match(/const seen = \(gi\) => \{[^}]*\}/)[0]), 'in view by the screen alone');
+  assert.ok(/targetAt\(p\.x, p\.y, false\)/.test(src), 'the mouse beside a ball: the floor');
   assert.ok(!/turnTo\s*=/.test(src));
   const turns = src.split('\n').filter((l) => /oneTurn = (?!null)/.test(l));
   assert.equal(turns.length, 1); assert.ok(/FRONT\.buttonTurns/.test(turns[0]), 'only under FRONT.buttonTurns: ' + turns[0].trim());
