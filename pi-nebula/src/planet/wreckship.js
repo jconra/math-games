@@ -125,32 +125,7 @@ function onGround(mat, { ground, sky, kind }) {
   return mat;
 }
 
-// ITS SHADOW on the ground: each piece's skin drawn once more, every point carried along the sun's rays down to the
-// ground (its heights, as the ground's picture reads them: src/planet/ground.js) and drawn dark there, each spot of the
-// ground darkened once however many triangles fall on it (the stencil). Without it a piece looks pasted on the land.
-function shadowMaterial({ ground, sunDir, air }) {
-  const U = ground.U, sun = sunDir.clone().normalize(); if (sun.y < 0.12) { sun.y = 0.12; sun.normalize(); }
-  return new THREE.ShaderMaterial({
-    uniforms: { uH: U.uH, uN: U.uN, uT: U.uT, uP: U.uP, uCam: U.uCam, uCurve: U.uCurve, uSun: { value: sun }, uAlpha: { value: air ? 0.5 : 0.7 } },
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
-    vertexShader: /* glsl */`
-      uniform highp sampler2D uH; uniform float uN, uT, uP, uCurve; uniform vec3 uCam, uSun;
-      float hAt(vec2 w) {
-        vec2 q = (w + 0.5 * uP) / uT, f = floor(q), t = q - f; ivec2 i = ivec2(f), m = ivec2(int(uN) - 1);
-        float a = texelFetch(uH, i & m, 0).r, b = texelFetch(uH, (i + ivec2(1, 0)) & m, 0).r, c = texelFetch(uH, (i + ivec2(0, 1)) & m, 0).r, d = texelFetch(uH, (i + ivec2(1, 1)) & m, 0).r;
-        return mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
-      }
-      void main() {
-        vec3 w = (modelMatrix * vec4(position, 1.0)).xyz;
-        // (down the sun's rays to the ground: twice, the second time to the ground where the first one landed)
-        float g = hAt(w.xz); vec3 p = w - uSun * max(0.0, w.y - g) / uSun.y;
-        g = hAt(p.xz); p = w - uSun * max(0.0, w.y - g) / uSun.y; p.y = hAt(p.xz) + 0.25;
-        vec2 d = p.xz - uCam.xz; p.y -= dot(d, d) * uCurve;
-        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
-      }`,
-    fragmentShader: 'uniform float uAlpha; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, uAlpha); }',
-  });
-}
+// ITS SHADOW on the ground: each piece's skin casts, as everything standing on the planet does (src/planet/groundshadow.js).
 
 const say = (t0) => Math.round(performance.now() - t0);
 export async function makeWreck({ land, ship = null, pieces = null, seed = land.seed }) {
@@ -188,11 +163,10 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
   const geos = [], materials = [];
   let skinGeos = [];
   const W = {
-    ship, plan, site: placed.site, placed, group, stats, paintId: null, world,
+    ship, plan, site: placed.site, placed, group, stats, paintId: null, world, shades: [],
     draw({ scene, ground, sky = null, sunDir = null, paint = null }) {
       const td = performance.now();
-      const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;
-      if (shadow) materials.push(shadow);
+      const shadow = !!(sunDir && ground.shadows);
       const M = C.grimeMaterials({}, { dirt: (S.LAB.dirt || {})[DIRT] ?? 0.9, streaks: S.STREAKS, deck: S.DECK, grime: { dirt: { value: (S.LAB.dirt || {})[DIRT] ?? 0.9 } }, key: 'wreckgrime-' + ship });
       const byKind = {
         skin: onGround(M.solid, { ground, sky, kind: 'skin' }),
@@ -212,11 +186,7 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
           mesh.matrixAutoUpdate = false; mesh.matrix.fromArray(placed.mats[k]); mesh.matrixWorldNeedsUpdate = true;
           if (kind === 'glass') mesh.renderOrder = 2;
           group.add(mesh); geos.push(g); stats.draws++;
-          if (kind === 'skin' && shadow) {
-            const sm = new THREE.Mesh(g, shadow); sm.name = `wreck:${k}:shadow`; sm.frustumCulled = false; sm.renderOrder = 1;
-            sm.matrixAutoUpdate = false; sm.matrix.copy(mesh.matrix); sm.matrixWorldNeedsUpdate = true;
-            group.add(sm); stats.draws++;
-          }
+          if (kind === 'skin' && shadow) { W.shades.push(ground.shadows.add(mesh)); stats.draws++; }
         }
       });
       W.paint(paint);
@@ -229,7 +199,7 @@ export async function makeWreck({ land, ship = null, pieces = null, seed = land.
       W.paintId = id;
       for (const g of skinGeos) { const a = g.attributes.color; recolour(g.userData.color0, id, { out: a.array }); a.needsUpdate = true; }
     },
-    dispose() { group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of materials) m.dispose(); skinGeos = []; },
+    dispose() { for (const s of W.shades) s.dispose(); W.shades = []; group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of materials) m.dispose(); skinGeos = []; },
   };
   return W;
 }

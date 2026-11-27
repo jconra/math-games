@@ -68,7 +68,7 @@ export function makeWalkLab({ LAB, scene, camera, canvas, renderer, quality, lab
     const rescued = makeRescued({ pods: L.pods, medic, walls: F.walls, scene });
     if (lab().planet !== planet) { medic.dispose(); F.dispose(); rescued.dispose(); return null; }
     // (the people's shadows on the ground, as in the game: src/planet/groundshadow.js)
-    const shades = makePeopleShadows({ scene, ground: planet.ground, sunDir: planet.sunDir, air: !!planet.dome });
+    const shades = makePeopleShadows({ ground: planet.ground });
     site = { planet, medic, F, rescued, shades, look: mine.id };
     return site;
   }

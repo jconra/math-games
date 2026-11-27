@@ -22,7 +22,7 @@
 //   g.U (the shader's settings, shared with the cover's), g.stats { patches, tris, lightMs, bytes }
 import * as THREE from 'three';
 import { SKY_GLSL } from './cloudSky.js';
-import { takesShadows } from './groundshadow.js';
+import { takesShadows, makeShadowPicture, SHADOW_PIC } from './groundshadow.js';
 
 // the patches: the smallest is SIZE0 metres across; a patch of level L is SIZE0 * 2^L and is drawn while the camera is
 // within RANGE times its size (a bigger one beyond). RANGE and MORPH keep every meeting of two sizes gap-free (see the
@@ -179,7 +179,9 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4(w.x, h - d2 * uCurve, w.y, 1.0);
 }`;
 const GROUND_FRAG = /* glsl */`
-uniform sampler2D uNM, uL, uDetail;
+uniform sampler2D uNM, uL, uDetail, uShadow;
+const float SHADOW_SKY = ${SHADOW_PIC.sky.toFixed(2)};
+uniform vec4 uShadowBox;
 uniform float uN, uP;
 uniform vec3 uSunDir, uSunCol, uAmbSky, uAmbGround, uDust, uRock, uBright, uDark, uGrass, uGrass2, uCanopy;
 uniform float uAmbPow, uAir, uFine, uBands, uTreeFar;
@@ -216,7 +218,12 @@ void main() {
   // (mottled about as finely as the crowns are: their colour measured from above matched the trees' own within 5%)
   base = mix(base, uCanopy * (0.75 + 0.5 * d1.b), wood * smoothstep(uTreeFar * 0.8, uTreeFar, length(vXZ - cameraPosition.xz)));
   float ndl = max(dot(n, uSunDir), 0.0);
-  vec3 col = base * (uSunCol * ndl * L.r + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g);
+  // THE SHADOWS of what stands on the ground (src/planet/groundshadow.js): the sun's light taken away there, as behind a
+  // hill, and some of the sky's too (the thing hides part of the sky from the ground right under and beside it)
+  float sh = 0.0;
+  { vec2 su = (vXZ - uShadowBox.xy) / uShadowBox.z; float e = max(abs(su.x), abs(su.y));
+    if (e < 1.0) sh = texture2D(uShadow, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
+  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh));
   #ifdef AIR
   // the haze: the sky behind, more of it the further off and the lower down
   col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), hazeAmt(cameraPosition, vWorld));
@@ -258,6 +265,9 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     // (the haze as thick as the air says at the landing place's height, thinning above it)
     uHaze: { value: look.air ? look.air.haze : 0 }, uHazeH: { value: look.air ? look.air.thin || 450 : 450 }, uHazeBase: { value: land.landing.y },
   };
+  // THE SHADOW PICTURE of what stands on the ground (src/planet/groundshadow.js)
+  const shadows = makeShadowPicture({ renderer, ground: { U }, sunDir, quality });
+  Object.assign(U, shadows.U);
   // (with air, the sky's own settings are shared, so the haze is the sky's colour exactly)
   if (look.air && sky && sky.uniforms) Object.assign(U, sky.uniforms);
   // (its spots of the picture marked as ground: the shadows are drawn there and only there, src/planet/groundshadow.js)
@@ -319,10 +329,11 @@ export function makeGround({ renderer, land, look, quality = 'medium', sky = nul
     const up = Math.max(0.5, camera.position.y - land.heightAt(camera.position.x, camera.position.z));
     U.uCam.value.copy(camera.position); U.uCamUp.value = up;
     select(camera, up);
+    shadows.update(camera);
   };
   stats.buildMs = Math.round(performance.now() - t0);
   return {
-    mesh, U, stats, update, light,
-    dispose() { geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
+    mesh, U, stats, update, light, shadows,
+    dispose() { shadows.dispose(); geo.dispose(); material.dispose(); hTex.dispose(); nmTex.dispose(); detail.dispose(); light.rt.dispose(); },
   };
 }

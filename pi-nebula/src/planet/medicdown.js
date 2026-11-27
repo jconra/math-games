@@ -36,7 +36,7 @@ import { onPlanet } from './podsdraw.js';
 import { placesOf } from '../aboardplan.js';
 import { MEDIC, patientBeds, restOrder, rampFelt } from '../rescueplan.js';
 import { INSIDE_FILL, FILL_UNIFORMS, insideLight } from './inside.js';
-import { groundShadowMaterial, shadowUnder, castsShadow } from './groundshadow.js';
+import { castsShadow } from './groundshadow.js';
 
 const KIT = new URL('../../kit/', import.meta.url).href;
 // the hull's corners' darkness baked coarser than the Ship Lab's (it is made each time a planet is landed on: as the
@@ -81,7 +81,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
   MD.rampFoot(B);
   // ITS SHADOW on the ground, as the wreck's and the pods' (src/planet/groundshadow.js): its hull, its legs and its
   // ramps once more, down the sun's rays (its place carries the planet's curve: update, below)
-  const shadowMat = sunDir ? groundShadowMaterial({ ground, sunDir, air: !!sky, curved: true }) : null, shade = shadowMat ? shadowUnder(B.group, shadowMat) : null;
+  const shade = sunDir && ground.shadows ? ground.shadows.add(B.group, { curved: true, test: (o) => o.castShadow }) : null;
   await breath();
   // ── its cabin, as the game builds it ─────────────────────────────────────────────────────────────────────────────
   t = performance.now();
@@ -215,7 +215,7 @@ export async function makeMedicDown({ scene, renderer = null, camera = null, gro
     ramp(k) { rampWant = k ? 1 : 0; },
     dispose() {
       if (walls) { walls.drop('medic:hull'); walls.drop('medic:cabin'); walls.drop('medic:ramp'); }
-      if (shade) shade.dispose(); if (shadowMat) shadowMat.dispose();
+      if (shade) shade.dispose();
       group.removeFromParent(); B.dispose(); C.built.dispose(); if (beams) beams.dispose();
       for (const g of [...hull.solid, ...cabin.solid, ...[...treads.values()].flat()]) g.dispose(); if (env) env.dispose();
       eachMaterial(hullMats, (m) => m.dispose()); eachMaterial(cabinMats, (m) => m.dispose());

@@ -58,47 +58,19 @@ export function onPlanet(mat, { ground, sky, kind }) {
   return mat;
 }
 
-// ITS SHADOW on the ground, as the wreck's (src/planet/wreckship.js shadowMaterial, its own copy here): the pod's base
-// and its lid drawn once more, every point carried down the sun's rays to the ground and drawn dark just over it, each
-// spot of the ground darkened once however many triangles fall on it (the stencil, the same mark as the wreck's, so where
-// the two fall together it is darkened once). Without it a pod looks set on the ground rather than in it.
-const SHADOW = { lift: 0.06 };
-function shadowMaterial({ ground, sunDir, air }) {
-  const U = ground.U, sun = sunDir.clone().normalize(); if (sun.y < 0.12) { sun.y = 0.12; sun.normalize(); }
-  return new THREE.ShaderMaterial({
-    uniforms: { uH: U.uH, uN: U.uN, uT: U.uT, uP: U.uP, uCam: U.uCam, uCurve: U.uCurve, uSun: { value: sun }, uAlpha: { value: air ? 0.5 : 0.7 } },
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
-    vertexShader: /* glsl */`
-      uniform highp sampler2D uH; uniform float uN, uT, uP, uCurve; uniform vec3 uCam, uSun;
-      float hAt(vec2 w) {
-        vec2 q = (w + 0.5 * uP) / uT, f = floor(q), t = q - f; ivec2 i = ivec2(f), m = ivec2(int(uN) - 1);
-        float a = texelFetch(uH, i & m, 0).r, b = texelFetch(uH, (i + ivec2(1, 0)) & m, 0).r, c = texelFetch(uH, (i + ivec2(0, 1)) & m, 0).r, d = texelFetch(uH, (i + ivec2(1, 1)) & m, 0).r;
-        return mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
-      }
-      void main() {
-        // (the pod's own place carries the curve already: taken off to find the ground under it, put back after)
-        vec3 w = (modelMatrix * vec4(position, 1.0)).xyz; vec2 d0 = w.xz - uCam.xz; w.y += dot(d0, d0) * uCurve;
-        float g = hAt(w.xz); vec3 p = w - uSun * max(0.0, w.y - g) / uSun.y;
-        g = hAt(p.xz); p = w - uSun * max(0.0, w.y - g) / uSun.y; p.y = hAt(p.xz) + ${SHADOW.lift.toFixed(3)};
-        vec2 d = p.xz - uCam.xz; p.y -= dot(d, d) * uCurve;
-        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
-      }`,
-    fragmentShader: 'uniform float uAlpha; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, uAlpha); }',
-  });
-}
-
+// ITS SHADOW on the ground: the base and the lid frame cast, as everything standing on the planet does (src/planet/groundshadow.js).
 export async function makePods({ plan, scene, ground, sky = null, sunDir = null, paint = null }) {
   const t0 = performance.now(), P = await loadPod(), tLoad = performance.now();
   const mats = podMaterials(P, { patch: (m, kind) => onPlanet(m, { ground, sky, kind }), paint: PAINTS[paint] || null });
   // (their own spots of the picture marked, so no shadow is drawn over them: src/planet/groundshadow.js castsShadow)
   for (const m of Object.values(mats)) if (m && m.isMaterial) castsShadow(m);
-  const shadow = sunDir ? shadowMaterial({ ground, sunDir, air: !!sky }) : null;
+  const shadow = !!(sunDir && ground.shadows), shades = [];
   const group = new THREE.Group(); group.name = 'planet:pods'; scene.add(group);
   const pods = plan.pods.map((pp) => {
     const p = makePod(P, mats); p.plan = pp; p.place = new THREE.Matrix4().fromArray(pp.mat);
     p.group.matrixAutoUpdate = false; p.group.matrix.copy(p.place); p.group.matrixWorldNeedsUpdate = true;
     // (its shadow: its base's and its lid frame's own triangles once more, riding with each)
-    if (shadow) for (const m of p.meshes()) if (/base|lidframe/.test(m.name)) { const s = new THREE.Mesh(m.geometry, shadow); s.name = m.name + ':shadow'; s.position.copy(m.position); s.frustumCulled = false; s.renderOrder = 1; m.parent.add(s); }
+    if (shadow) shades.push(ground.shadows.add(p.group, { curved: true, test: (m) => /base|lidframe/.test(m.name) }));
     group.add(p.group); return p;
   });
   let want = 0, filled = false, disposed = false;
@@ -136,7 +108,7 @@ export async function makePods({ plan, scene, ground, sky = null, sunDir = null,
       for (const p of pods) { draws += P.facts.draws + sh; tris += P.facts.tris + shTris; if (p.sleeper && p.sleeper.root.visible) { const c = p.sleeper.count(); draws += c.draws; tris += c.tris; sleepers++; } }
       return { pods: pods.length, draws, tris, sleepers };
     },
-    dispose() { disposed = true; for (const p of pods) { if (p.sleeper) p.sleeper.dispose(); p.dispose(); } group.removeFromParent(); for (const m of Object.values(mats)) m.dispose(); if (shadow) shadow.dispose(); },
+    dispose() { disposed = true; for (const p of pods) { if (p.sleeper) p.sleeper.dispose(); p.dispose(); } group.removeFromParent(); for (const m of Object.values(mats)) m.dispose(); for (const s of shades) s.dispose(); },
   };
   return api;
 }

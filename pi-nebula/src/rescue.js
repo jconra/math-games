@@ -186,7 +186,7 @@ export function makeSite(ctx, opts = {}) {
       if (st.closed) { F.dispose(); F = null; return; }
       F.player.c.root.visible = false;
       // (the people's shadows on the ground out here, as the wreck's and the pods': src/planet/groundshadow.js)
-      shades = makePeopleShadows({ scene: group, ground: planet.ground, sunDir: planet.sunDir, air: !!planet.dome });
+      shades = makePeopleShadows({ ground: planet.ground });
       rescued = makeRescued({ pods, medic, walls: F.walls, scene: carrier, busy: (id) => !!(opts.busy && opts.busy(id)), crew: () => (opts.crewAt ? opts.crewAt() : []) });
       st.times.ground = Math.round(performance.now() - t0);
       st.groundReady = true;
