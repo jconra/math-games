@@ -313,6 +313,9 @@ export function mountWorkBox(kit, ctx) {
       firstPick(c.right);
       if (c.right) {
         phase = 'anim';
+        // (the last answer is in and right: the box is solved from this moment, as the other kinds of box are, so that
+        // nothing deals a new box over it while its last line is still being written: keep.js)
+        if (si + 1 >= steps.length) solvedNow();
         b.classList.add('right');
         btns.forEach((o) => { o.disabled = true; });
         keyFn = null;

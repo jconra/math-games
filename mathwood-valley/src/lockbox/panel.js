@@ -113,6 +113,7 @@ import { mayDealOver } from './keep.js';
 import { showNumberLine, layoutNumberLine } from '../ui/numberline.js';
 import { SAFECRACKER_BOXES, saveRider as saveRiderNow } from '../save.js';
 import { levelTool, stepLevel } from '../ui/leveltool.js';
+import { startHere } from '../levels/model.js';
 import { partSum, blankWork } from '../math/jobsums.js';
 
 const PART_RIGHT_MS = 650;       // a part answered right: the answer sits in its slot this long before the next part
@@ -517,6 +518,20 @@ export function openLockbox(root = document.body, opts = {}) {
   let closed = false;
   let cur = null;   // the box being worked (mountBox's controller)
   let infoNow = null, forcedNow = false;   // (what it was dealt from: the level picker deals it again)
+  // A LEVEL PICKED BY HAND WHILE A SOLVED BOX IS KEPT (keep.js) STANDS. That box is recorded on the levels' ladder only
+  // when its own button is pressed (or at "Done for now"), after the hand's step and at the level it was made at: a
+  // miss recorded there (solved, but not clean) would step the rider back down to the old level, and a right one from
+  // a level above (the hand stepped down) could climb it again. So the level the hand picked is remembered here and
+  // put back once that record is in (keepHandLevel: boxFinished, end), and the next box comes at it.
+  let handLevel = null;
+  function keepHandLevel() {
+    if (handLevel === null) return;
+    const id = handLevel;
+    handLevel = null;
+    try {
+      if (rider && startHere(rider, 'lockbox', id)) (typeof opts.saveRider === 'function' ? opts.saveRider : saveRiderNow)(rider);
+    } catch (err) { console.warn(err); }
+  }
 
   // ===================================================================================================================
   // One box: its page (steps card, paper, mat, tray), its moves and hints, the check and the lid.
@@ -2312,6 +2327,7 @@ export function openLockbox(root = document.body, opts = {}) {
 
   async function boxFinished(result, ctrl) {
     if (closed) return;
+    keepHandLevel();   // (this box's record is in: a level picked by hand while it was kept stands)
     const before = purseNow();
     const boxesBefore = whole(rider?.stats?.boxes);
     const { pub, note } = payOut(result);
@@ -2404,7 +2420,8 @@ export function openLockbox(root = document.body, opts = {}) {
   }
 
   // THE LEVEL PICKER, in the box's own top strip (the tools strip is under the box): the arrows step the rider's level on
-  // the lock boxes' ladder (src/ui/leveltool.js), and the box up now is dealt again at the new level straight away. Only a
+  // the lock boxes' ladder (src/ui/leveltool.js), and the box up now is dealt again at the new level straight away (a box
+  // already solved or being opened is kept: the next one comes at the new level; keep.js). Only a
   // box the levels dealt: not a store order's equation, a rig's chosen rung, or a rider whose grown-up turned picking off.
   function showLevel() {
     const v = rider && opts.levels !== false && !opts.rung && !forcedNow ? levelTool(rider, 'lockbox') : null;
@@ -2416,11 +2433,18 @@ export function openLockbox(root = document.body, opts = {}) {
   levelEl.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-dir]'); if (!b || closed) return;
     b.blur();
-    if (!cur || !stepLevel(rider, 'lockbox', +b.dataset.dir)) return;
+    const stepped = cur ? stepLevel(rider, 'lockbox', +b.dataset.dir) : null;
+    if (!stepped) return;
     try { (typeof opts.saveRider === 'function' ? opts.saveRider : saveRiderNow)(rider); } catch (err) { console.warn(err); }
     // (a box being opened, or one already solved with its check or its working still up, is kept and paid by its
-    // own button: the next one comes at the new level. keep.js)
-    if (!mayDealOver(cur.phase(), !!cur.B?.solved)) { showLevel(); return; }
+    // own button: the next one comes at the new level. keep.js. A kept box not yet recorded on the ladder (not one
+    // being opened: that one's record is in) must not move the level picked here when it is: handLevel, above)
+    if (!mayDealOver(cur.phase(), !!cur.B?.solved)) {
+      const ph = cur.phase();
+      if (ph !== 'open' && ph !== 'done') handLevel = stepped.id;
+      showLevel();
+      return;
+    }
     slideTo(infoNow);
   });
 
@@ -2454,7 +2478,7 @@ export function openLockbox(root = document.body, opts = {}) {
     if (closed) return;
     closed = true;
     // a box solved a moment ago (its check still playing) is paid now, not lost
-    if (cur) { const kept = cur.stop(); if (kept) payOut(kept); cur.destroy(); }
+    if (cur) { const kept = cur.stop(); keepHandLevel(); if (kept) payOut(kept); cur.destroy(); }
     if (voice) { voice.dispose(); voice = null; }
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', onResize);
