@@ -196,6 +196,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { Person, STRIDE } from '../../mathwood-valley/world/objects/people.js';
 import { makeLids, eyesOf, lidLines, lidTurns, LIDS } from './lids.js';
+import { armsFor, armBonePlaces } from './armlength.js';
 
 export const CREW_DIR = new URL('../assets/crew/', import.meta.url).href;
 export const PEOPLE_DIR = new URL('../../mathwood-valley/models/people/', import.meta.url).href;
@@ -437,7 +438,7 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   lib.clipsFor = async (id, hand = null) => {
     // (THE ARMS' LENGTH BY THE BONES: an outfit with hands of its own, an android's, keeps its hands' size; its arms are
     // drawn in as everyone's)
-    const E0 = lib.entry('suit', id) || {}, AL0 = lib.armLengthOf(), AL = E0.ownHands ? { ...AL0, hand: +E0.handSize > 0.3 && +E0.handSize <= 1 ? +E0.handSize : 1 } : AL0;
+    const E0 = lib.entry('suit', id) || {}, AL = armsFor(E0, lib.armLengthOf());
     const sh = lib.shouldersOf(id), key = id + '|' + (hand || '') + '|' + sh + '|' + AL.arm + '|' + AL.hand;
     if (!fitted.has(key)) {
       fitted.set(key, (async () => {
@@ -714,8 +715,10 @@ function shortenArms(tpl, A, { cuffs = false } = {}) {
   for (const n of Object.keys(maps)) before[n] = bones[n].matrixWorld.clone();
   for (const s of ['L', 'R']) {
     const la = bones['LowerArm' + s], wr = bones['Wrist' + s]; if (!la || !wr) continue;
-    la.position.multiplyScalar(A.arm); wr.position.multiplyScalar(A.arm);
-    wr.traverse((b) => { if (b !== wr && b.isBone) b.position.multiplyScalar(A.hand); });
+    // (kit/armlength.js: the elbow and the wrist to A.arm of their places, each joint of the hand to A.hand)
+    const kids = []; wr.traverse((b) => { if (b !== wr && b.isBone) kids.push(b); });
+    const Q = armBonePlaces({ lower: la.position.toArray(), wrist: wr.position.toArray(), under: Object.fromEntries(kids.map((b) => [b.uuid, b.position.toArray()])) }, A);
+    la.position.fromArray(Q.lower); wr.position.fromArray(Q.wrist); for (const b of kids) b.position.fromArray(Q.under[b.uuid]);
   }
   tpl.updateMatrixWorld(true);
   const lead = new THREE.Matrix4();

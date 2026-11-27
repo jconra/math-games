@@ -6,6 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { armsFor, armBonePlaces } from '../kit/armlength.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const CREW = read('../kit/crew.js'), MAIN = read('../src/main.js'), ENGINE = read('../../shared/title/title.js');
@@ -17,6 +18,8 @@ test('the arms are made shorter (never more than the 10% the game\'s maker named
   // (5%: the least the game's maker named; by the numbers 3% already brings the fingertips past half way down the
   // thigh, and he is asked which he likes: MAKER_2.md, QUESTIONS.md)
   assert.ok(ARM_LENGTH.arm >= 0.90 && ARM_LENGTH.arm < 1, `arm ${ARM_LENGTH.arm}`);
+  // (his answer, MAKER2-1, 2026-11-27: "8% shorter"; a slip back to 0.95 fails here)
+  assert.equal(ARM_LENGTH.arm, 0.92);
   assert.ok(ARM_LENGTH.hand > 0.8 && ARM_LENGTH.hand < 1, `hand ${ARM_LENGTH.hand}`);
   // (no outfit of its own: crew.json has no per-outfit arm length)
   const list = JSON.parse(read('../assets/crew/crew.json'));
@@ -37,7 +40,10 @@ test('the upper arm and the forearm are drawn in by the same share, so they keep
   const f = CREW.slice(CREW.indexOf('function armMoves'), CREW.indexOf('function shortenArms'));
   assert.match(f, /for \(const n of \['LowerArm' \+ s, 'Wrist' \+ s\]\)[^\n]*multiplyScalar\(A\.arm - 1\)/);
   const g = CREW.slice(CREW.indexOf('function shortenArms'), CREW.indexOf('function armPoints'));
-  assert.match(g, /la\.position\.multiplyScalar\(A\.arm\); wr\.position\.multiplyScalar\(A\.arm\);/);
+  assert.match(g, /la\.position\.fromArray\(Q\.lower\); wr\.position\.fromArray\(Q\.wrist\);/);
+  // (kit/armlength.js: the elbow's and the wrist's places by the one share)
+  const Q = armBonePlaces({ lower: [0, 0.3, 0], wrist: [0, 0.27, 0], under: {} }, { arm: 0.9, hand: 1 });
+  assert.ok(Math.abs(Q.lower[1] / 0.3 - Q.wrist[1] / 0.27) < 1e-12);
 });
 
 test('the maker first: the crew kit and the first figure\'s files are fetched before the station starts loading', () => {
@@ -74,10 +80,37 @@ test('the figure as large as the window allows: on a wide window the card takes 
   assert.match(block, /\.cst-stage \{ height: auto;/);
 });
 
-test('an android\'s own hands are drawn in toward a person\'s size (its handSize, MAKER2-2); its arms are drawn in as everyone\'s', () => {
-  assert.match(CREW, /AL = E0\.ownHands \? \{ \.\.\.AL0, hand: \+E0\.handSize > 0\.3 && \+E0\.handSize <= 1 \? \+E0\.handSize : 1 \} : AL0;/);
+// (a suit's bones from its GLB's own nodes: each one's place from its parent's joint, and its parent)
+function suitBones(id) {
+  const f = readFileSync(new URL(`../assets/crew/suit_${id}.glb`, import.meta.url)), n = f.readUInt32LE(12), j = JSON.parse(f.subarray(20, 20 + n).toString());
+  const parent = {}; j.nodes.forEach((d, i) => (d.children || []).forEach((c) => (parent[c] = i)));
+  return { nodes: j.nodes, parent, find: (name) => j.nodes.findIndex((d) => d.name === name) };
+}
+const len = (v) => Math.hypot(v[0], v[1], v[2]);
+
+test('an android\'s own hands are drawn in toward a person\'s size (its handSize, MAKER2-2, Captain Vega\'s too); its arms are drawn in as everyone\'s', () => {
+  // (the kit takes both from kit/armlength.js: the arms' length an outfit wears, and the bones' places drawn in)
+  assert.match(CREW, /AL = armsFor\(E0, lib\.armLengthOf\(\)\);/);
+  assert.match(CREW, /const Q = armBonePlaces\(\{ lower: la\.position\.toArray\(\), wrist: wr\.position\.toArray\(\), under:/);
   const list = JSON.parse(read('../assets/crew/crew.json'));
-  for (const id of ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine']) { const s = list.parts.suit.find((x) => x.id === id); assert.ok(s.ownHands, id); assert.ok(s.handSize > 0.5 && s.handSize < 0.9, id); }
+  // (Vega's own hand measured against his height as the androids' were: 0.143 of the head joint's height, theirs 0.133
+  // to 0.151, a person's 0.109: as oversized as theirs, so the same)
+  for (const id of ['androidDock', 'androidHeavy', 'androidOld', 'androidMedical', 'androidService', 'androidFeminine', 'vega']) {
+    const s = list.parts.suit.find((x) => x.id === id); assert.ok(s.ownHands, id); assert.ok(s.handSize > 0.5 && s.handSize < 0.9, id);
+    // the hand's bones themselves: every joint under the wrist at handSize of its place, the wrist and elbow at the arm's
+    const A = armsFor(s, ARM_LENGTH), B = suitBones(id), wr = B.find('Wrist.R'), la = B.find('LowerArm.R');
+    const under = {}; const walk = (i) => (B.nodes[i].children || []).forEach((c) => { under[B.nodes[c].name] = B.nodes[c].translation || [0, 0, 0]; walk(c); }); walk(wr);
+    assert.ok(Object.keys(under).length >= 10, id + ': its fingers\' joints');
+    const Q = armBonePlaces({ lower: B.nodes[la].translation, wrist: B.nodes[wr].translation, under }, A);
+    // (the middle finger's length, the wrist's joint to its last joint, joint by joint)
+    const finger = (P) => ['Middle1.R', 'Middle2.R', 'Middle3.R', 'Middle4.R'].reduce((t, k) => t + len(P[k]), 0);
+    assert.ok(Math.abs(finger(Q.under) / finger(under) - s.handSize) < 1e-9, id + ': the hand drawn in to its handSize');
+    assert.ok(Math.abs(len(Q.wrist) / len(B.nodes[wr].translation) - ARM_LENGTH.arm) < 1e-9, id + ': the forearm as everyone\'s');
+  }
+  // (a person's outfit, its hands from a hand part: everyone's hand size)
+  assert.equal(armsFor(list.parts.suit.find((x) => x.id === 'crew1'), ARM_LENGTH).hand, ARM_LENGTH.hand);
+  // (an outfit with hands of its own and no handSize keeps them as made)
+  assert.equal(armsFor({ ownHands: true }, ARM_LENGTH).hand, 1);
 });
 
 test('the station is put together a piece at a time, the page given its turn between: rooms, light, shaders, walls, people', () => {
