@@ -137,7 +137,10 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   // SPLIT.at metres out to the far limit, then, over it, whatever is nearer than that (the cockpit, its own hull) with the
   // eye's own near limit. Each part has the whole depth buffer to itself: at 700 m things are told apart to under a
   // centimetre. The second pass draws only what reaches that close (most of the station is not in its view at all).
-  const box = OUTSIDE_BOX, SPLIT = { at: 6, margin: 4, on: true };
+  // (on at the best picture quality only: it costs about 2 ms a frame outside, far more on a slow machine, and what it
+  // mends (fine detail fighting for depth some hundreds of metres off) is too small to see on a phone's screen. The
+  // game's maker's standing rule: a costly feature is gated by the quality tier)
+  const box = OUTSIDE_BOX, SPLIT = { at: 6, margin: 4, on: qName === 'high' };
   const split = () => {
     if (!SPLIT.on || W0.alone || camera.near >= SPLIT.at) return false;
     const p = camera.position, m = SPLIT.margin;
