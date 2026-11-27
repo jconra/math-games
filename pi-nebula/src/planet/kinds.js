@@ -70,7 +70,7 @@ export const lookOff = (k) => !!(globalThis.PLANET_LOOK_OFF && globalThis.PLANET
 // a bare stretch away from its plants; so one, as before)
 export const CANYON_PATCH = 0.35, CANYON_SOFT = 1;
 // THE MOON'S SHADE: how much light its shadows get, off the ringed planet (see the moon's palette)
-export const MOON_SHADE = 0.25;
+export const MOON_SHADE = 0.38;
 // THE MEADOWS' BARE EARTH: how ragged its edge is (see the meadow's paint)
 export const MEADOW_RAGGED = 0.45;
 
