@@ -2,8 +2,8 @@
 //   fineFor(quality, far, was)   who gets the weight on one leg and the hands laid on their work: only near enough to
 //                     see it (FINE.near m from the camera, FINE.give more to let it go, so nobody flickers at the
 //                     edge), never on the low picture quality: each costs leg and arm solves every update, and a phone
-//                     does not pay for a desktop's look. -> { stance, hands } (hands: and not drawn as the far copy,
-//                     farCopy)
+//                     does not pay for a desktop's look; on medium, only on the full copy. -> { stance, hands }
+//                     (hands: and not drawn as the far copy, farCopy)
 //   nextStance(want, talking, rand)   the stance's next change, each person's own: { want (+1 the weight on their
 //                     left, -1 their right, 0 on both), after (s) }, from their own random numbers (rand(): 0 to 1)
 //   turnStep(diff, stepping)     a turn on the spot (diff radians still to go): bigger than TURN_STEP is stepped round,
@@ -12,7 +12,9 @@
 //                     chair stands an arm's length off the desk, in the station's own file)
 export const FINE = { near: 12, give: 1 };
 export function fineFor(quality, far, was = false, farCopy = false) {
-  const stance = quality !== 'low' && far < FINE.near + (was ? FINE.give : 0);
+  // (and on the medium quality, a phone's, not on the far copy either: measured, the phone's view of twenty people
+  // standing still paid 2 ms a slowed frame for the weight shifts of figures drawn as far copies)
+  const stance = quality !== 'low' && far < FINE.near + (was ? FINE.give : 0) && !(farCopy && quality !== 'high');
   return { stance, hands: stance && !farCopy };
 }
 

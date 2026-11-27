@@ -9,7 +9,7 @@ import { seatSteps, roundAt, SIT } from '../src/seatsteps.js';
 test('the stance and the hands on the work: near, above the low quality; the hands never on the far copy', () => {
   for (const q of ['medium', 'high']) {
     assert.deepEqual(fineFor(q, 3), { stance: true, hands: true }, q + ' near');
-    assert.deepEqual(fineFor(q, 3, false, true), { stance: true, hands: false }, q + ' near, the far copy');
+    assert.deepEqual(fineFor(q, 3, false, true), { stance: q === 'high', hands: false }, q + ' near, the far copy');
     assert.deepEqual(fineFor(q, FINE.near + 0.5), { stance: false, hands: false }, q + ' past the near');
     // (let go a metre past where it was taken up: no flicker at the edge)
     assert.equal(fineFor(q, FINE.near + 0.5, true).stance, true);
