@@ -34,7 +34,17 @@ export const TREE_STRIDE = 6, TREE_CLEAR = 10, TREE_STEEP = 32;
 // THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
 // small stones and the plants up to `tall` metres grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
 // middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js); the cover reads it: src/planet/cover.js
-export const CLEARING = { pad: 11, kept: 0.999, tall: 1.35, gaps: 0.3, least: 0.5, thin: 1.0 };
+export const CLEARING = { pad: 11, kept: 0.999, tall: 1.35, gaps: 0.3, least: 0.5, thin: 1.0, knee: 0.5, kneeIn: 22, kneeOut: 28 };
+// THE CAMERA'S OWN SPACE (round 3's critics: giant leaves filling a third of the screen where she first stands): within
+// `kneeIn` metres of where the ship really set down (land.start; the planned spot until then) no plant taller than her
+// knee (`knee` metres), easing back to the plants' own heights by `kneeOut`: the ramp's foot, her first steps and the
+// camera swung behind and beside her there (src/chase.js: 2.6 m, 4.4 at its widest)
+export function kneeCap(land, x, z) {
+  const S = land.start || land.landing, d = Math.hypot(wrapD(x - S.x, land.width), wrapD(z - S.z, land.width));
+  if (d >= CLEARING.kneeOut) return Infinity;
+  const t = Math.max(0, (d - CLEARING.kneeIn) / (CLEARING.kneeOut - CLEARING.kneeIn));
+  return CLEARING.knee + t * t * 6;
+}
 
 export function makeLand(seed, { kind = null, n = SAMPLES } = {}) {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();

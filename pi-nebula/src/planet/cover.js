@@ -23,7 +23,7 @@ import { SKY_GLSL } from './cloudSky.js';
 import { HAZE_GLSL } from './ground.js';
 import { PLANTS, PLANT_SINK } from './kinds.js';
 import { hash2 } from './noise.js';
-import { wrapD, CLEARING } from './land.js';
+import { wrapD, CLEARING, kneeCap } from './land.js';
 export { CLEARING };
 import { lookOff } from './kinds.js';
 
@@ -299,6 +299,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
             const hgt = PLANTS[p.k].height * p.size * (0.7 + 0.6 * hash2(wi + e, wj + q, 7)), y = land.heightAt(x, z) - PLANT_SINK[p.k] * hgt;
             // (the tall ones keep off the landing place, as before: a person walking there would have the camera in them)
             if (hgt > CLEARING.tall && land.landingAt(x, z) > CLEAR) continue;
+            if (hgt > kneeCap(land, x, z)) continue;
             col.setRGB(1, 1, 1).multiplyScalar(0.85 + 0.3 * hash2(wi, wj + e, 13 + q));
             if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col, pad && land.landingAt(x, z) > CLEAR)) break;
           }

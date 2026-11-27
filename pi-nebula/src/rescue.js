@@ -299,6 +299,7 @@ export function makeSite(ctx, opts = {}) {
     medic.place(st.stand, { down: false }); medic.group.visible = true;
     // (nothing under it, on its ramp, at its foot or on the walks from there to each pod, wherever it came down)
     clearDisc(land, st.stand.x, st.stand.z, CLEARING.pad);
+    land.start = { x: st.stand.x, z: st.stand.z };
     for (const p of podPlan.pods) clearWay(land, [medic.foot.x, medic.foot.z], [p.x, p.z]);
     planet.relayNow(W.camera);
     if (!st.skipAll) medic.ramp(1);
