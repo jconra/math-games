@@ -14,7 +14,7 @@
 //                     something grows, ripples on the loose ground, cracks on the hard)
 export const GRIT = {
   size: 512,
-  far: 26,                // metres: gone by here (a phone's lowest tier: none at all)
+  far: 26,                // metres: gone by here (only on the best quality: on a phone's it read as polka dots)
   scales: [1.9, 0.62],    // metres across one repeat of the picture, the two layers
   kinds: {
     moon: [0.6, 0.2, 0.0, 0.0],
