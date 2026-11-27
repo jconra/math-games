@@ -5,7 +5,7 @@
 //     from: 'sheriff' (seized boxes at the desk), 'loot' (the saddlebags) or 'practice' ("Just lock boxes" on the title)
 //     -> { el, close(), workSum() (the sum on screen for the tools' Work it out: the part being asked, a find-x box's
 //          line; src/math/jobsums.js partSum / blankWork; or null), redeal() (a new box at the level now: the help
-//          menu's skip; false for a store order's equation or a box already opening) }
+//          menu's skip; false for a store order's equation, a box already opening or one already solved: keep.js) }
 //   opts.workOut(): "Work it out" in the top strip (the game's tools, src/ui/tools.js: the HUD is under the box);
 //   opts.toolsOpen(): a tool is up over the box (the box hears no keys meanwhile)
 //   onBox(result)   (optional) runs as each box finishes, solved or set aside: the caller pays the gold and records
@@ -109,6 +109,7 @@ import { makeIneqBox } from './ineqbox.js';
 import * as Q from './ineq.js';
 import { setLineSVG } from './setline.js';
 import { GOLDEN_RULE, STEPS, SKIP_WORD, cardMode, currentStep } from './steps.js';
+import { mayDealOver } from './keep.js';
 import { showNumberLine, layoutNumberLine } from '../ui/numberline.js';
 import { SAFECRACKER_BOXES, saveRider as saveRiderNow } from '../save.js';
 import { levelTool, stepLevel } from '../ui/leveltool.js';
@@ -2417,8 +2418,9 @@ export function openLockbox(root = document.body, opts = {}) {
     b.blur();
     if (!cur || !stepLevel(rider, 'lockbox', +b.dataset.dir)) return;
     try { (typeof opts.saveRider === 'function' ? opts.saveRider : saveRiderNow)(rider); } catch (err) { console.warn(err); }
-    const ph = cur.phase();
-    if (ph === 'open' || ph === 'done') { showLevel(); return; }   // (a box being opened: the next one comes at the new level)
+    // (a box being opened, or one already solved with its check or its working still up, is kept and paid by its
+    // own button: the next one comes at the new level. keep.js)
+    if (!mayDealOver(cur.phase(), !!cur.B?.solved)) { showLevel(); return; }
     slideTo(infoNow);
   });
 
@@ -2490,10 +2492,11 @@ export function openLockbox(root = document.body, opts = {}) {
     // the sum on screen for the tools' Work it out (the box's own controller reads it), or null
     workSum: () => { try { return !closed && cur && cur.workSum ? cur.workSum() : null; } catch (e) { console.warn(e); return null; } },
     // the help menu's "Skip to a new question" (src/ui/helpmenu.js; the game has moved the level first): a new box slides
-    // in, as the level arrows deal one; not a store order's own equation or a box already opening. -> true if dealt
+    // in, as the level arrows deal one; not a store order's own equation, a box already opening or one already solved
+    // (keep.js: a solved box is never thrown away unpaid). -> true if dealt
     redeal: () => {
       if (closed || !cur || forcedNow || opts.rung) return false;
-      const ph = cur.phase(); if (ph === 'open' || ph === 'done') return false;
+      if (!mayDealOver(cur.phase(), !!cur.B?.solved)) return false;
       slideTo(infoNow); showLevel();
       return true;
     },

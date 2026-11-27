@@ -112,7 +112,7 @@ export const SKIP_WHY = {
   windmill: "This card can't be swapped while the miller is teaching, or after you got it right. Press Back to building.",
   bridge: "This card can't be swapped while the engineer is teaching, or after you got it right. Press Back to building.",
   fishing: 'This fish is answered already. Keep it or throw it back, and the next fish brings a new question.',
-  boxes: "This box can't be swapped while it is opening, or when it's the storekeeper's own sum. Finish it, or press Done for now.",
+  boxes: "This box can't be swapped once it's solved, while it is opening, or when it's the storekeeper's own sum. Finish it, or press Done for now.",
   graphs: "The Professor is between points. Try again in a moment.",
   roundup: 'This bunch is done. The next one comes at your level.',
   sheep: 'This flock is done. The next one comes at your level.',
