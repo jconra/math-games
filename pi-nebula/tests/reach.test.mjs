@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { handsAt, WORK_OF, WORK_AT, SCAN_HOLD, REACH, shoulderAt } from '../src/atwork.js';
+import { handsAt, WORK, WORK_OF, WORK_AT, SCAN_HOLD, REACH, shoulderAt } from '../src/atwork.js';
 import { ROSTER, SCAN_BED } from '../src/life.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -22,7 +22,7 @@ function bones(suit) {
   const world = (i) => { const d = j.nodes[i], t = d.translation || [0, 0, 0], q = d.rotation || [0, 0, 0, 1], s = d.scale || [1, 1, 1]; if (parent[i] == null) return { p: t, q, s }; const P = world(parent[i]), v = rot(P.q, [t[0] * P.s[0], t[1] * P.s[1], t[2] * P.s[2]]); return { p: [P.p[0] + v[0], P.p[1] + v[1], P.p[2] + v[2]], q: mul(P.q, q), s: [P.s[0] * s[0], P.s[1] * s[1], P.s[2] * s[2]] }; };
   const at = (name) => { const i = j.nodes.findIndex((d) => d.name === name); assert.ok(i >= 0, suit + ': ' + name); return world(i).p; };
   const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  const B = { R: at('UpperArm.R'), L: at('UpperArm.L'), ab: at('Abdomen'), ch: at('Chest') };
+  const B = { R: at('UpperArm.R'), L: at('UpperArm.L'), ab: at('Abdomen'), ch: at('Chest'), head: at('Head'), knee: at('LowerLeg.R') };
   B.arm = d(B.R, at('LowerArm.R')) + d(at('LowerArm.R'), at('Wrist.R'));
   return B;
 }
@@ -39,8 +39,7 @@ function worst(body, S, secs = 120) {
     const H = handsAt(S.kind, S, t, 3.7);
     H.hands.forEach((h, i) => {
       if (!h || (H.share && H.share[i] < 0.5)) return;
-      // (the knees bent: everything from the hips up lower by the crouch)
-      const sh = shoulderAt(sc(i === 0 ? B.L : B.R), sc(B.ab), sc(B.ch), H.lean), q = [h[0], h[1] + (H.crouch || 0), h[2] - (S.stepIn || 0)];
+      const sh = shoulderAt(sc(i === 0 ? B.L : B.R), sc(B.ab), sc(B.ch), H.lean), q = [h[0], h[1], h[2] - (S.stepIn || 0)];
       most = Math.max(most, Math.hypot(q[0] - sh[0], q[1] - sh[1], q[2] - sh[2]) / (B.arm * ARM * k));
     });
   }
@@ -52,18 +51,16 @@ test('the bodies that work at each place are the ones the roster sends there', (
   assert.deepEqual(AT('pump').map((b) => b.id), ['mechanic']);
   assert.deepEqual(AT('cook').map((b) => b.id), ['cook']);
   assert.deepEqual(AT('forge').map((b) => b.id), ['smelter']);
-  assert.ok(AT('lockers').length >= 1);
 });
 
-test('the pump: each point of its screen and its buttons within reach of the mechanic, the elbow bent', () => {
-  assert.ok(WORK_AT.pump.points.some((p) => p[1] < 0.8), 'its buttons too');
+test('the pump: each point of its screen within reach of the mechanic, the elbow bent', () => {
+  // (no point under the screen: a stoop to the buttons put his knees and head in the cabinet)
+  assert.ok(WORK_AT.pump.points.every((p) => p[1] >= 1.0), 'only the screen');
+  assert.equal(WORK_AT.lockers, undefined, 'the lockers: the reach clip, as the game has them');
   for (const b of AT('pump')) { const F = WORK_AT.pump, k = worst(b, { kind: 'face', at: [0, 0, F.face], heading: 0, points: F.points, stepIn: F.stepIn }); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
 });
-test('a locker\'s handle within reach of each who goes to the lockers', () => {
-  for (const b of AT('lockers')) { const F = WORK_AT.lockers, k = worst(b, { kind: 'face', at: [0, 0, F.face], heading: 0, points: F.points, stepIn: F.stepIn }); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
-});
-test('the cook\'s counter (its near edge 0.45 m ahead, its top 0.94 m up, as the walls find it): his wipe within reach', () => {
-  for (const b of AT('cook')) { const k = worst(b, ahead(0.45, 0.94, WORK_OF.Bar_Polish)); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
+test('the cook\'s counter (its near edge 0.43 m ahead, its top 0.94 m up, as the walls find it): his wipe within reach', () => {
+  for (const b of AT('cook')) { const k = worst(b, ahead(0.43, 0.94, WORK_OF.Bar_Polish)); assert.ok(k <= REACH.most, `${b.id}: ${k.toFixed(3)} of the arm`); }
 });
 test('the furnace\'s console: both hands within reach of its worker', () => {
   const W = WORK_OF.Tend_Forge;
@@ -82,4 +79,20 @@ test('the reach rule itself: a point at the shoulder\'s own height an arm ahead 
   // (leaning forward carries the shoulder forward)
   const s2 = shoulderAt(sh, B.ab, B.ch, 0.5);
   assert.ok(s2[2] > sh[2] + 0.05);
+});
+
+test('the pump: his head and his knees stay out of its cabinet through every visit (the review, W1 and W10)', () => {
+  // (no stoop any more: the knees stay under him; the head, bowed as the hold bows him, stays behind the cabinet's
+  // face, 0.45 m ahead of his spot less the step in, by more than a head's front)
+  assert.equal(WORK.face.crouch, undefined, 'no stoop');
+  const F = WORK_AT.pump, face = F.face - F.stepIn;
+  for (const b of AT('pump')) {
+    const B = bones(b.suit), k = b.size, sc = (p) => p.map((v) => v * k);
+    for (let t = 0; t < 60; t += 0.05) {
+      const H = handsAt('face', { kind: 'face', at: [0, 0, F.face], heading: 0, points: F.points }, t, 3.7);
+      const head = shoulderAt(sc(B.head), sc(B.ab), sc(B.ch), H.lean);
+      assert.ok(head[2] + 0.12 < face, `${b.id}: the head ${head[2].toFixed(3)} m ahead, the face ${face.toFixed(2)}`);
+      assert.ok(sc(B.knee)[2] + 0.08 < face, 'the knees');
+    }
+  }
 });

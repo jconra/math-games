@@ -17,19 +17,20 @@
 //     'panel'   standing at a console: both hands on it, now and then one along to press something and back
 //     'wipe'    standing at a counter: the left hand flat on it, the right wiping to and fro along it
 //     'face'    standing at an upright face (S.points: [across, up] of its screen and buttons; S.at its foot): one hand
-//               up to a point of it, tapping, then down a while; -> also share (each hand's part), palms, fingers,
-//               crouch (m: the knees bent to a low point)
+//               up to a point of it, tapping, then down a while; -> also share (each hand's part), palms, fingers
 //     (S.apart, S.lean: the work's own, in place of WORK's: a narrow top, one reached across to; S.tilt: its top
-//     rising to their right, m a metre; S.in: how far in past its edge the hands go, in place of WORK's)
+//     rising to their right, m a metre; S.in: how far in past its edge the hands go, S.along: how far a hand goes
+//     along it and back, each in place of WORK's)
 //   wheelLocal(chair, t, seed)   the two wrists on Cargo's forklift's steering wheel, in the driver's own frame
 export const WORK = {
   desk: { in: 0.04, apart: 0.36, lean: 0.45, tap: 0.012, along: 0.12 },
   panel: { in: 0.06, apart: 0.38, lean: 0.24, along: 0.16 },
-  // (the cook's counter: wiped in long strokes along it, to and fro, on its bare strip in front of the food wells)
-  wipe: { in: 0.0, left: [-0.25, 0.04], right: [0.12, 0.06], stroke: 0.17, deep: 0.03, round: 1.7, lean: 0.7 },
-  // (a face to work on, upright: the pump's screen and buttons; one hand goes to a point of it, taps, and comes down)
-  // (a low point of it, under the screen: the knees bent `crouch` m as well as the bow, as a person stoops to it)
-  face: { visit: [2.2, 3.4], rest: [0.6, 1.2], lean: [0.12, 0.45], tap: 0.012, crouch: 0.3, lead: 0.45 },
+  // (the cook's counter: wiped to and fro along its near strip, nearly upright, a little bow, his head clear of the
+  // heat lamp over the counter (two critics, r3: folded over with his head up in the lamp's hood))
+  wipe: { in: 0.0, left: [-0.15, 0.02], right: [0.05, 0.02], stroke: 0.11, deep: 0.015, round: 1.7, lean: 0.5 },
+  // (a face to work on, upright: the pump's screen; one hand goes to a point of it, taps a while, and comes down a
+  // moment; a little bow the lower the point)
+  face: { visit: [2.6, 4.0], rest: [0.5, 0.9], lean: [0.12, 0.3], tap: 0.012 },
   // (how often a hand goes along to another place and back: every [least, most] seconds, taking `secs`)
   move: { every: [1.4, 3.2], secs: 1.0 },
 };
@@ -46,18 +47,18 @@ export const WORK = {
 // The cook at his counter (Bar_Polish): its top, wiped. The furnace's worker (Tend_Forge): the console's end, its
 // band (kit/station2-options.js thermalConsole) 0.98 m up over his spot's line, east of its tall screen housing.
 export const WORK_OF = {
-  Bar_Polish: { kind: 'wipe', lo: 0.75, hi: 1.15, to: 0.9, stepIn: 0.22 },
-  Tend_Forge: { kind: 'panel', lo: 0.7, hi: 1.2, to: 1.0, edge: [0.5, 0.98], tilt: 0.34, lean: 0.7, apart: 0.24, stepIn: 0.28 },
+  Bar_Polish: { kind: 'wipe', lo: 0.75, hi: 1.15, to: 0.9, stepIn: 0.25 },
+  // (along: how far a hand goes along the band and back, kept short so the right hand never reaches the screen's
+  // housing, 0.25 m to his right of his middle: the review, W12)
+  Tend_Forge: { kind: 'panel', lo: 0.7, hi: 1.2, to: 1.0, edge: [0.5, 0.98], tilt: 0.34, lean: 0.7, apart: 0.24, along: 0.06, stepIn: 0.28 },
 };
 // By the place: a hangar's fuel pump (kit/hangar.js), its face 0.45 m in front of its spot (life.js SPOTS.pump):
-// points of its screen (1.0 to 1.24 m up) and its three buttons under it (0.7 m up: stooped to, the knees bent and
-// bowed, WORK.face crouch; standing straight, the review found his hand 25 cm short of them), [across, up], on his
-// right side of it. A wall
-// locker (kit/shell.js 'locker', its front 0.2 m in front of its spot): the hand on its door's handle, 0.3 m to their
-// right, 0.9 to 1.16 m up.
+// points of its screen (1.0 to 1.24 m up), [across, up], on his right side of it. Its three buttons at 0.7 m are under
+// a standing arm's reach, and a stoop to them put his knees and head inside the cabinet (the review, W1 and W10): not
+// sent there. (The lockers went back to the reach clip, as the game has them: two critics, r3, found the hand-on-the-
+// handle hold too still, and the handle's place not every locker's.)
 export const WORK_AT = {
-  pump: { kind: 'face', face: 0.45, stepIn: 0.18, points: [[0, 1.12], [0.12, 1.16], [0.12, 1.06], [-0.04, 1.08], [0.12, 0.7], [0, 0.7]] },
-  lockers: { kind: 'face', face: 0.2, points: [[0.295, 1.0], [0.295, 1.06]] },
+  pump: { kind: 'face', face: 0.45, stepIn: 0.18, points: [[0, 1.12], [0.12, 1.16], [0.12, 1.06], [-0.04, 1.08]] },
 };
 // The medic at the big scanner while it runs (people.js MEDIC AT THE SCREEN): her hands on the board's end over its
 // pedestal (kit/bigscanner.js: its top 0.85 m up, `back` m nearer her than the scanner's SCAN.panel point, `up` over
@@ -80,7 +81,13 @@ export function surfaceAhead(floorAt, at, heading, { from = 0.2, to = 1.3, lo = 
   const sx = Math.sin(heading), sz = Math.cos(heading);
   for (let d = from; d <= to + 1e-9; d += step) {
     const x = at[0] + sx * d, z = at[2] + sz * d, f = floorAt(x, z, at[1] + hi, hi - lo);
-    if (f != null && f >= at[1] + lo - 1e-6 && f <= at[1] + hi + 1e-6) return { d, y: f };
+    if (f != null && f >= at[1] + lo - 1e-6 && f <= at[1] + hi + 1e-6) {
+      // (its edge found exactly, to a centimetre, between the last step that missed it and this one: the hands go just
+      // past the edge itself, not up to a step's length further in (the review, W3))
+      let a = Math.max(from, d - step), b = d;
+      for (let i = 0; i < 4 && d > from; i++) { const m = (a + b) / 2, g = floorAt(at[0] + sx * m, at[2] + sz * m, at[1] + hi, hi - lo); if (g != null && g >= at[1] + lo - 1e-6 && g <= at[1] + hi + 1e-6) b = m; else a = m; }
+      return { d: b, y: f };
+    }
   }
   return null;
 }
@@ -90,42 +97,51 @@ const wander = (t, seed, k = 1) => (Math.sin(t * 0.9 * k + seed) + Math.sin(t * 
 const ease = (u) => u * u * (3 - 2 * u);
 // (now and then one hand goes along to another place on the work and back: how far along this moment, 0 at rest, for
 // the hand `side` (-1 left, 1 right) only)
-function along(t, seed) {
+function along(t, seed, o = {}) {
   const M = WORK.move, span = (M.every[0] + M.every[1]) / 2, k = Math.floor((t + seed * 3.1) / span), into = (t + seed * 3.1) - k * span;
-  const r = Math.abs(Math.sin(k * 12.9898 + seed * 78.233) * 43758.5453) % 1, side = r < 0.5 ? -1 : 1, dir = (r * 7) % 1 < 0.5 ? -1 : 1;
-  if (into > M.secs) return { side, u: 0 };
-  return { side, u: Math.sin(ease(into / M.secs) * Math.PI) * dir };
+  const r = Math.abs(Math.sin(k * 12.9898 + seed * 78.233) * 43758.5453) % 1, dir = (r * 7) % 1 < 0.5 ? -1 : 1;
+  o.side = r < 0.5 ? -1 : 1; o.u = into > M.secs ? 0 : Math.sin(ease(into / M.secs) * Math.PI) * dir;
+  return o;
 }
 
-export function handsAt(kind, S, t, seed = 0) {
-  const K = WORK[kind] || WORK.panel, h = S.heading, f = [Math.sin(h), 0, Math.cos(h)], r = [-Math.cos(h), 0, Math.sin(h)], r_ = r;
+// (out: a record kept per person and written into, so a hold laid each frame makes nothing new; one is made if none)
+const FINGERS_UP = [null, [0, 1, 0]];
+export function handsAt(kind, S, t, seed = 0, out = null) {
+  const O = out || {}, K = WORK[kind] || WORK.panel, h = S.heading;
+  if (!O.pair) { O.h0 = [0, 0, 0]; O.h1 = [0, 0, 0]; O.pair = [null, null]; O.f = [0, 0, 0]; O.r = [0, 0, 0]; O.sh = [0, 0]; O.pa = [null, null]; }
+  const f = O.f, r = O.r; f[0] = Math.sin(h); f[2] = Math.cos(h); r[0] = -Math.cos(h); r[2] = Math.sin(h);
   // (a point on the work: `a` across (their right +), `b` in from its near edge, a little over its top)
   // (S.tilt: a top that rises to their right, m a metre across)
-  const on = (a, b, up = 0.012) => [S.at[0] + r[0] * a + f[0] * b, S.at[1] + up + (S.tilt || 0) * a, S.at[2] + r[2] * a + f[2] * b];
+  const on = (a, b, up, d) => { d[0] = S.at[0] + r[0] * a + f[0] * b; d[1] = S.at[1] + up + (S.tilt || 0) * a; d[2] = S.at[2] + r[2] * a + f[2] * b; return d; };
+  O.share = null; O.palms = null; O.fingers = null; O.hands = O.pair;
   if (kind === 'wipe') {
     // (to and fro along the counter, a little in and out, never quite the same twice; the other hand moves a little too)
     const w = (t / K.round + seed) * Math.PI * 2, c = K.right, sw = Math.sin(w) + 0.25 * Math.sin(w * 2.3 + seed);
-    return { hands: [on(K.left[0] + wander(t, seed) * 0.03, K.left[1] + K.in), on(c[0] + sw * K.stroke, c[1] + K.in + Math.sin(w * 2) * K.deep, 0.015)], lean: K.lean };
+    O.pair[0] = on(K.left[0] + wander(t, seed) * 0.03, K.left[1] + K.in, 0.012, O.h0);
+    O.pair[1] = on(c[0] + sw * K.stroke, c[1] + K.in + Math.sin(w * 2) * K.deep, 0.015, O.h1);
+    O.lean = K.lean;
+    return O;
   }
   if (kind === 'face') {
     // (S.points: [across, up] on the face, from its foot in front of them; a visit: up to one, a tap or two, down)
     const F = WORK.face, span = (F.visit[0] + F.visit[1]) / 2 + (F.rest[0] + F.rest[1]) / 2, n = Math.floor((t + seed) / span), into = (t + seed) - n * span;
-    const r = Math.abs(Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453) % 1, pt = S.points[Math.floor(r * S.points.length) % S.points.length], visit = F.visit[0] + r * (F.visit[1] - F.visit[0]);
-    // (the body first: bowed and stooped to it, then the hand up to it, F.lead s later; the hand down again before the
-    // body comes up: the hand never reaches for a point the body has not yet come down to)
-    const sm = (v) => { const u = Math.max(0, Math.min(1, v)); return u * u * (3 - 2 * u); };
-    const kb = into < visit ? sm(Math.min(into, visit - into) / 0.35) : 0, k = into < visit ? sm((Math.min(into, visit - into) - F.lead) / 0.35) : 0;
+    const q = Math.abs(Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453) % 1, pt = S.points[Math.floor(q * S.points.length) % S.points.length], visit = F.visit[0] + q * (F.visit[1] - F.visit[0]);
+    const u = into < visit ? Math.max(0, Math.min(1, Math.min(into, visit - into) / 0.35)) : 0, k = u * u * (3 - 2 * u);
     const low = Math.max(0, Math.min(1, (1.15 - pt[1]) / 0.45));
     const tap = k > 0.99 ? Math.max(0, Math.sin(into * 8 + seed)) * F.tap : 0;
-    const R = [S.at[0] + r_[0] * pt[0] - f[0] * (0.04 - tap), S.at[1] + pt[1], S.at[2] + r_[2] * pt[0] - f[2] * (0.04 - tap)];
-    return { hands: [null, R], share: [0, k], palms: [null, f], fingers: [null, [0, 1, 0]], lean: F.lean[0] + (F.lean[1] - F.lean[0]) * low * kb, crouch: F.crouch * low * kb };
+    const R = O.h1; R[0] = S.at[0] + r[0] * pt[0] - f[0] * (0.04 - tap); R[1] = S.at[1] + pt[1]; R[2] = S.at[2] + r[2] * pt[0] - f[2] * (0.04 - tap);
+    O.pair[0] = null; O.pair[1] = R; O.sh[0] = 0; O.sh[1] = k; O.share = O.sh; O.pa[1] = f; O.palms = O.pa; O.fingers = FINGERS_UP;
+    O.lean = F.lean[0] + (F.lean[1] - F.lean[0]) * low * k;
+    return O;
   }
-  const g = along(t, seed), half = (S.apart || K.apart) / 2;
+  along(t, seed, O);
+  const half = (S.apart || K.apart) / 2;
   const tp = K.tap || 0.008, tapL = Math.max(0, Math.sin(t * 9 + seed)) * tp, tapR = Math.max(0, Math.sin(t * 8.3 + seed * 1.7)) * tp;
-  const IN = S.in ?? K.in;
-  const L = on(-half + (g.side < 0 ? g.u * K.along : 0) + wander(t, seed) * 0.01, IN + wander(t, seed + 1) * 0.01, 0.012 + tapL);
-  const R = on(half + (g.side > 0 ? g.u * K.along : 0) + wander(t, seed + 2) * 0.01, IN + wander(t, seed + 3) * 0.01, 0.012 + tapR);
-  return { hands: [L, R], lean: S.lean || K.lean };
+  const IN = S.in ?? K.in, AL = S.along ?? K.along;
+  O.pair[0] = on(-half + (O.side < 0 ? O.u * AL : 0) + wander(t, seed) * 0.01, IN + wander(t, seed + 1) * 0.01, 0.012 + tapL, O.h0);
+  O.pair[1] = on(half + (O.side > 0 ? O.u * AL : 0) + wander(t, seed + 2) * 0.01, IN + wander(t, seed + 3) * 0.01, 0.012 + tapR, O.h1);
+  O.lean = S.lean || K.lean;
+  return O;
 }
 
 // CARGO'S FORKLIFT'S STEERING WHEEL, read off the game's maker's own file (assets/cargo/forklift.glb, its points over

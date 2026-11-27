@@ -73,8 +73,8 @@ import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, SEAT_APART, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
-import { seatSteps, leanOf, roundAt, SIT } from './seatsteps.js';
-import { fineFor, turnStep, deskSeat, DESK_SIT } from './finemoves.js';
+import { seatSteps, leanOf, roundAt, SIT, riseStep, wayClear as seatWayClear } from './seatsteps.js';
+import { fineFor, turnStep, deskSeat, DESK_SIT, reachShort } from './finemoves.js';
 import { surfaceAhead, handsAt, WORK_OF, WORK_AT, SCAN_HOLD, WORK } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
@@ -117,7 +117,7 @@ export const LIFE = {
 const BAD_FOR = 240;
 // (m: how far ahead of a desk sitter's seat a desk's edge is reached with the elbows bent, bowed over it: Cargo's
 // shipping desk, 0.45, measured in the game)
-const DESK_REACH = 0.45;
+const DESK_REACH = 0.45, DESK_CUSHION = 0.23;
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
 export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
@@ -339,32 +339,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // (and room to walk away: a quarter-metre walk out from the spot, as a person walks, gets 2.5 m off; a spot in a
   // pocket between a table and a wall, that nobody who stood there could leave, is no spot)
   const _w = new THREE.Vector3();
-  // (a way of seat steps clear of the walls and the furniture: each walked point a step apart, nothing solid within
-  // a leg's width of it from the shins to the shoulders, and no top (a table's) over the floor there; the last few
-  // centimetres to the spot in front of the seat are between its seat and its table, and are let be; by the seat
-  // itself (`own`, within 0.38 m of its middle: walked round, its legs clear of it) only what stands higher than it)
-  const clearStep = (x, y, z, r, own = false) => {
-    for (const h of own ? [0.8, 1.05, 1.35] : [0.3, 0.55, 0.8, 1.05, 1.35]) {
-      if (walls.solidAt(x, y + h, z)) return false;
-      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; if (walls.solidAt(x + Math.cos(a) * r, y + h, z + Math.sin(a) * r)) return false; }
-    }
-    const top = walls.floorAt(x, z, y + 1.4, 1.2);
-    return !(top != null && top > y + (own ? 0.7 : 0.15));
-  };
-  const wayClear = (steps, from, seat) => {
-    let at = [from.x, from.y, from.z];
-    const walks = steps.down.filter((m) => m.move === 'walk' || m.move === 'back');
-    for (let w = 0; w < walks.length; w++) {
-      const to = walks[w].to, n = Math.max(1, Math.ceil(Math.hypot(to[0] - at[0], to[2] - at[2]) / 0.1)), last = w === walks.length - 1;
-      for (let i = 1; i <= n; i++) {
-        const u = i / n, x = at[0] + (to[0] - at[0]) * u, z = at[2] + (to[2] - at[2]) * u;
-        if (last && Math.hypot(to[0] - x, to[2] - z) < 0.25) break;
-        if (!clearStep(x, at[1], z, 0.14, !!seat && Math.hypot(x - seat.x, z - seat.z) < 0.38)) return false;
-      }
-      at = to;
-    }
-    return true;
-  };
+  // (a seat's steps clear of the walls, the furniture and the seat itself: src/seatsteps.js wayClear)
+  const wayClear = (steps, from, seat) => seatWayClear(steps, [from.x, from.y, from.z], seat ? [seat.x, seat.y, seat.z] : null, (x, y, z) => walls.solidAt(x, y, z), (x, z, top, drop) => walls.floorAt(x, z, top, drop));
   const walkOut = (p) => {
     const G = 0.25, seen = new Set([0]), q = [[p.x, p.y, p.z]];
     const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -461,12 +437,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         // (a desk chair's sitter sits DESK_SIT forward of its middle: stood first in front of the chair itself, as before,
         // clear of the desk's top; then lowered onto its front)
         if (s.beside) seat.pre = SIT.pre - DESK_SIT;
-        // (a stool, come to from behind: round by whichever of its sides is clear of the walls and the furniture there,
-        // all the way round to the spot in front of it; the review, 2026-11-27: at the smelter control room's long table
-        // the way round went through its top. Neither clear: straight to the spot in front, as listed in missing)
+        // (a stool, come to from behind: round by whichever of its sides is clear of the walls, the furniture and the
+        // stool itself, all the way round to the spot in front of it. Neither clear: not sat on, never walked through
+        // (the review, W11), as listed in missing)
         if (!s.front && !s.beside) {
           seat.round = [1, -1].find((k) => wayClear(seatSteps({ ...seat, round: k }), ap, s.seat)) ?? 0;
-          if (!seat.round) missing.push('seat ' + seat.name + ' (no clear way round it: straight to it)');
+          if (!seat.round) { missing.push('seat ' + seat.name + ' (no clear way round it: not used)'); continue; }
         } else if (!wayClear(seatSteps(seat), ap, s.seat)) missing.push('seat ' + seat.name + ' (its steps not clear of the furniture)');
         seats[name].push(seat);
       }
@@ -864,6 +840,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       const far = camera.position.distanceTo(P.pos);
       P.far = far;
       P.shown = !P.away && inView(P, camera);
+      if (!P.shown) P.stepIn = 0;      // (out of view: no step in left over for the next time they are seen, W13)
       if (P.shown) seen.push(P);
     }
     // the nearest of them drawn, at most DRAWN[quality] (a body out of the scene costs nothing at all: the scene's own
@@ -910,7 +887,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // their legs, feet and hands as the move has them (moves.js M.bed, from onbed.js))
       // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
       // (two at a talking spot between their conversations: both listening, each their own nods and shifts, no hands)
-      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : P.act && P.act.kind === 'talk' && P.act.phase === 'do' && talkThere(P.act) ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
+      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : P.act && P.act.kind === 'talk' && P.act.phase === 'do' && talkThere(P.act) && P.fine ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
       P.moves.bed = P.act && (P.act.kind === 'scan' || P.act.kind === 'ward') && P.pose && P.bed ? P.bed : null;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
@@ -940,7 +917,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // (someone at work less often))
       else if (!P.walking && !P.convo && far < 20) look = glance(P, near, !!(P.act && ((P.act.clip && P.act.clip !== STAND) || P.act.onWork)));
       // (at work with their hands on it, HANDS ON THE WORK: their eyes on it, a glance up now and then)
-      if (!look && P.act && P.act.onWork && !P.walking && (P.act.phase === 'do' || P.act.phase === 'sat') && far < 20) { const w = P.act.onWork; look = near.set(w.at[0] + Math.sin(w.heading) * 0.15, w.at[1] + (w.kind === 'desk' ? 0.35 : 0.05), w.at[2] + Math.cos(w.heading) * 0.15); }
+      if (!look && P.act && P.act.onWork && P.handsOk && !P.walking && (P.act.phase === 'do' || P.act.phase === 'sat') && far < 20) { const w = P.act.onWork; look = near.set(w.at[0] + Math.sin(w.heading) * 0.15, w.at[1] + (w.kind === 'desk' ? 0.35 : 0.05), w.at[2] + Math.cos(w.heading) * 0.15); }
       if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
       P.moves.look = look && far < 20 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
       // (a little more smile while the player is near, or just after a hello)
@@ -955,13 +932,13 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // time it starts, the person and the place named; alarms.reach keeps the worst of each, m)
       // (a hold settled at work: on for a second and more, its bow and step in eased in; not one being taken up or let go)
       P.holdOn = P.moves.hold && P.moves.holdNow > 0.9 ? (P.holdOn || 0) + adt : 0;
-      const short = P.holdOn > 1.2 ? P.moves.holdShort || 0 : 0;
-      if (short > 0.02) {
+      const short = reachShort(P.holdOn, P.moves.holdShort || 0);
+      if (short > 0) {
         const where = (P.act && (P.act.step && P.act.step.do || P.act.kind)) || '-', key = P.id + ' ' + where;
         if (!P.outOfReach) alarm('outOfReach', P, 'a hand ' + short.toFixed(2) + ' m out of reach at ' + where);
         alarms.reach[key] = Math.max(alarms.reach[key] || 0, +short.toFixed(3));
       }
-      P.outOfReach = short > 0.02;
+      P.outOfReach = short > 0;
     }
     bubbles.show(!!player); bubbles.update(dt);
     audit(dt);
@@ -1105,7 +1082,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (at work with its hands on the work, HANDS ON THE WORK below: standing, the hands are the move's)
     if (a.onWork === undefined) a.onWork = workOf(P, a);
     // (hands laid on the work only near and above the low quality, bodyMoves: else the work's own clip, as ever)
-    play(P, a.onWork && P.handsOk ? STAND : a.clip || STAND);
+    // (the change between the two, at the hands' line, eased over a second: W14)
+    play(P, a.onWork && P.handsOk ? STAND : a.clip || STAND, { fade: 1 });
     // (at work with a clip of its own: turned to the work; standing about: a look round now and then, and toward
     // whoever comes up)
     if (!a.onWork && (!a.clip || a.clip === STAND)) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
@@ -1116,13 +1094,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   // each step plays (a slow walk, a step back, stepping round, sitting, standing), the body leaning
   // forward as they lower onto it and as they rise (moves.js M.lean). Getting up, nobody stands where they will step
   // back to: they wait up off the seat till it is clear ──
-  // (where someone done getting up somewhere else than their seat's spot stands: here if clear of the walls and of
-  // everyone, else the nearest such place within 0.6 m)
-  function stepClear(P) {
-    const ok = (x, z) => walls.free(x, P.pos.y, z, 0.22) && !someoneAt({ x, y: P.pos.y, z }, P, LIFE.body);
-    if (ok(P.pos.x, P.pos.z)) return;
-    for (const r of [0.3, 0.45, 0.6]) for (let i = 0; i < 12; i++) { const t = i / 12 * Math.PI * 2, x = P.pos.x + Math.cos(t) * r, z = P.pos.z + Math.sin(t) * r; if (ok(x, z)) { P.pos.x = x; P.pos.z = z; return; } }
-  }
+  // (done getting up somewhere else than the seat's spot: where they stand; nobody is ever set aside in a frame, the
+  // way on from there is walked (the review, W2))
+  function upHere(P, a) { a.si = null; a.held = 0; a.seatLean = 0; stillV++; next(P); }
   // (a seat or a spot no way could be found to twice is let be a while, not for good: a sitting that works there takes
   // one off its count, and BAD_FOR seconds after its last failure it is tried again; the review, 2026-11-27)
   function usable(s) { if (s.bad >= 2 && clock - (s.badAt || 0) > BAD_FOR) s.bad = 0; return !(s.bad >= 2); }
@@ -1132,16 +1106,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const S = a.spot, path = (S.steps || (S.steps = seatSteps(S)))[way];
     if (a.si == null) { a.si = 0; a.st = 0; a.sFrom = P.pos.clone(); a.sHead = P.heading; }
     const st = path[a.si];
-    // (getting up, the last step, the one that ends on the spot they came from: someone standing there (the player
-    // come up to talk, most likely), held standing (the standing clip, never a walk on the spot); the player there, or
-    // anyone after LIFE.riseWait, and they are done where they are, at the nearest clear place: the review, 2026-11-27,
-    // a captain marched on the spot beside his stool for as long as the player stood behind it)
-    const by = way === 'up' && a.si === path.length - 1 && a.st === 0 ? someoneAt(a.spot.pos, P, LIFE.body) : null;
-    if (by) {
-      a.held = (a.held || 0) + dt; a.seatLean = 0;
-      play(P, STAND, { fade: 0.25 });
-      if (by === playerNow || a.held > LIFE.riseWait) { a.si = null; a.held = 0; stepClear(P); stillV++; next(P); }
-      return;
+    // (getting up: the player standing on the spot they would step back to, and they stay seated, as the game had it;
+    // the player come there while they are up and stepping, and they are done where they stand; anyone else there, held
+    // standing (the standing clip, never a walk on the spot) at most LIFE.riseWait, then done where they stand. Never
+    // set aside in a frame (the review, W2))
+    if (way === 'up' && a.st === 0) {
+      const Q = someoneAt(a.spot.pos, P, LIFE.body), r = riseStep(a.si, path.length, Q ? (Q === playerNow ? 'player' : 'other') : null, a.held || 0, LIFE.riseWait);
+      if (r === 'seated') { play(P, CLIPS.sit); return; }
+      if (r === 'done') { upHere(P, a); return; }
+      if (r === 'hold') { a.held = (a.held || 0) + dt; a.seatLean = 0; play(P, STAND, { fade: 0.25 }); return; }
     }
     a.st += dt;
     const u = Math.min(1, a.st / st.secs), e = ease(u);
@@ -1174,11 +1147,11 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     const f = surfaceAhead((x, z, top, drop) => walls.floorAt(x, z, top, drop), [at.x, at.y, at.z], h, { from: k.from ?? 0.15, to: k.to, lo: k.lo, hi: k.hi }) || (k.edge ? { d: k.edge[0], y: at.y + k.edge[1] } : null);
     if (!f) { alarms.noWork = (alarms.noWork || 0) + 1; return null; }
     // (a desk whose edge stands further off than a sitter's arm reaches it bowed, DESK_REACH: the sitter on the front
-    // of the seat, drawn forward that much more, at most 0.2 m: the review's measure, the control room's radio desk 8 to
-    // 10 cm out of reach)
-    // (further still: drawn forward up to 0.24 m, bowed more (2.5 radians a metre past 0.2), the hands on its very edge)
-    const stepIn = a.kind === 'sit' ? Math.max(0, Math.min(0.24, f.d - DESK_REACH)) : k.stepIn || 0;
-    const past = a.kind === 'sit' ? Math.max(0, f.d - DESK_REACH - 0.2) : 0, lean = past ? Math.min(0.8, (k.lean || WORK.desk.lean) + past * 2.5) : k.lean;
+    // of the seat, drawn forward that much more, never past the chair's cushion (DESK_CUSHION: its front 0.23 m
+    // forward of the chair's middle, kit/furniture.js, less the seat's own DESK_SIT); further still, bowed more, 2.5
+    // radians a metre, at most 0.8, the hands on its very edge (the review, W9: a sitter 15 cm past the cushion, in the air)
+    const stepIn = a.kind === 'sit' ? Math.max(0, Math.min(DESK_CUSHION - DESK_SIT, f.d - DESK_REACH)) : k.stepIn || 0;
+    const past = a.kind === 'sit' ? Math.max(0, f.d - DESK_REACH - stepIn) : 0, lean = past ? Math.min(0.8, (k.lean || WORK.desk.lean) + past * 2.5) : k.lean;
     return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean, apart: k.apart, tilt: k.tilt || 0, stepIn, in: past ? 0 : undefined };
   }
   // (each frame a person is drawn: the stance at rest, the lean, the hands on the work, for moves.js)
@@ -1189,7 +1162,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function bodyMoves(P, far) {
     const a = P.act, M = P.moves, seated = !!(a && ['sat', 'sitting', 'rising'].includes(a.phase));
     // (src/finemoves.js fineFor: a metre's give past FINE.near before it is let go, so nobody flickers at the edge)
-    const F = fineFor(quality, far, P.fine, P.c.far), fine = F.stance, hands = F.hands;
+    const F = fineFor(quality, far, P.fine, P.c.far, P.fineRec || (P.fineRec = {}), P.handsOk), fine = F.stance, hands = F.hands;
     P.fine = fine; P.handsOk = hands;
     M.stand = fine && !P.walking && !P.pose && !seated && P.clip === STAND ? 1 : 0;
     // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
@@ -1200,15 +1173,17 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       if (!a.atPanel) { const h = a.spot.heading ?? P.heading, H = SCAN_HOLD; a.atPanel = { kind: 'panel', at: [SCAN.panel.x - Math.sin(h) * H.back, SCAN.panel.y + H.up, SCAN.panel.z - Math.cos(h) * H.back], heading: h, apart: H.apart, lean: H.lean, stepIn: H.stepIn, seed: Math.random() * 100 }; }
     } else if (a && a.atPanel) a.atPanel = null;
     const w = !hands ? null : a && a.atPanel ? a.atPanel : a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
-    let lean = seated ? a.seatLean || 0 : 0, bow = 0, crouch = 0;
+    let lean = seated ? a.seatLean || 0 : 0, bow = 0;
     // (a step in to the work, drawn: eased, as the last of their steps to it)
-    P.stepIn = damp(P.stepIn || 0, w && w.stepIn ? w.stepIn : 0, 4, P.animDt || 0); if (P.stepIn < 1e-3 && !(w && w.stepIn)) P.stepIn = 0;
+    // (just come into view: at once, never eased in where the player sees it)
+    const sIn = w && w.stepIn ? w.stepIn : 0;
+    P.stepIn = M.snap ? sIn : damp(P.stepIn || 0, sIn, 4, P.animDt || 0); if (P.stepIn < 1e-3 && !sIn) P.stepIn = 0;
     if (w) {
-      const H = handsAt(w.kind, w, a.t, w.seed);
+      const H = handsAt(w.kind, w, a.t, w.seed, P.handsRec || (P.handsRec = {}));
       setHold(M, H);
-      bow = H.lean; crouch = H.crouch || 0;
+      bow = H.lean;
     } else M.hold = null;
-    M.lean = lean; M.bow = bow; M.crouch = crouch;
+    M.lean = lean; M.bow = bow;
   }
 
   // ── MEET: a captain gone to their ship to wait for the player (the top of this file) ─────────────────────────
@@ -1357,11 +1332,15 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (never while the player is at a job, answering its questions; nor while they are on their way to their ship, or
     // waiting by it, to meet the player: the contract is signed, there is nothing to ask)
     if (!pl || P.away || !P.shown || K.cool > 0 || K.meet || bubbles.asking || (jobs && jobs.busy && jobs.busy())) return;
-    if (P.act && (P.act.kind === 'scan' || P.act.phase === 'rising' || P.act.phase === 'sitting')) return;
+    if (P.act && (P.act.kind === 'scan' || P.act.phase === 'sitting')) return;
+    // (getting up: from the moment he is on his feet he answers, the steps left dropped (the review, W5: about 4.9 s on
+    // a stool's way round against the game's 0.7 s); still rising off the seat, not yet)
+    if (P.act && P.act.phase === 'rising' && !(P.act.si > 0)) return;
     const d = pl.pos.distanceTo(P.pos);
     if (d > FRIENDLY.offer || Math.abs(pl.pos.y - P.pos.y) > 1.2) return;
     // (only the nearest captain speaks up; the one the player was led to, before a nearer one)
     if (seeking !== K.id) for (const Q of list) if (Q !== P && Q.cap && !Q.away && Q.shown && (Q.cap.id === seeking ? pl.pos.distanceTo(Q.pos) <= FRIENDLY.offer : pl.pos.distanceTo(Q.pos) < d)) return;
+    if (P.act && P.act.phase === 'rising') upHere(P, P.act);
     offer(P);
   }
   // (the offer begun: the captain stops and turns to the player; offerNow speaks once they face them)

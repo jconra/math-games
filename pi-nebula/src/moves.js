@@ -20,8 +20,6 @@
 //                                  brought down `chin` (rad); `legs` how much of the legs is worn over the clip's (0: the
 //                                  clip's own legs)
 //   M.bow = radians                bowed over the work the hands are on (taken low in the back: atwork.js REACH)
-//   M.crouch = m                   (standing at rest) the knees bent, the hips this much lower, the feet kept: down
-//                                  to work a low part of something (atwork.js WORK.face crouch)
 //   M.holdShort                    (read) how far past the arm's whole length the farther hand's place of M.hold was
 //                                  this frame, m (above 0: out of reach, the arm straight and the hand short of it;
 //                                  people.js counts it as an alarm, alarms.outOfReach)
@@ -259,10 +257,7 @@ export function addMoves(c) {
     M.sideU = Math.min(1, (M.sideU ?? 1) + dt / STANCE.ease);
     M.side = (M.sideFrom ?? M.sideWant) + (M.sideWant - (M.sideFrom ?? M.sideWant)) * M.sideU * M.sideU * (3 - 2 * M.sideU);
     const w = M.side * M.standNow, aw = Math.abs(w), H = B.Hips;
-    // (M.crouch: the knees bent, the hips this much lower, the feet where they were: down to the work)
-    M.crouchNow = damp(M.crouchNow || 0, M.crouch || 0, 5, dt); if (M.crouchNow < 1e-3 && !M.crouch) M.crouchNow = 0;
-    const cr = M.crouchNow * M.standNow;
-    if ((aw < 1e-3 && cr < 1e-3) || !H || !H.parent || !B.UpperLegL || !B.UpperLegR || !B.LowerLegL || !B.LowerLegR) return;
+    if (aw < 1e-3 || !H || !H.parent || !B.UpperLegL || !B.UpperLegR || !B.LowerLegL || !B.LowerLegR) return;
     _fw.set(0, 0, 1).applyQuaternion(_rq); _lf.set(1, 0, 0).applyQuaternion(_rq);
     // each foot's root as the clip leaves it (the crew kit puts the foot at its shin's end: along the shin, its length)
     for (const [i, s] of [[0, 'L'], [1, 'R']]) {
@@ -273,7 +268,7 @@ export function addMoves(c) {
     _feet[w > 0 ? 1 : 0].addScaledVector(_fw, STANCE.free * aw);
     // the hips across over the weight leg and a little down, the hip over it up; the body above turned back upright and
     // on past it, so the shoulders tip the other way
-    H.getWorldPosition(_v2).addScaledVector(_lf, w * STANCE.shift).addScaledVector(_dn, STANCE.drop * aw + cr);
+    H.getWorldPosition(_v2).addScaledVector(_lf, w * STANCE.shift).addScaledVector(_dn, STANCE.drop * aw);
     H.parent.updateWorldMatrix(true, false); H.position.copy(H.parent.worldToLocal(_v2));
     turn(H, Z, w * STANCE.roll, _rq);
     H.updateWorldMatrix(false, true);
@@ -309,7 +304,9 @@ export function addMoves(c) {
     // (bowed over the work their hands are on: M.bow, radians, taken low in the back, at the abdomen most (atwork.js
     // REACH, as the reach of each hold is worked out), so the shoulders come down and forward to it)
     M.bowNow = damp(M.bowNow, M.bow || 0, 5, dt); if (Math.abs(M.bowNow) < 0.002 && !M.bow) M.bowNow = 0;
-    if (M.bowNow) { turn(B.Abdomen, X, M.bowNow * REACH.abdomen, _rq); turn(B.Chest, X, M.bowNow * REACH.chest, _rq); }
+    // (the neck and head turned back up by most of the bow, so the eyes stay on the way ahead or the work and the head
+    // never hangs: two critics, r3, saw both forklift drivers with the head dropped to the chest)
+    if (M.bowNow) { turn(B.Abdomen, X, M.bowNow * REACH.abdomen, _rq); turn(B.Chest, X, M.bowNow * REACH.chest, _rq); if (B.Neck) turn(B.Neck, X, -M.bowNow * 0.4, _rq); if (B.Head) turn(B.Head, X, -M.bowNow * 0.4, _rq); }
     // the head toward what it looks at (yaw and a little pitch, in the person's own frame), the neck taking its share
     let wy = 0, wp = 0;
     if (M.look && B.Head) {

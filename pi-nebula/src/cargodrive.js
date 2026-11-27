@@ -36,6 +36,8 @@ import { wheelHold, FORKLIFT_WHEEL } from './atwork.js';
 import { setHold } from './moves.js';
 // (the hands round the wheel for moves.js: src/atwork.js wheelHold, in the person's own frame)
 const holdOf = (M, H) => setHold(M, H);
+// (each hand's share of the hold: both seated; climbing, the right one as it reaches (kept, not made each frame))
+const BOTH = [1, 1], ONE = [0, 0];
 
 import { HAND } from '../kit/forkliftdrive.js';
 
@@ -198,7 +200,7 @@ export function makeCargoDrive({ W, walls, input, usable = null, forklift, run =
       // (OUT OF REACH, as people.js counts the station's: the player's hands short of the wheel, loud, once a ride)
       if (seated && (P.moves.holdShort || 0) > 0.02 && !C.shortSaid) { C.shortSaid = true; C.outOfReach = (C.outOfReach || 0) + 1; console.warn('cargo: the player\'s hands ' + P.moves.holdShort.toFixed(2) + ' m short of the wheel'); }
       if (!seated) C.shortSaid = false;
-      if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT, 3, seated ? [1, 1] : [0, m.hand], wheelOut)); else P.moves.hold = null;
+      if (seated || (m && m.hand > 0)) holdOf(P.moves, wheelHold(RIDE.chair, wheelT, 3, seated ? BOTH : (ONE[1] = m.hand, ONE), wheelOut)); else P.moves.hold = null;
     }
     P.pos.set(x, STORE.floor, z); P.heading = h;
     P.c.root.position.set(x, y, z); P.c.root.quaternion.copy(_q.setFromAxisAngle(UP, h));

@@ -22,8 +22,8 @@ export const SIT = {
   pre: 0.24,          // (m in front of the seat's middle: where they stand, their back to it, before they sit: their
                       // shins just clear of a chair's cushion, 0.14 put them through it)
   preTable: 0.2,      // (the same at a stool, its table's edge 0.3 m in front of it)
-  round: 0.52,        // (m out to a stool's side, walked to first when they come from behind it, ahead of its middle by
-  aside: 0.3,         // this much: so the walk on round in front of it keeps their legs off it)
+  round: 0.6,         // (m out to a stool's side, walked to first when they come from behind it, ahead of its middle by
+  aside: 0.2,         // this much: so both legs of the way round keep the walker's legs off its cushion (wayClear))
   speed: 0.55,        // (m/s stepping back or across)
   turn: 3.2,          // (radians a second turning on the spot)
   lower: 1.05, rise: 0.95,     // (s: lowering onto the seat, rising off it)
@@ -35,6 +35,47 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[2] - q[2]);
 const A = (v) => (Array.isArray(v) ? v : [v.x, v.y, v.z]);
+
+// whether a seat's steps (seatSteps(S).down) are clear, walked from `from`: each point a step apart has nothing solid
+// within a leg's width of it from the shins to the shoulders (solidAt(x, y, z)), and no top over the floor there
+// (floorAt(x, z, top, drop): a table's); the seat itself (`seat`, its middle) is walked round, never through: no point
+// nearer it than its cushion's radius and the walker's half width (CLEAR.seat). The last few centimetres to the spot in
+// front of the seat lie between it and its table, and are let be.
+export const CLEAR = { step: 0.1, leg: 0.14, heights: [0.3, 0.55, 0.8, 1.05, 1.35], top: 0.15, seat: 0.3, last: 0.25 };
+export function wayClear(steps, from, seat, solidAt, floorAt) {
+  let at = from;
+  const walks = steps.down.filter((m) => m.move === 'walk' || m.move === 'back');
+  for (let w = 0; w < walks.length; w++) {
+    const to = walks[w].to, n = Math.max(1, Math.ceil(Math.hypot(to[0] - at[0], to[2] - at[2]) / CLEAR.step)), last = w === walks.length - 1;
+    for (let i = 1; i <= n; i++) {
+      const u = i / n, x = at[0] + (to[0] - at[0]) * u, z = at[2] + (to[2] - at[2]) * u;
+      if (last && Math.hypot(to[0] - x, to[2] - z) < CLEAR.last) break;
+      if (seat && Math.hypot(x - seat[0], z - seat[2]) < CLEAR.seat) return false;
+      // (the seat's own cushion apart, judged above: only what stands higher than a seat near it)
+      const near = seat && Math.hypot(x - seat[0], z - seat[2]) < CLEAR.seat + 0.1;
+      for (const h of CLEAR.heights) {
+        if (near && h < 0.7) continue;
+        if (solidAt(x, at[1] + h, z)) return false;
+        for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; if (solidAt(x + Math.cos(a) * CLEAR.leg, at[1] + h, z + Math.sin(a) * CLEAR.leg)) return false; }
+      }
+      const top = floorAt(x, z, at[1] + 1.4, 1.2);
+      if (top != null && top > at[1] + (near ? 0.7 : CLEAR.top)) return false;
+    }
+    at = to;
+  }
+  return true;
+}
+
+// GETTING UP, someone on the spot they step back to: what the riser does at the start of step `si` of `n`, `by` who is
+// there ('player', 'other' or null), held `held` s so far: 'go' (on with the step), 'seated' (stays sitting: the player
+// there before they rise, as the game had it), 'done' (done where they stand: the player there once they are up),
+// 'hold' (standing, waiting for someone else to step off, at most `wait` s, then 'done'). Nobody is ever moved by it.
+export function riseStep(si, n, by, held, wait) {
+  if (!by) return 'go';
+  if (by === 'player') return si === 0 ? 'seated' : 'done';
+  if (si === n - 1) return held > wait ? 'done' : 'hold';
+  return 'go';
+}
 
 // the point at a stool's side they walk round by, on side s (+1 their left as they sit, -1 their right)
 export function roundAt(S, s) {

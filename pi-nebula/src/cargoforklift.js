@@ -68,6 +68,8 @@ import { setHold } from './moves.js';
 
 // (the hands round the wheel for moves.js: src/atwork.js wheelHold, in the person's own frame)
 const holdOf = (M, H) => setHold(M, H), wheelOut = {};
+// (each hand's share of the hold: both seated; climbing, the right one as it reaches (kept, not made each frame))
+const BOTH = [1, 1], ONE = [0, 0];
 const KEY = 'cargo:forklift';
 // its shine: the room's own picture of itself, this much (the kit's painted parts have 1.25: kit/materials.js, as the
 // station sets them)
@@ -304,7 +306,7 @@ export function makeCargoForklift({ W, walls, hold = () => false, open = () => [
       const seated = on && k >= 1;
       P.moves.lean = seated ? 0 : m.lean; P.moves.bow = seated ? FORKLIFT_WHEEL.bow : 0;      // (seated: bowed to the wheel, low in the back)
       // (seated, both hands round its wheel; climbing on or off, the right hand on it as they go)
-      if (seated || m.hand > 0) holdOf(P.moves, wheelHold(RIDE.chair, clock, P.id.length, seated ? [1, 1] : [0, m.hand], wheelOut)); else P.moves.hold = null;
+      if (seated || m.hand > 0) holdOf(P.moves, wheelHold(RIDE.chair, clock, P.id.length, seated ? BOTH : (ONE[1] = m.hand, ONE), wheelOut)); else P.moves.hold = null;
     }
     return pp;
   }
