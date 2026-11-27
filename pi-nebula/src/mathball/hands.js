@@ -23,7 +23,7 @@ export const HANDS = {
   slop: { touch: 12, mouse: 6 },        // px a press may move and still be a tap
   tapMs: { touch: 800, mouse: Infinity },   // ms: a finger held longer than this is no tap (a mouse click has no limit)
   reach: { touch: 44, mouse: 22 },      // px beyond a ball's edge on the screen that a tap still picks it (empty hands)
-  onIt: { touch: 16, mouse: 6 },        // ... that counts as on it (a ball in hand: swapped for it, before a goal)
+  onIt: { touch: 16, mouse: 6 },        // px beyond a ball's edge, where the finger came down, that still picks it (empty hands)
   aimByRest: false,                     // the game's maker's question 2 (B: true)
   hold: 280, restSlop: 4,               // with aimByRest: ms a finger rests, within this many px, before it aims
   past: 0.35,                           // s of where each ball was that a tap still counts
@@ -111,13 +111,14 @@ export function nearestBall(x, y, balls, reach) {
 }
 
 // the ball under a point (as the balls were then), or within `pad` px of its edge: a point inside a ball's disc beats
-// any point in a margin; inside, the disc it is most nearly in the middle of (a near ball in front of a far one: the
-// one the point is on); in the margins, the ball whose edge is nearest. An id or null
+// any point in a margin; inside more than one disc, the NEARER ball (depth: its distance from the camera), the one
+// drawn on top there (with no depth given, the disc the point is most nearly in the middle of); in the margins, the
+// ball whose edge is nearest. An id or null
 export function underAt(x, y, balls, pad = 0) {
-  let best = null, inside = false, bk = Infinity;
+  let best = null, inside = false, bk = Infinity, bz = Infinity;
   for (const b of balls) {
-    const d = Math.hypot(x - b.x, y - b.y), r = Math.max(1, b.r || 0);
-    if (d <= r) { if (!inside || d / r < bk) { inside = true; bk = d / r; best = b.id; } }
+    const d = Math.hypot(x - b.x, y - b.y), r = Math.max(1, b.r || 0), z = b.depth ?? Infinity;
+    if (d <= r) { if (!inside || z < bz || (z === bz && d / r < bk)) { inside = true; bz = z; bk = d / r; best = b.id; } }
     else if (!inside && d - r <= pad && d - r < bk) { bk = d - r; best = b.id; }
   }
   return best;
@@ -142,25 +143,22 @@ export function pastOnScreen(hist, toScreen) {
 //   held      a ball in hand
 //   underIn   the ball the finger came down INSIDE (its disc on the screen, as the balls were then), or null
 //   under     the ball under the finger as it came down, inside or within onIt of its edge (underAt), or null
-//   hitBall   the ball the tap is on exactly now (not the one in hand), or null
-//   near      nearestBall over reach: { id, d } (d: from its edge, now or a moment ago) or null
+//   hitBall   the ball the tap is inside now (exactly under it, or inside its disc), not the one in hand, or null
+//   near      nearestBall over reach: { id, d } (d: from its edge, now or a moment ago) or null (empty hands only)
 //   hitGoal   the goal whose box the tap is on exactly, or null
-//   goalBy    the goal just beside the tap (its box padded, or the floor at its mouth), or null
+//   goalBy    the goal just beside the tap (the floor at its mouth, or its box padded; no ball can hide it), or null
 //   spot      a spot on the floor or a wall in front that a throw could go to (the mouse throws there)
 // -> { pick: id } | { throw: goal } | { toss: true } | { say: 'ball first' } | null
-// Empty hands: a ball under it, on it, or the nearest within reach; a goal says "a ball first". A ball in hand: a
-// ball the tap is truly ON (inside its disc) is swapped for; else a goal on or just beside the tap is thrown at,
-// whatever lies near (a ball come to rest at a goal's foot never takes a tap meant for the goal); else a ball within
-// onIt of the tap is swapped for; else (the mouse) the spot; a ball merely within reach never drops the one in hand.
+// Empty hands: a ball under it, on it, or the nearest within reach; a goal says "a ball first". A ball in hand: only
+// a ball the finger is INSIDE, now or as it came down, is swapped for (never one that lies near, or rolled past a
+// moment ago); else a goal on or just beside the tap is thrown at; else (the mouse) the spot; a finger's tap on empty
+// floor does nothing.
 export function chooseTap({ held = false, touch = true, underIn = null, under = null, hitBall = null, near = null, hitGoal = null, goalBy = null, spot = false }, H = HANDS) {
-  const onIt = touch ? H.onIt.touch : H.onIt.mouse, reach = touch ? H.reach.touch : H.reach.mouse;
+  const reach = touch ? H.reach.touch : H.reach.mouse;
   if (held) {
-    // (inside it as the finger came down, or now: never by where a ball rolled a moment ago, which is for empty hands)
     const inside = underIn ?? hitBall;
     if (inside != null) return { pick: inside };
     const g = hitGoal ?? goalBy; if (g != null) return { throw: g };
-    if (under != null) return { pick: under };
-    if (near && near.d <= onIt) return { pick: near.id };
     if (!touch && spot) return { toss: true };
     return null;
   }
@@ -175,7 +173,7 @@ export function chooseTap({ held = false, touch = true, underIn = null, under = 
 // FRONT.buttonTurns), at `rate` radians a second; true once it faces `want`. Nothing else changes cam.yaw.
 export function viewTurn(cam, dx, dy = 0, H = HANDS) {
   cam.yaw = wrapA(cam.yaw - dx * H.turn);
-  cam.lift = Math.max(-1, Math.min(1.6, (cam.lift || 0) + dy * H.lift));
+  cam.lift = Math.max(-1, Math.min(1, (cam.lift || 0) + dy * H.lift));
 }
 export function turnToward(cam, want, rate, dt) {
   const d = wrapA(want - cam.yaw);

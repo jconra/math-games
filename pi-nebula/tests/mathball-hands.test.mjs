@@ -136,16 +136,58 @@ test('the order of a tap\'s rules (chooseTap): empty hands and a ball in hand; b
   assert.deepEqual(T({ held: true, near: { id: 5, d: 0 }, hitGoal: 1 }), { throw: 1 }, 'a ball that rolled through the spot a moment ago: the goal');
   assert.deepEqual(T({ held: true, under: 3, near: { id: 3, d: 9 }, hitGoal: 1 }), { throw: 1 }, 'a ball at the goal\'s foot, the tap just beside it: the goal');
   assert.deepEqual(T({ held: true, under: 3, goalBy: 2 }), { throw: 2 }, 'beside a goal too');
-  assert.deepEqual(T({ held: true, under: 3 }), { pick: 3 }, 'no goal there: a ball within 16 px swaps');
-  assert.deepEqual(T({ held: true, near: { id: 5, d: 16 } }), { pick: 5 }, 'on it: 16 px');
-  assert.equal(T({ held: true, near: { id: 5, d: 16.01 } }), null, 'past 16 px: nothing');
-  assert.deepEqual(T({ held: true, near: { id: 5, d: 30 }, goalBy: 2 }), { throw: 2 }, 'a goal just beside, a ball in reach: the throw');
+  // (holding a ball, only a ball the finger is inside swaps: never one within 16 px, nor where a ball was)
+  assert.equal(T({ held: true, under: 3 }), null, 'a ball 10 px off: nothing');
+  assert.equal(T({ held: true, near: { id: 5, d: 0 } }), null, 'a ball that crossed the spot a moment ago: nothing');
   assert.equal(T({ held: true, near: { id: 5, d: 30 } }), null, 'a ball merely in reach never drops the one in hand');
   assert.equal(T({ held: true, spot: true }), null, 'a finger on the floor: nothing (never a throw by mistake)');
   assert.deepEqual(chooseTap({ held: true, touch: false, spot: true }), { toss: true }, 'the mouse: a click on the floor throws there');
-  assert.deepEqual(chooseTap({ held: true, touch: false, near: { id: 5, d: 6 } }), { pick: 5 }, 'the mouse on a ball: 6 px');
-  assert.equal(chooseTap({ held: true, touch: false, near: { id: 5, d: 6.01 } }), null);
+  assert.deepEqual(chooseTap({ held: true, touch: false, hitBall: 5, spot: true }), { pick: 5 }, 'the mouse on a ball: that ball');
+  assert.deepEqual(chooseTap({ held: true, touch: false, near: { id: 5, d: 2 }, spot: true }), { toss: true }, 'the mouse beside a ball: the floor');
 });
+
+test('inside two overlapping discs, the nearer ball (drawn on top) is the one tapped', () => {
+  const near = { id: 'near', x: 100, y: 300, r: 40, depth: 3 }, far = { id: 'far', x: 135, y: 300, r: 8, depth: 12 };
+  assert.equal(underAt(134, 300, [far, near], 0), 'near', 'on the far ball\'s middle, but the near ball is in front');
+  assert.equal(underAt(134, 300, [near, far], 0), 'near');
+  assert.equal(underAt(142, 300, [near, far], 16), 'far', 'past the near ball\'s edge, inside only the far one');
+});
+
+// THE CAMERA'S SUM (camera.js, the court's numbers): from the start spot, the middle and under a goal, facing the far
+// goals, on the three screens, nothing dragged: the far goals' signs and mouths clear of the top bar, and the floor
+// on the screen from no more than 1.75 m ahead of the feet. (The top bar's foot: 92 px on an upright phone, 78 px on
+// the others, from mathball.css; the goal buttons: from 750 px down on an upright phone.)
+test('the resting tilt keeps the far goals and the floor ahead on the screen, on the three screens', async () => {
+  const { pose, onScreen } = await import('../src/mathball/camera.js');
+  const { MBCAM } = await readCam();
+  const { GOALS } = await import('../src/mathball/court.js');
+  const G = Object.fromEntries(GOALS.map((g) => [g.key, g])), underGoal = (k) => [G[k].mid[0] + G[k].n[0] * 1.2, G[k].mid[1] + G[k].n[1] * 1.2];
+  const shapes = [['phone', 400, 860, MBCAM.tall, 92, 750], ['side', 860, 400, MBCAM.wide, 78, 395], ['wide', 1280, 720, MBCAM.wide, 78, 715]];
+  const places = [[[0, 6.3], 'NW'], [[0, 6.3], 'NE'], [[0, -6.3], 'SE'], [[0, 0], 'NE'], [[0, 0], 'SW'], [underGoal('SE'), 'NE'], [underGoal('NW'), 'SW'], [[0, 7.5], 'NE']];
+  for (const [name, Wd, Ht, C, top, bottom] of shapes) for (const [[x, z], gk] of places) {
+    const g = G[gk], yaw = Math.atan2(g.aim[0] - x, g.aim[2] - z), P = pose(C, x, z, yaw, 0);
+    const sign = onScreen([g.mid[0] + g.n[0] * 0.2, 2.67, g.mid[1] + g.n[1] * 0.2], P, C.fov, Wd, Ht), mouth = onScreen([g.mid[0], 0, g.mid[1]], P, C.fov, Wd, Ht);
+    assert.ok(sign && sign[1] >= top, `${name} at ${x},${z} facing ${gk}: the sign under the top bar (${sign && Math.round(sign[1])})`);
+    assert.ok(mouth && mouth[1] <= Ht, `${name}: the mouth on the screen`);
+    const at = (a) => onScreen([x + Math.sin(yaw) * a, 0, z + Math.cos(yaw) * a], P, C.fov, Wd, Ht);
+    const f = at(1.75), f6 = at(6);
+    if (z === 7.5) continue;   // (beyond the start spot, toward the wall: only the far goals are promised)
+    assert.ok(f && f[1] <= bottom, `${name} at ${x},${z}: the floor 1.75 m ahead above the screen's foot (${f && Math.round(f[1])})`);
+    assert.ok(f6 && f6[1] >= top, `${name}: the floor 6 m ahead under the top bar`);
+    // (the player's own drag reaches the feet, down, and stays inside the court's ceiling)
+    const Pd = pose(C, x, z, yaw, -1), feet = onScreen([x, 0, z], Pd, C.fov, Wd, Ht);
+    assert.ok(feet && feet[1] <= Ht, `${name} at ${x},${z}: a drag down shows the feet (${feet && Math.round(feet[1])})`);
+  }
+  // the tilt is the same with a ball in hand and without, and the camera's height near a wall never changes the look
+  const a = pose(MBCAM.tall, 0, 6.3, Math.PI, 0), b = pose(MBCAM.tall, 0, 6.3, Math.PI, 0, 0);
+  assert.equal(a.look[1], b.look[1]);
+});
+// (index.js imports three, which node has not: its MBCAM is read from the file's text)
+async function readCam() {
+  const src = readFileSync(new URL('../src/mathball/index.js', import.meta.url), 'utf8');
+  const m = src.match(/export const MBCAM = (\{[\s\S]*?\n\});/);
+  return { MBCAM: Function('"use strict"; return (' + m[1].replace(/\/\/[^\n]*/g, '') + ')')() };
+}
 
 test('the view turns only by viewTurn (a drag) and turnToward (a goal button\'s one turn); walking pushes as the view looks', () => {
   const cam = { yaw: 1, lift: 0 };
