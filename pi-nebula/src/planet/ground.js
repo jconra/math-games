@@ -254,11 +254,11 @@ void main() {
   base = mix(base, uCanopy * (0.75 + 0.5 * d1.b), wood * smoothstep(uTreeFar * 0.8, uTreeFar, length(vXZ - cameraPosition.xz)));
   float ndl = max(dot(n, uSunDir), 0.0);
   // THE SHADOWS of what stands on the ground (src/planet/groundshadow.js): the sun's light taken away there, as behind a
-  // hill, and some of the sky's too (the thing hides part of the sky from the ground right under and beside it)
+  // hill, and some of the sky's too where the sun reaches (in the land's own shade there is no second shadow)
   float sh = 0.0;
   { vec2 su = (vXZ - uShadowBox.xy) / uShadowBox.z; float e = max(abs(su.x), abs(su.y));
     if (e < 1.0) sh = texture2D(uShadow, su * 0.5 + 0.5).r * (1.0 - smoothstep(0.85, 1.0, e)) * uShadowBox.w; }
-  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh));
+  vec3 col = base * (uSunCol * ndl * L.r * (1.0 - sh) + mix(uAmbGround, uAmbSky, n.y * 0.5 + 0.5) * uAmbPow * L.g * (1.0 - SHADOW_SKY * sh * L.r));
   #ifdef AIR
   // the haze: the sky behind, more of it the further off and the lower down
   col = mix(col, skyAt(cameraPosition, normalize(vWorld - cameraPosition)), hazeAmt(cameraPosition, vWorld));
