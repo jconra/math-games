@@ -338,16 +338,17 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   const _w = new THREE.Vector3();
   // (a way of seat steps clear of the walls and the furniture: each walked point a step apart, nothing solid within
   // a leg's width of it from the shins to the shoulders, and no top (a table's) over the floor there; the last few
-  // centimetres to the spot in front of the seat are between its seat and its table, and are let be)
-  const clearStep = (x, y, z, r) => {
-    for (const h of [0.3, 0.55, 0.8, 1.05, 1.35]) {
+  // centimetres to the spot in front of the seat are between its seat and its table, and are let be; by the seat
+  // itself (`own`, within 0.38 m of its middle: walked round, its legs clear of it) only what stands higher than it)
+  const clearStep = (x, y, z, r, own = false) => {
+    for (const h of own ? [0.8, 1.05, 1.35] : [0.3, 0.55, 0.8, 1.05, 1.35]) {
       if (walls.solidAt(x, y + h, z)) return false;
       for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; if (walls.solidAt(x + Math.cos(a) * r, y + h, z + Math.sin(a) * r)) return false; }
     }
     const top = walls.floorAt(x, z, y + 1.4, 1.2);
-    return !(top != null && top > y + 0.15);
+    return !(top != null && top > y + (own ? 0.7 : 0.15));
   };
-  const wayClear = (steps, from) => {
+  const wayClear = (steps, from, seat) => {
     let at = [from.x, from.y, from.z];
     const walks = steps.down.filter((m) => m.move === 'walk' || m.move === 'back');
     for (let w = 0; w < walks.length; w++) {
@@ -355,7 +356,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       for (let i = 1; i <= n; i++) {
         const u = i / n, x = at[0] + (to[0] - at[0]) * u, z = at[2] + (to[2] - at[2]) * u;
         if (last && Math.hypot(to[0] - x, to[2] - z) < 0.25) break;
-        if (!clearStep(x, at[1], z, 0.14)) return false;
+        if (!clearStep(x, at[1], z, 0.14, !!seat && Math.hypot(x - seat.x, z - seat.z) < 0.38)) return false;
       }
       at = to;
     }
@@ -458,9 +459,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         // all the way round to the spot in front of it; the review, 2026-11-27: at the smelter control room's long table
         // the way round went through its top. Neither clear: straight to the spot in front, as listed in missing)
         if (!s.front && !s.beside) {
-          seat.round = [1, -1].find((k) => wayClear(seatSteps({ ...seat, round: k }), ap)) ?? 0;
+          seat.round = [1, -1].find((k) => wayClear(seatSteps({ ...seat, round: k }), ap, s.seat)) ?? 0;
           if (!seat.round) missing.push('seat ' + seat.name + ' (no clear way round it: straight to it)');
-        } else if (!wayClear(seatSteps(seat), ap)) missing.push('seat ' + seat.name + ' (its steps not clear of the furniture)');
+        } else if (!wayClear(seatSteps(seat), ap, s.seat)) missing.push('seat ' + seat.name + ' (its steps not clear of the furniture)');
         seats[name].push(seat);
       }
     }
@@ -943,10 +944,12 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         if (Math.abs(s2 - P.smile.now) > 0.01 || (s2 !== P.smile.now && Math.abs(s2 - want) < 0.01)) { P.smile.now = Math.abs(s2 - want) < 0.01 ? want : s2; c.setFace({ ...(c.recipe.face || {}), smile: P.smile.now }); }
       }
       bodyMoves(P, far);
-      c.update(P.animDt); P.animDt = 0;
+      const adt = P.animDt; c.update(adt); P.animDt = 0;
       // (OUT OF REACH: a hand sent to the work that the arm, straight, still falls short of by over 2 cm: loud, once each
       // time it starts, the person and the place named; alarms.reach keeps the worst of each, m)
-      const short = P.moves.holdShort || 0;
+      // (a hold settled at work: on for a second and more, its bow and step in eased in; not one being taken up or let go)
+      P.holdOn = P.moves.hold && P.moves.holdNow > 0.9 ? (P.holdOn || 0) + adt : 0;
+      const short = P.holdOn > 1.2 ? P.moves.holdShort || 0 : 0;
       if (short > 0.02) {
         const where = (P.act && (P.act.step && P.act.step.do || P.act.kind)) || '-', key = P.id + ' ' + where;
         if (!P.outOfReach) alarm('outOfReach', P, 'a hand ' + short.toFixed(2) + ' m out of reach at ' + where);
