@@ -26,6 +26,12 @@ import { addMoves } from './moves.js';
 // twice that, for sharp screens)
 export const SIZES = { face: [224, 224], body: [300, 540] };
 export const POSE = { clip: 'Stand_Listen', at: 0.6 };
+// THE WAVE: now and then (every `every` s, at random) the figure in the start screen's window waves a hand (the crew
+// kit's Wave clip, its upper body only), then stands as before; never while the player is turning it or picking a look
+// (`quiet` s after either), nor while a picture is being drawn (the game's maker, 2026-11-26, of the figure standing
+// there: "make them wave or something? Or walk"). `len`: the wave's length if its clip does not say; `back`: the
+// ease back to standing (s)
+export const WAVE = { clip: 'Wave', every: [9, 16], quiet: 4, len: 2.4, back: 0.5 };
 // (stood at rest as the game's people stand, moves.js THE STANCE: the weight on one leg, held still for the picture)
 function atRest(c) { const M = addMoves(c); M.stand = 1; M.standNow = 1; M.sideNext = Infinity; return c; }
 const OVER = 2;
@@ -331,7 +337,9 @@ async function drawMade(look) {
   // left standing as they are)
   if (LIVE.host && held && pkOf(recipe) !== LIVE.pk) return draw(lib, recipe, ['body', 'face'], null, 0.86);
   const c = await standFor(recipe);
-  // (stood as the ready-made pictures' people stand, each time)
+  // (stood as the ready-made pictures' people stand, each time; never caught mid-wave, THE WAVE)
+  if (LIVE.waving && LIVE.waving.c === c) liveWave();
+  c.play(POSE.clip, { fade: 0 });
   if (c.person.cur) c.person.cur.time = 0;
   c.update(0); c.update(POSE.at);
   const got = await snap(openStudio(), c, ['body', 'face'], 0.86);
@@ -389,7 +397,7 @@ export function restStudio() { clearTimeout(restTimer); if (LIVE.host) liveHide(
 // The view is kept from one look to the next (an arrow pressed with the person seen from behind still shows them from
 // behind), and starts as the pictures stand: a little turned, as a three-quarter view.
 export const LIVE_VIEW = { yaw: -0.24, pitch: 0.05, zoom: 0, pitchMost: [-0.2, 0.55], fov: 22, close: 0.6, px: 2 };
-const LIVE = { el: null, host: null, recipe: null, pk: null, size: 1, view: { yaw: LIVE_VIEW.yaw, pitch: LIVE_VIEW.pitch, zoom: LIVE_VIEW.zoom }, raf: 0, ro: null, cam: null };
+const LIVE = { el: null, host: null, recipe: null, pk: null, size: 1, view: { yaw: LIVE_VIEW.yaw, pitch: LIVE_VIEW.pitch, zoom: LIVE_VIEW.zoom }, raf: 0, ro: null, cam: null, touched: 0, waveT: 0, waving: null };
 export const live = { frames: 0, made: 0, view: LIVE.view, blinks: 0 };
 const TALLEST = Math.max(...Object.values(HEIGHTS));
 // (where the person's head is, as made and facing the front: what the window frames them by)
@@ -404,7 +412,7 @@ export function liveShow(el, look) {
   const recipe = recipeOf(look, lib), size = +recipe.size > 0 ? +recipe.size : 1;
   delete recipe.size;
   const pk = pkOf(recipe);
-  LIVE.recipe = recipe; LIVE.size = size; LIVE.pk = pk;
+  LIVE.recipe = recipe; LIVE.size = size; LIVE.pk = pk; LIVE.touched = performance.now(); liveWave();
   const S = openStudio();
   clearTimeout(restTimer);
   if (LIVE.host !== el) {
@@ -430,6 +438,7 @@ export function liveView(v) {
     if (Number.isFinite(+v.yaw)) V.yaw = +v.yaw;
     if (Number.isFinite(+v.pitch)) V.pitch = Math.max(M[0], Math.min(M[1], +v.pitch));
     if (Number.isFinite(+v.zoom)) V.zoom = Math.max(0, Math.min(1, +v.zoom));
+    LIVE.touched = performance.now(); liveWave();
     liveDraw();
   }
   return { ...LIVE.view };
@@ -441,7 +450,7 @@ export function liveHide(soon = true) {
   if (studio && studio.canvas.parentElement) studio.canvas.remove();
   LIVE.host = null;
   if (LIVE.raf) cancelAnimationFrame(LIVE.raf);
-  LIVE.raf = 0; liveBlink(false);
+  LIVE.raf = 0; liveBlink(false); liveWave(false);
   if (soon && !busy) rest();
 }
 // (drawn once, at the next frame, however many changes asked for it meanwhile)
@@ -482,6 +491,33 @@ function liveRender() {
   S.renderer.render(S.scene, cam);
   live.frames++;
   if (!LIVE.blinkRaf) liveBlink();
+}
+// (THE WAVE: the next one waited for, at random; a turn or a look picked meanwhile puts it off, and one under way
+// stops at once, the figure stood as before)
+function liveWave(on = true) {
+  clearTimeout(LIVE.waveT); LIVE.waveT = 0;
+  if (LIVE.waving) { cancelAnimationFrame(LIVE.waving.raf); const c = LIVE.waving.c; LIVE.waving = null; if (held && held.c === c) { c.play(POSE.clip, { fade: 0 }); posed(c); liveDraw(); } }
+  if (!on) return;
+  LIVE.waveT = setTimeout(waveNow, (WAVE.every[0] + Math.random() * (WAVE.every[1] - WAVE.every[0])) * 1000);
+}
+function waveNow() {
+  LIVE.waveT = 0;
+  const c = held && held.c;
+  if (!LIVE.host || busy || !c || held.pk !== LIVE.pk || performance.now() - LIVE.touched < WAVE.quiet * 1000) { liveWave(); return; }
+  c.play(WAVE.clip, { fade: 0.3 });
+  const a = c.person.cur, len = (a && a.getClip && a.getClip().duration) || WAVE.len;
+  const W = LIVE.waving = { c, t: 0, last: performance.now(), raf: 0, back: false };
+  const step = () => {
+    if (LIVE.waving !== W) return;
+    const now = performance.now(), dt = Math.min(0.1, (now - W.last) / 1000); W.last = now; W.t += dt;
+    // (a picture to draw, or another figure in the window: stood as before at once, liveWave)
+    if (busy || !held || held.c !== c) { liveWave(); return; }
+    if (!W.back && W.t > len - 0.3) { W.back = true; c.play(POSE.clip, { fade: WAVE.back }); }
+    if (W.back && W.t > len - 0.3 + WAVE.back) { LIVE.waving = null; posed(c); liveRender(); liveWave(); return; }
+    c.update(dt); liveRender();
+    W.raf = requestAnimationFrame(step);
+  };
+  W.raf = requestAnimationFrame(step);
 }
 // (the next blink: a wait as the person's own lids say, then their lids moved on frame by frame and drawn while they
 // move; off: no blink waited for)
