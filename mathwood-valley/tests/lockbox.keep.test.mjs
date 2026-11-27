@@ -127,3 +127,16 @@ test('the level picker is drawn for a "Work it out" box too', () => {
   const branch = src.slice(at, src.indexOf('return mountWorkBox(', at));
   assert.match(branch.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n'), /\bshowLevel\(\);/, 'before the box\'s own page is made');
 });
+
+// with the picker now showing over a "Work it out" box, the level's title would be on screen twice (in the picker and
+// in the box's own line): the box's line leaves it out then, as an equation box's does (read from the source)
+test('a "Work it out" box does not name its level twice when the picker shows', () => {
+  const work = readFileSync(new URL('../src/lockbox/workpanel.js', import.meta.url), 'utf8');
+  const line = work.split('\n').find((l) => l.includes(".lbx-rung').innerHTML"));
+  assert.ok(line, "the box's own line in the top strip");
+  assert.match(line, /lvUp \? problem\.name \|\| plan\.title : `\$\{plan\.title\} · \$\{problem\.name \|\| ''\}`/);
+  assert.match(work, /const lvUp = !!top\.querySelector\('\.lbx-lv'\) && !top\.querySelector\('\.lbx-lv'\)\.hidden;/);
+  // (the picker's element is the one the panel hides and shows)
+  const panel = readFileSync(new URL('../src/lockbox/panel.js', import.meta.url), 'utf8');
+  assert.match(panel, /const levelEl = top\.querySelector\('\.lbx-lv'\);/);
+});

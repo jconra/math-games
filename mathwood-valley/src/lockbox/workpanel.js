@@ -86,7 +86,10 @@ export function mountWorkBox(kit, ctx) {
 
   // the top strip shows this box
   top.querySelector('.lbx-tier').textContent = look ? look.title(info, tier) : TIER_NAME[tier];
-  top.querySelector('.lbx-rung').innerHTML = `${esc(ctx.where)} · ${esc(plan && plan.title ? `${plan.title} · ${problem.name || ''}` : `Work it out · ${problem.name || ''}`)}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
+  // (the level's title stands in the level picker when the picker is showing: left out of this line then, as an
+  // equation box leaves it out, so it is not on screen twice)
+  const lvUp = !!top.querySelector('.lbx-lv') && !top.querySelector('.lbx-lv').hidden;
+  top.querySelector('.lbx-rung').innerHTML = `${esc(ctx.where)} · ${esc(plan && plan.title ? (lvUp ? problem.name || plan.title : `${plan.title} · ${problem.name || ''}`) : `Work it out · ${problem.name || ''}`)}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
 
   // ----- state -----
   let phase = 'anim', gone = false, recorded = false, solved = false;
