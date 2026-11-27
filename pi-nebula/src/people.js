@@ -1168,7 +1168,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
     if (a && a.kind === 'drive' && P.pose) return;
     // (MEDIC AT THE SCREEN: the medic running a scan, at the pedestal's screen and turned to it, her hands on its top)
-    if (a && a.kind === 'scanMedic' && a.phase === 'do' && SCAN && SCAN.busy && Math.abs(wrap((a.spot.heading ?? P.heading) - P.heading)) < 0.3) {
+    if (a && a.kind === 'scanMedic' && a.phase === 'do' && SCAN && SCAN.busy && !SCAN.busy.over && Math.abs(wrap((a.spot.heading ?? P.heading) - P.heading)) < 0.3) {
       // (the board's end over the pedestal, her hands just in over it, a step in to it: atwork.js SCAN_HOLD)
       if (!a.atPanel) { const h = a.spot.heading ?? P.heading, H = SCAN_HOLD; a.atPanel = { kind: 'panel', at: [SCAN.panel.x - Math.sin(h) * H.back, SCAN.panel.y + H.up, SCAN.panel.z - Math.cos(h) * H.back], heading: h, apart: H.apart, lean: H.lean, stepIn: H.stepIn, seed: Math.random() * 100 }; }
     } else if (a && a.atPanel) a.atPanel = null;
