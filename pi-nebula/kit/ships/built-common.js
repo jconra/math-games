@@ -463,49 +463,6 @@ export const leafPose = (M) => { const q = new THREE.Quaternion(), pos = new THR
 // (a panel: its outer face painted (paint(P, n)), its inner face dark, 3 cm in; P in the ship's frame, n its outward
 // normal)
 export const panel = (acc, P, n, paint, inner, dk) => { acc.poly(P.map(dk), n, paint(P, n), 'solid', 99); acc.poly(P.map((v) => dk(v.clone().addScaledVector(n, -0.03))).reverse(), n.clone().negate(), inner, 'solid', 99); };
-// A GEAR POD (a bay): B { x [inboard, outboard] (port side's |x|), z [aft, fore], belly [y at the aft and fore ends:
-// the doors' plane], wallTop (the pod's side up to here), ceil (inside, under the deck, as far out as step), step,
-// roof (out to the pod's side), axle [x, y] (the strut's turning point), strip (optional: the low strip of its side, a
-// flap), mirror (starboard) }
-export const bayOf = (B) => ({ s: B.mirror ? -1 : 1, yb: (z) => B.belly[0] + (B.belly[1] - B.belly[0]) * (z - B.z[0]) / (B.z[1] - B.z[0]), zm: (B.z[0] + B.z[1]) / 2 });
-// the pod's bottom as its doors: from each end to the middle, in two leaves: A at the end, hinged on the bay's edge,
-// swings straight down; B, its inner part, folds back up against A's outside as A swings (hinged on A's free edge, 1.5
-// cm out, so it lies 3 cm off it), so the halves hang no lower than a quarter of the bay's length; and the side's low
-// strip, if any: one flap the bay's length, hinged along its top, swinging out and up (flapOpen radians)
-export function bayDoors(p, which, B, { key, paint, inner, dk, flapOpen = 1.75 }) {
-  const { s, yb, zm } = bayOf(B), X = (x) => s * x, ax = V3(1, 0, 0);
-  [[B.z[0], 1], [B.z[1], -1]].forEach(([ze, dir], h) => {
-    const L = Math.abs(zm - ze), zA = ze + dir * L / 2, phi = dir * PI / 2, psi = dir * PI;
-    const bottom = (z1, z2) => [V3(X(B.x[0]), yb(z1), z1), V3(X(B.x[1]), yb(z1), z1), V3(X(B.x[1]), yb(z2), z2), V3(X(B.x[0]), yb(z2), z2)];
-    const nb = (() => { const P = bottom(B.z[0], B.z[1]), n = tnorm(P.slice(0, 3)).normalize(); return n.y > 0 ? n.negate() : n; })();
-    const e = dk(V3(0, yb(ze), ze)), E = turnAbout(e, ax, phi);
-    const f = dk(V3(0, yb(zA), zA)).applyMatrix4(E).add(V3(0, 0, -dir * 0.015)), F = turnAbout(f, ax, psi);
-    const build = (z1, z2) => (lp) => { const acc = new Acc(); panel(acc, bottom(z1, z2), nb, paint, inner, dk); acc.flush(lp); };
-    p.leaf(`${key}:bay door:${which}:${h}a`, build(ze, zA), { ...leafPose(E), door: 'doors', hinge: { at: e.toArray(), axis: ax.toArray(), angle: -phi } });
-    p.leaf(`${key}:bay door:${which}:${h}b`, build(zA, zm), { ...leafPose(F.clone().multiply(E)), door: 'doors', hinge: [{ at: e.toArray(), axis: ax.toArray(), angle: -phi }, { at: f.toArray(), axis: ax.toArray(), angle: -psi }] });
-  });
-  if (B.strip == null) return;
-  const az = V3(0, 0, 1), top = dk(V3(X(B.x[1]), B.strip, 0)), th = s * flapOpen, FL = turnAbout(top, az, th);
-  const strip = [V3(X(B.x[1]), yb(B.z[0]), B.z[0]), V3(X(B.x[1]), B.strip, B.z[0]), V3(X(B.x[1]), B.strip, B.z[1]), V3(X(B.x[1]), yb(B.z[1]), B.z[1])];
-  p.leaf(`${key}:bay flap:${which}`, (lp) => { const acc = new Acc(); panel(acc, strip, V3(s, 0, 0), paint, inner, dk); acc.flush(lp); }, { ...leafPose(FL), door: 'doors', hinge: { at: top.toArray(), axis: az.toArray(), angle: -th } });
-}
-// the gear pod's outside (its side over the doors or the flap, up to the hull's overhang, and its ends, painted by
-// paint(P, n)), the bay's inside dark (the inner wall, the ceiling under the deck, the step and the roof over the pod)
-// and the axle the strut turns on
-export function bayPod(acc, B, { paint, dark, metal, dk }) {
-  const { s, yb } = bayOf(B), X = (x) => s * x, [x0, x1] = B.x, wt = B.wallTop ?? B.roof;
-  const sec = (z) => [[x0, yb(z)], [x1, yb(z)], [x1, wt], [B.step, B.roof], [B.step, B.ceil], [x0, B.ceil]].map(([x, y]) => V3(X(x), y, z));
-  const [a, f] = [sec(B.z[0]), sec(B.z[1])];
-  const lo = (z) => B.strip ?? yb(z);
-  panel(acc, [V3(X(x1), lo(B.z[0]), B.z[0]), V3(X(x1), wt, B.z[0]), V3(X(x1), wt, B.z[1]), V3(X(x1), lo(B.z[1]), B.z[1])], V3(s, 0, 0), paint, dark, dk);
-  for (const [P, nz] of [[a, -1], [f, 1]]) { polyTo(acc, P, V3(0, 0, nz), paint(P, V3(0, 0, nz)), 'solid', dk); polyTo(acc, P, V3(0, 0, -nz), dark, 'solid', dk); }
-  const quad = (p0, p1) => [V3(X(p0[0]), p0[1], B.z[0]), V3(X(p1[0]), p1[1], B.z[0]), V3(X(p1[0]), p1[1], B.z[1]), V3(X(p0[0]), p0[1], B.z[1])];
-  for (const [P, n] of [[quad([B.step, B.roof], [x1, B.roof]), V3(0, -1, 0)], [quad([B.step, B.ceil], [B.step, B.roof]), V3(s, 0, 0)], [quad([x0, B.ceil], [B.step, B.ceil]), V3(0, -1, 0)]]) {
-    acc.poly(P.map(dk), n, dark, 'solid', 99); acc.poly(P.map(dk), n.clone().negate(), dark, 'solid', 99);
-  }
-  { const P = [a[5], a[0], f[0], f[5]]; acc.poly(P.map(dk), V3(s, 0, 0), dark, 'solid', 99); }
-  boxAt(acc, V3(X(B.axle[0]), B.axle[1], (B.z[0] + B.z[1]) / 2), [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)], [0.06, 0.06, (B.z[1] - B.z[0]) / 2 - 0.01], metal, ['w+', 'w-'], dk);   // (its ends 1 cm inside the end walls, unseen)
-}
 // a well (W { box, rim, ceil }): dark walls standing on its rim up to its ceiling, and the ceiling (or, with `ceil`,
 // lower (ceil.low) aft of ceil.z, a step up between them)
 export function wellWalls(acc, W, { dark, dk }) {

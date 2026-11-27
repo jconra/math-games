@@ -193,6 +193,46 @@
    "variant": "starboard"
   },
   {
+   "piece": "mbGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose port"
+  },
+  {
+   "piece": "mbGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose port"
+  },
+  {
+   "piece": "mbGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose starboard"
+  },
+  {
+   "piece": "mbGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose starboard"
+  },
+  {
    "piece": "mbArm",
    "cell": [
     0,

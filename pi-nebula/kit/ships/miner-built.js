@@ -1,5 +1,5 @@
 // THE MINER, BUILT: the ship's own parts, on the 3,000-triangle smart mesh made from the game's maker's picture (its
-// data is miner-built.hull.js, made by the rig ~/pw/space-math/rigs/miner-built/rig/makehull.mjs), with the parts the
+// data is miner-built.hull.js, made by the rig ~/pw/space-math/rigs/gear-2/miner-rig/makehull.mjs), with the parts the
 // 8,000-triangle one has better: the one round engine at the stern, the eight ore canisters and their mounts, the
 // jointed arms with their cutter wheels, and the thruster pods. Everything is painted in flat colours from a small
 // palette, face by face, by the rules below (every colour line on an edge of the model), with the grime over it. The
@@ -31,9 +31,10 @@
 //                            corner rods: door 'lift', 1 down) and the hatch's two sliding doors (door 'hatch', 1 open)
 //                'belly, cabin'   the lift people ride, with the cabin built inside (cabinLift, CLIFT): its platform the
 //                            airlock's floor when up, the tower and rods telescoping into it (door 'lift', 1 down)
-//   mbGear       'port' / 'starboard'   a landing leg (strut and foot: door 'gear', 1 folded)
-//   mbGearDoors  'port' / 'starboard'   its pod's doors (door 'doors', 1 shut)
-//   mbWells      'pods'      the legs' pods under the lower canisters
+//   mbGear       'nose port' / 'nose starboard' / 'port' / 'starboard'   a landing leg: a slim telescope (its tubes and
+//                            foot, sliding up into one another: door 'gear', 1 folded; gear-plan.js)
+//   mbGearDoors  (the same four)   its well's two doors, cut from the hull's skin, sliding (door 'doors', 1 shut)
+//   mbWells      'pods'      the legs' wells: dark walls and tops (the variant keeps its old name, as the layouts give it)
 //   mbCockpit    'two seats' two bucket seats side by side, the pedestal between them, the dash and side consoles, on
 //                            a flight deck raised over the cabin's, in its tub under the canopy
 //                'two seats, cabin'   the same with the cabin built inside (cabinCockpit): the cabin's wall behind it,
@@ -44,7 +45,8 @@ import { part, placeInto } from '../shipparts/place.js';
 import { engineerStation } from '../shipparts/cockpit/consoles.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
-import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD, DECK as DECK0, HATCH, PARTS, Q } from './miner-built.hull.js';
+import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD, DECK as DECK0, HATCH, DOORS, WELLS, PARTS, Q } from './miner-built.hull.js';
+import { LEGS as GEAR_PLAN } from './gear-plan.js';
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
 const PI = Math.PI, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -1019,42 +1021,26 @@ function mbLift(p, variant) {
 }
 
 // ── THE LANDING GEAR ────────────────────────────────────────────────────────────────────────────────────────────────
-// His picture's two legs at the stern's corners, under the lower canisters (with the lift at the front, his three
-// feet). Neither smart mesh has legs that reach the ground (they stand on the lift's platform and the cutter wheels),
-// and the Explorer's 8k legs are too thick to fold under this ship's slim belly; so each leg is kept plain, his
-// picture's: a square strut, a knee, a piston and a broad foot. Folding (door 'gear', 1 up), it swings back about its
-// axle (across the ship) to lie along its pod under the lower canisters, its foot turning flat; the pod's bottom
-// doors (door 'doors', 1 shut) close under it (built-common.js bayDoors and bayPod, as the Explorer's aft bays). Its
-// piston is STAND longer than the hull's ground line asks, so the foot stands on the floor with the ship raised.
-export const GEAR = { x: 2.2, z: -4.15, axle: 1.24, fold: PI / 2, foot: -PI / 2, speed: 0.42, doorSpeed: 0.9 };
-const BAY = { x: [1.82, 2.58], z: [-5.95, -3.85], belly: [0.96, 0.96], wallTop: 1.5, ceil: 1.5, step: 2.58, roof: 1.5, axle: [GEAR.x, GEAR.axle] };
-export const WELLS = { port: { bay: BAY }, starboard: { bay: { ...BAY, mirror: true } } };
-function legLeaves(p, side) {
-  const s = side === 'starboard' ? -1 : 1, x = s * GEAR.x, z = GEAR.z, ya = GEAR.axle, yk = 0.62, yf = 0.13 - STAND, g0 = -STAND;
-  const hinge = { at: dk(V3(x, ya, z)).toArray(), axis: [1, 0, 0], angle: GEAR.fold }, ankle = { at: dk(V3(x, yf, z)).toArray(), axis: [1, 0, 0], angle: GEAR.foot };
-  p.leaf('mb:leg strut:' + side, (lp) => {
-    const a = new Acc();
-    C.boxAt(a, V3(x, (ya + 0.12 + yk) / 2, z), AX, [0.19, (ya + 0.12 - yk) / 2, 0.17], PAL.dark, [], dk);      // the strut
-    C.boxAt(a, V3(x, ya, z), AX, [0.23, 0.1, 0.1], PAL.metal, [], dk);                                           // its axle's boss
-    C.boxAt(a, V3(x, yk, z), AX, [0.23, 0.13, 0.2], PAL.dark, [], dk);                                           // the knee
-    C.boxAt(a, V3(x, (yk + yf) / 2, z), AX, [0.1, (yk - yf) / 2, 0.1], PAL.metal, [], dk);                      // the piston
-    for (const sy of [0.2, -0.2]) C.boxAt(a, V3(x + s * 0.195, (ya + yk) / 2 + sy, z), AX, [0.005, 0.12, 0.13], PAL.yellow, ['u-'], dk);   // (yellow marks on its outer face)
-    a.flush(lp);
-  }, { door: 'gear', hinge });
-  p.leaf('mb:leg foot:' + side, (lp) => {
-    const a = new Acc();
-    C.boxAt(a, V3(x, yf, z), AX, [0.13, 0.07, 0.13], PAL.metal, [], dk);
-    C.boxAt(a, V3(x, g0 + 0.05, z), AX, [0.35, 0.05, 0.42], PAL.dark, [], dk);
-    C.boxAt(a, V3(x, g0 + 0.115, z), AX, [0.22, 0.03, 0.28], PAL.yellow, ['v-'], dk);
-    a.poly([V3(x - 0.35, g0, z - 0.42), V3(x + 0.35, g0, z - 0.42), V3(x + 0.35, g0, z + 0.42), V3(x - 0.35, g0, z + 0.42)].map(dk).reverse(), V3(0, -1, 0), PAL.rubber, 'solid', 99);
-    a.flush(lp);
-  }, { door: 'gear', hinge: [hinge, ankle] });
-  p.door('gear', [0, -DECK, 0], 0, GEAR.speed);
-  return p;
+// Four slim telescoping legs (gear-plan.js LEGS.miner): a pair under the cockpit's sides (the game's maker, 2026-11-26:
+// "I don't see front landing gear on the miner ship"; it stood on two legs at the stern and its lift), their wells going
+// up between the cockpit's walls and the hull's sides, clear of the folded arms outside and of the lift, the crew's way
+// in, amidships; and a pair under the stern's block, their wells beside the engine room. Each folds into itself up into
+// its well, which two doors cut from the hull's own skin shut, sliding (built-common.js teleLeg, slideDoors; the old legs
+// folded into pods hung under the lower canisters: "these landing gear coverings.. are kind of hideous", of the
+// Explorer's, and so these too are gone). Each leg reaches STAND further down than the hull's ground line (the plan's
+// floor), so its foot stands on the floor with the ship raised. The legs are the door 'gear' (1 up), the doors 'doors'
+// (1 shut).
+export const GEAR = { speed: 0.42, doorSpeed: 0.9 };
+const LEGS = GEAR_PLAN.miner;
+function legLeaves(p, which) {
+  // (its tubes light metal, their collars, the hub and the pad dark, the sole rubber)
+  const paint = { tube: PAL.metal, collar: PAL.dark, hub: PAL.dark, pad: PAL.dark, sole: PAL.rubber };
+  return C.teleLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint, speed: GEAR.speed });
 }
-const podPaint = () => PAL.dark;
-function mbGearDoors(p, side) { C.bayDoors(p, side, WELLS[side].bay, { key: 'mb', paint: podPaint, inner: PAL.dark, dk }); p.door('doors', [0, -DECK, 0], 0, GEAR.doorSpeed); return p; }
-function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS)) C.bayPod(acc, W.bay, { paint: podPaint, dark: PAL.dark, metal: PAL.metal, dk }); return acc.flush(p); }
+// the doors painted as the hull there by its own rules (a face of its lower band)
+const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
+function mbGearDoors(p, which) { return C.slideDoors(p, DOORS[which], { key: 'mb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.dark, dk, speed: GEAR.doorSpeed }); }
+function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS)) C.wellWalls(acc, W, { dark: PAL.dark, dk }); return acc.flush(p); }
 
 // ── THE COCKPIT ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // The cockpit family's parts (built-common.js builtCockpitPlan): two bucket seats in the ship's colours side by side,
@@ -1400,8 +1386,8 @@ export const SHIP_MINER_BUILT = {
   mbArm: { name: 'Miner (built): mining arm', group: GR, at: 'free', foot: [1.2, 3, 7], variants: ['port', 'starboard'], raise: STAND, build: mbArm },
   mbPod: { name: 'Miner (built): thruster pod', group: GR, at: 'free', foot: [1, 1, 1.3], variants: PODS.map((q) => q.name), raise: STAND, build: mbPod },
   mbLift: { name: 'Miner (built): belly lift', group: GR, at: 'free', foot: [2, 4, 2], variants: ['belly', 'belly, cabin'], raise: STAND, build: (p, v) => mbLift(p, v) },
-  mbGear: { name: 'Miner (built): landing leg', group: GR, at: 'free', foot: [1, 1.4, 2], variants: ['port', 'starboard'], raise: STAND, build: legLeaves },
-  mbGearDoors: { name: 'Miner (built): leg pod doors', group: GR, at: 'free', foot: [1, 0.5, 2], variants: ['port', 'starboard'], raise: STAND, build: mbGearDoors },
-  mbWells: { name: 'Miner (built): leg pods', group: GR, at: 'free', foot: [5, 0.6, 2], variants: ['pods'], raise: STAND, build: mbWells },
+  mbGear: { name: 'Miner (built): landing leg', group: GR, at: 'free', foot: [1, 1.4, 2], variants: Object.keys(GEAR_PLAN.miner.legs), raise: STAND, build: legLeaves },
+  mbGearDoors: { name: 'Miner (built): leg well doors', group: GR, at: 'free', foot: [1, 0.5, 2], variants: Object.keys(GEAR_PLAN.miner.legs), raise: STAND, build: mbGearDoors },
+  mbWells: { name: 'Miner (built): leg wells', group: GR, at: 'free', foot: [5, 0.6, 2], variants: ['pods'], raise: STAND, build: mbWells },
   mbCockpit: { name: 'Miner (built): cockpit', group: GR, at: 'free', foot: [2.5, 2, 3], variants: ['two seats', 'two seats, cabin'], raise: STAND, build: (p, v) => mbCockpit(p, v) },
 };
