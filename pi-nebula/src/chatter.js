@@ -9,6 +9,12 @@
 import { TALKS } from './lines.js';
 import { news } from './news.js';
 
+// TALKING BY TURNS (people.js, two talking; moves.js moves their hands, nods and leans): who talks with their hands
+// this moment, X one of the two of a conversation C ({ A, B, speaking, last }): the one speaking, or, between lines,
+// the one who spoke last (while the other gathers their words), else the one who began it; the other listens, nodding.
+// Never both, never neither (two blind critics, 2026-11-26: both made the same gesture at once, then both froze)
+export const talkRole = (X, C) => ((C.speaking || C.last || C.A) === X ? 'speak' : 'listen');
+
 export const MEMORY = { again: 9 * 60, perNews: 3 };
 const heard = new Map();        // conversation id -> when it was last begun
 const told = new Map();         // news id -> how many times it has been talked over

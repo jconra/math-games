@@ -59,11 +59,10 @@ const GESTURES = [
   { L: [0, 0, 0, 0], R: [0, 0, 0, 0], w: 2 },                     // hands down a moment
 ];
 const pickGesture = () => { const s = GESTURES.reduce((a, g) => a + g.w, 0); let r = Math.random() * s; for (const g of GESTURES) { r -= g.w; if (r <= 0) return g; } return GESTURES[0]; };
-// (a listener's: smaller, now and then)
+// (a listener's: now and then the hands together in front, never a hand held up palm up as the speaker's are: two
+// critics, 2026-11-26, saw both talkers offering the same open hand at the same moment)
 const LISTEN = [
-  { L: [0.05, 0, 0.55, 0.25], R: [0, 0, 0, 0] },                  // a hand up a little
-  { L: [0, 0, 0, 0], R: [0.06, 0, 0.6, 0.3] },
-  { L: [0.12, 0.02, 0.95, 0.05], R: [0.12, 0.02, 0.95, 0.05] },   // the hands together in front
+  { L: [0.06, 0.02, 0.5, 0], R: [0.06, 0.02, 0.5, 0] },           // the hands loosely together, low in front
 ];
 
 // a turn of a bone about an axis of the person's own frame (rq: the person's own turn in the world)
@@ -310,7 +309,8 @@ export function addMoves(c) {
     } else { M.want.L = GESTURES[4].L; M.want.R = GESTURES[4].R; M.listenG = false; }
     M.beatT += dt;
     const beat = speaking ? Math.max(0, Math.sin(M.beatT * 7.5)) * MOVES.beat : 0;
-    for (const s of ['L', 'R']) for (let i = 0; i < 4; i++) M.arms[s][i] = damp(M.arms[s][i], M.want[s][i], 4.5, dt);
+    // (a listener's hands come down quickly when the other starts: never both talking with their hands at once)
+    for (const s of ['L', 'R']) for (let i = 0; i < 4; i++) M.arms[s][i] = damp(M.arms[s][i], M.want[s][i], M.talk === 'speak' ? 4.5 : 10, dt);
     // ── laid on: top down, so each bone turns from where its parent now is ──
     if (Math.abs(M.sway) > 1e-4) { turn(B.Abdomen, Z, M.sway * 0.5, _rq); turn(B.Chest, Z, M.sway * 0.5, _rq); }
     // (on a bed, lying back or sitting up: the upper back rounded forward, more of it in the chest)

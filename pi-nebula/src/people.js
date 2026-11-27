@@ -85,7 +85,7 @@ import { sleeperRecipe } from './sleeper.js';
 import { WARD, WARD_BED, bedFor, bedNumber, bedSide, assign, stayFor, watching, kept, ABOUT, ABOUT_DAY, SCAN_WAIT, SCAN_STEP, othersDo, startOf } from './wardplan.js';
 import { makeBubbles } from './bubbles.js';
 import { nameFor } from './friends.js';
-import { pickTalk } from './chatter.js';
+import { pickTalk, talkRole } from './chatter.js';
 import { CHECKUP, spare, needed, whoseTurn, firstCome } from './checkup.js';
 import { HELLOS, AGAIN, CAPTAINS, SCAN_TALK, CHECKUP_TALK, NUDGES } from './lines.js';
 import { VOICES, CLIPS as VOICE_CLIPS, clipUrl } from './voices.js';
@@ -863,7 +863,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       // do (moves.js), never while their hands are at work; the scanner's patient getting on, lying and getting off:
       // their legs, feet and hands as the move has them (moves.js M.bed, from onbed.js))
       // (a captain waiting on the player's answer listens as someone in a talk does: a nod, a hand, the weight shifting)
-      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
+      // (two at a talking spot between their conversations: both listening, each their own nods and shifts, no hands)
+      if (!P.convo) { P.moves.talk = P.talkUntil && clock < P.talkUntil && !(P.act && P.act.work > 0) ? 'speak' : P.cap && P.cap.state === 'offer' ? 'listen' : P.act && P.act.kind === 'talk' && P.act.phase === 'do' ? 'listen' : null; P.moves.sitting = !!(P.act && ['sat', 'sitting', 'rising'].includes(P.act.phase)); }
       P.moves.bed = P.act && (P.act.kind === 'scan' || P.act.kind === 'ward') && P.pose && P.bed ? P.bed : null;
       // the clips: every frame near, every other frame further, every fourth far off (what is skipped added on)
       P.animDt += dt;
@@ -1148,7 +1149,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
   function talking(dt) {
     for (const C of [...convos]) {
       C.t += dt;
-      if (C.speaking) { if (C.t > C.secs) { C.speaking = null; C.t = 0; C.gap = rnd(0.35, 0.9); } }
+      if (C.speaking) { if (C.t > C.secs) { C.last = C.speaking; C.speaking = null; C.t = 0; C.gap = rnd(0.35, 0.9); } }
       else if (C.t > C.gap) {
         C.i++;
         if (C.i >= C.lines.length) { endTalk(C.A); continue; }
@@ -1156,7 +1157,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         C.speaking = S; C.t = 0; C.secs = READ(L.words); counts.lines++;
         if (S.shown) bubbles.say(S, L.words, { kind: 'talk', secs: C.secs });
       }
-      for (const X of [C.A, C.B]) if (X.moves) { X.moves.talk = C.speaking === X ? 'speak' : 'listen'; X.moves.sitting = !!C.sitting; }
+      // (by turns, never in step: the one speaking, or who spoke last while the other gathers their words, talks with
+      // their hands; the other listens, nodding and shifting their weight)
+      for (const X of [C.A, C.B]) if (X.moves) { X.moves.talk = talkRole(X, C); X.moves.sitting = !!C.sitting; }
     }
   }
   // (sitting at a table or on a bench with someone beside, nobody talking: a chat)
