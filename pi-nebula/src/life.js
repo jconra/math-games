@@ -77,8 +77,9 @@ const shipSpots = (room) => [
 // (all: every such piece), { room, at: [across x, across z] (0..1 of its box), face: [x, z] (a way to face) },
 // { place, toward, out }. face [x, z] is in the piece's own frame (or the world's, for a room).
 export const SPOTS = {
-  // the cook behind the serving counter, facing whoever comes up to it
-  cook: [{ piece: 'counter', variant: 'serve', local: [0, 0, -0.85], face: [0, 1] }],
+  // the cook behind the serving counter, facing whoever comes up to it (a step nearer it, 2026-11-26: his hands on its
+  // top as he wipes it, src/atwork.js; from 0.85 m his arms only just reached)
+  cook: [{ piece: 'counter', variant: 'serve', local: [0, 0, -0.75], face: [0, 1] }],
   // the terminal: the jobs board (hung high: looked up at from the floor, from its open east side), the serving
   // counter's front, the drinks
   board: [{ piece: 'jobs', variant: 'hang', local: [2.6, -4.3, 0.9], face: [-0.6, -1] }, { piece: 'jobs', variant: 'hang', local: [3.5, -4.3, 1.8], face: [-0.7, -1] }],
@@ -118,8 +119,11 @@ export const SPOTS = {
   shipRound: [[0.27, 0.41], [0.41, 0.17], [0.77, 0.5], [0.52, 0.86], [0.27, 0.59]].map((at) => ({ room: 'hangar', at })),
   pump: [{ piece: 'fuel', variant: 'pump', room: 'hangar', local: [0, 0, 0.9], face: [0, -1] }],
   minerMechanic: [{ room: 'hangar-miner', at: [0.285, 0.43], face: [1, 0.08] }, { room: 'hangar-miner', at: [0.285, 0.57], face: [1, -0.08] }],
-  // the smelter: by the forge (the hall's middle), its store, its lobby
-  forge: [{ room: 'smelter-hall', at: [0.5, 0.5], face: [0, -1] }],
+  // the smelter: at the north end of the forge's own console (kit/forge.js: east of the two towers; its front is the
+  // player's Smelter job's place, so he keeps clear of it), the pours on his right, his hands on its top; its store, its
+  // lobby. (Two blind critics, 2026-11-26: he stood in the hall's middle wringing his hands, the furnaces at his side
+  // and behind him; src/atwork.js, people.js HANDS ON THE WORK)
+  forge: [{ piece: 'forge', room: 'smelter-hall', local: [4.2, 0, -3.05], face: [0, 1] }],
   forgeConsole: [{ room: 'smelter-hall', at: [0.82, 0.62], face: [1, 0] }],
   store: [{ piece: 'crate', variant: 'stack', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }, { piece: 'crate', variant: 'cart', room: 'smelter-store', local: [0, 0, 1.2], face: [0, -1] }],
   lobby: [{ room: 'smelter-lobby', at: [0.3, 0.35], face: [1, 0] }],

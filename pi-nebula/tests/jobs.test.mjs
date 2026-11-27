@@ -463,8 +463,9 @@ test('the smelter job stands at the forge\'s console in the smelter\'s hall, the
   const far = Math.hypot(pour[0] - V.at[0], pour[2] - V.at[2]); assert.ok(far > 3 && far < 8, String(far));
   // the station's people keep their spots by the forge: the smelter's by the console's south end (life.js forgeConsole)
   // and the forge's middle are clear of the job's ring and the margin people keep (people.js KEEP_OFF: 0.8 m and 0.3)
+  // (a spot in the forge's own frame, life.js's smelter at its console's north end: its middle on the hall's middle)
   for (const s of [...SPOTS.forge, ...SPOTS.forgeConsole]) {
-    const x = box.x[0] + (box.x[1] - box.x[0]) * s.at[0], z = box.z[0] + (box.z[1] - box.z[0]) * s.at[1];
+    const x = s.at ? box.x[0] + (box.x[1] - box.x[0]) * s.at[0] : (box.x[0] + box.x[1]) / 2 + s.local[0], z = s.at ? box.z[0] + (box.z[1] - box.z[0]) * s.at[1] : (box.z[0] + box.z[1]) / 2 + s.local[2];
     assert.ok(Math.hypot(x - at[0], z - at[2]) > 0.8 + 0.3 + 0.5, `the people's spot at ${x}, ${z} is on the job's ring`);
   }
   // the pay desk and its places are gone from the control room; the crane's chair is still there

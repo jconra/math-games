@@ -72,6 +72,7 @@ import { expand, zonesOf, setDoors } from '../kit/layout.js';
 import { PIECES } from '../kit/catalog.js';
 import { placeMatrix, WALL_FACE } from '../kit/grid.js';
 import { NEAR, SPOTS, TALKS, APART, SEATS, CLIPS, ROSTER, ROOM_CREW, SCAN_BED, lookRecipe } from './life.js';
+import { surfaceAhead, handsAt } from './atwork.js';
 import { placeOf, STOPS } from './liftrules.js';
 import { TOWER, STORE } from '../kit/places-plan.js';
 import { pointGap } from '../kit/forkliftround.js';
@@ -419,7 +420,7 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
           if (!clearAt(ap)) ap = null;
         }
         if (!ap) { missing.push('seat ' + name + ' (no room beside it)'); continue; }
-        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, table: s.table, who: null, bad: 0 });
+        seats[name].push({ name: name + '.' + seats[name].length, seat: s.seat, heading: s.heading, pos: ap, front: !!s.front, desk: !!s.beside, table: s.table, who: null, bad: 0 });
       }
     }
   }
@@ -886,7 +887,9 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       else if (tk || ck || vis) { const q = tk || ck || vis; look = near.copy(q.pos).setY((q.drawnY ?? q.pos.y) + (q.sitY || 0) + 1.5); }
       // (anyone else standing or sitting about, or at work: now and then a glance at someone going by, or round the room
       // (someone at work less often))
-      else if (!P.walking && !P.convo && far < 20) look = glance(P, near, !!(P.act && P.act.clip && P.act.clip !== STAND));
+      else if (!P.walking && !P.convo && far < 20) look = glance(P, near, !!(P.act && ((P.act.clip && P.act.clip !== STAND) || P.act.onWork)));
+      // (at work with their hands on it, HANDS ON THE WORK: their eyes on it, a glance up now and then)
+      if (!look && P.act && P.act.onWork && !P.walking && (P.act.phase === 'do' || P.act.phase === 'sat') && far < 20) { const w = P.act.onWork; look = near.set(w.at[0] + Math.sin(w.heading) * 0.15, w.at[1] + (w.kind === 'desk' ? 0.35 : 0.05), w.at[2] + Math.cos(w.heading) * 0.15); }
       if (far < 8 && look) c.lookAt(look, { dart: true }); else c.lookAt(null);
       P.moves.look = look && far < 20 ? (P.moves.lookAt || (P.moves.lookAt = new THREE.Vector3())).copy(look) : null;
       // (a little more smile while the player is near, or just after a hello)
@@ -1014,7 +1017,8 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
     // (getting up only when nobody is standing where they would step; sitting side by side with someone, a chat now
     // and then)
     if (a.phase === 'sat') {
-      play(P, CLIPS.sit); idle(P, a, dt, a.spot.front ? 0.15 : 0.4);
+      if (a.onWork === undefined) a.onWork = workOf(P, a);
+      play(P, CLIPS.sit); if (!a.onWork) idle(P, a, dt, a.spot.front ? 0.15 : 0.4);
       if (!P.convo && a.t > 5 && Math.random() < dt * 0.08) seatChat(P);
       if (a.t > a.len && !someoneAt(a.spot.pos, P, LIFE.body) && !(P.convo && P.convo.speaking === P)) { endTalk(P); a.phase = 'rising'; a.t = 0; }
       return;
@@ -1046,18 +1050,45 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
       } else if (a.both > 0 || a.t > 20 || !other) next(P);      // (the other gone, or not come: on with the day)
       return;
     }
-    play(P, a.clip || STAND);
+    // (at work with its hands on the work, HANDS ON THE WORK below: standing, the hands are the move's)
+    if (a.onWork === undefined) a.onWork = workOf(P, a);
+    play(P, a.onWork ? STAND : a.clip || STAND);
     // (at work with a clip of its own: turned to the work; standing about: a look round now and then, and toward
     // whoever comes up)
-    if (!a.clip || a.clip === STAND) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
+    if (!a.onWork && (!a.clip || a.clip === STAND)) idle(P, a, dt, a.kind === 'post' ? 0.22 : 0.35);
     if (a.t > a.len && !(P.cap && P.cap.busy)) next(P);
   }
 
-  // (each frame a person is drawn: the stance at rest, for moves.js)
+  // ── HANDS ON THE WORK (src/atwork.js): what in front of them their hands go to, found once as they come to it ──
+  // sitting at a desk (a desk chair): its top; the cook at his counter (his polishing): its top, wiped round; the
+  // furnace's worker at his post (the forge's clip): the console in front of him. null: nothing found, the clip as ever
+  // (edge: where the work's near edge is, [m ahead, its top's height over their floor], for one the walls do not know:
+  // the forge's console stands in a piece drawn apart from the walls' own floors, kit/forge.js thermalConsole, its
+  // north end 0.5 m ahead of the smelter's spot (clear of the player's job's ring), its top 0.95 m up; he leans in)
+  const WORK_OF = { [CLIPS.polish]: { kind: 'wipe', lo: 0.75, hi: 1.15, to: 0.9 }, [CLIPS.forge]: { kind: 'panel', lo: 0.7, hi: 1.2, to: 1.0, edge: [0.5, 0.95], lean: 0.42, apart: 0.3 } };
+  function workOf(P, a) {
+    const k = a.kind === 'sit' ? (a.spot.desk ? { kind: 'desk', lo: 0.6, hi: 0.95, to: 1.0, from: 0.3 } : null) : WORK_OF[a.clip] || null;
+    if (!k) return null;
+    const at = a.kind === 'sit' ? a.spot.seat : P.pos, h = a.kind === 'sit' ? a.spot.heading : a.spot.heading ?? P.heading;
+    const f = surfaceAhead((x, z, top, drop) => walls.floorAt(x, z, top, drop), [at.x, at.y, at.z], h, { from: k.from ?? 0.15, to: k.to, lo: k.lo, hi: k.hi }) || (k.edge ? { d: k.edge[0], y: at.y + k.edge[1] } : null);
+    if (!f) { alarms.noWork = (alarms.noWork || 0) + 1; return null; }
+    return { kind: k.kind, at: [at.x + Math.sin(h) * f.d, f.y, at.z + Math.cos(h) * f.d], heading: h, seed: Math.random() * 100, lean: k.lean, apart: k.apart };
+  }
+  // (each frame a person is drawn: the stance at rest, the lean, the hands on the work, for moves.js)
+  const _hw = [new THREE.Vector3(), new THREE.Vector3()];
   function bodyMoves(P) {
     const a = P.act, M = P.moves, seated = !!(a && ['sat', 'sitting', 'rising'].includes(a.phase));
     M.stand = !P.walking && !P.pose && !seated && P.clip === STAND ? 1 : 0;
     // (on a machine, its own: src/cargoforklift.js sets the lean and the hands on its wheel)
+    const w = a && a.onWork && !P.walking && ((a.phase === 'do' && a.kind !== 'sit') || a.phase === 'sat') ? a.onWork : null;
+    let lean = 0;
+    if (w) {
+      const H = handsAt(w.kind, w, a.t, w.seed);
+      _hw[0].fromArray(H.hands[0]); _hw[1].fromArray(H.hands[1]);
+      M.hold = M.hold || { hands: [_hw[0].clone(), _hw[1].clone()] };
+      M.hold.hands[0].copy(_hw[0]); M.hold.hands[1].copy(_hw[1]);
+      lean = Math.max(lean, H.lean);
+    } else M.hold = null;
     M.lean = lean;
   }
 
