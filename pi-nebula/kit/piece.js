@@ -75,16 +75,19 @@ export class Piece {
   // told from the skin round it (layout.js); nobody walks on it or is stopped by it.
   // `aim`: a leaf that rides a line whose ends move straight as it opens, turning as the line turns (kit/leafaim.js: a
   // landing leg's stages, its braces), instead of sliding or swinging.
+  // `fold`: a leaf that folds into a line as it opens (kit/leafaim.js foldMatrix: a gear well's door shrinking into
+  // its frame), { at, along, from, to }.
   // `hoop`: a hoop of light this leaf carries with it, lighting its room live as it glides (materials.js hoopLit; a
   // glide's leaf only): { at (the hoop's middle, in the leaf's frame; the hoop lies in the leaf's x-y plane), r (its
   // radius), color [r, g, b], i (its strength), reach (metres), every (seconds its bright part takes to go round) }
-  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide = [0, 0, 0], door = 0, hinge = null, still = false, hoop = null, aim = null }) {
+  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide = [0, 0, 0], door = 0, hinge = null, still = false, hoop = null, aim = null, fold = null }) {
     let lp = this._leafCache?.get(key);
     if (!lp) { lp = new Piece(); build(lp); (this._leafCache ||= new Map()).set(key, lp); }
     const base = new THREE.Matrix4().compose(new THREE.Vector3(...at), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(1, 1, 1));
     const mv = { key, piece: lp, base, slide: new THREE.Vector3(...slide), door, still };
     if (hoop) mv.hoop = hoop;
     if (aim) mv.aim = aim;
+    if (fold) mv.fold = fold;
     if (hinge) mv.hinge = (Array.isArray(hinge) ? hinge : [hinge]).map((H) => ({ at: [...H.at], axis: new THREE.Vector3(...H.axis).normalize().toArray(), angle: H.angle }));
     this.movers.push(mv);
   }

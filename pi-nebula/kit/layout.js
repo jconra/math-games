@@ -12,7 +12,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PIECES } from './catalog.js';
 import { placeMatrix, onGrid, WALL_FACE } from './grid.js';
 import { Piece } from './piece.js';
-import { aimMatrix } from './leafaim.js';
+import { aimMatrix, foldMatrix } from './leafaim.js';
 import { bake, bakeWith, makeVoxels, lightBins, lightAt } from './bake.js';
 import { applyBake } from './bakefile.js';
 import { MAT_KEYS, BAKED, GLOWING, U, hoopLit } from './materials.js';
@@ -156,7 +156,7 @@ function* roomSteps(room, mats, opts) {
         // is drawn with its room and costs no batch of its own: a parked ship's folded arms, its legs)
         const held = mine.get(mv.door);
         if (held && held.hold != null) {
-          const e2 = leafMatrix({ M: _m, base: mv.base, slide: mv.slide, hinge: mv.hinge, aim: mv.aim }, held.hold, _lm).elements.slice();
+          const e2 = leafMatrix({ M: _m, base: mv.base, slide: mv.slide, hinge: mv.hinge, aim: mv.aim, fold: mv.fold }, held.hold, _lm).elements.slice();
           for (const [k, g] of Object.entries(pieceByMat(mv.piece))) lists[k].push({ geo: g, e: e2 });
           continue;
         }
@@ -168,6 +168,7 @@ function* roomSteps(room, mats, opts) {
           const leaf = { key: mv.key, piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: held || null, meshes: [], own: [] };
           if (mv.hinge) leaf.hinge = mv.hinge;
           if (mv.aim) leaf.aim = mv.aim;
+          if (mv.fold) leaf.fold = mv.fold;
           if (mv.hoop) leaf.hoop = mv.hoop;
           const e0 = leafMatrix(leaf, 0, _lm).elements.slice();
           leaf.shut = new THREE.Matrix4().fromArray(e0).invert();
@@ -179,6 +180,7 @@ function* roomSteps(room, mats, opts) {
         const leaf = { piece: mv.piece, M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
         if (mv.hinge) leaf.hinge = mv.hinge;
         if (mv.aim) leaf.aim = mv.aim;
+        if (mv.fold) leaf.fold = mv.fold;
         if (mv.hoop) leaf.hoop = mv.hoop;
         leafGroups.get(mv.key).list.push(leaf); if (leaf.door) leaf.door.leaves.push(leaf);
       }
@@ -311,7 +313,7 @@ export function zoneAt(built, eye) {
 }
 
 const ease = (t) => t * t * (3 - 2 * t);
-const _h = new THREE.Matrix4(), _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _lt = new THREE.Matrix4(), _lm = new THREE.Matrix4();
+const _h = new THREE.Matrix4(), _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _lt = new THREE.Matrix4(), _lm = new THREE.Matrix4(), _ae = new Float64Array(16);
 // where a leaf stands when its door is open by t (0..1), into `out`
 function leafMatrix(leaf, t, out) {
   _lt.makeTranslation(leaf.slide.x * ease(t), leaf.slide.y * ease(t), leaf.slide.z * ease(t));
@@ -322,8 +324,9 @@ function leafMatrix(leaf, t, out) {
     _hp.fromArray(H.at); _ha.fromArray(H.axis);
     out.multiply(_h.makeTranslation(_hp.x, _hp.y, _hp.z)).multiply(_h.makeRotationAxis(_ha, H.angle * ease(t))).multiply(_h.makeTranslation(-_hp.x, -_hp.y, -_hp.z));
   }
-  // (a leaf that rides a line: kit/leafaim.js, by the eased t)
-  if (leaf.aim) out.multiply(_h.fromArray(aimMatrix(leaf.aim, ease(t))));
+  // (a leaf that rides a line, or folds into one: kit/leafaim.js, by the eased t, into a scratch array)
+  if (leaf.aim) out.multiply(_h.fromArray(aimMatrix(leaf.aim, ease(t), _ae)));
+  if (leaf.fold) out.multiply(_h.fromArray(foldMatrix(leaf.fold, ease(t), _ae)));
   return out.multiply(leaf.base);
 }
 // (where a leaf stands when its door is open by t, for code outside the kit that must know: the crane, of the legs)

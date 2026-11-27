@@ -1025,11 +1025,12 @@ function mbLift(p, variant) {
 // ── THE LANDING GEAR ────────────────────────────────────────────────────────────────────────────────────────────────
 // Four legs (gear-plan.js LEGS.miner; the game's maker: "something like the F-16 landing gear. It goes out wider, and has
 // a few cylinders that meet up"), heavy and industrial, each a graphite main cylinder and a bright piston over a
-// gusseted skid, leaning out 20 degrees, with two fat cream braces from its well's edges to a knuckle low on it: a pair under the cockpit's sides (the game's maker, 2026-11-26:
+// gusseted skid, leaning out 28 degrees, with two fat cream supports meeting it at a knuckle low on it (the aft pair's from
+// under the body inboard and from under the block's outboard edge, so from behind each stands in an A): a pair under the cockpit's sides (the game's maker, 2026-11-26:
 // "I don't see front landing gear on the miner ship"; it stood on two legs at the stern and its lift), their wells going
 // up between the cockpit's walls and the hull's sides, clear of the folded arms outside and of the lift, the crew's way
 // in, amidships; and a pair under the stern's block, their wells beside the engine room. Each folds into itself up into
-// its well, which two doors cut from the hull's own skin shut, sliding (built-common.js strutLeg, slideDoors; the old legs
+// its well, which a door cut from the hull's own skin shuts, folding out of its frame (built-common.js strutLeg, foldDoors; the old legs
 // folded into pods hung under the lower canisters: "these landing gear coverings.. are kind of hideous", of the
 // Explorer's, and so these too are gone). Each leg reaches STAND further down than the hull's ground line (the plan's
 // floor), so its foot stands on the floor with the ship raised. The legs are the door 'gear' (1 up), the doors 'doors'
@@ -1038,13 +1039,13 @@ export const GEAR = { speed: 0.42, doorSpeed: 0.9 };
 const LEGS = GEAR_PLAN.miner;
 // (heavy and industrial: its main cylinders dark graphite, the stage and the braces the cream of its panels, the
 // pistons bright, the joints black with metal bolts, hazard-yellow bands, a gusseted skid with a striped toe)
-const GEAR_PAINT = { cyl: PAL.dark, stage: PAL.cream, brace: PAL.cream, piston: PAL.chrome, joint: PAL.black, bolt: PAL.metal, band: PAL.yellow, pad: PAL.dark, sole: PAL.rubber };
+const GEAR_PAINT = { cyl: PAL.dark, brace: PAL.cream, piston: PAL.chrome, rod: PAL.chrome, joint: PAL.black, bolt: PAL.metal, band: PAL.yellow, pad: PAL.dark, sole: PAL.rubber };
 function legLeaves(p, which) {
   return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'mb', which, dk, paint: GEAR_PAINT, speed: GEAR.speed, style: 'heavy' });
 }
 // the doors painted as the hull there by its own rules (a face of its lower band)
 const lowerFace = (P, n) => ({ part: 'body', zone: 'lower', n, c: P.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / P.length), thin: false });
-function mbGearDoors(p, which) { return C.slideDoors(p, DOORS[which], { key: 'mb', which, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.dark, dk, speed: GEAR.doorSpeed, edge: PAL.seam, box: WELLS[which].box }); }
+function mbGearDoors(p, which) { return C.foldDoors(p, DOORS[which], { key: 'mb', which, how: LEGS.legs[which].door, paint: (P, n) => C.paintOf(RULES, PAL, lowerFace(P, n), PAL.belly), inner: PAL.dark, dk, speed: GEAR.doorSpeed, edge: PAL.seam, box: WELLS[which].box }); }
 function mbWells(p) {
   const acc = new Acc();
   // (each leg's well, and the still blocks its braces are mounted on, standing in its mouth)
