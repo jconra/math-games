@@ -214,9 +214,40 @@ export function lookRoundDue(S, { dt, t, holding, running, balls, showing }) {
 // turns the view sideways and never tilts it) brings the camera nearer and higher or further and lower, as on main.
 // turnToward: a goal button's one turn (index.js, FRONT.buttonTurns), at `rate` radians a second; true once it faces
 // `want`. Nothing else changes cam.yaw.
+// (the game's maker, 2026-11-27: "When you swipe it should be like you are grabbing the wall there and moving that
+// point": the world follows the finger, so a swipe to the right turns the view to the left)
 export function viewTurn(cam, dx, dy = 0, H = HANDS) {
-  cam.yaw = wrapA(cam.yaw - dx * H.turn);
+  cam.yaw = wrapA(cam.yaw + dx * H.turn);
   cam.lift = Math.max(-1, Math.min(1.6, (cam.lift || 0) + dy * H.lift));   // (main's limits)
+}
+// THE SWIPE'S SPEED AND ITS GLIDE (the game's maker: "It also shouldn't take several swipes to move around ... the
+// swipes were speed based. So it swipes more the faster you swipe, and maybe even glides to a stop"). A drag slower
+// than SPIN.slow px a second turns the view one to one; faster, by up to SPIN.most times as much. Lifted while still
+// moving (the last move under SPIN.fresh ms before the lift), the view glides on at the swipe's speed and slows to a
+// stop (SPIN.friction a second); a new touch stops it at once.
+//   const W = makeSpin()
+//   W.drag(dx, ms) -> the pixels to turn by for a move of dx px, ms after the last one
+//   W.release(ms)  the finger lifted, ms after its last move     W.stop()   a touch: the glide ends
+//   W.step(dt)     -> the pixels to turn by this frame of the glide (0 when there is none)
+export const SPIN = { slow: 600, gain: 1 / 900, most: 3, fresh: 90, friction: 3.5, least: 40 };
+export function makeSpin(S = SPIN) {
+  let v = 0, gliding = false;
+  return {
+    drag(dx, ms) {
+      const sec = Math.max(ms, 4) / 1000, speed = Math.abs(dx) / sec, g = Math.min(S.most, 1 + Math.max(0, speed - S.slow) * S.gain);
+      const px = dx * g; v = v * 0.4 + (px / sec) * 0.6; gliding = false;
+      return px;
+    },
+    release(ms) { gliding = ms <= S.fresh && Math.abs(v) > S.least; if (!gliding) v = 0; },
+    stop() { gliding = false; v = 0; },
+    step(dt) {
+      if (!gliding) return 0;
+      const px = v * dt; v *= Math.exp(-S.friction * dt);
+      if (Math.abs(v) < S.least) { gliding = false; v = 0; }
+      return px;
+    },
+    get gliding() { return gliding; },
+  };
 }
 export function turnToward(cam, want, rate, dt) {
   const d = wrapA(want - cam.yaw);

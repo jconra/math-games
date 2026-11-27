@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HANDS, makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, canTap, inView, buttonDoes, mouthAt, lookRoundDue } from '../src/mathball/hands.js';
+import { HANDS, SPIN, makeSpin, makeHands, nearestBall, underAt, chooseTap, remember, pastOnScreen, viewTurn, turnToward, pushFor, canPick, canTap, inView, buttonDoes, mouthAt, lookRoundDue } from '../src/mathball/hands.js';
 
 const W = 400;   // an upright phone's width (the left 42% is the walking stick's)
 function press(H, { x = 300, y = 400, moveBy = 0, ms = 100, touch = true, button = 0, aimable = false, id = 1, steps = 4 } = {}) {
@@ -153,55 +153,76 @@ test('inside two overlapping discs, the nearer ball (drawn on top) is the one ta
   assert.equal(underAt(142, 300, [near, far], 16), 'far', 'past the near ball\'s edge, inside only the far one');
 });
 
-// THE CAMERA (camera.js) IS MAIN'S OWN, driven by the hand's turn: checked against main's lines (65bc920 index.js
-// aim(), written out here on their own) over the reviewer's grid (every half metre inside the court, every quarter
-// metre along each wall 0.45 m in, each corner and goal mouth), turns every 30 degrees, with and without a ball, and
-// the mouse's tilt at its two limits; and with main's easing, her figure stays on the screen through a quick swipe
-test('the camera is main\'s own on the grid, beside walls and away from them; a quick swipe never loses her', async () => {
-  const { target, ease, onScreen } = await import('../src/mathball/camera.js');
+// THE CAMERA (camera.js) over the reviewer's grid (every half metre inside, every quarter metre along each wall 0.45 m
+// in, corners, goal mouths; turns every 30 degrees; with and without a ball): away from walls main's own lines,
+// exactly; beside a wall it rises above her, never turns by itself, keeps her on the screen and stays in the court;
+// through a quick swipe (the game's easing, follow) her figure stays on the screen; walking to a wall it moves smoothly
+test('the camera: main\'s away from walls; beside one it rises above her; a quick swipe never loses her; it moves smoothly', async () => {
+  const { target, follow, stand, onScreen } = await import('../src/mathball/camera.js');
   const { MBCAM } = await readCam();
   const { COURT, WALLS, CORNERS, GOALS, clampIn, inside } = await import('../src/mathball/court.js');
-  const mainPose = (C, x, z, yaw, lift, holding) => {   // (main's own lines)
+  const mainPose = (C, x, z, yaw, lift, holding) => {   // (main's own lines, 65bc920 index.js aim())
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     let ax = x - fx * C.dist * (1 - lift * 0.12), az = z - fz * C.dist * (1 - lift * 0.12), ay = C.height + lift * 0.9;
     const [cx, cz] = clampIn(ax, az, 0.4), pushed = Math.hypot(cx - ax, cz - az);
     ay = Math.min(ay + pushed * 0.5, COURT.height - 0.7);
-    return { eye: [cx, ay, cz], look: [x + fx * C.ahead, C.lookY + (holding ? C.holdUp : 0), z + fz * C.ahead] };
+    return { eye: [cx, ay, cz], look: [x + fx * C.ahead, C.lookY + (holding ? C.holdUp : 0), z + fz * C.ahead], pushed };
   };
   const places = [];
   for (let x = -4.8; x <= 4.8 + 1e-9; x += 0.5) for (let z = -8.76; z <= 8.76 + 1e-9; z += 0.5) if (inside(x, z) >= 0.45) places.push([x, z]);
   for (const W of WALLS) for (let s = 0; s <= W.len + 1e-9; s += 0.25) places.push(clampIn(W.A[0] + W.u[0] * s + W.n[0] * 0.45, W.A[1] + W.u[1] * s + W.n[1] * 0.45, 0.45));
   for (const c of CORNERS) places.push(clampIn(c[0], c[1], 0.45));
   for (const g of GOALS) places.push(clampIn(g.mid[0], g.mid[1], 0.45));
-  let n = 0, beside = 0;
-  for (const C of [MBCAM.tall, MBCAM.wide]) for (const [x, z] of places) for (let yd = 0; yd < 360; yd += 30) for (const held of [false, true]) for (const lift of [0, -1, 1.6]) {
-    const yaw = yd * Math.PI / 180, P = target(C, x, z, yaw, lift, held), M = mainPose(C, x, z, yaw, lift, held);
-    for (let i = 0; i < 3; i++) { assert.equal(P.eye[i], M.eye[i]); assert.equal(P.look[i], M.look[i]); }
-    n++; if (P.pushed > 0) beside++;
-  }
-  assert.ok(n > 30000 && beside > n / 4, `${n} cases, ${beside} beside a wall`);
-  // a quarter turn in a quarter second by the hand (30 and 60 frames a second), facing every 45 degrees, both turn ways,
-  // with a ball in hand and without, on the three screens. In the court's middle (the fifth review's X1 case): her feet,
-  // hip and head on the screen at every frame. Beside a wall (0.45 m off the east wall, and in the corner by the green
-  // goal): the camera drawn at every frame is main's own eased camera, worked out here from main's own lines (main's
-  // camera there can let her pass the screen's edge for a moment in a swipe, as it does in the live game)
-  const screens = [[400, 860, MBCAM.tall], [860, 400, MBCAM.wide], [1280, 720, MBCAM.wide]];
-  for (const [Wd, Ht, C] of screens) for (const [x, z] of [[0, 0], [4.35, 0], [4.35, 5.5]]) for (let y0 = 0; y0 < 8; y0++) for (const dir of [1, -1]) for (const held of [false, true]) for (const dt of [1 / 30, 1 / 60]) {
-    const k = 1 - Math.exp(-MBCAM.ease * dt), S = { eye: null };
-    let yaw = y0 * Math.PI / 4;
-    ease(S, target(C, x, z, yaw, 0, held), k);
-    const M0 = mainPose(C, x, z, yaw, 0, held), mat = M0.eye.slice(), mlook = M0.look.slice();   // (main's cam.at, cam.look)
-    for (let t = 0; t < 1.0; t += dt) {
-      if (t < 0.25) yaw += dir * (Math.PI / 2) * dt / 0.25;
-      const P = ease(S, target(C, x, z, yaw, 0, held), k);
-      const M = mainPose(C, x, z, yaw, 0, held); for (let i = 0; i < 3; i++) { mat[i] += (M.eye[i] - mat[i]) * k; mlook[i] += (M.look[i] - mlook[i]) * k; }
-      for (let i = 0; i < 3; i++) { assert.ok(Math.abs(P.eye[i] - mat[i]) < 1e-9); assert.ok(Math.abs(P.look[i] - mlook[i]) < 1e-9); }
-      if (x === 0 && z === 0) {
-        const on = [0, 0.9, 1.75].map((h) => { const q = onScreen([x, h, z], P, C.fov, Wd, Ht); return !!(q && q[0] >= 0 && q[0] <= Wd && q[1] >= 0 && q[1] <= Ht); });
-        assert.ok(on.every(Boolean), `${Wd}x${Ht} in the middle from ${y0 * 45} turning ${dir}: her figure on the screen ${t.toFixed(2)} s in (${on})`);
+  const screens = [['upright', 400, 860, MBCAM.tall, 133], ['side', 860, 400, MBCAM.wide, 93], ['wide', 1280, 720, MBCAM.wide, 93]];
+  for (const [name, Wd, Ht, C, bar] of screens) {
+    let beside = 0, goals = 0, mainGoals = 0;
+    for (const [x, z] of places) for (let yd = 0; yd < 360; yd += 30) for (const held of [false, true]) {
+      const yaw = yd * Math.PI / 180, P = target(C, x, z, yaw, 0, held), M = mainPose(C, x, z, yaw, 0, held);
+      const dir = Math.atan2(P.look[0] - P.eye[0], P.look[2] - P.eye[2]);
+      assert.ok(Math.abs(Math.atan2(Math.sin(dir - yaw), Math.cos(dir - yaw))) < 1e-9, 'it looks along the hand\'s turn exactly');
+      assert.ok(inside(P.eye[0], P.eye[2]) >= 0.4 - 1e-6 && P.eye[1] <= COURT.height - 0.7 + 1e-9, 'inside the court, under the ceiling');
+      if (M.pushed < 1e-9) { for (let i = 0; i < 3; i++) { assert.ok(Math.abs(P.eye[i] - M.eye[i]) < 1e-9); assert.ok(Math.abs(P.look[i] - M.look[i]) < 1e-9); } continue; }
+      beside++;
+      for (const h of [0, 0.9, 1.75]) { const q = onScreen([x, h, z], P, C.fov, Wd, Ht); assert.ok(q && q[0] >= 0 && q[0] <= Wd && q[1] >= 0 && q[1] <= Ht, `${name} at ${x.toFixed(2)},${z.toFixed(2)} turned ${yd}: her figure (${h} m) on the screen`); }
+      if (held) for (const g of GOALS) {
+        if (Math.hypot(g.mid[0] - x, g.mid[1] - z) < 4) continue;
+        const ok = (Q) => { const q = onScreen(g.aim, Q, C.fov, Wd, Ht); return q && q[0] >= 0 && q[0] <= Wd && q[1] >= bar && q[1] <= Ht; };
+        if (ok(P)) goals++; if (ok(M)) mainGoals++;
       }
     }
+    assert.ok(beside > 1000, `${name}: beside a wall in ${beside} cases`);
+    assert.ok(goals >= mainGoals * 0.85, `${name}: far goals in view beside a wall ${goals} against main's ${mainGoals}`);
   }
+  // a quarter turn in a quarter second by the hand (30 and 60 frames a second, the game's easing), from the middle and
+  // from beside walls, every 45 degrees, both ways, with and without a ball, the three screens: her feet, hip and head on
+  // the screen and the camera inside the court at every frame
+  for (const [name, Wd, Ht, C] of screens) for (const [x, z] of [[0, 0], [4.35, 0], [4.35, 5.5], [-1.5, 8.3], [0, 6.3]]) for (let y0 = 0; y0 < 8; y0++) for (const dir of [1, -1]) for (const held of [false, true]) for (const dt of [1 / 30, 1 / 60]) {
+    const k = 1 - Math.exp(-MBCAM.ease * dt), S = {};
+    let yaw = y0 * Math.PI / 4;
+    follow(S, C, x, z, yaw, 0, held, k);
+    for (let t = 0; t < 1.0; t += dt) {
+      if (t < 0.25) yaw += dir * (Math.PI / 2) * dt / 0.25;
+      const P = follow(S, C, x, z, yaw, 0, held, k);
+      assert.ok(inside(P.eye[0], P.eye[2]) >= 0.4 - 1e-6, `${name}: never through a wall`);
+      const d = Math.atan2(P.look[0] - P.eye[0], P.look[2] - P.eye[2]); assert.ok(Math.abs(Math.atan2(Math.sin(d - yaw), Math.cos(d - yaw))) < 1e-9, 'along the hand\'s turn');
+      for (const h of [0, 0.9, 1.75]) { const q = onScreen([x, h, z], P, C.fov, Wd, Ht); assert.ok(q && q[0] >= 0 && q[0] <= Wd && q[1] >= 0 && q[1] <= Ht, `${name} at ${x},${z} from ${y0 * 45} turning ${dir}: her figure (${h} m) on the screen ${t.toFixed(2)} s in (${q && q.map(Math.round)})`); }
+    }
+  }
+  // walking toward a wall a millimetre at a time, facing every 5 degrees: where it stands is solved directly, so it
+  // comes in steadily, never back and forth (the old 2 cm search's wobble). (Looking nearly along the wall it comes in
+  // steeply, up to about 36 cm for each cm she walks a few degrees off the wall: the cliff left as it is, eased on the
+  // screen)
+  let steep = 0;
+  for (const C of [MBCAM.tall, MBCAM.wide]) for (let yd = 0; yd < 360; yd += 5) {
+    const yaw = yd * Math.PI / 180; let prev = null, dir = 0, turns = 0;
+    for (let x = 2.0; x <= 4.35; x += 0.001) {
+      const s = stand(C, x, 0.3, yaw);
+      if (prev) { const d = s.back - prev.back; steep = Math.max(steep, Math.abs(d) / 0.001); if (Math.abs(d) > 1e-7) { const sg = Math.sign(d); if (dir && sg !== dir) turns++; dir = sg; } }
+      prev = s;
+    }
+    assert.ok(turns <= 1, `turned ${yd}: it went back and forth ${turns} times`);
+  }
+  console.log(`# beside a wall, at its steepest it comes in ${steep.toFixed(1)} cm for each cm she walks`);
 });
 // (index.js imports three, which node has not: its MBCAM is read from the file's text)
 async function readCam() {
@@ -219,8 +240,8 @@ test('a finger\'s drag turns the view and never tilts it; the mouse\'s drag up a
 
 test('the view turns only by viewTurn (a drag) and turnToward (a goal button\'s one turn); walking pushes as the view looks', () => {
   const cam = { yaw: 1, lift: 0 };
-  viewTurn(cam, 100); assert.ok(Math.abs(cam.yaw - (1 - 100 * HANDS.turn)) < 1e-9);
-  viewTurn(cam, 0, 50); assert.ok(cam.lift > 0); assert.ok(Math.abs(cam.yaw - (1 - 100 * HANDS.turn)) < 1e-9, 'the mouse\'s drag up or down tilts, never turns');
+  viewTurn(cam, 100); assert.ok(Math.abs(cam.yaw - (1 + 100 * HANDS.turn)) < 1e-9, 'the world follows the finger: a swipe right turns the view left');
+  viewTurn(cam, 0, 50); assert.ok(cam.lift > 0); assert.ok(Math.abs(cam.yaw - (1 + 100 * HANDS.turn)) < 1e-9, 'the mouse\'s drag up or down tilts, never turns');
   const c2 = { yaw: 0 }; let n = 0; while (!turnToward(c2, Math.PI * 0.9, 6.5, 1 / 30) && n < 200) n++;
   assert.ok(n < 20); assert.ok(Math.abs(c2.yaw - Math.PI * 0.9) < 1e-3);
   const p = pushFor(0, 1, 0); assert.ok(Math.abs(p.y - 1) < 1e-9 && Math.abs(p.x) < 1e-9);
@@ -301,12 +322,30 @@ test('index.js: the turn written only from the drag; no tilt from a finger; the 
   assert.equal((src.match(/cam\.yaw\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.yaw is written only by viewTurn / turnToward');
   assert.equal((src.match(/cam\.lift\s*(=(?!=)|\+=|-=)/g) || []).length, 0, 'cam.lift (the tilt) only by viewTurn');
   const turns = src.split('\n').filter((l) => /viewTurn\(/.test(l));
-  assert.equal(turns.length, 2, 'viewTurn is called in two places: ' + turns.map((l) => l.trim().slice(0, 60)).join(' | '));
-  assert.ok(turns.some((l) => /if \(r\.turn && !paused && !closed\) \{ viewTurn\(cam, r\.turn\[0\], e\.pointerType === 'mouse' \? r\.turn\[1\] : 0\);/.test(l)), 'the drag (onMove), a finger passing no tilt');
-  assert.ok(turns.some((l) => /faceTo: \(y\) => \{ viewTurn\(cam, wrapA\(cam\.yaw - y\) \/ HANDS\.turn, 0\)/.test(l)), 'the rigs\' faceTo');
+  assert.equal(turns.length, 3, 'viewTurn is called in three places: ' + turns.map((l) => l.trim().slice(0, 60)).join(' | '));
+  assert.ok(turns.some((l) => /if \(r\.turn && !paused && !closed\) \{ const now = stamp\(e\), px = spin\.drag\(r\.turn\[0\], [^;]*\); lastDragT = now; viewTurn\(cam, px, e\.pointerType === 'mouse' \? r\.turn\[1\] : 0\);/.test(l)), 'the drag (onMove), by its speed, a finger passing no tilt');
+  assert.ok(turns.some((l) => /\{ const g = paused \? 0 : spin\.step\(dt\); if \(g\) \{ viewTurn\(cam, g, 0\);/.test(l)), 'the glide after a swipe');
+  assert.ok(turns.some((l) => /faceTo: \(y\) => \{ spin\.stop\(\); viewTurn\(cam, wrapA\(y - cam\.yaw\) \/ HANDS\.turn, 0\)/.test(l)), 'the rigs\' faceTo');
   assert.equal((src.match(/turnToward\(/g) || []).length, 1, 'turnToward: the goal button\'s one turn only');
   assert.ok(/const does = how === 'button' \? buttonDoes\(seen\(gi\), FRONT\.buttonTurns\) : 'throw';/.test(src), 'the goal\'s button by its rule');
   assert.ok(!/MBCAM\.(swing|after|turn)\b/.test(src) && !/turnTo\s*=/.test(src), 'the old swings are gone');
   assert.ok(!/'air', 'roll', 'rest', 'turn'/.test(src), 'no list of ball modes of its own: hands.js canTap');
   assert.equal((src.match(/canTap\(b, /g) || []).length, 3, 'the click targets, the balls on the screen and the record of where they were');
+});
+
+test('a swipe\'s speed: slow is one to one, faster turns further (up to 3 times); let go while moving, it glides to a stop', () => {
+  const W = makeSpin();
+  assert.equal(W.drag(10, 50), 10, '200 px a second: one to one');
+  assert.equal(W.drag(30, 50), 30, '600 px a second: one to one');
+  const f = W.drag(60, 50); assert.ok(f > 60 && f < 180, `1200 px a second: further (${f})`);
+  assert.equal(makeSpin().drag(400, 50), 400 * SPIN.most, 'never more than 3 times');
+  // the glide: let go at once after a quick move, it goes on the same way and slows to a stop
+  const G = makeSpin(); G.drag(60, 16); G.release(20);
+  let total = 0, n = 0, last = Infinity; while (G.gliding && n < 600) { const px = G.step(1 / 60); assert.ok(px > 0 && px <= last + 1e-9, 'the same way, slowing'); last = px; total += px; n++; }
+  assert.ok(!G.gliding && total > 100 && n < 120, `it glides ${Math.round(total)} px and stops in ${(n / 60).toFixed(2)} s`);
+  // a finger that stopped before lifting: no glide; a new touch stops a glide at once
+  const H = makeSpin(); H.drag(60, 16); H.release(200); assert.equal(H.gliding, false); assert.equal(H.step(1 / 60), 0);
+  const K = makeSpin(); K.drag(60, 16); K.release(10); assert.ok(K.gliding); K.stop(); assert.equal(K.step(1 / 60), 0);
+  // a slow drag lifted while moving: hardly any glide
+  const Sl = makeSpin(); Sl.drag(2, 16); Sl.release(10); let t2 = 0; for (let i = 0; i < 300; i++) t2 += Sl.step(1 / 60); assert.ok(t2 < 40, `a slow drag: ${t2.toFixed(1)} px of glide`);
 });
