@@ -20,11 +20,13 @@ import { JUMP } from './wormplan.js';
 
 export const SOUNDS = {
   // the game's maker (2026-11-27): "For engine noises. We could use something that sounds like the lurcher engine (but
-  // maybe softer)". Four takes in the lab, for him to choose by ear: A the Lurcher's own sound, quieter; B rounder; C a
-  // gentler, slower throb; D the Lurcher's own sound, quieter, its tone opened so a phone's own speaker plays it (A, B
-  // and C are nearly all below 300 Hz, lower than a phone's speaker goes, and he plays on his phone). D until he
-  // chooses.
-  engine: 'SHIP — ENGINE D',
+  // maybe softer)". Five takes in the lab, for him to choose by ear: A the Lurcher's own sound, quieter; B rounder; C a
+  // gentler, slower throb; D quieter but brighter and buzzier, so a phone's own speaker plays it; E between A and D, a
+  // hum with some body that a phone still plays (A, B and C are nearly all below 300 Hz, lower than a phone's speaker
+  // goes, and he plays on his phone). E until he chooses: by the numbers it is the easier on the ear of the two a phone
+  // plays (a tenth of D's share above 1 kHz, the middle of its sound about 200 Hz against D's 275, a shallower chop),
+  // for 2 dB less of it on a phone's speaker than D and 6 dB more than A.
+  engine: 'SHIP — ENGINE E',
   // the wormhole's moments (src/wormplan.js JUMP): the tear opening and coming over the ship; the colours all round,
   // for as long as they last; the far end opening
   jump: { tear: 'JUMP — TEAR', tunnel: 'JUMP — TUNNEL', open: 'JUMP — OPEN' },
@@ -33,9 +35,9 @@ export const SOUNDS = {
 };
 
 // HOW LOUD (measured from renders, ~/pw/space-math/SOUNDS_1_PI_NEBULA.md): with the HUD's volume as it starts (0.8), a
-// voice clip speaks at about -23 dB and the station's music plays at about -29 dB; the engine at 0.27 sits at about
-// -34 dB, 11 dB under a voice and 5 dB under the music, so a person speaking stays clear over it with nothing turned
-// down. The jump at about -30 dB in all (its loudest stretch, the colours all round, -28 dB); a chime at about -29 dB
+// voice clip speaks at about -23 dB and the station's music plays at about -29 dB; the engine (take E) at 0.27 sits at
+// about -38 dB idling to -32 dB at full RPMs, 9 to 15 dB under a voice and 3 to 9 dB under the music, so a person
+// speaking stays clear over it with nothing turned down. The jump at about -30 dB in all (its loudest stretch, the colours all round, -28 dB); a chime at about -29 dB
 // (A) and -26 dB (B) over its first 0.3 s.
 export const LEVEL = { engine: 0.27, jump: 1, chime: 0.8 };
 
@@ -44,7 +46,10 @@ export const ENGINE = {
   fadeIn: 0.4, fadeOut: 0.5,     // s: an engine starts and stops softly (never a click)
   rise: 1.2, fall: 0.8,          // the most the RPMs move in a second, up and down (with the engine's own 50 ms glide)
   linger: 0.25,                  // s: an engine nobody has asked for in this long is stopped (a ship put away, a run given up)
-  watchdog: 1,                   // s: no update of the engines at all in this long (the game's loop gone): every engine stopped
+  // THE WATCHDOG (makeWatch): a check every `every` s; `misses` checks in a row with no frame between them (the game's
+  // loop gone, not one slow frame: a new planet's first picture can take over a second) and every engine and the
+  // jump's hum are stopped
+  watch: { every: 0.25, misses: 6 },
   leap: 50,                      // m: a ship moved further than this in one frame was put somewhere, not flown: no speed from it
   idle: 0.15,                    // the flight model's own idle (src/flymodel.js stepShip: S.engine eases to it, power on)
   aloft: 0.2,                    // the RPMs of a ship held up off the floor, going nowhere
@@ -69,6 +74,13 @@ export function rpmOf(S) {
 // zero): held up at least ENGINE.aloft, at full by ENGINE.fast m/s
 export const rpmOfSpeed = (v) => ENGINE.aloft + (1 - ENGINE.aloft) * clamp01((+v || 0) / ENGINE.fast);
 
+// THE FLOOR A RUN GIVES ITS SHIP WHERE IT MOVES IT ITSELF (src/engines.js own(S, floor)): a rescue's (src/rescue.js),
+// by its part: standing on the ground with the pods, idling; flown down, the hover, the lift, the climb, above: held up.
+// At the rocks (src/fieldfly.js: the drill, the ride) the ship floats in space: idling when still.
+const GROUND = new Set(['pods', 'wait', 'board']);
+export const rescueFloor = (phase) => (GROUND.has(phase) ? 0 : ENGINE.aloft);
+export const FIELD_FLOOR = 0;
+
 // the RPMs eased toward what is wanted: never a jump in pitch, whatever the number asked for does
 export function easeRpm(now, want, dt) {
   const d = want - now, up = ENGINE.rise * dt, down = ENGINE.fall * dt;
@@ -86,6 +98,25 @@ export function nearest(list, n, out) {
 }
 export const mostFor = (quality) => ENGINE.most[quality] ?? ENGINE.most.medium;
 
+// A WATCH ON A SOUND KEPT GOING BY THE GAME'S FRAMES: beat() each frame; arm() once something sounds; when ENGINE.watch
+// .misses checks in a row have come with no beat between them, dead() is called and the watch stops (armed again by
+// the next sound). One slow frame is one missed check, never enough.
+export function makeWatch(dead) {
+  let iv = 0, beats = 0, missed = 0;
+  const check = () => {
+    if (beats) { beats = 0; missed = 0; return; }
+    if (++missed >= ENGINE.watch.misses) { W.disarm(); dead(); }
+  };
+  const W = {
+    beat() { beats++; },
+    // (in node's tests a timer that keeps nothing alive: .unref; a browser's is a number)
+    arm() { if (!iv) { missed = 0; beats = 0; iv = setInterval(check, ENGINE.watch.every * 1000); if (iv && iv.unref) iv.unref(); } },
+    disarm() { if (iv) { clearInterval(iv); iv = 0; } },
+    get armed() { return !!iv; },
+  };
+  return W;
+}
+
 // THE JUMP, HEARD (src/wormhole.js): the three patches at the wormhole's own moments, in the game's own time.
 //   const J = makeJumpSound(sound)    (the game's sound player, or a stand-in)
 //   J.begin(tunnel)   a jump begins: the tear (tunnel: begun in the colours, as the Drill Lab's arrival: the hum at once)
@@ -94,23 +125,39 @@ export const mostFor = (quality) => ENGINE.most[quality] ?? ENGINE.most.medium;
 //                     sounds, started again if anything stopped it (a hidden page, its own last guard); it ends with
 //                     the colours: at 'open', or once they are past the longest they can last, in the game's own time
 //   J.hush()          everything stopped (the jump put away)
+// The hum is under a watch (makeWatch): if the frames stop coming mid-tunnel (the game's loop gone), it stops.
+const HUM = { volume: LEVEL.jump, fade: 0.15, most: 120 }, TEAR = { volume: LEVEL.jump }, OPEN = { volume: LEVEL.jump };
 export function makeJumpSound(sound) {
   let tear = null, hum = null;
-  const humOff = (f = 0.3) => { if (hum) { hum.stop(f); hum = null; } };
+  const humOff = (f = 0.3) => { if (hum) { hum.stop(f); hum = null; } watch.disarm(); };
+  const watch = makeWatch(() => humOff());
   // (its wall-clock `most`, 120 s, is only the last guard against a hum left behind: the colours' own end is game time)
-  const humOn = () => { if (!hum || !hum.on) hum = sound.patch(SOUNDS.jump.tunnel, { volume: LEVEL.jump, fade: 0.15, most: 120 }); };
+  const humOn = () => { if (!hum || !hum.on) { hum = sound.patch(SOUNDS.jump.tunnel, HUM); if (hum) watch.arm(); } };
   const J = {
     hush() { if (tear) { tear.stop(0.15); tear = null; } humOff(); },
-    begin(tunnel = false) { J.hush(); if (tunnel) humOn(); else tear = sound.patch(SOUNDS.jump.tear, { volume: LEVEL.jump }); },
+    begin(tunnel = false) { J.hush(); if (tunnel) humOn(); else tear = sound.patch(SOUNDS.jump.tear, TEAR); },
     event(ev) {
       if (ev === 'shut') { tear = null; humOn(); }
-      else if (ev === 'open') { humOff(); sound.patch(SOUNDS.jump.open, { volume: LEVEL.jump }); }
+      else if (ev === 'open') { humOff(); sound.patch(SOUNDS.jump.open, OPEN); }
     },
     step(jump) {
+      watch.beat();
       if (!jump || jump.phase !== 'tunnel') return;
       if (jump.t > JUMP.most + 1) humOff(); else humOn();
     },
     get humming() { return !!(hum && hum.on); },
   };
   return J;
+}
+
+// A POD'S LOCK, HEARD (src/podlock.js): the chime for a right answer once for a lock, at the moment its last answer is
+// judged right (the lock box's onSolved); a lock closed so quickly after its solving move that the box never said so
+// chimes as it opens instead (its onBox, solved); a box thrown away after its chime (a level arrow in its review) and
+// solved again does not chime a second time for the same lock.
+//   const L = makeLockChime(sound)    L.solved()   L.opened()   L.chimed
+const CHIME = { volume: LEVEL.chime };
+export function makeLockChime(sound) {
+  let chimed = false;
+  const ring = () => { if (chimed) return; chimed = true; sound.patch(SOUNDS.chime, CHIME); };
+  return { solved: ring, opened: ring, get chimed() { return chimed; } };
 }

@@ -100,6 +100,7 @@ import { planLevelBox, recordPlan } from './levelplan.js';
 import { termSub, subText } from './findx.js';
 import { rulesHTML, RULES_TITLE, ALGEBRA_TITLE, GO_WORD } from './rules.js';
 import { makeBoxVoice } from './boxvoice.js';
+import { solvedHook } from './solved.js';
 import { sayLine as speakLine } from '../audio/sayline.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { readAloud, isPlaced, levelOf, MAPS, SKILL } from '../math/skill.js';
@@ -586,11 +587,8 @@ export function openLockbox(root = document.body, opts = {}) {
     // the time this box takes until it is solved (a sit-down answer: src/math/skill.js), and what its parts said
     const boxClock = answerTimer();
     let boxTime = null;
-    let solvedTold = false;
-    const solvedNow = () => {
-      if (!boxTime) boxTime = boxClock.stop();
-      if (!solvedTold && opts.onSolved) { solvedTold = true; try { opts.onSolved(); } catch (e) { console.error(e); } }
-    };
+    const tellSolved = solvedHook(opts);   // (opts.onSolved, once a box: solved.js)
+    const solvedNow = () => { if (!boxTime) boxTime = boxClock.stop(); tellSolved(); };
     let partsAsked = 0, xSlips = 0, numSlips = 0, negSlips = 0, away = false;
     // what the inequality mode adds to the shared flow (null on an equation box)
     const IB = ineqMode ? {

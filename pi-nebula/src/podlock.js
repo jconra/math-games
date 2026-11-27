@@ -32,7 +32,7 @@ import { openLongWork } from '../../mathwood-valley/src/ui/longwork.js';
 import { openOwnSum } from '../../mathwood-valley/src/ui/ownsum.js';
 import { workOf } from '../../mathwood-valley/src/math/longwork.js';
 import { sound } from './sound.js';
-import { SOUNDS, LEVEL } from './sounds.js';
+import { makeLockChime } from './sounds.js';
 
 const CSS = new URL('./podlock.css', import.meta.url).href;
 
@@ -103,6 +103,7 @@ export function labMedic() {
 
 export function openPodLock(root = document.body, { rider = null, pod = {}, onOpen = () => {}, onClose = () => {}, saveRider = null, rung, level, size, debug = false, finish = null } = {}) {
   let sheet = null, opened = false;
+  const chime = makeLockChime(sound);
   // WORK IT OUT, as Mathwood's tools do it over the box: the part being asked in columns (its own sheet, longwork.js),
   // or, between parts (nothing to work out on screen), the entry to type a sum by hand
   function openOwn() {
@@ -128,9 +129,10 @@ export function openPodLock(root = document.body, { rider = null, pod = {}, onOp
     saveRider: (r) => { if (typeof saveRider === 'function') saveRider(r); },
     workOut: () => { closeSheet(); const s = handle.workSum(); if (s) openWork(s); else openOwn(); },
     toolsOpen: () => !!sheet && !!document.querySelector('.bml:not(.is-out), .bmo.is-on'),
-    // (the lock's last answer judged right: the chime for a right answer, as a card's, at that moment: src/sounds.js)
-    onSolved: () => sound.patch(SOUNDS.chime, { volume: LEVEL.chime }),
-    onBox: (res) => { if (res.solved && !opened) { opened = true; try { onOpen(res); } catch (e) { console.error(e); } } },
+    // (the chime for a right answer, once for this lock: at the moment its last answer is judged right; or, closed so
+    // quickly the box never said so, as it opens: src/sounds.js makeLockChime)
+    onSolved: () => chime.solved(),
+    onBox: (res) => { if (res.solved && !opened) { opened = true; chime.opened(); try { onOpen(res); } catch (e) { console.error(e); } } },
     onDone: (totals) => { closeSheet(); try { onClose(totals); } catch (e) { console.error(e); } },
   });
   return { el: handle.el, handle, close: () => handle.close() };

@@ -25,6 +25,7 @@
 
 import { workCredit, recordPart } from './strand.js';
 import { recordPlan } from './levelplan.js';
+import { solvedHook } from './solved.js';
 import { ORDER_RULES, toText } from './workout.js';
 import { TIER_NAME, goldFor } from './box.js';
 import { answerTimer } from '../ui/answertimer.js';
@@ -52,6 +53,7 @@ const isOp = (p) => ['+', '−', '×', '÷'].includes(p);
 
 export function mountWorkBox(kit, ctx) {
   const { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished } = ctx;
+  const tellSolved = solvedHook(opts);   // (opts.onSolved, once a box: solved.js)
   const K = ctx.K ?? 1;
   const look = kit.look || null;
   const words = (t) => (look && t ? look.say(t) : t);
@@ -367,10 +369,7 @@ export function mountWorkBox(kit, ctx) {
     renderTop();
   }
 
-  function solvedNow() {
-    if (!solved && opts.onSolved) { try { opts.onSolved(); } catch (e) { console.error(e); } }   // (once a box: panel.js opts.onSolved)
-    solved = true; if (!boxTime) boxTime = boxClock.stop();
-  }
+  function solvedNow() { solved = true; if (!boxTime) boxTime = boxClock.stop(); tellSolved(); }
 
   // ----- the review: the whole working, line under line, and one button -----
   function review() {

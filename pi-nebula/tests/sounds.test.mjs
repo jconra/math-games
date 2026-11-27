@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../src/flymodel.js';
 import { JUMP, makeJump, stepJump } from '../src/wormplan.js';
-import { SOUNDS, LEVEL, ENGINE, rpmOf, rpmOfSpeed, easeRpm, nearest, mostFor, makeJumpSound } from '../src/sounds.js';
+import { SOUNDS, LEVEL, ENGINE, rpmOf, rpmOfSpeed, easeRpm, nearest, mostFor, makeJumpSound, makeWatch, makeLockChime, rescueFloor, FIELD_FLOOR } from '../src/sounds.js';
 import { makeEngines } from '../src/engines.js';
 import { PATCH_PRESETS, patchAutoStopTime } from '../src/audio/patch.js';
 
@@ -18,7 +18,7 @@ test('every sound the game asks for is a patch in the copy synced from the Sound
   const names = [SOUNDS.engine, SOUNDS.chime, ...Object.values(SOUNDS.jump)];
   for (const n of names) { assert.ok(PATCH_PRESETS[n], n + ' is in src/audio/patch.js'); assert.equal(PATCH_PRESETS[n].project, 'pi-nebula', n); }
   // the engine (each take): a drone that plays until it is stopped, with the one RPMs number the game moves
-  for (const k of ['A', 'B', 'C', 'D']) {
+  for (const k of ['A', 'B', 'C', 'D', 'E']) {
     const P = PATCH_PRESETS['SHIP — ENGINE ' + k];
     assert.equal(P.group, 'SHIPS'); assert.equal(patchAutoStopTime(P), null, k + ': no envelope, it runs until stopped');
     const rpm = P.nodes.find((n) => n.id === 'rpm'); assert.equal(rpm.type, 'value');
@@ -224,28 +224,72 @@ test('the jump heard at the wormhole\'s own moments, in the game\'s own time', (
   H.hush();
 });
 
-test('the ship of a run is heard through every part of it, moved by the flight model or by the run itself', () => {
-  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = M.makeShip(), ears = { x: 0, y: 0, z: 0 };
-  // a rescue's parts after the pilot's own flying: flown down by the run (the flight model still), the hover, set down
-  // and standing, the lift and the climb, held above; the run puts the ship where it is each frame (M.place)
-  const p = [0, 300, 0]; M.place(S, p);
-  const part = (secs, vy, vx, standing = false) => { const rpm = []; for (let t = 0; t < secs; t += DT) { p[0] += vx * DT; p[1] += vy * DT; M.place(S, p); E.own(S, standing); E.update(DT, ears, 'low'); rpm.push(snd.live()[0] ? snd.live()[0].rpm.at(-1) : null); } return rpm; };
-  const down = part(6, -20, 15), hover = part(4, 0, 0), stand = part(4, 0, 0, true), lift = part(3, 8, 0), above = part(4, 0, 0);
+
+// a ship flown by hand with forward held for a while (the real flight model), then left where it is: its throttle as the
+// last flown frame left it, near full
+function flownThenLeft() {
+  const S = M.makeShip(); S.power = true;
+  for (let t = 0; t < 1.2; t += DT) M.stepShip(S, keys('up'), DT, null);
+  for (let t = 0; t < 4; t += DT) M.stepShip(S, keys('forward'), DT, null);
+  assert.ok(rpmOf(S) > 0.95, 'flown at full: ' + rpmOf(S));
+  return S;
+}
+// the run moving the ship itself frame by frame (M.place, as rescue.js and fieldfly.js put it), the flight model not
+// stepped; the RPMs heard each frame
+function moved(E, snd, S, p, secs, v, floor) {
+  const out = [];
+  for (let t = 0; t < secs; t += DT) { p[0] += v[0] * DT; p[1] += v[1] * DT; M.place(S, p); E.own(S, floor); E.update(DT, { x: 0, y: 0, z: 0 }, 'low'); const h = snd.live()[0]; out.push(h ? h.rpm.at(-1) : null); }
+  return out;
+}
+
+test('at the rocks, flown to a rock and then drilling or riding: the engine idles, never held at the last throttle', () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = flownThenLeft(), p = [...S.p];
+  E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');      // (the last flown frame: hand flying, at full)
+  assert.ok(snd.live()[0].rpm.at(-1) > 0.95);
+  // the drill: the ship still among the rocks (fieldfly's own floor); then the ride to the next rock, then still again
+  const drill = moved(E, snd, S, p, 3, [0, 0], FIELD_FLOOR), ride = moved(E, snd, S, p, 3, [12, 0], FIELD_FLOOR), still = moved(E, snd, S, p, 3, [0, 0], FIELD_FLOOR);
+  assert.ok(drill.at(-1) < 0.05, 'drilling, the ship still: idling, ' + drill.at(-1));
+  assert.ok(ride.at(-1) > 0.3 && ride.at(-1) < 0.7, 'riding at 12 m/s: ' + ride.at(-1));
+  assert.ok(still.at(-1) < 0.05, 'still again: idling');
+  assert.equal(snd.started.length, 1, 'one engine all through');
+  E.update(1, null, 'low');
+});
+
+test('a rescue\'s parts, after the pilot has flown: the engine through every one, by how the run moves the ship', () => {
+  const snd = fakeSound(), E = makeEngines({ sound: snd }), S = flownThenLeft(), p = [...S.p];
+  E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');
+  const part = (phase, secs, v) => moved(E, snd, S, p, secs, v, rescueFloor(phase));
+  const down = part('fly', 6, [15, -20]), hover = part('hover', 4, [0, 0]), stand = part('pods', 4, [0, 0]), lift = part('lift', 3, [0, 8]), above = part('up', 4, [0, 0]);
   assert.equal(snd.started.length, 1, 'one engine all the way through, never stopped and started again');
   assert.ok([...down, ...hover, ...stand, ...lift, ...above].every((r) => r != null), 'sounding in every part');
-  assert.ok(down.at(-1) > 0.8, 'flown down at speed: ' + down.at(-1));
-  assert.ok(Math.abs(hover.at(-1) - ENGINE.aloft) < 0.05, 'the hover: held up');
+  assert.ok(down.at(-1) > 0.8, 'flown down at speed by her pilot: ' + down.at(-1));
+  assert.ok(Math.abs(hover.at(-1) - ENGINE.aloft) < 0.05, 'the hover: held up, not the throttle the pilot left: ' + hover.at(-1));
   assert.ok(stand.at(-1) < 0.05, 'standing on the ground: idling');
   assert.ok(lift.at(-1) > above.at(-1), 'the climb works harder than holding above');
   // the run's own leap from one place to another (the ship put at the far place) is not a speed
-  p[0] += 5000; part(DT, 0, 0); assert.ok(snd.live()[0].rpm.at(-1) < 0.5);
-  E.update(1, ears, 'low');
+  p[0] += 5000; part('up', DT, [0, 0]); assert.ok(snd.live()[0].rpm.at(-1) < 0.5);
+  E.update(1, null, 'low');
 });
 
-test('the watchdog: if the engines\' update stops coming (the game\'s loop gone), every engine stops', async () => {
+test('the watch: one slow frame stops nothing; the game\'s frames gone, every engine and the jump\'s hum stop', async () => {
+  const wait = (s) => new Promise((r) => setTimeout(r, s * 1000));
   const snd = fakeSound(), E = makeEngines({ sound: snd }), S = M.makeShip();
   S.power = true; E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low');
-  assert.equal(snd.live().length, 1);
-  await new Promise((r) => setTimeout(r, ENGINE.watchdog * 1000 + 500));
-  assert.equal(snd.live().length, 0, 'stopped with no update for ' + ENGINE.watchdog + ' s');
+  const H = makeJumpSound(snd); H.begin(true); H.step({ phase: 'tunnel', t: 0 });
+  assert.equal(snd.live().length, 2);
+  // one frame of 1.2 s (a planet's first picture): fewer missed checks than the watch needs
+  await wait(1.2); E.own(S); E.update(DT, { x: 0, y: 0, z: 0 }, 'low'); H.step({ phase: 'tunnel', t: 1.2 });
+  assert.equal(snd.live().length, 2, 'still sounding after one slow frame');
+  // then no frame at all: both stopped
+  await wait(ENGINE.watch.every * (ENGINE.watch.misses + 2));
+  assert.equal(snd.live().length, 0, 'stopped once the frames are gone');
+  const w = makeWatch(() => {}); assert.equal(w.armed, false);
+});
+
+test('a pod\'s lock chimes once, at its right answer; closed before the box said so, as it opens; solved again, not again', () => {
+  const snd = fakeSound(), chimes = () => snd.started.filter((h) => h.name === SOUNDS.chime).length;
+  let L = makeLockChime(snd); L.solved(); assert.equal(chimes(), 1); L.opened(); assert.equal(chimes(), 1, 'opened after: no second');
+  L.solved(); assert.equal(chimes(), 1, 'a box thrown away and solved again: the same lock, no second');
+  L = makeLockChime(snd); L.opened(); assert.equal(chimes(), 2, 'closed before the box said it was solved: chimed as it opens');
+  L = makeLockChime(snd); assert.equal(chimes(), 2, 'a lock not solved: none'); assert.equal(L.chimed, false);
 });

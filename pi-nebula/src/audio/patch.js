@@ -1,4 +1,4 @@
-// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit 6efa490. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
+// MADE BY THE SOUND LAB, do not edit it here: tools/sync.mjs pi-nebula, from the Sound Lab at commit fb39dfc. Change the engine (engine.js) or a sound (sounds/pi-nebula.js) there and sync again.
 // engine.js — the Sound Lab's modular patch engine, and only the engine: no sounds are written here. The sounds
 // are plain data in sounds/, one file per project; patch.js puts the two together for the lab's pages, and
 // tools/sync.mjs makes each game's copy from them (README: "Using the engine in a game").
@@ -1020,15 +1020,19 @@ export const PATCH_PRESETS = {
   //  that sounds like the lurcher engine (but maybe softer)". Each take is a copy of RMRF's 'LURCHER — ENGINE'
   //  (sounds/rmrf.js), changed, so tuning one never changes the other. Its shape is kept: ONE number, RPMs (0 idle
   //  .. 1 full), that the pitch, the pulse and the brightness all follow; the game moves only that number
-  //  (handle.setValue('rpm', v)). No envelope: an engine drones until the game stops it. The four takes are at the
+  //  (handle.setValue('rpm', v)). No envelope: an engine drones until the game stops it. The five takes are at the
   //  same loudness at a middle RPMs (0.4), half the Lurcher's (-6 dB); they differ in what "softer" leans on:
   //    A  the Lurcher's own sound, only quieter
   //    B  rounder: a triangle wave in place of the square, the tone filter lower (the buzz taken off)
   //    C  a gentler, slower throb: the pulse about half as quick, and it never drops out (0.3 to 0.9, where the
   //       Lurcher's chops right through)
   //  A, B and C are nearly all below 300 Hz, lower than a phone's own speaker plays. So:
-  //    D  the Lurcher's own sound, quieter, with its tone filter opened (900 -> 1600 Hz) and its lowest hum thinned
-  //       (a highpass at 140 Hz), so its own upper harmonics carry it on a phone's speaker; nothing added to it
+  //    D  the Lurcher's sound made quieter but brighter and buzzier: its tone filter opened (900 -> 1600 Hz) and its
+  //       lowest hum thinned (a highpass at 140 Hz), so its upper tones carry it on a phone's speaker; less soft in tone
+  //       than A (the middle of its sound about 290 Hz at idle against A's 95), the Lurcher's deep chop through it
+  //    E  between A and D: the tone filter opened only as far as a phone needs (500 -> 900 Hz), the lowest hum thinned
+  //       a little (a highpass at 120 Hz), and C's shallower chop (it never drops out): a hum with some body that a
+  //       phone can play (the middle of its sound about 190 Hz at idle)
   // ════════════════════════════════════════════════════════════════════════════════
   'SHIP — ENGINE A': { group: 'SHIPS', project: 'pi-nebula', name: 'Engine A (quieter)', kind: 'engine', dur: 3, nodes: [
     { id: 'rpm', type: 'value', name: 'RPMs', value: 0, delay: 0 },
@@ -1082,7 +1086,7 @@ export const PATCH_PRESETS = {
     { from: 'osc', to: 'am' }, { from: 'lfo', to: 'am', port: 'gain' }, { from: 'am', to: 'f' }, { from: 'f', to: 'g' }, { from: 'g', to: 'out' },
   ] },
 
-  'SHIP — ENGINE D': { group: 'SHIPS', project: 'pi-nebula', name: 'Engine D (for a phone)', kind: 'engine', dur: 3, nodes: [
+  'SHIP — ENGINE D': { group: 'SHIPS', project: 'pi-nebula', name: 'Engine D (brighter, for a phone)', kind: 'engine', dur: 3, nodes: [
     { id: 'rpm', type: 'value', name: 'RPMs', value: 0, delay: 0 },
     { id: 'osc', type: 'osc', name: 'servo', wave: 'square', freq: 70, freqMod: 1, voices: 2, detune: 6 },
     { id: 'am', type: 'gain', name: 'pulse', gain: 0.4 },
@@ -1094,6 +1098,25 @@ export const PATCH_PRESETS = {
     { id: 'r-am', type: 'math', name: 'rev→pulse', mul: 26.5 },    // 20.5→47 a second
     { id: 'r-cut', type: 'math', name: 'rev→bright', mul: 700 },   // 900→1600 Hz
     { id: 'out', type: 'out', name: 'output', gain: 0.555 },
+  ], cables: [
+    { from: 'rpm', to: 'r-pit' }, { from: 'r-pit', to: 'osc', port: 'freq' },
+    { from: 'rpm', to: 'r-am' }, { from: 'r-am', to: 'lfo', port: 'freq' },
+    { from: 'rpm', to: 'r-cut' }, { from: 'r-cut', to: 'f', port: 'freq' },
+    { from: 'osc', to: 'am' }, { from: 'lfo', to: 'am', port: 'gain' }, { from: 'am', to: 'f' }, { from: 'f', to: 'hp' }, { from: 'hp', to: 'g' }, { from: 'g', to: 'out' },
+  ] },
+
+  'SHIP — ENGINE E': { group: 'SHIPS', project: 'pi-nebula', name: 'Engine E (softer, for a phone)', kind: 'engine', dur: 3, nodes: [
+    { id: 'rpm', type: 'value', name: 'RPMs', value: 0, delay: 0 },
+    { id: 'osc', type: 'osc', name: 'servo', wave: 'square', freq: 70, freqMod: 1, voices: 2, detune: 6 },
+    { id: 'am', type: 'gain', name: 'pulse', gain: 0.6 },
+    { id: 'lfo', type: 'osc', name: 'pulse', wave: 'sine', freq: 20.5, freqMod: 1, level: 0.3 },
+    { id: 'f', type: 'filter', name: 'tone', ftype: 'lowpass', freq: 500, Q: 0.7 },
+    { id: 'hp', type: 'filter', name: 'thin', ftype: 'highpass', freq: 120, Q: 0.7 },
+    { id: 'g', type: 'gain', name: 'servo', gain: 0.36 },
+    { id: 'r-pit', type: 'math', name: 'rev→pitch', mul: 80 },     // 70→150 Hz
+    { id: 'r-am', type: 'math', name: 'rev→pulse', mul: 26.5 },    // 20.5→47 a second
+    { id: 'r-cut', type: 'math', name: 'rev→bright', mul: 400 },   // 500→900 Hz
+    { id: 'out', type: 'out', name: 'output', gain: 0.441 },
   ], cables: [
     { from: 'rpm', to: 'r-pit' }, { from: 'r-pit', to: 'osc', port: 'freq' },
     { from: 'rpm', to: 'r-am' }, { from: 'r-am', to: 'lfo', port: 'freq' },

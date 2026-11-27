@@ -22,7 +22,8 @@
 //       values: { id: v } its value nodes (an engine's 'rpm') as it starts; set(id, v) moves one while it plays (eased by
 //       the engine over 50 ms); most: seconds after which it is stopped whatever happens (a drone that must not run on).
 //       A patch with an envelope ends by itself; one without (an engine) plays until stop(fade). A name not in the copy
-//       is said once, loudly, on the console, and nothing plays; so is any failure of the engine itself: sound.patch
+//       is said once, loudly, on the console, and nothing plays; so is any failure of the engine itself (said again at
+//       most once a minute, and that patch not tried again for FAILED_WAIT s, so nothing is rebuilt every frame): sound.patch
 //       never throws (a card or a pod's lock calls it in the middle of its own work). THE PAGE HIDDEN (another tab, the
 //       phone's home screen): every patch playing that has no end of its own (an engine, the jump's hum) is stopped at
 //       once, and none starts while it is hidden; whoever wanted it asks again on the first frame back (the music rests
@@ -38,6 +39,7 @@
 // The volume and the mute are kept in this browser (localStorage 'calc-station.sound'); ui/soundbutton.js is the HUD's
 // switch for them.
 const KEY = 'calc-station.sound';
+const FAILED_WAIT = 5;   // (s: a patch that failed to play is not tried again for this long)
 const GROUPS = { voices: 0.9, effects: 1, music: 0.6, station: 0.9 };   // (station: the station's announcements, src/announce.js)
 
 function makeSound() {
@@ -106,7 +108,8 @@ function makeSound() {
   // A SOUND LAB PATCH (sound.patch, above). The engine is fetched once, at the first touch (it is the same file the
   // music plays with); asked for before it is in, nothing plays (an engine asks again next frame; a chime is let go).
   let E = null, loading = null;
-  const told = new Set(), drones = new Set();
+  const told = new Set(), drones = new Set(), failed = new Map();   // (failed: a patch's name -> when it may be tried again, when it was last said)
+  const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
   const hidden = () => typeof document !== 'undefined' && !!document.hidden;
   const loud = (key, ...msg) => { if (!told.has(key)) { told.add(key); console.error(...msg); } };
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', () => { if (document.hidden) for (const h of [...drones]) h.stop(0.05); });
@@ -123,6 +126,7 @@ function makeSound() {
     const lib = engineNow(); if (!lib) return null;
     const P = lib.PATCH_PRESETS[name];
     if (!P) { loud(name, `sound.patch: no Sound Lab patch '${name}' in src/audio/patch.js (sync it from the lab: node tools/sync.mjs pi-nebula <this file>)`); return null; }
+    const F = failed.get(name); if (F && clock() < F.retry) return null;
     const drone = lib.patchAutoStopTime(P) == null;
     if (drone && hidden()) return null;
     const gr = groups[group] ? group : 'effects';
@@ -140,7 +144,9 @@ function makeSound() {
       (pan || g).connect(groups[gr]);
       v = E.playPatch(ctx, null, g, null, values ? withValues(P, values) : P, () => done(0.2));
     } catch (e) {
-      loud('play:' + name, `sound.patch: '${name}' could not be played; the game goes on without it`, e);
+      const t = clock(), was = failed.get(name);
+      if (!was || t - was.said >= 60) console.error(`sound.patch: '${name}' could not be played; the game goes on without it (not tried again for ${FAILED_WAIT} s)`, e);
+      failed.set(name, { retry: t + FAILED_WAIT, said: was && t - was.said < 60 ? was.said : t });
       try { if (v) v.stop(0.01); if (g) g.disconnect(); if (pan) pan.disconnect(); } catch (x) { /* */ }
       return null;
     }
