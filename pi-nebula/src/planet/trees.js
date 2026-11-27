@@ -134,7 +134,7 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
   const loaded = await Promise.all(used.map((i) => loadTree(TREES[T0.kinds[i].tree].file)));
   const t1 = performance.now();
   const stats = { trees: count, models: 0, kinds: used.length, loadMs: Math.round(t1 - t0), bakeMs: 0, buildMs: 0 };
-  const built = [], shades = [], shadowCopies = [], shadowReach = ground.shadows && !lookOff('plantShadows') ? ground.shadows.nearReach() : 0, Y = new THREE.Vector3(0, 1, 0);
+  const built = [], shades = [], shadowCopies = [], shadowReach = ground.shadows && ground.shadows.wants('tree') && !lookOff('plantShadows') ? ground.shadows.nearReach() : 0, Y = new THREE.Vector3(0, 1, 0);
   let canopy = [0, 0, 0], canopyW = 0;
   used.forEach((ki, n) => {
     const kind = T0.kinds[ki], M = loaded[n], turn = turnOf(leaves[kind.leaf] || leaves[0]);
@@ -233,7 +233,8 @@ export async function makeTrees({ renderer, land, look, ground, quality = 'mediu
     });
     // (the shadows' short list: the trees drawn as models, mostly whole, within reach of the eye)
     if (shadowCopies.length) {
-      const R = shadowReach + 4, R2 = R * R;
+      // (those whose foot is within the picture's corner and a crown's shadow of the eye)
+      const R = shadowReach * 1.42 + 6, R2 = R * R;
       for (const { m, copy } of shadowCopies) {
         const a = m.instanceMatrix.array, f = m.userData.fade.array, b = copy.instanceMatrix.array; let k = 0;
         for (let i = 0; i < m.count; i++) { const dx = a[i * 16 + 12] - eye.x, dz = a[i * 16 + 14] - eye.z; if (f[i] < 0.5 || dx * dx + dz * dz > R2) continue; for (let e = 0; e < 16; e++) b[k * 16 + e] = a[i * 16 + e]; k++; }

@@ -33,7 +33,9 @@ const CELL = 8;
 const CLEAR = 0.92;
 // THE LANDING PLACE NOT A BARE CLEARING: src/planet/land.js CLEARING (plain numbers, for the tests too)
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
-export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
+// (padOwn: the landing place's plants from a share of their own on top of the layer's budget; on low out of it, so low
+// draws no more than main did: the review)
+export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0, padOwn: false }, medium: { reach: 0.8, many: 0.5, detail: 1, padOwn: true }, high: { reach: 1, many: 1, detail: 1, padOwn: true } };
 
 // ── rocks, made in code ──────────────────────────────────────────────────────────────────────────────────────────
 function rockShapes(detail) {
@@ -196,9 +198,9 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
   const stats = { rocks: 0, plants: 0, tris: 0, buildMs: 0, layers: 0 };
   // a layer: one InstancedMesh for each of its shapes, laid out round the camera out to `reach` metres
   function layer({ name, shapes, material, reach, most, lay }) {
-    const padMost = Math.round(most * PAD_SHARE), meshes = shapes.map((g) => { const m = new THREE.InstancedMesh(g, material, most + padMost); m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); return m; });
+    const padMost = Math.round(most * PAD_SHARE), wild = Q.padOwn ? most : most - padMost, meshes = shapes.map((g) => { const m = new THREE.InstancedMesh(g, material, wild + padMost); m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); return m; });
     for (const m of meshes) m.setColorAt(0, col.set(1, 1, 1));
-    const L = { name, meshes, reach, most, padMost, padPlaced: 0, lay, order: ringOrder(reach), tris: shapes.map((g) => (g.index ? g.index.count : g.attributes.position.count) / 3), count: 0 };
+    const L = { name, meshes, reach, most: wild, padMost, padPlaced: 0, lay, order: ringOrder(reach), tris: shapes.map((g) => (g.index ? g.index.count : g.attributes.position.count) / 3), count: 0 };
     layers.push(L); return L;
   }
   // put an instance in a layer's shape s
@@ -310,19 +312,28 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
 
   // ── their shadows on the ground (src/planet/groundshadow.js): every rock, plant and flower casts, its leaves cut out
   // of their picture as they are drawn ──
-  // (only those near enough to fall inside the near shadow picture, a short list of each mesh's made at every relay;
-  // none at all on a level whose picture has none: src/planet/groundshadow.js)
+  // (only those whose shadow can fall inside the near shadow picture: a short list of each mesh's, made again whenever
+  // the camera has gone SHORT_STEP metres, of those whose foot or shadow's tip lies within the picture's half and that
+  // step of the camera; none at all on a level whose picture has none: src/planet/groundshadow.js)
   const shades = [], shadowCopies = [], shadowReach = ground.shadows && !lookOff('plantShadows') ? ground.shadows.nearReach() : 0;
   if (shadowReach > 0) for (const L of layers) for (const m of L.meshes) {
     const copy = new THREE.InstancedMesh(m.geometry, m.material, m.instanceMatrix.count); copy.count = 0; copy.frustumCulled = false; copy.name = m.name;
     shadowCopies.push({ m, copy });
     shades.push(ground.shadows.add(copy, { kind: /plant/.test(L.name) ? 'plant' : 'rock', reach: L.reach, map: /plant/.test(L.name) && sheet ? sheet.map : null }));
   }
+  const SHORT_STEP = 2, sun = ground.shadows ? ground.shadows.sun : null;
+  let listX = Infinity, listZ = Infinity;
   function shortList(cx, cz) {
-    const R = shadowReach + CELL * 1.5 + 2, R2 = R * R;
+    listX = cx; listZ = cz;
+    const M = shadowReach + SHORT_STEP + 0.5, tx = sun ? -sun.x / sun.y : 0, tz = sun ? -sun.z / sun.y : 0;
     for (const { m, copy } of shadowCopies) {
       const a = m.instanceMatrix.array, b = copy.instanceMatrix.array; let k = 0;
-      for (let i = 0; i < m.count; i++) { const dx = a[i * 16 + 12] - cx, dz = a[i * 16 + 14] - cz; if (dx * dx + dz * dz > R2) continue; for (let e = 0; e < 16; e++) b[k * 16 + e] = a[i * 16 + e]; k++; }
+      for (let i = 0; i < m.count; i++) {
+        // (its foot, and the tip of its shadow: its height down the sun's rays; in if the line between crosses the box)
+        const x = a[i * 16 + 12] - cx, z = a[i * 16 + 14] - cz, h = a[i * 16 + 5], x2 = x + tx * h, z2 = z + tz * h;
+        if (Math.min(x, x2) > M || Math.max(x, x2) < -M || Math.min(z, z2) > M || Math.max(z, z2) < -M) continue;
+        for (let e = 0; e < 16; e++) b[k * 16 + e] = a[i * 16 + e]; k++;
+      }
       copy.count = k; copy.instanceMatrix.needsUpdate = true;
     }
   }
@@ -352,6 +363,7 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
       clock.value += dt;
       const x = camera.position.x, z = camera.position.z;
       if (Math.hypot(x - lastX, z - lastZ) > CELL * 1.5) { lastX = x; lastZ = z; relay(x, z); }
+      else if (shadowCopies.length && Math.hypot(x - listX, z - listZ) > SHORT_STEP) shortList(x, z);
     },
     relayNow(camera) { lastX = camera.position.x; lastZ = camera.position.z; relay(lastX, lastZ); },
     dispose() { for (const s of shades) s.dispose(); for (const L of layers) for (const m of L.meshes) { m.dispose(); } for (const g of new Set([...rockShapesG, ...boulderShapesG])) g.dispose(); rockMat.dispose(); boulderMat.dispose(); for (const m of plantMats) m.dispose(); },
