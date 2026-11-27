@@ -113,6 +113,8 @@ export const LIFE = {
 };
 // (a turn on the spot bigger than this (radians) is stepped round, the legs walking it, not swivelled on still feet)
 const TURN_STEP = 0.35;
+// (m: how far forward of a desk chair's middle its sitter sits, on the front of its seat, nearer the desk)
+const DESK_SIT = 0.14;
 // PRESENCE: how often the nearest are counted (s); how long someone has to be past the nearest before they go (s); how far
 // from the player someone comes back or goes, at least (m)
 export const PRESENCE = { every: 0.5, linger: 2, come: 4, go: 6 };
@@ -401,8 +403,10 @@ export async function makePeople({ W, walls, lib, jobs = null, boarding = null, 
         const t = tables.reduce((b, q) => (!b || q.distanceTo(o) < b.distanceTo(o) ? q : b), null); if (!t) continue;
         const hd = Math.atan2(t.x - o.x, t.z - o.z); list2.push({ seat: o.clone(), heading: hd, back: new THREE.Vector3(-Math.sin(hd), 0, -Math.cos(hd)), table: t });
       } else if (d.face === 'own') {
-        // (facing the way the chair faces, its desk; two at one desk sit "at one table", and may chat)
-        const hd = Math.atan2(f.x, f.z); list2.push({ seat: o.clone(), heading: hd, back: f.clone().negate(), table: desk || o.clone(), beside: true });
+        // (facing the way the chair faces, its desk; two at one desk sit "at one table", and may chat; sat forward on its
+        // seat, DESK_SIT: the chairs stand an arm's length off their desks, kept in the station's own file, and at their
+        // middles the hands reached the desk only with the arms locked straight)
+        const hd = Math.atan2(f.x, f.z); list2.push({ seat: o.clone().addScaledVector(f, DESK_SIT), heading: hd, back: f.clone().negate(), table: desk || o.clone(), beside: true });
       } else {
         const hd = Math.atan2(f.x, f.z), side = new THREE.Vector3(Math.cos(hd), 0, -Math.sin(hd));
         // (a bench's two seats at its two ends, a person's width and more apart: life.js SEAT_APART)
