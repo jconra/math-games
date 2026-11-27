@@ -31,9 +31,9 @@ const CELL = 8;
 // edge: src/planet/land.js; 0.92 is about 4 m past it)
 const CLEAR = 0.92;
 // THE LANDING PLACE NOT A BARE CLEARING (two critics: plants and rocks began 15 to 30 m away, a cleared stage): the
-// small stones and the plants grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
+// small stones and the plants up to `tall` metres grow on it as anywhere, but for where the ship sets down (within `pad` metres of its
 // middle) and what is kept clear under the wreck, the pods and the way to them (the full mark: src/planet/wreck.js)
-export const CLEARING = { pad: 11, kept: 0.999 };
+export const CLEARING = { pad: 11, kept: 0.999, tall: 1.1 };
 // per tier: how far out (times each kind's own reach) and how many (times its own number)
 export const COVER_QUALITY = { low: { reach: 0.6, many: 0.3, detail: 0 }, medium: { reach: 0.8, many: 0.5, detail: 1 }, high: { reach: 1, many: 1, detail: 1 } };
 
@@ -289,6 +289,8 @@ export async function makeCover({ land, look, ground, quality = 'medium', sky = 
             const x = bx + Math.cos(a) * d, z = bz + Math.sin(a) * d;
             if (land.growthAt(x, z) < 0.05 || keptClear(x, z)) continue;
             const hgt = PLANTS[p.k].height * p.size * (0.7 + 0.6 * hash2(wi + e, wj + q, 7)), y = land.heightAt(x, z) - PLANT_SINK[p.k] * hgt;
+            // (the tall ones keep off the landing place, as before: a person walking there would have the camera in them)
+            if (hgt > CLEARING.tall && land.landingAt(x, z) > CLEAR) continue;
             col.setRGB(1, 1, 1).multiplyScalar(0.85 + 0.3 * hash2(wi, wj + e, 13 + q));
             if (!put(L2, s, x, y, z, hgt, hash2(wi + e, wj, 17 + q) * 6.283, 0.06, col)) break;
           }
