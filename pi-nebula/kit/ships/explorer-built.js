@@ -879,10 +879,12 @@ function ebAirstair(p) {
 // doors; down: the doors, then the legs).
 export const GEAR_SPEED = 0.42, GEAR_DOOR_SPEED = 0.9;
 const LEGS = GEAR_PLAN.explorer;
-// (sleek: its cylinders and supports the hull's white, the piston a dark band (the shock leg's, as on the F-16), the
-// supports' rods bright, the joints, the ankle block and the bevelled pad its dark trim with metal bolts, a yellow band
-// on the cylinder and round the pad to match the wings' tips, hoses along the cylinder, a torque link)
-const GEAR_PAINT = { cyl: PAL.skin, piston: PAL.rubber, rod: PAL.chrome, joint: PAL.trim, bolt: PAL.metal, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
+// (sleek: its cylinders and supports a dark grey that sits with the dark underside and the engines (the game's maker,
+// of the white ones: "They should probably be darker, but the design looks good"), the piston a darker band (the
+// shock leg's, as on the F-16), the supports' rods bright, the joints, the ankle block and the bevelled pad its dark
+// trim with metal bolts, a yellow band on the cylinder and round the pad to match the wings' tips, hoses along the
+// cylinder, a torque link)
+const GEAR_PAINT = { cyl: PAL.deck, piston: PAL.rubber, rod: PAL.chrome, joint: PAL.trim, bolt: PAL.metal, band: PAL.yellow, pad: PAL.trim, sole: PAL.rubber };
 function ebGear(p, which) {
   return C.strutLeg(p, LEGS.legs[which], { floor: LEGS.floor, key: 'eb', which, dk, paint: GEAR_PAINT, speed: GEAR_SPEED, style: 'sleek' });
 }
